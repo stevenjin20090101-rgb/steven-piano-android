@@ -19,7 +19,9 @@ import dev.stevenjin.stevenpiano.midi.NoteRouter
  * `song = anchorSong + (now - anchorNanos) * tempo / 100`, re-anchored on play and on every
  * tempo change so nothing jumps. [advance] sends everything due, as one batch, and says when
  * the next event is due. Pause, seek and stop silence the piano first; play and seek then
- * re-send the pedal in effect. Not thread-safe: one thread (the scheduler's) owns it.
+ * re-send the pedal in effect. Keys played on the Keys screen go out at once through the same
+ * [router] ([liveNoteOn] and friends), so a piece and the keys share its bookkeeping; a full
+ * silence lets go of both. Not thread-safe: one thread (the scheduler's) owns it.
  */
 class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRouter()) {
     var status: PlaybackStatus = PlaybackStatus.Stopped
@@ -112,6 +114,24 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         anchorSongMicros = positionMicros(nowNanos)
         anchorNanos = nowNanos
         tempoPct = pct.coerceIn(PlaybackLimits.TempoPct)
+    }
+
+    /** A key pressed on the Keys screen, sent now. */
+    fun liveNoteOn(key: Int, velocity: Int, nowNanos: Long) = live { router.liveNoteOn(key, velocity, nowNanos / 1000, it) }
+
+    /** A key let go on the Keys screen, sent now. */
+    fun liveNoteOff(key: Int) = live { router.liveNoteOff(key, it) }
+
+    /** The Keys screen's sustain, sent now. */
+    fun liveSustain(down: Boolean) = live { router.liveSustain(down, it) }
+
+    /** Lets go of the Keys screen's keys and its sustain; the piece's keys stay down. */
+    fun silenceLive() = live { router.silenceLive(it) }
+
+    private inline fun live(route: (MidiBatch) -> Unit) {
+        batch.clear()
+        route(batch)
+        send(dropPending = false)
     }
 
     /** Sends every event due at [nowNanos]; returns when the next one is due ([Long.MAX_VALUE]: nothing to wait for). */

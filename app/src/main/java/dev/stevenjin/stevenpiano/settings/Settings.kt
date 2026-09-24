@@ -19,6 +19,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -29,7 +30,7 @@ import java.io.IOException
 /** How Now playing draws notes: the pianola roll (default) or Synthesia-style falling notes. */
 enum class NoteDisplay { PAPER_ROLL, FALLING }
 
-/** The Piano tab's preferences, plus the last piano connected. */
+/** The Piano tab's preferences, plus the last piano connected and where the Keys screen was. */
 data class PianoSettings(
     val autoConnect: Boolean = true,
     val lastDeviceAddress: String? = null,
@@ -40,7 +41,13 @@ data class PianoSettings(
     val velocityPct: Int = 100,
     val foldOutOfRange: Boolean = true,
     val skipDrumChannel: Boolean = true,
-)
+    /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
+    val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
+) {
+    companion object {
+        const val DEFAULT_KEYS_VIEWPORT_START = 48
+    }
+}
 
 val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -70,6 +77,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setSkipDrumChannel(on: Boolean) = edit { it[SKIP_DRUM_CHANNEL] = on }
 
+    suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
+
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
@@ -86,6 +95,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             velocityPct = (this[VELOCITY_PCT] ?: defaults.velocityPct).coerceIn(PlaybackLimits.VelocityPct),
             foldOutOfRange = this[FOLD_OUT_OF_RANGE] ?: defaults.foldOutOfRange,
             skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
+            keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
         )
     }
 
@@ -99,5 +109,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val VELOCITY_PCT = intPreferencesKey("velocityPct")
         val FOLD_OUT_OF_RANGE = booleanPreferencesKey("foldOutOfRange")
         val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
+        val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
     }
 }

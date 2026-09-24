@@ -42,6 +42,9 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * (the main thread). The engine runs on the [Scheduler] thread and reports back through
  * [state], plus allocation-free [positionMicrosAt] and active-key bitsets for per-frame drawing.
  * When the link drops mid-piece the player pauses; when it comes back, Play resumes.
+ * The Keys screen plays through here too ([liveNoteOn] and friends): its keys join the queue of
+ * scheduler commands and go out through the engine's router, so they share the piece's
+ * reference counts, 100 ms guard and silence. A dropped link lets go of them.
  */
 class Player(
     private val link: PianoLink,
@@ -60,6 +63,10 @@ class Player(
     private var position = PositionClock.Zero
     private val activeLow = AtomicLong()
     private val activeHigh = AtomicLong()
+    private val _liveSustain = MutableStateFlow(false)
+
+    /** Whether the Keys screen's sustain is down, as the engine last left it (a full silence lifts it). */
+    val liveSustain: StateFlow<Boolean> = _liveSustain.asStateFlow()
 
     // Owned by the scope's thread.
     private var playlist = Playlist.Empty
@@ -125,6 +132,18 @@ class Player(
             startCurrent()
         }
     }
+
+    /** A key pressed on the Keys screen ([key] 24-107): sent at once, with the velocity percentage applied. */
+    fun liveNoteOn(key: Int, velocity: Int) = scheduler.submit { engine.liveNoteOn(key, velocity, it) }
+
+    /** A key let go on the Keys screen. */
+    fun liveNoteOff(key: Int) = scheduler.submit { engine.liveNoteOff(key) }
+
+    /** The Keys screen's latching sustain: CC64 127 or 0. */
+    fun liveSustain(down: Boolean) = scheduler.submit { engine.liveSustain(down) }
+
+    /** Lets go of every key the Keys screen holds, and its sustain; a playing piece keeps its keys. */
+    fun silenceLive() = scheduler.submit { engine.silenceLive() }
 
     /** Live tempo, 25-200 %. */
     fun setTempo(pct: Int) = scheduler.submit { engine.setTempo(pct, it) }
@@ -219,8 +238,11 @@ class Player(
 
     private fun onLinkState(linkState: LinkState) {
         val connected = linkState is LinkState.Connected
-        if (connected != linkConnected && state.value.status == PlaybackStatus.Playing) {
-            if (connected) scheduler.submit { engine.resync(it) } else pause()   // the piano silences itself on a drop
+        if (connected != linkConnected) {
+            if (!connected) silenceLive()   // the piano lets go on a drop; forget the Keys screen's keys too
+            if (state.value.status == PlaybackStatus.Playing) {
+                if (connected) scheduler.submit { engine.resync(it) } else pause()   // the piano silences itself on a drop
+            }
         }
         linkConnected = connected
     }
@@ -229,6 +251,7 @@ class Player(
     private fun publish() {
         activeLow.set(engine.router.activeLow)
         activeHigh.set(engine.router.activeHigh)
+        _liveSustain.value = engine.router.liveSustainDown
         val status = engine.status
         val running = status == PlaybackStatus.Playing
         val duration = engine.piece?.durationMicros ?: 0L

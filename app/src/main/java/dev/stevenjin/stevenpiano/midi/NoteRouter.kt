@@ -10,15 +10,18 @@
 package dev.stevenjin.stevenpiano.midi
 
 /**
- * Turns file events into what the piano can safely play. The firmware has no per-key
- * reference counting, cannot re-strike a held key, needs ~100 ms between strikes of one
- * key, and treats CC120/121/123 as "everything off". So this router:
- *  - remembers the key each source note (channel x note) was actually sent as, so a
- *    transpose change mid-note still releases the right key;
- *  - reference-counts sent keys: one Note On when a key goes 0 -> 1, one Note Off at 1 -> 0;
- *  - thins a strike that comes < 100 ms after the previous strike of an idle key;
+ * Turns file events, and keys played on the Keys screen, into what the piano can safely play.
+ * The firmware has no per-key reference counting, cannot re-strike a held key, needs ~100 ms
+ * between strikes of one key, and treats CC120/121/123 as "everything off". So this router:
+ *  - remembers the key each source note (channel x note, or a live key) was actually sent as,
+ *    so a transpose change mid-note still releases the right key;
+ *  - reference-counts sent keys: one Note On when a key goes 0 -> 1, one Note Off at 1 -> 0,
+ *    so a live key and a piece's note on the same key share it;
+ *  - thins a strike that comes < 100 ms after the previous strike of an idle key, taps included;
  *  - forwards CC64 only; every other controller, program change, pitch bend and
  *    aftertouch is dropped.
+ * Live keys are sources of their own, apart from the piece's: [silenceLive] lets go of them
+ * (and of the Keys screen's sustain) while the piece's keys stay down.
  * Everything goes out on channel 1: the piano listens in omni mode.
  * Times are wall-clock microseconds, because the 100 ms guard protects the solenoids.
  */
@@ -28,10 +31,15 @@ class NoteRouter {
     var velocityPct = 100
     var skipDrums = true
 
-    private val sentKey = IntArray(16 * 128) { KeyMap.UNPLAYABLE }
+    /** Per source, the key it sounds: 16 channels x 128 notes from files, then 128 live keys. */
+    private val sentKey = IntArray(SOURCES) { KeyMap.UNPLAYABLE }
     private val refCount = IntArray(128)
     private val lastOnsetMicros = LongArray(128) { NEVER }
     private var pedal = UNKNOWN
+
+    /** Whether the Keys screen's sustain is latched down. */
+    var liveSustainDown = false
+        private set
 
     /** Sounding keys as bits `key - 24`: keys 24..87 here. */
     var activeLow = 0L
@@ -53,20 +61,52 @@ class NoteRouter {
             0x90 -> if (data2 == 0) release(source, out)
             else if (accepts(channel)) noteOn(source, data1, data2, nowMicros, out)
             0x80 -> release(source, out)
-            0xB0 -> if (data1 == SUSTAIN && data2 != pedal && accepts(channel)) {
-                pedal = data2
-                out.add(0xB0, SUSTAIN, data2)
-            }
+            0xB0 -> if (data1 == SUSTAIN && accepts(channel)) setPedal(data2, out)
         }
     }
 
-    /** The stop sequence, in this order: pedal up, then All Notes Off. Forgets every held key. */
+    /**
+     * A key pressed on the Keys screen. Keys there are already the piano's (24-107), so there is
+     * no transpose or fold, but the velocity percentage applies. A key the screen already holds
+     * is not struck again; a key a piece holds is shared, not re-struck; a strike within 100 ms
+     * of the key's last one is thinned like any other.
+     */
+    fun liveNoteOn(key: Int, velocity: Int, nowMicros: Long, out: MidiBatch) {
+        if (key !in KeyMap.LOWEST..KeyMap.HIGHEST) return
+        val source = LIVE + key
+        if (sentKey[source] != KeyMap.UNPLAYABLE) return
+        strike(source, key, velocity, nowMicros, out)
+    }
+
+    /** The Keys screen let go of [key]. */
+    fun liveNoteOff(key: Int, out: MidiBatch) {
+        if (key in KeyMap.LOWEST..KeyMap.HIGHEST) release(LIVE + key, out)
+    }
+
+    /** The Keys screen's latching sustain: CC64 = 127 when [down], 0 when up. The piano has one pedal; the last change wins. */
+    fun liveSustain(down: Boolean, out: MidiBatch) {
+        liveSustainDown = down
+        setPedal(if (down) PEDAL_DOWN else 0, out)
+    }
+
+    /**
+     * Lets go of everything the Keys screen holds: a Note Off for each of its keys (unless a piece
+     * still holds that key too), then the pedal if the screen's sustain was down. A piece's keys
+     * stay down.
+     */
+    fun silenceLive(out: MidiBatch) {
+        for (key in KeyMap.LOWEST..KeyMap.HIGHEST) release(LIVE + key, out)
+        if (liveSustainDown) liveSustain(false, out)
+    }
+
+    /** The stop sequence, in this order: pedal up, then All Notes Off. Forgets every held key, live ones too. */
     fun silence(out: MidiBatch) {
         out.add(0xB0, SUSTAIN, 0)
         out.add(0xB0, ALL_NOTES_OFF, 0)
         sentKey.fill(KeyMap.UNPLAYABLE)
         refCount.fill(0)
         pedal = 0
+        liveSustainDown = false
         activeLow = 0L
         activeHigh = 0L
     }
@@ -75,6 +115,11 @@ class NoteRouter {
         release(source, out)   // a source struck again while sounding is released first
         val key = KeyMap.map(note, transpose, fold)
         if (key == KeyMap.UNPLAYABLE) return
+        strike(source, key, velocity, nowMicros, out)
+    }
+
+    /** [source] now sounds [key]: a Note On only when the key goes 0 -> 1 and is not thinned. */
+    private fun strike(source: Int, key: Int, velocity: Int, nowMicros: Long, out: MidiBatch) {
         if (refCount[key] == 0) {
             if (nowMicros - lastOnsetMicros[key] < MIN_ONSET_GAP_MICROS) return   // thinned
             lastOnsetMicros[key] = nowMicros
@@ -83,6 +128,12 @@ class NoteRouter {
         }
         refCount[key]++
         sentKey[source] = key
+    }
+
+    private fun setPedal(value: Int, out: MidiBatch) {
+        if (value == pedal) return
+        pedal = value
+        out.add(0xB0, SUSTAIN, value)
     }
 
     private fun release(source: Int, out: MidiBatch) {
@@ -109,6 +160,11 @@ class NoteRouter {
         const val SUSTAIN = 64
         const val ALL_NOTES_OFF = 123
         const val MIN_ONSET_GAP_MICROS = 100_000L
+        private const val PEDAL_DOWN = 127
+
+        /** The first live source: after the 16 x 128 file sources. */
+        private const val LIVE = 16 * 128
+        private const val SOURCES = LIVE + 128
         private const val NEVER = Long.MIN_VALUE / 2
         private const val UNKNOWN = -1
     }

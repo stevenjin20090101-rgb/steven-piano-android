@@ -59,6 +59,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** In the background nothing may hold a key down: the Keys screen's keys and sustain let go. */
+    override fun onStop() {
+        super.onStop()
+        graph.player.silenceLive()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         route(intent)

@@ -10,7 +10,6 @@
 package dev.stevenjin.stevenpiano.ui.screens.nowplaying
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -43,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,7 +58,7 @@ import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
-import dev.stevenjin.stevenpiano.ui.components.LiveDot
+import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
@@ -217,26 +214,6 @@ private fun ColumnScope.PieceView(
             StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo)
         }
         ConnectionLine(connected, playing, onOpenPiano)
-    }
-}
-
-/** "● Sent to piano" with the live dot, or "○ Not connected", which opens the Piano tab. */
-@Composable
-private fun ConnectionLine(connected: Boolean, playing: Boolean, onOpenPiano: () -> Unit) {
-    val tap = if (connected) Modifier else Modifier.clickable(onClickLabel = "Open the Piano tab", role = Role.Button, onClick = onOpenPiano)
-    Row(
-        tap
-            .heightIn(min = 48.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LiveDot(live = connected, breathing = playing)
-        Spacer(Modifier.width(8.dp))
-        Text(
-            if (connected) "Sent to piano" else "Not connected",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
