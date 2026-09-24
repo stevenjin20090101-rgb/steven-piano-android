@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.ble.LinkState
@@ -52,48 +54,60 @@ import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.PlayerState
-import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.LocalAppFrame
+import dev.stevenjin.stevenpiano.ui.NotesLayout
+import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
-import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
+import dev.stevenjin.stevenpiano.ui.components.StaffCanvas
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
-/** Below this height the screen scrolls, and the roll gets [COMPACT_ROLL]. */
-private val COMPACT_BELOW = 520.dp
-private val COMPACT_ROLL = 240.dp
+/** Below this height the screen scrolls, and the note views get fixed heights; the stacked views need more. */
+private val SHORT_BELOW = 520.dp
+private val SHORT_BELOW_STACKED = 780.dp
+private val SHORT_ROLL = 240.dp
+private val SHORT_STAFF = 200.dp
+private val PANEL_GAP = 8.dp
 
 /** After a change while paused (a seek), frames keep coming this long so the picture catches up. */
 private const val SETTLE_NANOS = 400_000_000L
 
 /**
- * The signature screen: the title, the composer, the note canvas over the keyboard strip, the
- * scrubber, the transport, tempo and the connection line. The transport goes through
- * [playback], which keeps the playback service running; [onOpenPiano] shows the Piano tab.
+ * The signature screen: the title, the composer, the note views, the scrubber, the transport,
+ * tempo and the connection line. The note views follow the window's width class: on a phone one
+ * canvas (paper roll, falling notes or the staff, as Note display says); on wider screens the
+ * staff and the notes together (stacked on medium widths, side by side on expanded ones), or
+ * either alone, as Wide layout says. The roll always keeps its keyboard strip beneath it, lane
+ * for key. The transport goes through [playback], which keeps the playback service running;
+ * [onOpenPiano] shows the Piano tab.
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val graph = LocalContext.current.graph
     val player = graph.player
+    val frame = LocalAppFrame.current
     val state by player.state.collectAsStateWithLifecycle()
     val settings by graph.settings.collectAsStateWithLifecycle()
     val link by graph.pianoLink.state.collectAsStateWithLifecycle()
     val piece = state.piece
+    val plan = frame.notesPlan(settings.noteDisplay, settings.wideLayout)
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        // Too short for the roll to share the height (landscape, a small phone at a large font):
-        // the screen scrolls and the roll keeps a fixed height instead of collapsing.
-        val compact = piece != null && maxHeight < COMPACT_BELOW
-        Column(if (compact) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
-            NowPlayingContent(state, piece, settings.noteDisplay, link is LinkState.Connected, player, playback, onOpenPiano, compact)
+        // Too short for the note views to share the height (landscape, a small phone at a large
+        // font): the screen scrolls and the views keep fixed heights instead of collapsing.
+        val short = piece != null && maxHeight < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
+        Column(if (short) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
+            NowPlayingContent(state, piece, plan, link is LinkState.Connected, player, playback, onOpenPiano, short)
         }
     }
 }
@@ -102,18 +116,18 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
 private fun ColumnScope.NowPlayingContent(
     state: PlayerState,
     piece: NowPlaying?,
-    display: NoteDisplay,
+    plan: NotesPlan,
     connected: Boolean,
     player: Player,
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
-    compact: Boolean,
+    short: Boolean,
 ) {
     ScreenHeader("Now playing")
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     if (piece != null) {
-        PieceView(piece, state, display, connected, player, playback, onOpenPiano, compact)
+        PieceView(piece, state, plan, connected, player, playback, onOpenPiano, short)
     } else if (!state.loading) {
         Box(
             Modifier
@@ -136,12 +150,12 @@ private fun ColumnScope.NowPlayingContent(
 private fun ColumnScope.PieceView(
     piece: NowPlaying,
     state: PlayerState,
-    display: NoteDisplay,
+    plan: NotesPlan,
     connected: Boolean,
     player: Player,
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
-    compact: Boolean,
+    short: Boolean,
 ) {
     val playing = state.status == PlaybackStatus.Playing
     val roll = remember(player) { RollClock(player) }
@@ -159,27 +173,18 @@ private fun ColumnScope.PieceView(
         if (piece.composer.isNotBlank()) Eyebrow(piece.composer, Modifier.padding(top = 4.dp), maxLines = 1)
     }
     Spacer(Modifier.height(16.dp))
-    Column(
-        (if (compact) Modifier.height(COMPACT_ROLL) else Modifier.weight(1f))
+    NoteViews(
+        plan,
+        piece,
+        state,
+        frame,
+        roll,
+        player,
+        short,
+        (if (short) Modifier.height(shortHeight(plan.layout)) else Modifier.weight(1f))
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        NoteCanvas(
-            piece.notes,
-            state.transpose,
-            state.fold,
-            display,
-            frame,
-            roll,
-            Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        )
-        HairlineDivider()
-        KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
-    }
+            .padding(horizontal = 16.dp),
+    )
     Scrubber(
         piece.durationMicros,
         frame,
@@ -217,8 +222,73 @@ private fun ColumnScope.PieceView(
     }
 }
 
+/** The fixed height the note views take when the screen scrolls. */
+private fun shortHeight(layout: NotesLayout): Dp = when (layout) {
+    NotesLayout.STACKED -> SHORT_STAFF + PANEL_GAP + SHORT_ROLL
+    else -> SHORT_ROLL
+}
+
 /**
- * The frame time the canvas, keyboard and scrubber draw at: every frame while playing (the
+ * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the staff,
+ * or both, each on the elevated surface with the card corners.
+ */
+@Composable
+private fun NoteViews(
+    plan: NotesPlan,
+    piece: NowPlaying,
+    state: PlayerState,
+    frame: LongState,
+    roll: RollClock,
+    player: Player,
+    short: Boolean,
+    modifier: Modifier,
+) {
+    val notes: @Composable (Modifier) -> Unit = { panel ->
+        Panel(panel) {
+            NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth())
+            HairlineDivider()
+            KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
+        }
+    }
+    val staff: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
+        Panel(panel) {
+            StaffCanvas(piece.notes, state.transpose, state.fold, frame, roll, Modifier.weight(1f).fillMaxWidth())
+            if (strip) {
+                HairlineDivider()
+                KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
+            }
+        }
+    }
+    when (plan.layout) {
+        NotesLayout.ROLL -> notes(modifier)
+        NotesLayout.STAFF -> staff(modifier, true)
+        NotesLayout.STACKED -> Column(modifier) {
+            staff(if (short) Modifier.height(SHORT_STAFF).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth(), false)
+            Spacer(Modifier.height(PANEL_GAP))
+            notes(if (short) Modifier.height(SHORT_ROLL).fillMaxWidth() else Modifier.weight(2f).fillMaxWidth())
+        }
+        // The keyboard strip stays under the roll, not across both views, so every lane still
+        // meets its key.
+        NotesLayout.SIDE_BY_SIDE -> Row(modifier) {
+            staff(Modifier.weight(1f).fillMaxHeight(), false)
+            Spacer(Modifier.width(PANEL_GAP))
+            notes(Modifier.weight(1f).fillMaxHeight())
+        }
+    }
+}
+
+@Composable
+private fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        content = content,
+    )
+}
+
+/**
+ * The frame time the canvases, keyboard and scrubber draw at: every frame while playing (the
  * first one starts the roll's ease-in), and a short burst after anything that moves a paused
  * piece ([settle]), so the picture catches up with the scheduler thread.
  */

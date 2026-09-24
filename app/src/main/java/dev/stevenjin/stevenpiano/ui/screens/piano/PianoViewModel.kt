@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
+import dev.stevenjin.stevenpiano.settings.WideLayout
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -45,6 +46,8 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel() {
     fun setAutoConnect(on: Boolean) = edit { setAutoConnect(on) }
 
     fun setNoteDisplay(display: NoteDisplay) = edit { setNoteDisplay(display) }
+
+    fun setWideLayout(layout: WideLayout) = edit { setWideLayout(layout) }
 
     fun setDefaultTempo(pct: Int) = edit { setDefaultTempo(pct) }
 

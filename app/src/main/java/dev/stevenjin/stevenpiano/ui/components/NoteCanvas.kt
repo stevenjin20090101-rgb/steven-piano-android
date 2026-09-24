@@ -32,14 +32,31 @@ import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlin.math.max
 import kotlin.math.min
 
-/** How fast the roll travels: this many dp per second of music (so it slows with the tempo). */
-private const val DP_PER_SECOND = 120f
+/** How fast notes travel, on the roll and on the staff alike: this many dp per second of music (so it slows with the tempo). */
+internal const val NOTES_DP_PER_SECOND = 120f
 
 /** The tracker bar sits this share of the height up from the bottom (paper roll). */
 private const val TRACKER_FROM_BOTTOM = 1f / 3f
 
 /** Steps between upcoming and sounding colours, precomputed so drawing never allocates. */
-private const val RAMP_STEPS = 12
+internal const val RAMP_STEPS = 12
+
+/** The upcoming-to-sounding colours, [RAMP_STEPS] + 1 of them, for [rampLevel]. */
+internal fun colorRamp(upcoming: Color, sounding: Color): Array<Color> =
+    Array(RAMP_STEPS + 1) { lerp(upcoming, sounding, it / RAMP_STEPS.toFloat()) }
+
+/**
+ * How bright a note is at [now]: 0 upcoming, [RAMP_STEPS] sounding, easing across the line both
+ * ways over [flipMicros] (0: a cut, when motion is reduced).
+ */
+internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int {
+    val bright = when {
+        now < start -> 0f
+        now < end -> if (flipMicros == 0L) 1f else min(1f, (now - start).toFloat() / flipMicros)
+        else -> if (flipMicros == 0L) 0f else max(0f, 1f - (now - end).toFloat() / flipMicros)
+    }
+    return (bright * RAMP_STEPS + 0.5f).toInt()
+}
 
 /**
  * The note canvas. 84 lanes for C1-B7 (black-key lanes narrower and darker), notes from [notes]
@@ -83,11 +100,11 @@ fun NoteCanvas(
                     fold = fold,
                     paper = display == NoteDisplay.PAPER_ROLL,
                     height = size.height,
-                    pxPerMicro = DP_PER_SECOND.dp.toPx() / 1_000_000f,
+                    pxPerMicro = NOTES_DP_PER_SECOND.dp.toPx() / 1_000_000f,
                     inset = 1.dp.toPx(),
                     minHeight = 2.dp.toPx(),
                     flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L,
-                    ramp = Array(RAMP_STEPS + 1) { lerp(upcoming, sounding, it / RAMP_STEPS.toFloat()) },
+                    ramp = colorRamp(upcoming, sounding),
                 )
                 val bar = 2.dp.toPx()
                 val edgeGap = 6.dp.toPx()
@@ -145,21 +162,11 @@ private class Roll(
             val top = min(hitY - (end - now) * pxPerMicro, bottom - minHeight)
             val width = keys.width(lane) - 2 * inset
             scope.drawRoundRect(
-                color = ramp[level(now, start, end)],
+                color = ramp[rampLevel(now, start, end, flipMicros)],
                 topLeft = Offset(keys.left(lane) + inset, top),
                 size = Size(width, bottom - top),
                 cornerRadius = if (paper) CornerRadius(width / 2) else CornerRadius.Zero,
             )
         }
-    }
-
-    /** How bright a note is: 0 upcoming, [RAMP_STEPS] sounding, easing across the line both ways. */
-    private fun level(now: Long, start: Long, end: Long): Int {
-        val bright = when {
-            now < start -> 0f
-            now < end -> if (flipMicros == 0L) 1f else min(1f, (now - start).toFloat() / flipMicros)
-            else -> if (flipMicros == 0L) 0f else max(0f, 1f - (now - end).toFloat() / flipMicros)
-        }
-        return (bright * RAMP_STEPS + 0.5f).toInt()
     }
 }

@@ -42,6 +42,8 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
+import dev.stevenjin.stevenpiano.settings.WideLayout
+import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -79,6 +81,7 @@ fun PianoScreen() {
 
 @Composable
 private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
+    val frame = LocalAppFrame.current
     Eyebrow(
         "Preferences",
         Modifier
@@ -87,7 +90,10 @@ private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
     )
     HairlineDivider()
     SwitchRow("Auto-connect on launch", settings.autoConnect, vm::setAutoConnect)
-    NoteDisplayChoice(settings.noteDisplay, vm::setNoteDisplay)
+    // On wide screens the staff has its own place, so Note display picks the roll's style there.
+    val display = if (frame.wide) settings.noteDisplay.rollStyle else settings.noteDisplay
+    SingleChoice("Note display", frame.noteDisplayChoices, display, ::labelOf, vm::setNoteDisplay)
+    if (frame.wide) SingleChoice("Wide layout", WideLayout.entries, settings.wideLayout, ::labelOf, vm::setWideLayout)
     StepperRow("Default tempo", settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo)
     StepperRow("Transpose", settings.transpose, PlaybackLimits.Transpose, 1, Format::semitones, "Transpose down a semitone", "Transpose up a semitone", vm::setTranspose)
     StepperRow("Velocity", settings.velocityPct, PlaybackLimits.VelocityPct, 5, Format::percent, "Play softer", "Play louder", vm::setVelocity)
@@ -144,22 +150,23 @@ private fun StepperRow(
     HairlineDivider(startInset = 16.dp)
 }
 
+/** A preference with a few named options: its label, then one radio row per option. */
 @Composable
-private fun NoteDisplayChoice(selected: NoteDisplay, onSelect: (NoteDisplay) -> Unit) {
+private fun <T> SingleChoice(title: String, options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     Column(Modifier.selectableGroup()) {
-        RowLabel("Note display", Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
-        NoteDisplay.entries.forEach { display ->
+        RowLabel(title, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+        options.forEach { option ->
             Row(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .selectable(display == selected, role = Role.RadioButton) { onSelect(display) }
+                    .selectable(option == selected, role = Role.RadioButton) { onSelect(option) }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = display == selected, onClick = null)
+                RadioButton(selected = option == selected, onClick = null)
                 Spacer(Modifier.width(12.dp))
-                RowLabel(labelOf(display))
+                RowLabel(label(option))
             }
         }
     }
@@ -174,4 +181,11 @@ private fun RowLabel(text: String, modifier: Modifier = Modifier) {
 private fun labelOf(display: NoteDisplay): String = when (display) {
     NoteDisplay.PAPER_ROLL -> "Paper roll"
     NoteDisplay.FALLING -> "Falling notes"
+    NoteDisplay.STAFF -> "Staff"
+}
+
+private fun labelOf(layout: WideLayout): String = when (layout) {
+    WideLayout.STAFF_AND_NOTES -> "Staff and notes"
+    WideLayout.NOTES_ONLY -> "Notes only"
+    WideLayout.STAFF_ONLY -> "Staff only"
 }

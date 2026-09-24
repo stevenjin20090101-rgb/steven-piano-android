@@ -16,6 +16,18 @@ it was built for draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
 piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
 domain); their licences govern those files.
 
+Third-party
+-----------
+Bravura music font (app/src/main/res/font/bravura.otf, version 1.482,
+bundled unmodified), which draws the staff view's clefs, sharps and note
+heads:
+  Copyright © 2026, Steinberg Media Technologies GmbH
+  (http://www.steinberg.net/), with Reserved Font Name "Bravura".
+  Licensed under the SIL Open Font License, Version 1.1; the full licence
+  is in third_party/bravura/OFL.txt and at https://openfontlicense.org.
+  The font keeps its own licence; the MIT licence of this project does not
+  apply to it.
+
 Authorship verification
 -----------------------
 This project carries an Ed25519 cryptographic authorship signature.

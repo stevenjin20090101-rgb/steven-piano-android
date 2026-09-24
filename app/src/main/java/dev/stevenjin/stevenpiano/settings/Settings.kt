@@ -27,8 +27,23 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-/** How Now playing draws notes: the pianola roll (default) or Synthesia-style falling notes. */
-enum class NoteDisplay { PAPER_ROLL, FALLING }
+/**
+ * How Now playing draws notes: the pianola roll (default), Synthesia-style falling notes, or the
+ * staff. On wide screens the staff has its own place ([WideLayout]) and this chooses the roll's
+ * style, Staff reading as the paper roll there.
+ */
+enum class NoteDisplay {
+    PAPER_ROLL,
+    FALLING,
+    STAFF,
+    ;
+
+    /** The roll style this display draws the notes in: Staff has none of its own, so it takes the paper roll. */
+    val rollStyle: NoteDisplay get() = if (this == STAFF) PAPER_ROLL else this
+}
+
+/** What Now playing shows on medium and expanded widths. */
+enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
 /** The Piano tab's preferences, plus the last piano connected and where the Keys screen was. */
 data class PianoSettings(
@@ -41,6 +56,7 @@ data class PianoSettings(
     val velocityPct: Int = 100,
     val foldOutOfRange: Boolean = true,
     val skipDrumChannel: Boolean = true,
+    val wideLayout: WideLayout = WideLayout.STAFF_AND_NOTES,
     /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
     val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
 ) {
@@ -77,6 +93,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setSkipDrumChannel(on: Boolean) = edit { it[SKIP_DRUM_CHANNEL] = on }
 
+    suspend fun setWideLayout(layout: WideLayout) = edit { it[WIDE_LAYOUT] = layout.name }
+
     suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
 
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
@@ -95,6 +113,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             velocityPct = (this[VELOCITY_PCT] ?: defaults.velocityPct).coerceIn(PlaybackLimits.VelocityPct),
             foldOutOfRange = this[FOLD_OUT_OF_RANGE] ?: defaults.foldOutOfRange,
             skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
+            wideLayout = WideLayout.entries.firstOrNull { it.name == this[WIDE_LAYOUT] } ?: defaults.wideLayout,
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
         )
     }
@@ -109,6 +128,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val VELOCITY_PCT = intPreferencesKey("velocityPct")
         val FOLD_OUT_OF_RANGE = booleanPreferencesKey("foldOutOfRange")
         val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
+        val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
     }
 }
