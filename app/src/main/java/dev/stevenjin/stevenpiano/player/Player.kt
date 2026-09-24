@@ -142,15 +142,20 @@ class Player(
 
     fun setSkipDrums(skip: Boolean) = configure { copy(skipDrums = skip) }
 
-    /** Stops, then waits until the stop sequence has been written: for service teardown. Blocks up to [timeoutMs]. */
-    fun stopAndFlush(timeoutMs: Long): Boolean = settleAndFlush(timeoutMs) { engine.stop(it) }
-
-    /** Pauses, then waits until the stop sequence has been written: before a user disconnect. Blocks up to [timeoutMs]. */
-    fun pauseAndFlush(timeoutMs: Long): Boolean = settleAndFlush(timeoutMs) { engine.pause(it) }
-
-    private fun settleAndFlush(timeoutMs: Long, action: (Long) -> Unit): Boolean {
+    /** Stops, then waits until the stop sequence has been written. Blocks up to [timeoutMs]: for service teardown. */
+    fun stopAndFlush(timeoutMs: Long): Boolean {
         advanceJob?.cancel()
         loadJob?.cancel()
+        return settle(timeoutMs) { engine.stop(it) }
+    }
+
+    /** Pauses, then waits (off the main thread) until the stop sequence has been written: before a user disconnect. */
+    suspend fun pauseAndFlush(timeoutMs: Long): Boolean {
+        advanceJob?.cancel()
+        return withContext(io) { settle(timeoutMs) { engine.pause(it) } }
+    }
+
+    private fun settle(timeoutMs: Long, action: (Long) -> Unit): Boolean {
         val deadline = clock.nanoTime() + timeoutMs * NANOS_PER_MS
         if (!scheduler.submitAndWait(timeoutMs, action)) return false
         return link.flush(((deadline - clock.nanoTime()) / NANOS_PER_MS).coerceAtLeast(0L))

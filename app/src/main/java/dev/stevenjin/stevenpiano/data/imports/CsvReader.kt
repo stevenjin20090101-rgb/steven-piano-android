@@ -20,7 +20,7 @@ object CsvReader {
         val field = StringBuilder()
         var quoted = false
         var atFieldStart = true
-        var i = if (text.startsWith('﻿')) 1 else 0
+        var i = if (text.startsWith('\uFEFF')) 1 else 0
 
         fun endField() {
             row += field.toString()

@@ -31,7 +31,7 @@ class CsvReaderTest {
 
     @Test
     fun `empty fields, a byte-order mark, a bare CR and no final newline`() {
-        assertEquals(listOf(listOf("a", "", "c"), listOf("", "", ""), listOf("d")), CsvReader.parse("﻿a,,c\n,,\rd"))
+        assertEquals(listOf(listOf("a", "", "c"), listOf("", "", ""), listOf("d")), CsvReader.parse("\uFEFFa,,c\n,,\rd"))
         assertEquals(listOf(listOf("")), CsvReader.parse("\"\""))
         assertEquals(emptyList<List<String>>(), CsvReader.parse(""))
     }

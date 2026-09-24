@@ -12,6 +12,15 @@ package dev.stevenjin.stevenpiano.ble
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiSink
 import kotlinx.coroutines.flow.StateFlow
+import java.util.UUID
+
+/** How the piano shows itself over Bluetooth LE (firmware: BLE-MIDI 2.2 on NimBLE). */
+object PianoBluetooth {
+    /** In the scan response, not the advertisement: scans filter by service instead. */
+    const val NAME = "Steven Piano"
+    val SERVICE_UUID: UUID = UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700")
+    val CHARACTERISTIC_UUID: UUID = UUID.fromString("7772E5DB-3868-4112-A1A9-F2669D106BF3")
+}
 
 /**
  * The connection to the piano. Nothing ever comes back from the piano, so [state] is all
