@@ -99,7 +99,7 @@ fun PianoNavHost(requestedTab: Route?, onTabShown: () -> Unit, onImport: (Import
                 )
             }
             composable(Route.NowPlaying.path) {
-                NowPlayingScreen(onPlayPause = playback::togglePlayPause, onOpenPiano = { show(Route.Piano) })
+                NowPlayingScreen(playback, onOpenPiano = { show(Route.Piano) })
             }
             composable(Route.Piano.path) { PianoScreen() }
         }

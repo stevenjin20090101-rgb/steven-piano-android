@@ -11,14 +11,18 @@ package dev.stevenjin.stevenpiano
 
 import android.app.Application
 import android.content.Context
+import dev.stevenjin.stevenpiano.service.ImportService
+import dev.stevenjin.stevenpiano.service.PlaybackNotification
 
-/** Builds the [AppGraph] once per process. */
+/** Builds the [AppGraph] once per process, and the notification channels. */
 class App : Application() {
     lateinit var graph: AppGraph
         private set
 
     override fun onCreate() {
         super.onCreate()
+        PlaybackNotification.createChannel(this)
+        ImportService.createChannel(this)
         graph = AppGraph(this).also { it.start() }
     }
 }

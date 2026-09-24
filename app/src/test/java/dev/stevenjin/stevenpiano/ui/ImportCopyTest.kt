@@ -7,7 +7,7 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.ui.screens.library
+package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import org.junit.After
@@ -27,17 +27,17 @@ class ImportCopyTest {
 
     @Test
     fun `a running import counts files looked at`() {
-        assertEquals("Looking for MIDI files…", importRunning(ImportProgress(finished = false)))
-        assertEquals("Imported 1,204 of 1,727", importRunning(ImportProgress(done = 1_204, total = 1_727, finished = false)))
+        assertEquals("Looking for MIDI files…", ImportCopy.running(ImportProgress(finished = false)))
+        assertEquals("Imported 1,204 of 1,727", ImportCopy.running(ImportProgress(done = 1_204, total = 1_727, finished = false)))
     }
 
     @Test
     fun `the summary names what came in and what could not be read, and passes over duplicates`() {
-        assertEquals("Imported 12 pieces.", importSummary(ImportProgress(done = 14, total = 14, imported = 12, duplicates = 2)))
-        assertEquals("Imported 1 piece.", importSummary(ImportProgress(done = 1, total = 1, imported = 1)))
-        assertEquals("Imported 5 pieces. 1 file couldn't be read.", importSummary(ImportProgress(done = 6, total = 6, imported = 5, failed = 1)))
-        assertEquals("2 files couldn't be read.", importSummary(ImportProgress(done = 2, total = 2, failed = 2)))
-        assertEquals("That piece is already in the library.", importSummary(ImportProgress(done = 1, total = 1, duplicates = 1)))
-        assertEquals("Those pieces are already in the library.", importSummary(ImportProgress(done = 3, total = 3, duplicates = 3)))
+        assertEquals("Imported 12 pieces.", ImportCopy.summary(ImportProgress(done = 14, total = 14, imported = 12, duplicates = 2)))
+        assertEquals("Imported 1 piece.", ImportCopy.summary(ImportProgress(done = 1, total = 1, imported = 1)))
+        assertEquals("Imported 5 pieces. 1 file couldn't be read.", ImportCopy.summary(ImportProgress(done = 6, total = 6, imported = 5, failed = 1)))
+        assertEquals("2 files couldn't be read.", ImportCopy.summary(ImportProgress(done = 2, total = 2, failed = 2)))
+        assertEquals("That piece is already in the library.", ImportCopy.summary(ImportProgress(done = 1, total = 1, duplicates = 1)))
+        assertEquals("Those pieces are already in the library.", ImportCopy.summary(ImportProgress(done = 3, total = 3, duplicates = 3)))
     }
 }

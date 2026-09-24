@@ -106,6 +106,18 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
+
+        <!-- Playback with the screen off: the media notification, session and wake lock. -->
+        <service
+            android:name=".service.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Imports that outlive the screen, with a progress notification. -->
+        <service
+            android:name=".service.ImportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

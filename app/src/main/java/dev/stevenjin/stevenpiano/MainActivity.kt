@@ -22,15 +22,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
+import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.ui.PianoNavHost
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
-import kotlinx.coroutines.launch
 
 /**
  * The one activity: edge to edge, transparent system bars, the three tabs. MIDI files that
- * arrive by "Open with" or the share sheet are imported; the playback notification opens
- * Now playing.
+ * arrive by "Open with" or the share sheet, or come from the Library's pickers, are imported by
+ * the import service; the playback notification opens Now playing.
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
@@ -44,7 +44,9 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) route(intent)
         setContent {
             PianoTheme {
-                PianoNavHost(requestedTab, onTabShown = { requestedTab = null }, onImport = ::startImport)
+                PianoNavHost(requestedTab, onTabShown = { requestedTab = null }) { source ->
+                    ImportService.start(this, source, fromPicker = true)
+                }
             }
         }
     }
@@ -57,16 +59,11 @@ class MainActivity : ComponentActivity() {
     private fun route(intent: Intent) {
         val shared = sharedMidi(intent)
         if (shared.isNotEmpty()) {
-            startImport(ImportSource.Uris(shared))
+            ImportService.start(this, ImportSource.Uris(shared), fromPicker = false)
             requestedTab = Route.Library
         } else {
             Route.of(intent.getStringExtra(EXTRA_TAB))?.let { requestedTab = it }
         }
-    }
-
-    private fun startImport(source: ImportSource) {
-        val app = applicationContext
-        app.graph.appScope.launch { app.graph.importer.import(app, source) }
     }
 
     companion object {

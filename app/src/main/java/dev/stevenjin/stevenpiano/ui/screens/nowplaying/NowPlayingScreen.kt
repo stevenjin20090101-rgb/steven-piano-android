@@ -54,6 +54,7 @@ import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
@@ -72,11 +73,11 @@ private const val SETTLE_NANOS = 400_000_000L
 
 /**
  * The signature screen: the title, the composer, the note canvas over the keyboard strip, the
- * scrubber, the transport, tempo and the connection line. [onPlayPause] starts or pauses
- * playback; [onOpenPiano] shows the Piano tab.
+ * scrubber, the transport, tempo and the connection line. The transport goes through
+ * [playback], which keeps the playback service running; [onOpenPiano] shows the Piano tab.
  */
 @Composable
-fun NowPlayingScreen(onPlayPause: () -> Unit, onOpenPiano: () -> Unit) {
+fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val graph = LocalContext.current.graph
     val player = graph.player
     val state by player.state.collectAsStateWithLifecycle()
@@ -88,7 +89,7 @@ fun NowPlayingScreen(onPlayPause: () -> Unit, onOpenPiano: () -> Unit) {
         state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         val piece = state.piece
         if (piece != null) {
-            PieceView(piece, state, settings.noteDisplay, link is LinkState.Connected, player, onPlayPause, onOpenPiano)
+            PieceView(piece, state, settings.noteDisplay, link is LinkState.Connected, player, playback, onOpenPiano)
         } else if (!state.loading) {
             Box(
                 Modifier
@@ -115,7 +116,7 @@ private fun ColumnScope.PieceView(
     display: NoteDisplay,
     connected: Boolean,
     player: Player,
-    onPlayPause: () -> Unit,
+    playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
 ) {
     val playing = state.status == PlaybackStatus.Playing
@@ -170,11 +171,11 @@ private fun ColumnScope.PieceView(
         playing = playing,
         hasNext = state.queueIndex + 1 < state.queueSize,
         onPrevious = {
-            player.previous()
+            playback.previous()
             if (!playing) settle++
         },
-        onPlayPause = onPlayPause,
-        onNext = player::next,
+        onPlayPause = playback::togglePlayPause,
+        onNext = playback::next,
         modifier = Modifier.fillMaxWidth(),
     )
     FlowRow(

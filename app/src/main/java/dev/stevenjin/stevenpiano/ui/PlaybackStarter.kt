@@ -9,21 +9,80 @@
 
 package dev.stevenjin.stevenpiano.ui
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.service.PlaybackService
 
-/** Playback started by a tap in the app: a library row, or the play button. */
-class PlaybackStarter(private val player: Player) {
-    fun play(pieceId: Long, queue: List<Long>) = player.play(pieceId, queue)
+/**
+ * Playback started by a tap in the app: a library row or the transport. Anything that may start
+ * the piano also starts the playback service, which must be started from the foreground; the
+ * first time, the notification permission is asked for (API 33+), in context.
+ */
+class PlaybackStarter(private val context: Context, private val player: Player, private val askForNotifications: () -> Unit) {
+    fun play(pieceId: Long, queue: List<Long>) {
+        player.play(pieceId, queue)
+        started()
+    }
 
-    fun togglePlayPause() = player.togglePlayPause()
+    fun togglePlayPause() {
+        if (player.state.value.status == PlaybackStatus.Playing) {
+            player.pause()
+        } else {
+            player.resume()
+            started()
+        }
+    }
+
+    fun previous() {
+        player.previous()
+        started()
+    }
+
+    fun next() {
+        player.next()
+        started()
+    }
+
+    private fun started() {
+        askForNotifications()
+        PlaybackService.start(context)
+    }
+
+    companion object {
+        /** Asked once per process at most; Android itself stops asking after two refusals. */
+        private var askedForNotifications = false
+
+        fun shouldAskForNotifications(context: Context): Boolean =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !askedForNotifications &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+
+        fun markAsked() {
+            askedForNotifications = true
+        }
+    }
 }
 
 @Composable
 fun rememberPlaybackStarter(): PlaybackStarter {
-    val player = LocalContext.current.graph.player
-    return remember(player) { PlaybackStarter(player) }
+    val context = LocalContext.current
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }   // playback goes on either way
+    return remember(context) {
+        PlaybackStarter(context.applicationContext, context.graph.player) {
+            if (PlaybackStarter.shouldAskForNotifications(context)) {
+                PlaybackStarter.markAsked()
+                ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 }

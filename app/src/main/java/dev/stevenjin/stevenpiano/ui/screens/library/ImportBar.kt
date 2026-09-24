@@ -21,7 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
-import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.ImportCopy
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
@@ -37,30 +37,15 @@ fun ImportBar(progress: ImportProgress, dismissed: ImportProgress?, onDismiss: (
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     when {
         !progress.finished -> Column {
-            Text(importRunning(progress), Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = style, color = color)
+            Text(ImportCopy.running(progress), Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = style, color = color)
             ProgressHairline(if (progress.total == 0) null else progress.done.toFloat() / progress.total)
         }
         progress.total > 0 && progress !== dismissed -> Column {
             Row(Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(importSummary(progress), Modifier.weight(1f), style = style, color = color)
+                Text(ImportCopy.summary(progress), Modifier.weight(1f), style = style, color = color)
                 GlyphButton(R.drawable.ic_close, "Dismiss") { onDismiss(progress) }
             }
             HairlineDivider()
         }
     }
-}
-
-internal fun importRunning(progress: ImportProgress): String =
-    if (progress.total == 0) "Looking for MIDI files…" else "Imported ${Format.count(progress.done)} of ${Format.count(progress.total)}"
-
-/** "Imported 12 pieces. 1 file couldn't be read." */
-internal fun importSummary(progress: ImportProgress): String {
-    val imported = when {
-        progress.imported > 0 -> "Imported ${Format.count(progress.imported, "piece", "pieces")}."
-        progress.failed > 0 -> null
-        progress.duplicates == 1 -> "That piece is already in the library."
-        else -> "Those pieces are already in the library."
-    }
-    val failed = if (progress.failed > 0) "${Format.count(progress.failed, "file", "files")} couldn't be read." else null
-    return listOfNotNull(imported, failed).joinToString(" ")
 }
