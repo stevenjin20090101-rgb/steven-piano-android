@@ -15,20 +15,67 @@ import android.os.Looper
 import android.util.Log
 import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.midi.MidiBatch
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The emulator has no piano: in debug builds there this link stands in. It "finds" the piano
  * after a moment, then logs every message it is given (`adb logcat -s PianoLink`), so the
  * stop sequence can be checked: `B0 40 00` then `B0 7B 00`.
+ *
+ * It has the piano's console too, answered by an [EmulatedConsole] a moment later, so the
+ * Piano tab's settings work on the emulator; every line both ways is logged ("console > ledbright 40",
+ * "console < ledbright=40"). The emulated piano keeps its values across connections, as a
+ * powered piano does. [consoleMode] is asked on each connection: `adb shell setprop
+ * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
+ * to one whose console never answers; anything else, the full console.
  */
-class LoggingPianoLink : PianoLink {
+class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty) : PianoLink {
+    /** Which piano the emulator pretends to reach. */
+    enum class ConsoleMode { Full, None, Mute }
+
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
     private val main = Handler(Looper.getMainLooper())
-    private val found = Runnable { _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU) }
+    private val emulated = EmulatedConsole()
+    private val replies = MutableSharedFlow<String>(extraBufferCapacity = REPLY_BUFFER_LINES)
+
+    @Volatile
+    private var mode = ConsoleMode.Full
+
+    @Volatile
+    override var console: ConsoleChannel? = null
+        private set
+
+    private val channel = object : ConsoleChannel {
+        override val lines: SharedFlow<String> = replies.asSharedFlow()
+
+        override fun sendLine(text: String) {
+            if (console !== this || PianoConsole.encode(text) == null) return
+            Log.d(TAG, "console > $text")
+            if (mode == ConsoleMode.Mute) return
+            val answer = synchronized(emulated) { emulated.handle(text) }
+            main.postDelayed({
+                if (console === this) {
+                    answer.forEach { line ->
+                        Log.d(TAG, "console < $line")
+                        replies.tryEmit(line)
+                    }
+                }
+            }, REPLY_MS)
+        }
+    }
+
+    private val found = Runnable {
+        mode = consoleMode()
+        console = if (mode == ConsoleMode.None) null else channel
+        Log.d(TAG, "Connected (emulated), console: ${mode.name.lowercase()}")
+        _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU)
+    }
 
     override fun connect(address: String?) {
         if (_state.value is LinkState.Connected) return
@@ -38,6 +85,7 @@ class LoggingPianoLink : PianoLink {
 
     override fun disconnect() {
         main.removeCallbacks(found)
+        console = null
         _state.value = LinkState.Disconnected
     }
 
@@ -54,9 +102,24 @@ class LoggingPianoLink : PianoLink {
         private const val TAG = "PianoLink"
         private const val LOGGED_MTU = 255
         private const val SCAN_MS = 1_500L
+        private const val REPLY_MS = 40L
+        private const val REPLY_BUFFER_LINES = 512
+        private const val CONSOLE_PROPERTY = "debug.stevenpiano.console"
 
         /** Debug builds on an emulator, which has no piano to reach. */
         fun isWanted(): Boolean =
             BuildConfig.DEBUG && (Build.HARDWARE in setOf("goldfish", "ranchu") || Build.FINGERPRINT.startsWith("generic"))
+
+        /** `debug.stevenpiano.console`: "none", "mute", or unset for the full console. Read with getprop (debug builds only). */
+        private fun consoleModeFromProperty(): ConsoleMode {
+            val value = runCatching {
+                ProcessBuilder("getprop", CONSOLE_PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
+            }.getOrDefault("")
+            return when (value) {
+                "none" -> ConsoleMode.None
+                "mute" -> ConsoleMode.Mute
+                else -> ConsoleMode.Full
+            }
+        }
     }
 }

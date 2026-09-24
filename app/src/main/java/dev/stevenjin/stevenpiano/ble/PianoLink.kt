@@ -23,11 +23,18 @@ object PianoBluetooth {
 }
 
 /**
- * The connection to the piano. Nothing ever comes back from the piano, so [state] is all
- * the app can know about it. Implementations must be safe to call from any thread.
+ * The connection to the piano. MIDI only goes out; what comes back is [state] and, on firmware
+ * that has it, the piano's text console ([console]) on the same connection. Implementations
+ * must be safe to call from any thread.
  */
 interface PianoLink : MidiSink {
     val state: StateFlow<LinkState>
+
+    /**
+     * The piano's console (its settings), while connected to a piano whose firmware offers it;
+     * null when not connected or when the piano has no console. Set before [state] turns Connected.
+     */
+    val console: ConsoleChannel?
 
     /** Finds and connects to the piano, preferring [address] (the last one used) when given. */
     fun connect(address: String? = null)

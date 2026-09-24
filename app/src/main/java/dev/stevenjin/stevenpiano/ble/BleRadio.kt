@@ -42,10 +42,19 @@ interface GattConnection {
     /** After discovery: true when the BLE-MIDI characteristic is there. */
     fun hasMidiCharacteristic(): Boolean
 
+    /** After discovery: true when the piano's console (Nordic UART: RX, and TX with its CCCD) is there too. */
+    fun hasConsole(): Boolean
+
     fun requestHighPriority(): Boolean
 
-    /** Write without response. */
+    /** A MIDI packet, written without response. */
     fun write(packet: ByteArray): WriteResult
+
+    /** Switches on the console's TX notifications: the CCCD write, answered by [GattEvents.onConsoleSubscribed]. */
+    fun subscribeConsole(): WriteResult
+
+    /** A piece of a console line to RX, written without response. */
+    fun writeConsole(chunk: ByteArray): WriteResult
 
     fun disconnect()
 
@@ -62,7 +71,14 @@ interface GattEvents {
 
     fun onServicesDiscovered(connection: GattConnection, success: Boolean)
 
+    /** A characteristic write (MIDI or console) is done: the next operation may go. */
     fun onWriteDone(connection: GattConnection, success: Boolean)
+
+    /** The console's CCCD write is done. */
+    fun onConsoleSubscribed(connection: GattConnection, success: Boolean)
+
+    /** A notification from the console's TX; [data] is the caller's own copy. */
+    fun onConsoleData(connection: GattConnection, data: ByteArray)
 }
 
 /** The link's own thread: runs actions in order, now or after a delay. */

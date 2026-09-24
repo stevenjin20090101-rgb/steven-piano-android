@@ -15,6 +15,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
@@ -105,6 +106,22 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) =
             events.onWriteDone(connection, status == BluetoothGatt.GATT_SUCCESS)
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) =
+            events.onConsoleSubscribed(connection, status == BluetoothGatt.GATT_SUCCESS)
+
+        // API 33+: the value arrives with the callback. Not calling super keeps the old callback below silent.
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            if (characteristic.uuid == PianoConsole.TX_UUID) events.onConsoleData(connection, value.copyOf())
+        }
+
+        // API 26-32: the value sits in the characteristic until the next notification overwrites it, so copy it now.
+        @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            if (characteristic.uuid != PianoConsole.TX_UUID) return
+            val value = characteristic.value ?: return
+            events.onConsoleData(connection, value.copyOf())
+        }
     }
 
     private companion object {
@@ -116,6 +133,8 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
 private class AndroidGattConnection : GattConnection {
     lateinit var gatt: BluetoothGatt
     private var midi: BluetoothGattCharacteristic? = null
+    private var consoleRx: BluetoothGattCharacteristic? = null
+    private var consoleCccd: BluetoothGattDescriptor? = null
 
     override fun requestMtu(mtu: Int): Boolean = gatt.requestMtu(mtu)
 
@@ -126,23 +145,49 @@ private class AndroidGattConnection : GattConnection {
         return midi != null
     }
 
+    override fun hasConsole(): Boolean {
+        val service = gatt.getService(PianoConsole.SERVICE_UUID)
+        consoleRx = service?.getCharacteristic(PianoConsole.RX_UUID)
+        consoleCccd = service?.getCharacteristic(PianoConsole.TX_UUID)?.getDescriptor(PianoConsole.CCCD_UUID)
+        return consoleRx != null && consoleCccd != null
+    }
+
     override fun requestHighPriority(): Boolean = gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
 
-    override fun write(packet: ByteArray): WriteResult {
-        val characteristic = midi ?: return WriteResult.Failed
+    override fun write(packet: ByteArray): WriteResult = writeNoResponse(midi, packet)
+
+    override fun writeConsole(chunk: ByteArray): WriteResult = writeNoResponse(consoleRx, chunk)
+
+    override fun subscribeConsole(): WriteResult {
+        val cccd = consoleCccd ?: return WriteResult.Failed
+        if (!gatt.setCharacteristicNotification(cccd.characteristic, true)) return WriteResult.Failed
+        val enable = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return statusToResult(gatt.writeDescriptor(cccd, enable))
+        }
+        @Suppress("DEPRECATION")
+        cccd.value = enable
+        @Suppress("DEPRECATION")
+        return if (gatt.writeDescriptor(cccd)) WriteResult.Sent else WriteResult.Busy
+    }
+
+    private fun writeNoResponse(characteristic: BluetoothGattCharacteristic?, bytes: ByteArray): WriteResult {
+        if (characteristic == null) return WriteResult.Failed
         val noResponse = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return when (gatt.writeCharacteristic(characteristic, packet, noResponse)) {
-                BluetoothStatusCodes.SUCCESS -> WriteResult.Sent
-                BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY -> WriteResult.Busy
-                else -> WriteResult.Failed
-            }
+            return statusToResult(gatt.writeCharacteristic(characteristic, bytes, noResponse))
         }
         characteristic.writeType = noResponse
         @Suppress("DEPRECATION")
-        characteristic.value = packet
+        characteristic.value = bytes
         @Suppress("DEPRECATION")
         return if (gatt.writeCharacteristic(characteristic)) WriteResult.Sent else WriteResult.Busy
+    }
+
+    private fun statusToResult(status: Int): WriteResult = when (status) {
+        BluetoothStatusCodes.SUCCESS -> WriteResult.Sent
+        BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY -> WriteResult.Busy
+        else -> WriteResult.Failed
     }
 
     override fun disconnect() = gatt.disconnect()

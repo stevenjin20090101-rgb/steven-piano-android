@@ -13,9 +13,14 @@ import android.content.Context
 import android.os.HandlerThread
 import android.util.Log
 import dev.stevenjin.stevenpiano.midi.MidiBatch
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
@@ -28,7 +33,10 @@ import kotlin.concurrent.withLock
  * Connect: a filtered scan, stopped before connecting; connectGatt(autoConnect = false);
  * requestMtu(255), keeping whatever onMtuChanged grants; discoverServices, retried once;
  * connection priority HIGH; Connected, and the address is remembered.
- * Writes: one GATT operation in flight, always: the next packet waits for onCharacteristicWrite.
+ * The console: when discovery also finds the Nordic UART Service, the first operation on the
+ * connection switches on its notifications (the CCCD write), and [console] carries lines both ways.
+ * Writes: one GATT operation in flight, always: the next waits for its callback. MIDI goes first;
+ * a console line goes only while no MIDI is waiting, so it delays a MIDI packet by one write at most.
  * A drop: close() the gatt, then Reconnecting: a background connectGatt(autoConnect = true) on
  * the same piano, plus filtered scans with backoff 1, 2, 4, 8, 15 s starting after 20 s.
  * Every radio call and every callback runs on [executor]'s thread, which never blocks.
@@ -53,6 +61,20 @@ class GattPianoLink(
     private val drainLock = ReentrantLock()
     private val drained = drainLock.newCondition()
 
+    // The console: lines queued from any thread, written from the link's thread.
+    @Volatile
+    private var consoleReady = false
+    private val consoleQueue = ConcurrentLinkedQueue<ByteArray>()
+    private val consoleLines = MutableSharedFlow<String>(extraBufferCapacity = CONSOLE_BUFFER_LINES, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val consoleChannel = object : ConsoleChannel {
+        override val lines: SharedFlow<String> = consoleLines.asSharedFlow()
+
+        override fun sendLine(text: String) = queueLine(text)
+    }
+
+    override val console: ConsoleChannel?
+        get() = if (consoleReady) consoleChannel else null
+
     // Owned by the executor's thread.
     private enum class Phase { None, Connecting, Negotiating, Ready }
 
@@ -69,8 +91,11 @@ class GattPianoLink(
     private var discoveryRetried = false
     private var connectRetried = false
     private var inFlight = false
-    private var retryPacket: ByteArray? = null
+    private var retryOp: Op? = null
     private var writeRetries = 0
+    private var subscribePending = false
+    private var consoleOffset = 0   // bytes of the head console line already written
+    private val assembler = ConsoleLineAssembler()
     private var reconnectStartedMs = 0L
     private var backoffStep = 0
     private val throttle = ScanThrottle()
@@ -99,6 +124,14 @@ class GattPianoLink(
 
         override fun onWriteDone(connection: GattConnection, success: Boolean) =
             executor.execute { onWritten(connection) }
+
+        override fun onConsoleSubscribed(connection: GattConnection, success: Boolean) = executor.execute {
+            if (!success && connection === gatt) log("The piano did not switch on its console replies")
+            onWritten(connection)
+        }
+
+        override fun onConsoleData(connection: GattConnection, data: ByteArray) =
+            executor.execute { onConsoleNotified(connection, data) }
     }
 
     init {
@@ -271,6 +304,7 @@ class GattPianoLink(
 
     private fun becomeReady(connection: GattConnection) {
         guard { connection.requestHighPriority() }
+        val hasConsole = guard { connection.hasConsole() } == true
         phase = Phase.Ready
         reconnecting = false
         attempt = 0
@@ -279,11 +313,16 @@ class GattPianoLink(
         executor.cancel(startScan)
         executor.cancel(retryInBackground)
         writer.clear()   // anything that slipped in while the last connection was going down
+        consoleQueue.clear()
+        consoleOffset = 0
+        assembler.clear()
+        subscribePending = hasConsole   // the connection's first write, so no reply is lost
+        consoleReady = hasConsole
         ready = true
         val name = piano?.name ?: PianoBluetooth.NAME
         val address = piano?.address ?: preferredAddress
         publish()
-        log("Connected to $name, MTU $mtu")
+        log("Connected to $name, MTU $mtu" + if (hasConsole) ", with its console" else ", no console")
         address?.let {
             preferredAddress = it
             onConnected(it, name)
@@ -390,10 +429,15 @@ class GattPianoLink(
         val connection = gatt ?: return
         gatt = null
         ready = false
+        consoleReady = false
         writer.clear()
+        consoleQueue.clear()
+        consoleOffset = 0
+        subscribePending = false
+        assembler.clear()
         executor.cancel(writeTimeout)
         inFlight = false
-        retryPacket = null
+        retryOp = null
         writeRetries = 0
         setWriting(false)
         guard { connection.close() }
@@ -401,36 +445,95 @@ class GattPianoLink(
 
     // ---- Writing -------------------------------------------------------------------------
 
+    /** One GATT operation: a MIDI packet, a piece of a console line, or switching on the console's replies. */
+    private sealed interface Op {
+        class Midi(val packet: ByteArray) : Op
+
+        class Console(val chunk: ByteArray, val endsLine: Boolean) : Op
+
+        data object Subscribe : Op
+    }
+
     private fun pumpNow() {
         pumpQueued.set(false)
         executor.cancel(pump)
         val connection = gatt
         if (phase != Phase.Ready || inFlight || connection == null) return
         val now = executor.nanoTime()
-        val packet = retryPacket ?: writer.nextPacket(now, mtu, now / NANOS_PER_MS)
-        if (packet == null) {
+        val op = retryOp ?: nextOp(now)
+        if (op == null) {
             val wait = writer.nanosUntilReady(now)
             if (wait == Long.MAX_VALUE) setWriting(false) else executor.schedule((wait + NANOS_PER_MS - 1) / NANOS_PER_MS, pump)
             return
         }
-        setWriting(true)
-        when (guard { connection.write(packet) } ?: WriteResult.Failed) {
+        setWriting(op is Op.Midi || writer.pending > 0)   // flush() waits for MIDI only
+        val result = guard {
+            when (op) {
+                is Op.Midi -> connection.write(op.packet)
+                is Op.Console -> connection.writeConsole(op.chunk)
+                Op.Subscribe -> connection.subscribeConsole()
+            }
+        } ?: WriteResult.Failed
+        when (result) {
             WriteResult.Sent -> {
                 inFlight = true
-                retryPacket = null
+                retryOp = null
                 writeRetries = 0
+                done(op)
                 executor.schedule(WRITE_TIMEOUT_MS, writeTimeout)
             }
             WriteResult.Busy, WriteResult.Failed -> {
-                retryPacket = packet
+                retryOp = op
                 if (++writeRetries > MAX_WRITE_RETRIES) {
-                    log("Dropped a packet the stack would not take")
-                    retryPacket = null
+                    log(if (op is Op.Midi) "Dropped a packet the stack would not take" else "Dropped a console write the stack would not take")
+                    retryOp = null
                     writeRetries = 0
+                    done(op, dropped = true)
                 }
                 executor.schedule(WRITE_RETRY_MS, pump)
             }
         }
+    }
+
+    /**
+     * What goes next: the console subscription (once, first), then MIDI. A console line waits
+     * while any MIDI is queued, even MIDI still waiting for the pace, so it never holds up a due
+     * packet by more than the one write already in flight.
+     */
+    private fun nextOp(now: Long): Op? {
+        if (subscribePending) return Op.Subscribe
+        writer.nextPacket(now, mtu, now / NANOS_PER_MS)?.let { return Op.Midi(it) }
+        if (writer.pending > 0) return null
+        val line = consoleQueue.peek() ?: return null
+        val end = minOf(line.size, consoleOffset + (mtu - ATT_HEADER).coerceAtLeast(1))
+        return Op.Console(line.copyOfRange(consoleOffset, end), endsLine = end == line.size)
+    }
+
+    /** An operation went out (or was given up on): move past it. A console line given up on is dropped whole. */
+    private fun done(op: Op, dropped: Boolean = false) {
+        when (op) {
+            is Op.Midi -> Unit
+            Op.Subscribe -> subscribePending = false
+            is Op.Console -> if (op.endsLine || dropped) {
+                consoleQueue.poll()
+                consoleOffset = 0
+            } else {
+                consoleOffset += op.chunk.size
+            }
+        }
+    }
+
+    /** From any thread: a console line joins the queue, behind MIDI. */
+    private fun queueLine(text: String) {
+        val bytes = PianoConsole.encode(text) ?: return log("Console line not sent: longer than ${ConsoleChannel.MAX_LINE} characters, or more than one line")
+        if (!consoleReady) return
+        consoleQueue.add(bytes)
+        if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
+    }
+
+    private fun onConsoleNotified(connection: GattConnection, data: ByteArray) {
+        if (connection !== gatt || !consoleReady) return
+        assembler.feed(data) { consoleLines.tryEmit(it) }
     }
 
     private fun onWritten(connection: GattConnection) {
@@ -473,6 +576,8 @@ class GattPianoLink(
         private const val DEFAULT_MTU = 23
         private const val REQUESTED_MTU = 255
         private const val NANOS_PER_MS = 1_000_000L
+        private const val ATT_HEADER = 3
+        private const val CONSOLE_BUFFER_LINES = 512
         private const val CONNECT_TIMEOUT_MS = 15_000L
         private const val RETRY_CONNECT_MS = 500L
         private const val BACKGROUND_RETRY_MS = 1_000L

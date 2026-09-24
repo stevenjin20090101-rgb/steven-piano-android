@@ -84,6 +84,12 @@ class FakeRadio : BleRadio {
     fun adapter(on: Boolean) = adapterListener?.invoke(on)
 }
 
+/**
+ * One connection the test drives. With [hasConsole] the piano also has its console (Nordic UART):
+ * the link's writes are logged in [ops] in the order they went out, and [consoleScript] answers
+ * each whole line written to RX with notifications, [notifyChunk] bytes at a time (so lines arrive
+ * split, as the firmware's MTU-sized notifications split them).
+ */
 class FakeGatt(val address: String, val autoConnect: Boolean, private val events: GattEvents) : GattConnection {
     var requestedMtu = 0
     var discoveries = 0
@@ -91,9 +97,19 @@ class FakeGatt(val address: String, val autoConnect: Boolean, private val events
     var disconnected = false
     var closed = false
     var hasMidi = true
+    var hasConsole = false
     var nextWrite = WriteResult.Sent
     var revoked = false
     val writes = mutableListOf<ByteArray>()
+    val consoleWrites = mutableListOf<ByteArray>()
+    val ops = mutableListOf<String>()
+    var consoleScript: ((String) -> List<String>)? = null
+    var notifyChunk = 20
+    private val rx = StringBuilder()
+
+    /** Every line written to the console so far, split on "\n". */
+    val consoleLinesWritten: List<String>
+        get() = consoleWrites.joinToString("") { String(it, Charsets.UTF_8) }.split('\n').dropLast(1)
 
     override fun requestMtu(mtu: Int): Boolean {
         requestedMtu = mtu
@@ -107,6 +123,8 @@ class FakeGatt(val address: String, val autoConnect: Boolean, private val events
 
     override fun hasMidiCharacteristic(): Boolean = hasMidi
 
+    override fun hasConsole(): Boolean = hasConsole
+
     override fun requestHighPriority(): Boolean {
         highPriority = true
         return true
@@ -114,8 +132,31 @@ class FakeGatt(val address: String, val autoConnect: Boolean, private val events
 
     override fun write(packet: ByteArray): WriteResult {
         if (revoked) throw SecurityException("BLUETOOTH_CONNECT revoked")
-        if (nextWrite == WriteResult.Sent) writes += packet
+        if (nextWrite == WriteResult.Sent) {
+            writes += packet
+            ops += "midi"
+        }
         return nextWrite
+    }
+
+    override fun subscribeConsole(): WriteResult {
+        if (nextWrite == WriteResult.Sent) ops += "subscribe"
+        return nextWrite
+    }
+
+    override fun writeConsole(chunk: ByteArray): WriteResult {
+        if (nextWrite != WriteResult.Sent) return nextWrite
+        consoleWrites += chunk
+        ops += "console"
+        rx.append(String(chunk, Charsets.UTF_8))
+        while (true) {
+            val end = rx.indexOf("\n")
+            if (end < 0) break
+            val line = rx.substring(0, end)
+            rx.delete(0, end + 1)
+            consoleScript?.invoke(line)?.let { replies -> notify(("> $line\n" + replies.joinToString("") { "$it\n" }).toByteArray()) }
+        }
+        return WriteResult.Sent
     }
 
     override fun disconnect() {
@@ -135,4 +176,16 @@ class FakeGatt(val address: String, val autoConnect: Boolean, private val events
     fun discovered(success: Boolean = true) = events.onServicesDiscovered(this, success)
 
     fun writeDone() = events.onWriteDone(this, success = true)
+
+    fun subscribeDone(success: Boolean = true) = events.onConsoleSubscribed(this, success)
+
+    /** The piano notifies [bytes] on TX, [notifyChunk] bytes per notification. */
+    fun notify(bytes: ByteArray) {
+        var at = 0
+        while (at < bytes.size) {
+            val end = minOf(bytes.size, at + notifyChunk)
+            events.onConsoleData(this, bytes.copyOfRange(at, end))
+            at = end
+        }
+    }
 }
