@@ -42,3 +42,9 @@ class MidiBatch {
             ((status and 0xFF) shl 16) or ((data1 and 0x7F) shl 8) or (data2 and 0x7F)
     }
 }
+
+/** Where routed messages go: the piano link, or a recorder in tests. */
+fun interface MidiSink {
+    /** Takes a copy of [batch]. [dropPending] replaces anything still queued (the stop sequence). */
+    fun send(batch: MidiBatch, dropPending: Boolean)
+}

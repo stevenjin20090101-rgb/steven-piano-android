@@ -45,14 +45,15 @@ class NoteRouter {
 
     fun isSounding(key: Int): Boolean = key in 0..127 && refCount[key] > 0
 
+    /** Releases always go through, so changing a setting mid-note never strands a held key. */
     fun route(status: Int, data1: Int, data2: Int, nowMicros: Long, out: MidiBatch) {
         val channel = status and 0x0F
-        if (!accepts(channel)) return
+        val source = channel * 128 + data1
         when (status and 0xF0) {
-            0x90 -> if (data2 > 0) noteOn(channel * 128 + data1, data1, data2, nowMicros, out)
-            else release(channel * 128 + data1, out)
-            0x80 -> release(channel * 128 + data1, out)
-            0xB0 -> if (data1 == SUSTAIN && data2 != pedal) {
+            0x90 -> if (data2 == 0) release(source, out)
+            else if (accepts(channel)) noteOn(source, data1, data2, nowMicros, out)
+            0x80 -> release(source, out)
+            0xB0 -> if (data1 == SUSTAIN && data2 != pedal && accepts(channel)) {
                 pedal = data2
                 out.add(0xB0, SUSTAIN, data2)
             }
