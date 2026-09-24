@@ -1,0 +1,151 @@
+// ============================================================================
+//  Steven Piano - Android player for the self-playing acoustic piano
+//  Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+//  Original author & creator: Steven Jin.
+//  Licensed under the MIT License (see LICENSE). This copyright and attribution
+//  notice MUST be preserved in all copies or substantial portions of the work.
+//  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+// ============================================================================
+
+package dev.stevenjin.stevenpiano.midi
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class NoteRouterTest {
+    private val router = NoteRouter()
+    private val out = MidiBatch()
+
+    private fun send(status: Int, data1: Int, data2: Int, atMs: Long = 0): List<String> {
+        out.clear()
+        router.route(status, data1, data2, atMs * 1000, out)
+        return out.hex()
+    }
+
+    @Test
+    fun `out-of-range notes fold by octaves into C1-B7`() {
+        assertEquals(35, KeyMap.map(23, 0, fold = true))
+        assertEquals(96, KeyMap.map(108, 0, fold = true))
+        assertEquals(33, KeyMap.map(21, 0, fold = true))
+        assertEquals(103, KeyMap.map(127, 0, fold = true))
+        assertEquals(98, KeyMap.map(105, 5, fold = true))
+        assertEquals(60, KeyMap.map(60, 0, fold = true))
+        assertEquals(listOf("90 23 50"), send(0x90, 23, 80))
+    }
+
+    @Test
+    fun `drop mode skips out-of-range notes and their releases`() {
+        router.fold = false
+        assertEquals(KeyMap.UNPLAYABLE, KeyMap.map(23, 0, fold = false))
+        assertEquals(KeyMap.UNPLAYABLE, KeyMap.map(106, 2, fold = false))
+        assertEquals(emptyList<String>(), send(0x90, 23, 80))
+        assertEquals(emptyList<String>(), send(0x80, 23, 0))
+        assertEquals(listOf("90 18 50"), send(0x90, 24, 80))
+    }
+
+    @Test
+    fun `a transpose change mid-note releases the key that was sent`() {
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80))
+        router.transpose = 2
+        assertEquals(listOf("80 3C 00"), send(0x80, 60, 0, atMs = 200))
+        assertEquals(listOf("90 3E 50"), send(0x90, 60, 80, atMs = 300))
+    }
+
+    @Test
+    fun `two sources on one key send one Note On and one Note Off`() {
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80))
+        assertEquals(emptyList<String>(), send(0x91, 60, 90, atMs = 10))
+        assertEquals(emptyList<String>(), send(0x80, 60, 0, atMs = 300))
+        assertTrue(router.isSounding(60))
+        assertEquals(listOf("80 3C 00"), send(0x81, 60, 0, atMs = 400))
+        assertFalse(router.isSounding(60))
+    }
+
+    @Test
+    fun `notes that fold onto one key share it`() {
+        assertEquals(listOf("90 60 50"), send(0x90, 96, 80))
+        assertEquals(emptyList<String>(), send(0x90, 108, 80))
+        assertEquals(emptyList<String>(), send(0x80, 96, 0, atMs = 200))
+        assertEquals(listOf("80 60 00"), send(0x80, 108, 0, atMs = 250))
+    }
+
+    @Test
+    fun `a strike within 100 ms of the previous strike of an idle key is thinned`() {
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 0))
+        assertEquals(listOf("80 3C 00"), send(0x80, 60, 0, atMs = 40))
+        assertEquals(emptyList<String>(), send(0x90, 60, 80, atMs = 99))
+        assertEquals(emptyList<String>(), send(0x80, 60, 0, atMs = 120))   // its release is ignored too
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 130))
+        assertEquals(listOf("80 3C 00"), send(0x80, 60, 0, atMs = 170))
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 230))   // exactly 100 ms later
+    }
+
+    @Test
+    fun `a source struck again while sounding is released first`() {
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 0))
+        assertEquals(listOf("80 3C 00", "90 3C 46"), send(0x90, 60, 70, atMs = 200))
+    }
+
+    @Test
+    fun `CC64 is forwarded on channel 1, repeats are not`() {
+        assertEquals(listOf("B0 40 7F"), send(0xB3, 64, 127))
+        assertEquals(emptyList<String>(), send(0xB0, 64, 127))
+        assertEquals(listOf("B0 40 28"), send(0xB0, 64, 40))
+        assertEquals(listOf("B0 40 00"), send(0xB0, 64, 0))
+    }
+
+    @Test
+    fun `all-off controllers, other controllers and non-note messages never reach the piano`() {
+        for (controller in listOf(120, 121, 123, 7, 10, 66, 67, 1, 91)) {
+            assertEquals("CC$controller", emptyList<String>(), send(0xB0, controller, 0))
+            assertEquals("CC$controller", emptyList<String>(), send(0xB0, controller, 127))
+        }
+        assertEquals(emptyList<String>(), send(0xC0, 5, 0))
+        assertEquals(emptyList<String>(), send(0xE0, 0, 64))
+        assertEquals(emptyList<String>(), send(0xA0, 60, 10))
+        assertEquals(emptyList<String>(), send(0xD0, 20, 0))
+    }
+
+    @Test
+    fun `silence is pedal up then All Notes Off, and forgets held keys`() {
+        send(0x90, 60, 80)
+        send(0xB0, 64, 127)
+        out.clear()
+        router.silence(out)
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), out.hex())
+        assertEquals(0L, router.activeLow)
+        assertEquals(emptyList<String>(), send(0x80, 60, 0, atMs = 200))
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 300))
+        assertEquals(emptyList<String>(), send(0xB0, 64, 0, atMs = 300))   // the pedal is known to be up
+    }
+
+    @Test
+    fun `the drum channel is skipped only while the setting is on`() {
+        assertEquals(emptyList<String>(), send(0x99, 38, 100))
+        assertEquals(emptyList<String>(), send(0xB9, 64, 127))
+        router.skipDrums = false
+        assertEquals(listOf("90 26 64"), send(0x99, 38, 100, atMs = 500))
+    }
+
+    @Test
+    fun `velocity scales and stays within 1 to 127`() {
+        router.velocityPct = 150
+        assertEquals(listOf("90 3C 7F"), send(0x90, 60, 100))
+        router.velocityPct = 50
+        assertEquals(listOf("90 3E 20"), send(0x90, 62, 64))
+        assertEquals(listOf("90 40 01"), send(0x90, 64, 1))
+    }
+
+    @Test
+    fun `active keys track what the piano is playing`() {
+        send(0x90, 24, 80)
+        send(0x90, 107, 80)
+        assertEquals(1L, router.activeLow)
+        assertEquals(1L shl 19, router.activeHigh)
+        send(0x80, 24, 0, atMs = 200)
+        assertEquals(0L, router.activeLow)
+        assertTrue(router.isSounding(107))
+    }
+}
