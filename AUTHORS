@@ -1,0 +1,23 @@
+Steven Piano — Android player for the self-playing acoustic piano
+==================================================================
+
+Original author, designer, and creator
+--------------------------------------
+Steven Jin  <stevenjin20090101@gmail.com>
+  - The app: MIDI file engine, Bluetooth LE MIDI link, playback, library
+    and import, and the interface
+  - The self-playing piano it plays (firmware, system integration and the
+    physical installation), in the sibling firmware project
+
+Music library
+-------------
+The MIDI files the app plays are not part of this repository. The library
+it was built for draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
+piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
+domain); their licences govern those files.
+
+Authorship verification
+-----------------------
+This project carries an Ed25519 cryptographic authorship signature.
+See PROVENANCE.md to verify that Steven Jin authored these exact files.
+Public-key fingerprint: eab16a502f679465

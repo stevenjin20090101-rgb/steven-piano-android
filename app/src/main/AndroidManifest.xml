@@ -48,6 +48,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.StevenPiano">
 
+        <!-- Authorship, also compiled into the app as Provenance.TAG (see PROVENANCE.md). -->
+        <meta-data
+            android:name="dev.stevenjin.stevenpiano.provenance"
+            android:value="STEVEN-PIANO-PROVENANCE Made by Steven Jin &lt;stevenjin20090101@gmail.com&gt; Ed25519 fp eab16a502f679465" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
