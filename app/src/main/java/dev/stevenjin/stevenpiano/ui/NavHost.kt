@@ -21,11 +21,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -103,10 +107,10 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
             Scaffold(
                 modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.background,
-                // The rail already pads for the start edge (a phone on its side may have its
-                // navigation buttons there); the content keeps the other edges.
+                // The rail pads for the start edge; the content keeps the others. A phone on its
+                // side may have its navigation buttons or its camera cutout at either end.
                 contentWindowInsets = if (frame.rail) {
-                    ScaffoldDefaults.contentWindowInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
+                    WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
                 } else {
                     ScaffoldDefaults.contentWindowInsets
                 },
@@ -197,7 +201,10 @@ private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
     val density = LocalDensity.current
     Row {
         CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, MAX_LABEL_SCALE))) {
-            NavigationRail(containerColor = MaterialTheme.colorScheme.surface) {
+            NavigationRail(
+                containerColor = MaterialTheme.colorScheme.surface,
+                windowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Vertical + WindowInsetsSides.Start),
+            ) {
                 Route.entries.forEach { route ->
                     NavigationRailItem(
                         selected = route == current,
