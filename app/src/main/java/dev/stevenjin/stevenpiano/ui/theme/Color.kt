@@ -1,0 +1,30 @@
+package dev.stevenjin.stevenpiano.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Steven Piano palette. Two appearances, one accent. See DESIGN.md › Colour for the
+// contrast figures; every text token clears 4.5:1 on its surface and the primary /
+// secondary pair clears 7:1 in dark.
+//
+// RED HAS EXACTLY ONE MEANING: the piano is live. It is used by LiveDot and nothing
+// else. Never a button fill, never text, never a highlight, never an error colour.
+
+// ---- Dark: "the camera body" (default) ------------------------------------------
+val InkSurface       = Color(0xFF0E0E0E)   // app background
+val InkElevated      = Color(0xFF1A1A1A)   // cards, sheets, nav bar
+val InkHairline      = Color(0xFF2A2A2A)   // dividers, outlines
+val InkDisabledGlyph = Color(0xFF6B6B6B)   // disabled icons only — never text (3.5:1)
+val SilverPrimary    = Color(0xFFF2F2F2)   // 16.9:1 — softened white, not #FFFFFF
+val SilverSecondary  = Color(0xFFA3A3A3)   //  7.4:1
+val SilverTertiary   = Color(0xFF8A8A8A)   //  5.4:1 — eyebrows, timestamps
+val LiveRedDark      = Color(0xFFD9232E)   // the dot (non-text; always paired with a word)
+
+// ---- Light: "the paper roll" ---------------------------------------------------
+val PaperSurface     = Color(0xFFF4F1EA)   // warm paper
+val PaperElevated    = Color(0xFFFBF9F4)
+val PaperHairline    = Color(0xFFD8D3C8)
+val PaperDisabledGlyph = Color(0xFFB8B2A6)
+val CarbonPrimary    = Color(0xFF141414)   // 15.6:1
+val CarbonSecondary  = Color(0xFF5C5851)   //  6.1:1
+val CarbonTertiary   = Color(0xFF6E6A62)   //  4.7:1
+val LiveRedLight     = Color(0xFFC81E28)   //  5.8:1

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Bluetooth LE MIDI to the piano. API 31+: scan never derives location. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- API 26-30: legacy Bluetooth permissions, and scanning needs fine location. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- Playback with the screen off, and imports that outlive the screen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="true" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.StevenPiano">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- "Open with" for MIDI files that arrive with a MIDI type. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/midi" />
+                <data android:mimeType="audio/mid" />
+                <data android:mimeType="audio/x-midi" />
+                <data android:mimeType="application/x-midi" />
+            </intent-filter>
+
+            <!-- "Open with" for .mid / .midi files that arrive untyped. PatternMatcher's
+                 ".*" stops at the first dot, hence the dotted variants. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.mid" />
+                <data android:pathPattern=".*\\..*\\.mid" />
+                <data android:pathPattern=".*\\..*\\..*\\.mid" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.mid" />
+                <data android:pathPattern=".*\\.midi" />
+                <data android:pathPattern=".*\\..*\\.midi" />
+                <data android:pathPattern=".*\\..*\\..*\\.midi" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.midi" />
+                <data android:pathPattern=".*\\.MID" />
+                <data android:pathPattern=".*\\..*\\.MID" />
+                <data android:pathPattern=".*\\..*\\..*\\.MID" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.MID" />
+            </intent-filter>
+
+            <!-- Share sheet: one or many MIDI files. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/midi" />
+                <data android:mimeType="audio/mid" />
+                <data android:mimeType="audio/x-midi" />
+                <data android:mimeType="application/x-midi" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
