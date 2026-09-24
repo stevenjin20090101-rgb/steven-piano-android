@@ -42,8 +42,6 @@ class Scheduler(
 
     fun start() = thread.start()
 
-    fun shutdown() = thread.interrupt()
-
     /** Runs [command] on the scheduler thread with the time it runs at. */
     fun submit(command: (nowNanos: Long) -> Unit) = commands.put(command)
 
@@ -72,7 +70,7 @@ class Scheduler(
                 if (command != null) run(command)
             }
         } catch (e: InterruptedException) {
-            // shut down
+            // Only the process going away interrupts this thread.
         }
     }
 

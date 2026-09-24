@@ -278,6 +278,7 @@ class GattPianoLink(
         connectRetried = false
         executor.cancel(startScan)
         executor.cancel(retryInBackground)
+        writer.clear()   // anything that slipped in while the last connection was going down
         ready = true
         val name = piano?.name ?: PianoBluetooth.NAME
         val address = piano?.address ?: preferredAddress
