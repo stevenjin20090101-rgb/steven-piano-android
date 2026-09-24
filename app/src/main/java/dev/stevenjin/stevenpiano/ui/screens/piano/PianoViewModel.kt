@@ -36,6 +36,9 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 
+    /** Stops looking for the piano. Nothing is sounding yet, so there is nothing to silence. */
+    fun cancel() = graph.pianoLink.disconnect()
+
     /** Pauses first, so the piano is silenced, then drops the link. */
     fun disconnect() = graph.disconnectPiano()
 

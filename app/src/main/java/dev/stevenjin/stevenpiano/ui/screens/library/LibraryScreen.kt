@@ -41,14 +41,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -70,7 +66,6 @@ import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
-import kotlinx.coroutines.launch
 
 /**
  * The Library tab: search, the category chips, then text-only rows. Tapping a piece plays it
@@ -83,8 +78,6 @@ fun LibraryScreen(onPlay: (pieceId: Long, queue: List<Long>) -> Unit, onImport: 
     val state by vm.state.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val searchFocus = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
     var adding by rememberSaveable { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
     val pickers = rememberImportPickers(onImport)
@@ -97,15 +90,6 @@ fun LibraryScreen(onPlay: (pieceId: Long, queue: List<Long>) -> Unit, onImport: 
             .imePadding(),
     ) {
         ScreenHeader("Library") {
-            if (!state.empty) {
-                GlyphButton(R.drawable.ic_search, "Search the library") {
-                    scope.launch {
-                        listState.scrollToItem(0)
-                        withFrameNanos { }   // let the field come back on screen first
-                        searchFocus.requestFocus()
-                    }
-                }
-            }
             GlyphButton(R.drawable.ic_add, "Add MIDI files") { adding = true }
         }
         HairlineDivider()
@@ -113,7 +97,7 @@ fun LibraryScreen(onPlay: (pieceId: Long, queue: List<Long>) -> Unit, onImport: 
         when {
             !state.loaded -> Unit
             state.empty -> EmptyLibrary(onAdd = { adding = true })
-            else -> LibraryList(state, vm, listState, searchFocus, onPlay) { dialog = it }
+            else -> LibraryList(state, vm, listState, onPlay) { dialog = it }
         }
     }
     if (adding) AddSheet(pickers) { adding = false }
@@ -125,12 +109,11 @@ private fun LibraryList(
     state: LibraryState,
     vm: LibraryViewModel,
     listState: LazyListState,
-    searchFocus: FocusRequester,
     onPlay: (Long, List<Long>) -> Unit,
     onDialog: (LibraryDialog) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
-        item(key = "search") { SearchField(vm.query, vm::search, searchFocus) }
+        item(key = "search") { SearchField(vm.query, vm::search) }
         item(key = "categories") { CategoryChips(state.category, vm::selectCategory) }
         state.group?.let { group ->
             item(key = "group") { GroupHeader(group, (state.listing as? Listing.Pieces)?.pieces?.size ?: 0, vm::closeGroup) }
@@ -156,15 +139,14 @@ private fun LibraryList(
 }
 
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit, focus: FocusRequester) {
+private fun SearchField(query: String, onQuery: (String) -> Unit) {
     val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQuery,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .focusRequester(focus),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         placeholder = { Text("Search titles and composers") },
         leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
         trailingIcon = if (query.isEmpty()) null else {

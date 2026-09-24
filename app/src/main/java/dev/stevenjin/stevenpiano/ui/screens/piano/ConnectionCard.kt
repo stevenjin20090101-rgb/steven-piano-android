@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,12 +58,20 @@ import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
- * The piano: its name, the status with the dot, and one button, Connect or Disconnect. While
- * looking, an indeterminate hairline. Problems are copy in place, with the button that fixes
- * them. Permission is asked for here, in context, with a one-line reason.
+ * The piano: its name, the status with the dot, and one button that says what it will do:
+ * Connect, Cancel (while looking), Disconnect (while connected). While looking, an indeterminate
+ * hairline. A problem is copy in place, with Retry or the fix under it. Permission is asked for
+ * here, in context, with a one-line reason.
  */
 @Composable
-fun ConnectionCard(link: LinkState, playing: Boolean, onConnect: () -> Unit, onDisconnect: () -> Unit, modifier: Modifier = Modifier) {
+fun ConnectionCard(
+    link: LinkState,
+    playing: Boolean,
+    onConnect: () -> Unit,
+    onCancel: () -> Unit,
+    onDisconnect: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val activity = LocalActivity.current
     var missing by remember { mutableStateOf(BlePermissions.missing(context)) }
@@ -104,21 +113,25 @@ fun ConnectionCard(link: LinkState, playing: Boolean, onConnect: () -> Unit, onD
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (refused) TextButton(onClick = { context.startActivity(appSettings(context)) }) { Text("Open app settings") }
             } else if (link is LinkState.Error) {
-                OutlinedBanner(link.message, Modifier.padding(top = 12.dp))
+                OutlinedBanner(link.message, Modifier.padding(top = 12.dp)) {
+                    when (link.reason) {
+                        LinkError.BluetoothOff -> TextButton(onClick = { runCatching { fixThenRetry.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) } }) {
+                            Text("Turn on Bluetooth")
+                        }
+                        LinkError.LocationOff -> TextButton(onClick = { runCatching { fixThenRetry.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } }) {
+                            Text("Open Location settings")
+                        }
+                        else -> TextButton(onClick = onConnect) { Text("Retry") }
+                    }
+                }
             }
             Spacer(Modifier.height(16.dp))
             when {
-                link is LinkState.Connected || searching ->
-                    OutlinedButton(onClick = onDisconnect, border = BorderStroke(Hairline, LocalTertiary.current)) { Text("Disconnect") }
-                needsPermission && refused -> Button(onClick = { context.startActivity(appSettings(context)) }) { Text("Open app settings") }
-                needsPermission -> Button(onClick = { askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
-                link is LinkState.Error && link.reason == LinkError.BluetoothOff ->
-                    Button(onClick = { fixThenRetry.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }) { Text("Turn on Bluetooth") }
-                link is LinkState.Error && link.reason == LinkError.LocationOff ->
-                    Button(onClick = { fixThenRetry.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }) { Text("Open Location settings") }
-                link is LinkState.Error -> Button(onClick = onConnect) { Text("Retry") }
-                else -> Button(onClick = onConnect) { Text("Connect") }
+                link is LinkState.Connected -> OutlinedButton(onClick = onDisconnect, border = BorderStroke(Hairline, LocalTertiary.current)) { Text("Disconnect") }
+                searching -> OutlinedButton(onClick = onCancel, border = BorderStroke(Hairline, LocalTertiary.current)) { Text("Cancel") }
+                else -> Button(onClick = { if (missing.isEmpty()) onConnect() else askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
             }
         }
     }

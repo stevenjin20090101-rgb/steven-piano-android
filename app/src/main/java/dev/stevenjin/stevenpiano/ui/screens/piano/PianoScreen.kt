@@ -64,7 +64,7 @@ fun PianoScreen() {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            ConnectionCard(link, playing, vm::connect, vm::disconnect, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             Preferences(settings, vm)
             AboutRow(Modifier.padding(16.dp))
         }
