@@ -9,6 +9,12 @@
 
 package dev.stevenjin.stevenpiano.midi
 
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.data.imports.CsvReader
+import dev.stevenjin.stevenpiano.data.imports.IndexCsv
+import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics
+import dev.stevenjin.stevenpiano.data.imports.ZipSource
+import dev.stevenjin.stevenpiano.data.imports.isMidiName
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -22,14 +28,18 @@ import java.security.MessageDigest
  */
 class CorpusTest {
 
-    @Test
-    fun `every file in the library parses, and only the truncated Borodin warns`() {
+    private fun corpus(): File {
         val root = System.getProperty("stevenpiano.corpus")
         assumeTrue("Run with -Pcorpus to parse the MIDI library", root != null)
-        val files = File(root!!).walk()
-            .filter { it.isFile && it.extension.lowercase() in setOf("mid", "midi") }
-            .sortedBy { it.path }
-            .toList()
+        return File(root!!)
+    }
+
+    private fun midiFiles(root: File) = root.walk().filter { it.isFile && isMidiName(it.name) }.sortedBy { it.path }.toList()
+
+    @Test
+    fun `every file in the library parses, and only the damaged Borodin warns`() {
+        val root = corpus()
+        val files = midiFiles(root)
         assertTrue("No MIDI files under $root", files.isNotEmpty())
 
         val failed = mutableListOf<String>()
@@ -55,6 +65,48 @@ class CorpusTest {
             val sha = truncated.sha256()
             warned.keys.forEach { assertEquals("Unexpected warnings in ${it.path}: ${warned[it]}", sha, it.sha256()) }
         }
+    }
+
+    @Test
+    fun `INDEX csv lists every collection file, and the zip every piece`() {
+        val root = corpus()
+        val indexFile = File(root, IndexCsv.FILE_NAME)
+        assumeTrue(indexFile.isFile)
+        val text = indexFile.readText()
+        val rows = CsvReader.parse(text).drop(1).filter { it.size >= 5 }
+        assertEquals(rows.size, IndexCsv.parse(text).size)
+        rows.forEach { assertTrue("INDEX.csv lists a missing file: ${it[4]}", File(root, it[4]).isFile) }
+        val zipFile = File(root, "ALL-SONGS.zip")
+        if (zipFile.isFile) {
+            ZipSource(zipFile).use { zip ->
+                val items = zip.items()
+                val folder = File(root, "ALL SONGS").listFiles { f -> isMidiName(f.name) }.orEmpty()
+                println("Corpus: INDEX.csv ${rows.size} rows; ALL-SONGS.zip ${items.size} pieces")
+                assertEquals(folder.size, items.size)
+                assertTrue(items.any { "Frédéric Chopin" in it.name })
+            }
+        }
+    }
+
+    @Test
+    fun `the importer's names for the library come out clean`() {
+        val root = corpus()
+        val indexFile = File(root, IndexCsv.FILE_NAME)
+        val index = if (indexFile.isFile) IndexCsv.parse(indexFile.readText()) else null
+        var stubs = 0
+        val mojibake = mutableListOf<String>()
+        val keys = mutableSetOf<String>()
+        val files = midiFiles(root)
+        for (file in files) {
+            val midi = SmfParser.parse(file.readBytes())
+            val meta = TitleHeuristics.metadata(file.name, index?.lookup(file.relativeTo(root).path), midi.sequenceNames)
+            val name = ComposerNames.normalize(meta.composer)
+            if (TitleHeuristics.isStub(meta.title)) stubs++
+            if ("Ã" in meta.title + name.display) mojibake += file.name
+            keys += name.key
+        }
+        println("Corpus: ${files.size} titles, $stubs still stubs, ${keys.size} composer groups")
+        assertEquals(emptyList<String>(), mojibake)
     }
 
     private fun File.sha256(): String =

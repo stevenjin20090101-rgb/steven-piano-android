@@ -1,0 +1,103 @@
+// ============================================================================
+//  Steven Piano - Android player for the self-playing acoustic piano
+//  Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+//  Original author & creator: Steven Jin.
+//  Licensed under the MIT License (see LICENSE). This copyright and attribution
+//  notice MUST be preserved in all copies or substantial portions of the work.
+//  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+// ============================================================================
+
+package dev.stevenjin.stevenpiano.settings
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import dev.stevenjin.stevenpiano.player.PlaybackLimits
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import java.io.IOException
+
+/** How Now playing draws notes: the pianola roll (default) or Synthesia-style falling notes. */
+enum class NoteDisplay { PAPER_ROLL, FALLING }
+
+/** The Piano tab's preferences, plus the last piano connected. */
+data class PianoSettings(
+    val autoConnect: Boolean = true,
+    val lastDeviceAddress: String? = null,
+    val lastDeviceName: String? = null,
+    val noteDisplay: NoteDisplay = NoteDisplay.PAPER_ROLL,
+    val defaultTempoPct: Int = 100,
+    val transpose: Int = 0,
+    val velocityPct: Int = 100,
+    val foldOutOfRange: Boolean = true,
+    val skipDrumChannel: Boolean = true,
+)
+
+val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+/** Preferences in DataStore: one [settings] flow, one setter each. Out-of-range values are clamped. */
+class SettingsRepository(private val store: DataStore<Preferences>) {
+    val settings: Flow<PianoSettings> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it.toSettings() }
+        .distinctUntilChanged()
+
+    suspend fun setAutoConnect(on: Boolean) = edit { it[AUTO_CONNECT] = on }
+
+    suspend fun rememberDevice(address: String, name: String) = edit {
+        it[LAST_DEVICE_ADDRESS] = address
+        it[LAST_DEVICE_NAME] = name
+    }
+
+    suspend fun setNoteDisplay(display: NoteDisplay) = edit { it[NOTE_DISPLAY] = display.name }
+
+    suspend fun setDefaultTempo(pct: Int) = edit { it[DEFAULT_TEMPO_PCT] = pct.coerceIn(PlaybackLimits.TempoPct) }
+
+    suspend fun setTranspose(semitones: Int) = edit { it[TRANSPOSE] = semitones.coerceIn(PlaybackLimits.Transpose) }
+
+    suspend fun setVelocity(pct: Int) = edit { it[VELOCITY_PCT] = pct.coerceIn(PlaybackLimits.VelocityPct) }
+
+    suspend fun setFoldOutOfRange(on: Boolean) = edit { it[FOLD_OUT_OF_RANGE] = on }
+
+    suspend fun setSkipDrumChannel(on: Boolean) = edit { it[SKIP_DRUM_CHANNEL] = on }
+
+    private suspend fun edit(change: (MutablePreferences) -> Unit) {
+        store.edit(change)
+    }
+
+    private fun Preferences.toSettings(): PianoSettings {
+        val defaults = PianoSettings()
+        return PianoSettings(
+            autoConnect = this[AUTO_CONNECT] ?: defaults.autoConnect,
+            lastDeviceAddress = this[LAST_DEVICE_ADDRESS],
+            lastDeviceName = this[LAST_DEVICE_NAME],
+            noteDisplay = NoteDisplay.entries.firstOrNull { it.name == this[NOTE_DISPLAY] } ?: defaults.noteDisplay,
+            defaultTempoPct = (this[DEFAULT_TEMPO_PCT] ?: defaults.defaultTempoPct).coerceIn(PlaybackLimits.TempoPct),
+            transpose = (this[TRANSPOSE] ?: defaults.transpose).coerceIn(PlaybackLimits.Transpose),
+            velocityPct = (this[VELOCITY_PCT] ?: defaults.velocityPct).coerceIn(PlaybackLimits.VelocityPct),
+            foldOutOfRange = this[FOLD_OUT_OF_RANGE] ?: defaults.foldOutOfRange,
+            skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
+        )
+    }
+
+    private companion object {
+        val AUTO_CONNECT = booleanPreferencesKey("autoConnect")
+        val LAST_DEVICE_ADDRESS = stringPreferencesKey("lastDeviceAddress")
+        val LAST_DEVICE_NAME = stringPreferencesKey("lastDeviceName")
+        val NOTE_DISPLAY = stringPreferencesKey("noteDisplay")
+        val DEFAULT_TEMPO_PCT = intPreferencesKey("defaultTempoPct")
+        val TRANSPOSE = intPreferencesKey("transpose")
+        val VELOCITY_PCT = intPreferencesKey("velocityPct")
+        val FOLD_OUT_OF_RANGE = booleanPreferencesKey("foldOutOfRange")
+        val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
+    }
+}

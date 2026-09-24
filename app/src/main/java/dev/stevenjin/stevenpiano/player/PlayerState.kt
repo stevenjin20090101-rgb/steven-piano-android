@@ -13,6 +13,13 @@ import dev.stevenjin.stevenpiano.midi.NoteList
 
 enum class PlaybackStatus { Stopped, Playing, Paused }
 
+/** The ranges Now playing and the Piano tab offer. */
+object PlaybackLimits {
+    val TempoPct = 25..200
+    val Transpose = -12..12
+    val VelocityPct = 50..150
+}
+
 /** The piece in the player: what Now playing shows. [notes] feed the note canvas. */
 data class NowPlaying(
     val pieceId: Long,

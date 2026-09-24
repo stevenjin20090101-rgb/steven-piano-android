@@ -131,12 +131,12 @@ class Player(
 
     /** The tempo each new piece starts at. */
     fun setDefaultTempo(pct: Int) {
-        defaultTempoPct = pct.coerceIn(PlaybackEngine.MIN_TEMPO_PCT, PlaybackEngine.MAX_TEMPO_PCT)
+        defaultTempoPct = pct.coerceIn(PlaybackLimits.TempoPct)
     }
 
-    fun setTranspose(semitones: Int) = configure { copy(transpose = semitones.coerceIn(-12, 12)) }
+    fun setTranspose(semitones: Int) = configure { copy(transpose = semitones.coerceIn(PlaybackLimits.Transpose)) }
 
-    fun setVelocity(pct: Int) = configure { copy(velocityPct = pct.coerceIn(50, 150)) }
+    fun setVelocity(pct: Int) = configure { copy(velocityPct = pct.coerceIn(PlaybackLimits.VelocityPct)) }
 
     fun setFold(fold: Boolean) = configure { copy(fold = fold) }
 

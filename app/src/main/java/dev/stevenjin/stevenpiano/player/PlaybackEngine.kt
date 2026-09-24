@@ -111,7 +111,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     fun setTempo(pct: Int, nowNanos: Long) {
         anchorSongMicros = positionMicros(nowNanos)
         anchorNanos = nowNanos
-        tempoPct = pct.coerceIn(MIN_TEMPO_PCT, MAX_TEMPO_PCT)
+        tempoPct = pct.coerceIn(PlaybackLimits.TempoPct)
     }
 
     /** Sends every event due at [nowNanos]; returns when the next one is due ([Long.MAX_VALUE]: nothing to wait for). */
@@ -177,9 +177,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         return lo
     }
 
-    companion object {
-        const val MIN_TEMPO_PCT = 25
-        const val MAX_TEMPO_PCT = 200
-        private const val NANOS_PER_MICRO_PCT = 100_000L   // 1000 ns per µs, times 100 %
+    private companion object {
+        const val NANOS_PER_MICRO_PCT = 100_000L   // 1000 ns per µs, times 100 %
     }
 }
