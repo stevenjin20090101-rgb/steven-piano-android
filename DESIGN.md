@@ -263,3 +263,118 @@ No exclamation marks, no apologies in errors, no jargon ("MIDI file", not "SMF")
 
 Would this plan appear for a different product? The palette discipline could; the
 paper roll, the tracker bar, and the 84-lane C1–B7 range could not. That is the test.
+
+---
+
+# v1.1 — tablets, Keys, staff, piano settings
+
+Additions Steven asked for after v1.0. Everything above still holds; this section only
+adds. Four things: the app adapts to tablets, a playable keyboard, a staff view beside
+the waterfall, and the piano's own lighting and feel settings adjustable from the app.
+
+## Structure change: four destinations
+
+**Library · Now playing · Keys · Piano.** Keys is new. The Piano tab keeps the
+connection card and the app's preferences and gains the piano's own settings (below).
+Glyphs: Library keeps the books, Now playing keeps the roll, **Keys takes the keyboard
+glyph**, and **Piano moves to a sliders glyph** (three horizontal lines with knobs).
+
+## Adaptive layout (tablets and phones in landscape)
+
+Window size classes decide the frame; nothing else changes with size.
+
+| Width class | Frame | Now playing | Keys |
+|---|---|---|---|
+| Compact (< 600 dp: phones portrait) | Bottom `NavigationBar`, as v1.0 | One canvas; *Note display* chooses Paper roll / Falling notes / **Staff** | Two octaves visible, scroll for more |
+| Medium (600–840 dp: small tablets, phones landscape) | `NavigationRail` on the left, labels shown | **Stacked**: staff on top (⅓), notes below (⅔) | About four octaves visible |
+| Expanded (≥ 840 dp: tablets landscape) | `NavigationRail` on the left | **Side by side**: staff left, notes right, equal widths; keyboard strip and transport span the full width beneath | All 84 keys visible, no scrolling |
+
+- Never a rail and a bar at once. The rail carries the same four glyphs and labels.
+- Reading surfaces (Library list, Piano settings) cap their content width at 720 dp and
+  centre it; rows keep their 56 dp height and 17 sp body.
+- A new preference on wide screens, **Wide layout**: *Staff and notes* (default) ·
+  *Notes only* · *Staff only*. On compact widths the *Note display* preference gains
+  *Staff* as a third option.
+- Landscape phones use the Medium layout. Rotation keeps position and state.
+
+## Keys — a playable keyboard
+
+The piano, from the tablet. Every tap becomes a Note On over the same link the pieces
+use; the piano's own LED strip reacts as it does to any note.
+
+- **The keyboard** fills the screen: 84 keys, C1–B7, white keys `surfaceElevated` with
+  hairline gaps, black keys `contentTertiary` at 60 % height overlapping the white ones,
+  the octave letters (C1 … C7) in Eyebrow style at the bottom of each C. A pressed key
+  inverts to `contentPrimary` for as long as the finger is down. Multi-touch: chords.
+  Sliding across keys plays a glissando (off, then on, as the finger crosses a boundary).
+- **Loudness by touch position**: the vertical position of the touch on the key sets
+  velocity, top = soft (velocity 24), bottom = loud (127), linear in between; black keys
+  the same across their own height. A small Eyebrow readout **VELOCITY 84** under the
+  keyboard shows the last value for a second so the mapping can be learned.
+- **Scrolling** on narrow screens: a mini-map above the keyboard, the full 84-key strip
+  in miniature with a viewport rectangle in `contentPrimary`; drag it to move, or use
+  the ‹ › octave buttons at either end of it.
+- **Sustain**: one outlined toggle button, *Sustain*, latching: down sends CC64 = 127,
+  up sends CC64 = 0. It reads *Sustain on* while down. Leaving the screen releases it.
+- **Connection line** as on Now playing: "● Sent to piano" / "○ Not connected"; when
+  not connected the keys still invert (so the screen is honest about what it can do)
+  and the line explains.
+- **Safety**: on leaving the Keys screen, on app background, and on link drop every
+  held key gets its Note Off and the pedal is released, through the same silence path
+  as playback. The same-key 100 ms guard applies to taps too.
+- No haptics on keys (frequent interaction). No sound from the phone.
+
+## Staff — the sheet-music view
+
+Honest about what it is: pitch on a grand staff, in time, in sync with the roll. Not
+engraved notation (no beams, rests, ties or voices).
+
+- **Grand staff**: treble and bass, five hairlines each, staff line spacing 6 dp,
+  40 dp between the staves, clefs at the left edge in `contentSecondary`. Notes at or
+  above middle C sit on the treble staff, below it on the bass staff; middle C gets its
+  own ledger line. Ledger lines as needed (the piano's C1 needs several below the
+  bass staff; they are drawn, not clipped).
+- **Notes**: filled note heads (an ellipse 7 × 5 dp, tilted), a sharp `♯` before the
+  head for black keys (no key signatures; sharps only, consistently), and a hairline
+  **duration bar** trailing to the right of each head for the note's length. Chords
+  stack; heads a second apart offset to the right, as engraving does.
+- **Time** runs left to right at the same pixels-per-second as the roll; the
+  **playhead** is a 2 dp `contentPrimary` vertical line one third from the left. Heads
+  to the right are upcoming (`contentSecondary`), a head brightens to `contentPrimary`
+  as it crosses the playhead and stays bright for its duration (the same 120 ms flip
+  as the roll; a cut under reduced motion).
+- **Glyphs**: clefs, sharps and note heads from the Bravura music font (SIL Open Font
+  Licence, bundled) so they look like music; if the font cannot be bundled, simplified
+  vector clefs drawn by hand are acceptable and must still read as G and F clefs.
+- Reduced motion, font scaling and colours exactly as the roll.
+
+## Piano settings — the instrument's own lighting and feel, from the app
+
+The firmware exposes its console commands over a Bluetooth text channel (see
+`firmware/docs/BLE_SETTINGS.md`). The app reads every value on connect and writes a
+value the moment a control changes; the piano stores them itself.
+
+- Lives on the **Piano tab**, under the connection card and above the app preferences,
+  as sections with Eyebrow headers: **LIGHTING · FEEL · PEDAL · DIAGNOSTICS**. All of
+  it is disabled, greyed with `disabledGlyph` handles, until the piano is connected and
+  has answered the read; a one-line note explains: "Connect to the piano to adjust its
+  settings."
+- Controls follow the value's shape: switches for on/off, steppers with tabular
+  figures for numbers with few steps (count, offset, gap in ms), a hairline slider
+  with the number beside it for continuous ones (brightness, volume, curve), and a
+  single-choice row for palettes and presets. Every control shows its unit
+  (%, ms, LEDs) in the eyebrow and its live value.
+- **Feel presets** are a row of chips; choosing one applies the preset on the piano and
+  every dependent control updates to what the piano reports back, so the user sees what
+  a preset actually did.
+- **Lighting preview**: no on-screen strip; the piano is the preview. A *Test LED*
+  action lights one key's LED (the firmware's `ledtest`) so offset and scale can be
+  aligned from the app while standing at the piano.
+- **Diagnostics** shows the piano's status text as it reports it (boards found,
+  temperature, uptime) in Body on `surfaceElevated`, with *All keys off* as an outlined
+  button. No red anywhere; a fault reads in words.
+- Writes are rate-limited (150 ms after the last change) so dragging a slider does not
+  flood the piano; the app never sends a value it has not shown.
+- If the piano runs older firmware without the channel, the whole section shows one
+  line: "This piano's firmware doesn't offer settings over Bluetooth yet." and nothing
+  else, so the app keeps working exactly as v1.0.

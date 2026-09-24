@@ -17,16 +17,27 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +46,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -44,22 +58,27 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
+import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.screens.keys.KeysScreen
 import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoScreen
+import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.flow.first
 import kotlin.math.min
 
 /**
- * The app's frame: three tabs in a bottom navigation bar (Library, Now playing, Piano) with a
- * 240 ms fade-through between them, or a cut when motion is reduced. [requestedTab] switches
- * tabs from outside (a shared file, the notification); [onImport] brings files into the library.
+ * The app's frame: four destinations (Library, Now playing, Keys, Piano) in a bottom navigation
+ * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
+ * with a 240 ms fade-through between them, or a cut when motion is reduced. [requestedTab]
+ * switches destination from outside (a shared file, the notification); [onImport] brings files
+ * into the library.
  */
 @Composable
-fun PianoNavHost(requestedTab: Route?, onTabShown: () -> Unit, onImport: (ImportSource) -> Unit) {
+fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, onImport: (ImportSource) -> Unit) {
     val nav = rememberNavController()
     val reduced = rememberReducedMotion()
     val playback = rememberPlaybackStarter()
@@ -74,41 +93,61 @@ fun PianoNavHost(requestedTab: Route?, onTabShown: () -> Unit, onImport: (Import
         onTabShown()
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { TabBar(current, show) },
-    ) { padding ->
-        NavHost(
-            navController = nav,
-            startDestination = Route.Library.path,
-            modifier = Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding),
-            enterTransition = { if (reduced) EnterTransition.None else FadeThrough.enter },
-            exitTransition = { if (reduced) ExitTransition.None else FadeThrough.exit },
-            popEnterTransition = { if (reduced) EnterTransition.None else FadeThrough.enter },
-            popExitTransition = { if (reduced) ExitTransition.None else FadeThrough.exit },
+    CompositionLocalProvider(LocalAppFrame provides frame) {
+        Row(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
         ) {
-            composable(Route.Library.path) {
-                LibraryScreen(
-                    onPlay = { id, queue ->
-                        playback.play(id, queue)
-                        show(Route.NowPlaying)
-                    },
-                    onImport = onImport,
-                )
+            if (frame.rail) TabRail(current, show)
+            Scaffold(
+                modifier = Modifier.weight(1f),
+                containerColor = MaterialTheme.colorScheme.background,
+                // The rail already pads for the start edge (a phone on its side may have its
+                // navigation buttons there); the content keeps the other edges.
+                contentWindowInsets = if (frame.rail) {
+                    ScaffoldDefaults.contentWindowInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
+                } else {
+                    ScaffoldDefaults.contentWindowInsets
+                },
+                bottomBar = { if (!frame.rail) TabBar(current, show) },
+            ) { padding ->
+                NavHost(
+                    navController = nav,
+                    startDestination = Route.Library.path,
+                    modifier = Modifier
+                        .padding(padding)
+                        .consumeWindowInsets(padding),
+                    enterTransition = { if (reduced) EnterTransition.None else FadeThrough.enter },
+                    exitTransition = { if (reduced) ExitTransition.None else FadeThrough.exit },
+                    popEnterTransition = { if (reduced) EnterTransition.None else FadeThrough.enter },
+                    popExitTransition = { if (reduced) ExitTransition.None else FadeThrough.exit },
+                ) {
+                    composable(Route.Library.path) {
+                        LibraryScreen(
+                            onPlay = { id, queue ->
+                                playback.play(id, queue)
+                                show(Route.NowPlaying)
+                            },
+                            onImport = onImport,
+                        )
+                    }
+                    composable(Route.NowPlaying.path) {
+                        NowPlayingScreen(playback, onOpenPiano = { show(Route.Piano) })
+                    }
+                    composable(Route.Keys.path) { KeysScreen(onOpenPiano = { show(Route.Piano) }) }
+                    composable(Route.Piano.path) { PianoScreen() }
+                }
             }
-            composable(Route.NowPlaying.path) {
-                NowPlayingScreen(playback, onOpenPiano = { show(Route.Piano) })
-            }
-            composable(Route.Piano.path) { PianoScreen() }
         }
     }
 }
 
 /**
- * Short labels; the selected tab sits on a surfaceElevated pill, never a tint. Labels scale with
- * the system font up to 1.5x, so "Now playing" stays on one line and the three icons stay level.
+ * Compact widths: the four destinations along the bottom, short labels, the selected one on a
+ * surfaceElevated pill, never a tint. Labels scale with the system font only as far as the widest
+ * one ("Now playing") still fits its quarter of the bar on one line, and never past 1.5x, so the
+ * four icons stay level.
  */
 @Composable
 private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
@@ -122,23 +161,80 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
     val density = LocalDensity.current
     Column {
         HairlineDivider()
-        CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, MAX_LABEL_SCALE))) {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
-                Route.entries.forEach { route ->
-                    NavigationBarItem(
-                        selected = route == current,
-                        onClick = { onSelect(route) },
-                        icon = { Icon(painterResource(route.icon), contentDescription = null) },
-                        label = { Text(route.label, maxLines = 1) },
-                        colors = colors,
-                    )
+        BoxWithConstraints {
+            val itemWidth = (maxWidth - BAR_ITEM_GAP * (Route.entries.size - 1)) / Route.entries.size
+            val cap = labelScaleThatFits(itemWidth)
+            CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, cap))) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+                    Route.entries.forEach { route ->
+                        NavigationBarItem(
+                            selected = route == current,
+                            onClick = { onSelect(route) },
+                            icon = { Icon(painterResource(route.icon), contentDescription = null) },
+                            label = { Text(route.label, maxLines = 1) },
+                            colors = colors,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Medium and expanded widths: the same four glyphs and labels in a rail on the left, labels
+ * always shown, set off from the content by a hairline. Labels scale up to 1.5x.
+ */
+@Composable
+private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
+    val colors = NavigationRailItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.onSurface,
+        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+        indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val density = LocalDensity.current
+    Row {
+        CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, MAX_LABEL_SCALE))) {
+            NavigationRail(containerColor = MaterialTheme.colorScheme.surface) {
+                Route.entries.forEach { route ->
+                    NavigationRailItem(
+                        selected = route == current,
+                        onClick = { onSelect(route) },
+                        icon = { Icon(painterResource(route.icon), contentDescription = null) },
+                        label = { Text(route.label, maxLines = 1, textAlign = TextAlign.Center) },
+                        alwaysShowLabel = true,
+                        colors = colors,
+                    )
+                }
+            }
+        }
+        VerticalDivider(thickness = Hairline, color = LocalHairline.current)
+    }
+}
+
+/** The font scale, between 1x and [MAX_LABEL_SCALE], at which the widest destination label fills [itemWidth]. */
+@Composable
+private fun labelScaleThatFits(itemWidth: Dp): Float {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelMedium
+    val density = LocalDensity.current.density
+    return remember(itemWidth, style, density) {
+        val unscaled = Density(density, 1f)
+        val widest = Route.entries.maxOf { measurer.measure(it.label, style, maxLines = 1, density = unscaled).size.width }
+        val room = with(unscaled) { itemWidth.toPx() } * LABEL_FILL
+        if (widest <= 0) MAX_LABEL_SCALE else (room / widest).coerceIn(1f, MAX_LABEL_SCALE)
+    }
+}
+
 private const val MAX_LABEL_SCALE = 1.5f
+
+/** A label may use this share of its item's width, so it never touches its neighbour. */
+private const val LABEL_FILL = 0.92f
+
+/** Material's gap between bar items. */
+private val BAR_ITEM_GAP = 8.dp
 
 private fun NavController.showTab(route: Route) = navigate(route.path) {
     popUpTo(graph.findStartDestination().id) { saveState = true }

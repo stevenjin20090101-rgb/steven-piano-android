@@ -245,3 +245,181 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
 5. Rotate, font scale 2.0, TalkBack: nothing overlaps, everything is labelled.
 6. Unit tests green; no colour literal outside `ui/theme`; `LocalLive` only in
    `LiveDot.kt`; provenance verifies; the provenance string is in the release DEX.
+
+---
+
+# v1.1 — engineering additions
+
+Read `DESIGN.md › v1.1` first. Everything in v1.0 stays; these are additions. The
+engine, data and BLE layers keep their v1.0 contracts except where stated.
+
+## Adaptive frame
+
+- Add `androidx.compose.material3:material3-window-size-class` (or compute the class
+  from `LocalConfiguration` if the artifact does not resolve). `WindowWidthSizeClass`
+  drives the frame: Compact → bottom `NavigationBar`; Medium and Expanded →
+  `NavigationRail` (labels shown, same four destinations, same glyphs). One or the
+  other, never both.
+- Four destinations: `library`, `nowplaying`, `keys`, `piano`. Keys takes the keyboard
+  glyph; Piano gets a new sliders glyph.
+- Now playing layout by class: Compact = one canvas whose style comes from
+  `noteDisplay` (now `PAPER_ROLL | FALLING | STAFF`); Medium = `Column`(staff ⅓, notes
+  ⅔); Expanded = `Row`(staff, notes) with the keyboard strip and transport spanning
+  beneath. The wide-screen choice comes from a new setting `wideLayout: STAFF_AND_NOTES
+  | NOTES_ONLY | STAFF_ONLY` (default `STAFF_AND_NOTES`).
+- Reading surfaces cap content at 720 dp centred (`Modifier.widthIn(max = 720.dp)`).
+- Keys visible range by class: Compact ≈ 2 octaves, Medium ≈ 4, Expanded all 84.
+
+## Keys screen — `ui/screens/keys/`
+
+- `KeysScreen`, `KeysViewModel`, `PlayableKeyboard` (a `Canvas` with
+  `pointerInput` handling), `KeyMiniMap`, `SustainButton`.
+- Geometry from the existing `KeyLayout` (84 lanes, C1–B7) scaled to a chosen visible
+  range with horizontal offset; white keys full height, black keys 60 % height drawn
+  after whites. Hit-testing prefers black keys within their rectangle.
+- Multi-touch: track each pointer id → current key; on down send Note On; when a
+  pointer crosses into another key send Note Off for the old key and Note On for the
+  new (glissando); on up/cancel send Note Off. Velocity from the touch's y within the
+  key's rectangle: `24 + (y / keyHeight) × (127 − 24)`, clamped.
+- Sending goes through a new `LiveInput` in `player/` (or on `Player`): `noteOn(key,
+  vel)`, `noteOff(key)`, `sustain(down)` that feed the same `NoteRouter` instance the
+  player uses (so reference counting, the 100 ms guard and the silence sequence stay
+  correct when a piece plays at the same time) and `PianoLink.send`. Live input
+  bypasses transpose/fold (keys are already 24–107) but respects `velocityPct`.
+- `silenceLive()` on `ON_STOP` of the screen, on app background, and on link drop:
+  Note Off for every held live key and CC64 = 0 through the router.
+- Mini-map: the 84-key strip in miniature with a draggable viewport; ‹ › buttons shift
+  by one octave. State in the view model; persisted `keysViewportStart` (default C3).
+- VELOCITY readout: Eyebrow + Tabular, shown for 1 s after each tap (no animation
+  other than appear/disappear cuts).
+- No haptics. `contentDescription` on the keyboard describes it as a playable piano
+  keyboard; TalkBack users get the octave buttons and sustain as focusable controls.
+
+## Staff view — `ui/components/StaffCanvas.kt`
+
+- Same inputs as `NoteCanvas` (the `NoteList`, `positionMicrosAt(frameNanos)`, active
+  keys); same frame loop and draw-phase-only state reads; same pixels-per-second so the
+  two views stay in step.
+- Layout: treble staff and bass staff, line spacing 6 dp, 40 dp between the staves,
+  centred vertically in the available height; clefs at the left edge; playhead at ⅓
+  width. Horizontal axis is time: x = playheadX + (noteStart − now) × pxPerSecond.
+- Pitch → staff position: use sharps only. Diatonic step index from MIDI number
+  (C=0, D=1 … B=6 per octave; black keys take the step of the natural below and a
+  sharp). Notes ≥ 60 on the treble staff (E4 = bottom line), < 60 on the bass staff
+  (G2 = bottom line); middle C on a ledger line below the treble staff. Ledger lines
+  every second step outside the five lines, drawn per note for the head's width + 4 dp.
+- Note head: filled ellipse 7 × 5 dp rotated −20°; sharp glyph 6 dp to the left of the
+  head; duration bar: 1 dp hairline from the head's right edge for `duration ×
+  pxPerSecond`. Heads a second apart in one chord offset by one head width. Cull to the
+  visible time window with the same binary search as the roll.
+- Glyphs: bundle Bravura (SIL OFL) as `res/font/bravura.otf` and draw clefs (U+E050
+  G clef, U+E062 F clef), sharps (U+E262) and note heads (U+E0A4) with `drawText`
+  via `TextMeasurer`; if the font cannot be obtained offline, hand-drawn vector paths
+  for the two clefs and a plain ellipse head are acceptable. Add the OFL text to
+  `AUTHORS`/`README` acknowledgements.
+- Colours: staff lines `LocalHairline`, clefs `onSurfaceVariant`, upcoming heads
+  `onSurfaceVariant`, active heads `onSurface` with the 120 ms flip (cut under reduced
+  motion), playhead `onSurface`.
+
+## Settings (new keys)
+
+`noteDisplay` gains `STAFF`; `wideLayout` (see above); `keysViewportStart: Int (48)`.
+
+## Piano settings over Bluetooth
+
+Specified in `firmware/docs/BLE_SETTINGS.md` (protocol) and the "Piano settings"
+subsection below (app side), written once the firmware's command catalogue is
+confirmed.
+
+## Piano settings over Bluetooth — app side (M9)
+
+Protocol: `firmware/docs/BLE_SETTINGS.md` (Nordic UART Service next to BLE-MIDI; console
+commands in, replies out; `dump` / `get` for machine-readable state; allow-list). Design:
+`DESIGN.md › v1.1 › Piano settings`.
+
+### Link: a console channel on the same connection — `ble/`
+
+- After service discovery, `GattPianoLink` looks for NUS `6E400001-…`. If present:
+  enable notifications on TX `6E400003-…` (write CCCD `0x2902` = `0x0001`, one GATT op
+  in the existing serialized queue) and remember RX `6E400002-…`.
+- `PianoLink` gains `val console: ConsoleChannel?` (null when the piano has no NUS):
+  `fun sendLine(text: String)` (appends `\n`, ≤ 79 characters, `WRITE_TYPE_NO_RESPONSE`
+  to RX, ≤ MTU−3 bytes per write) and `val lines: SharedFlow<String>` (notifications
+  reassembled on `\n`, `> ` echo lines dropped).
+- Console writes share the single-operation GATT queue with MIDI. MIDI packets go
+  first: a console write is dequeued only when the paced MIDI writer has nothing
+  pending. Never let a console write delay a due MIDI packet by more than one op.
+- `FakePianoLink` gets a scripted console (canned replies per command) for tests;
+  `LoggingPianoLink` answers `dump` with a fixed plausible dump so the settings screen
+  can be exercised on the emulator.
+
+### Repository — `piano/PianoSettingsRepository.kt`
+
+- `state: StateFlow<PianoState>` where `PianoState` = `Unknown` (not connected or not
+  yet read) · `Unsupported` (no NUS, or `dump` not answered with `!proto=1 … end`
+  within 2 s) · `Ready(values: Map<String, String>, facts: Map<String, String>,
+  lastError: String?)`.
+- On `LinkState.Connected` with a console: send `dump`; parse `name=value` lines into
+  `values`, `!name=value` into `facts`, until `end`.
+- `set(name, value)`: debounce 150 ms per name → `sendLine("$name $value")` → then
+  `sendLine("get $name")`; the reply updates `values[name]`. Reply lines containing
+  `out of range`, `usage:`, `unknown`, or `refused` become `lastError` (cleared on the
+  next successful `get`). Booleans as `0`/`1`, floats with two decimals.
+- `preset(name)`: `sendLine(name)` then `dump` (presets change several values).
+- `action(name)`: `off`, `save`, `ledtest <midi>`, `testmin <midi>`, `testmax <midi>`,
+  `status` (its text lines are collected into `statusText` until 300 ms of silence).
+- `save()` is sent automatically when the Piano screen leaves the foreground after any
+  successful `set` since the last save.
+- On disconnect: `Unknown`. Values are never cached across connections (the piano is
+  the source of truth).
+
+### The table — `piano/PianoSettings.kt`
+
+A static list of `PianoSetting(name, label, section, kind, unit)` where `kind` is
+`Switch`, `Stepper(min, max, step)`, `Slider(min, max, step, decimals)` or
+`Choice(options)`. Names are the firmware command names. Sections and members, in order:
+
+- **LIGHTING**: `leds` Switch "Strip" · `ledmode` Choice Off/Static/Rainbow/Reactive ·
+  `ledbright` Slider 0–255 shown as % · `reactcolor` Choice Rainbow/Solid/Velocity/
+  Fire/Ocean/Forest/Lava/Party · `ledcount` Stepper 1–300 "LEDs" · `ledoffset` Stepper
+  −300–300 · `ledscale` Stepper 10–400 % · `ledtail` Stepper 0–255 · `ledreverse` Switch
+  · `ledglow` Stepper 0–10 · `velbright` Switch "Brightness follows velocity" · `decay`
+  Stepper 1–40 · `rainspeed` Stepper 1–40 · **Test LED**: a Stepper for a key (24–107,
+  default 60, shown as note name) and a *Light it* action (`ledtest`) · `dimsecs`
+  Stepper 0–3600 s step 30 · `dimfloor` Slider 0–255.
+- **FEEL**: presets chip row Soft · Cinematic · Expressive · Snappy · `fullpower` Switch
+  "Full power (no dynamics)" · `volume` Slider 0–100 % · `velcurve` Slider 0.4–3.0 step
+  0.05 · `velmult` Slider 0.1–5.0 step 0.1 · `min` Slider 0–4095 "White-key floor" ·
+  `minblack` Slider 0–4095 "Black-key floor (0 = same as white)" · `max` Slider 0–4095
+  "Ceiling" · `humanvel` Stepper 0–30 · `humantime` Stepper 0–40 ms · `burstgap`
+  Stepper 0–600 ms step 10 · `burstboost` Slider 0–100 % · `minstrike` Stepper 0–500 ms
+  step 5 · `isostrike` Stepper 0–500 ms step 5 · `isogap` Stepper 0–2000 ms step 10 ·
+  `gap` Stepper 0–300 ms · `hold` Stepper 50–4000 ms step 50 · `restrike` Stepper 0 or
+  40–1000 ms step 10 · `softrelease` Switch · `releasepwm` Slider 0–4095 · `releasems`
+  Stepper 0–200 ms · `freq` Stepper 24–1526 Hz step 10.
+- **PEDAL**: `pedalon` Switch · `pedalhalf` Switch · `pedalup` Stepper 80–600 ·
+  `pedaldown` Stepper 80–600. (`pedaltest` is refused over Bluetooth; not shown.)
+- **DIAGNOSTICS**: facts as read-only rows (`!fw`, `!boards` rendered as seven OK /
+  MISSING words, `!i2cfails`, `!pedalboard`, `!uptime` as h:mm) · *Read status* action
+  showing `statusText` in Body on `surfaceElevated` · *All keys off* (`off`) and *Save
+  now* (`save`) outlined buttons. `keyforce_white` / `keyforce_black` are shown
+  read-only ("Key force ×1.00") since setting them is refused over Bluetooth.
+
+### Screen — `ui/screens/piano/PianoSettingsSections.kt`
+
+- Rendered on the Piano tab between the connection card and the app preferences, per
+  DESIGN. Every control reads its live value from `values`, shows the unit in its
+  eyebrow, and calls `set` on change; sliders call `set` on value change (the
+  repository debounces). Disabled with `LocalDisabledGlyph` handles while `Unknown`,
+  with the line "Connect to the piano to adjust its settings."; the single line "This
+  piano's firmware doesn't offer settings over Bluetooth yet." while `Unsupported`.
+- `lastError` shows as an `OutlinedBanner` under the control's section.
+- Every control has a `contentDescription` including its label and value; steppers'
+  ± buttons are 48 dp.
+
+### Tests
+
+Parser (dump/get/`!` facts/end/timeout → Unsupported), debounce and write-then-get
+ordering, error detection, preset → dump, `save` on leave, MIDI-before-console queue
+priority in the link (with the fake), and the settings table's ranges matching
+`BLE_SETTINGS.md` (a test asserts every name in the table is in the spec's list).

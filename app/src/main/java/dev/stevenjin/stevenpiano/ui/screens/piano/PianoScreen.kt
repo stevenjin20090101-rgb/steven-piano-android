@@ -47,9 +47,13 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
+import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
-/** The Piano tab: the connection card, the few preferences, and the About row at the very bottom. */
+/**
+ * The Piano tab: the connection card, the few preferences, and the About row at the very bottom.
+ * On wide screens it reads as a 720 dp column in the middle; it scrolls from anywhere.
+ */
 @Composable
 fun PianoScreen() {
     val graph = LocalContext.current.graph
@@ -58,15 +62,17 @@ fun PianoScreen() {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val playing by vm.playing.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Piano")
+        ScreenHeader("Piano", Modifier.readingWidth())
         Column(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            Preferences(settings, vm)
-            AboutRow(Modifier.padding(16.dp))
+            Column(Modifier.readingWidth()) {
+                ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Preferences(settings, vm)
+                AboutRow(Modifier.padding(16.dp))
+            }
         }
     }
 }

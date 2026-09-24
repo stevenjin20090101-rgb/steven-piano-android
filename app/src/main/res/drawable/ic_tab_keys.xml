@@ -7,7 +7,7 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- Piano tab (the connection and the settings): three sliders with their knobs. Tinted where it is used. -->
+<!-- Keys tab: a keyboard. Tinted where it is used. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -15,5 +15,9 @@
     android:viewportHeight="24">
     <path
         android:fillColor="#FF000000"
-        android:pathData="M3,5h18v2H3z M3,11h18v2H3z M3,17h18v2H3z M5,6a3,3 0 1,1 6,0a3,3 0 1,1 -6,0z M12,12a3,3 0 1,1 6,0a3,3 0 1,1 -6,0z M7,18a3,3 0 1,1 6,0a3,3 0 1,1 -6,0z" />
+        android:fillType="evenOdd"
+        android:pathData="M3,5h18v14H3z M5,7v10h14V7z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M8.47,7h2.4v6h-2.4z M13.13,7h2.4v6h-2.4z M9.17,13h1v4h-1z M13.83,13h1v4h-1z" />
 </vector>

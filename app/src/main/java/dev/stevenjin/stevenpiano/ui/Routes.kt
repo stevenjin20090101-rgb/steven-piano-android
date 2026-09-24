@@ -12,10 +12,15 @@ package dev.stevenjin.stevenpiano.ui
 import androidx.annotation.DrawableRes
 import dev.stevenjin.stevenpiano.R
 
-/** The three tabs, in bar order. Tabs navigate; they never act. */
+/**
+ * The four destinations, in bar and rail order. They navigate; they never act. Library keeps the
+ * books, Now playing the roll, Keys takes the keyboard, and Piano (the connection and settings)
+ * the sliders.
+ */
 enum class Route(val path: String, val label: String, @param:DrawableRes val icon: Int) {
     Library("library", "Library", R.drawable.ic_tab_library),
     NowPlaying("now-playing", "Now playing", R.drawable.ic_stat_piano),
+    Keys("keys", "Keys", R.drawable.ic_tab_keys),
     Piano("piano", "Piano", R.drawable.ic_tab_piano),
     ;
 

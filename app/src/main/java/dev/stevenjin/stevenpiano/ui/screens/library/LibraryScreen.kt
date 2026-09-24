@@ -12,9 +12,11 @@ package dev.stevenjin.stevenpiano.ui.screens.library
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,11 +67,15 @@ import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import dev.stevenjin.stevenpiano.ui.components.readingPadding
+import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
  * The Library tab: search, the category chips, then text-only rows. Tapping a piece plays it
  * (with the list it was in as the queue) and switches to Now playing. [onImport] brings files in.
+ * On wide screens the content stays a 720 dp column in the middle; the list still scrolls from
+ * anywhere across the screen.
  */
 @Composable
 fun LibraryScreen(onPlay: (pieceId: Long, queue: List<Long>) -> Unit, onImport: (ImportSource) -> Unit) {
@@ -89,11 +95,13 @@ fun LibraryScreen(onPlay: (pieceId: Long, queue: List<Long>) -> Unit, onImport: 
             .fillMaxSize()
             .imePadding(),
     ) {
-        ScreenHeader("Library") {
-            GlyphButton(R.drawable.ic_add, "Add MIDI files") { adding = true }
+        Column(Modifier.readingWidth()) {
+            ScreenHeader("Library") {
+                GlyphButton(R.drawable.ic_add, "Add MIDI files") { adding = true }
+            }
+            HairlineDivider()
+            ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
         }
-        HairlineDivider()
-        ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
         when {
             !state.loaded -> Unit
             state.empty -> EmptyLibrary(onAdd = { adding = true })
@@ -112,7 +120,21 @@ private fun LibraryList(
     onPlay: (Long, List<Long>) -> Unit,
     onDialog: (LibraryDialog) -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        LibraryItems(state, vm, listState, readingPadding(maxWidth), onPlay, onDialog)
+    }
+}
+
+@Composable
+private fun LibraryItems(
+    state: LibraryState,
+    vm: LibraryViewModel,
+    listState: LazyListState,
+    padding: PaddingValues,
+    onPlay: (Long, List<Long>) -> Unit,
+    onDialog: (LibraryDialog) -> Unit,
+) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = padding) {
         item(key = "search") { SearchField(vm.query, vm::search) }
         item(key = "categories") { CategoryChips(state.category, vm::selectCategory) }
         state.group?.let { group ->

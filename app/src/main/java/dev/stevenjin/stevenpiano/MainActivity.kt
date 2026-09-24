@@ -17,24 +17,30 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.service.ImportService
+import dev.stevenjin.stevenpiano.ui.AppFrame
 import dev.stevenjin.stevenpiano.ui.PianoNavHost
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
 
 /**
- * The one activity: edge to edge, transparent system bars, the three tabs. MIDI files that
- * arrive by "Open with" or the share sheet, or come from the Library's pickers, are imported by
- * the import service; the playback notification opens Now playing.
+ * The one activity: edge to edge, transparent system bars, the four destinations in a frame the
+ * window's width class chooses. MIDI files that arrive by "Open with" or the share sheet, or
+ * come from the Library's pickers, are imported by the import service; the playback
+ * notification opens Now playing.
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
 
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -43,8 +49,10 @@ class MainActivity : ComponentActivity() {
         )
         if (savedInstanceState == null) route(intent)
         setContent {
+            val widthClass = calculateWindowSizeClass(this).widthSizeClass
+            val frame = remember(widthClass) { AppFrame(widthClass) }
             PianoTheme {
-                PianoNavHost(requestedTab, onTabShown = { requestedTab = null }) { source ->
+                PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }) { source ->
                     ImportService.start(this, source, fromPicker = true)
                 }
             }
