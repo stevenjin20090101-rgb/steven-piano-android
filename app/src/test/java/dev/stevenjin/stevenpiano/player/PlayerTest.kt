@@ -96,6 +96,38 @@ class PlayerTest {
     }
 
     @Test
+    fun `live keys go out through the player, and a dropped link lets go of them`() = runBlocking {
+        onMain {
+            player.liveNoteOn(60, 100)
+            player.liveSustain(true)
+        }
+        withTimeout(2_000) { player.liveSustain.first { it } }
+        assertEquals(listOf("90 3C 64", "B0 40 7F"), link.messages)
+        assertEquals(1L shl 36, player.activeKeysLow)
+        link.drop()
+        withTimeout(2_000) { player.liveSustain.first { !it } }
+        assertEquals(listOf("90 3C 64", "B0 40 7F", "80 3C 00", "B0 40 00"), link.messages)
+        assertEquals(0L, player.activeKeysLow)
+    }
+
+    @Test
+    fun `leaving the Keys screen lets go of its keys while the piece plays on`() = runBlocking {
+        source.pieces[1] = piece(64, 5_000)
+        onMain { player.play(1) }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        withTimeout(2_000) { while (link.messages.isEmpty()) delay(5) }
+        onMain {
+            player.liveNoteOn(60, 100)
+            player.silenceLive()
+        }
+        withTimeout(2_000) { while (link.messages.size < 3) delay(5) }
+        assertEquals(listOf("90 40 50", "90 3C 64", "80 3C 00"), link.messages)
+        assertEquals(PlaybackStatus.Playing, player.state.value.status)
+        assertEquals(1L shl 40, player.activeKeysLow)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
     fun `a piece that can't be read says why`() = runBlocking {
         onMain { player.play(7) }
         val state = withTimeout(2_000) { player.state.first { it.problem != null } }

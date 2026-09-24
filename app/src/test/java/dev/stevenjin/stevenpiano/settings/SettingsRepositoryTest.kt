@@ -35,26 +35,44 @@ class SettingsRepositoryTest {
 
         repository.setAutoConnect(false)
         repository.rememberDevice("C8:2E:18:00:11:22", "Steven Piano")
-        repository.setNoteDisplay(NoteDisplay.FALLING)
+        repository.setNoteDisplay(NoteDisplay.STAFF)
         repository.setDefaultTempo(80)
         repository.setTranspose(30)
         repository.setVelocity(10)
         repository.setFoldOutOfRange(false)
         repository.setSkipDrumChannel(false)
+        repository.setWideLayout(WideLayout.NOTES_ONLY)
+        repository.setKeysViewportStart(3)
         assertEquals(
             PianoSettings(
                 autoConnect = false,
                 lastDeviceAddress = "C8:2E:18:00:11:22",
                 lastDeviceName = "Steven Piano",
-                noteDisplay = NoteDisplay.FALLING,
+                noteDisplay = NoteDisplay.STAFF,
                 defaultTempoPct = 80,
                 transpose = 12,
                 velocityPct = 50,
                 foldOutOfRange = false,
                 skipDrumChannel = false,
+                wideLayout = WideLayout.NOTES_ONLY,
+                keysViewportStart = 24,
             ),
             repository.settings.first(),
         )
+        repository.setKeysViewportStart(200)
+        assertEquals(107, repository.settings.first().keysViewportStart)
+        repository.setKeysViewportStart(60)
+        assertEquals(60, repository.settings.first().keysViewportStart)
         scope.cancel()
+    }
+
+    @Test
+    fun `v1_1 defaults - paper roll, staff and notes on wide screens, the Keys screen from C3`() {
+        val defaults = PianoSettings()
+        assertEquals(NoteDisplay.PAPER_ROLL, defaults.noteDisplay)
+        assertEquals(WideLayout.STAFF_AND_NOTES, defaults.wideLayout)
+        assertEquals(48, defaults.keysViewportStart)
+        assertEquals(NoteDisplay.PAPER_ROLL, NoteDisplay.STAFF.rollStyle)
+        assertEquals(NoteDisplay.FALLING, NoteDisplay.FALLING.rollStyle)
     }
 }

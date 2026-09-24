@@ -1,0 +1,201 @@
+// ============================================================================
+//  Steven Piano - Android player for the self-playing acoustic piano
+//  Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+//  Original author & creator: Steven Jin.
+//  Licensed under the MIT License (see LICENSE). This copyright and attribution
+//  notice MUST be preserved in all copies or substantial portions of the work.
+//  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+// ============================================================================
+
+package dev.stevenjin.stevenpiano.player
+
+import dev.stevenjin.stevenpiano.ble.FakePianoLink
+import dev.stevenjin.stevenpiano.midi.MidiPiece
+import dev.stevenjin.stevenpiano.midi.SmfBuilder
+import dev.stevenjin.stevenpiano.midi.SmfParser
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** Keys from the Keys screen, through the engine's own router, on a virtual clock. */
+class LiveInputTest {
+    private val ms = 1_000_000L
+    private var now = 0L
+    private val link = FakePianoLink { now }
+    private val engine = PlaybackEngine(link)
+    private val router get() = engine.router
+
+    /** One track, 1 tick = 1 ms. */
+    private fun piece(block: SmfBuilder.Track.() -> Unit): MidiPiece =
+        SmfParser.parse(SmfBuilder(format = 0, division = 1000).track { tempo(0, 1_000_000); block() }.build())
+
+    private fun at(timeMs: Long) {
+        now = timeMs * ms
+    }
+
+    /** Drives the engine like the scheduler does, up to [untilMs]. */
+    private fun runUntil(untilMs: Long) {
+        while (true) {
+            val wake = engine.advance(now)
+            if (wake > untilMs * ms) break
+            now = wake
+        }
+        now = untilMs * ms
+    }
+
+    /** "time-in-ms message". */
+    private fun sent() = link.sent.map { "${it.atNanos / ms} ${it.message}" }
+
+    @Test
+    fun `a key goes down and up the moment it is played`() {
+        engine.liveNoteOn(60, 100, now)
+        at(300)
+        engine.liveNoteOff(60)
+        assertEquals(listOf("0 90 3C 64", "300 80 3C 00"), sent())
+        assertEquals(listOf(false, false), link.sent.map { it.dropPending })
+    }
+
+    @Test
+    fun `the velocity percentage applies, transpose and fold do not`() {
+        router.velocityPct = 50
+        router.transpose = 7
+        router.fold = false
+        engine.liveNoteOn(60, 100, now)
+        engine.liveNoteOn(107, 127, now)
+        assertEquals(listOf("90 3C 32", "90 6B 40"), link.messages)
+    }
+
+    @Test
+    fun `keys the piano does not have are ignored`() {
+        engine.liveNoteOn(23, 100, now)
+        engine.liveNoteOn(108, 100, now)
+        engine.liveNoteOff(23)
+        assertEquals(emptyList<String>(), link.messages)
+    }
+
+    @Test
+    fun `a key the screen already holds is not struck again`() {
+        engine.liveNoteOn(60, 100, now)
+        at(200)
+        engine.liveNoteOn(60, 90, now)
+        engine.liveNoteOff(60)
+        engine.liveNoteOff(60)
+        assertEquals(listOf("0 90 3C 64", "200 80 3C 00"), sent())
+    }
+
+    @Test
+    fun `sustain latches the pedal down, then up`() {
+        engine.liveSustain(true)
+        assertTrue(router.liveSustainDown)
+        engine.liveSustain(true)
+        engine.liveSustain(false)
+        assertFalse(router.liveSustainDown)
+        assertEquals(listOf("B0 40 7F", "B0 40 00"), link.messages)
+    }
+
+    @Test
+    fun `silenceLive lets go of the screen's keys and pedal while the piece's keys stay down`() {
+        engine.load(piece { noteOn(0, 64); noteOff(5_000, 64) }, now)
+        engine.play(now)
+        runUntil(200)
+        engine.liveNoteOn(60, 100, now)
+        engine.liveNoteOn(67, 90, now)
+        engine.liveSustain(true)
+        link.clear()
+        engine.silenceLive()
+        assertEquals(listOf("200 80 3C 00", "200 80 43 00", "200 B0 40 00"), sent())
+        assertTrue(router.isSounding(64))
+        assertFalse(router.isSounding(60))
+        assertFalse(router.liveSustainDown)
+        assertEquals((1L shl 40), router.activeLow)
+        link.clear()
+        runUntil(10_000)   // the piece plays on to its own release and end
+        assertEquals(listOf("5000 80 40 00", "5000 B0 40 00", "5000 B0 7B 00"), sent())
+    }
+
+    @Test
+    fun `silenceLive with nothing held sends nothing`() {
+        engine.silenceLive()
+        assertEquals(emptyList<String>(), link.messages)
+    }
+
+    @Test
+    fun `a live key on a key the piece holds shares it`() {
+        engine.load(piece { noteOn(0, 64); noteOff(1_000, 64) }, now)
+        engine.play(now)
+        runUntil(200)
+        link.clear()
+        engine.liveNoteOn(64, 100, now)   // already down: no re-strike
+        at(300)
+        engine.liveNoteOff(64)            // the piece still holds it
+        assertEquals(emptyList<String>(), sent())
+        assertTrue(router.isSounding(64))
+        runUntil(1_000)
+        assertEquals("1000 80 40 00", sent().first())
+    }
+
+    @Test
+    fun `the piece letting go of a shared key leaves it down for the finger`() {
+        engine.load(piece { noteOn(0, 64); noteOff(500, 64); noteOn(2_000, 72); noteOff(2_100, 72) }, now)
+        engine.play(now)
+        runUntil(100)
+        engine.liveNoteOn(64, 100, now)
+        link.clear()
+        runUntil(600)
+        assertEquals(emptyList<String>(), sent())
+        assertTrue(router.isSounding(64))
+        engine.liveNoteOff(64)
+        assertEquals(listOf("600 80 40 00"), sent())
+    }
+
+    @Test
+    fun `the 100 ms guard thins fast taps of one key`() {
+        engine.liveNoteOn(60, 100, now)
+        at(40)
+        engine.liveNoteOff(60)
+        at(80)
+        engine.liveNoteOn(60, 100, now)   // 80 ms after the last strike: thinned
+        at(90)
+        engine.liveNoteOff(60)            // its release goes nowhere
+        at(150)
+        engine.liveNoteOn(60, 100, now)
+        assertEquals(listOf("0 90 3C 64", "40 80 3C 00", "150 90 3C 64"), sent())
+    }
+
+    @Test
+    fun `the guard counts the piece's strikes too`() {
+        engine.load(piece { noteOn(0, 62); noteOff(50, 62) }, now)
+        engine.play(now)
+        runUntil(60)
+        link.clear()
+        engine.liveNoteOn(62, 100, now)
+        at(120)
+        engine.liveNoteOn(62, 100, now)
+        assertEquals(listOf("120 90 3E 64"), sent())
+    }
+
+    @Test
+    fun `a full stop lets go of the live keys and the sustain too`() {
+        engine.liveNoteOn(60, 100, now)
+        engine.liveSustain(true)
+        link.clear()
+        engine.stop(now)
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), link.messages)
+        assertFalse(router.liveSustainDown)
+        link.clear()
+        engine.liveNoteOff(60)
+        engine.silenceLive()
+        assertEquals(emptyList<String>(), link.messages)
+    }
+
+    @Test
+    fun `live keys light the keyboard strip`() {
+        engine.liveNoteOn(60, 100, now)
+        engine.liveNoteOn(107, 100, now)
+        assertEquals(1L shl 36, router.activeLow)
+        assertEquals(1L shl 19, router.activeHigh)
+        engine.liveNoteOff(60)
+        assertEquals(0L, router.activeLow)
+    }
+}

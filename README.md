@@ -11,9 +11,39 @@
 
 An Android app that plays Standard MIDI Files on Steven's self-playing acoustic
 piano over Bluetooth LE MIDI. Pick a piece in the **Library**, watch it on
-**Now playing** as a paper roll (or falling notes) while the piano plays it, and
-connect and tune playback on the **Piano** tab. Sideloaded as an APK; no
-network, no accounts, no analytics. Made by Steven Jin.
+**Now playing** as a paper roll, falling notes or a staff while the piano plays
+it, play the piano yourself on **Keys**, and connect and tune playback on the
+**Piano** tab. Phones and tablets alike. Sideloaded as an APK; no network, no
+accounts, no analytics. Made by Steven Jin.
+
+## What it does
+
+- **Library**: search, collections, composers, favorites and recent pieces;
+  import single files, a whole folder (with its `INDEX.csv`) or a zip.
+- **Now playing**: the pianola paper roll (the default), Synthesia-style falling
+  notes, or a **staff**: the notes on a grand staff (treble and bass, sharps
+  only, a line trailing each head for its length), scrolling through a playhead
+  in step with the roll. Not engraved sheet music: no beams, rests or ties.
+  Tempo, scrubbing, previous and next.
+- **Keys**: a playable keyboard over the piano's 84 keys, C1–B7. Every touch is a
+  Note On to the piano; chords with several fingers, a glissando by sliding.
+  Where you touch a key sets how hard it plays: near the top softly (velocity
+  24), near the bottom loudly (127); the last value shows as VELOCITY for a
+  second. A latching **Sustain** holds the pedal. A phone shows two octaves at a
+  time (drag the mini-map, or use the ‹ › octave buttons), a small tablet about
+  four, a large tablet in landscape all 84 keys. Leaving the screen, putting the
+  app in the background or losing the link lets go of every key and the pedal.
+  Keys shares the piano's safety rules with playback (never re-strike a held
+  key, no same-key strikes closer than 100 ms), so it can be played while a
+  piece plays.
+- **Piano**: the connection, the preferences (auto-connect, note display, wide
+  layout, default tempo, transpose, velocity, folding, drum channel) and the
+  About line.
+- **Tablets and phones on their side**: a navigation rail on the left instead of
+  the bottom bar. Now playing shows the staff and the notes together: stacked on
+  a small tablet or a phone on its side, side by side on a large tablet on its
+  side; **Piano › Wide layout** can show either alone. The Library and the Piano
+  tab keep a comfortable 720 dp reading column in the middle of the screen.
 
 The phone does all the timing: the piano plays each note the moment it arrives.
 The app folds notes outside the piano's range (C1–B7) by octaves, never sends a
@@ -113,6 +143,26 @@ the first play, so the lock screen shows play and pause.
 - [ ] Import the whole `midi` folder (or the zip): 1,727 pieces appear grouped by
       collection and composer; search finds "Clair de lune"; a MAESTRO
       performance plays with its recorded dynamics (piano in variable-force mode).
+- [ ] Keys: a tap plays the key; three fingers play a chord; sliding plays a
+      glissando with each key released before the next; a touch near the top of a
+      key is soft and near the bottom loud (VELOCITY confirms it). Sustain on holds
+      the pedal, Sustain off lifts it. With a key and the sustain held, switch tab,
+      press Home, or power the piano off: every key and the pedal come up.
+- [ ] Keys while a piece plays: pressing a key the piece is holding does not
+      re-strike it, and leaving Keys leaves the piece's notes sounding.
+- [ ] On a tablet: the rail replaces the bottom bar; Now playing shows the staff
+      over the roll upright and beside it on its side, in step with each other;
+      Wide layout › Staff only and Notes only work while playing.
+
+## Acknowledgements
+
+- The staff view's clefs, sharps and note heads are drawn with **Bravura**, the
+  SMuFL music font by Steinberg Media Technologies GmbH, bundled unmodified under
+  the SIL Open Font License 1.1 (notice in `AUTHORS`, licence in
+  `third_party/bravura/OFL.txt`).
+- The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
+  piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
+  domain); those files are not part of this repository.
 
 ## Authorship
 
