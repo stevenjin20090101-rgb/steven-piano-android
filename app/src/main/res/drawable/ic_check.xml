@@ -7,6 +7,13 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<resources>
-    <string name="app_name">Steven Piano</string>
-</resources>
+<!-- Check: tinted where it is used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M9.5,16.2L5.3,12L3.9,13.4L9.5,19L20.1,8.4L18.7,7Z" />
+</vector>

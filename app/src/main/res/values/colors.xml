@@ -8,13 +8,8 @@
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
 <resources>
-    <!-- Day half of the DayNight pair (values-night holds the dark half). Compose draws
-         everything; this only colours the window before the first frame. System bars are
-         transparent: the app draws edge to edge. -->
-    <style name="Theme.StevenPiano" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/window_background</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">true</item>
-    </style>
+    <!-- Adaptive launcher icon: the camera-body black. -->
+    <color name="ic_launcher_background">#0E0E0E</color>
+    <!-- The window behind the first frame: warm paper in light, camera body in dark. -->
+    <color name="window_background">#F4F1EA</color>
 </resources>
