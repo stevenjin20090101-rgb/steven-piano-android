@@ -85,7 +85,7 @@ b0f77977023047f071902b77663d2c3dc8714f30b65791d05d0ab696e926f3f7  app/src/main/j
 4b66d6ade9ee39d644c99a4d6e473fe40b2f8d1d56acb9dadb13e3a11484a1a9  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/library/LibraryRows.kt
 e770337f206c0cba1c71b95cd14a84582b863390db262f012b707b711e957035  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/library/LibraryScreen.kt
 90f96c87f468e094687c761d18b5afa0af9fd10597be009a109828997510660b  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/library/LibraryViewModel.kt
-97c7f270ca5a25fa8c7673c62f5cfeb675d41d5a1023c62f001cee291748075b  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/nowplaying/NowPlayingScreen.kt
+dbf5ba513a6eaa8f4c405d7e4800f5293da424da42472732965d139fc4196f78  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/nowplaying/NowPlayingScreen.kt
 671aca3736eec4a04fbf1c3826f12b4a6664c5f69502c00c148c434b78de9c46  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/nowplaying/RollClock.kt
 fc57971783653bc3bfb095359c8b54f780fa4ee5cc7bed4dfc9004fda573a863  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/AboutRow.kt
 148f3e2f424cc3602172f52c52160a259c6bf5bd4ea06f6c9fa16b6ee8bd04f9  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/ConnectionCard.kt

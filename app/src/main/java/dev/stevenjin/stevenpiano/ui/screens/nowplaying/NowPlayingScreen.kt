@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -68,6 +71,10 @@ import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
+/** Below this height the screen scrolls, and the roll gets [COMPACT_ROLL]. */
+private val COMPACT_BELOW = 520.dp
+private val COMPACT_ROLL = 240.dp
+
 /** After a change while paused (a seek), frames keep coming this long so the picture catches up. */
 private const val SETTLE_NANOS = 400_000_000L
 
@@ -83,27 +90,46 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val state by player.state.collectAsStateWithLifecycle()
     val settings by graph.settings.collectAsStateWithLifecycle()
     val link by graph.pianoLink.state.collectAsStateWithLifecycle()
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Now playing")
-        if (state.loading) ProgressHairline(null)
-        state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
-        val piece = state.piece
-        if (piece != null) {
-            PieceView(piece, state, settings.noteDisplay, link is LinkState.Connected, player, playback, onOpenPiano)
-        } else if (!state.loading) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "Choose a piece from the library.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
+    val piece = state.piece
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Too short for the roll to share the height (landscape, a small phone at a large font):
+        // the screen scrolls and the roll keeps a fixed height instead of collapsing.
+        val compact = piece != null && maxHeight < COMPACT_BELOW
+        Column(if (compact) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
+            NowPlayingContent(state, piece, settings.noteDisplay, link is LinkState.Connected, player, playback, onOpenPiano, compact)
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.NowPlayingContent(
+    state: PlayerState,
+    piece: NowPlaying?,
+    display: NoteDisplay,
+    connected: Boolean,
+    player: Player,
+    playback: PlaybackStarter,
+    onOpenPiano: () -> Unit,
+    compact: Boolean,
+) {
+    ScreenHeader("Now playing")
+    if (state.loading) ProgressHairline(null)
+    state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+    if (piece != null) {
+        PieceView(piece, state, display, connected, player, playback, onOpenPiano, compact)
+    } else if (!state.loading) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Choose a piece from the library.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -118,6 +144,7 @@ private fun ColumnScope.PieceView(
     player: Player,
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
+    compact: Boolean,
 ) {
     val playing = state.status == PlaybackStatus.Playing
     val roll = remember(player) { RollClock(player) }
@@ -136,8 +163,7 @@ private fun ColumnScope.PieceView(
     }
     Spacer(Modifier.height(16.dp))
     Column(
-        Modifier
-            .weight(1f)
+        (if (compact) Modifier.height(COMPACT_ROLL) else Modifier.weight(1f))
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(MaterialTheme.shapes.medium)
