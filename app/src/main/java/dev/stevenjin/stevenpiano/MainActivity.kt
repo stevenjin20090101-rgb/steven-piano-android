@@ -49,8 +49,8 @@ class MainActivity : ComponentActivity() {
         )
         if (savedInstanceState == null) route(intent)
         setContent {
-            val widthClass = calculateWindowSizeClass(this).widthSizeClass
-            val frame = remember(widthClass) { AppFrame(widthClass) }
+            val size = calculateWindowSizeClass(this)
+            val frame = remember(size) { AppFrame(size.widthSizeClass, size.heightSizeClass) }
             PianoTheme {
                 PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }) { source ->
                     ImportService.start(this, source, fromPicker = true)

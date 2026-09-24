@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui
 
+import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -41,9 +42,17 @@ data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay)
  * their side) move the four destinations to a rail on the left. Never a rail and a bar at once.
  * The class also sets how Now playing arranges the staff and the notes, how many keys the Keys
  * screen shows, and which note-display choices the Piano tab offers.
+ *
+ * A phone on its side is often 840 dp wide or more, but only 360-480 dp tall: an expanded width
+ * over a compact height ([height]) counts as medium, so landscape phones get the medium layout,
+ * as the design says, rather than 49 slivers of keys and two views 400 dp tall.
  */
 @Immutable
-class AppFrame(val widthClass: WindowWidthSizeClass) {
+class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = WindowHeightSizeClass.Medium) {
+    /** The width class the frame follows. */
+    val widthClass: WindowWidthSizeClass =
+        if (width == WindowWidthSizeClass.Expanded && height == WindowHeightSizeClass.Compact) WindowWidthSizeClass.Medium else width
+
     /** The navigation rail on the left instead of the bottom bar. */
     val rail: Boolean get() = widthClass != WindowWidthSizeClass.Compact
 

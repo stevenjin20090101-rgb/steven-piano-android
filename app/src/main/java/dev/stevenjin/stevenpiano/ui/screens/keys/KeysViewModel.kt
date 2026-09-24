@@ -78,17 +78,17 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** The drag ended: settle on a whole white key and remember it. */
     fun settle(visibleWhites: Int) {
         first = KeyboardGeometry.clampFirst(first.roundToInt().toFloat(), visibleWhites)
-        remember()
+        persist()
     }
 
     /** ‹ or ›: an octave down ([octaves] -1) or up (+1). */
     fun shiftOctave(octaves: Int, visibleWhites: Int) {
         val from = KeyboardGeometry.clampFirst(first, visibleWhites).roundToInt()
         first = KeyboardGeometry.clampFirst((from + octaves * WHITES_PER_OCTAVE).toFloat(), visibleWhites)
-        remember()
+        persist()
     }
 
-    private fun remember() {
+    private fun persist() {
         val key = KeyboardGeometry.whiteKey(first.roundToInt())
         graph.appScope.launch { graph.settingsRepository.setKeysViewportStart(key) }
     }
