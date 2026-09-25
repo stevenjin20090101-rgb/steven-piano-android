@@ -17,7 +17,7 @@ import org.junit.Test
 class ScoreMetricsTest {
     private val density = 2.625f   // a phone's xxhdpi
 
-    private fun metrics(widthDp: Float, heightDp: Float, width: ScoreWidth = ScoreWidth.COMPACT, fontScale: Float = 1f) =
+    private fun metrics(widthDp: Float, heightDp: Float, width: ScoreWidth = ScoreWidth.COMPACT, fontScale: Float = 1f, chordDp: Float = 0f) =
         ScoreMetrics.forPanel(
             width,
             widthDp * density,
@@ -26,6 +26,7 @@ class ScoreMetricsTest {
             headWidth = 1.18f * 6 * density,
             clefWidth = 2.74f * 6 * density,
             numberHeight = 16f * fontScale * density,
+            chordHeight = chordDp * fontScale * density,
         )
 
     @Test
@@ -84,5 +85,26 @@ class ScoreMetricsTest {
         val extra = 60f * density / 4
         assertEquals(ScoreMetrics.PAD_TOP_DP * density + extra, m.firstSystemTop, 0.5f)
         assertEquals(m.numberHeight + m.grandStaffHeight + m.systemGap + extra, m.systemPitch, 0.5f)
+    }
+
+    @Test
+    fun `chord names get a line of their own above each system's bar-number line`() {
+        val plain = metrics(379f, 460f)
+        val named = metrics(379f, 460f, chordDp = 29f)
+        assertEquals(0f, plain.chordHeight, 0f)
+        assertEquals(29f * density, named.chordHeight, 0.01f)
+        // Every system's staff starts a chord line and a number line below its block's top.
+        for (row in 0 until named.systemsPerPage) {
+            assertEquals(named.firstSystemTop + row * named.systemPitch + named.chordHeight + named.numberHeight, named.staffTop(row), 0.01f)
+            if (row > 0) {
+                val previousBottom = named.staffTop(row - 1) + named.grandStaffHeight
+                assertTrue(named.staffTop(row) - named.numberHeight - named.chordHeight - previousBottom >= named.systemGap - 0.01f)
+            }
+        }
+        assertTrue(named.staffTop(named.systemsPerPage - 1) + named.grandStaffHeight <= named.pageHeight)
+        // The line costs room: three systems fit without it, two with it; at twice the text size in 400 dp, one.
+        assertEquals(3, plain.systemsPerPage)
+        assertEquals(2, named.systemsPerPage)
+        assertEquals(1, metrics(379f, 400f, fontScale = 2f, chordDp = 29f).systemsPerPage)
     }
 }

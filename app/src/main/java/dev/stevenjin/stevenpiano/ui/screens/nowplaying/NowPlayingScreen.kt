@@ -285,7 +285,10 @@ private fun NoteViews(
     }
     val notes: @Composable (Modifier) -> Unit = { panel ->
         Panel(panel) {
-            NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(), hands = hands, fingers = fingers)
+            NoteCanvas(
+                piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(),
+                hands = hands, fingers = fingers, chords = piece.chords,
+            )
             HairlineDivider()
             KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
         }
@@ -307,6 +310,7 @@ private fun NoteViews(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 hands = hands,
                 fingers = fingers,
+                chords = piece.chords,
             )
             if (strip) {
                 HairlineDivider()

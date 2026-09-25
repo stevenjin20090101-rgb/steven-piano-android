@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
+import dev.stevenjin.stevenpiano.score.ChordTrack
 import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
@@ -55,6 +57,10 @@ private const val NUMERAL_MIN_WIDTH = 0.75f
 
 /** A numeral sits this far inside its bar's leading edge. */
 private val NumeralPad = 2.dp
+
+/** A chord name sits this far from the canvas's left edge, on a backing this much larger than its text. */
+private val ChordInset = 4.dp
+private val ChordPad = 4.dp
 
 /** Steps between upcoming and sounding colours, precomputed so drawing never allocates. */
 internal const val RAMP_STEPS = 12
@@ -107,7 +113,9 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  * [NUMERALS_TALL] numerals tall carries its suggested finger in small tabular figures inside it at
  * its leading edge, the end that reaches the line first: knocked out of a filled bar (the elevated
  * surface's colour; the content colour would vanish on a bar that is itself that colour as it
- * sounds) and in the secondary colour inside an outlined one.
+ * sounds) and in the secondary colour inside an outlined one. With [chords], each chord's name stands
+ * at the canvas's left edge where the chord begins, an eyebrow-sized label on a 4 dp backing of the
+ * elevated surface (so it reads over the bars), travelling with the notes.
  *
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
@@ -124,11 +132,21 @@ fun NoteCanvas(
     modifier: Modifier = Modifier,
     hands: ByteArray? = null,
     fingers: ByteArray? = null,
+    chords: ChordTrack? = null,
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val numeralStyle = MaterialTheme.typography.labelSmall.merge(Tabular).merge(TextStyle(letterSpacing = 0.sp))
     val numerals = remember(measurer, density, numeralStyle) { Numerals(measurer, density, numeralStyle) }
+    // Chord names in the eyebrow's size and tracking, in the chord's own case ("Am", not "AM"); each
+    // distinct name measured once.
+    val chordStyle = MaterialTheme.typography.labelSmall
+    val chordLabels = remember(chords, transpose, measurer, density, chordStyle) {
+        chords?.takeIf { it.size > 0 }?.let { c ->
+            val measured = HashMap<String, TextLayoutResult>()
+            Array(c.size) { i -> c.name(i, transpose).let { name -> measured.getOrPut(name) { measurer.measure(name, chordStyle, maxLines = 1, density = density) } } }
+        }
+    }
     val upcoming = MaterialTheme.colorScheme.onSurfaceVariant
     val sounding = MaterialTheme.colorScheme.onSurface
     val inside = MaterialTheme.colorScheme.surfaceVariant
@@ -158,6 +176,11 @@ fun NoteCanvas(
                     numerals = numerals,
                     numeralPad = NumeralPad.toPx(),
                     numeralOnOutline = upcoming,
+                    chords = if (chordLabels != null) chords else null,
+                    chordLabels = chordLabels,
+                    chordInset = ChordInset.toPx(),
+                    chordPad = ChordPad.toPx(),
+                    chordColor = upcoming,
                 )
                 val bar = 2.dp.toPx()
                 val edgeGap = 6.dp.toPx()
@@ -169,6 +192,7 @@ fun NoteCanvas(
                     }
                     val drawn = roll.drawNotes(this, now, black = false, budget = MAX_NOTE_DRAWS)
                     roll.drawNotes(this, now, black = true, budget = MAX_NOTE_DRAWS - drawn)
+                    roll.drawChords(this, now)
                     if (roll.paper) {
                         drawRect(edge, Offset(0f, roll.hitY - bar / 2 - edgeGap - edgeLine), Size(size.width, edgeLine))
                         drawRect(sounding, Offset(0f, roll.hitY - bar / 2), Size(size.width, bar))
@@ -203,6 +227,12 @@ private class Roll(
     val numeralPad: Float,
     /** A numeral's colour inside an outlined bar (inside a filled one it takes [inside]'s). */
     val numeralOnOutline: Color,
+    /** The chords and each one's measured name, or null for none. */
+    val chords: ChordTrack?,
+    val chordLabels: Array<TextLayoutResult>?,
+    val chordInset: Float,
+    val chordPad: Float,
+    val chordColor: Color,
 ) {
     /** The shortest and narrowest bar that carries a numeral. */
     private val numeralMinHeight = NUMERALS_TALL * numerals.height
@@ -212,6 +242,31 @@ private class Roll(
     val hitY: Float = if (paper) height * (1f - TRACKER_FROM_BOTTOM) else height
     private val aheadMicros = (hitY / pxPerMicro).toLong()
     private val behindMicros = ((height - hitY) / pxPerMicro).toLong()
+
+    /**
+     * The chord names in view at [now]: each at the left edge, its backing's bottom on the line where
+     * its chord begins, so it travels with the notes. Allocation-free.
+     */
+    fun drawChords(scope: DrawScope, now: Long) {
+        val chords = chords ?: return
+        val labels = chordLabels ?: return
+        val height = hitY + behindMicros * pxPerMicro
+        // A label reaches this far above its line, so one that starts just below the top edge still shows.
+        val reach = ((labels[0].size.height + 2 * chordPad) / pxPerMicro).toLong()
+        var i = chords.firstAtOrAfter(now - behindMicros)
+        while (i < chords.size) {
+            val start = chords.startMicros[i]
+            if (start > now + aheadMicros + reach) break
+            val text = labels[i]
+            val bottom = hitY - (start - now) * pxPerMicro
+            val boxHeight = text.size.height + 2 * chordPad
+            if (bottom > 0f && bottom - boxHeight < height) {
+                scope.drawRect(inside, Offset(chordInset, bottom - boxHeight), Size(text.size.width + 2 * chordPad, boxHeight))
+                scope.drawText(text, color = chordColor, topLeft = Offset(chordInset + chordPad, bottom - boxHeight + chordPad))
+            }
+            i++
+        }
+    }
 
     /** Draws the visible white (or black) notes, at most [budget] of them; returns how many it drew. */
     fun drawNotes(scope: DrawScope, now: Long, black: Boolean, budget: Int): Int {

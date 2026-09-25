@@ -76,6 +76,7 @@ import dev.stevenjin.stevenpiano.midi.TempoMap
 import dev.stevenjin.stevenpiano.midi.TimeSignature
 import dev.stevenjin.stevenpiano.score.Accidental
 import dev.stevenjin.stevenpiano.score.Beams
+import dev.stevenjin.stevenpiano.score.ChordTrack
 import dev.stevenjin.stevenpiano.score.Dynamics
 import dev.stevenjin.stevenpiano.score.Head
 import dev.stevenjin.stevenpiano.score.PageTurn
@@ -109,6 +110,10 @@ private val LedgerOverhang = 2.dp
 /** A final bar line's thick stroke, and the gap before it. */
 private val FinalStroke = 3.dp
 private val FinalGap = 2.dp
+
+/** A chord name keeps this far above the bar number, and from the name before it. */
+private val ChordGap = 2.dp
+private val ChordSpacing = 6.dp
 
 /** A horizontal drag this long turns the page. */
 private val SwipeDistance = 40.dp
@@ -171,8 +176,9 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * The score (DESIGN.md › v1.2 › Score): the piece as systems of bars on pages, one page, or two
  * side by side when the panel is 840 dp wide or more, laid out by [ScoreLayoutEngine] from the
  * file's tempo map, bars and signatures ([keySignatures] are the file's; [transpose] moves them
- * with the notes), each note on its hand's staff when the [hands] are known, and the suggested
- * [fingers] as small numerals above the right hand's heads and below the left's (DESIGN.md › v1.3).
+ * with the notes), each note on its hand's staff when the [hands] are known, the suggested
+ * [fingers] as small numerals above the right hand's heads and below the left's, and the [chords]'
+ * names on a line of their own above each system, where each chord begins (DESIGN.md › v1.3).
  * Staff lines and bar lines are the tertiary grey; clefs, signatures, notes and their beams, rests,
  * ties, tempo marks and dynamics the secondary colour (DESIGN.md › v1.3 › Score fidelity); bar
  * numbers eyebrows above each system. A 2 dp cursor moves through the current
@@ -206,6 +212,7 @@ fun ScorePages(
     modifier: Modifier = Modifier,
     hands: ByteArray? = null,
     fingers: ByteArray? = null,
+    chords: ChordTrack? = null,
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -216,6 +223,21 @@ fun ScorePages(
     }
     // Fingering numerals: the eyebrow's size, tabular, untracked (one digit each).
     val numerals = remember(measurer, density, numberStyle) { Numerals(measurer, density, numberStyle.merge(TextStyle(letterSpacing = 0.sp))) }
+    // Chord names: body text on a line of their own, reserved above each system's bar-number line.
+    val chordStyle = MaterialTheme.typography.bodyMedium
+    val shownChords = chords?.takeIf { it.size > 0 }
+    val chordNames = remember(shownChords, transpose) { shownChords?.let { c -> Array(c.size) { c.name(it, transpose) } } }
+    val chordHeight = remember(measurer, density, chordStyle, numberStyle, numberHeight, shownChords != null) {
+        if (shownChords == null) {
+            0f
+        } else {
+            val line = measurer.measure("C", chordStyle, maxLines = 1, density = density).size.height.toFloat()
+            val numberBaseline = measurer.measure("0", numberStyle, maxLines = 1, density = density).firstBaseline
+            // The bar number rises past its own line (over the G clef): the chord line sits clear above it.
+            val numberTop = with(density) { G_CLEF_RISE * LineGap.toPx() + NumberClearance.toPx() } + numberBaseline
+            line + max(0f, numberTop - numberHeight) + with(density) { ChordGap.toPx() }
+        }
+    }
     val colors = ScoreColors(
         upcoming = MaterialTheme.colorScheme.onSurfaceVariant,
         sounding = MaterialTheme.colorScheme.onSurface,
@@ -228,10 +250,10 @@ fun ScorePages(
     BoxWithConstraints(modifier.clipToBounds()) {
         val panelWidth = constraints.maxWidth.toFloat()
         val panelHeight = constraints.maxHeight.toFloat()
-        val metrics = remember(width, panelWidth, panelHeight, density, glyphs, numberHeight, numerals) {
+        val metrics = remember(width, panelWidth, panelHeight, density, glyphs, numberHeight, numerals, chordHeight) {
             ScoreMetrics.forPanel(
                 width, panelWidth, panelHeight, density.density, glyphs.headWidth, glyphs.clefWidth, numberHeight,
-                numeralHeight = numerals.height, numeralWidth = numerals.width,
+                numeralHeight = numerals.height, numeralWidth = numerals.width, chordHeight = chordHeight,
             )
         }
         val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics, hands, fingers) {
@@ -244,7 +266,8 @@ fun ScorePages(
                 Laid(notes, ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, handsHere, fingersHere))
             }
         }
-        laid?.let { ScoreView(it.layout, notes, glyphs, numerals, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek) }
+        val chordText = remember(shownChords, chordNames, chordStyle) { if (shownChords != null && chordNames != null) ChordText(shownChords, chordNames, chordStyle) else null }
+        laid?.let { ScoreView(it.layout, notes, glyphs, numerals, chordText, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek) }
     }
 }
 
@@ -257,6 +280,7 @@ private fun ScoreView(
     notes: NoteList,
     glyphs: ScoreGlyphs,
     numerals: Numerals,
+    chordText: ChordText?,
     colors: ScoreColors,
     measurer: TextMeasurer,
     numberStyle: TextStyle,
@@ -336,6 +360,7 @@ private fun ScoreView(
                 layout,
                 shown.getOrElse(slot) { -1 },
                 painter,
+                chordText,
                 colors,
                 measurer,
                 numberStyle,
@@ -403,6 +428,7 @@ private fun PageLayer(
     layout: ScoreLayout,
     page: Int,
     painter: ScorePainter,
+    chordText: ChordText?,
     colors: ScoreColors,
     measurer: TextMeasurer,
     numberStyle: TextStyle,
@@ -415,14 +441,23 @@ private fun PageLayer(
                 val systems = layout.systemsOn(page)
                 val numbers = systems.map { s -> measurer.measure((layout.systems[s].firstBar + 1).toString(), numberStyle, maxLines = 1) }
                 val marks = systems.mapIndexed { k, s -> painter.marks(layout, layout.systems[s], numbers[k], measurer, numberStyle) }
+                val chordLabels = systems.mapIndexed { k, s ->
+                    chordText?.let { painter.chordLabels(layout, layout.systems[s], numbers[k], marks[k], it, measurer) }
+                }
                 onDrawBehind {
                     with(painter) {
-                        for ((k, s) in systems.withIndex()) system(layout, layout.systems[s], numbers[k], marks[k], colors)
+                        for ((k, s) in systems.withIndex()) system(layout, layout.systems[s], numbers[k], marks[k], chordLabels[k], colors)
                     }
                 }
             },
     )
 }
+
+/** A piece's chords and their names (transposed as shown), to be set on the score's chord lines in [style]. */
+private class ChordText(val chords: ChordTrack, val names: Array<String>, val style: TextStyle)
+
+/** One system's chord names as placed: each name's layout and its box's top-left corner. */
+private class ChordLabels(val text: List<TextLayoutResult>, val x: FloatArray, val top: FloatArray)
 
 /** The score's colours: staff and bar lines tertiary, glyphs and upcoming notes secondary, sounding ones primary. */
 @Immutable
@@ -542,6 +577,9 @@ private class SystemMarks(
     val tempoText: TextLayoutResult?,
     val tempoX: Float,
     val tempoBaseline: Float,
+    /** The tempo mark's right edge and top, for the chord names above it. */
+    val tempoRight: Float = 0f,
+    val tempoTop: Float = 0f,
 )
 
 /** Draws a laid-out score: whole systems for the page layers, and the per-frame overlay. Allocation-free. */
@@ -553,6 +591,8 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     private val finalStroke = with(density) { FinalStroke.toPx() }
     private val finalGap = with(density) { FinalGap.toPx() }
     private val tieStroke = Stroke(width = hair)
+    private val chordGap = with(density) { ChordGap.toPx() }
+    private val chordSpacing = with(density) { ChordSpacing.toPx() }
 
     /** From the treble's top line up to a bar number's baseline: over the clef's top, never on the staff. */
     private val numberLift = G_CLEF_RISE * space + with(density) { NumberClearance.toPx() }
@@ -595,7 +635,45 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
         val onLine = system.trebleTop - numberLift
         val lifted = min(onLine, skyline(layout, system, x, right) - TEMPO_CLEARANCE * space)
         val baseline = max(lifted, min(onLine, system.bandTop + height))   // never above its band
-        return SystemMarks(beams, ties, tempo, text, x, baseline)
+        return SystemMarks(beams, ties, tempo, text, x, baseline, right, baseline - height)
+    }
+
+    /**
+     * System [system]'s chord names ([chordText]): each where its chord begins in the system, its box
+     * on the chord line just above the bar [number] (lifted clear of notes, numerals and the tempo mark
+     * that reach up into it, never above its band); a name that would run into the one before it is
+     * left out on the score (the waterfall still shows it).
+     */
+    fun chordLabels(
+        layout: ScoreLayout,
+        system: ScoreSystem,
+        number: TextLayoutResult,
+        marks: SystemMarks,
+        chordText: ChordText,
+        measurer: TextMeasurer,
+    ): ChordLabels {
+        val chords = chordText.chords
+        val bars = layout.bars
+        val from = chords.firstAtOrAfter(bars.startMicros[system.firstBar])
+        val until = if (system.lastBar + 1 < bars.count) chords.firstAtOrAfter(bars.startMicros[system.lastBar + 1]) else chords.size
+        val numberTop = system.trebleTop - numberLift - number.firstBaseline
+        val texts = ArrayList<TextLayoutResult>()
+        val xs = ArrayList<Float>()
+        val tops = ArrayList<Float>()
+        var lastRight = Float.NEGATIVE_INFINITY
+        for (i in from until until) {
+            val x = system.xAt(chords.startMicros[i])
+            if (x < lastRight + chordSpacing) continue
+            val text = measurer.measure(chordText.names[i], chordText.style, maxLines = 1)
+            val right = x + text.size.width
+            var bottom = min(numberTop - chordGap, skyline(layout, system, x, right) - TEMPO_CLEARANCE * space)
+            if (marks.tempo != null && right >= marks.tempoX && x <= marks.tempoRight) bottom = min(bottom, marks.tempoTop - chordGap)
+            texts += text
+            xs += x
+            tops += max(bottom - text.size.height, system.bandTop)
+            lastRight = right
+        }
+        return ChordLabels(texts, xs.toFloatArray(), tops.toFloatArray())
     }
 
     /**
@@ -630,10 +708,10 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     }
 
     /**
-     * One system: its staves, opening and bar lines, signs, bar number and tempo mark, then its rests,
-     * ties, beams, notes and tied heads, its dynamics and its fingering, kept to its band.
+     * One system: its staves, opening and bar lines, signs, bar number, tempo mark and chord names, then
+     * its rests, ties, beams, notes and tied heads, its dynamics and its fingering, kept to its band.
      */
-    fun DrawScope.system(layout: ScoreLayout, s: ScoreSystem, number: TextLayoutResult, marks: SystemMarks, colors: ScoreColors) {
+    fun DrawScope.system(layout: ScoreLayout, s: ScoreSystem, number: TextLayoutResult, marks: SystemMarks, chords: ChordLabels?, colors: ScoreColors) {
         clipRect(top = s.bandTop, bottom = s.bandBottom) {
             val length = s.right - s.left
             for (n in 0..4) {
@@ -654,6 +732,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
             for (k in s.signKind.indices) glyph(glyphs.sign(s.signKind[k]), s.signX[k], s.signY[k], colors.glyph)
             drawText(number, color = colors.number, topLeft = Offset(s.left, s.trebleTop - numberLift - number.firstBaseline))
             if (marks.tempo != null && marks.tempoText != null) tempoMark(marks.tempo, marks.tempoText, marks.tempoX, marks.tempoBaseline, colors.glyph)
+            if (chords != null) for (k in chords.text.indices) drawText(chords.text[k], color = colors.glyph, topLeft = Offset(chords.x[k], chords.top[k]))
             val rests = layout.rests
             for (k in rests.inSystem(s.index)) glyph(glyphs.rest(rests.value[k].toInt()), rests.x[k], rests.y[k], colors.upcoming)
             drawPath(marks.ties, colors.upcoming, style = tieStroke)

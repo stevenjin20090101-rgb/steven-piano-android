@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.midi.KeySignature
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.midi.TempoMap
 import dev.stevenjin.stevenpiano.midi.TimeSignature
+import dev.stevenjin.stevenpiano.score.ChordTrack
 
 enum class PlaybackStatus { Stopped, Playing, Paused }
 
@@ -28,7 +29,8 @@ object PlaybackLimits {
  * reads the file's [tempoMap], [barStartsMicros] and signatures. [hands] (`score.Hands`, one per
  * note; empty until known) are worked out once per piece, off the main thread, before it is shown;
  * the suggested [fingers] (`score.Fingering`) with them, on the keys the piano plays at
- * [fingersTranspose] and [fingersFold], and again whenever those change.
+ * [fingersTranspose] and [fingersFold], and again whenever those change; and the [chords]
+ * (`score.Chords`), in the file's own pitches (they are spelled transposed as they are shown).
  */
 data class NowPlaying(
     val pieceId: Long,
@@ -44,6 +46,7 @@ data class NowPlaying(
     val fingers: ByteArray = ByteArray(0),
     val fingersTranspose: Int = 0,
     val fingersFold: Boolean = true,
+    val chords: ChordTrack = ChordTrack.Empty,
 ) {
     /** The hands, when they have been worked out for these notes: one per note. */
     val handsOrNull: ByteArray? get() = hands.takeIf { it.size == notes.size && it.isNotEmpty() }

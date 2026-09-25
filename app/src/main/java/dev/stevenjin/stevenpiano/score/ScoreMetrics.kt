@@ -30,7 +30,8 @@ enum class ScoreWidth(val barsPerSystem: Int) {
  * they are, how many bars a system holds and how many systems a page, and the staff's own sizes.
  * A page's systems are spread down it evenly; each keeps one bar-number line ([numberHeight],
  * the eyebrow's line height, which grows with the font scale) above its treble staff, so the
- * numbers never touch the lines. [headWidth] and [clefWidth] are the glyphs as measured on the
+ * numbers never touch the lines, and, when chord names are shown, a chord line ([chordHeight])
+ * above that. [headWidth] and [clefWidth] are the glyphs as measured on the
  * device; other glyph widths follow from the staff space (SMuFL fonts are four spaces to the em).
  * Pure, so the layout engine and its tests need no Android.
  */
@@ -61,6 +62,8 @@ data class ScoreMetrics(
     /** A fingering numeral's height (its digits' cap height) and width, as measured: they are set above and below heads. */
     val numeralHeight: Float = NUMERAL_HEIGHT_DP * density,
     val numeralWidth: Float = NUMERAL_WIDTH_DP * density,
+    /** The chord-name line above each system's bar-number line (0: no chord names). */
+    val chordHeight: Float = 0f,
 ) {
     /** One staff: four spaces. */
     val staffHeight: Float get() = 4 * space
@@ -69,7 +72,7 @@ data class ScoreMetrics(
     val grandStaffHeight: Float get() = 2 * staffHeight + staveGap
 
     /** The y of the treble staff's top line of the system in [row] (0 at the top of a page). */
-    fun staffTop(row: Int): Float = firstSystemTop + row * systemPitch + numberHeight
+    fun staffTop(row: Int): Float = firstSystemTop + row * systemPitch + chordHeight + numberHeight
 
     /** The x of the page shown in [slot] (0 on the left). */
     fun slotLeft(slot: Int): Float = slot * (pageWidth + pageGap)
@@ -97,7 +100,8 @@ data class ScoreMetrics(
         /**
          * The metrics for a panel of [panelWidthPx] × [panelHeightPx] in a window [width] wide, at
          * [density] pixels per dp. [numberHeight] is the bar number's line height in pixels;
-         * [numeralHeight] and [numeralWidth] a fingering numeral's.
+         * [numeralHeight] and [numeralWidth] a fingering numeral's; [chordHeight] the chord-name line
+         * reserved above each system's number line (0 without chord names).
          */
         fun forPanel(
             width: ScoreWidth,
@@ -109,6 +113,7 @@ data class ScoreMetrics(
             numberHeight: Float = NUMBER_HEIGHT_DP * density,
             numeralHeight: Float = NUMERAL_HEIGHT_DP * density,
             numeralWidth: Float = NUMERAL_WIDTH_DP * density,
+            chordHeight: Float = 0f,
         ): ScoreMetrics {
             val pages = if (panelWidthPx / density >= TWO_PAGES_DP) 2 else 1
             val pageGap = if (pages == 2) PAGE_GAP_DP * density else 0f
@@ -117,7 +122,7 @@ data class ScoreMetrics(
             val systemGap = SYSTEM_GAP_DP * density
             val padTop = PAD_TOP_DP * density
             val padBottom = PAD_BOTTOM_DP * density
-            val block = numberHeight + 8 * space + staveGap
+            val block = chordHeight + numberHeight + 8 * space + staveGap
             val systems = max(1, floor((panelHeightPx - padTop - padBottom + systemGap) / (block + systemGap)).toInt())
             // Spread the systems down the page: what is left over goes evenly above, between and below them.
             val free = panelHeightPx - padTop - padBottom - (systems * block + (systems - 1) * systemGap)
@@ -142,6 +147,7 @@ data class ScoreMetrics(
                 systemPitch = block + systemGap + extra,
                 numeralHeight = numeralHeight,
                 numeralWidth = numeralWidth,
+                chordHeight = chordHeight,
             )
         }
     }

@@ -15,6 +15,7 @@ import dev.stevenjin.stevenpiano.data.imports.IndexCsv
 import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics
 import dev.stevenjin.stevenpiano.data.imports.ZipSource
 import dev.stevenjin.stevenpiano.data.imports.isMidiName
+import dev.stevenjin.stevenpiano.score.Chords
 import dev.stevenjin.stevenpiano.score.Fingering
 import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
@@ -26,7 +27,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.security.MessageDigest
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ForkJoinPool
+import java.util.stream.Collectors
 
 /**
  * Parses the whole MIDI library. Skipped unless Gradle runs with `-Pcorpus`
@@ -83,22 +89,41 @@ class CorpusTest {
         val root = corpus()
         val files = midiFiles(root)
         val combined = MessageDigest.getInstance("SHA-256")
-        for (file in files) {
-            val md = MessageDigest.getInstance("SHA-256")
-            val digest = try {
-                val p = SmfParser.parse(file.readBytes())
-                for (e in p.events) md.update("${e.atMicros} ${e.status} ${e.data1} ${e.data2}\n".toByteArray())
-                for (i in 0 until p.notes.size) md.update("${p.notes.startMicros[i]} ${p.notes.endMicros[i]} ${p.notes.note(i)}\n".toByteArray())
-                md.update("${p.durationMicros} ${p.warnings}".toByteArray())
-                md.digest().joinToString("") { "%02x".format(it) }
-            } catch (e: SmfException) {
-                "FAIL ${e.message}"
-            }
-            combined.update("${file.relativeTo(root).path} $digest\n".toByteArray())
-        }
+        // Each file's digest on its own (in parallel: they are independent), combined in file order.
+        val digests = inParallel { files.parallelStream().map { file -> digestOf(file) }.collect(Collectors.toList()) }
+        for ((k, file) in files.withIndex()) combined.update("${file.relativeTo(root).path} ${digests[k]}\n".toByteArray())
         val hex = combined.digest().joinToString("") { "%02x".format(it) }
         println("Corpus digest: ${files.size} files, $hex")
         if (files.size == CORPUS_FILES) assertEquals(CORPUS_DIGEST, hex)
+    }
+
+    /** One file's events, notes, length and warnings, hashed as the M12 run hashed them. */
+    private fun digestOf(file: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        return try {
+            val p = SmfParser.parse(file.readBytes())
+            for (e in p.events) md.update("${e.atMicros} ${e.status} ${e.data1} ${e.data2}\n".toByteArray())
+            for (i in 0 until p.notes.size) md.update("${p.notes.startMicros[i]} ${p.notes.endMicros[i]} ${p.notes.note(i)}\n".toByteArray())
+            md.update("${p.durationMicros} ${p.warnings}".toByteArray())
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: SmfException) {
+            "FAIL ${e.message}"
+        }
+    }
+
+    /**
+     * Runs [work] (a parallel stream) on half the machine's processors: enough to keep the corpus
+     * quick, few enough that each file's timings stay close to its time alone.
+     */
+    private fun <T> inParallel(work: () -> T): T {
+        val pool = ForkJoinPool((Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1))
+        try {
+            return pool.submit(Callable { work() }).get()
+        } catch (e: ExecutionException) {
+            throw e.cause ?: e
+        } finally {
+            pool.shutdown()
+        }
     }
 
     @Test
@@ -145,8 +170,8 @@ class CorpusTest {
 
     /**
      * Every file is analysed for the waterfall format (DESIGN.md › v1.3 › The waterfall format: hands,
-     * suggested fingering) without an exception, each part timed on its own, and laid out as a score
-     * with its hands and fingering on a phone's panel and a tablet's.
+     * suggested fingering, chord names) without an exception, each part timed on its own, and laid out
+     * as a score with its hands and fingering on a phone's panel and a tablet's.
      */
     @Test
     fun `every file in the library is analysed and lays out as a score, on a phone and on a tablet`() {
@@ -158,88 +183,25 @@ class CorpusTest {
             panel(ScoreWidth.EXPANDED, 1_280f, 700f, 2f),
         )
         assertEquals(listOf(1, 2), panels.map { it.pages })
+        val started = System.nanoTime()
+        // Files are independent: they are checked in parallel, and their tallies added up after.
+        val tallies = inParallel { files.parallelStream().map { check(it, root, panels) }.collect(Collectors.toList()) }
+        val all = Tally("")
         val quantized = mutableMapOf<String, Int>()
         val total = mutableMapOf<String, Int>()
-        var notes = 0L
-        var bars = 0L
-        var tied = 0L
-        var beams = 0L
-        var rests = 0L
-        var ties = 0L
-        var tempoMarks = 0L
-        var dynamics = 0L
-        var right = 0L
-        var fingered = 0L
-        var numerals = 0L
-        var handsNanos = 0L
-        var fingersNanos = 0L
-        var layoutNanos = 0L
-        var mostNotes = 0
-        val started = System.nanoTime()
-        for (file in files) {
-            val piece = SmfParser.parse(file.readBytes())
-            val keys = IntArray(piece.notes.size) { KeyMap.map(piece.notes.note(it), 0, true) }
-            val path = file.path
-            var t0 = System.nanoTime()
-            val hands = Hands.assign(piece.notes, piece.trackNames, piece.tempoMap, piece.timeSignatures)
-            handsNanos += System.nanoTime() - t0
-            t0 = System.nanoTime()
-            val fingers = Fingering.assign(piece.notes, hands)
-            fingersNanos += System.nanoTime() - t0
-            assertEquals(path, piece.notes.size, hands.size)
-            assertEquals(path, piece.notes.size, fingers.size)
-            assertTrue(path, hands.all { it == Hands.RIGHT || it == Hands.LEFT })
-            assertTrue(path, fingers.all { it in 0..5 })
-            assertTrue(path, (0 until piece.notes.size).all { piece.notes.track(it) < piece.trackNames.size })
-            right += hands.count { it == Hands.RIGHT }
-            fingered += fingers.count { it > 0 }
-            mostNotes = maxOf(mostNotes, piece.notes.size)
-            val collection = file.relativeTo(root).path.substringBefore(File.separator)
-            total.merge(collection, 1, Int::plus)
-            t0 = System.nanoTime()
-            for (metrics in panels) {
-                val score = ScoreLayoutEngine.layout(
-                    piece.notes, keys, piece.tempoMap, piece.barStartsMicros, piece.keySignatures, metrics, piece.timeSignatures, hands, fingers,
-                )
-                val where = "${file.path} on ${metrics.pages} page(s)"
-                assertEquals(where, (piece.barStartsMicros.size + metrics.barsPerSystem - 1) / metrics.barsPerSystem, score.systems.size)
-                for (i in 0 until score.noteCount) {
-                    val system = score.systems[score.system[i]]
-                    assertTrue(where, i in system.firstNote until system.noteEnd)
-                    assertTrue(where, score.x[i] >= system.left && score.x[i] <= metrics.pageWidth)
-                }
-                // M13's engraving: tied heads in their systems' runs, and every mark finite and on its page.
-                for (h in score.noteCount until score.headCount) {
-                    val system = score.systems[score.system[h]]
-                    assertTrue(where, h in system.firstTied until system.tiedEnd)
-                    assertTrue(where, score.x[h] >= system.left && score.x[h] <= metrics.pageWidth)
-                }
-                fun onPage(x: Float) = x.isFinite() && x >= 0f && x <= metrics.pageWidth
-                for (k in 0 until score.beams.size) assertTrue(where, onPage(score.beams.x1[k]) && onPage(score.beams.x2[k]) && score.beams.y1[k].isFinite() && score.beams.y2[k].isFinite())
-                for (k in 0 until score.rests.size) assertTrue(where, onPage(score.rests.x[k]) && score.rests.y[k].isFinite())
-                for (k in 0 until score.ties.size) assertTrue(where, onPage(score.ties.x1[k]) && onPage(score.ties.x2[k]) && score.ties.x2[k] >= score.ties.x1[k])
-                assertEquals(where, 0, score.tempoMarks.firstOrNull()?.system)
-                for (mark in score.tempoMarks) assertTrue(where, onPage(mark.x) && mark.bpm in 1..TempoMarks.MAX_BPM)
-                for (mark in score.dynamics) assertTrue(where, onPage(mark.x) && mark.y.isFinite() && mark.system == mark.bar / metrics.barsPerSystem)
-                for (k in 0 until score.fingers.size) {
-                    assertTrue(where, onPage(score.fingers.x[k]) && score.fingers.baseline[k].isFinite() && score.fingers.finger[k] in 1..5)
-                    assertEquals(where, score.system[score.fingers.note[k]], score.fingers.system[k])
-                }
-                if (metrics === panels[0]) {
-                    if (score.quantized) quantized.merge(collection, 1, Int::plus)
-                    notes += score.noteCount
-                    bars += score.bars.count
-                    tied += score.headCount - score.noteCount
-                    beams += (0 until score.beams.size).count { score.beams.level[it].toInt() == 1 }
-                    rests += score.rests.size
-                    ties += score.ties.size
-                    tempoMarks += score.tempoMarks.size
-                    dynamics += score.dynamics.size
-                    numerals += score.fingers.size
-                }
-            }
-            layoutNanos += System.nanoTime() - t0
+        for (t in tallies) {
+            all.add(t)
+            total.merge(t.collection, 1, Int::plus)
+            if (t.quantized) quantized.merge(t.collection, 1, Int::plus)
         }
+        val notes = all.notes
+        val bars = all.bars
+        val tied = all.tied
+        val beams = all.beams
+        val rests = all.rests
+        val ties = all.ties
+        val tempoMarks = all.tempoMarks
+        val dynamics = all.dynamics
         val seconds = (System.nanoTime() - started) / 1e9
         val sequenced = quantized.values.sum()
         println(
@@ -252,9 +214,144 @@ class CorpusTest {
         )
         total.keys.sorted().forEach { println("  $it: ${quantized[it] ?: 0} of ${total[it]} quantised") }
         println(
-            "Corpus analysis: hands %.1f s (%.1f %% right hand), fingering %.1f s (%.1f %% of notes fingered, %d numerals on the phone panel), layout %.1f s; largest file %d notes"
-                .format(handsNanos / 1e9, 100.0 * right / notes, fingersNanos / 1e9, 100.0 * fingered / notes, numerals, layoutNanos / 1e9, mostNotes),
+            ("Corpus analysis (CPU time over all threads): hands %.1f s (%.1f %% right hand), fingering %.1f s (%.1f %% of notes fingered, " +
+                "%d numerals on the phone panel), chords %.1f s (%d names, one every %.1f s of music), layout %.1f s; largest file %d notes, " +
+                "slowest analysis %.0f ms (%s)")
+                .format(
+                    all.handsNanos / 1e9, 100.0 * all.right / notes, all.fingersNanos / 1e9, 100.0 * all.fingered / notes, all.numerals,
+                    all.chordsNanos / 1e9, all.chordLabels, all.musicSeconds / all.chordLabels, all.layoutNanos / 1e9, all.mostNotes,
+                    all.slowestNanos / 1e6, all.slowest,
+                ),
         )
+    }
+
+    /** One file's counts and times, added up over the library. */
+    private class Tally(val collection: String) {
+        var quantized = false
+        var notes = 0L
+        var bars = 0L
+        var tied = 0L
+        var beams = 0L
+        var rests = 0L
+        var ties = 0L
+        var tempoMarks = 0L
+        var dynamics = 0L
+        var right = 0L
+        var fingered = 0L
+        var numerals = 0L
+        var chordLabels = 0L
+        var musicSeconds = 0.0
+        var handsNanos = 0L
+        var fingersNanos = 0L
+        var chordsNanos = 0L
+        var layoutNanos = 0L
+        var mostNotes = 0
+        var slowestNanos = 0L
+        var slowest = ""
+
+        fun add(t: Tally) {
+            notes += t.notes
+            bars += t.bars
+            tied += t.tied
+            beams += t.beams
+            rests += t.rests
+            ties += t.ties
+            tempoMarks += t.tempoMarks
+            dynamics += t.dynamics
+            right += t.right
+            fingered += t.fingered
+            numerals += t.numerals
+            chordLabels += t.chordLabels
+            musicSeconds += t.musicSeconds
+            handsNanos += t.handsNanos
+            fingersNanos += t.fingersNanos
+            chordsNanos += t.chordsNanos
+            layoutNanos += t.layoutNanos
+            mostNotes = maxOf(mostNotes, t.mostNotes)
+            if (t.slowestNanos > slowestNanos) {
+                slowestNanos = t.slowestNanos
+                slowest = t.slowest
+            }
+        }
+    }
+
+    /** Analyses and lays out one file, checking everything; its tally. */
+    private fun check(file: File, root: File, panels: List<ScoreMetrics>): Tally {
+        val tally = Tally(file.relativeTo(root).path.substringBefore(File.separator))
+        val piece = SmfParser.parse(file.readBytes())
+        val keys = IntArray(piece.notes.size) { KeyMap.map(piece.notes.note(it), 0, true) }
+        val path = file.path
+        // Each part's time is this thread's CPU time: the files run in parallel.
+        val cpu = ManagementFactory.getThreadMXBean()
+        var t0 = cpu.currentThreadCpuTime
+        val hands = Hands.assign(piece.notes, piece.trackNames, piece.tempoMap, piece.timeSignatures)
+        tally.handsNanos = cpu.currentThreadCpuTime - t0
+        t0 = cpu.currentThreadCpuTime
+        val fingers = Fingering.assign(piece.notes, hands)
+        tally.fingersNanos = cpu.currentThreadCpuTime - t0
+        t0 = cpu.currentThreadCpuTime
+        val chords = Chords.detect(piece.notes, piece.tempoMap, piece.barStartsMicros, piece.timeSignatures, piece.keySignatures)
+        tally.chordsNanos = cpu.currentThreadCpuTime - t0
+        tally.slowestNanos = tally.handsNanos + tally.fingersNanos + tally.chordsNanos
+        tally.slowest = "${file.name}, ${piece.notes.size} notes"
+        for (i in 0 until chords.size) {
+            assertTrue(path, chords.startMicros[i] in 0..piece.durationMicros && (i == 0 || chords.startMicros[i] >= chords.startMicros[i - 1]))
+            assertTrue(path, chords.name(i).isNotEmpty() && chords.name(i, 5).isNotEmpty())
+        }
+        tally.chordLabels = chords.size.toLong()
+        tally.musicSeconds = piece.durationMicros / 1e6
+        assertEquals(path, piece.notes.size, hands.size)
+        assertEquals(path, piece.notes.size, fingers.size)
+        assertTrue(path, hands.all { it == Hands.RIGHT || it == Hands.LEFT })
+        assertTrue(path, fingers.all { it in 0..5 })
+        assertTrue(path, (0 until piece.notes.size).all { piece.notes.track(it) < piece.trackNames.size })
+        tally.right = hands.count { it == Hands.RIGHT }.toLong()
+        tally.fingered = fingers.count { it > 0 }.toLong()
+        tally.mostNotes = piece.notes.size
+        t0 = cpu.currentThreadCpuTime
+        for (metrics in panels) {
+            val score = ScoreLayoutEngine.layout(
+                piece.notes, keys, piece.tempoMap, piece.barStartsMicros, piece.keySignatures, metrics, piece.timeSignatures, hands, fingers,
+            )
+            val where = "${file.path} on ${metrics.pages} page(s)"
+            assertEquals(where, (piece.barStartsMicros.size + metrics.barsPerSystem - 1) / metrics.barsPerSystem, score.systems.size)
+            for (i in 0 until score.noteCount) {
+                val system = score.systems[score.system[i]]
+                assertTrue(where, i in system.firstNote until system.noteEnd)
+                assertTrue(where, score.x[i] >= system.left && score.x[i] <= metrics.pageWidth)
+            }
+            // M13's engraving: tied heads in their systems' runs, and every mark finite and on its page.
+            for (h in score.noteCount until score.headCount) {
+                val system = score.systems[score.system[h]]
+                assertTrue(where, h in system.firstTied until system.tiedEnd)
+                assertTrue(where, score.x[h] >= system.left && score.x[h] <= metrics.pageWidth)
+            }
+            fun onPage(x: Float) = x.isFinite() && x >= 0f && x <= metrics.pageWidth
+            for (k in 0 until score.beams.size) assertTrue(where, onPage(score.beams.x1[k]) && onPage(score.beams.x2[k]) && score.beams.y1[k].isFinite() && score.beams.y2[k].isFinite())
+            for (k in 0 until score.rests.size) assertTrue(where, onPage(score.rests.x[k]) && score.rests.y[k].isFinite())
+            for (k in 0 until score.ties.size) assertTrue(where, onPage(score.ties.x1[k]) && onPage(score.ties.x2[k]) && score.ties.x2[k] >= score.ties.x1[k])
+            assertEquals(where, 0, score.tempoMarks.firstOrNull()?.system)
+            for (mark in score.tempoMarks) assertTrue(where, onPage(mark.x) && mark.bpm in 1..TempoMarks.MAX_BPM)
+            for (mark in score.dynamics) assertTrue(where, onPage(mark.x) && mark.y.isFinite() && mark.system == mark.bar / metrics.barsPerSystem)
+            for (k in 0 until score.fingers.size) {
+                assertTrue(where, onPage(score.fingers.x[k]) && score.fingers.baseline[k].isFinite() && score.fingers.finger[k] in 1..5)
+                assertEquals(where, score.system[score.fingers.note[k]], score.fingers.system[k])
+            }
+            if (metrics === panels[0]) {
+                tally.quantized = score.quantized
+                tally.notes = score.noteCount.toLong()
+                tally.bars = score.bars.count.toLong()
+                tally.tied = (score.headCount - score.noteCount).toLong()
+                tally.beams = (0 until score.beams.size).count { score.beams.level[it].toInt() == 1 }.toLong()
+                tally.rests = score.rests.size.toLong()
+                tally.ties = score.ties.size.toLong()
+                tally.tempoMarks = score.tempoMarks.size.toLong()
+                tally.dynamics = score.dynamics.size.toLong()
+                tally.numerals = score.fingers.size.toLong()
+            }
+        }
+        tally.layoutNanos = cpu.currentThreadCpuTime - t0
+        return tally
     }
 
     private fun panel(width: ScoreWidth, widthDp: Float, heightDp: Float, density: Float) =

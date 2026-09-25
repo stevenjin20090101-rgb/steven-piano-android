@@ -13,6 +13,8 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.NoteList
+import dev.stevenjin.stevenpiano.score.ChordTrack
+import dev.stevenjin.stevenpiano.score.Chords
 import dev.stevenjin.stevenpiano.score.Fingering
 import dev.stevenjin.stevenpiano.score.Hands
 import kotlinx.coroutines.CancellationException
@@ -20,6 +22,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,8 +55,8 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * The Keys screen plays through here too ([liveNoteOn] and friends): its keys join the queue of
  * scheduler commands and go out through the engine's router, so they share the piece's
  * reference counts, 100 ms guard and silence. A dropped link lets go of them.
- * Each piece's hands and suggested fingering are worked out on [compute] as it loads, before it is
- * shown and played; the fingering again when transpose or folding changes the keys played.
+ * Each piece's hands, suggested fingering and chord names are worked out on [compute] as it loads,
+ * before it is shown and played; the fingering again when transpose or folding changes the keys played.
  */
 class Player(
     private val link: PianoLink,
@@ -301,8 +305,15 @@ class Player(
             val tempo = defaultTempoPct
             val transpose = _state.value.transpose
             val fold = _state.value.fold
-            val hands = withContext(compute) { handsOf(midi) }
-            val fingers = withContext(compute) { fingersOf(midi.notes, hands, transpose, fold) }
+            // The chords while the hands and then the fingering are worked out: a long performance takes
+            // tens of milliseconds for each on a phone.
+            val (hands, fingers, chords) = withContext(compute) {
+                coroutineScope {
+                    val chords = async { chordsOf(midi) }
+                    val hands = handsOf(midi)
+                    Triple(hands, fingersOf(midi.notes, hands, transpose, fold), chords.await())
+                }
+            }
             _state.update {
                 it.copy(
                     loading = false,
@@ -320,6 +331,7 @@ class Player(
                         fingers = fingers,
                         fingersTranspose = transpose,
                         fingersFold = fold,
+                        chords = chords,
                     ),
                 )
             }
@@ -355,6 +367,15 @@ class Player(
         } catch (e: OutOfMemoryError) {
             ByteArray(0)
         }
+    }
+
+    /** The piece's chord names; none if finding them fails. */
+    private fun chordsOf(midi: MidiPiece): ChordTrack = try {
+        Chords.detect(midi.notes, midi.tempoMap, midi.barStartsMicros, midi.timeSignatures, midi.keySignatures)
+    } catch (e: Exception) {
+        ChordTrack.Empty
+    } catch (e: OutOfMemoryError) {
+        ChordTrack.Empty
     }
 
     /**
