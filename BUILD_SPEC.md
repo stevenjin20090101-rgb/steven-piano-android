@@ -1260,7 +1260,7 @@ transposed ("B♭/D", "F♯m7").
 - Settings: `fingering` (true), `chordNames` (true), `handColours` (false), keys "fingering",
   "chordNames", "handColours". Piano › App preferences, after Note display (and Wide layout on wide
   windows): "Fingering", "Chord names", "Hand colours" with the note "Colours the two hands on the
-  waterfall only".
+  waterfall and the keyboard strip" (the v1.3 delta audit's copy fix; it read "waterfall only").
 
 ## Measured (September 2026)
 
@@ -1369,3 +1369,25 @@ above and below, stacked, clear of an up stem), `ScoreMetricsTest` (+1: the chor
 `SettingsRepositoryTest` (+1: the three switches' defaults, remembered), `PlayerTest` (+1: hands and
 fingering arrive with the piece, and transposing fingers it again); `CorpusTest`'s layout test now
 analyses every file and lays it out with its hands and fingering. 523 tests before, 560 after.
+
+# v1.3 — the delta audit's fixes (versionCode 6)
+
+The v1.3 delta audit (`docs/SECURITY_AUDIT.md` › v1.3 delta) bounds what a crafted file may cost the
+score and the waterfall, and versionName stays 1.3 (versionCode 6). `ScoreLayoutEngine` writes at most
+`restBudget(n) = max(4,096, 2n)` rests and `tiedBudget(n) = min(max(4,096, 2n), 100,000)` tied heads,
+lays a piece of more than `MAX_ENGRAVED_NOTES` (100,000) notes out as performed, allocates no
+engraving arrays for a performed piece, finds the metre by binary search, keeps each system's
+`ScoreSkyline` for the painter, and calls a `checkpoint` between its passes (as `Hands`, `Fingering`
+and `Chords` do every few thousand notes or windows; it throws to stop the work); `Ties.segments`
+cuts a note after `MAX_EMPTY_BARS` (64) empty bars; `Chords` keeps a forward index into the key
+signatures; `SmfParser` keeps 4,096 time and 4,096 key signatures and warns once, "Too many signature
+changes; some were ignored." `ScorePages` lays out through `layOut` (`ScoreLaid.kt`): an
+`OutOfMemoryError` or `RuntimeException` shows "This score is too large to show." (Body,
+`onSurfaceVariant`, centred), cancellation passes through, a layout is drawn only with the notes it
+was made for (`madeFor`), a re-layout of the piece shown waits `RELAYOUT_SETTLE_MS` (150 ms), and a
+page draws at most `MAX_NOTE_DRAWS` rests, numerals, beam and tie segments a system, reading the
+skyline for its tempo mark and chord names; the player's piece start and refingering wait 150 ms
+(`SETTLE_MS`) when they replace one still running; `NoteCanvas` draws only chord names clear of the
+one before (chosen once per scale) and at most `MAX_CHORD_DRAWS` (64) a frame. Tests: 583, adding
+`ScoreLayoutBudgetTest`, `ScoreLaidTest`, `AnalysisCancelTest`, `ScoreSkylineTest` and cases in
+`ChordsTest`, `SmfParserTest`, `TiesTest`, `CanvasBudgetTest` and `PlayerTest`.

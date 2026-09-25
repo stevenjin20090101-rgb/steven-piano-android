@@ -257,3 +257,127 @@ shows **Fetch notes**. The User-Agent keeps the GitHub URL, now published.
   then install the release APK. Android refuses an update signed by a different key; uninstalling
   clears the library, so plan to re-import the music.
 - Keep debug builds off the school tablet from now on.
+
+## v1.3 delta — 2026-09-25
+
+A delta audit read v1.3 at `a7dadc1` (M13's engraving and M14's hands, fingering and chord names on
+top of the fixes above). It found one High, one Medium, two correctness and performance findings
+(P1, P2) and four Low ones, all in what v1.3 added: crafted files could make the score's layout, the
+chord names or the drawing cost without bound. All eight are fixed, in three commits (`51c6eeb`,
+`8a7d891`, `044d039`) and this one (docs, versionCode 6, provenance). Tests went from 560 to 583; the
+corpus of 3,454 files parses byte for byte as before (digest `7192757e…`) and engraves exactly as
+before (34,268 tied heads, 44,840 ties, 203,920 beamed groups, 184,884 rests on the phone panel).
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| H1 | High | The score's layout could run the heap out on a crafted file, and the error killed the app | Fixed |
+| M1 | Medium | Chord names looked the key up from the start for every name; signatures were uncapped | Fixed |
+| P1 | Performance | The layout found each bar's metre with a scan from the end | Fixed |
+| P2 | Correctness | For a frame after a change of piece, the old layout was drawn with the new notes | Fixed |
+| L1 | Low | Analyses and layouts could not be stopped and piled up under rapid taps | Fixed |
+| L2 | Low | A page's build on the main thread scanned and drew without a cap | Fixed |
+| L3 | Low | The waterfall drew every visible chord name each frame | Fixed |
+| L4 | Low | Ties walked every bar a note crossed, even bars too short to hold any of it | Fixed |
+| — | Copy | The Hand colours note said "waterfall only" | Fixed |
+
+### H1: the layout's memory (High): fixed
+
+The engine allocated about 123 bytes of working arrays per head, budgeted tied heads at
+`max(4096, 2n)` (three heads a note) and capped rests per silence but not per piece, and
+`ScorePages` ran it in `produceState` with nothing to catch an `OutOfMemoryError`.
+
+- Rests stop at `restBudget(n) = max(4,096, 2n)`: past it silences are still found (and still end
+  beams) but no longer written. Tied heads stop at `tiedBudget(n) = min(max(4,096, 2n), 100,000)`.
+  A piece of more than 100,000 notes (`MAX_ENGRAVED_NOTES`) is laid out as performed: heads and
+  duration lines, no values, beams, rests or ties. A performed piece allocates none of engraving's
+  working arrays: 72 bytes a head.
+- Measured here: the audit's 0.72 MB file (10,000 bars of 255/1 at 4 ticks a quarter, eight one-tick
+  notes a bar) made 2.8 million rests and held 58 MB after the layout; it now makes 160,000 rests and
+  holds 9 MB. 300,000 held notes made 900,000 heads (95 MB); now 300,000, performed (26 MB).
+- `ScorePages` lays out through `layOut` (`ui/components/ScoreLaid.kt`): an `OutOfMemoryError` or a
+  `RuntimeException` leaves the panel saying "This score is too large to show." (Body,
+  `onSurfaceVariant`, centred). Cancellation passes through, and so does a failure that ends a layout
+  already replaced: `withContext` hands a failure back as it is, cancelled or not, so the result is
+  kept only while the coroutine is still active (the test for it found the race).
+
+### M1: chord names and signatures (Medium): fixed
+
+`Chords.detect` makes its names in time order, so the key in force is now a forward index
+(`KeysInForce`, which starts again if asked out of order) instead of a scan from the first signature
+for each name: 20,000 names under 100,000 key signatures took 1.20 s here and take 0.08 s. The parser
+keeps at most 4,096 time signatures and 4,096 key signatures (`SmfParser.MAX_SIGNATURES`, the first
+read) and drops the rest with one warning: "Too many signature changes; some were ignored."
+
+### P1: the metre in force: fixed
+
+`ScoreLayoutEngine.timeAt` is a binary search over the signatures' ticks (the same signature for every
+tick as before): 20,001 bars under 200,000 time signatures took 1.85 s to lay out and take 0.06 s.
+
+### P2: one piece's layout: fixed
+
+`ScorePages` draws a layout only with the notes it was made for (`laid.madeFor(notes)`, an identity
+check) and hands `ScoreView` the layout's own notes, so the overlay never reads one piece's notes
+through another's heads.
+
+### L1: stopping superseded work: fixed
+
+`Hands`, `Fingering`, `Chords` and `ScoreLayoutEngine` take a `checkpoint`, called every 4,096 notes
+or events (1,024 windows or bars for the chords) and between the layout's passes; it throws to stop
+the work. The player passes its coroutine's `ensureActive` and rethrows the cancellation where it used
+to catch every exception. A piece start or a refingering that replaces one still running waits 150 ms
+first (a burst of five Next taps reads pieces 1 and 5 only), and a layout of the piece already shown
+waits 150 ms (`RELAYOUT_SETTLE_MS`); a new piece's first layout starts at once.
+
+### L2: the page's build: fixed
+
+The engine keeps each system's skyline (`ScoreSkyline`: how far above the treble staff's top line
+anything reaches, per half-space column, numerals over the right hand included), built from the
+profiles the numerals already use; the painter reads a few columns for the tempo mark and each chord
+name instead of scanning the system. A system's rests, numerals, beam and tie segments are drawn to
+`MAX_NOTE_DRAWS` (4,000) each, as its heads already were. The skyline is never below anything that
+reaches up under a label and never above what lies within a column of it (tested against a
+brute-force scan).
+
+### L3: chord names on the waterfall: fixed
+
+The names drawn are chosen once per canvas scale, each clear of the one before it (names travel
+together, so the same ones show every frame), and at most 64 are drawn a frame.
+
+### L4: bars too short for a tie: fixed
+
+`Ties.segments` cuts a note after 64 bars in a row that hold none of it (`MAX_EMPTY_BARS`; no music
+has one), instead of walking every such bar a note crosses.
+
+### Copy
+
+The Hand colours switch's note reads "Colours the two hands on the waterfall and the keyboard strip".
+
+### Confirmed sound (re-checked while fixing)
+
+- The parser's v1.2 caps are unchanged: 2,097,152 events, 1,024 tracks, 256 bytes and 16 texts a
+  kind, a day of music, 20 warnings; bars stop at 100,000 (`Bars.MAX_BARS`).
+- The engine's other bounds hold: at most 64 heads a written note, 64 rests a silence, 48 heads a
+  chord on a staff; key signatures and bars are found by binary search; tempo marks show at most
+  9,999 BPM.
+- Chord names: at most 20,000 windows a piece, 16 a bar and 512 notes a window; the Viterbi keeps
+  three 64-bit words a window.
+- Fingering: at most 250,000 notes, at most ten finger orders an event. Hands: linear but for a heap,
+  runs cut at 64 notes.
+- The roll and the score's overlay draw at most 4,000 notes a frame and look back at most 30 s; a
+  note's tied heads light as the cursor reaches them, 63 at most.
+- A failure in the hands, fingering or chords (an exception or `OutOfMemoryError`) leaves that part
+  empty and the piece plays; only cancellation passes through.
+- The hand tones are read only by `NoteCanvas` and `KeyboardStrip`, and only while the switch is on;
+  the live red is still read only by `LiveDot`.
+
+### Residual
+
+A performed piece of about a million notes (the most the event cap allows) still lays out at about
+72 bytes a head, some 90 MB: on a small heap its panel says the score is too large and the app goes
+on. An `OutOfMemoryError` is process-wide, so another thread allocating at that moment could still
+fail; the budgets make that unlikely. A crafted file of 100,000 bars with notes in every system keeps
+up to about 14 MB of skylines.
+
+### What the owner must do
+
+Install the release APK of versionCode 6 over 1.3 (same key, so it updates in place). Nothing else.

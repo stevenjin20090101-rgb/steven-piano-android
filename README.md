@@ -72,7 +72,11 @@ Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.3.
   (MAESTRO) keep plain note heads with a line for each note's length, in bars
   counted at the file's own tempo, with their tempo and only the clear changes
   of dynamics (two bands or more). A file without a key signature is written in
-  sharps.
+  sharps. A piece of more than 100,000 notes is shown as performed (plain heads
+  with a line for each note's length; no note values, beams, rests or ties),
+  a score writes at most twice as many rests as its notes (never fewer than
+  4,096) and ties at most 100,000 heads, and a score too large for the memory
+  left says so in its panel instead of showing.
 - **The waterfall format**: who plays what, with which finger, over which
   chord, on the roll, the falling notes, the keyboard strip and the score.
   - **Hands.** The right hand's notes are filled bars and the left hand's
@@ -350,7 +354,8 @@ The full audit, every finding and what was done about it, is in
   cloud or carried to a new device by Android's transfer (the library stays where it
   was imported). Release builds log no file names or URLs.
 - **What a file may cost:** a MIDI file is read up to 8 MB and at most about two
-  million events and a day of music; its text up to 256 bytes a name; titles and names
+  million events and a day of music; its text up to 256 bytes a name, and 4,096 time
+  and 4,096 key signatures; titles and names
   are stored cut to 200 and 120 characters. A zip is refused over 512 MB or 20,000
   entries, a folder is read 16 levels deep and at most 20,000 files, an `INDEX.csv`
   up to 2 MB. Files from other apps wait for **Add**. A file past a limit is skipped
