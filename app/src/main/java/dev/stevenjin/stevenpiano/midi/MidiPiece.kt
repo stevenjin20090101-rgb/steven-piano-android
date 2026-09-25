@@ -9,7 +9,11 @@
 
 package dev.stevenjin.stevenpiano.midi
 
-/** A parsed Standard MIDI File, flattened onto one microsecond timeline. */
+/**
+ * A parsed Standard MIDI File, flattened onto one microsecond timeline. The score's view of time
+ * travels beside it: the [tempoMap] back to ticks and beats, the time and key signatures (kept
+ * apart from [events], which carry only what the piano plays), and where each bar starts.
+ */
 class MidiPiece(
     val format: Int,
     val ppq: Int,
@@ -25,6 +29,14 @@ class MidiPiece(
     val notes: NoteList,
     /** Damage the parser worked around, in plain English. Empty for a healthy file. */
     val warnings: List<String>,
+    /** Ticks and microseconds as the parser timed them, for the score's bars and beats. */
+    val tempoMap: TempoMap,
+    /** Time signatures in time order, never empty: 4/4 from the start until the file says otherwise. */
+    val timeSignatures: List<TimeSignature>,
+    /** Key signatures in time order; empty when the file has none (the score then spells in sharps). */
+    val keySignatures: List<KeySignature>,
+    /** Where each bar starts, in microseconds: bar 1 at 0 (see [Bars]). */
+    val barStartsMicros: LongArray,
 ) {
     val sequenceName: String? get() = sequenceNames.firstOrNull()
     val noteCount: Int get() = notes.size

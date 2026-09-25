@@ -264,4 +264,96 @@ class SmfParserTest {
         assertEquals(2, notes.firstStartingAtOrAfter(125_001))
         assertEquals(0, notes.firstStartingAtOrAfter(0))
     }
+
+    @Test
+    fun `time and key signatures are read beside the events, which keep their timings`() {
+        val music: SmfBuilder.Track.() -> Unit = {
+            noteOn(0, 60)
+            noteOff(480, 60)
+            noteOn(480, 63)
+            noteOff(1920, 63)
+        }
+        val plain = SmfParser.parse(SmfBuilder().track { tempo(0, 600_000) }.track(music).build())
+        val signed = SmfParser.parse(
+            SmfBuilder().track {
+                tempo(0, 600_000)
+                timeSignature(0, 3, 4)
+                keySignature(0, -3)
+                timeSignature(1440, 6, 8)
+                keySignature(1440, 2, minor = true)
+            }.track(music).build(),
+        )
+        assertEquals(plain.events, signed.events)
+        assertEquals(plain.durationMicros, signed.durationMicros)
+        assertEquals(listOf("3/4@0", "6/8@1440"), signed.timeSignatures.map { it.toString() })
+        assertEquals(listOf(-3 to false, 2 to true), signed.keySignatures.map { it.sharps to it.minor })
+        assertEquals(listOf(0L, 1_800_000L), signed.keySignatures.map { it.atMicros })
+        assertEquals(listOf(0L, 1_800_000L), signed.barStartsMicros.toList())   // 1440 ticks at 0.6 s a beat
+    }
+
+    @Test
+    fun `FD 01 reads as three flats, minor`() {
+        val piece = SmfParser.parse(
+            SmfBuilder(format = 0).track {
+                meta(0, 0x59, byteArrayOf(0xFD.toByte(), 0x01))
+                noteOn(0, 60)
+                noteOff(480, 60)
+            }.build(),
+        )
+        val key = piece.keySignatures.single()
+        assertEquals(-3, key.sharps)
+        assertTrue(key.minor)
+    }
+
+    @Test
+    fun `without signatures a file is in 4-4 with no key, one bar per two seconds at 120 BPM`() {
+        val piece = SmfParser.parse(SmfBuilder(format = 0).track { noteOn(0, 60); noteOff(3840, 60) }.build())
+        assertEquals(listOf(TimeSignature.Common), piece.timeSignatures)
+        assertTrue(piece.keySignatures.isEmpty())
+        assertEquals(listOf(0L, 2_000_000L), piece.barStartsMicros.toList())
+        assertEquals(1, piece.tempoMap.size)
+        assertEquals(480, piece.tempoMap.ppq)
+    }
+
+    @Test
+    fun `repeated signatures collapse, the last at a tick wins, and bad ones are ignored`() {
+        val piece = SmfParser.parse(
+            SmfBuilder(format = 1).track {
+                timeSignature(0, 4, 4)
+                timeSignature(1920, 4, 4)                              // a sequencer's repeat
+                meta(2000, 0x58, byteArrayOf(0, 2, 24, 8))             // no beats: ignored
+                meta(2100, 0x58, byteArrayOf(3, 9, 24, 8))             // 3/512: ignored
+            }.track {
+                keySignature(0, 1)
+                keySignature(0, -1)                                     // same tick, later track: wins
+                noteOn(0, 60)
+                noteOff(9600, 60)
+            }.track {
+                keySignature(0, -1)                                     // a second hand repeating it
+                meta(960, 0x59, byteArrayOf(9, 0))                      // nine sharps: ignored
+                keySignature(3840, -1, minor = false)                   // repeats the key in force
+                keySignature(5760, 0)
+            }.build(),
+        )
+        assertEquals(listOf(TimeSignature.Common), piece.timeSignatures)
+        assertEquals(listOf(-1 to 0L, 0 to 5760L), piece.keySignatures.map { it.sharps to it.tick })
+        assertEquals(5, piece.barStartsMicros.size)
+    }
+
+    @Test
+    fun `the tempo map times bars and gives ticks back`() {
+        val piece = SmfParser.parse(
+            SmfBuilder(format = 1).track {
+                tempo(0, 500_000)
+                timeSignature(0, 2, 4)
+                tempo(960, 250_000)
+            }.track {
+                noteOn(0, 60)
+                noteOff(2880, 60)
+            }.build(),
+        )
+        assertEquals(listOf(0L, 1_000_000L, 1_500_000L), piece.barStartsMicros.toList())
+        assertEquals(2_880L, piece.tempoMap.microsToTicks(piece.durationMicros))
+        assertEquals(6.0, piece.tempoMap.microsToBeats(piece.durationMicros), 1e-9)
+    }
 }

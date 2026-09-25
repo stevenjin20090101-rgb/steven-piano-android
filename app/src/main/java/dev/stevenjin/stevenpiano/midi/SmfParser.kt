@@ -18,8 +18,6 @@ import kotlin.math.min
  * struck again at the same instant. Damaged files are read as far as they go, with warnings.
  */
 object SmfParser {
-    private const val DEFAULT_TEMPO = 500_000   // microseconds per quarter note: 120 BPM
-
     internal const val RANK_TEMPO = 0
     internal const val RANK_CONTROL = 1
     internal const val RANK_NOTE_OFF = 2
@@ -65,8 +63,11 @@ object SmfParser {
         if (tracks == 0) throw SmfException(NO_TRACKS)
         if (tracks < declaredTracks) warnings += "The file lists $declaredTracks tracks but holds $tracks."
 
-        val events = raw.merge(ppq = division)
+        val tempo = TempoMap.Builder(division)
+        val events = raw.merge(tempo)
+        val tempoMap = tempo.build()
         val durationMicros = events.lastOrNull()?.atMicros ?: 0L
+        val timeSignatures = SignatureLists.times(raw.times, tempoMap)
         return MidiPiece(
             format = format,
             ppq = division,
@@ -77,6 +78,10 @@ object SmfParser {
             events = events,
             notes = pairNotes(events, durationMicros),
             warnings = warnings,
+            tempoMap = tempoMap,
+            timeSignatures = timeSignatures,
+            keySignatures = SignatureLists.keys(raw.keys, tempoMap),
+            barStartsMicros = Bars.starts(tempoMap, timeSignatures, durationMicros),
         )
     }
 
@@ -183,6 +188,9 @@ object SmfParser {
                     val tempo = (b.u16(at) shl 8) or (b[at + 2].toInt() and 0xFF)
                     if (tempo > 0) raw.add(tick, RANK_TEMPO, tempo)
                 }
+                // Signatures stay beside the packed words (whose 2-bit rank is full): the score reads them.
+                0x58 -> if (length >= 2) raw.times += SignatureLists.Raw(tick, b[at].toInt() and 0xFF, b[at + 1].toInt() and 0xFF)
+                0x59 -> if (length >= 2) raw.keys += SignatureLists.Raw(tick, b[at].toInt(), b[at + 1].toInt() and 0xFF)
                 0x03 -> if (track == 0) MidiText.decode(b, at, length).takeIf { it.isNotEmpty() }?.let(header.names::add)
                 0x01 -> if (track == 0) MidiText.decode(b, at, length).takeIf { it.isNotEmpty() }?.let(header.texts::add)
                 0x02 -> if (header.copyright == null) header.copyright = MidiText.decode(b, at, length).ifEmpty { null }
@@ -251,12 +259,16 @@ object SmfParser {
         }
     }
 
-    /** Events of every track in arrival order, as ticks plus packed words. */
+    /** Events of every track in arrival order, as ticks plus packed words; signatures in lists of their own. */
     private class RawEvents {
         private var ticks = LongArray(1024)
         private var words = IntArray(1024)
         var size = 0
             private set
+
+        /** Time signatures (numerator, power of two) and key signatures (sharps, signed; mode) as read. */
+        val times = ArrayList<SignatureLists.Raw>()
+        val keys = ArrayList<SignatureLists.Raw>()
 
         /** [payload] is a packed message, or the tempo for [RANK_TEMPO]. Returns the event's index. */
         fun add(tick: Long, rank: Int, payload: Int): Int {
@@ -274,25 +286,22 @@ object SmfParser {
             words[index] = CANCELED
         }
 
-        /** Stable merge by (tick, rank), then ticks to microseconds through the tempo map. */
-        fun merge(ppq: Int): List<TimedEvent> {
+        /**
+         * Stable merge by (tick, rank), then ticks to microseconds through the tempo map as it
+         * builds up in [tempo]: a tempo change sorts first at its tick and times what follows.
+         */
+        fun merge(tempo: TempoMap.Builder): List<TimedEvent> {
             val order = LongArray(size) { i -> (ticks[i] shl 25) or ((rank(words[i]).toLong()) shl 23) or i.toLong() }
             order.sort()
             val events = ArrayList<TimedEvent>(size)
-            var segmentTick = 0L
-            var segmentMicros = 0L
-            var tempo = DEFAULT_TEMPO.toLong()
             for (key in order) {
                 val i = (key and INDEX_MASK).toInt()
                 val word = words[i]
                 if (word == CANCELED) continue
-                val micros = segmentMicros + (ticks[i] - segmentTick) * tempo / ppq
                 if (rank(word) == RANK_TEMPO) {
-                    segmentTick = ticks[i]
-                    segmentMicros = micros
-                    tempo = (word and 0xFFFFFF).toLong()
+                    tempo.change(ticks[i], word and 0xFFFFFF)
                 } else {
-                    events += TimedEvent(micros, (word ushr 16) and 0xFF, (word ushr 8) and 0xFF, word and 0xFF)
+                    events += TimedEvent(tempo.micros(ticks[i]), (word ushr 16) and 0xFF, (word ushr 8) and 0xFF, word and 0xFF)
                 }
             }
             return events

@@ -65,6 +65,14 @@ class SmfBuilder(
 
         fun name(tick: Long, text: String, charset: Charset = Charsets.UTF_8) = meta(tick, 0x03, text.toByteArray(charset))
 
+        /** FF 58: [numerator]/[denominator] (a power of two), with the usual 24 clocks per click and 8 32nds per quarter. */
+        fun timeSignature(tick: Long, numerator: Int, denominator: Int) =
+            meta(tick, 0x58, byteArrayOf(numerator.toByte(), Integer.numberOfTrailingZeros(denominator).toByte(), 24, 8))
+
+        /** FF 59: [sharps] (negative: flats) and the mode. */
+        fun keySignature(tick: Long, sharps: Int, minor: Boolean = false) =
+            meta(tick, 0x59, byteArrayOf(sharps.toByte(), if (minor) 1 else 0))
+
         fun meta(tick: Long, type: Int, data: ByteArray) {
             raw(tick, 0xFF, type, *varLen(data.size))
             out.write(data)
