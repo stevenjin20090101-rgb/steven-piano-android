@@ -68,7 +68,8 @@ Folder: `Player Piano/android/` (its own git repo; never pushed without Steven's
 - Output `MidiPiece(sequenceName, texts, copyright, format, ppq, durationMicros,
   events: List<TimedEvent>, notes: NoteList, noteCount, warnings)`; `TimedEvent(atMicros,
   status, data1, data2)`; `NoteList` = parallel arrays sorted by start with
-  `maxDurationMicros` (for the canvas).
+  `maxDurationMicros` (for the canvas). (Since the v1.2 audit `events` is an `EventList`:
+  parallel primitive arrays read by index, still a `List<TimedEvent>`; see the last section.)
 
 ## Note routing — `midi/KeyMap.kt`, `midi/NoteRouter.kt`
 
@@ -226,9 +227,11 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
 ## Build & sideload
 
 - `./gradlew assembleDebug assembleRelease testDebugUnitTest` must succeed from a clean
-  checkout with JDK 17 and the Android SDK present (AGP fetches platform 36).
-- `app/build/outputs/apk/debug/app-debug.apk` for sideloading; release is signed with
-  the debug keystore and minified (`-keep` for `Provenance`).
+  checkout with JDK 17 and the Android SDK present (AGP fetches platform 36);
+  `assembleRelease` also needs the release key (below).
+- `app/build/outputs/apk/debug/app-debug.apk` for test phones; release is minified
+  (`-keep` for `Provenance`) and, since the v1.2 audit, signed with Steven Piano's release
+  key (see the last section), never the debug key.
 - `README.md`: what it is, build, sideload (Install unknown apps / `adb install`),
   importing the `midi/` folder or `ALL-SONGS.zip`, connecting (forget any stale
   "Steven Piano" bond first), battery-optimisation exemption, the device checklist.
@@ -862,3 +865,88 @@ otherwise. This run closes v1.2: README, `AUTHORS` and the provenance manifest a
 bars through tempo changes), `QuantizeTest`, `SpellingTest`, `ScoreMetricsTest`, `PageTurnTest`,
 `ScoreLayoutEngineTest`, `AdaptiveFrameTest` (the Score names, bars a system by width), and
 `CorpusTest` laying out every corpus file on both panels.
+
+---
+
+# v1.2 — security and robustness (the audit)
+
+`docs/SECURITY_AUDIT.md` lists the audit's eighteen findings and what became of each. These are the
+contracts the fixes added; everything above stays except where this section says otherwise.
+
+## Limits on what comes in
+
+- `data/TextLimits`: text is cut on code-point boundaries before it is stored: title 200,
+  composer 120, collection and playlist names 120, source path 512, display names 255, `INDEX.csv`
+  fields 1,024; `PieceEntity.named` derives `searchText` (400) and `titleKey` (200) from what is
+  kept. `data/db/TextRepair` cuts older rows with `substr` once, from Room's `onOpen`, guarded by the
+  DataStore flag `libraryTextRepairDone`.
+- `SmfParser`: at most `MAX_EVENTS` = 2,097,152 events ("This file has too many events."),
+  `min(declared, MAX_TRACKS = 1024)` tracks (one reused per-track table), text metas read to 256
+  bytes (cut back to a UTF-8 boundary) and 16 of a kind, 20 warnings then "...and N more.", and at
+  most a day of music. `MidiPiece.events` is an `EventList` (`atMicros(i)`, `status(i)`,
+  `data1(i)`, `data2(i)`, `firstAtOrAfter`, `lastMicros`), a `List<TimedEvent>` when read as one.
+  The corpus digest in `CorpusTest` holds the output byte-identical.
+- `data/imports/ImportLimits`: `INDEX.csv` 2 MB (larger: ignored); a zip at most 512 MB and 20,000
+  entries, copied only with a 64 MB free-space margin; `TreeWalk` (pure, under `TreeWalker`) visits
+  each folder id once, 16 levels deep, at most 20,000 MIDI files, 5,000 folders and 100,000
+  documents, cancellable per folder; stale `import-*.zip` and `*.part` files swept at start.
+- `OutOfMemoryError` is caught where files are parsed (importer: "File too large to read";
+  `LibraryRepository.load`: "This piece is too large to play."; roll cards). Roll cards are drawn
+  one at a time and kept gzipped in the cache (`RollCardFiles`).
+- Intents: content URIs only, at most 500 (`SharedFiles.accepted`); no `file` scheme in the
+  manifest; files from other apps wait for the person's Add in `ShareSheet`.
+
+## Failing safe
+
+- `Scheduler` catches any `Throwable` from a step: the engine stops (the stop sequence), then the
+  failure is reported; the thread carries on.
+- `CrashSilencer` (installed first in `App.onCreate`) calls `PianoLink.emergencySilence(200)` when a
+  link exists and is connected, then hands the crash to Android's handler. `GattPianoLink` writes
+  CC64 = 0 and CC123 straight onto the ready connection, retrying a busy stack for at most 200 ms;
+  the fakes record the call.
+- The Library's state goes to `unreadable` ("The library couldn't be read.") when a read fails.
+
+## The link and pacing
+
+- `LinkState.Connected(name, mtu, epoch)`: a new epoch for every connection and for every packet
+  given up on; `Player` re-syncs a playing piece when it sees one. `LinkState.Error` carries
+  `otherAddress` for `LinkError.OtherPiano`: the remembered address is pinned, another "Steven
+  Piano" is offered after 3 s ("Connect to it"), never taken, and ignored while reconnecting.
+- Packets carrying a Note Off, CC64 or CC120–123 (`BleMidiFramer.mustArrive`) are never given up
+  while connected; a Note-On-only packet given up on is followed by the stop sequence.
+- `PacedWriter` keeps at most 2,000 waiting messages, dropping waiting Note Ons only.
+  `NoteRouter` passes a file's CC64 changes three at once, then one per 50 ms (latest wins,
+  `flushPedal`, `pedalDueMicros`); the stop sequence and live sustain are never held back.
+
+## Network and privacy
+
+- `WikipediaUrls.pageLink` keeps a "From Wikipedia" URL only for `https://en.wikipedia.org/wiki/…`
+  (no user info, no port); `WikipediaLink` opens it as a browsable VIEW or says "No browser is
+  available to open this link." `allowed`/`hostOf` read URLs with `java.net.URI` (no user info,
+  backslash, or port but 443); `Retry-After` at most a day; a too-deep JSON body is an `IOException`.
+- R8 strips `Log.v/d/i`; URLs and file paths are logged in debug builds only. The piece sheet asks
+  Wikipedia only with "Fetch artwork automatically" on, otherwise it shows "Fetch notes". At most 200
+  automatic lookups a run for composers outside the canonical list.
+
+## Drawing
+
+The roll and the score's overlay look back at most 30 s (`NoteList.scanStart`) and draw at most
+4,000 notes a frame; decoded pictures are at most 4 megapixels.
+
+## Build
+
+- Release signing: `~/steven-piano-keystore.properties` (storeFile, storePassword, keyAlias,
+  keyPassword; path from `System.getProperty("user.home")`) feeds `signingConfigs.release`, APK
+  Signature Scheme v2 and v3; without it `checkReleaseSigning` (before `preReleaseBuild`) stops the
+  release build. The keystore and properties never enter the repository (`.gitignore`).
+- `versionCode` 4, `versionName` 1.2; `dataExtractionRules` exclude everything from cloud backup and
+  device transfer; StrictMode logs in debug builds; `ImportService.onTimeout` stops cleanly.
+
+## Tests added
+
+`SmfLimitsTest`, `TextLimitsTest`, `TextRepairTest`, `LibraryStatesTest`, `RollCardFilesTest`,
+`SchedulerTest`, `CrashSilencerTest`, `TreeWalkTest`, `ImportLimitsTest`, `CanvasBudgetTest`,
+`PieceNotesChoiceTest`, and additions to `ImporterTest`, `CsvReaderTest`, `PlaybackEngineTest`,
+`PlayerTest`, `GattPianoLinkTest`, `PacedWriterTest`, `NoteRouterTest`, `WikipediaUrlsTest`,
+`TitleHeuristicsTest`, `ArtFilesTest`, `ArtworkWorkerTest`, `SharedFilesTest`, `ImportCopyTest` and
+`CorpusTest` (the corpus digest): 396 tests before, 472 after.

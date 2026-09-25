@@ -114,7 +114,8 @@ location, nothing about what you play.
 - Composers are fetched after an import, when the app opens with composers not yet
   looked up, and from **Library › + › Fetch artwork and notes for every composer**
   (a notification shows the progress); a piece's notes when its sheet opens.
-  **Piano › Fetch artwork automatically** (on) turns the automatic fetching off.
+  **Piano › Fetch artwork automatically** (on) turns the automatic fetching off; then a
+  piece's sheet asks Wikipedia only when you tap **Fetch notes**.
 - One request at a time, at most four a second. Offline nothing is fetched and nothing
   is recorded; a failed fetch is retried a day later. Without a portrait a composer
   shows a mosaic of their pieces' first seconds drawn as a paper roll.
@@ -131,7 +132,7 @@ export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 cd "Player Piano/android"
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew testDebugUnitTest    # the JVM tests
-./gradlew assembleRelease      # minified: app/build/outputs/apk/release/app-release.apk
+./gradlew assembleRelease      # minified, release key: app/build/outputs/apk/release/app-release.apk
 ```
 
 If Gradle can't find the SDK, create `local.properties` with
@@ -145,18 +146,25 @@ its console, so the Piano tab's settings work there (`adb logcat -s PianoLink`
 shows every line both ways). `adb shell setprop debug.stevenpiano.console none`
 before connecting stands in for firmware without the console.
 
-Both builds are signed with this Mac's debug key, so either installs over the
-other and keeps the library. A build from another computer has a different key:
-uninstall first (which clears the library).
+The debug build is signed with this Mac's debug key; the release build with
+Steven Piano's own release key, which lives outside this repository (see
+*Security*). Without `~/steven-piano-keystore.properties` the release build stops
+with a message; it never falls back to the debug key. Android installs an update
+only over a copy signed with the same key: to go from a debug build to the release
+build (or to a build from another computer), uninstall first, which clears the
+library. The school tablet runs the release build.
 
 ## Sideload
 
-- **From the phone:** copy `app-debug.apk` to it (USB, Drive, mail), open it,
+The school tablet and any piano that stays gets the release build,
+`app-release.apk`; debug builds are debuggable and belong on test phones only.
+
+- **From the phone:** copy `app-release.apk` to it (USB, Drive, mail), open it,
   and when Android asks, allow **Install unknown apps** for the app that opened
   it (Files or Chrome). Then **Install**.
 - **With adb:** turn on USB debugging (Settings › About phone › tap *Build
   number* seven times, then Settings › System › Developer options), connect the
-  phone and run `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+  phone and run `adb install -r app/build/outputs/apk/release/app-release.apk`.
 
 ## Bring in the music
 
@@ -171,7 +179,8 @@ whole `midi` folder over USB.
 - **Library › + › Add zip**, then `ALL-SONGS.zip`: the same 1,727 pieces, named
   from their file names (no playlists).
 - **Library › + › Add files** for a few pieces, or send `.mid` files to Steven
-  Piano from any file manager (*Open with* or *Share*).
+  Piano from any file manager (*Open with* or *Share*); the app asks "Add 3 files to
+  the library?" before it copies anything.
 
 Imports continue with the screen off and show their progress in the Library and
 in a notification. A full import takes about a minute.
@@ -189,6 +198,9 @@ in a notification. A full import takes about a minute.
 4. The dot turns red and the status reads **Connected**. With *Auto-connect on
    launch* on (the default), the app reconnects by itself next time, and after
    a dropped link it keeps trying in the background.
+5. The app remembers this piano and connects only to it. If another device calls
+   itself Steven Piano and the known one is not around, the Piano tab says so and
+   offers **Connect to it**; the app never switches by itself.
 
 ## Keep playing with the screen off
 
@@ -200,8 +212,9 @@ the first play, so the lock screen shows play and pause.
 
 ## Test it on the piano
 
-- [ ] Sideload `app-debug.apk`. The app launches instantly and asks for Bluetooth
-      permission only from the Piano tab, with a one-line reason.
+- [ ] Sideload `app-release.apk` (uninstall a debug build first). The app launches
+      instantly and asks for Bluetooth permission only from the Piano tab, with a
+      one-line reason.
 - [ ] Connect: the dot goes live and the status reads Connected within a few
       seconds of the piano advertising.
 - [ ] Play a quiet piano-midi.de piece: the roll scrolls, notes brighten crossing
@@ -250,8 +263,32 @@ the first play, so the lock screen shows play and pause.
       on: the change is still there. *Test LED* lights the key's LED; Read
       status shows the piano's report. With older firmware the tab says it
       doesn't offer settings over Bluetooth yet, and playback works as before.
-- [ ] "Open with" from a file manager that gives no access: the Library says it
-      couldn't read the file (no crash); *Add files* imports it.
+- [ ] "Open with" from a file manager: the app asks "Add 1 file to the library?";
+      Cancel adds nothing, Add imports it. From one that gives no access: after Add
+      the Library says it couldn't read the file (no crash); *Add files* imports it.
+
+## Security
+
+The full audit, every finding and what was done about it, is in
+[`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md).
+
+- **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
+  `upload.wikimedia.org`, carrying page titles and searches made from the library's
+  own names, the app's User-Agent and, as with any connection, the device's IP
+  address. No analytics, no crash reports, no accounts. Nothing is backed up to the
+  cloud or carried to a new device by Android's transfer (the library stays where it
+  was imported). Release builds log no file names or URLs.
+- **What a file may cost:** a MIDI file is read up to 8 MB and at most about two
+  million events and a day of music; its text up to 256 bytes a name; titles and names
+  are stored cut to 200 and 120 characters. A zip is refused over 512 MB or 20,000
+  entries, a folder is read 16 levels deep and at most 20,000 files, an `INDEX.csv`
+  up to 2 MB. Files from other apps wait for **Add**. A file past a limit is skipped
+  with a plain reason; it never takes the app down.
+- **The release key** lives outside this repository, in the home folder:
+  `~/steven-piano-release.jks` and `~/steven-piano-keystore.properties` (its
+  passwords), both readable by Steven only and never committed. **Back them up**
+  somewhere safe and offline. Losing them means no future release can update an
+  installed copy: every device would need an uninstall and a fresh import.
 
 ## Acknowledgements
 
