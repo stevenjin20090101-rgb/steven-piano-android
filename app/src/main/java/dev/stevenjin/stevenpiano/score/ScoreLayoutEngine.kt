@@ -33,7 +33,8 @@ import kotlin.math.min
  * the middle line; a chord's farthest head decides, and two values struck together on one staff
  * stem apart, the higher up), eighth and sixteenth flags, and dots. A performed file keeps black
  * heads with a hairline for each note's length. Heads a second apart move aside, accidentals in a
- * chord stack leftwards so they don't collide. No beams, rests, ties, tuplets or grace notes.
+ * chord stack leftwards so they don't collide. In a sequenced file, flagged notes within a beat are
+ * beamed ([Beams]). No tuplets or grace notes.
  *
  * Pure (no Android, no Compose): it runs off the main thread and in the JVM tests.
  */
@@ -78,6 +79,10 @@ private class Build(
     private val half = m.space / 2
     private val stemWidth = m.density   // a 1 dp hairline
     private val ppq = tempo.ppq
+
+    /** A sixteenth in ticks: the grid written notes are counted on. */
+    private val step = ppq / 4.0
+
     private val barMicros = if (barStarts.isEmpty()) longArrayOf(0L) else barStarts
     private val barCount = barMicros.size
     private val barTick = LongArray(barCount) { tempo.microsToTicks(barMicros[it]) }
@@ -143,10 +148,41 @@ private class Build(
     private val valueFlags = ByteArray(n)
     private val quantized = Quantize.onGrid(notes.startMicros, tempo)
 
+    // Written notes (sequenced files): each note's onset on the sixteenth grid and where its written value ends.
+    private val writtenStart = LongArray(n)
+    private val writtenEnd = LongArray(n)
+
+    /** Playable notes in onset order. */
+    private val order = IntArray(n)
+    private var orderSize = 0
+
+    // Stems (sequenced files): each head's stem owner, and for each owner its value group's lowest and
+    // highest heads, the chord's column, whether a second moved the stem between two columns, and the
+    // sum of its heads' staff positions.
+    private val ownerOf = IntArray(n) { -1 }
+    private val stemLow = IntArray(n)
+    private val stemHigh = IntArray(n)
+    private val stemLeft = FloatArray(n)
+    private val stemShifted = BooleanArray(n)
+    private val positionSum = IntArray(n)
+    private val groupHeads = IntArray(n)
+
+    // Onsets: one chord on one staff, in time order, with the stem owner of its one flagged value (-1: none).
+    private var onsets = 0
+    private val onsetHead = IntArray(n)
+    private val onsetOwner = IntArray(n)
+
+    /** A silence of a sixteenth or more on the note's staff comes just before its onset (in its bar). */
+    private val silenceBefore = BooleanArray(n)
+
+    private val beams = BeamSink()
+
     fun run(): ScoreLayout {
         for (s in 0 until systemCount) layoutSystem(s)
         placeNotes()
         chords()
+        silences()
+        beam()
         noteRanges()
         return ScoreLayout(
             metrics = m,
@@ -171,6 +207,7 @@ private class Build(
             dotY = dotY,
             moved = moved,
             durationEnd = durationEnd,
+            beams = beams.build(systemCount),
         )
     }
 
@@ -311,7 +348,9 @@ private class Build(
             val key = keys[i]
             if (key == KeyMap.UNPLAYABLE) continue
             val tick = tempo.microsToTicks(starts[i])
-            val b = barIndex(tick)
+            // A sequenced note belongs to the bar its written onset is in (one a hair early is the next bar's downbeat).
+            val written = if (quantized) onGrid(tick) else tick
+            val b = barIndex(written)
             val s = b / barsPerSystem
             val sharps = sharpsAt(tick)
             if (b != stateBar || sharps != stateKey) {
@@ -338,29 +377,35 @@ private class Build(
                 head[i] = (if (value.whole) Head.WHOLE else if (value.hollow) Head.HALF else Head.BLACK).toByte()
                 valueFlags[i] = value.flags.toByte()
                 dotted[i] = value.dotted
+                writtenStart[i] = written
+                writtenEnd[i] = written + Math.round(Math.scalb(1.0, value.power) * (if (value.dotted) 1.5 else 1.0) * ppq)
             } else {
                 head[i] = Head.BLACK.toByte()
             }
+            order[orderSize++] = i
         }
     }
+
+    /** [tick] on the sixteenth grid. */
+    private fun onGrid(tick: Long): Long = Math.round(Math.rint(tick / step) * step)
 
     /** Chords: seconds moved aside, accidentals stacked, stems shared, dots and duration lines placed. */
     private fun chords() {
         val chord = IntArray(CHORD_LIMIT)
-        var i = 0
-        while (i < n) {
-            if (system[i] < 0) {
-                i++
-                continue
-            }
-            var end = i + 1
-            while (end < n && sameChord(i, end)) end++
-            for (onTreble in booleanArrayOf(true, false)) {
+        var a = 0
+        while (a < orderSize) {
+            val i = order[a]
+            var end = a + 1
+            while (end < orderSize && sameChord(i, order[end])) end++
+            for (onTreble in TREBLE_THEN_BASS) {
                 var count = 0
-                for (j in i until end) if (system[j] >= 0 && treble[j] == onTreble && count < CHORD_LIMIT) chord[count++] = j
+                for (k in a until end) {
+                    val j = order[k]
+                    if (treble[j] == onTreble && count < CHORD_LIMIT) chord[count++] = j
+                }
                 if (count > 0) staffChord(chord, count)
             }
-            i = end
+            a = end
         }
         for (j in 0 until n) {
             if (system[j] < 0) continue
@@ -377,9 +422,8 @@ private class Build(
         }
     }
 
-    /** Whether note [j] belongs to the chord note [i] starts (same bar; same tick, or within [ScoreLayoutEngine.CHORD_MICROS] when performed). */
+    /** Whether note [j] (playable, after [i]) belongs to the chord note [i] starts (same bar; same tick, or within [ScoreLayoutEngine.CHORD_MICROS] when performed). */
     private fun sameChord(i: Int, j: Int): Boolean {
-        if (system[j] < 0) return notes.startMicros[j] - notes.startMicros[i] <= ScoreLayoutEngine.CHORD_MICROS
         if (bar[j] != bar[i]) return false
         return if (quantized) startTick[j] == startTick[i] else notes.startMicros[j] - notes.startMicros[i] <= ScoreLayoutEngine.CHORD_MICROS
     }
@@ -398,7 +442,11 @@ private class Build(
             }
         }
         accidentals(chord, count, base)
-        if (quantized) stems(chord, count, base)
+        if (quantized) {
+            onsetOwner[onsets] = stems(chord, count, base)
+            onsetHead[onsets] = chord[0]
+            onsets++
+        }
     }
 
     /** Accidentals stacked to the left of the chord, top down, each in the first column where it clears the others. */
@@ -422,9 +470,10 @@ private class Build(
     /**
      * Stems for the chord's value groups: one stem per value (hollow or black, flags, dot). A lone
      * group points away from its farthest head (up when that is below the middle line); with two
-     * or more, the group holding the highest head points up and the others down.
+     * or more, the group holding the highest head points up and the others down. Returns the stem's
+     * owner when the chord is one flagged value (it may be beamed), else -1.
      */
-    private fun stems(chord: IntArray, count: Int, base: FloatArray) {
+    private fun stems(chord: IntArray, count: Int, base: FloatArray): Int {
         val groupOf = IntArray(count) { -1 }
         val groupKeys = IntArray(count)
         var groups = 0
@@ -439,19 +488,23 @@ private class Build(
             }
             groupOf[k] = g
         }
-        if (groups == 0) return
+        if (groups == 0) return -1
         val highestGroup = (count - 1 downTo 0).first { groupOf[it] >= 0 }.let { groupOf[it] }
         for (g in 0 until groups) {
             var low = -1
             var high = -1
             var anyMoved = false
             var left = Float.MAX_VALUE
+            var sum = 0
+            var heads = 0
             for (k in 0 until count) {
                 if (groupOf[k] != g) continue
                 if (low < 0) low = k
                 high = k
                 anyMoved = anyMoved || moved[chord[k]]
                 left = min(left, base[k])
+                sum += position[chord[k]]
+                heads++
             }
             val lowNote = chord[low]
             val highNote = chord[high]
@@ -470,6 +523,157 @@ private class Build(
                 stemTo[owner] = max(y[lowNote] + ScoreLayoutEngine.STEM_SPACES * space, middle)
             }
             flags[owner] = valueFlags[owner]
+            stemLow[owner] = lowNote
+            stemHigh[owner] = highNote
+            stemLeft[owner] = left
+            stemShifted[owner] = anyMoved
+            positionSum[owner] = sum
+            groupHeads[owner] = heads
+            for (k in 0 until count) if (groupOf[k] == g) ownerOf[chord[k]] = owner
+        }
+        if (groups != 1) return -1
+        val owner = ownerOf[chord[(0 until count).first { groupOf[it] == 0 }]]
+        return if (valueFlags[owner] > 0) owner else -1
+    }
+
+    // --- Silences and beams (sequenced files) -----------------------------------------------
+
+    /**
+     * Marks each onset that follows a silence of a sixteenth or more on its staff within its bar:
+     * from the bar's start, or from where every earlier written note on that staff has ended.
+     */
+    private fun silences() {
+        if (!quantized) return
+        val covered = LongArray(2)
+        val silentAt = LongArray(2)
+        var currentBar = -1
+        for (a in 0 until orderSize) {
+            val h = order[a]
+            val b = bar[h]
+            if (b != currentBar) {
+                currentBar = b
+                covered[0] = barTick[b]
+                covered[1] = barTick[b]
+                silentAt[0] = -1L
+                silentAt[1] = -1L
+            }
+            val staff = if (treble[h]) 0 else 1
+            if (writtenStart[h] - covered[staff] >= step / 2) {
+                silenceBefore[h] = true
+                silentAt[staff] = writtenStart[h]
+            } else if (writtenStart[h] == silentAt[staff]) {
+                silenceBefore[h] = true   // the rest of that chord
+            }
+            covered[staff] = max(covered[staff], writtenEnd[h])
+        }
+    }
+
+    /** Beams each staff's flagged notes within a beat ([Beams]): shared stem direction, one straight beam, no flags. */
+    private fun beam() {
+        if (!quantized || onsets == 0) return
+        val index = IntArray(onsets)
+        val onsetBar = IntArray(onsets)
+        val beat = IntArray(onsets)
+        val offset = IntArray(onsets)
+        val beamable = BooleanArray(onsets)
+        val rest = BooleanArray(onsets)
+        val groupOf = IntArray(onsets)
+        for (onTreble in TREBLE_THEN_BASS) {
+            var count = 0
+            for (u in 0 until onsets) {
+                val h = onsetHead[u]
+                if (treble[h] != onTreble) continue
+                val b = bar[h]
+                val sixteenths = Math.round((writtenStart[h] - barTick[b]) / step).toInt().coerceAtLeast(0)
+                val beatLength = Beams.beatSixteenths(metre[b])
+                index[count] = u
+                onsetBar[count] = b
+                beat[count] = sixteenths / beatLength
+                offset[count] = sixteenths % beatLength
+                beamable[count] = onsetOwner[u] >= 0
+                rest[count] = silenceBefore[h]
+                count++
+            }
+            Beams.group(onsetBar, beat, beamable, rest, count, groupOf)
+            var k = 0
+            while (k < count) {
+                if (groupOf[k] < 0) {
+                    k++
+                    continue
+                }
+                var end = k + 1
+                while (end < count && groupOf[end] == groupOf[k]) end++
+                beamGroup(index, offset, k, end)
+                k = end
+            }
+        }
+    }
+
+    // One group's working arrays, grown as needed.
+    private var groupX = FloatArray(16)
+    private var groupFar = FloatArray(16)
+    private var groupMiddle = FloatArray(16)
+    private var groupTip = FloatArray(16)
+    private var beamGroups = 0
+
+    /** Beams the onsets [index] from..until (one group, in order): stems, the beam line, secondary beams and stubs. */
+    private fun beamGroup(index: IntArray, offset: IntArray, from: Int, until: Int) {
+        val count = until - from
+        if (groupX.size < count) {
+            groupX = FloatArray(count)
+            groupFar = FloatArray(count)
+            groupMiddle = FloatArray(count)
+            groupTip = FloatArray(count)
+        }
+        var sum = 0
+        var heads = 0
+        for (k in from until until) {
+            val o = onsetOwner[index[k]]
+            sum += positionSum[o]
+            heads += groupHeads[o]
+        }
+        val up = Beams.stemsUp(sum, heads)
+        for (j in 0 until count) {
+            val o = onsetOwner[index[from + j]]
+            groupX[j] = if (up || stemShifted[o]) stemLeft[o] + headWidth(o) - stemWidth else stemLeft[o]
+            groupFar[j] = if (up) y[stemHigh[o]] else y[stemLow[o]]
+            groupMiddle[j] = y[o] + position[o] * half - 2 * space
+        }
+        Beams.line(groupX, groupFar, groupMiddle, count, up, space, ScoreLayoutEngine.STEM_SPACES * space, groupTip)
+        for (j in 0 until count) {
+            val o = onsetOwner[index[from + j]]
+            stemX[o] = groupX[j]
+            stemUp[o] = up
+            stemFrom[o] = if (up) y[stemLow[o]] - STEM_ATTACH * space else y[stemHigh[o]] + STEM_ATTACH * space
+            stemTo[o] = groupTip[j]
+            flags[o] = 0
+        }
+        val s = system[onsetOwner[index[from]]]
+        val last = count - 1
+        val slope = if (groupX[last] > groupX[0]) (groupTip[last] - groupTip[0]) / (groupX[last] - groupX[0]) else 0f
+        fun lineAt(x: Float) = groupTip[0] + slope * (x - groupX[0])
+        val id = beamGroups++
+        beams.add(s, groupX[0], groupTip[0], groupX[last] + stemWidth, lineAt(groupX[last] + stemWidth), up, 1, false, id)
+        // Sixteenths: a second beam over each run of them; a lone one gets a stub into the group.
+        val inward = if (up) Beams.SECONDARY_OFFSET * space else -Beams.SECONDARY_OFFSET * space
+        var j = 0
+        while (j < count) {
+            if (valueFlags[onsetOwner[index[from + j]]] < 2) {
+                j++
+                continue
+            }
+            var end = j + 1
+            while (end < count && valueFlags[onsetOwner[index[from + end]]] >= 2) end++
+            val partial = end - j < 2
+            val right = Beams.stubPointsRight(j, count, offset[from + j])
+            val x1 = if (partial && !right) groupX[j] + stemWidth - m.headWidth else groupX[j]
+            val x2 = when {
+                !partial -> groupX[end - 1] + stemWidth
+                right -> groupX[j] + m.headWidth
+                else -> groupX[j] + stemWidth
+            }
+            beams.add(s, x1, lineAt(x1) + inward, x2, lineAt(x2) + inward, up, 2, partial, id)
+            j = end
         }
     }
 
@@ -543,6 +747,8 @@ private class Build(
         /** More heads than this in one chord on one staff are left as they are. */
         const val CHORD_LIMIT = 48
 
+        val TREBLE_THEN_BASS = booleanArrayOf(true, false)
+
         // Horizontal spacing, in staff spaces.
         const val CLEF_INSET = 0.5f
         const val AFTER_CLEF = 0.8f
@@ -583,5 +789,61 @@ private class Build(
             Accidental.FLAT -> FLAT_WIDTH
             else -> NATURAL_WIDTH
         }
+    }
+}
+
+/** Beam segments as the engine finds them, sorted by system when built. */
+private class BeamSink {
+    private var system = IntArray(64)
+    private var x1 = FloatArray(64)
+    private var y1 = FloatArray(64)
+    private var x2 = FloatArray(64)
+    private var y2 = FloatArray(64)
+    private var up = BooleanArray(64)
+    private var level = ByteArray(64)
+    private var stub = BooleanArray(64)
+    private var group = IntArray(64)
+    private var size = 0
+
+    fun add(s: Int, ax: Float, ay: Float, bx: Float, by: Float, stemsUp: Boolean, beamLevel: Int, partial: Boolean, id: Int) {
+        if (size == system.size) {
+            val grown = size * 2
+            system = system.copyOf(grown)
+            x1 = x1.copyOf(grown)
+            y1 = y1.copyOf(grown)
+            x2 = x2.copyOf(grown)
+            y2 = y2.copyOf(grown)
+            up = up.copyOf(grown)
+            level = level.copyOf(grown)
+            stub = stub.copyOf(grown)
+            group = group.copyOf(grown)
+        }
+        system[size] = s
+        x1[size] = ax
+        y1[size] = ay
+        x2[size] = bx
+        y2[size] = by
+        up[size] = stemsUp
+        level[size] = beamLevel.toByte()
+        stub[size] = partial
+        group[size] = id
+        size++
+    }
+
+    fun build(systemCount: Int): ScoreBeams {
+        val sorted = BySystem(system, size, systemCount)
+        val o = sorted.order
+        return ScoreBeams(
+            system = IntArray(size) { system[o[it]] },
+            x1 = FloatArray(size) { x1[o[it]] },
+            y1 = FloatArray(size) { y1[o[it]] },
+            x2 = FloatArray(size) { x2[o[it]] },
+            y2 = FloatArray(size) { y2[o[it]] },
+            up = BooleanArray(size) { up[o[it]] },
+            level = ByteArray(size) { level[o[it]] },
+            stub = BooleanArray(size) { stub[o[it]] },
+            group = IntArray(size) { group[o[it]] },
+            systemStart = sorted.start,
+        )
     }
 }

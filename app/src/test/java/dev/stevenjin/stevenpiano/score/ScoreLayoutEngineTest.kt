@@ -117,7 +117,10 @@ class ScoreLayoutEngineTest {
         assertTrue(score.quantized)
         val heads = (0 until score.noteCount).map { score.head[it].toInt() }
         assertEquals(listOf(Head.WHOLE, Head.HALF, Head.BLACK, Head.BLACK, Head.BLACK, Head.BLACK, Head.BLACK, Head.BLACK), heads)
-        assertEquals(listOf(0, 0, 0, 1, 2, 2, 0, 1), (0 until score.noteCount).map { score.flags[it].toInt() })
+        // The eighth and two sixteenths share beat 4 of bar 2, so they are beamed and lose their flags
+        // (BeamsTest); the eighth alone in its beat keeps its flag.
+        assertEquals(listOf(0, 0, 0, 0, 0, 0, 0, 1), (0 until score.noteCount).map { score.flags[it].toInt() })
+        assertEquals(2, score.beams.size)   // the primary beam and the sixteenths' second beam
         assertEquals(listOf(false, false, false, false, false, false, true, false), score.dotted.toList())
         assertTrue(score.stemX[0].isNaN())                                  // a whole note has no stem
         assertTrue((1 until score.noteCount).none { score.stemX[it].isNaN() })

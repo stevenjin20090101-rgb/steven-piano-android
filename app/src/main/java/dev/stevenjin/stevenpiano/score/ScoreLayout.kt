@@ -143,7 +143,7 @@ class ScoreLayout internal constructor(
     val stemFrom: FloatArray,
     val stemTo: FloatArray,
     val stemUp: BooleanArray,
-    /** Flags on the stem this note carries: 0, 1 (eighth) or 2 (sixteenth). */
+    /** Flags on the stem this note carries: 0, 1 (eighth) or 2 (sixteenth); 0 when it is beamed. */
     val flags: ByteArray,
     val dotted: BooleanArray,
     val dotX: FloatArray,
@@ -152,6 +152,8 @@ class ScoreLayout internal constructor(
     val moved: BooleanArray,
     /** Where a performed note's duration hairline ends (NaN: none). */
     val durationEnd: FloatArray,
+    /** Beams joining flagged notes within a beat (sequenced files only; flags are then 0). */
+    val beams: ScoreBeams,
 ) {
     val noteCount: Int get() = x.size
 
@@ -182,5 +184,51 @@ class ScoreLayout internal constructor(
     internal companion object {
         /** Bravura's whole head is 1.688 spaces wide, the black and half heads 1.18. */
         const val WHOLE_TO_BLACK = 1.688f / 1.18f
+    }
+}
+
+/**
+ * The beams as drawn. Each entry is one beam segment: a band [Beams.THICKNESS] spaces thick whose
+ * outer edge (the stem tips' side) runs from ([x1], [y1]) to ([x2], [y2]) in page coordinates, the
+ * thickness lying toward the heads: below the edge when the group's stems are [up], above it
+ * otherwise. [level] 1 is the primary beam, 2 the sixteenths' secondary beam; a [stub] is a lone
+ * sixteenth's partial beam, one head wide. Entries of one [group] lie on one line. Sorted by system:
+ * [inSystem] gives a system's entries.
+ */
+class ScoreBeams internal constructor(
+    val system: IntArray,
+    val x1: FloatArray,
+    val y1: FloatArray,
+    val x2: FloatArray,
+    val y2: FloatArray,
+    val up: BooleanArray,
+    val level: ByteArray,
+    val stub: BooleanArray,
+    val group: IntArray,
+    private val systemStart: IntArray,
+) {
+    val size: Int get() = system.size
+
+    /** The entries drawn in system [s]. */
+    fun inSystem(s: Int): IntRange = runOf(systemStart, s)
+}
+
+/** A system's run in a collection sorted by system, from its prefix counts. */
+internal fun runOf(systemStart: IntArray, s: Int): IntRange =
+    if (s < 0 || s + 1 >= systemStart.size) IntRange.EMPTY else systemStart[s] until systemStart[s + 1]
+
+/**
+ * A stable counting sort of [size] entries by their [system] (0 until [systemCount]): [order] lists
+ * the entries system by system, and system s's run is [start] (s) until [start] (s + 1).
+ */
+internal class BySystem(system: IntArray, size: Int, systemCount: Int) {
+    val start = IntArray(systemCount + 1)
+    val order = IntArray(size)
+
+    init {
+        for (k in 0 until size) start[system[k] + 1]++
+        for (s in 0 until systemCount) start[s + 1] += start[s]
+        val next = start.copyOf(systemCount)
+        for (k in 0 until size) order[next[system[k]]++] = k
     }
 }
