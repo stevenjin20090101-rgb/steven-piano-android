@@ -28,6 +28,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,8 +37,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
@@ -53,8 +57,10 @@ import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
- * The Piano tab: the connection card, the few preferences, and the About row at the very bottom.
- * On wide screens it reads as a 720 dp column in the middle; it scrolls from anywhere.
+ * The Piano tab: the connection card, the piano's own settings (lighting, feel, pedal,
+ * diagnostics), the app's few preferences, and the About row at the very bottom. On wide screens
+ * it reads as a 720 dp column in the middle; it scrolls from anywhere. When the tab leaves the
+ * foreground (another tab, the app in the background) the piano saves any change made here.
  */
 @Composable
 fun PianoScreen() {
@@ -63,6 +69,13 @@ fun PianoScreen() {
     val link by vm.link.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val playing by vm.playing.collectAsStateWithLifecycle()
+    val piano by vm.piano.collectAsStateWithLifecycle()
+    val statusText by vm.statusText.collectAsStateWithLifecycle()
+    val statusReading by vm.statusReading.collectAsStateWithLifecycle()
+
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.leave() }
+    DisposableEffect(vm) { onDispose { vm.leave() } }
+
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("Piano", Modifier.readingWidth())
         Column(
@@ -72,6 +85,7 @@ fun PianoScreen() {
         ) {
             Column(Modifier.readingWidth()) {
                 ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                PianoSettingsSections(piano, link is LinkState.Connected, statusText, statusReading, vm)
                 Preferences(settings, vm)
                 AboutRow(Modifier.padding(16.dp))
             }
@@ -83,7 +97,7 @@ fun PianoScreen() {
 private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
     val frame = LocalAppFrame.current
     Eyebrow(
-        "Preferences",
+        "App preferences",
         Modifier
             .padding(start = 16.dp, top = 24.dp, bottom = 8.dp)
             .semantics { heading() },

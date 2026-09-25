@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
+import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.ui.AppFrame
@@ -71,6 +72,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun route(intent: Intent) {
+        emulatorSet(intent)
         val shared = sharedMidi(intent)
         if (shared.isNotEmpty()) {
             ImportService.start(this, ImportSource.Uris(shared), fromPicker = false)
@@ -80,9 +82,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The emulator only (a debug build with no piano, see [LoggingPianoLink]): `adb shell am start -n
+     * dev.stevenjin.stevenpiano/.MainActivity --es dev.stevenjin.stevenpiano.EMULATOR_SET "ledbright 300"`
+     * sets a value past the controls' ranges, so a refusal can be seen. Inert on a phone or tablet.
+     */
+    private fun emulatorSet(intent: Intent) {
+        if (!LoggingPianoLink.isWanted()) return
+        val line = intent.getStringExtra(EXTRA_EMULATOR_SET)?.trim() ?: return
+        graph.pianoSettings.set(line.substringBefore(' '), line.substringAfter(' ', ""))
+    }
+
     companion object {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
+        private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
     }
 }
 

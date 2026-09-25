@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
@@ -25,15 +27,22 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * The Piano tab: the connection and the preferences. Preferences are written in the app's
- * scope so leaving the tab never drops one; the player picks them up from the settings flow.
+ * The Piano tab: the connection, the piano's own settings, and the app's preferences. The piano's
+ * settings go through the app-wide [AppGraph.pianoSettings], which reads them on every connection;
+ * [leave] saves them on the piano when the tab goes. Preferences are written in the app's scope so
+ * leaving the tab never drops one; the player picks them up from the settings flow.
  */
-class PianoViewModel(private val graph: AppGraph) : ViewModel() {
+class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsActions {
     val link: StateFlow<LinkState> = graph.pianoLink.state
     val settings: StateFlow<PianoSettings> = graph.settings
     val playing: StateFlow<Boolean> = graph.player.state
         .map { it.status == PlaybackStatus.Playing }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), false)
+
+    /** What the piano reports of its own settings. */
+    val piano: StateFlow<PianoState> = graph.pianoSettings.state
+    val statusText: StateFlow<String?> = graph.pianoSettings.statusText
+    val statusReading: StateFlow<Boolean> = graph.pianoSettings.statusReading
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 
@@ -42,6 +51,17 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** Pauses first, so the piano is silenced, then drops the link. */
     fun disconnect() = graph.disconnectPiano()
+
+    override fun setPianoValue(name: String, value: String) = graph.pianoSettings.set(name, value)
+
+    override fun applyPreset(command: String) = graph.pianoSettings.preset(command)
+
+    override fun runPianoAction(action: PianoAction, key: Int) = graph.pianoSettings.action(action, key)
+
+    override fun dismissPianoError() = graph.pianoSettings.dismissError()
+
+    /** The tab left the foreground: changes still waiting go now, and the piano saves them. */
+    fun leave() = graph.pianoSettings.leave()
 
     fun setAutoConnect(on: Boolean) = edit { setAutoConnect(on) }
 
