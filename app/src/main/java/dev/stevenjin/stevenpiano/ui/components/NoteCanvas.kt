@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LongState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
@@ -23,13 +24,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlin.math.max
 import kotlin.math.min
@@ -39,6 +46,15 @@ internal const val NOTES_DP_PER_SECOND = 120f
 
 /** The tracker bar sits this share of the height up from the bottom (paper roll). */
 private const val TRACKER_FROM_BOTTOM = 1f / 3f
+
+/** A bar carries its finger's numeral when it is at least this many numerals tall... */
+internal const val NUMERALS_TALL = 3f
+
+/** ...and at least this share of a numeral wide (a black key's lane on a phone is not). */
+private const val NUMERAL_MIN_WIDTH = 0.75f
+
+/** A numeral sits this far inside its bar's leading edge. */
+private val NumeralPad = 2.dp
 
 /** Steps between upcoming and sounding colours, precomputed so drawing never allocates. */
 internal const val RAMP_STEPS = 12
@@ -87,7 +103,11 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  * colour over 120 ms (a cut when motion is reduced) and stays bright for its duration.
  * With [hands] (`score.Hands`, one per note) the right hand's notes are filled bars and the left
  * hand's outlined ones: a 1 dp line in the same colours with the elevated surface inside
- * (DESIGN.md › v1.3 › The waterfall format).
+ * (DESIGN.md › v1.3 › The waterfall format). With [fingers] (`score.Fingering`) each bar at least
+ * [NUMERALS_TALL] numerals tall carries its suggested finger in small tabular figures inside it at
+ * its leading edge, the end that reaches the line first: knocked out of a filled bar (the elevated
+ * surface's colour; the content colour would vanish on a bar that is itself that colour as it
+ * sounds) and in the secondary colour inside an outlined one.
  *
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
@@ -103,7 +123,12 @@ fun NoteCanvas(
     clock: SongClock,
     modifier: Modifier = Modifier,
     hands: ByteArray? = null,
+    fingers: ByteArray? = null,
 ) {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val numeralStyle = MaterialTheme.typography.labelSmall.merge(Tabular).merge(TextStyle(letterSpacing = 0.sp))
+    val numerals = remember(measurer, density, numeralStyle) { Numerals(measurer, density, numeralStyle) }
     val upcoming = MaterialTheme.colorScheme.onSurfaceVariant
     val sounding = MaterialTheme.colorScheme.onSurface
     val inside = MaterialTheme.colorScheme.surfaceVariant
@@ -129,6 +154,10 @@ fun NoteCanvas(
                     hands = hands?.takeIf { it.size == notes.size },
                     inside = inside,
                     outline = Stroke(width = Hairline.toPx()),
+                    fingers = fingers?.takeIf { it.size == notes.size },
+                    numerals = numerals,
+                    numeralPad = NumeralPad.toPx(),
+                    numeralOnOutline = upcoming,
                 )
                 val bar = 2.dp.toPx()
                 val edgeGap = 6.dp.toPx()
@@ -167,7 +196,18 @@ private class Roll(
     /** The inside of a left-hand (outlined) bar. */
     val inside: Color,
     val outline: Stroke,
+    /** Each note's suggested finger (0: none), or null for no numerals. */
+    val fingers: ByteArray?,
+    val numerals: Numerals,
+    /** A numeral keeps this far inside its bar's leading edge. */
+    val numeralPad: Float,
+    /** A numeral's colour inside an outlined bar (inside a filled one it takes [inside]'s). */
+    val numeralOnOutline: Color,
 ) {
+    /** The shortest and narrowest bar that carries a numeral. */
+    private val numeralMinHeight = NUMERALS_TALL * numerals.height
+    private val numeralMinWidth = NUMERAL_MIN_WIDTH * numerals.width
+
     /** Where notes sound: the tracker bar, or the bottom edge for falling notes. */
     val hitY: Float = if (paper) height * (1f - TRACKER_FROM_BOTTOM) else height
     private val aheadMicros = (hitY / pxPerMicro).toLong()
@@ -195,7 +235,8 @@ private class Roll(
             val width = keys.width(lane) - 2 * inset
             val left = keys.left(lane) + inset
             val color = ramp[rampLevel(now, start, end, flipMicros)]
-            if (hands != null && hands[i] == Hands.LEFT) {
+            val outlined = hands != null && hands[i] == Hands.LEFT
+            if (outlined) {
                 // Outlined: the elevated surface inside a 1 dp line drawn just within the bar's edge.
                 val line = outline.width
                 scope.drawRoundRect(inside, Offset(left, top), Size(width, bottom - top), if (paper) CornerRadius(width / 2) else CornerRadius.Zero)
@@ -212,6 +253,17 @@ private class Roll(
                     topLeft = Offset(left, top),
                     size = Size(width, bottom - top),
                     cornerRadius = if (paper) CornerRadius(width / 2) else CornerRadius.Zero,
+                )
+            }
+            val finger = fingers?.get(i)?.toInt() ?: 0
+            if (finger > 0 && bottom - top >= numeralMinHeight && width >= numeralMinWidth) {
+                // The leading edge: the bar's bottom, which meets the line first; clear of a perforation's round end.
+                val digit = numerals.digits[finger.coerceAtMost(5)]
+                val baseline = bottom - numeralPad - if (paper) min(width / 2, numerals.height / 2) else 0f
+                scope.drawText(
+                    digit,
+                    color = if (outlined) numeralOnOutline else inside,
+                    topLeft = Offset(left + (width - digit.size.width) / 2, baseline - digit.firstBaseline),
                 )
             }
             drawn++

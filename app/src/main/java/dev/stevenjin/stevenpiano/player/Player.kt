@@ -12,6 +12,8 @@ package dev.stevenjin.stevenpiano.player
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.midi.MidiPiece
+import dev.stevenjin.stevenpiano.midi.NoteList
+import dev.stevenjin.stevenpiano.score.Fingering
 import dev.stevenjin.stevenpiano.score.Hands
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -49,7 +51,8 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * The Keys screen plays through here too ([liveNoteOn] and friends): its keys join the queue of
  * scheduler commands and go out through the engine's router, so they share the piece's
  * reference counts, 100 ms guard and silence. A dropped link lets go of them.
- * Each piece's hands are worked out on [compute] as it loads, before it is shown and played.
+ * Each piece's hands and suggested fingering are worked out on [compute] as it loads, before it is
+ * shown and played; the fingering again when transpose or folding changes the keys played.
  */
 class Player(
     private val link: PianoLink,
@@ -80,6 +83,7 @@ class Player(
     private var defaultTempoPct = 100
     private var loadJob: Job? = null
     private var advanceJob: Job? = null
+    private var fingerJob: Job? = null
     private var linkConnected = false
     private var linkEpoch: Long? = null
 
@@ -236,6 +240,29 @@ class Player(
             engine.router.fold = s.fold
             engine.router.skipDrums = s.skipDrums
         }
+        refinger()
+    }
+
+    /**
+     * The fingering follows the keys played: when transpose or folding no longer match the ones the
+     * piece's fingering was worked out for, it is worked out again on [compute] (meanwhile none shows).
+     */
+    private fun refinger() {
+        val s = _state.value
+        val piece = s.piece ?: return
+        if (piece.fingersTranspose == s.transpose && piece.fingersFold == s.fold) return
+        val hands = piece.handsOrNull ?: return
+        val transpose = s.transpose
+        val fold = s.fold
+        fingerJob?.cancel()
+        fingerJob = scope.launch {
+            val fingers = withContext(compute) { fingersOf(piece.notes, hands, transpose, fold) }
+            _state.update { now ->
+                val shown = now.piece
+                if (shown == null || shown.notes !== piece.notes) now
+                else now.copy(piece = shown.copy(fingers = fingers, fingersTranspose = transpose, fingersFold = fold))
+            }
+        }
     }
 
     private fun enqueue(pieceIds: List<Long>, change: (Queue) -> Queue): Boolean {
@@ -272,7 +299,10 @@ class Player(
             }
             val midi = playable.midi
             val tempo = defaultTempoPct
+            val transpose = _state.value.transpose
+            val fold = _state.value.fold
             val hands = withContext(compute) { handsOf(midi) }
+            val fingers = withContext(compute) { fingersOf(midi.notes, hands, transpose, fold) }
             _state.update {
                 it.copy(
                     loading = false,
@@ -287,9 +317,13 @@ class Player(
                         keySignatures = midi.keySignatures,
                         timeSignatures = midi.timeSignatures,
                         hands = hands,
+                        fingers = fingers,
+                        fingersTranspose = transpose,
+                        fingersFold = fold,
                     ),
                 )
             }
+            refinger()   // transpose or folding changed while it loaded
             scheduler.submit { now ->
                 engine.load(midi, now)
                 engine.setTempo(tempo, now)
@@ -309,6 +343,18 @@ class Player(
         ByteArray(0)
     } catch (e: OutOfMemoryError) {
         ByteArray(0)
+    }
+
+    /** The suggested fingering on the keys played at [transpose] and [fold]; none without hands or if it fails. */
+    private fun fingersOf(notes: NoteList, hands: ByteArray, transpose: Int, fold: Boolean): ByteArray {
+        if (hands.size != notes.size || hands.isEmpty()) return ByteArray(0)
+        return try {
+            Fingering.assign(notes, hands, transpose, fold)
+        } catch (e: Exception) {
+            ByteArray(0)
+        } catch (e: OutOfMemoryError) {
+            ByteArray(0)
+        }
     }
 
     /**

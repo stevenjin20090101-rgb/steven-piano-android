@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.KeySignature
@@ -170,7 +171,8 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * The score (DESIGN.md › v1.2 › Score): the piece as systems of bars on pages, one page, or two
  * side by side when the panel is 840 dp wide or more, laid out by [ScoreLayoutEngine] from the
  * file's tempo map, bars and signatures ([keySignatures] are the file's; [transpose] moves them
- * with the notes), each note on its hand's staff when the [hands] are known (DESIGN.md › v1.3).
+ * with the notes), each note on its hand's staff when the [hands] are known, and the suggested
+ * [fingers] as small numerals above the right hand's heads and below the left's (DESIGN.md › v1.3).
  * Staff lines and bar lines are the tertiary grey; clefs, signatures, notes and their beams, rests,
  * ties, tempo marks and dynamics the secondary colour (DESIGN.md › v1.3 › Score fidelity); bar
  * numbers eyebrows above each system. A 2 dp cursor moves through the current
@@ -203,6 +205,7 @@ fun ScorePages(
     onSeek: (micros: Long) -> Unit,
     modifier: Modifier = Modifier,
     hands: ByteArray? = null,
+    fingers: ByteArray? = null,
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -211,6 +214,8 @@ fun ScorePages(
     val numberHeight = remember(measurer, density, numberStyle) {
         measurer.measure("0", numberStyle, maxLines = 1, density = density).size.height.toFloat()
     }
+    // Fingering numerals: the eyebrow's size, tabular, untracked (one digit each).
+    val numerals = remember(measurer, density, numberStyle) { Numerals(measurer, density, numberStyle.merge(TextStyle(letterSpacing = 0.sp))) }
     val colors = ScoreColors(
         upcoming = MaterialTheme.colorScheme.onSurfaceVariant,
         sounding = MaterialTheme.colorScheme.onSurface,
@@ -223,18 +228,23 @@ fun ScorePages(
     BoxWithConstraints(modifier.clipToBounds()) {
         val panelWidth = constraints.maxWidth.toFloat()
         val panelHeight = constraints.maxHeight.toFloat()
-        val metrics = remember(width, panelWidth, panelHeight, density, glyphs, numberHeight) {
-            ScoreMetrics.forPanel(width, panelWidth, panelHeight, density.density, glyphs.headWidth, glyphs.clefWidth, numberHeight)
+        val metrics = remember(width, panelWidth, panelHeight, density, glyphs, numberHeight, numerals) {
+            ScoreMetrics.forPanel(
+                width, panelWidth, panelHeight, density.density, glyphs.headWidth, glyphs.clefWidth, numberHeight,
+                numeralHeight = numerals.height, numeralWidth = numerals.width,
+            )
         }
-        val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics, hands) {
+        val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics, hands, fingers) {
             if (value?.notes !== notes) value = null   // never another piece's pages under this one's cursor
             value = withContext(Dispatchers.Default) {
                 val keys = IntArray(notes.size) { KeyMap.map(notes.note(it), transpose, fold) }
                 val keysMoved = keySignatures.map { it.transposed(transpose) }
-                Laid(notes, ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, hands?.takeIf { it.size == notes.size }))
+                val handsHere = hands?.takeIf { it.size == notes.size }
+                val fingersHere = fingers?.takeIf { it.size == notes.size && handsHere != null }
+                Laid(notes, ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, handsHere, fingersHere))
             }
         }
-        laid?.let { ScoreView(it.layout, notes, glyphs, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek) }
+        laid?.let { ScoreView(it.layout, notes, glyphs, numerals, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek) }
     }
 }
 
@@ -246,6 +256,7 @@ private fun ScoreView(
     layout: ScoreLayout,
     notes: NoteList,
     glyphs: ScoreGlyphs,
+    numerals: Numerals,
     colors: ScoreColors,
     measurer: TextMeasurer,
     numberStyle: TextStyle,
@@ -256,7 +267,7 @@ private fun ScoreView(
 ) {
     val metrics = layout.metrics
     val density = LocalDensity.current
-    val painter = remember(glyphs, density) { ScorePainter(glyphs, density) }
+    val painter = remember(glyphs, numerals, density) { ScorePainter(glyphs, numerals, density) }
     val slotLeft = remember(metrics) { FloatArray(metrics.pages) { metrics.slotLeft(it).roundToInt().toFloat() } }
     // The system sounding, read per frame; everything below it changes only when it does.
     val cursorSystem by remember(layout, clock) { derivedStateOf { layout.systemAt(clock.positionAt(frameNanos.longValue)) } }
@@ -506,6 +517,21 @@ private class ScoreGlyphs(private val measurer: TextMeasurer, density: Density, 
 }
 
 /**
+ * The fingering numerals 1 to 5, measured once on the main thread in the eyebrow's size (they grow
+ * with the font scale, as text does): each digit's layout, a digit's cap [height] and [width].
+ */
+internal class Numerals(measurer: TextMeasurer, density: Density, style: TextStyle) {
+    val digits: Array<TextLayoutResult> = Array(6) { measurer.measure(it.toString(), style, maxLines = 1, density = density) }
+    val height: Float = with(density) { style.fontSize.toPx() } * DIGIT_CAP
+    val width: Float = digits.maxOf { it.size.width }.toFloat()
+
+    private companion object {
+        /** Roboto's figures stand this share of the em above the baseline. */
+        const val DIGIT_CAP = 0.71f
+    }
+}
+
+/**
  * A system's beams and ties as paths, and its tempo mark measured and placed (its left edge and its
  * text's baseline): built with its page's cached layer, never per frame.
  */
@@ -519,7 +545,7 @@ private class SystemMarks(
 )
 
 /** Draws a laid-out score: whole systems for the page layers, and the per-frame overlay. Allocation-free. */
-private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
+private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals: Numerals, density: Density) {
     private val space = with(density) { LineGap.toPx() }
     val hair = with(density) { Hairline.toPx() }
     private val overhang = with(density) { LedgerOverhang.toPx() }
@@ -596,12 +622,16 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
         for (k in t.inSystem(system.index)) {
             if (t.above[k] && t.x2[k] >= from && t.x1[k] <= to) top = min(top, min(t.y1[k], t.y2[k]) - TIE_HIGHEST * space)
         }
+        val f = layout.fingers
+        for (k in f.inSystem(system.index)) {
+            if (f.above[k] && f.x[k] + numerals.width / 2 >= from && f.x[k] - numerals.width / 2 <= to) top = min(top, f.baseline[k] - numerals.height)
+        }
         return top
     }
 
     /**
      * One system: its staves, opening and bar lines, signs, bar number and tempo mark, then its rests,
-     * ties, beams, notes and tied heads, and its dynamics, kept to its band.
+     * ties, beams, notes and tied heads, its dynamics and its fingering, kept to its band.
      */
     fun DrawScope.system(layout: ScoreLayout, s: ScoreSystem, number: TextLayoutResult, marks: SystemMarks, colors: ScoreColors) {
         clipRect(top = s.bandTop, bottom = s.bandBottom) {
@@ -645,6 +675,11 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
             for (k in layout.dynamicsIn(s.index)) {
                 val mark = layout.dynamics[k]
                 glyph(glyphs.dynamic(mark.band), mark.x, mark.y, colors.glyph)
+            }
+            val f = layout.fingers
+            for (k in f.inSystem(s.index)) {
+                val digit = numerals.digits[f.finger[k].toInt().coerceIn(0, 5)]
+                drawText(digit, color = colors.glyph, topLeft = Offset(f.x[k] - digit.size.width / 2f, f.baseline[k] - digit.firstBaseline))
             }
         }
     }

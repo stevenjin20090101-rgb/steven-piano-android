@@ -69,7 +69,8 @@ object ScoreLayoutEngine {
      * folding (`KeyMap.UNPLAYABLE` ones are left out); [bars] are the bar starts in microseconds;
      * [keySignatures] and [timeSignatures] as the file gives them (key signatures already moved by
      * any transpose). [hands] ([Hands.RIGHT] or [Hands.LEFT] per note) puts each note on its hand's
-     * staff; without them the staff is the pitch's, split at middle C.
+     * staff; without them the staff is the pitch's, split at middle C. [fingers] ([Fingering], 1–5
+     * per note, 0 for none) are set as numerals above the right hand's heads and below the left's.
      */
     fun layout(
         notes: NoteList,
@@ -80,10 +81,12 @@ object ScoreLayoutEngine {
         metrics: ScoreMetrics,
         timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
         hands: ByteArray? = null,
+        fingers: ByteArray? = null,
     ): ScoreLayout {
         require(keys.size == notes.size) { "One key per note" }
         require(hands == null || hands.size == notes.size) { "One hand per note" }
-        return Build(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures, hands).run()
+        require(fingers == null || fingers.size == notes.size) { "One finger per note" }
+        return Build(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures, hands, fingers).run()
     }
 }
 
@@ -100,6 +103,7 @@ private class Build(
     private val m: ScoreMetrics,
     timeSignatures: List<TimeSignature>,
     private val hands: ByteArray?,
+    private val fingers: ByteArray?,
 ) {
     private val space = m.space
     private val half = m.space / 2
@@ -214,6 +218,8 @@ private class Build(
     private val beams = BeamSink()
     private val rests = RestSink()
     private val ties = TieSink()
+    private var beamsBuilt: ScoreBeams? = null
+    private var tiesBuilt: ScoreTies? = null
 
     fun run(): ScoreLayout {
         for (s in 0 until systemCount) layoutSystem(s)
@@ -227,6 +233,9 @@ private class Build(
         headRanges()
         val tempoMarks = tempoMarks()
         val dynamics = dynamics()
+        beamsBuilt = beams.build(systemCount)
+        tiesBuilt = ties.build(systemCount)
+        val numerals = numerals()
         return ScoreLayout(
             metrics = m,
             quantized = quantized,
@@ -255,11 +264,12 @@ private class Build(
             tiedStartMicros = LongArray(written.tied) { tempo.tickToMicros(written.tiedTick[it]) },
             tiedFrom = written.tiedFrom,
             tiedByNote = written.tiedByNote,
-            beams = beams.build(systemCount),
+            beams = beamsBuilt!!,
             rests = rests.build(systemCount),
-            ties = ties.build(systemCount),
+            ties = tiesBuilt!!,
             tempoMarks = tempoMarks,
             dynamics = dynamics,
+            fingers = numerals,
         )
     }
 
@@ -894,7 +904,8 @@ private class Build(
         val slope = if (groupX[last] > groupX[0]) (groupTip[last] - groupTip[0]) / (groupX[last] - groupX[0]) else 0f
         fun lineAt(x: Float) = groupTip[0] + slope * (x - groupX[0])
         val id = beamGroups++
-        beams.add(s, groupX[0], groupTip[0], groupX[last] + stemWidth, lineAt(groupX[last] + stemWidth), up, 1, false, id)
+        val onTreble = treble[onsetOwner[index[from]]]
+        beams.add(s, groupX[0], groupTip[0], groupX[last] + stemWidth, lineAt(groupX[last] + stemWidth), up, 1, false, id, onTreble)
         // Sixteenths: a second beam over each run of them; a lone one gets a stub into the group.
         val inward = if (up) Beams.SECONDARY_OFFSET * space else -Beams.SECONDARY_OFFSET * space
         var j = 0
@@ -913,7 +924,7 @@ private class Build(
                 right -> groupX[j] + m.headWidth
                 else -> groupX[j] + stemWidth
             }
-            beams.add(s, x1, lineAt(x1) + inward, x2, lineAt(x2) + inward, up, 2, partial, id)
+            beams.add(s, x1, lineAt(x1) + inward, x2, lineAt(x2) + inward, up, 2, partial, id, onTreble)
             j = end
         }
     }
@@ -1016,6 +1027,148 @@ private class Build(
         return floor
     }
 
+    // --- Fingering numerals (when asked for) ----------------------------------------------------
+
+    /**
+     * Suggested fingering ([Fingering]): for each onset, a stack of numerals over the right hand's heads
+     * (the highest note's on top) and under the left hand's (the lowest note's at the bottom), centred
+     * on the chord's column, clear of whatever the staff holds there: heads and their accidentals,
+     * stems and flags, beams, ties ([Profiles], the tempo mark's check above and the dynamics' below,
+     * made per staff). Placed after the beams, when every stem has its final length.
+     */
+    private fun numerals(): ScoreFingers {
+        val sink = FingerSink()
+        if (fingers == null || hands == null || orderSize == 0) return sink.build(systemCount)
+        val profiles = Profiles()
+        val chord = IntArray(CHORD_LIMIT)
+        var a = 0
+        while (a < orderSize) {
+            val first = order[a]
+            var end = a + 1
+            while (end < orderSize && sameChord(first, order[end])) end++
+            for (hand in HANDS) {
+                var count = 0
+                for (k in a until end) {
+                    val h = order[k]
+                    if (h < n && hands[h] == hand && fingers[h] > 0 && count < CHORD_LIMIT) chord[count++] = h
+                }
+                if (count == 0) continue
+                // Rising pitch.
+                for (k in 1 until count) {
+                    val h = chord[k]
+                    var j = k - 1
+                    while (j >= 0 && headKey[chord[j]] > headKey[h]) {
+                        chord[j + 1] = chord[j]
+                        j--
+                    }
+                    chord[j + 1] = h
+                }
+                val s = system[chord[0]]
+                profiles.of(s)
+                var column = Float.MAX_VALUE
+                for (k in 0 until count) {
+                    val h = chord[k]
+                    column = min(column, x[h] - if (moved[h]) m.headWidth else 0f)
+                }
+                val centre = column + m.headWidth / 2
+                val from = centre - m.numeralWidth / 2
+                val to = centre + m.numeralWidth / 2
+                val pitch = m.numeralHeight * (1 + FINGER_GAP)
+                if (hand == Hands.RIGHT) {
+                    val lowest = profiles.top(treble[chord[count - 1]], from, to) - FINGER_CLEARANCE * space
+                    for (k in 0 until count) sink.add(s, centre, lowest - k * pitch, fingers[chord[k]], true, chord[k])
+                } else {
+                    val highest = profiles.bottom(treble[chord[0]], from, to) + FINGER_CLEARANCE * space + m.numeralHeight
+                    for (k in 0 until count) sink.add(s, centre, highest + k * pitch, fingers[chord[count - 1 - k]], false, chord[count - 1 - k])
+                }
+            }
+            a = end
+        }
+        return sink.build(systemCount)
+    }
+
+    /**
+     * What each staff of one system holds, column by column (half a space wide): the highest and
+     * lowest point reached by heads (with their ledger lines and accidentals), stems (with their
+     * flags), beams and ties. Built once a system, as the numerals reach it.
+     */
+    private inner class Profiles {
+        private val width = space / 2
+        private val columns = (m.pageWidth / width).toInt() + 2
+        private val top = Array(2) { FloatArray(columns) }
+        private val bottom = Array(2) { FloatArray(columns) }
+        private var built = -1
+
+        fun of(s: Int) {
+            if (s == built) return
+            built = s
+            for (t in 0..1) {
+                top[t].fill(Float.POSITIVE_INFINITY)
+                bottom[t].fill(Float.NEGATIVE_INFINITY)
+            }
+            if (noteEnd[s] > 0) for (i in noteFrom[s] until noteEnd[s]) if (system[i] == s) head(i)
+            if (tiedEnd[s] > 0) for (h in tiedFrom[s] until tiedEnd[s]) head(h)
+            val b = beamsBuilt
+            if (b != null) {
+                for (k in b.inSystem(s)) {
+                    val thick = Beams.THICKNESS * space
+                    val y0 = min(b.y1[k], b.y2[k]) - if (b.up[k]) 0f else thick
+                    val y1 = max(b.y1[k], b.y2[k]) + if (b.up[k]) thick else 0f
+                    mark(b.treble[k], b.x1[k], b.x2[k], y0, y1)
+                }
+            }
+            val t = tiesBuilt
+            if (t != null) {
+                for (k in t.inSystem(s)) {
+                    val h = if (t.from[k] >= 0) t.from[k] else t.to[k]
+                    val bow = TIE_HEIGHT * space
+                    val y0 = min(t.y1[k], t.y2[k]) - if (t.above[k]) bow else 0f
+                    val y1 = max(t.y1[k], t.y2[k]) + if (t.above[k]) 0f else bow
+                    mark(treble[h], t.x1[k], t.x2[k], y0, y1)
+                }
+            }
+        }
+
+        private fun head(h: Int) {
+            val w = headWidth(h)
+            mark(treble[h], x[h], x[h] + w, y[h] - half, y[h] + half)   // its ledger lines are within it
+            if (accidental[h].toInt() != Accidental.NONE) {
+                mark(treble[h], accidentalX[h], x[h], y[h] - ACCIDENTAL_RISE * space, y[h] + ACCIDENTAL_DEPTH * space)
+            }
+            if (!stemX[h].isNaN()) {
+                val reach = if (flags[h] > 0) FLAG_REACH * space else stemWidth
+                mark(treble[h], stemX[h], stemX[h] + reach, min(stemFrom[h], stemTo[h]), max(stemFrom[h], stemTo[h]))
+            }
+            if (dotted[h]) mark(treble[h], dotX[h], dotX[h] + DOT_WIDTH * space, dotY[h] - half / 2, dotY[h] + half / 2)
+        }
+
+        private fun mark(onTreble: Boolean, x0: Float, x1: Float, y0: Float, y1: Float) {
+            val t = if (onTreble) 0 else 1
+            val a = (x0 / width).toInt().coerceIn(0, columns - 1)
+            val b = (x1 / width).toInt().coerceIn(0, columns - 1)
+            for (c in a..b) {
+                if (y0 < top[t][c]) top[t][c] = y0
+                if (y1 > bottom[t][c]) bottom[t][c] = y1
+            }
+        }
+
+        /** The highest point the staff reaches between [x0] and [x1]. */
+        fun top(onTreble: Boolean, x0: Float, x1: Float): Float {
+            val t = if (onTreble) 0 else 1
+            var best = Float.POSITIVE_INFINITY
+            for (c in (x0 / width).toInt().coerceIn(0, columns - 1)..(x1 / width).toInt().coerceIn(0, columns - 1)) best = min(best, top[t][c])
+            return best
+        }
+
+        /** The lowest point the staff reaches between [x0] and [x1]. */
+        fun bottom(onTreble: Boolean, x0: Float, x1: Float): Float {
+            val t = if (onTreble) 0 else 1
+            var best = Float.NEGATIVE_INFINITY
+            for (c in (x0 / width).toInt().coerceIn(0, columns - 1)..(x1 / width).toInt().coerceIn(0, columns - 1)) best = max(best, bottom[t][c])
+            return best
+        }
+    }
+
     /** A tie bows away from its head's stem; with no stem (a whole note), up from the middle line and above, else down. */
     private fun bowsUp(h: Int): Boolean {
         val owner = ownerOf[h]
@@ -1091,6 +1244,19 @@ private class Build(
     private companion object {
         /** More heads than this in one chord on one staff are left as they are. */
         const val CHORD_LIMIT = 48
+
+        val HANDS = byteArrayOf(Hands.RIGHT, Hands.LEFT)
+
+        /** A numeral keeps this far (in spaces) from what it sits on; stacked numerals keep this share of their height apart. */
+        const val FINGER_CLEARANCE = 0.4f
+        const val FINGER_GAP = 0.2f
+
+        /** A sharp or natural rises about this far above its head's centre line; a flag reaches this far right of its stem. */
+        const val ACCIDENTAL_RISE = 1.5f
+        const val FLAG_REACH = 1.1f
+
+        /** A tie bows at most this far (in spaces) from its ends. */
+        const val TIE_HEIGHT = 0.9f
 
         val TREBLE_THEN_BASS = booleanArrayOf(true, false)
 
@@ -1178,9 +1344,10 @@ private class BeamSink {
     private var level = ByteArray(64)
     private var stub = BooleanArray(64)
     private var group = IntArray(64)
+    private var treble = BooleanArray(64)
     private var size = 0
 
-    fun add(s: Int, ax: Float, ay: Float, bx: Float, by: Float, stemsUp: Boolean, beamLevel: Int, partial: Boolean, id: Int) {
+    fun add(s: Int, ax: Float, ay: Float, bx: Float, by: Float, stemsUp: Boolean, beamLevel: Int, partial: Boolean, id: Int, onTreble: Boolean) {
         if (size == system.size) {
             val grown = size * 2
             system = system.copyOf(grown)
@@ -1192,6 +1359,7 @@ private class BeamSink {
             level = level.copyOf(grown)
             stub = stub.copyOf(grown)
             group = group.copyOf(grown)
+            treble = treble.copyOf(grown)
         }
         system[size] = s
         x1[size] = ax
@@ -1202,6 +1370,7 @@ private class BeamSink {
         level[size] = beamLevel.toByte()
         stub[size] = partial
         group[size] = id
+        treble[size] = onTreble
         size++
     }
 
@@ -1218,6 +1387,7 @@ private class BeamSink {
             level = ByteArray(size) { level[o[it]] },
             stub = BooleanArray(size) { stub[o[it]] },
             group = IntArray(size) { group[o[it]] },
+            treble = BooleanArray(size) { treble[o[it]] },
             systemStart = sorted.start,
         )
     }
@@ -1348,4 +1518,48 @@ private fun sortedByKey(key: LongArray, size: Int): IntArray {
         width *= 2
     }
     return a
+}
+
+/** Fingering numerals as the engine places them, sorted by system when built. */
+private class FingerSink {
+    private var system = IntArray(64)
+    private var x = FloatArray(64)
+    private var baseline = FloatArray(64)
+    private var finger = ByteArray(64)
+    private var above = BooleanArray(64)
+    private var note = IntArray(64)
+    private var size = 0
+
+    fun add(s: Int, atX: Float, atBaseline: Float, digit: Byte, overNote: Boolean, of: Int) {
+        if (size == system.size) {
+            val grown = size * 2
+            system = system.copyOf(grown)
+            x = x.copyOf(grown)
+            baseline = baseline.copyOf(grown)
+            finger = finger.copyOf(grown)
+            above = above.copyOf(grown)
+            note = note.copyOf(grown)
+        }
+        system[size] = s
+        x[size] = atX
+        baseline[size] = atBaseline
+        finger[size] = digit
+        above[size] = overNote
+        note[size] = of
+        size++
+    }
+
+    fun build(systemCount: Int): ScoreFingers {
+        val sorted = BySystem(system, size, systemCount)
+        val o = sorted.order
+        return ScoreFingers(
+            system = IntArray(size) { system[o[it]] },
+            x = FloatArray(size) { x[o[it]] },
+            baseline = FloatArray(size) { baseline[o[it]] },
+            finger = ByteArray(size) { finger[o[it]] },
+            above = BooleanArray(size) { above[o[it]] },
+            note = IntArray(size) { note[o[it]] },
+            systemStart = sorted.start,
+        )
+    }
 }

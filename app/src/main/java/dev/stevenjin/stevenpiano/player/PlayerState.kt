@@ -26,7 +26,9 @@ object PlaybackLimits {
 /**
  * The piece in the player: what Now playing shows. [notes] feed the note canvas; the score also
  * reads the file's [tempoMap], [barStartsMicros] and signatures. [hands] (`score.Hands`, one per
- * note; empty until known) are worked out once per piece, off the main thread, before it is shown.
+ * note; empty until known) are worked out once per piece, off the main thread, before it is shown;
+ * the suggested [fingers] (`score.Fingering`) with them, on the keys the piano plays at
+ * [fingersTranspose] and [fingersFold], and again whenever those change.
  */
 data class NowPlaying(
     val pieceId: Long,
@@ -39,9 +41,16 @@ data class NowPlaying(
     val keySignatures: List<KeySignature> = emptyList(),
     val timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
     val hands: ByteArray = ByteArray(0),
+    val fingers: ByteArray = ByteArray(0),
+    val fingersTranspose: Int = 0,
+    val fingersFold: Boolean = true,
 ) {
     /** The hands, when they have been worked out for these notes: one per note. */
     val handsOrNull: ByteArray? get() = hands.takeIf { it.size == notes.size && it.isNotEmpty() }
+
+    /** The fingering for the keys played at [transpose] and [fold], or null while it is being worked out again. */
+    fun fingersFor(transpose: Int, fold: Boolean): ByteArray? =
+        fingers.takeIf { it.size == notes.size && it.isNotEmpty() && fingersTranspose == transpose && fingersFold == fold }
 
     private companion object {
         const val DEFAULT_PPQ = 480

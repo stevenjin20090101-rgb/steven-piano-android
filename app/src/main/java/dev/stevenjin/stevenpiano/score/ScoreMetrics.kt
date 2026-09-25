@@ -58,6 +58,9 @@ data class ScoreMetrics(
     /** Where the first system's bar-number line starts, and from one system's to the next's. */
     val firstSystemTop: Float,
     val systemPitch: Float,
+    /** A fingering numeral's height (its digits' cap height) and width, as measured: they are set above and below heads. */
+    val numeralHeight: Float = NUMERAL_HEIGHT_DP * density,
+    val numeralWidth: Float = NUMERAL_WIDTH_DP * density,
 ) {
     /** One staff: four spaces. */
     val staffHeight: Float get() = 4 * space
@@ -87,9 +90,14 @@ data class ScoreMetrics(
         /** The eyebrow's line height at font scale 1. */
         const val NUMBER_HEIGHT_DP = 16f
 
+        /** A fingering numeral in the eyebrow's size at font scale 1: a digit's cap height and advance. */
+        const val NUMERAL_HEIGHT_DP = 8.6f
+        const val NUMERAL_WIDTH_DP = 6.8f
+
         /**
          * The metrics for a panel of [panelWidthPx] × [panelHeightPx] in a window [width] wide, at
-         * [density] pixels per dp. [numberHeight] is the bar number's line height in pixels.
+         * [density] pixels per dp. [numberHeight] is the bar number's line height in pixels;
+         * [numeralHeight] and [numeralWidth] a fingering numeral's.
          */
         fun forPanel(
             width: ScoreWidth,
@@ -99,6 +107,8 @@ data class ScoreMetrics(
             headWidth: Float,
             clefWidth: Float,
             numberHeight: Float = NUMBER_HEIGHT_DP * density,
+            numeralHeight: Float = NUMERAL_HEIGHT_DP * density,
+            numeralWidth: Float = NUMERAL_WIDTH_DP * density,
         ): ScoreMetrics {
             val pages = if (panelWidthPx / density >= TWO_PAGES_DP) 2 else 1
             val pageGap = if (pages == 2) PAGE_GAP_DP * density else 0f
@@ -130,6 +140,8 @@ data class ScoreMetrics(
                 density = density,
                 firstSystemTop = firstTop,
                 systemPitch = block + systemGap + extra,
+                numeralHeight = numeralHeight,
+                numeralWidth = numeralWidth,
             )
         }
     }

@@ -216,6 +216,34 @@ class PlayerTest {
         assertEquals(PlaybackStatus.Stopped, state.status)
     }
 
+    @Test
+    fun `a piece arrives with its hands and fingering, and transposing fingers it again`() = runBlocking {
+        source.pieces[1] = SmfParser.parse(
+            SmfBuilder(format = 1, division = 480).track { tempo(0, 500_000) }
+                .track {
+                    name(0, "Piano right")
+                    listOf(60, 62, 64).forEachIndexed { k, key -> noteOn(k * 480L, key); noteOff(k * 480L + 480, key) }
+                }
+                .track {
+                    name(0, "Piano left")
+                    noteOn(0, 48)
+                    noteOff(1_440, 48)
+                }
+                .build(),
+        )
+        onMain { player.play(1) }
+        val loaded = withTimeout(5_000) { player.state.first { it.piece?.pieceId == 1L } }.piece!!
+        assertEquals(4, loaded.hands.size)
+        fun rightHand(p: NowPlaying) = (0 until 4).filter { p.notes.note(it) >= 60 }.map { p.fingers[it].toInt() }
+        assertEquals(listOf(1, 2, 3), rightHand(loaded))
+        assertEquals(loaded.fingers, loaded.fingersFor(0, true))
+        assertNull(loaded.fingersFor(1, true))
+        onMain { player.setTranspose(1) }   // C D E becomes C♯ D♯ F: the thumb leaves C♯
+        val moved = withTimeout(5_000) { player.state.first { it.piece?.fingersFor(1, true) != null } }.piece!!
+        assertTrue(rightHand(moved)[0] != 1)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
     private class FakeSource : PieceSource {
         val pieces = ConcurrentHashMap<Long, MidiPiece>()
         val played = CopyOnWriteArrayList<Long>()

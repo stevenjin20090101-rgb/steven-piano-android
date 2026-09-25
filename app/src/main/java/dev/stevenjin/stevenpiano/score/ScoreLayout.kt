@@ -178,6 +178,8 @@ class ScoreLayout internal constructor(
     val tempoMarks: List<TempoMark>,
     /** Dynamics under the treble staff where the loudness moves into a new band (every file). */
     val dynamics: List<DynamicMark>,
+    /** Suggested fingering: numerals above the right hand's heads and below the left hand's (when asked for). */
+    val fingers: ScoreFingers = ScoreFingers.None,
 ) {
     /** Every head: the notes' own and the tied ones. */
     val headCount: Int get() = x.size
@@ -242,8 +244,8 @@ class ScoreLayout internal constructor(
  * outer edge (the stem tips' side) runs from ([x1], [y1]) to ([x2], [y2]) in page coordinates, the
  * thickness lying toward the heads: below the edge when the group's stems are [up], above it
  * otherwise. [level] 1 is the primary beam, 2 the sixteenths' secondary beam; a [stub] is a lone
- * sixteenth's partial beam, one head wide. Entries of one [group] lie on one line. Sorted by system:
- * [inSystem] gives a system's entries.
+ * sixteenth's partial beam, one head wide. Entries of one [group] lie on one line, on the [treble]
+ * staff or the bass. Sorted by system: [inSystem] gives a system's entries.
  */
 class ScoreBeams internal constructor(
     val system: IntArray,
@@ -255,6 +257,7 @@ class ScoreBeams internal constructor(
     val level: ByteArray,
     val stub: BooleanArray,
     val group: IntArray,
+    val treble: BooleanArray,
     private val systemStart: IntArray,
 ) {
     val size: Int get() = system.size
@@ -326,4 +329,29 @@ class ScoreTies internal constructor(
 
     /** The ties drawn in system [s]. */
     fun inSystem(s: Int): IntRange = runOf(systemStart, s)
+}
+
+/**
+ * Fingering numerals as placed (DESIGN.md › v1.3 › The waterfall format): [finger] 1–5 centred on
+ * [x], its digits' baseline at [baseline] (page coordinates), [above] its note (the right hand's) or
+ * below it (the left hand's); a chord's numerals stacked, the highest note's on top. [note] is the
+ * note each belongs to. Sorted by system: [inSystem] gives a system's numerals.
+ */
+class ScoreFingers internal constructor(
+    val system: IntArray,
+    val x: FloatArray,
+    val baseline: FloatArray,
+    val finger: ByteArray,
+    val above: BooleanArray,
+    val note: IntArray,
+    private val systemStart: IntArray,
+) {
+    val size: Int get() = system.size
+
+    /** The numerals drawn in system [s]. */
+    fun inSystem(s: Int): IntRange = runOf(systemStart, s)
+
+    companion object {
+        val None = ScoreFingers(IntArray(0), FloatArray(0), FloatArray(0), ByteArray(0), BooleanArray(0), IntArray(0), IntArray(1))
+    }
 }

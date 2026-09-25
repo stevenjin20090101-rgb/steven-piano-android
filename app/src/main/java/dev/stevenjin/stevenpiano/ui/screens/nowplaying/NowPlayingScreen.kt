@@ -278,13 +278,14 @@ private fun NoteViews(
 ) {
     val scoreWidth = LocalAppFrame.current.scoreWidth
     val hands = piece.handsOrNull
+    val fingers = piece.fingersFor(state.transpose, state.fold)
     // Which hand each sounding key belongs to, for the strip's outlined left-hand keys.
     val keyHands = remember(piece.notes, hands, state.transpose, state.fold) {
         hands?.let { KeyHands(piece.notes, it, state.transpose, state.fold) }
     }
     val notes: @Composable (Modifier) -> Unit = { panel ->
         Panel(panel) {
-            NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(), hands = hands)
+            NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(), hands = hands, fingers = fingers)
             HairlineDivider()
             KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
         }
@@ -305,6 +306,7 @@ private fun NoteViews(
                 onSeek = onSeek,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 hands = hands,
+                fingers = fingers,
             )
             if (strip) {
                 HairlineDivider()

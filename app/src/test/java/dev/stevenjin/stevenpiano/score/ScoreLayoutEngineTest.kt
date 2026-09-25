@@ -56,6 +56,7 @@ class ScoreLayoutEngineTest {
         transpose: Int = 0,
         fold: Boolean = true,
         hands: ByteArray? = null,
+        fingers: ByteArray? = null,
     ): ScoreLayout =
         ScoreLayoutEngine.layout(
             piece.notes,
@@ -66,6 +67,7 @@ class ScoreLayoutEngineTest {
             metrics,
             piece.timeSignatures,
             hands,
+            fingers,
         )
 
     /** The note on [key] starting at [tick]. */
@@ -363,6 +365,7 @@ class ScoreLayoutEngineTest {
         for (system in score.systems) assertEquals(system.page % 2, system.slot)
         assertTrue(score.systems.all { it.right <= tablet.pageWidth })
     }
+
     @Test
     fun `a right-hand note below middle C lands on the treble staff, a left-hand one above it on the bass`() {
         val crossing = piece {
@@ -396,5 +399,44 @@ class ScoreLayoutEngineTest {
         val plain = layout(crossing)
         assertFalse(plain.treble[b3])
         assertTrue(plain.treble[d4])
+    }
+
+    @Test
+    fun `fingering numerals stand above the right hand's heads and under the left hand's, a chord's stacked`() {
+        val piece = piece {
+            note(0, 72, 480)       // C5 and E5, the right hand's chord (stem down)
+            note(0, 76, 480)
+            note(0, 48, 480)       // C3, the left hand
+            note(480, 64, 480)     // E4, the right hand (stem up)
+        }
+        val given = mapOf(72 to 1, 76 to 3, 48 to 5, 64 to 2)
+        val hands = ByteArray(piece.notes.size) { if (piece.notes.note(it) >= 60) Hands.RIGHT else Hands.LEFT }
+        val fingers = ByteArray(piece.notes.size) { given.getValue(piece.notes.note(it)).toByte() }
+        val score = layout(piece, hands = hands, fingers = fingers)
+        val f = score.fingers
+        assertEquals(4, f.size)
+        fun numeral(key: Int) = (0 until f.size).first { piece.notes.note(f.note[it]) == key }
+        val c5 = piece.at(0, 72)
+        val e5 = piece.at(0, 76)
+        val c3 = piece.at(0, 48)
+        val e4 = piece.at(480, 64)
+        val nC5 = numeral(72)
+        val nE5 = numeral(76)
+        val nC3 = numeral(48)
+        val nE4 = numeral(64)
+        assertEquals(listOf(1, 3, 5, 2), listOf(nC5, nE5, nC3, nE4).map { f.finger[it].toInt() })
+        // The chord's two stack over its top head, E5's (3) above C5's (1), centred on the column.
+        assertTrue(f.above[nC5] && f.above[nE5])
+        assertTrue(f.baseline[nE5] < f.baseline[nC5] - phone.numeralHeight)
+        assertTrue(f.baseline[nC5] < score.y[e5] - space / 2)
+        assertEquals(score.x[c5] + head / 2, f.x[nC5], 0.01f)
+        // The left hand's under its head.
+        assertTrue(!f.above[nC3])
+        assertTrue(f.baseline[nC3] - phone.numeralHeight > score.y[c3] + space / 2)
+        // Over a stem that points up: above its tip.
+        assertTrue(score.stemUp[e4])
+        assertTrue(f.baseline[nE4] < score.stemTo[e4])
+        // No fingering asked for, no numerals.
+        assertEquals(0, layout(piece, hands = hands).fingers.size)
     }
 }
