@@ -18,6 +18,7 @@ import dev.stevenjin.stevenpiano.data.imports.isMidiName
 import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
 import dev.stevenjin.stevenpiano.score.ScoreMetrics
 import dev.stevenjin.stevenpiano.score.ScoreWidth
+import dev.stevenjin.stevenpiano.score.TempoMarks
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -158,6 +159,8 @@ class CorpusTest {
         var beams = 0L
         var rests = 0L
         var ties = 0L
+        var tempoMarks = 0L
+        var dynamics = 0L
         val started = System.nanoTime()
         for (file in files) {
             val piece = SmfParser.parse(file.readBytes())
@@ -185,6 +188,9 @@ class CorpusTest {
                 for (k in 0 until score.beams.size) assertTrue(where, onPage(score.beams.x1[k]) && onPage(score.beams.x2[k]) && score.beams.y1[k].isFinite() && score.beams.y2[k].isFinite())
                 for (k in 0 until score.rests.size) assertTrue(where, onPage(score.rests.x[k]) && score.rests.y[k].isFinite())
                 for (k in 0 until score.ties.size) assertTrue(where, onPage(score.ties.x1[k]) && onPage(score.ties.x2[k]) && score.ties.x2[k] >= score.ties.x1[k])
+                assertEquals(where, 0, score.tempoMarks.firstOrNull()?.system)
+                for (mark in score.tempoMarks) assertTrue(where, onPage(mark.x) && mark.bpm in 1..TempoMarks.MAX_BPM)
+                for (mark in score.dynamics) assertTrue(where, onPage(mark.x) && mark.y.isFinite() && mark.system == mark.bar / metrics.barsPerSystem)
                 if (metrics === panels[0]) {
                     if (score.quantized) quantized.merge(collection, 1, Int::plus)
                     notes += score.noteCount
@@ -193,6 +199,8 @@ class CorpusTest {
                     beams += (0 until score.beams.size).count { score.beams.level[it].toInt() == 1 }
                     rests += score.rests.size
                     ties += score.ties.size
+                    tempoMarks += score.tempoMarks.size
+                    dynamics += score.dynamics.size
                 }
             }
         }
@@ -202,7 +210,10 @@ class CorpusTest {
             "Corpus score: ${files.size} files ($notes notes, $bars bars) laid out on both panels in %.1f s; ".format(seconds) +
                 "quantised (note values) %d = %.1f %%".format(sequenced, 100.0 * sequenced / files.size),
         )
-        println("Corpus engraving (phone panel): $tied tied heads, $ties ties, $beams beamed groups, $rests rests")
+        println(
+            "Corpus engraving (phone panel): $tied tied heads, $ties ties, $beams beamed groups, $rests rests, " +
+                "$tempoMarks tempo marks, $dynamics dynamics",
+        )
         total.keys.sorted().forEach { println("  $it: ${quantized[it] ?: 0} of ${total[it]} quantised") }
     }
 

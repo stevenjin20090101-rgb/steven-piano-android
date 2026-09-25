@@ -211,6 +211,8 @@ private class Build(
         beam()
         tieArcs()
         headRanges()
+        val tempoMarks = tempoMarks()
+        val dynamics = dynamics()
         return ScoreLayout(
             metrics = m,
             quantized = quantized,
@@ -242,6 +244,8 @@ private class Build(
             beams = beams.build(systemCount),
             rests = rests.build(systemCount),
             ties = ties.build(systemCount),
+            tempoMarks = tempoMarks,
+            dynamics = dynamics,
         )
     }
 
@@ -908,6 +912,50 @@ private class Build(
         }
     }
 
+    // --- Tempo marks and dynamics (every file) ------------------------------------------------
+
+    /** [TempoMarks] at the systems' starts, each on the bar-number line where its first bar's signatures end. */
+    private fun tempoMarks(): List<TempoMark> = TempoMarks.marks(
+        tempo,
+        LongArray(systemCount) { barTick[it * barsPerSystem] },
+        BooleanArray(systemCount) { barCompound[it * barsPerSystem] },
+        FloatArray(systemCount) { contentLeft[it * barsPerSystem] - BAR_LEFT_PAD * space },
+    )
+
+    /**
+     * [Dynamics]: each bar's mean velocity over the notes struck in it (both staves), marked where the
+     * band changes, under the treble staff at the bar's first onset: the p's and m's tops 1.5 spaces
+     * below the staff's bottom line.
+     */
+    private fun dynamics(): List<DynamicMark> {
+        val sum = DoubleArray(barCount)
+        val count = IntArray(barCount)
+        val firstTick = LongArray(barCount)
+        val firstX = FloatArray(barCount)
+        for (i in 0 until n) {
+            if (system[i] < 0) continue
+            val b = bar[i]
+            sum[b] += notes.velocity(i).toDouble()
+            if (count[b] == 0 || startTick[i] < firstTick[b]) {
+                firstTick[b] = startTick[i]
+                firstX[b] = x[i]
+            } else if (startTick[i] == firstTick[b]) {
+                firstX[b] = min(firstX[b], x[i])   // a chord: its leftmost head
+            }
+            count[b]++
+        }
+        val means = DoubleArray(barCount) { if (count[it] > 0) sum[it] / count[it] else Double.NaN }
+        val bands = IntArray(barCount)
+        Dynamics.marks(means, !quantized, bands)
+        val marks = ArrayList<DynamicMark>()
+        for (b in 0 until barCount) {
+            if (bands[b] < 0) continue
+            val s = b / barsPerSystem
+            marks += DynamicMark(s, b, firstX[b], staffBottom(s, true) + (DYNAMIC_BELOW + DYNAMIC_ASCENT) * space, bands[b])
+        }
+        return marks
+    }
+
     /** A tie bows away from its head's stem; with no stem (a whole note), up from the middle line and above, else down. */
     private fun bowsUp(h: Int): Boolean {
         val owner = ownerOf[h]
@@ -1022,6 +1070,10 @@ private class Build(
         const val NATURAL_WIDTH = 0.672f
         const val DIGIT_WIDTH = 1.8f
         const val WHOLE_REST_WIDTH = 1.128f
+
+        /** Dynamics: the tops of p and m this far under the treble staff; Bravura's p and m rise this far above their baseline. */
+        const val DYNAMIC_BELOW = 1.5f
+        const val DYNAMIC_ASCENT = 1.096f
 
         /** Key-signature positions on the treble staff (steps above E4), in the order they are added; the bass is a third lower. */
         val TREBLE_SHARPS = intArrayOf(8, 5, 9, 6, 3, 7, 4)

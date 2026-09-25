@@ -127,8 +127,8 @@ class ScoreSystem internal constructor(
  * and a note that crosses a bar line or lasts a length no one value writes has tied heads after
  * [noteCount] ([tiedHeadCount], [tiedHead]; each [tiedNote]'s, sounding from [tiedStartMicros])
  * joined to it by [ties]. Otherwise (a performance) every head is black and a hairline runs to
- * [durationEnd] for its length. Positions are page coordinates in pixels: [x] is a head's left
- * edge, [y] its centre line.
+ * [durationEnd] for its length. Every file gets [tempoMarks] and [dynamics]. Positions are page
+ * coordinates in pixels: [x] is a head's left edge, [y] its centre line.
  */
 class ScoreLayout internal constructor(
     val metrics: ScoreMetrics,
@@ -174,6 +174,10 @@ class ScoreLayout internal constructor(
     val rests: ScoreRests,
     /** Ties from each written piece of a note to the next (sequenced files only). */
     val ties: ScoreTies,
+    /** Tempo marks on the bar-number lines, the first system's first (every file). */
+    val tempoMarks: List<TempoMark>,
+    /** Dynamics under the treble staff where the loudness moves into a new band (every file). */
+    val dynamics: List<DynamicMark>,
 ) {
     /** Every head: the notes' own and the tied ones. */
     val headCount: Int get() = x.size
