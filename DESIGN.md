@@ -484,8 +484,9 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
   large text sizes.
 - **Note values** when the file quantizes cleanly (sequenced files): hollow whole and half
   heads, filled quarters and shorter, stems, eighth and sixteenth flags, dots. Performed
-  files (MAESTRO) keep filled heads with duration bars. Sharps only; no beams, rests, ties
-  or key signatures — said plainly in the README.
+  files (MAESTRO) keep filled heads with duration bars. Key signatures are drawn and
+  accidentals spelled in the key (pulled forward from v1.3); no beams, rests or ties
+  yet — said plainly in the README.
 - The grand staff keeps 6 dp line spacing; the gap between systems is 32 dp so the
   lowest and highest ledger lines fit.
 
