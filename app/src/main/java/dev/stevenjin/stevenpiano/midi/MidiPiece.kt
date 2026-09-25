@@ -25,7 +25,7 @@ class MidiPiece(
     /** Time of the last event: when the music, pedal included, is over. */
     val durationMicros: Long,
     /** Note On (velocity > 0), Note Off and Control Change, sorted; off before on at equal times. */
-    val events: List<TimedEvent>,
+    val events: EventList,
     val notes: NoteList,
     /** Damage the parser worked around, in plain English. Empty for a healthy file. */
     val warnings: List<String>,
@@ -46,6 +46,66 @@ class MidiPiece(
 data class TimedEvent(val atMicros: Long, val status: Int, val data1: Int, val data2: Int) {
     val command: Int get() = status and 0xF0
     val channel: Int get() = status and 0x0F
+}
+
+/**
+ * A piece's events in time order, kept as two parallel primitive arrays: 12 bytes an event and
+ * no object per event, so the densest file the parser accepts ([SmfParser] stops at about two
+ * million events) costs tens of megabytes, not hundreds. The player reads it by index without
+ * allocating ([atMicros], [status], [data1], [data2]); as a [List] it hands out [TimedEvent]s,
+ * one allocated per read, for tests and tools. [micros] and [packed] may be longer than [size].
+ */
+class EventList internal constructor(
+    private val micros: LongArray,
+    /** `status << 16 | data1 << 8 | data2`, as [MidiBatch.pack] packs a message. */
+    private val packed: IntArray,
+    override val size: Int,
+) : AbstractList<TimedEvent>() {
+    init {
+        require(size >= 0 && size <= micros.size && size <= packed.size) { "$size events in arrays of ${micros.size} and ${packed.size}" }
+    }
+
+    fun atMicros(i: Int): Long = micros[i]
+
+    fun status(i: Int): Int = packed[i] ushr 16
+
+    fun data1(i: Int): Int = (packed[i] ushr 8) and 0xFF
+
+    fun data2(i: Int): Int = packed[i] and 0xFF
+
+    fun command(i: Int): Int = status(i) and 0xF0
+
+    fun channel(i: Int): Int = status(i) and 0x0F
+
+    /** When the last event sounds: the piece's length. 0 for no events. */
+    val lastMicros: Long get() = if (size == 0) 0L else micros[size - 1]
+
+    override fun get(index: Int): TimedEvent {
+        if (index !in 0 until size) throw IndexOutOfBoundsException("Event $index of $size")
+        return TimedEvent(micros[index], status(index), data1(index), data2(index))
+    }
+
+    /** Index of the first event at or after [at] ([size] when there is none). */
+    fun firstAtOrAfter(at: Long): Int {
+        var lo = 0
+        var hi = size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (micros[mid] < at) lo = mid + 1 else hi = mid
+        }
+        return lo
+    }
+
+    companion object {
+        val Empty = EventList(LongArray(0), IntArray(0), 0)
+
+        /** [events] as an [EventList]: for tests, and for callers that already hold objects. */
+        fun of(events: List<TimedEvent>): EventList = EventList(
+            LongArray(events.size) { events[it].atMicros },
+            IntArray(events.size) { MidiBatch.pack(events[it].status, events[it].data1, events[it].data2) },
+            events.size,
+        )
+    }
 }
 
 /**

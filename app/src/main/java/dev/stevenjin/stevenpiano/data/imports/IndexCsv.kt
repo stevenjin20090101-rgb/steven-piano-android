@@ -9,13 +9,15 @@
 
 package dev.stevenjin.stevenpiano.data.imports
 
+import dev.stevenjin.stevenpiano.data.TextLimits
 import java.text.Normalizer
 import java.util.Locale
 
 /**
  * The library's INDEX.csv (`collection,composer,title,size_kb,path`), looked up by the path
  * of a file relative to the folder or zip the index sits in. Columns are found by their
- * header names; without a header they are taken in that order.
+ * header names; without a header they are taken in that order. Each field keeps at most
+ * [TextLimits.CSV_FIELD] characters (the importer cuts titles and names further).
  */
 class IndexCsv private constructor(private val rows: Map<String, Row>) {
     data class Row(val collection: String, val composer: String, val title: String, val path: String)
@@ -28,7 +30,7 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
         const val FILE_NAME = "INDEX.csv"
 
         fun parse(text: String): IndexCsv {
-            val table = CsvReader.parse(text)
+            val table = CsvReader.parse(text, maxField = TextLimits.CSV_FIELD)
             val header = table.firstOrNull().orEmpty().map { it.trim().lowercase(Locale.ROOT) }
             val hasHeader = "path" in header
             fun column(name: String, position: Int) = if (hasHeader) header.indexOf(name) else position

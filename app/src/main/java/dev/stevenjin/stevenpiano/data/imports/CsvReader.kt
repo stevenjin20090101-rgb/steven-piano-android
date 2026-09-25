@@ -12,9 +12,10 @@ package dev.stevenjin.stevenpiano.data.imports
 /**
  * RFC 4180 CSV: quoted fields may hold commas, line breaks and doubled quotes; lines end
  * with CRLF, LF or CR; a leading byte-order mark is ignored. Lenient about stray quotes.
+ * A field keeps at most [maxField] characters; the rest of it is read past and dropped.
  */
 object CsvReader {
-    fun parse(text: String): List<List<String>> {
+    fun parse(text: String, maxField: Int = Int.MAX_VALUE): List<List<String>> {
         val rows = mutableListOf<List<String>>()
         var row = mutableListOf<String>()
         val field = StringBuilder()
@@ -38,11 +39,11 @@ object CsvReader {
             val c = text[i]
             when {
                 quoted && c == '"' && text.getOrNull(i + 1) == '"' -> {
-                    field.append('"')
+                    if (field.length < maxField) field.append('"')
                     i++
                 }
                 quoted && c == '"' -> quoted = false
-                quoted -> field.append(c)
+                quoted -> if (field.length < maxField) field.append(c)
                 c == '"' && atFieldStart -> {
                     quoted = true
                     atFieldStart = false
@@ -51,7 +52,7 @@ object CsvReader {
                 c == '\r' -> if (text.getOrNull(i + 1) != '\n') endRow()
                 c == '\n' -> endRow()
                 else -> {
-                    field.append(c)
+                    if (field.length < maxField) field.append(c)
                     atFieldStart = false
                 }
             }

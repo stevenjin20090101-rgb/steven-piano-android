@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -81,10 +82,45 @@ data class LibraryState(
     val listing: Listing = Listing.Pieces(emptyList()),
     val pieceCount: Int = 0,
     val loaded: Boolean = false,
+    /** The library could not be read (a damaged database, a row too large to read): the tab says so instead of crashing. */
+    val unreadable: Boolean = false,
 ) {
     /** Nothing imported yet. */
-    val empty: Boolean get() = loaded && pieceCount == 0
+    val empty: Boolean get() = loaded && !unreadable && pieceCount == 0
 }
+
+/** What the Library shows: a category, or a group inside it. */
+internal data class Selection(val category: Category, val group: Group?)
+
+/**
+ * The Library's state from the [selections] (with the search text) and the piece [count]: each
+ * selection's [listing]. A listing or count that fails to read becomes the unreadable state, logged
+ * through [log], instead of an exception that would crash the app; choosing another category or
+ * search reads again. Pure over its flows, so it is unit-tested.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun libraryStates(
+    selections: Flow<Pair<Selection, String>>,
+    count: Flow<Int>,
+    log: (Throwable) -> Unit,
+    listing: (Selection, String) -> Flow<Listing>,
+): Flow<LibraryState> =
+    selections
+        .flatMapLatest { (sel, q) ->
+            listing(sel, q)
+                .map { LibraryState(sel.category, sel.group, it, loaded = true) }
+                .catch { e ->
+                    if (e is CancellationException) throw e
+                    log(e)
+                    emit(LibraryState(sel.category, sel.group, loaded = true, unreadable = true))
+                }
+        }
+        .combine(count) { state, pieces -> state.copy(pieceCount = pieces) }
+        .catch { e ->
+            if (e is CancellationException) throw e
+            log(e)
+            emit(LibraryState(loaded = true, unreadable = true))
+        }
 
 /**
  * The Library tab: the chosen category or group, filtered by the search field (title and
@@ -99,8 +135,6 @@ class LibraryViewModel(
     private val writes: CoroutineScope,
     private val forgetArtwork: (String) -> Unit = {},
 ) : ViewModel() {
-    private data class Selection(val category: Category, val group: Group?)
-
     private val selection = MutableStateFlow(Selection(Category.All, null))
 
     /** The search field's text. Compose state, so typing never waits on the database. */
@@ -112,14 +146,17 @@ class LibraryViewModel(
         private set
 
     val state: StateFlow<LibraryState> =
-        combine(selection, snapshotFlow { query.trim() }.distinctUntilChanged()) { sel, q -> sel to q }
-            .flatMapLatest { (sel, q) -> listing(sel, q).map { LibraryState(sel.category, sel.group, it, loaded = true) } }
-            .combine(library.count()) { state, count -> state.copy(pieceCount = count) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), LibraryState())
+        libraryStates(
+            combine(selection, snapshotFlow { query.trim() }.distinctUntilChanged()) { sel, q -> sel to q },
+            library.count(),
+            log = { Log.w(TAG, "The library couldn't be read", it) },
+            listing = ::listing,
+        ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), LibraryState())
 
-    val playlists: Flow<List<PlaylistSummary>> get() = library.playlists()
+    /** Every playlist, for the dialogs; none when the library can't be read. */
+    val playlists: Flow<List<PlaylistSummary>> get() = library.playlists().orNone()
 
-    fun membershipOf(pieceId: Long): Flow<List<Long>> = library.playlistIdsOf(pieceId)
+    fun membershipOf(pieceId: Long): Flow<List<Long>> = library.playlistIdsOf(pieceId).orNone()
 
     fun search(text: String) {
         query = text
@@ -177,9 +214,19 @@ class LibraryViewModel(
     /** A drag in the playlist ended with its pieces in [orderedIds]' order. */
     fun reorderPlaylist(playlistId: Long, orderedIds: List<Long>) = write { library.reorderPlaylist(playlistId, orderedIds) }
 
-    /** A composer's pieces, by title, for Play all and Shuffle on the composer's tile. */
+    /** A composer's pieces, by title, for Play all and Shuffle on the composer's tile. Nothing plays if they can't be read. */
     fun composerPieces(composerKey: String, then: (List<Long>) -> Unit) {
-        viewModelScope.launch { then(library.byComposer(composerKey).first().map { it.id }) }
+        viewModelScope.launch {
+            val ids = try {
+                library.byComposer(composerKey).first().map { it.id }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "A composer's pieces couldn't be read", e)
+                return@launch
+            }
+            then(ids)
+        }
     }
 
     private fun listing(sel: Selection, query: String): Flow<Listing> {
@@ -200,6 +247,13 @@ class LibraryViewModel(
     }
 
     private fun List<PieceEntity>.matching(key: String): List<PieceEntity> = if (key.isEmpty()) this else filter { key in it.searchText }
+
+    /** A read that fails ends as an empty list, logged, rather than an exception in a dialog. */
+    private fun <T> Flow<List<T>>.orNone(): Flow<List<T>> = catch { e ->
+        if (e is CancellationException) throw e
+        Log.w(TAG, "The library couldn't be read", e)
+        emit(emptyList())
+    }
 
     private fun write(block: suspend () -> Unit) {
         writes.launch {

@@ -82,10 +82,10 @@ class LibraryRepository(
 
     suspend fun setFavorite(id: Long, favorite: Boolean) = pieces.setFavorite(id, favorite)
 
-    /** New title and composer; the composer is normalized as on import. A blank title is ignored. */
+    /** New title and composer; the composer is normalized as on import. A blank title is ignored. Both are cut as on import. */
     suspend fun rename(id: Long, title: String, composer: String) {
         val piece = pieces.byId(id) ?: return
-        pieces.update(piece.named(title.trim().ifEmpty { piece.title }, ComposerNames.normalize(composer)))
+        pieces.update(piece.named(title.trim().ifEmpty { piece.title }, ComposerNames.normalize(TextLimits.clip(composer, TextLimits.COMPOSER))))
     }
 
     /**
@@ -105,10 +105,10 @@ class LibraryRepository(
         withContext(io) { files.delete(piece.fileName) }
     }
 
-    /** The playlist called [name], made if needed. Returns its id. */
-    suspend fun createPlaylist(name: String): Long = playlistId(name.trim(), imported = false)
+    /** The playlist called [name] (cut to [TextLimits.COLLECTION]), made if needed. Returns its id. */
+    suspend fun createPlaylist(name: String): Long = playlistId(playlistName(name), imported = false)
 
-    suspend fun renamePlaylist(id: Long, name: String) = playlists.rename(id, name.trim())
+    suspend fun renamePlaylist(id: Long, name: String) = playlists.rename(id, playlistName(name))
 
     /** Only the playlist goes; its pieces stay in the library. */
     suspend fun deletePlaylist(id: Long) = playlists.delete(id)
@@ -139,6 +139,7 @@ class LibraryRepository(
         }
     }
 
+    /** Reads and parses the piece. A file too large for the memory left says so instead of taking the app down. */
     override suspend fun load(pieceId: Long): PlayablePiece {
         val piece = pieces.byId(pieceId) ?: throw PieceUnavailableException("This piece is no longer in the library.")
         val bytes = try {
@@ -146,7 +147,12 @@ class LibraryRepository(
         } catch (e: IOException) {
             throw PieceUnavailableException("This piece's file is missing. Delete it and import it again.")
         }
-        return PlayablePiece(piece.id, piece.title, piece.composer, SmfParser.parse(bytes))
+        val midi = try {
+            SmfParser.parse(bytes)
+        } catch (e: OutOfMemoryError) {
+            throw PieceUnavailableException(TOO_LARGE)
+        }
+        return PlayablePiece(piece.id, piece.title, piece.composer, midi)
     }
 
     override suspend fun markPlayed(pieceId: Long) = pieces.markPlayed(pieceId, clock())
@@ -186,8 +192,11 @@ class LibraryRepository(
     private fun likeEscape(text: String): String =
         text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
+    private fun playlistName(name: String): String = TextLimits.clip(name.trim(), TextLimits.COLLECTION)
+
     private companion object {
         /** Ids per query: under SQLite's 999-variable limit on older Android versions. */
         const val SQL_CHUNK = 500
+        const val TOO_LARGE = "This piece is too large to play."
     }
 }

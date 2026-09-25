@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.data.imports
 import android.content.Context
 import android.util.Log
 import dev.stevenjin.stevenpiano.data.PieceFiles
+import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.midi.SmfException
@@ -45,7 +46,8 @@ interface ImportStore {
  * (filling in a blank composer when this copy knows one), parse, name (INDEX.csv row, else
  * the file name, else Track 0's name for stub titles), save, then insert 25 per transaction.
  * Files listed in INDEX.csv go first, so its names win over copies elsewhere in the tree.
- * One import runs at a time; [progress] follows it.
+ * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
+ * (an [OutOfMemoryError]) counts as failed. One import runs at a time; [progress] follows it.
  */
 class Importer(
     private val store: ImportStore,
@@ -98,7 +100,13 @@ class Importer(
             currentCoroutineContext().ensureActive()
             state = state.copy(current = item.name)
             progress.value = state
-            when (val outcome = prepare(item, source.rowFor(item), seen)) {
+            val outcome = try {
+                prepare(item, source.rowFor(item), seen)
+            } catch (e: OutOfMemoryError) {   // the parse's arrays are garbage again; the next file may fit
+                log("${item.relativePath}: $TOO_LARGE")
+                Outcome.Failed
+            }
+            when (outcome) {
                 is Outcome.Ready -> batch += outcome.piece
                 Outcome.Duplicate -> state = state.copy(duplicates = state.duplicates + 1)
                 Outcome.Failed -> state = state.copy(failed = state.failed + 1)
@@ -134,7 +142,7 @@ class Importer(
         if (!seen.add(sha)) return Outcome.Duplicate
         store.findBySha(sha)?.let { existing ->
             if (existing.composer.isBlank()) {
-                val composer = TitleHeuristics.metadata(item.name, row, emptyList()).composer
+                val composer = TextLimits.clip(TitleHeuristics.metadata(item.name, row, emptyList()).composer, TextLimits.COMPOSER)
                 if (composer.isNotEmpty()) store.fillComposer(existing, ComposerNames.normalize(composer))
             }
             return Outcome.Duplicate
@@ -158,17 +166,17 @@ class Importer(
             composer = "",
             composerKey = "",
             composerShort = "",
-            collection = meta.collection,
+            collection = meta.collection?.let { TextLimits.clip(it, TextLimits.COLLECTION) },
             sha256 = sha,
             fileName = fileName,
-            sourceName = item.relativePath,
+            sourceName = TextLimits.clip(item.relativePath, TextLimits.SOURCE_NAME),
             sizeBytes = bytes.size.toLong(),
             durationMs = midi.durationMicros / 1000,
             noteCount = midi.noteCount,
             addedAt = clock(),
             searchText = "",
             titleKey = "",
-        ).named(meta.title, ComposerNames.normalize(meta.composer))
+        ).named(meta.title, ComposerNames.normalize(TextLimits.clip(meta.composer, TextLimits.COMPOSER)))   // named() cuts the title
         return Outcome.Ready(piece)
     }
 
@@ -176,6 +184,7 @@ class Importer(
         const val TAG = "Importer"
         const val BATCH_SIZE = 25
         const val MAX_BYTES = 8 * 1024 * 1024
+        const val TOO_LARGE = "File too large to read"
 
         /** The whole stream, or null when it is larger than [MAX_BYTES]. */
         fun readCapped(input: InputStream): ByteArray? {

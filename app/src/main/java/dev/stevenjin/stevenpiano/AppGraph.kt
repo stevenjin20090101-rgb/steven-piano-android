@@ -20,6 +20,7 @@ import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.art.ArtFiles
 import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
+import dev.stevenjin.stevenpiano.data.db.TextRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.Importer
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * The app's objects, one per process, wired by hand. The [player] and the [pianoLink] are
@@ -57,7 +59,17 @@ class AppGraph(private val app: Application) {
     val settings: StateFlow<PianoSettings> =
         settingsRepository.settings.stateIn(appScope, SharingStarted.Eagerly, PianoSettings())
 
-    private val database: PianoDatabase by lazy { PianoDatabase.open(app) }
+    /** Opening it runs the one-off repair of text imported before 1.2 capped it ([TextRepair]), before any query. */
+    private val database: PianoDatabase by lazy {
+        PianoDatabase.open(app) { db ->
+            TextRepair.runOnce(
+                db,
+                due = { runBlocking { !settingsRepository.textRepairDone() } },
+                done = { runBlocking { settingsRepository.markTextRepairDone() } },
+                log = { Log.w(TAG, it) },
+            )
+        }
+    }
     private val pieceFiles = PieceFiles(app.filesDir)
     val library: LibraryRepository by lazy { LibraryRepository(database, pieceFiles) }
 

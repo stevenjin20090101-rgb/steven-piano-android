@@ -16,6 +16,7 @@ import dev.stevenjin.stevenpiano.data.db.PieceSummary
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.ui.Format
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,11 +53,20 @@ class UpNextViewModel(private val player: Player, private val library: LibraryRe
     fun skipTo(uid: Long) = player.skipToQueueEntry(uid)
 
     private suspend fun rows(queue: QueueSnapshot): UpNextState {
-        val found = library.summaries(queue.ids)
-        fun row(i: Int) = row(queue.uids[i], queue.ids[i], found[queue.ids[i]])
+        // The queue still works when the library can't be read; its rows say so instead of crashing.
+        val found = try {
+            library.summaries(queue.ids)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {
+            null
+        }
+        fun row(i: Int) = if (found == null) unreadable(queue.uids[i], queue.ids[i]) else row(queue.uids[i], queue.ids[i], found[queue.ids[i]])
         val current = if (queue.index in queue.ids.indices) row(queue.index) else null
         return UpNextState(current, (queue.index + 1 until queue.ids.size).map(::row))
     }
+
+    private fun unreadable(uid: Long, pieceId: Long) = QueueRow(uid, pieceId, "Couldn't read this piece's name", "")
 
     private fun row(uid: Long, pieceId: Long, piece: PieceSummary?): QueueRow = if (piece == null) {
         QueueRow(uid, pieceId, "No longer in the library", "")

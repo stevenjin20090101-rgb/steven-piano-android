@@ -55,6 +55,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.RollCardImage
 import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -71,7 +72,15 @@ import kotlinx.coroutines.flow.first
 @Composable
 fun PieceDetailSheet(pieceId: Long, onDismiss: () -> Unit) {
     val graph = LocalContext.current.graph
-    val piece by produceState<PieceEntity?>(null, pieceId) { value = graph.library.piece(pieceId) }
+    val piece by produceState<PieceEntity?>(null, pieceId) {
+        value = try {
+            graph.library.piece(pieceId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {   // the library can't be read: the sheet stays empty rather than crash
+            null
+        }
+    }
     LaunchedEffect(piece) {
         val p = piece ?: return@LaunchedEffect
         // Both go to the front of the queue; the piece's own notes, asked last, come first.

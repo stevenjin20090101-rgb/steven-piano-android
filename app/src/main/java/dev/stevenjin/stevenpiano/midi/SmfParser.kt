@@ -16,6 +16,12 @@ import kotlin.math.min
  * firmware/gui/piano-control.html. Tracks are merged stably by (tick, rank) with the rank
  * tempo < controller < note-off < note-on, so a released key is always let go before it is
  * struck again at the same instant. Damaged files are read as far as they go, with warnings.
+ *
+ * A file is untrusted input, so what it can cost is bounded: at most [MAX_EVENTS] events (about
+ * two million, 12 bytes each once merged), the tracks the header lists up to [MAX_TRACKS], text
+ * metas read to [MAX_TEXT_BYTES] and [MAX_TEXTS] of each kind, [MAX_WARNINGS] warnings, and at
+ * most [MAX_DURATION_MICROS] (a day) of music. Past a cap the file is refused in plain English
+ * ([SmfException]) or the excess is skipped with a warning.
  */
 object SmfParser {
     internal const val RANK_TEMPO = 0
@@ -28,6 +34,8 @@ object SmfParser {
         "This MIDI file stores separate patterns (format 2), which can't be played as one piece."
     private const val SMPTE = "This MIDI file counts time in video frames (SMPTE), which Steven Piano can't play."
     private const val NO_TRACKS = "This MIDI file has no tracks."
+    private const val TOO_MANY_EVENTS = "This file has too many events."
+    private const val TOO_LONG = "This file lasts longer than a day, which Steven Piano can't play."
 
     fun parse(bytes: ByteArray): MidiPiece {
         if (bytes.size < 14 || !bytes.hasTag(0, "MThd")) throw SmfException(NOT_MIDI)
@@ -43,30 +51,46 @@ object SmfParser {
 
         val raw = RawEvents()
         val header = Track0Meta()
-        val warnings = mutableListOf<String>()
+        val warnings = Warnings()
+        val open = OpenNotes()   // one table for every track, cleared between them
+        val readable = min(declaredTracks, MAX_TRACKS)
         var tracks = 0
+        var skipped = false
         var pos = 8L + headerLength   // extra header bytes are skipped
         while (pos + 8 <= bytes.size) {
             val start = pos + 8
             val end = start + bytes.u32(pos.toInt() + 4)
             val cutShort = end > bytes.size
             if (bytes.hasTag(pos.toInt(), "MTrk")) {
-                if (cutShort) warnings += "Track ${tracks + 1} is cut short, so it plays as far as it goes."
-                TrackReader(bytes, start.toInt(), min(end, bytes.size.toLong()).toInt(), tracks, raw, header, warnings)
-                    .read(warnOnTruncation = !cutShort)
-                tracks++
+                if (tracks < readable) {
+                    if (cutShort) warnings += "Track ${tracks + 1} is cut short, so it plays as far as it goes."
+                    TrackReader(bytes, start.toInt(), min(end, bytes.size.toLong()).toInt(), tracks, raw, header, warnings, open)
+                        .read(warnOnTruncation = !cutShort)
+                    tracks++
+                } else {
+                    skipped = true   // past the tracks the header lists (or the cap): skipped whole
+                }
             } else if (cutShort) {
                 warnings += "The file ends with damaged data, which is skipped."
             }
             pos = end   // unknown chunks are skipped whole
         }
         if (tracks == 0) throw SmfException(NO_TRACKS)
-        if (tracks < declaredTracks) warnings += "The file lists $declaredTracks tracks but holds $tracks."
+        if (skipped) {
+            warnings += if (declaredTracks > MAX_TRACKS) {
+                "Only the first $MAX_TRACKS tracks are read; the rest are skipped."
+            } else {
+                "The file holds more tracks than the $declaredTracks it lists; the extra ones are skipped."
+            }
+        } else if (tracks < declaredTracks) {
+            warnings += "The file lists $declaredTracks tracks but holds $tracks."
+        }
 
         val tempo = TempoMap.Builder(division)
         val events = raw.merge(tempo)
         val tempoMap = tempo.build()
-        val durationMicros = events.lastOrNull()?.atMicros ?: 0L
+        val durationMicros = events.lastMicros
+        if (durationMicros > MAX_DURATION_MICROS) throw SmfException(TOO_LONG)
         val timeSignatures = SignatureLists.times(raw.times, tempoMap)
         return MidiPiece(
             format = format,
@@ -77,7 +101,7 @@ object SmfParser {
             durationMicros = durationMicros,
             events = events,
             notes = pairNotes(events, durationMicros),
-            warnings = warnings,
+            warnings = warnings.list(),
             tempoMap = tempoMap,
             timeSignatures = timeSignatures,
             keySignatures = SignatureLists.keys(raw.keys, tempoMap),
@@ -86,8 +110,9 @@ object SmfParser {
     }
 
     /** Pairs every Note On with its Note Off per channel and key; a re-strike ends the previous note. */
-    private fun pairNotes(events: List<TimedEvent>, durationMicros: Long): NoteList {
-        val count = events.count { it.command == 0x90 }
+    private fun pairNotes(events: EventList, durationMicros: Long): NoteList {
+        var count = 0
+        for (i in 0 until events.size) if (events.command(i) == 0x90) count++
         val starts = LongArray(count)
         val ends = LongArray(count)
         val keys = ByteArray(count)
@@ -95,20 +120,23 @@ object SmfParser {
         val channels = ByteArray(count)
         val open = IntArray(16 * 128) { -1 }
         var n = 0
-        for (e in events) {
-            val source = e.channel * 128 + e.data1
-            when (e.command) {
+        for (i in 0 until events.size) {
+            val at = events.atMicros(i)
+            val channel = events.channel(i)
+            val key = events.data1(i)
+            val source = channel * 128 + key
+            when (events.command(i)) {
                 0x90 -> {
-                    if (open[source] >= 0) ends[open[source]] = e.atMicros
-                    starts[n] = e.atMicros
+                    if (open[source] >= 0) ends[open[source]] = at
+                    starts[n] = at
                     ends[n] = -1L
-                    keys[n] = e.data1.toByte()
-                    velocities[n] = e.data2.toByte()
-                    channels[n] = e.channel.toByte()
+                    keys[n] = key.toByte()
+                    velocities[n] = events.data2(i).toByte()
+                    channels[n] = channel.toByte()
                     open[source] = n++
                 }
                 0x80 -> if (open[source] >= 0) {
-                    ends[open[source]] = e.atMicros
+                    ends[open[source]] = at
                     open[source] = -1
                 }
             }
@@ -123,6 +151,30 @@ object SmfParser {
         var copyright: String? = null
     }
 
+    /** The first [MAX_WARNINGS] warnings, then a count of the rest. */
+    private class Warnings {
+        private val kept = ArrayList<String>()
+        private var more = 0
+
+        operator fun plusAssign(warning: String) {
+            if (kept.size < MAX_WARNINGS) kept += warning else more++
+        }
+
+        fun list(): List<String> = if (more == 0) kept else kept + "…and $more more."
+    }
+
+    /**
+     * The raw index and tick of the note sounding on each channel * 128 + key, within one track.
+     * One table serves every track, cleared as each begins: a file of a thousand tiny tracks
+     * allocates it once.
+     */
+    private class OpenNotes {
+        val index = IntArray(16 * 128)
+        val tick = LongArray(16 * 128)
+
+        fun clear() = index.fill(-1)
+    }
+
     private class Truncated : Exception()
     private class Damaged : Exception()
 
@@ -134,11 +186,15 @@ object SmfParser {
         private val track: Int,
         private val raw: RawEvents,
         private val header: Track0Meta,
-        private val warnings: MutableList<String>,
+        private val warnings: Warnings,
+        open: OpenNotes,
     ) {
-        // The raw index and tick of the note sounding on each channel * 128 + key, in this track.
-        private val openIndex = IntArray(16 * 128) { -1 }
-        private val openTick = LongArray(16 * 128)
+        private val openIndex = open.index
+        private val openTick = open.tick
+
+        init {
+            open.clear()
+        }
 
         fun read(warnOnTruncation: Boolean) {
             var tick = 0L
@@ -191,12 +247,15 @@ object SmfParser {
                 // Signatures stay beside the packed words (whose 2-bit rank is full): the score reads them.
                 0x58 -> if (length >= 2) raw.times += SignatureLists.Raw(tick, b[at].toInt() and 0xFF, b[at + 1].toInt() and 0xFF)
                 0x59 -> if (length >= 2) raw.keys += SignatureLists.Raw(tick, b[at].toInt(), b[at + 1].toInt() and 0xFF)
-                0x03 -> if (track == 0) MidiText.decode(b, at, length).takeIf { it.isNotEmpty() }?.let(header.names::add)
-                0x01 -> if (track == 0) MidiText.decode(b, at, length).takeIf { it.isNotEmpty() }?.let(header.texts::add)
-                0x02 -> if (header.copyright == null) header.copyright = MidiText.decode(b, at, length).ifEmpty { null }
+                0x03 -> if (track == 0 && header.names.size < MAX_TEXTS) text(at, length)?.let(header.names::add)
+                0x01 -> if (track == 0 && header.texts.size < MAX_TEXTS) text(at, length)?.let(header.texts::add)
+                0x02 -> if (header.copyright == null) header.copyright = text(at, length)
             }
             return true
         }
+
+        /** A text meta's first [MAX_TEXT_BYTES], decoded; null when that is empty. */
+        private fun text(at: Int, length: Int): String? = MidiText.decode(b, at, length, MAX_TEXT_BYTES).ifEmpty { null }
 
         private fun channelMessage(status: Int, tick: Long) {
             val command = status and 0xF0
@@ -272,7 +331,7 @@ object SmfParser {
 
         /** [payload] is a packed message, or the tempo for [RANK_TEMPO]. Returns the event's index. */
         fun add(tick: Long, rank: Int, payload: Int): Int {
-            if (size == MAX_EVENTS) throw SmfException("This MIDI file has too many events to play.")
+            if (size == MAX_EVENTS) throw SmfException(TOO_MANY_EVENTS)
             if (size == ticks.size) {
                 ticks = ticks.copyOf(size * 2)
                 words = words.copyOf(size * 2)
@@ -289,31 +348,55 @@ object SmfParser {
         /**
          * Stable merge by (tick, rank), then ticks to microseconds through the tempo map as it
          * builds up in [tempo]: a tempo change sorts first at its tick and times what follows.
+         * The sort keys' array is reused for the events' times (event k is written at or before
+         * key k, which has been read by then), so the merge needs one long array, not two.
          */
-        fun merge(tempo: TempoMap.Builder): List<TimedEvent> {
+        fun merge(tempo: TempoMap.Builder): EventList {
             val order = LongArray(size) { i -> (ticks[i] shl 25) or ((rank(words[i]).toLong()) shl 23) or i.toLong() }
             order.sort()
-            val events = ArrayList<TimedEvent>(size)
-            for (key in order) {
-                val i = (key and INDEX_MASK).toInt()
+            var count = 0
+            for (i in 0 until size) if (words[i] != CANCELED && rank(words[i]) != RANK_TEMPO) count++
+            val packed = IntArray(count)
+            var n = 0
+            for (k in 0 until size) {
+                val i = (order[k] and INDEX_MASK).toInt()
                 val word = words[i]
                 if (word == CANCELED) continue
                 if (rank(word) == RANK_TEMPO) {
                     tempo.change(ticks[i], word and 0xFFFFFF)
                 } else {
-                    events += TimedEvent(tempo.micros(ticks[i]), (word ushr 16) and 0xFF, (word ushr 8) and 0xFF, word and 0xFF)
+                    order[n] = tempo.micros(ticks[i])
+                    packed[n] = word and 0xFFFFFF
+                    n++
                 }
             }
-            return events
+            return EventList(order, packed, n)
         }
 
         private fun rank(word: Int): Int = (word ushr 24) and 0x3
     }
 
     private const val MAX_TICK = 1L shl 37
-    private const val MAX_EVENTS = 1 shl 23
     private const val INDEX_MASK = (1L shl 23) - 1
     private const val CANCELED = -1
+
+    /** Events a file may hold: 2,097,152. An 8 MB file of re-struck notes could otherwise make about 5.6 million. */
+    const val MAX_EVENTS = 1 shl 21
+
+    /** Tracks read, at most, whatever the header lists. */
+    const val MAX_TRACKS = 1024
+
+    /** Bytes of a text meta that are read; a name is a line, not a megabyte. */
+    const val MAX_TEXT_BYTES = 256
+
+    /** Track names (FF 03) and texts (FF 01) kept from Track 0. */
+    const val MAX_TEXTS = 16
+
+    /** Warnings kept; the rest are counted in one more. */
+    const val MAX_WARNINGS = 20
+
+    /** A day: the longest piece the player times (its clock arithmetic has room for about three years). */
+    const val MAX_DURATION_MICROS = 24L * 60 * 60 * 1_000_000
 }
 
 private fun ByteArray.u16(i: Int): Int = ((this[i].toInt() and 0xFF) shl 8) or (this[i + 1].toInt() and 0xFF)

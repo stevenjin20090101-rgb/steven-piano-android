@@ -117,6 +117,47 @@ class ImporterTest {
         assertTrue(store.pieces.isEmpty())
     }
 
+    @Test
+    fun `a 1 MB track name imports as a 200-character title, with its keys made from the title kept`() = runTest {
+        val bytes = midi(60, trackName = "Grand Sonata " + "x".repeat(1_000_000))
+        val result = importer.run(OpenedSource(listOf(item("a.mid", bytes))))   // a stub name: Track 0's name wins
+        assertEquals(1, result.imported)
+        val piece = store.pieces.single()
+        assertEquals(200, piece.title.length)
+        assertTrue(piece.title.startsWith("Grand Sonata xxx"))
+        assertEquals(piece.title.lowercase(), piece.titleKey)
+        assertTrue(piece.searchText.startsWith(piece.titleKey) && piece.searchText.length <= 400)
+    }
+
+    @Test
+    fun `an INDEX csv row and a path of any length are cut to their caps`() = runTest {
+        val path = "deep/".repeat(150) + "piece.mid"   // 759 characters: within a CSV field, past the 512 kept
+        val index = IndexCsv.parse(
+            "collection,composer,title,size_kb,path\n${"C".repeat(3_000)},${"Q".repeat(3_000)},${"T".repeat(3_000)},1,$path\n",
+        )
+        importer.run(OpenedSource(listOf(item(path, midi(60))), index))
+        val piece = store.pieces.single()
+        assertEquals(200, piece.title.length)
+        assertEquals(120, piece.composer.length)
+        assertEquals(120, piece.collection!!.length)
+        assertEquals(512, piece.sourceName.length)
+        assertTrue(piece.composerKey.length <= 120 && piece.composerShort.length <= 120)
+    }
+
+    @Test
+    fun `a file too large for the memory left counts as failed, and the import goes on`() = runTest {
+        val source = OpenedSource(
+            listOf(
+                ImportItem("huge.mid", "huge.mid") { throw OutOfMemoryError("Java heap space") },
+                item("Chopin - Nocturne.mid", midi(62)),
+            ),
+        )
+        val result = importer.run(source)
+        assertEquals(1, result.failed)
+        assertEquals(1, result.imported)
+        assertTrue(logs.any { it == "huge.mid: File too large to read" })
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()

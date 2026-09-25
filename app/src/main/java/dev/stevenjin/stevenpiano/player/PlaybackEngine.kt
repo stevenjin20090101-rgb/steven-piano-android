@@ -101,7 +101,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         silence()
         anchorSongMicros = targetMicros.coerceIn(0L, midi.durationMicros)
         anchorNanos = nowNanos
-        cursor = firstEventAtOrAfter(midi, anchorSongMicros)
+        cursor = midi.events.firstAtOrAfter(anchorSongMicros)
         ended = false
         if (status == PlaybackStatus.Stopped) status = PlaybackStatus.Paused
         if (status == PlaybackStatus.Playing) restorePedal(nowNanos)
@@ -142,13 +142,13 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         val events = midi.events
         val nowMicros = nowNanos / 1000
         batch.clear()
-        while (cursor < events.size && events[cursor].atMicros <= position) {
-            val e = events[cursor++]
-            router.route(e.status, e.data1, e.data2, nowMicros, batch)
+        while (cursor < events.size && events.atMicros(cursor) <= position) {
+            router.route(events.status(cursor), events.data1(cursor), events.data2(cursor), nowMicros, batch)
+            cursor++
         }
         if (cursor < events.size) {
             send(dropPending = false)
-            return wakeTimeFor(events[cursor].atMicros)
+            return wakeTimeFor(events.atMicros(cursor))
         }
         router.silence(batch)   // the end: last releases, then the stop sequence
         send(dropPending = false)
@@ -158,10 +158,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         return Long.MAX_VALUE
     }
 
-    private fun wakeTimeFor(songMicros: Long): Long {
-        val scaled = (songMicros - anchorSongMicros) * NANOS_PER_MICRO_PCT
-        return anchorNanos + (scaled + tempoPct - 1) / tempoPct   // rounded up, so the event is due by then
-    }
+    private fun wakeTimeFor(songMicros: Long): Long = wakeTime(songMicros, anchorSongMicros, anchorNanos, tempoPct)
 
     private fun silence() {
         batch.clear()
@@ -174,9 +171,8 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         val events = piece?.events ?: return
         batch.clear()
         for (i in cursor - 1 downTo 0) {
-            val e = events[i]
-            if (e.command == 0xB0 && e.data1 == NoteRouter.SUSTAIN && router.accepts(e.channel)) {
-                router.route(e.status, e.data1, e.data2, nowNanos / 1000, batch)
+            if (events.command(i) == 0xB0 && events.data1(i) == NoteRouter.SUSTAIN && router.accepts(events.channel(i))) {
+                router.route(events.status(i), events.data1(i), events.data2(i), nowNanos / 1000, batch)
                 break
             }
         }
@@ -187,17 +183,20 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         if (!batch.isEmpty()) sink.send(batch, dropPending)
     }
 
-    private fun firstEventAtOrAfter(midi: MidiPiece, micros: Long): Int {
-        var lo = 0
-        var hi = midi.events.size
-        while (lo < hi) {
-            val mid = (lo + hi) ushr 1
-            if (midi.events[mid].atMicros < micros) lo = mid + 1 else hi = mid
-        }
-        return lo
-    }
-
-    private companion object {
+    internal companion object {
         const val NANOS_PER_MICRO_PCT = 100_000L   // 1000 ns per µs, times 100 %
+
+        /**
+         * When an event at [songMicros] is due on the clock: rounded up, so it is due by then. A time
+         * too far ahead for the arithmetic (years away; the parser refuses files over a day) is
+         * [Long.MAX_VALUE], never a wrapped, negative time the scheduler would spin on.
+         */
+        fun wakeTime(songMicros: Long, anchorSongMicros: Long, anchorNanos: Long, tempoPct: Int): Long {
+            val ahead = songMicros - anchorSongMicros
+            if (ahead <= 0L) return anchorNanos
+            if (ahead > (Long.MAX_VALUE - tempoPct) / NANOS_PER_MICRO_PCT) return Long.MAX_VALUE
+            val nanos = (ahead * NANOS_PER_MICRO_PCT + tempoPct - 1) / tempoPct
+            return if (anchorNanos > Long.MAX_VALUE - nanos) Long.MAX_VALUE else anchorNanos + nanos
+        }
     }
 }

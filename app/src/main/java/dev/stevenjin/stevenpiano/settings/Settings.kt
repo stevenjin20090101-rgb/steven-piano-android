@@ -25,6 +25,7 @@ import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
@@ -118,6 +119,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setFetchArtworkAutomatically(on: Boolean) = edit { it[FETCH_ARTWORK_AUTOMATICALLY] = on }
 
+    /** Whether the one-off repair of over-long library text (`TextRepair`) has run. Housekeeping, not a preference. */
+    suspend fun textRepairDone(): Boolean =
+        store.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.first()[TEXT_REPAIR_DONE] == true
+
+    suspend fun markTextRepairDone() = edit { it[TEXT_REPAIR_DONE] = true }
+
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
@@ -159,5 +166,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val REPEAT = stringPreferencesKey("repeat")
         val ARTWORK_MONOCHROME = booleanPreferencesKey("artworkMonochrome")
         val FETCH_ARTWORK_AUTOMATICALLY = booleanPreferencesKey("fetchArtworkAutomatically")
+        val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
     }
 }

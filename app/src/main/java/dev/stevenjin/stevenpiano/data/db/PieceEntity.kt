@@ -13,6 +13,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import dev.stevenjin.stevenpiano.data.TextKeys
+import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 
 /**
@@ -50,12 +51,20 @@ data class PieceEntity(
 /** What a queue or a list needs to name a piece without loading all of it. */
 data class PieceSummary(val id: Long, val title: String, val composerShort: String, val durationMs: Long, val composerKey: String)
 
-/** This piece with a new title and composer, and every key derived from them. */
-fun PieceEntity.named(title: String, composer: ComposerNames.Name): PieceEntity = copy(
-    title = title,
-    composer = composer.display,
-    composerKey = composer.key,
-    composerShort = composer.short,
-    searchText = TextKeys.searchText(title, composer.display),
-    titleKey = TextKeys.fold(title),
-)
+/**
+ * This piece with a new title and composer, and every key derived from them. Title and composer
+ * are cut to [TextLimits] first and the keys are derived from what is kept, so no row can outgrow
+ * Android's cursor window, whether the text came from a file, INDEX.csv or the Rename dialog.
+ */
+fun PieceEntity.named(title: String, composer: ComposerNames.Name): PieceEntity {
+    val keptTitle = TextLimits.clip(title, TextLimits.TITLE)
+    val keptComposer = TextLimits.clip(composer.display, TextLimits.COMPOSER)
+    return copy(
+        title = keptTitle,
+        composer = keptComposer,
+        composerKey = TextLimits.clip(composer.key, TextLimits.COMPOSER),
+        composerShort = TextLimits.clip(composer.short, TextLimits.COMPOSER),
+        searchText = TextLimits.clip(TextKeys.searchText(keptTitle, keptComposer), TextLimits.SEARCH_TEXT),
+        titleKey = TextLimits.clip(TextKeys.fold(keptTitle), TextLimits.TITLE_KEY),
+    )
+}

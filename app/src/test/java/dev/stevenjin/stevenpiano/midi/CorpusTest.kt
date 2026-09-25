@@ -70,6 +70,34 @@ class CorpusTest {
         }
     }
 
+    /**
+     * Every file's events, notes, length and warnings, hashed as the M12 run compared them and
+     * combined over the whole library: the parser before M12, after M12 and after the v1.2 audit's
+     * hardening (compact event arrays, caps) must read the library byte for byte alike.
+     */
+    @Test
+    fun `every file parses exactly as the parser before M12 read it`() {
+        val root = corpus()
+        val files = midiFiles(root)
+        val combined = MessageDigest.getInstance("SHA-256")
+        for (file in files) {
+            val md = MessageDigest.getInstance("SHA-256")
+            val digest = try {
+                val p = SmfParser.parse(file.readBytes())
+                for (e in p.events) md.update("${e.atMicros} ${e.status} ${e.data1} ${e.data2}\n".toByteArray())
+                for (i in 0 until p.notes.size) md.update("${p.notes.startMicros[i]} ${p.notes.endMicros[i]} ${p.notes.note(i)}\n".toByteArray())
+                md.update("${p.durationMicros} ${p.warnings}".toByteArray())
+                md.digest().joinToString("") { "%02x".format(it) }
+            } catch (e: SmfException) {
+                "FAIL ${e.message}"
+            }
+            combined.update("${file.relativeTo(root).path} $digest\n".toByteArray())
+        }
+        val hex = combined.digest().joinToString("") { "%02x".format(it) }
+        println("Corpus digest: ${files.size} files, $hex")
+        if (files.size == CORPUS_FILES) assertEquals(CORPUS_DIGEST, hex)
+    }
+
     @Test
     fun `INDEX csv lists every collection file, and the zip every piece`() {
         val root = corpus()
@@ -164,4 +192,10 @@ class CorpusTest {
 
     private fun File.sha256(): String =
         MessageDigest.getInstance("SHA-256").digest(readBytes()).joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        /** The library as measured in September 2026 (../midi): 3,454 files, and what the parser made of them. */
+        const val CORPUS_FILES = 3_454
+        const val CORPUS_DIGEST = "7192757eebfe20200e9350eb40ee3673778de916e8ee2583bcda4d855b870cc5"
+    }
 }

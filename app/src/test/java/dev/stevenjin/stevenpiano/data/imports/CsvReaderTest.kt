@@ -35,6 +35,13 @@ class CsvReaderTest {
         assertEquals(listOf(listOf("")), CsvReader.parse("\"\""))
         assertEquals(emptyList<List<String>>(), CsvReader.parse(""))
     }
+
+    @Test
+    fun `a field keeps at most the cap, and the rest of its row still reads`() {
+        val long = "x".repeat(10)
+        val text = "$long,\"${"\"\"".repeat(10)}\",b\nc,d,e\n"
+        assertEquals(listOf(listOf("xxxx", "\"\"\"\"", "b"), listOf("c", "d", "e")), CsvReader.parse(text, maxField = 4))
+    }
 }
 
 class IndexCsvTest {
@@ -56,6 +63,16 @@ class IndexCsvTest {
         assertEquals("mutopia-public-domain", mutopia.collection)
         assertEquals("mozart", index.lookup("./PIANO-MIDI.DE\\mozart\\mz_311_1.mid")?.composer)
         assertNull(index.lookup("piano-midi.de/mozart/mz_311_2.mid"))
+    }
+
+    @Test
+    fun `an INDEX csv field is cut to 1 KB, so a megabyte title never reaches the importer`() {
+        val title = "T".repeat(1_000_000)
+        val collection = "C".repeat(5_000)
+        val row = IndexCsv.parse("collection,composer,title,size_kb,path\n$collection,Bach,$title,1,a.mid\n").lookup("a.mid")!!
+        assertEquals(1_024, row.title.length)
+        assertEquals(1_024, row.collection.length)
+        assertEquals("Bach", row.composer)
     }
 
     @Test

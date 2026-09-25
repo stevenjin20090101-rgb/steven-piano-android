@@ -78,6 +78,7 @@ import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.moved
@@ -154,6 +155,10 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
         }
         when {
             !state.loaded -> Unit
+            state.unreadable -> Column(Modifier.readingWidth()) {
+                CategoryChips(state.category, vm::selectCategory)
+                OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
+            }
             state.empty -> EmptyLibrary(onAdd = { adding = true })
             else -> BoxWithConstraints(Modifier.fillMaxSize()) {
                 LibraryItems(state, vm, listState, readingPadding(maxWidth), actions, play, changePhoto) { dialog = it }
@@ -179,6 +184,9 @@ private class LibraryPlay(private val playback: PlaybackStarter, private val onP
         onPlaying()
     }
 }
+
+/** What the tab says when the library can't be read, in place of a crash. */
+private const val UNREADABLE = "The library couldn't be read."
 
 /** A piece row's key; only these are reorderable, so no other key starts with "p" and a digit. */
 private fun pieceKey(id: Long): String = "p$id"

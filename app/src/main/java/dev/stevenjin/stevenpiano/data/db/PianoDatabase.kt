@@ -13,6 +13,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * The library. Schema v2 (app 1.2): playlists keep an order and artwork has its table. A v1
@@ -33,9 +34,15 @@ abstract class PianoDatabase : RoomDatabase() {
     abstract fun artwork(): ArtworkDao
 
     companion object {
-        fun open(context: Context): PianoDatabase =
+        /** [onOpen] runs as the database first opens, before any query (the one-off [TextRepair]). */
+        fun open(context: Context, onOpen: (SupportSQLiteDatabase) -> Unit = {}): PianoDatabase =
             Room.databaseBuilder(context, PianoDatabase::class.java, "steven-piano.db")
                 .addMigrations(MIGRATION_1_2)
+                .addCallback(
+                    object : Callback() {
+                        override fun onOpen(db: SupportSQLiteDatabase) = onOpen(db)
+                    },
+                )
                 .build()
     }
 }

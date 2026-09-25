@@ -182,6 +182,20 @@ class PlaybackEngineTest {
     }
 
     @Test
+    fun `a wake time too far ahead saturates instead of wrapping negative`() {
+        val wake = PlaybackEngine.Companion::wakeTime
+        assertEquals(500 * ms, wake(500_000L, 0L, 0L, 100))
+        assertEquals(1_000 * ms, wake(500_000L, 0L, 0L, 50))
+        assertEquals(7L, wake(0L, 0L, 7L, 100))
+        // About three years of song time at 100 %: the product overflows a Long.
+        assertEquals(Long.MAX_VALUE, wake(100_000_000_000_000L, 0L, 0L, 100))
+        assertEquals(Long.MAX_VALUE, wake(Long.MAX_VALUE, 0L, 0L, 25))
+        // A near-limit clock: the sum overflows instead.
+        assertEquals(Long.MAX_VALUE, wake(90_000_000_000_000L, 0L, Long.MAX_VALUE - 1_000L, 100))
+        assertTrue(wake(86_400_000_000L, 0L, 5L, 25) > 0)   // a day at 25 %: well inside
+    }
+
+    @Test
     fun `seeking a stopped piece leaves it paused there`() {
         engine.load(piece { noteOn(0, 60); noteOff(1000, 60) }, now)
         engine.seek(400_000L, now)
