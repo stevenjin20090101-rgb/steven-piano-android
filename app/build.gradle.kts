@@ -7,12 +7,23 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
 }
+
+// The release key lives outside this repository, in Steven's home folder, and never in git:
+// ~/steven-piano-keystore.properties names the keystore (storeFile, storePassword, keyAlias,
+// keyPassword). Without it the release build stops with a message; it never falls back to the
+// debug key. Debug builds and unit tests do not need it. See README > Security.
+val releaseSigningFile = File(System.getProperty("user.home"), "steven-piano-keystore.properties")
+val releaseSigning: Properties? = releaseSigningFile.takeIf { it.isFile }
+    ?.let { file -> Properties().apply { file.inputStream().use { load(it) } } }
+    ?.takeIf { props -> listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all { !props.getProperty(it).isNullOrBlank() } }
 
 android {
     namespace = "dev.stevenjin.stevenpiano"
@@ -22,14 +33,27 @@ android {
         applicationId = "dev.stevenjin.stevenpiano"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
+        versionCode = 4
         versionName = "1.2"
+    }
+
+    signingConfigs {
+        if (releaseSigning != null) {
+            create("release") {
+                storeFile = file(releaseSigning.getProperty("storeFile"))
+                storePassword = releaseSigning.getProperty("storePassword")
+                keyAlias = releaseSigning.getProperty("keyAlias")
+                keyPassword = releaseSigning.getProperty("keyPassword")
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
     }
 
     buildTypes {
         release {
-            // Sideloaded, never published: the debug keystore signs the release build.
-            signingConfig = signingConfigs.getByName("debug")
+            // Steven's release key (above); the debug build keeps the debug key.
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -68,6 +92,21 @@ android {
 kotlin {
     jvmToolchain(17)
 }
+
+// A release build without the release key stops here, before anything is compiled for it.
+val checkReleaseSigning = tasks.register("checkReleaseSigning") {
+    val path = releaseSigningFile.path
+    val present = releaseSigning != null
+    doLast {
+        if (!present) {
+            throw GradleException(
+                "Release signing: $path is missing or incomplete (storeFile, storePassword, keyAlias, keyPassword). " +
+                    "The release APK is signed only with Steven Piano's release key, never the debug key; see README > Security.",
+            )
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkReleaseSigning) }
 
 room {
     schemaDirectory("$projectDir/schemas")

@@ -49,12 +49,14 @@ import kotlinx.coroutines.launch
  * belongs to this process; picker grants are made persistable for the length of the import
  * and handed back after. Imports queue one after another; the service ends with the last. An
  * import that brought pieces in starts the artwork service before this one stops, when the person
- * lets artwork arrive by itself.
+ * lets artwork arrive by itself. When Android's time for data sync runs out ([onTimeout]) the
+ * imports stop where they are (what was saved stays) and the service ends at once.
  */
 class ImportService : Service() {
     private val scope = MainScope()
     private var running = 0
     private var progressJob: Job? = null
+    private val imports = mutableListOf<Job>()
     private var lastPostedAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -68,7 +70,7 @@ class ImportService : Service() {
         }
         running++
         if (progressJob == null) progressJob = scope.launch { graph.importProgress.collect(::post) }
-        scope.launch {
+        imports += scope.launch {
             try {
                 val result = try {
                     graph.importer.import(this@ImportService, request.source)
@@ -92,7 +94,20 @@ class ImportService : Service() {
                 stopIfIdle()
             }
         }
+        imports.removeAll { it.isCompleted }
         return START_NOT_STICKY
+    }
+
+    override fun onTimeout(startId: Int) = stopForTimeout()
+
+    /** Android 15's six hours a day for data sync ran out: the imports stop, and so does the service, now. */
+    override fun onTimeout(startId: Int, fgsType: Int) = stopForTimeout()
+
+    private fun stopForTimeout() {
+        imports.forEach { it.cancel() }   // each releases its grants as it ends
+        imports.clear()
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {

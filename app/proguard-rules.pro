@@ -9,3 +9,11 @@
 
 # The compiled-in authorship string must survive R8 so it is present in the release DEX.
 -keep class dev.stevenjin.stevenpiano.Provenance { *; }
+
+# Release builds log warnings and errors only: verbose, debug and info calls (request URLs,
+# artwork keys, the link's chatter) are removed with their messages.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}

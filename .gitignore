@@ -24,3 +24,9 @@ local.properties
 *.pem
 *PRIVATE*
 !provenance/author_ed25519_public.pem
+
+# Release signing: the keystore and its passwords live in the home folder, never here.
+keystore.properties
+*keystore.properties
+*.jks
+*.keystore

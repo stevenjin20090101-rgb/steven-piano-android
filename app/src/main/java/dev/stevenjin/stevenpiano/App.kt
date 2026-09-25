@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano
 
 import android.app.Application
 import android.content.Context
+import android.os.StrictMode
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.service.PlaybackNotification
@@ -27,11 +28,18 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashSilencer.install { if (::graph.isInitialized) graph.pianoLinkIfMade() else null }
+        if (BuildConfig.DEBUG) watchStrictly()
         PlaybackNotification.createChannel(this)
         ImportService.createChannel(this)
         ArtworkService.createChannel(this)
         graph = AppGraph(this).also { it.start() }
     }
+}
+
+/** Debug builds log disk and network work on the main thread, leaked closeables and the like (StrictMode), without stopping. */
+private fun watchStrictly() {
+    StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().build())
+    StrictMode.setVmPolicy(StrictMode.VmPolicy.Builder().detectAll().penaltyLog().build())
 }
 
 /** The process's [AppGraph], from any Context. */

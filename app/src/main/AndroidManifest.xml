@@ -45,14 +45,17 @@
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
 
+    <!-- No backup, and (Android 12+) no device-to-device transfer: the library stays on this device. -->
     <application
         android:name=".App"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.StevenPiano">
+        android:theme="@style/Theme.StevenPiano"
+        tools:targetApi="s">
 
         <!-- Authorship, also compiled into the app as Provenance.TAG (see PROVENANCE.md). -->
         <meta-data
