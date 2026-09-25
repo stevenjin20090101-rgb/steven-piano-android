@@ -46,7 +46,10 @@ enum class NoteDisplay {
 /** What Now playing shows on medium and expanded widths. */
 enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
-/** The Piano tab's preferences, plus the last piano connected, where the Keys screen was, and the queue's two modes. */
+/**
+ * The Piano tab's preferences, plus the last piano connected, where the Keys screen was, the
+ * queue's two modes, and how artwork looks and arrives.
+ */
 data class PianoSettings(
     val autoConnect: Boolean = true,
     val lastDeviceAddress: String? = null,
@@ -64,6 +67,10 @@ data class PianoSettings(
     val shuffle: Boolean = false,
     /** The transport's Repeat, remembered across launches. */
     val repeat: RepeatMode = RepeatMode.OFF,
+    /** Portraits drawn in black and white (the rest of the interface is monochrome either way). */
+    val artworkMonochrome: Boolean = false,
+    /** Composers' portraits and notes fetched from Wikipedia after an import, and when the app opens. */
+    val fetchArtworkAutomatically: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_KEYS_VIEWPORT_START = 48
@@ -106,6 +113,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setRepeat(mode: RepeatMode) = edit { it[REPEAT] = mode.name }
 
+    suspend fun setArtworkMonochrome(on: Boolean) = edit { it[ARTWORK_MONOCHROME] = on }
+
+    suspend fun setFetchArtworkAutomatically(on: Boolean) = edit { it[FETCH_ARTWORK_AUTOMATICALLY] = on }
+
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
@@ -126,6 +137,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
             shuffle = this[SHUFFLE] ?: defaults.shuffle,
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
+            artworkMonochrome = this[ARTWORK_MONOCHROME] ?: defaults.artworkMonochrome,
+            fetchArtworkAutomatically = this[FETCH_ARTWORK_AUTOMATICALLY] ?: defaults.fetchArtworkAutomatically,
         )
     }
 
@@ -143,5 +156,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
         val SHUFFLE = booleanPreferencesKey("shuffle")
         val REPEAT = stringPreferencesKey("repeat")
+        val ARTWORK_MONOCHROME = booleanPreferencesKey("artworkMonochrome")
+        val FETCH_ARTWORK_AUTOMATICALLY = booleanPreferencesKey("fetchArtworkAutomatically")
     }
 }

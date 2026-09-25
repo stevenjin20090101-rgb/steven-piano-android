@@ -49,6 +49,17 @@ interface PieceDao {
     @Query("SELECT * FROM composer_groups ORDER BY composerKey")
     fun composers(): Flow<List<ComposerGroup>>
 
+    /** A composer's first [limit] pieces by title: the roll cards of their mosaic. */
+    @Query("SELECT id FROM pieces WHERE composerKey = :composerKey ORDER BY titleKey LIMIT :limit")
+    suspend fun idsByComposer(composerKey: String, limit: Int): List<Long>
+
+    /** The composer of a playlist's first piece (its order, then title), for its cover; null when it is empty. */
+    @Query(
+        "SELECT p.composerKey FROM pieces p JOIN collection_pieces cp ON cp.pieceId = p.id " +
+            "WHERE cp.collectionId = :playlistId ORDER BY cp.position, p.titleKey LIMIT 1",
+    )
+    fun firstComposerKey(playlistId: Long): Flow<String?>
+
     @Query("SELECT COUNT(*) FROM pieces")
     fun count(): Flow<Int>
 

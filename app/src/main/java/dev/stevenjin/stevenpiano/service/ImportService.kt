@@ -37,13 +37,16 @@ import dev.stevenjin.stevenpiano.ui.Route
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
  * Imports run here: a dataSync foreground service with a progress notification (channel
  * "imports"), so a whole folder keeps going with the screen off. Access to the chosen files
  * belongs to this process; picker grants are made persistable for the length of the import
- * and handed back after. Imports queue one after another; the service ends with the last.
+ * and handed back after. Imports queue one after another; the service ends with the last. An
+ * import that brought pieces in starts the artwork service before this one stops, when the person
+ * lets artwork arrive by itself.
  */
 class ImportService : Service() {
     private val scope = MainScope()
@@ -64,7 +67,12 @@ class ImportService : Service() {
         if (progressJob == null) progressJob = scope.launch { graph.importProgress.collect(::post) }
         scope.launch {
             try {
-                graph.importer.import(this@ImportService, request.source)
+                val result = graph.importer.import(this@ImportService, request.source)
+                // Started now, while this service still holds the foreground: Android 12+ refuses
+                // a foreground service started from the background.
+                if (result.imported > 0 && graph.settingsRepository.settings.first().fetchArtworkAutomatically) {
+                    ArtworkService.start(this@ImportService, force = false)
+                }
             } finally {
                 if (request.persisted) request.uris.forEach { uri -> runCatching { contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
                 running--

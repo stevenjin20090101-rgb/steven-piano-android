@@ -62,6 +62,12 @@ class LibraryRepository(
 
     fun byComposer(composerKey: String): Flow<List<PieceEntity>> = pieces.byComposer(composerKey)
 
+    /** A composer's first [limit] pieces by title (a composer's mosaic of roll cards). */
+    suspend fun firstPieceIds(composerKey: String, limit: Int): List<Long> = pieces.idsByComposer(composerKey, limit)
+
+    /** The composer of a playlist's first piece: its cover when it has no photo. Null while it is empty. */
+    fun firstComposerKey(playlistId: Long): Flow<String?> = pieces.firstComposerKey(playlistId)
+
     /** Every playlist by name, with its size and total length. */
     fun playlists(): Flow<List<PlaylistSummary>> = playlists.summaries()
 

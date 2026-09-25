@@ -132,6 +132,12 @@
             android:name=".service.ImportService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Composers' portraits and notes fetched in the background, with a progress notification. -->
+        <service
+            android:name=".service.ArtworkService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

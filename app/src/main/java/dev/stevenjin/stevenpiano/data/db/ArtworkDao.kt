@@ -23,6 +23,10 @@ interface ArtworkDao {
     @Query("SELECT * FROM artwork WHERE `key` = :key")
     suspend fun get(key: String): ArtworkEntity?
 
+    /** Every row: the grids and rows read one shared map of these instead of a query each. */
+    @Query("SELECT * FROM artwork")
+    fun observeAll(): Flow<List<ArtworkEntity>>
+
     @Upsert
     suspend fun upsert(artwork: ArtworkEntity)
 

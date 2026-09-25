@@ -63,6 +63,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** In the foreground a foreground service may start: composers never looked up are fetched now. */
+    override fun onStart() {
+        super.onStart()
+        graph.fetchArtworkIfDue()
+    }
+
     /**
      * In the background nothing may hold a key down: the Keys screen's keys and sustain let go.
      * Not when the activity only stops to be recreated for a configuration change (a rotation

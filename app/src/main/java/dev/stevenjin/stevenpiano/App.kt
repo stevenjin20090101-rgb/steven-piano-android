@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano
 
 import android.app.Application
 import android.content.Context
+import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.service.PlaybackNotification
 
@@ -23,6 +24,7 @@ class App : Application() {
         super.onCreate()
         PlaybackNotification.createChannel(this)
         ImportService.createChannel(this)
+        ArtworkService.createChannel(this)
         graph = AppGraph(this).also { it.start() }
     }
 }

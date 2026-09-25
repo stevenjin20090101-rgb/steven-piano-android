@@ -17,11 +17,16 @@ import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.PieceFiles
+import dev.stevenjin.stevenpiano.data.art.ArtFiles
+import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.Importer
+import dev.stevenjin.stevenpiano.net.NetworkMonitor
+import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.settingsDataStore
@@ -59,6 +64,14 @@ class AppGraph(private val app: Application) {
     private val importState = MutableStateFlow(ImportProgress.Idle)
     val importProgress: StateFlow<ImportProgress> = importState.asStateFlow()
     val importer: Importer by lazy { Importer(library, pieceFiles, importState) }
+
+    /** Whether the device is online; artwork is only ever fetched when it is. */
+    val network: NetworkMonitor by lazy { NetworkMonitor(app) }
+
+    /** Portraits, notes, playlist photos and roll cards (the only network use: two Wikimedia hosts). */
+    val artwork: ArtworkRepository by lazy {
+        ArtworkRepository(app, database.artwork(), library, ArtFiles(app.filesDir), WikipediaClient(), network, appScope)
+    }
 
     /** The Bluetooth link; on an emulator in debug builds, a stand-in that logs what it would send. */
     val pianoLink: PianoLink by lazy {
@@ -121,6 +134,18 @@ class AppGraph(private val app: Application) {
             return
         }
         importState.value = ImportProgress(done = count, total = count, failed = count, unreadable = true)
+    }
+
+    /**
+     * The app came to the foreground, where a foreground service may start: if the person lets
+     * artwork arrive by itself, the device is online, and some composer was never looked up (a
+     * library from 1.1, an import made offline) or failed a day ago or more, the fetch starts.
+     */
+    fun fetchArtworkIfDue() {
+        appScope.launch {
+            if (!settingsRepository.settings.first().fetchArtworkAutomatically || !network.isOnline()) return@launch
+            if (artwork.composersDue()) ArtworkService.start(app, force = false)
+        }
     }
 
     /** Disconnect from the Piano tab: the player pauses first, so the piano is silenced, then the link drops. */

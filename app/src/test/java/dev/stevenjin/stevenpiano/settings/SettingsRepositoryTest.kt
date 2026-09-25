@@ -85,6 +85,22 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `artwork starts in colour and fetched automatically, and both are remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "artwork.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(false, repository.settings.first().artworkMonochrome)
+        assertEquals(true, repository.settings.first().fetchArtworkAutomatically)
+        repository.setArtworkMonochrome(true)
+        repository.setFetchArtworkAutomatically(false)
+        assertEquals(PianoSettings(artworkMonochrome = true, fetchArtworkAutomatically = false), repository.settings.first())
+        repository.setArtworkMonochrome(false)
+        repository.setFetchArtworkAutomatically(true)
+        assertEquals(PianoSettings(), repository.settings.first())
+        scope.cancel()
+    }
+
+    @Test
     fun `v1_1 defaults - paper roll, staff and notes on wide screens, the Keys screen from C3`() {
         val defaults = PianoSettings()
         assertEquals(NoteDisplay.PAPER_ROLL, defaults.noteDisplay)
