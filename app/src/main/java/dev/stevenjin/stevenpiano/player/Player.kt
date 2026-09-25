@@ -78,6 +78,7 @@ class Player(
     private var loadJob: Job? = null
     private var advanceJob: Job? = null
     private var linkConnected = false
+    private var linkEpoch: Long? = null
 
     // Owned by the scheduler thread: what was last published.
     private var shownStatus = PlaybackStatus.Stopped
@@ -319,15 +320,24 @@ class Player(
         scope.launch { withContext(io) { source.markPlayed(pieceId) } }
     }
 
+    /**
+     * A drop pauses a piece (the piano silences itself); coming back leaves Play to the person. A new
+     * connection seen while still connected (a drop and a reconnection too quick to see), or the link
+     * losing a packet, shows as a new epoch: playing, the piano is re-synced (silence, then the pedal).
+     */
     private fun onLinkState(linkState: LinkState) {
         val connected = linkState is LinkState.Connected
+        val epoch = (linkState as? LinkState.Connected)?.epoch
         if (connected != linkConnected) {
             if (!connected) silenceLive()   // the piano lets go on a drop; forget the Keys screen's keys too
             if (state.value.status == PlaybackStatus.Playing) {
                 if (connected) scheduler.submit { engine.resync(it) } else pause()   // the piano silences itself on a drop
             }
+        } else if (connected && epoch != linkEpoch && state.value.status == PlaybackStatus.Playing) {
+            scheduler.submit { engine.resync(it) }
         }
         linkConnected = connected
+        if (connected) linkEpoch = epoch
     }
 
     /** Scheduler thread, after every step: mirrors the engine into what the UI reads. */

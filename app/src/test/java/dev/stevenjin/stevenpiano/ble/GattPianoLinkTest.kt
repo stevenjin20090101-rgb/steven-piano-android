@@ -73,7 +73,7 @@ class GattPianoLinkTest {
         assertEquals(1, gatt.discoveries)
         gatt.discovered()
         executor.runDue()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 247), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 247, epoch = 1), state())
         assertTrue(gatt.highPriority)
         assertEquals(listOf(address to PianoBluetooth.NAME), remembered)
     }
@@ -120,7 +120,7 @@ class GattPianoLinkTest {
         assertEquals(1, gatt.discoveries)
         gatt.discovered()
         executor.runDue()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 23), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 23, epoch = 1), state())
     }
 
     @Test
@@ -256,7 +256,7 @@ class GattPianoLinkTest {
         val direct = radio.connections.last()
         assertFalse(direct.autoConnect)
         finishConnecting(direct)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 2), state())
     }
 
     @Test
@@ -265,7 +265,7 @@ class GattPianoLinkTest {
         executor.runDue()
         val background = radio.connections.last()
         finishConnecting(background)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 2), state())
         val scans = radio.scans
         executor.advance(120_000)
         assertEquals("no reconnect scans once connected", scans, radio.scans)
@@ -343,6 +343,110 @@ class GattPianoLinkTest {
         link.disconnect()
         executor.runDue()
         assertFalse(link.emergencySilence(200))
+    }
+
+    @Test
+    fun `a packet that lets keys go is never dropped, however long the stack stays busy`() {
+        val gatt = connectFully()
+        gatt.nextWrite = WriteResult.Busy
+        link.send(MidiBatch().apply { add(0x80, 60, 0); add(0x90, 62, 0) }, dropPending = false)
+        executor.advance(5_000)   // far past the 40 retries (about 200 ms) after which a Note On would go
+        assertTrue(gatt.writes.isEmpty())
+        gatt.nextWrite = WriteResult.Sent
+        executor.advance(20)
+        val sent = gatt.writes.single().map { it.toInt() and 0xFF }
+        assertEquals(listOf(0x80, 60, 0, 0x90, 62, 0), listOf(sent[2], sent[3], sent[4], sent[6], sent[7], sent[8]))
+        assertEquals(1L, (state() as LinkState.Connected).epoch)
+    }
+
+    @Test
+    fun `a Note On packet given up on is followed by the stop sequence and a new epoch`() {
+        val gatt = connectFully()
+        gatt.nextWrite = WriteResult.Busy
+        link.send(notes(3), dropPending = false)
+        executor.advance(5 * 41)   // 41 tries, 5 ms apart: dropped
+        assertEquals(2L, (state() as LinkState.Connected).epoch)
+        gatt.nextWrite = WriteResult.Sent
+        executor.advance(5)
+        val stop = gatt.writes.single().map { it.toInt() and 0xFF }
+        assertEquals(listOf(0xB0, 64, 0, 0xB0, 123, 0), listOf(stop[2], stop[3], stop[4], stop[6], stop[7], stop[8]))
+    }
+
+    @Test
+    fun `must-arrive packets are told apart from Note Ons`() {
+        fun packet(vararg messages: Int) = BleMidiFramer.frame(messages, 0, messages.size, 0)
+        assertTrue(BleMidiFramer.mustArrive(packet(MidiBatch.pack(0x80, 60, 0))))
+        assertTrue(BleMidiFramer.mustArrive(packet(MidiBatch.pack(0x90, 60, 64), MidiBatch.pack(0x93, 61, 0))))
+        assertTrue(BleMidiFramer.mustArrive(packet(MidiBatch.pack(0xB0, 64, 127))))
+        for (controller in 120..123) assertTrue(BleMidiFramer.mustArrive(packet(MidiBatch.pack(0xB0, controller, 0))))
+        assertFalse(BleMidiFramer.mustArrive(packet(MidiBatch.pack(0x90, 60, 64), MidiBatch.pack(0x90, 62, 1))))
+        assertFalse(BleMidiFramer.mustArrive(packet(MidiBatch.pack(0xB0, 7, 100))))
+    }
+
+    @Test
+    fun `each connection has a new epoch, so a quick drop and reconnect is never missed`() {
+        val first = connectFully()
+        assertEquals(1L, (state() as LinkState.Connected).epoch)
+        first.dropped()
+        executor.runDue()
+        finishConnecting(radio.connections.last())
+        assertEquals(2L, (state() as LinkState.Connected).epoch)
+    }
+
+    @Test
+    fun `another Steven Piano is offered, never connected to, while the known one stays away`() {
+        val other = "D4:D4:D4:00:00:01"
+        link.connect(address)
+        executor.runDue()
+        radio.find(other, PianoBluetooth.NAME)
+        executor.advance(2_999)
+        assertTrue("not connected to it", radio.connections.isEmpty())
+        assertEquals(LinkState.Scanning, state())
+        executor.advance(1)
+        assertEquals(LinkError.OtherPiano.toState(other), state())
+        assertFalse(radio.scanning)
+
+        link.connect(other)   // the person tapped Connect to it
+        executor.runDue()
+        radio.find(other, PianoBluetooth.NAME)
+        executor.runDue()
+        finishConnecting(radio.connections.single())
+        assertEquals(listOf(other to PianoBluetooth.NAME), remembered)
+    }
+
+    @Test
+    fun `the known piano answering within the grace wins over another one`() {
+        link.connect(address)
+        executor.runDue()
+        radio.find("D4:D4:D4:00:00:01", PianoBluetooth.NAME)
+        executor.advance(1_000)
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()
+        assertEquals(address, radio.connections.single().address)
+        executor.advance(5_000)
+        assertEquals(LinkState.Connecting, state())
+    }
+
+    @Test
+    fun `reconnecting never switches to another Steven Piano`() {
+        connectFully().dropped()
+        executor.runDue()
+        executor.advance(20_000)   // the reconnect scan starts
+        assertTrue(radio.scanning)
+        val before = radio.connections.size
+        radio.find("D4:D4:D4:00:00:01", PianoBluetooth.NAME)
+        executor.advance(5_000)
+        assertEquals(before, radio.connections.size)
+        assertTrue(state() is LinkState.Reconnecting)
+    }
+
+    @Test
+    fun `with no piano known yet, the first Steven Piano found is the one`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find("D4:D4:D4:00:00:01", PianoBluetooth.NAME)
+        executor.runDue()
+        assertEquals("D4:D4:D4:00:00:01", radio.connections.single().address)
     }
 
     @Test

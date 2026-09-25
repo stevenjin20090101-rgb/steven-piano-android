@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.midi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import dev.stevenjin.stevenpiano.midi.NoteRouter.Companion.PEDAL_BURST
 import org.junit.Test
 
 class NoteRouterTest {
@@ -94,6 +95,57 @@ class NoteRouterTest {
         assertEquals(emptyList<String>(), send(0xB0, 64, 127))
         assertEquals(listOf("B0 40 28"), send(0xB0, 64, 40))
         assertEquals(listOf("B0 40 00"), send(0xB0, 64, 0))
+    }
+
+    @Test
+    fun `a file's pedal changes pass three at once, then one per 50 ms, the latest waiting value winning`() {
+        assertEquals(listOf("B0 40 7F"), send(0xB0, 64, 127, atMs = 0))
+        assertEquals(listOf("B0 40 00"), send(0xB0, 64, 0, atMs = 1))
+        assertEquals(listOf("B0 40 7F"), send(0xB0, 64, 127, atMs = 2))
+        assertEquals(emptyList<String>(), send(0xB0, 64, 0, atMs = 3))    // the burst is spent: it waits
+        assertEquals(emptyList<String>(), send(0xB0, 64, 40, atMs = 4))   // and is replaced by the newer value
+        assertEquals(50_000L, router.pedalDueMicros)   // 2,000 µs of credit left at 2 ms: a change's worth (50,000) by 50 ms
+        out.clear()
+        router.flushPedal(49_999, out)
+        assertEquals(emptyList<String>(), out.hex())
+        router.flushPedal(50_000, out)
+        assertEquals(listOf("B0 40 28"), out.hex())
+        assertEquals(Long.MAX_VALUE, router.pedalDueMicros)
+    }
+
+    @Test
+    fun `a waiting pedal change back to where the pedal is sends nothing`() {
+        send(0xB0, 64, 127, atMs = 0)
+        send(0xB0, 64, 0, atMs = 1)
+        send(0xB0, 64, 127, atMs = 2)
+        send(0xB0, 64, 0, atMs = 3)
+        assertEquals(emptyList<String>(), send(0xB0, 64, 127, atMs = 4))   // back down, as the piano has it
+        assertEquals(Long.MAX_VALUE, router.pedalDueMicros)
+    }
+
+    @Test
+    fun `a pedal flapping every millisecond reaches the piano at most 20 times a second`() {
+        var changes = 0
+        for (ms in 0L until 2_000L) {
+            out.clear()
+            router.flushPedal(ms * 1000, out)
+            router.route(0xB0, 64, if (ms % 2 == 0L) 127 else 0, ms * 1000, out)
+            changes += out.hex().count { it.startsWith("B0 40") }
+        }
+        assertTrue("$changes changes in 2 s", changes <= PEDAL_BURST + 2 * 20)
+    }
+
+    @Test
+    fun `the stop sequence is never held back, and after it the pedal goes at once`() {
+        send(0xB0, 64, 127, atMs = 0)
+        send(0xB0, 64, 0, atMs = 1)
+        send(0xB0, 64, 127, atMs = 2)
+        send(0xB0, 64, 0, atMs = 3)   // waiting
+        out.clear()
+        router.silence(out)
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), out.hex())
+        assertEquals(Long.MAX_VALUE, router.pedalDueMicros)   // the waiting change is gone with the rest
+        assertEquals(listOf("B0 40 7F"), send(0xB0, 64, 127, atMs = 3))   // a resumed piece's pedal: at once
     }
 
     @Test

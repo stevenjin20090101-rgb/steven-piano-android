@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.player
 
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
 import dev.stevenjin.stevenpiano.midi.MidiPiece
+import dev.stevenjin.stevenpiano.midi.NoteRouter
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
 import dev.stevenjin.stevenpiano.midi.SmfParser
 import org.junit.Assert.assertEquals
@@ -179,6 +180,26 @@ class PlaybackEngineTest {
             listOf("0 90 3C 50", "25 80 3C 00", "120 90 3C 50", "145 80 3C 00", "205 B0 40 00", "205 B0 7B 00"),
             sent(),
         )
+    }
+
+    @Test
+    fun `a file whose pedal flaps every 10 ms moves the pedal at most 20 times a second, ending where the file does`() {
+        engine.load(
+            piece {
+                noteOn(0, 60)
+                for (t in 0L until 1_000L step 10) cc(t, 64, if ((t / 10) % 2 == 0L) 127 else 0)
+                cc(1_000, 64, 90)
+                noteOff(1_500, 60)
+            },
+            now,
+        )
+        engine.play(now)
+        runUntil(1_400)
+        val pedal = sent().filter { " B0 40 " in it }
+        assertTrue("${pedal.size} pedal changes", pedal.size <= NoteRouter.PEDAL_BURST + 21)
+        assertEquals("B0 40 5A", pedal.last().substringAfter(' '))   // the file's last value arrives
+        val times = pedal.map { it.substringBefore(' ').toLong() }
+        assertTrue(times.last() <= 1_050)   // at most 50 ms late
     }
 
     @Test

@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.data.imports
 
+import dev.stevenjin.stevenpiano.data.TextLimits
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -18,15 +19,18 @@ import java.text.Normalizer
  * Title, composer and collection for an imported file, from the best source available:
  * its INDEX.csv row, else a `Composer - Title` file name, else the file name alone.
  * A stub title such as `mz_311_1` gives way to Track 0's name when that reads like a real one.
+ * A file name is read to [TextLimits.DISPLAY_NAME] characters (a zip entry's can be 64 KB).
  */
 object TitleHeuristics {
     data class Metadata(val title: String, val composer: String, val collection: String?)
 
-    private val COMPOSER_TITLE = Regex("^(.+?) - (.+)$")
     private val STUB = Regex("^[a-z0-9_\\-.]+$")
     private val MIDI_EXTENSION = Regex("\\.midi?$", RegexOption.IGNORE_CASE)
     private val SPACES = Regex("\\s+")
     private val NOT_LETTERS = Regex("[^a-z ]")
+
+    /** What a regex's `.` does not match: the line terminators. */
+    private const val LINE_BREAKS = "\n\r\u0085\u2028\u2029"
     private val GENERIC_NAMES = setOf(
         "control track", "conductor", "conductor track", "tempo", "tempo track", "track", "new track",
         "untitled", "unbenannt", "sequence", "staff", "instrument", "copyright",
@@ -36,7 +40,7 @@ object TitleHeuristics {
     )
 
     fun metadata(fileName: String, row: IndexCsv.Row?, sequenceNames: List<String>): Metadata {
-        val base = cleanText(fileName.replace(MIDI_EXTENSION, ""))
+        val base = cleanText(TextLimits.clip(fileName.replace(MIDI_EXTENSION, ""), TextLimits.DISPLAY_NAME))
         val (composer, title) = when {
             row != null -> row.composer to row.title.ifBlank { base }
             else -> splitComposer(base) ?: ("" to base)
@@ -48,9 +52,17 @@ object TitleHeuristics {
         )
     }
 
-    /** `Composer - Title` at the first " - ", or null. */
-    fun splitComposer(name: String): Pair<String, String>? =
-        COMPOSER_TITLE.matchEntire(name)?.let { it.groupValues[1].trim() to it.groupValues[2].trim() }
+    /**
+     * `Composer - Title` at the first " - " with something on both sides, or null: what the regex
+     * `^(.+?) - (.+)$` matched, found with one linear search instead (that regex took quadratic time
+     * on long names full of dashes). Like the regex's `.`, a line break anywhere means no match.
+     */
+    fun splitComposer(name: String): Pair<String, String>? {
+        if (name.any { it in LINE_BREAKS }) return null
+        val at = name.indexOf(" - ", startIndex = 1)
+        if (at < 0 || at + 3 >= name.length) return null
+        return name.substring(0, at).trim() to name.substring(at + 3).trim()
+    }
 
     fun isStub(title: String): Boolean = STUB.matches(title)
 

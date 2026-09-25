@@ -36,7 +36,11 @@ interface PianoLink : MidiSink {
      */
     val console: ConsoleChannel?
 
-    /** Finds and connects to the piano, preferring [address] (the last one used) when given. */
+    /**
+     * Finds and connects to the piano. [address] (the last one used, or one the person chose) is
+     * the only piano connected to by itself; another advertising as "Steven Piano" is offered
+     * ([LinkError.OtherPiano]), never taken. With no address, the first Steven Piano found is.
+     */
     fun connect(address: String? = null)
 
     /** Drops the connection and stops reconnecting. Pause the player first so the piano is silenced. */
@@ -61,9 +65,17 @@ sealed interface LinkState {
     data object Disconnected : LinkState
     data object Scanning : LinkState
     data object Connecting : LinkState
-    data class Connected(val name: String, val mtu: Int) : LinkState
+
+    /**
+     * [epoch] changes with every new connection, and whenever the link lost a packet the piano
+     * needed: the player re-syncs (silence, then the pedal again) when it sees a new one, even if
+     * the drop between two connections was too quick for it to see.
+     */
+    data class Connected(val name: String, val mtu: Int, val epoch: Long = 0) : LinkState
     data class Reconnecting(val attempt: Int) : LinkState
-    data class Error(val reason: LinkError, val message: String) : LinkState
+
+    /** [otherAddress]: for [LinkError.OtherPiano], the piano that was found, which the person may choose. */
+    data class Error(val reason: LinkError, val message: String, val otherAddress: String? = null) : LinkState
 }
 
 /** Why a connection failed, so the Piano tab can offer the right fix. Messages are the copy to show. */
@@ -74,7 +86,8 @@ enum class LinkError(val message: String) {
     LocationOff("Location is off. This phone needs it on to find Bluetooth devices."),
     Unsupported("This phone doesn't support Bluetooth LE, so it can't reach the piano."),
     Failed("The connection to Steven Piano failed. Try again."),
+    OtherPiano("Another piano called Steven Piano is nearby, not the one this phone knows. Connect to it only if it's yours."),
     ;
 
-    fun toState(): LinkState.Error = LinkState.Error(this, message)
+    fun toState(otherAddress: String? = null): LinkState.Error = LinkState.Error(this, message, otherAddress)
 }

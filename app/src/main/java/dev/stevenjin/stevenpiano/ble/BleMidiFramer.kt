@@ -25,6 +25,26 @@ object BleMidiFramer {
     fun capacity(mtu: Int): Int = ((mtu - ATT_HEADER - 1) / BYTES_PER_MESSAGE).coerceIn(1, MAX_MESSAGES)
 
     /**
+     * Whether a framed [packet] lets something go: a Note Off (or Note On at velocity 0), the pedal
+     * (CC64) or an all-off (CC120-123). Such a packet is never given up on while connected: losing
+     * it would leave a key or the pedal down.
+     */
+    fun mustArrive(packet: ByteArray): Boolean {
+        for (i in 0 until (packet.size - 1) / BYTES_PER_MESSAGE) {
+            val at = 1 + i * BYTES_PER_MESSAGE
+            val command = packet[at + 1].toInt() and 0xF0
+            val data1 = packet[at + 2].toInt() and 0x7F
+            val data2 = packet[at + 3].toInt() and 0x7F
+            when {
+                command == 0x80 -> return true
+                command == 0x90 && data2 == 0 -> return true
+                command == 0xB0 && (data1 == 64 || data1 in 120..123) -> return true
+            }
+        }
+        return false
+    }
+
+    /**
      * Frames [count] packed messages (`status << 16 | data1 << 8 | data2`) from [messages],
      * starting at [offset], stamped with the low 13 bits of [timestampMs]. The piano ignores
      * timestamps; they are only there to keep the format valid.

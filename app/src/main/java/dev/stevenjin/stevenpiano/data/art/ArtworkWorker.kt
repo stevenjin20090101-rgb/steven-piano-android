@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.data.art
 import dev.stevenjin.stevenpiano.data.db.ArtworkDao
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.net.WikiApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -79,7 +80,10 @@ fun interface ImageStore {
  * leaves the rest of the background run for the next start.
  *
  * Confined to [scope]'s thread (the app's main thread; a test's scheduler): the queue is only
- * touched there. Fetching suspends; it never blocks that thread.
+ * touched there, and finding a queued key is a hash lookup, not a scan. Fetching suspends; it
+ * never blocks that thread. An automatic run asks about at most [MAX_OTHER_COMPOSERS] composers
+ * outside the library's list of well-known ones ([ComposerNames.canonical]); the rest are left
+ * due for the next run, so a 10,000-file import does not queue hours of lookups.
  */
 class ArtworkWorker(
     private val store: ArtworkDao,
@@ -96,7 +100,13 @@ class ArtworkWorker(
     /** The scope's own thread, where the queue lives. */
     private val confined: CoroutineContext = scope.coroutineContext[ContinuationInterceptor] ?: EmptyCoroutineContext
     private val queue = ArrayDeque<Task>()
+
+    /** Every queued task by its storage key: the queue's index, kept in step with it. */
+    private val queued = HashMap<String, Task>()
     private var worker: Job? = null
+
+    /** Composers outside the canonical list that this run's automatic requests have queued. */
+    private var othersThisRun = 0
     private var inFlight: String? = null
     private var done = 0
     private var total = 0
@@ -110,13 +120,22 @@ class ArtworkWorker(
 
     /**
      * Queues every key of [keys] that is due ([ArtworkPolicy]), in order, behind whatever is
-     * queued. Returns how many were queued; by then [progress] shows them.
+     * queued: unless [force] (the person asked for every composer), at most
+     * [MAX_OTHER_COMPOSERS] composers a run from outside the canonical list. Returns how many were
+     * queued; by then [progress] shows them.
      */
     suspend fun requestAll(keys: List<ArtKey>, force: Boolean): Int = withContext(confined) {
         val now = clock()
-        val due = keys.filter { ArtworkPolicy.shouldFetch(store.get(it.storageKey), now, force) }
-        due.forEach { enqueue(it, priority = false, force = force) }
-        due.size
+        var count = 0
+        for (key in keys) {
+            val other = key is ArtKey.Composer && ComposerNames.canonical(key.composerKey) == null
+            if (other && !force && othersThisRun >= MAX_OTHER_COMPOSERS) continue
+            if (!ArtworkPolicy.shouldFetch(store.get(key.storageKey), now, force)) continue
+            if (other && !force) othersThisRun++
+            enqueue(key, priority = false, force = force)
+            count++
+        }
+        count
     }
 
     /** Drops everything queued in the background (the fetch under way finishes); nothing is recorded for them. */
@@ -131,6 +150,7 @@ class ArtworkWorker(
     private fun dropBackground(): Int {
         val dropped = queue.count { it.background }
         queue.removeAll { it.background }
+        queued.values.removeAll { it.background }
         total -= dropped
         return dropped
     }
@@ -138,16 +158,17 @@ class ArtworkWorker(
     private fun enqueue(key: ArtKey, priority: Boolean, force: Boolean) {
         val storageKey = key.storageKey
         if (storageKey == inFlight) return
-        val queued = queue.firstOrNull { it.key.storageKey == storageKey }
-        if (queued != null) {
-            queued.force = queued.force || force
+        val existing = queued[storageKey]
+        if (existing != null) {
+            existing.force = existing.force || force
             if (priority) {
-                queue.remove(queued)
-                queue.addFirst(queued)
+                queue.remove(existing)   // a person waiting on a key: rare, so this one scan is fine
+                queue.addFirst(existing)
             }
         } else {
             val task = Task(key, force, background = !priority)
             if (priority) queue.addFirst(task) else queue.addLast(task)
+            queued[storageKey] = task
             if (task.background) total++
         }
         publish()
@@ -157,6 +178,7 @@ class ArtworkWorker(
     private suspend fun drain() {
         while (true) {
             val task = queue.removeFirstOrNull() ?: break
+            queued.remove(task.key.storageKey)
             inFlight = task.key.storageKey
             publish(task.key.label)
             try {
@@ -213,11 +235,15 @@ class ArtworkWorker(
     private fun finish() {
         done = 0
         total = 0
+        othersThisRun = 0
         worker = null
         state.value = ArtworkProgress.Idle
     }
 
-    private companion object {
-        const val MIN_BUSY_PAUSE_MS = 1_000L
+    companion object {
+        private const val MIN_BUSY_PAUSE_MS = 1_000L
+
+        /** Automatic lookups a run makes for composers the library does not know by name. */
+        const val MAX_OTHER_COMPOSERS = 200
     }
 }

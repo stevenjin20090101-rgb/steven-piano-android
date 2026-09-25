@@ -38,6 +38,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
@@ -143,10 +144,16 @@ class ArtworkRepository(
         val key = ArtworkEntity.forPlaylist(playlistId)
         val path = withContext(io) {
             val jpeg = PhotoImport.jpeg(context.contentResolver, uri, PhotoImport.MAX_PX) ?: return@withContext null
-            files.write(key, jpeg)
+            try {
+                files.write(key, jpeg)
+            } catch (e: IOException) {   // a full disk: the cover stays as it was
+                null
+            }
         } ?: return false
-        dao.upsert(ArtworkEntity(key, imagePath = path, fetchedAt = System.currentTimeMillis(), status = ArtworkStatus.OK))
-        return true
+        return readOr(false) {
+            dao.upsert(ArtworkEntity(key, imagePath = path, fetchedAt = System.currentTimeMillis(), status = ArtworkStatus.OK))
+            true
+        }
     }
 
     /**

@@ -61,7 +61,8 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
  * The piano: its name, the status with the dot, and one button that says what it will do:
  * Connect, Cancel (while looking), Disconnect (while connected). While looking, an indeterminate
  * hairline. A problem is copy in place, with Retry or the fix under it. Permission is asked for
- * here, in context, with a one-line reason.
+ * here, in context, with a one-line reason. When only another piano called Steven Piano answered,
+ * the phone connects to it only if the person taps Connect to it ([onConnectTo] with its address).
  */
 @Composable
 fun ConnectionCard(
@@ -70,6 +71,7 @@ fun ConnectionCard(
     onConnect: () -> Unit,
     onCancel: () -> Unit,
     onDisconnect: () -> Unit,
+    onConnectTo: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -122,6 +124,9 @@ fun ConnectionCard(
                         }
                         LinkError.LocationOff -> TextButton(onClick = { runCatching { fixThenRetry.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } }) {
                             Text("Open Location settings")
+                        }
+                        LinkError.OtherPiano -> link.otherAddress?.let { other ->
+                            TextButton(onClick = { onConnectTo(other) }) { Text("Connect to it") }
                         }
                         else -> TextButton(onClick = onConnect) { Text("Retry") }
                     }

@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.net
 
 import android.util.Log
+import dev.stevenjin.stevenpiano.BuildConfig
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,7 +66,8 @@ interface WikiApi {
  * by hand, and only to those hosts), the app's User-Agent and `Accept: application/json` on every
  * request (Wikimedia answers 403 without a User-Agent), 10 s to connect and 15 s to read, and a
  * byte cap on every body before anything decodes it: 256 KB for JSON, the caller's for files.
- * Each request is logged at debug level with its time, so their spacing can be checked.
+ * In debug builds each request is logged with its time, so their spacing can be checked; release
+ * builds log no URL (they carry names from the library).
  */
 class WikipediaClient(
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -87,7 +89,7 @@ class WikipediaClient(
         var url = start
         repeat(MAX_REDIRECTS + 1) {
             if (!WikipediaUrls.allowed(url)) throw IOException("Refused a request to ${WikipediaUrls.hostOf(url)}")
-            log("GET $url · User-Agent: $USER_AGENT · at ${System.currentTimeMillis()} ms")
+            if (BuildConfig.DEBUG) log("GET $url · User-Agent: $USER_AGENT · at ${System.currentTimeMillis()} ms")
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
@@ -123,11 +125,16 @@ class WikipediaClient(
         throw IOException("More than $MAX_REDIRECTS redirects")
     }
 
-    /** A body that is not the JSON expected counts as a failed request. */
+    /**
+     * A body that is not the JSON expected counts as a failed request, and so does one nested
+     * deeply enough to overflow `org.json`'s recursive parser.
+     */
     private inline fun <T> parse(block: () -> T): T = try {
         block()
     } catch (e: JSONException) {
         throw IOException("An unreadable response: ${e.message}")
+    } catch (e: StackOverflowError) {
+        throw IOException("An unreadable response: nested too deeply")
     }
 
     companion object {

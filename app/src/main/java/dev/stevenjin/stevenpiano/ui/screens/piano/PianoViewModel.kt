@@ -46,6 +46,9 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsAc
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 
+    /** The person chose the other "Steven Piano" a scan found: it becomes the piano this phone connects to. */
+    fun connectTo(address: String) = graph.pianoLink.connect(address)
+
     /** Stops looking for the piano. Nothing is sounding yet, so there is nothing to silence. */
     fun cancel() = graph.pianoLink.disconnect()
 

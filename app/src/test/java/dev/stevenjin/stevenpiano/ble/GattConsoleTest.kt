@@ -73,7 +73,7 @@ class GattConsoleTest {
     @Test
     fun `a piano with the console has it once connected, and switching on its replies is the first write`() {
         val gatt = connect()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255), link.state.value)
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), link.state.value)
         assertNotNull(link.console)
         assertEquals(listOf("subscribe"), gatt.ops)
         link.console!!.sendLine("dump")

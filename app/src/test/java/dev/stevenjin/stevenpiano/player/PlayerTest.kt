@@ -96,6 +96,27 @@ class PlayerTest {
     }
 
     @Test
+    fun `a new epoch while playing re-syncs the piano, even with no drop seen`() = runBlocking {
+        val pedalled = SmfParser.parse(
+            SmfBuilder(format = 0, division = 1000).track {
+                tempo(0, 1_000_000)
+                cc(0, 64, 127)
+                noteOn(0, 60)
+                noteOff(5_000, 60)
+            }.build(),
+        )
+        source.pieces[1] = pedalled
+        onMain { player.play(1) }
+        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        link.clear()
+        link.reconnectQuietly()
+        withTimeout(2_000) { while (link.messages.size < 3) delay(5) }
+        assertEquals(listOf("B0 40 00", "B0 7B 00", "B0 40 7F"), link.messages)   // silence, then the pedal again
+        assertEquals(PlaybackStatus.Playing, player.state.value.status)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
     fun `live keys go out through the player, and a dropped link lets go of them`() = runBlocking {
         onMain {
             player.liveNoteOn(60, 100)

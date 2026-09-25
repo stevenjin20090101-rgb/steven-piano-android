@@ -247,6 +247,21 @@ class ArtworkWorkerTest {
     }
 
     @Test
+    fun `an automatic run asks about at most 200 composers it does not know, and every known one`() = runTest {
+        val worker = worker(wiki())
+        val unknown = (0 until 250).map { ArtKey.Composer("someone$it", "Someone $it") }
+        assertEquals(203, worker.requestAll(unknown + listOf(debussy, chopin, bach), force = false))
+        assertEquals(203, worker.progress.value.total)
+        assertEquals(3, worker.requestAll(listOf(debussy, chopin, bach, ArtKey.Composer("someone250", "Someone 250")), force = false))   // known ones only: the cap is spent
+        advanceUntilIdle()
+        assertEquals(ArtworkProgress.Idle, worker.progress.value)
+        // A new run may ask about the next 200; the person asking for every composer is never capped.
+        assertEquals(50, worker.requestAll(unknown, force = false))   // the 50 not asked about yet
+        advanceUntilIdle()
+        assertEquals(250, worker.requestAll(unknown, force = true))
+    }
+
+    @Test
     fun `cancelling the background run lets the fetch under way finish and records nothing else`() = runTest {
         val wiki = wiki()
         val worker = worker(wiki)

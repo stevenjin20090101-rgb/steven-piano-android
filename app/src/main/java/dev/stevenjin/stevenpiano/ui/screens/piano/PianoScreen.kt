@@ -85,7 +85,7 @@ fun PianoScreen() {
                 .verticalScroll(rememberScrollState()),
         ) {
             Column(Modifier.readingWidth()) {
-                ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, vm::connectTo, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 PianoSettingsSections(piano, link is LinkState.Connected, statusText, statusReading, vm)
                 Preferences(settings, vm)
                 AboutRow(Modifier.padding(16.dp))

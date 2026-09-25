@@ -13,6 +13,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
+import dev.stevenjin.stevenpiano.data.TextLimits
 import java.util.concurrent.CancellationException
 
 /**
@@ -38,7 +39,8 @@ class TreeWalker(private val resolver: ContentResolver) {
                 }
             }
         }
-        fun entry(doc: TreeWalk.Found) = Entry(DocumentsContract.buildDocumentUriUsingTree(treeUri, doc.id), doc.name, doc.path)
+        fun entry(doc: TreeWalk.Found) =
+            Entry(DocumentsContract.buildDocumentUriUsingTree(treeUri, doc.id), TextLimits.clip(doc.name, TextLimits.DISPLAY_NAME), doc.path)
         return Listing(found.files.map(::entry), found.index?.let(::entry), found.limited)
     }
 

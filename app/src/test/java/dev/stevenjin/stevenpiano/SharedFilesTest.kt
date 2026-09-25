@@ -46,6 +46,15 @@ class SharedFilesTest {
     }
 
     @Test
+    fun `only content URIs are taken from another app, 500 at most`() {
+        val scheme = { uri: String -> uri.substringBefore("://", "").ifEmpty { null } }
+        val sent = listOf("content://files/a.mid", "file:///data/data/dev.stevenjin.stevenpiano/databases/steven-piano.db", "file:///proc/self/fd/0", "http://x/y.mid", "b.mid")
+        assertEquals(listOf("content://files/a.mid"), SharedFiles.accepted(sent, scheme))
+        val many = (0 until 2_000).map { "content://files/$it.mid" }
+        assertEquals(many.take(500), SharedFiles.accepted(many, scheme))
+    }
+
+    @Test
     fun `anything else is a bug and still throws`() {
         assertThrows(IllegalStateException::class.java) {
             SharedFiles.hand(listOf("content://files/nocturne.mid")) { throw IllegalStateException("not allowed to start a service") }

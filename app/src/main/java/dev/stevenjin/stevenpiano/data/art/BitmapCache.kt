@@ -60,12 +60,20 @@ class BitmapCache(maxBytes: Int = defaultBytes()) {
 
         fun defaultBytes(): Int = minOf(Runtime.getRuntime().maxMemory() / 8, MAX_BYTES.toLong()).toInt()
 
-        /** The smallest power of two that brings the shorter side of [width] × [height] to at most [target]. Pure. */
+        /** Four megapixels: the most any picture is decoded to, whatever its shape (16 MB as ARGB). */
+        const val MAX_DECODED_PIXELS = 4_000_000L
+
+        /**
+         * The smallest power of two that brings the shorter side of [width] × [height] to at most
+         * [target], and the whole picture to at most [MAX_DECODED_PIXELS] (a panorama's shorter
+         * side alone would let it decode huge). Pure.
+         */
         fun sampleSize(width: Int, height: Int, target: Int): Int {
             val shorter = minOf(width, height)
             if (shorter <= 0 || target <= 0) return 1
             var sample = 1
             while (shorter / sample > target) sample *= 2
+            while ((width.toLong() / sample) * (height.toLong() / sample) > MAX_DECODED_PIXELS) sample *= 2
             return sample
         }
 

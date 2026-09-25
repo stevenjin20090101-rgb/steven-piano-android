@@ -30,6 +30,16 @@ object SharedFiles {
         Unreadable,
     }
 
+    /** Files one share may hand over at most; the rest are left out. */
+    const val MAX_SHARED = 500
+
+    /**
+     * What an intent's files may be: content URIs only (a file:// path from another app could name
+     * this app's own files, a FIFO or /proc; the manifest cannot filter a share's EXTRA_STREAM, nor an
+     * explicit intent), at most [MAX_SHARED] of them. [scheme] reads a file's URI scheme.
+     */
+    fun <T> accepted(files: List<T>, scheme: (T) -> String?): List<T> = files.filter { scheme(it) == "content" }.take(MAX_SHARED)
+
     /** Hands [files] to [start] (the import service), and says how that went. Anything else [start] throws is a bug, and still throws. */
     fun <T> hand(files: List<T>, start: (List<T>) -> Unit): Outcome {
         if (files.isEmpty()) return Outcome.None

@@ -466,7 +466,15 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
             }
             for (k in s.signKind.indices) glyph(glyphs.sign(s.signKind[k]), s.signX[k], s.signY[k], colors.glyph)
             drawText(number, color = colors.number, topLeft = Offset(s.left, s.trebleTop - numberLift - number.firstBaseline))
-            for (i in s.firstNote until s.noteEnd) if (layout.system[i] == s.index) note(layout, s, i, colors.upcoming)
+            // A system holds a few bars; past MAX_NOTE_DRAWS notes in one it is a crafted file, not music.
+            var drawn = 0
+            for (i in s.firstNote until s.noteEnd) {
+                if (drawn >= MAX_NOTE_DRAWS) break
+                if (layout.system[i] == s.index) {
+                    note(layout, s, i, colors.upcoming)
+                    drawn++
+                }
+            }
         }
     }
 
@@ -493,7 +501,9 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
         }
         val starts = notes.startMicros
         val ends = notes.endMicros
-        for (i in notes.firstStartingAtOrAfter(now - notes.maxDurationMicros - flipMicros) until notes.size) {
+        var drawn = 0
+        for (i in notes.scanStart(now - flipMicros) until notes.size) {
+            if (drawn >= MAX_NOTE_DRAWS) break
             val start = starts[i]
             if (start > now) break
             val end = ends[i]
@@ -508,6 +518,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
             translate(left = slotLeft[slot]) {
                 clipRect(top = s.bandTop, bottom = s.bandBottom) { note(layout, s, i, ramp[level]) }
             }
+            drawn++
         }
     }
 

@@ -41,6 +41,20 @@ private const val TRACKER_FROM_BOTTOM = 1f / 3f
 /** Steps between upcoming and sounding colours, precomputed so drawing never allocates. */
 internal const val RAMP_STEPS = 12
 
+/**
+ * How far before the visible window a frame looks for notes still sounding into it: the longest
+ * note, but never more than 30 s. One note left unreleased runs to the piece's end; without the
+ * bound every frame would scan from the first note.
+ */
+internal const val MAX_BACKOFF_MICROS = 30_000_000L
+
+/** Notes drawn per frame at most, however dense the file: the roll and the score's overlay alike. */
+internal const val MAX_NOTE_DRAWS = 4_000
+
+/** Where a frame's scan starts: the first note that can still be sounding at [windowStart], within [MAX_BACKOFF_MICROS]. */
+internal fun NoteList.scanStart(windowStart: Long): Int =
+    firstStartingAtOrAfter(windowStart - minOf(maxDurationMicros, MAX_BACKOFF_MICROS))
+
 /** The upcoming-to-sounding colours, [RAMP_STEPS] + 1 of them, for [rampLevel]. */
 internal fun colorRamp(upcoming: Color, sounding: Color): Array<Color> =
     Array(RAMP_STEPS + 1) { lerp(upcoming, sounding, it / RAMP_STEPS.toFloat()) }
@@ -114,8 +128,8 @@ fun NoteCanvas(
                     for (i in 0 until KeyMap.KEY_COUNT) {
                         if (roll.keys.isBlack(i)) drawRect(blackLane, Offset(roll.keys.left(i), 0f), Size(roll.keys.width(i), size.height))
                     }
-                    roll.drawNotes(this, now, black = false)
-                    roll.drawNotes(this, now, black = true)
+                    val drawn = roll.drawNotes(this, now, black = false, budget = MAX_NOTE_DRAWS)
+                    roll.drawNotes(this, now, black = true, budget = MAX_NOTE_DRAWS - drawn)
                     if (roll.paper) {
                         drawRect(edge, Offset(0f, roll.hitY - bar / 2 - edgeGap - edgeLine), Size(size.width, edgeLine))
                         drawRect(sounding, Offset(0f, roll.hitY - bar / 2), Size(size.width, bar))
@@ -144,12 +158,15 @@ private class Roll(
     private val aheadMicros = (hitY / pxPerMicro).toLong()
     private val behindMicros = ((height - hitY) / pxPerMicro).toLong()
 
-    fun drawNotes(scope: DrawScope, now: Long, black: Boolean) {
+    /** Draws the visible white (or black) notes, at most [budget] of them; returns how many it drew. */
+    fun drawNotes(scope: DrawScope, now: Long, black: Boolean, budget: Int): Int {
         val windowStart = now - behindMicros
         val windowEnd = now + aheadMicros
         val starts = notes.startMicros
         val ends = notes.endMicros
-        for (i in notes.firstStartingAtOrAfter(windowStart - notes.maxDurationMicros) until notes.size) {
+        var drawn = 0
+        for (i in notes.scanStart(windowStart) until notes.size) {
+            if (drawn >= budget) break
             val start = starts[i]
             if (start > windowEnd) break
             val end = ends[i]
@@ -167,6 +184,8 @@ private class Roll(
                 size = Size(width, bottom - top),
                 cornerRadius = if (paper) CornerRadius(width / 2) else CornerRadius.Zero,
             )
+            drawn++
         }
+        return drawn
     }
 }

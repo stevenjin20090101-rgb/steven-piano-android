@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.data.imports
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
+import dev.stevenjin.stevenpiano.data.TextLimits
 import java.io.Closeable
 import java.io.File
 import java.io.FileNotFoundException
@@ -54,8 +55,9 @@ class ZipSource(private val file: File, private val deleteWhenClosed: Boolean = 
     /** The folder INDEX.csv sits in; its paths are relative to it. */
     val indexBase: String = indexEntry?.name?.let(::folderOf).orEmpty()
 
+    /** The MIDI files; each one's name is cut to [TextLimits.DISPLAY_NAME] characters (its path stays whole, for INDEX.csv). */
     fun items(): List<ImportItem> = entries.filter { isMidiName(it.name) }.map { entry ->
-        ImportItem(entry.name.substringAfterLast('/'), entry.name) { zip.getInputStream(entry) }
+        ImportItem(TextLimits.clip(entry.name.substringAfterLast('/'), TextLimits.DISPLAY_NAME), entry.name) { zip.getInputStream(entry) }
     }
 
     /** The INDEX.csv, or null when there is none or it is larger than [ImportLimits.INDEX_BYTES] (then it is ignored). */

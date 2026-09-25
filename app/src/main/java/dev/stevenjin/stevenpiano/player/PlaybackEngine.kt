@@ -21,7 +21,8 @@ import dev.stevenjin.stevenpiano.midi.NoteRouter
  * the next event is due. Pause, seek and stop silence the piano first; play and seek then
  * re-send the pedal in effect. Keys played on the Keys screen go out at once through the same
  * [router] ([liveNoteOn] and friends), so a piece and the keys share its bookkeeping; a full
- * silence lets go of both. Not thread-safe: one thread (the scheduler's) owns it.
+ * silence lets go of both. A pedal change the router holds back (it paces the pedal) is due by
+ * the time [advance] returns. Not thread-safe: one thread (the scheduler's) owns it.
  */
 class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRouter()) {
     var status: PlaybackStatus = PlaybackStatus.Stopped
@@ -142,13 +143,14 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         val events = midi.events
         val nowMicros = nowNanos / 1000
         batch.clear()
+        router.flushPedal(nowMicros, batch)   // a pedal change the router held back, if its turn has come
         while (cursor < events.size && events.atMicros(cursor) <= position) {
             router.route(events.status(cursor), events.data1(cursor), events.data2(cursor), nowMicros, batch)
             cursor++
         }
         if (cursor < events.size) {
             send(dropPending = false)
-            return wakeTimeFor(events.atMicros(cursor))
+            return minOf(wakeTimeFor(events.atMicros(cursor)), pedalWakeTime())
         }
         router.silence(batch)   // the end: last releases, then the stop sequence
         send(dropPending = false)
@@ -159,6 +161,9 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     }
 
     private fun wakeTimeFor(songMicros: Long): Long = wakeTime(songMicros, anchorSongMicros, anchorNanos, tempoPct)
+
+    /** When a pedal change the router is holding back may go ([Long.MAX_VALUE]: none is). */
+    private fun pedalWakeTime(): Long = router.pedalDueMicros.let { if (it == Long.MAX_VALUE) it else it * 1000 }
 
     private fun silence() {
         batch.clear()

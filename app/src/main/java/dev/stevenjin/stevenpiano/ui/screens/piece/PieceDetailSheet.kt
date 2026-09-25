@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,8 +65,10 @@ import kotlinx.coroutines.flow.first
  * the composer as an eyebrow, then the piece's Wikipedia extract when it has a page, otherwise the
  * composer's, a "From Wikipedia" link to where the text came from and the attribution line.
  * Opening it asks for the piece's notes (and the composer's, if never looked up) ahead of any
- * background fetch. Nothing found: "No notes found for this piece."; offline with nothing kept:
- * "Notes need an internet connection."
+ * background fetch, when artwork may arrive by itself (the Piano tab's "Fetch artwork
+ * automatically"); with that off, nothing is asked until the person taps "Fetch notes". Nothing
+ * found: "No notes found for this piece."; offline with nothing kept: "Notes need an internet
+ * connection."
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,8 +83,12 @@ fun PieceDetailSheet(pieceId: Long, onDismiss: () -> Unit) {
             null
         }
     }
-    LaunchedEffect(piece) {
+    val settings by graph.settings.collectAsStateWithLifecycle()
+    var asked by remember(pieceId) { mutableStateOf(false) }
+    val fetching = settings.fetchArtworkAutomatically || asked
+    LaunchedEffect(piece, fetching) {
         val p = piece ?: return@LaunchedEffect
+        if (!fetching) return@LaunchedEffect
         // Both go to the front of the queue; the piece's own notes, asked last, come first.
         if (p.composerKey.isNotEmpty()) graph.artwork.request(ArtKey.Composer(p.composerKey, p.composer), priority = true)
         graph.artwork.request(ArtKey.Piece(p.id, p.title, p.composer), priority = true)
@@ -92,23 +99,25 @@ fun PieceDetailSheet(pieceId: Long, onDismiss: () -> Unit) {
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        piece?.let { PieceNotes(it, sheetState) }
+        piece?.let { PieceNotes(it, sheetState, fetching, onFetch = { asked = true }) }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PieceNotes(piece: PieceEntity, sheetState: SheetState) {
+private fun PieceNotes(piece: PieceEntity, sheetState: SheetState, fetching: Boolean, onFetch: () -> Unit) {
     val online by LocalContext.current.graph.artwork.online.collectAsStateWithLifecycle()
     val own = rememberArtworkRow(ArtworkEntity.forPiece(piece.id))
     val composer = rememberArtworkRow(ArtworkEntity.forComposer(piece.composerKey))
     // A fetch that never records anything (Wikimedia asked to wait) must not leave the sheet waiting.
     var patient by remember(piece.id) { mutableStateOf(true) }
-    LaunchedEffect(piece.id) {
+    LaunchedEffect(piece.id, fetching) {
+        if (!fetching) return@LaunchedEffect
+        patient = true
         delay(WAIT_MS)
         patient = false
     }
-    val notes = PieceNotesChoice.of(own, composer, online, waiting = patient)
+    val notes = PieceNotesChoice.of(own, composer, online, waiting = patient, fetching = fetching)
     // The notes arrive after the sheet has opened at the height it had then: once it is up, it
     // settles again at its new height, so the text never runs off the bottom.
     LaunchedEffect(notes) {
@@ -136,11 +145,12 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState) {
         }
         Spacer(Modifier.height(16.dp))
         when (notes) {
-            is PieceNotesChoice.Text -> {
-                Text(notes.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            is PieceNotesChoice.Text -> NotesText(notes)
+            is PieceNotesChoice.Ask -> {
+                notes.composer?.let { NotesText(it) }
                 // Shifted by the button's own padding so its label lines up with the text.
-                WikipediaLink(notes.sourceUrl, Modifier.padding(top = 4.dp).offset(x = (-12).dp))
-                Eyebrow(ArtworkCopy.ATTRIBUTION, Modifier.padding(top = 4.dp), uppercase = false)
+                TextButton(onClick = onFetch, modifier = Modifier.padding(top = 4.dp).offset(x = (-12).dp)) { Text("Fetch notes") }
+                Eyebrow(ArtworkCopy.TRANSPARENCY, Modifier.padding(top = 4.dp), uppercase = false)
             }
             PieceNotesChoice.Waiting -> ProgressHairline(null, Modifier.padding(vertical = 12.dp))
             PieceNotesChoice.None -> Message("No notes found for this piece.")
@@ -148,6 +158,15 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState) {
         }
         Spacer(Modifier.height(32.dp))
     }
+}
+
+/** Wikipedia's text, where it came from, and its attribution. */
+@Composable
+private fun NotesText(notes: PieceNotesChoice.Text) {
+    Text(notes.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+    // Shifted by the button's own padding so its label lines up with the text.
+    WikipediaLink(notes.sourceUrl, Modifier.padding(top = 4.dp).offset(x = (-12).dp))
+    Eyebrow(ArtworkCopy.ATTRIBUTION, Modifier.padding(top = 4.dp), uppercase = false)
 }
 
 @Composable
@@ -163,14 +182,24 @@ sealed interface PieceNotesChoice {
     /** Online, and the piece has not been looked up yet: the fetch is under way. */
     data object Waiting : PieceNotesChoice
 
+    /**
+     * Artwork is not fetched by itself, and the piece was never looked up: a "Fetch notes" button,
+     * under the composer's text when that is kept already.
+     */
+    data class Ask(val composer: Text?) : PieceNotesChoice
+
     data object None : PieceNotesChoice
 
     data object Offline : PieceNotesChoice
 
     companion object {
-        /** [waiting]: the sheet still expects the piece's own fetch to finish. */
-        fun of(piece: ArtworkEntity?, composer: ArtworkEntity?, online: Boolean, waiting: Boolean): PieceNotesChoice {
+        /**
+         * [waiting]: the sheet still expects the piece's own fetch to finish. [fetching]: a fetch was
+         * asked for, by the setting or by the person; without it nothing goes out until they ask.
+         */
+        fun of(piece: ArtworkEntity?, composer: ArtworkEntity?, online: Boolean, waiting: Boolean, fetching: Boolean = true): PieceNotesChoice {
             piece.textOrNull()?.let { return it }
+            if (piece == null && !fetching && online) return Ask(composer.textOrNull())
             if (piece == null && online && waiting) return Waiting
             composer.textOrNull()?.let { return it }
             return if (piece == null && !online) Offline else None

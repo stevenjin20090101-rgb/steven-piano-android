@@ -31,4 +31,11 @@ object ImportCopy {
         val failed = if (progress.failed > 0) "${Format.count(progress.failed, "file", "files")} couldn't be read." else null
         return listOfNotNull(imported, failed).joinToString(" ")
     }
+
+    /** The question before files another app sent are imported: "Add 3 files to the library?" */
+    fun addShared(count: Int): String = "Add ${Format.count(count, "file", "files")} to the library?"
+
+    /** Under it: where they came from, and what adding does. */
+    fun sharedDetail(count: Int): String =
+        if (count == 1) "Another app sent this file. Adding copies it into Steven Piano." else "Another app sent these files. Adding copies them into Steven Piano."
 }

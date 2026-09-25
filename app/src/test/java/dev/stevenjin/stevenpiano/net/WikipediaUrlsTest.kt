@@ -104,6 +104,20 @@ class WikipediaUrlsTest {
     }
 
     @Test
+    fun `hosts are read as the connection reads them, with no user info, backslash or other port, and exact names`() {
+        assertFalse(WikipediaUrls.allowed("https://evil.com\\@en.wikipedia.org/wiki/Bach"))   // OkHttp would connect to evil.com
+        assertEquals("", WikipediaUrls.hostOf("https://evil.com\\@en.wikipedia.org/wiki/Bach"))
+        assertFalse(WikipediaUrls.allowed("https://user:pass@en.wikipedia.org/wiki/Bach"))
+        assertEquals("", WikipediaUrls.hostOf("https://user@en.wikipedia.org/wiki/Bach"))
+        assertFalse(WikipediaUrls.allowed("https://en.wikipedia.org:8443/wiki/Bach"))
+        assertTrue(WikipediaUrls.allowed("https://en.wikipedia.org:443/wiki/Bach"))
+        assertFalse(WikipediaUrls.allowed("https://xen.wikipedia.org/wiki/Bach"))
+        assertFalse(WikipediaUrls.allowed("https://en.wikipedia.org./wiki/Bach"))
+        assertFalse(WikipediaUrls.allowed("not a url"))
+        assertEquals("upload.wikimedia.org", WikipediaUrls.hostOf("https://UPLOAD.wikimedia.org/x.jpg"))
+    }
+
+    @Test
     fun `a From Wikipedia link is only ever an English Wikipedia article over HTTPS`() {
         val bach = "https://en.wikipedia.org/wiki/Johann_Sebastian_Bach"
         assertEquals(bach, WikipediaUrls.pageLink(bach))
@@ -128,5 +142,6 @@ class WikipediaUrlsTest {
         assertNull(WikipediaUrls.retryAfterMillis("Wed, 21 Oct 2015 07:28:00 GMT"))
         assertNull(WikipediaUrls.retryAfterMillis(null))
         assertNull(WikipediaUrls.retryAfterMillis("-5"))
+        assertEquals(86_400_000L, WikipediaUrls.retryAfterMillis("99999999999999999"))   // at most a day, never an overflow
     }
 }

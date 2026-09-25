@@ -13,6 +13,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import dev.stevenjin.stevenpiano.data.TextLimits
 import java.io.Closeable
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -103,7 +104,10 @@ fun openSource(context: Context, source: ImportSource, cancelled: () -> Boolean 
 private fun ContentResolver.openStream(uri: Uri): InputStream =
     openInputStream(uri) ?: throw FileNotFoundException("Can't open $uri")
 
-private fun displayName(resolver: ContentResolver, uri: Uri): String =
-    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+/** The name the sending app gives the file, cut to [TextLimits.DISPLAY_NAME] characters (another app chose it). */
+private fun displayName(resolver: ContentResolver, uri: Uri): String {
+    val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
     } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Untitled.mid"
+    return TextLimits.clip(name, TextLimits.DISPLAY_NAME)
+}

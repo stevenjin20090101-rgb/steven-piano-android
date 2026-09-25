@@ -28,6 +28,32 @@ class TitleHeuristicsTest {
     }
 
     @Test
+    fun `the split finds what the old regex found, without its quadratic time`() {
+        val cases = listOf(
+            "Abt, F - Vocalise1", "Liszt - Etude - La Campanella", "a - b", " - b", "a - ", "a -  - b", " -  - b", "x-y - z", "- - -",
+            "Chopin -Nocturne", "Chopin- Nocturne", "a\u2028 - b", "a - b\nc", "a\u0085 - b", "", "a",
+        )
+        val regex = Regex("^(.+?) - (.+)$")
+        for (name in cases) {
+            val expected = regex.matchEntire(name)?.let { it.groupValues[1].trim() to it.groupValues[2].trim() }
+            assertEquals(name, expected, TitleHeuristics.splitComposer(name))
+        }
+        val hostile = " - ".repeat(20_000) + "\u2028"   // 60,000 characters: once 10^9 regex steps
+        val started = System.nanoTime()
+        assertEquals(null, TitleHeuristics.splitComposer(hostile))
+        TitleHeuristics.metadata(hostile + ".mid", null, emptyList())
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 500)
+    }
+
+    @Test
+    fun `a file name is read to 255 characters`() {
+        val name = "Chopin - " + "Nocturne ".repeat(100) + ".mid"
+        val meta = TitleHeuristics.metadata(name, null, emptyList())
+        assertEquals("Chopin", meta.composer)
+        assertTrue(meta.title.length <= 255)
+    }
+
+    @Test
     fun `a stub title gives way to Track 0's name when that reads like a title`() {
         assertEquals("Klaviersonate Nr. 8 KV 311 1. Satz", meta("mz_311_1.mid", names = listOf("Klaviersonate Nr. 8 KV 311 1. Satz")).title)
         assertEquals("Die Jahreszeiten — April", meta("ty_april.mid", names = listOf("Die Jahreszeiten", "April")).title)

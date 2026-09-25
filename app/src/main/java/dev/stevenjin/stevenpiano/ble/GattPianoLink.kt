@@ -32,11 +32,17 @@ import kotlin.concurrent.withLock
  *
  * Connect: a filtered scan, stopped before connecting; connectGatt(autoConnect = false);
  * requestMtu(255), keeping whatever onMtuChanged grants; discoverServices, retried once;
- * connection priority HIGH; Connected, and the address is remembered.
+ * connection priority HIGH; Connected, and the address is remembered. The remembered address is
+ * pinned: another BLE-MIDI device advertising as "Steven Piano" is never connected to by itself;
+ * a scan that finds only such a one offers it ([LinkError.OtherPiano]) for the person to choose,
+ * and reconnecting ignores it. Each connection has a new [LinkState.Connected.epoch].
  * The console: when discovery also finds the Nordic UART Service, the first operation on the
  * connection switches on its notifications (the CCCD write), and [console] carries lines both ways.
  * Writes: one GATT operation in flight, always: the next waits for its callback. MIDI goes first;
  * a console line goes only while no MIDI is waiting, so it delays a MIDI packet by one write at most.
+ * A packet the stack keeps refusing is retried, and one that lets a key or the pedal go is never
+ * given up while connected; any other given up on is followed by the stop sequence and a new
+ * epoch, so the player re-syncs the piano.
  * A drop: close() the gatt, then Reconnecting: a background connectGatt(autoConnect = true) on
  * the same piano, plus filtered scans with backoff 1, 2, 4, 8, 15 s starting after 20 s.
  * Every radio call and every callback runs on [executor]'s thread, which never blocks, except
@@ -92,6 +98,13 @@ class GattPianoLink(
     private var gatt: GattConnection? = null
     private var piano: FoundPiano? = null
     private var preferredAddress: String? = null
+
+    /** Another "Steven Piano" a scan found while looking for the pinned one; offered if that one never shows. */
+    private var otherPiano: FoundPiano? = null
+    private var errorOther: String? = null
+
+    /** Bumped for each connection and each packet given up on; see [LinkState.Connected.epoch]. */
+    private var epoch = 0L
     private var mtu = DEFAULT_MTU
     private var discoveryRetried = false
     private var connectRetried = false
@@ -105,6 +118,12 @@ class GattPianoLink(
     private var backoffStep = 0
     private val throttle = ScanThrottle()
 
+    /** The stop sequence, queued after a packet was given up on. Only ever read. */
+    private val silence = MidiBatch().apply {
+        add(0xB0, 64, 0)
+        add(0xB0, 123, 0)
+    }
+
     // One Runnable per timer, so each can be cancelled.
     private val pump = Runnable { pumpNow() }
     private val startScan = Runnable { beginScan() }
@@ -115,7 +134,8 @@ class GattPianoLink(
     private val mtuTimeout = Runnable { discover() }
     private val discoveryTimeout = Runnable { gatt?.let { onDiscovered(it, success = false) } }
     private val writeTimeout = Runnable { gatt?.let(::onWritten) }
-    private val timers = listOf(pump, startScan, scanTimeout, connectTimeout, retryConnect, retryInBackground, mtuTimeout, discoveryTimeout, writeTimeout)
+    private val offerOther = Runnable { onOtherPianoOnly() }
+    private val timers = listOf(pump, startScan, scanTimeout, connectTimeout, retryConnect, retryInBackground, mtuTimeout, discoveryTimeout, writeTimeout, offerOther)
 
     private val events = object : GattEvents {
         override fun onConnectionChanged(connection: GattConnection, connected: Boolean, status: Int) =
@@ -149,7 +169,8 @@ class GattPianoLink(
 
     override fun send(batch: MidiBatch, dropPending: Boolean) {
         if (!ready) return
-        writer.enqueue(batch, dropPending)
+        val dropped = writer.enqueue(batch, dropPending)
+        if (dropped > 0) log("The piano fell behind: $dropped waiting notes dropped")
         if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
     }
 
@@ -200,6 +221,7 @@ class GattPianoLink(
         halt()
         wanted = true
         error = null
+        errorOther = null
         address?.let { preferredAddress = it }
         beginScan()
     }
@@ -225,17 +247,42 @@ class GattPianoLink(
     }
 
     private fun onFound(found: FoundPiano) {
-        if (!scanning || !isPiano(found)) return
+        if (!scanning) return
+        val pinned = preferredAddress
+        when {
+            pinned != null && found.address.equals(pinned, ignoreCase = true) -> connectFound(found)
+            found.name != PianoBluetooth.NAME -> Unit   // another BLE-MIDI device
+            pinned == null -> connectFound(found)   // no piano known yet: the first Steven Piano
+            reconnecting -> Unit   // a reconnection never switches pianos
+            otherPiano == null -> {   // the person decides, unless the known piano answers first
+                otherPiano = found
+                executor.schedule(OTHER_PIANO_GRACE_MS, offerOther)
+            }
+        }
+    }
+
+    private fun connectFound(found: FoundPiano) {
+        executor.cancel(offerOther)
+        otherPiano = null
         stopScanning()
         connectDirect(found)
     }
 
-    private fun isPiano(found: FoundPiano): Boolean =
-        found.name == PianoBluetooth.NAME || found.address.equals(preferredAddress, ignoreCase = true)
+    /** Only another "Steven Piano" answered: offered, never connected to. */
+    private fun onOtherPianoOnly() {
+        val other = otherPiano ?: return
+        if (!scanning || reconnecting) return
+        stopScanning()
+        fail(LinkError.OtherPiano, other.address)
+    }
 
     private fun onScanTimeout() {
         stopScanning()
-        if (reconnecting) scheduleNextScan() else fail(LinkError.NotFound)
+        when {
+            reconnecting -> scheduleNextScan()
+            otherPiano != null -> fail(LinkError.OtherPiano, otherPiano?.address)
+            else -> fail(LinkError.NotFound)
+        }
     }
 
     private fun onScanFailed(code: Int) {
@@ -341,6 +388,8 @@ class GattPianoLink(
         reconnecting = false
         attempt = 0
         error = null
+        errorOther = null
+        epoch++
         connectRetried = false
         executor.cancel(startScan)
         executor.cancel(retryInBackground)
@@ -429,11 +478,12 @@ class GattPianoLink(
         publish()
     }
 
-    private fun fail(reason: LinkError) {
+    private fun fail(reason: LinkError, other: String? = null) {
         log("Not connected: ${reason.name}")
         wanted = false
         halt()
         error = reason
+        errorOther = other
         publish()
     }
 
@@ -441,6 +491,7 @@ class GattPianoLink(
     private fun halt() {
         stopScanning()
         timers.forEach(executor::cancel)
+        otherPiano = null
         gatt?.let { guard { it.disconnect() } }
         closeGatt()
         phase = Phase.None
@@ -481,7 +532,8 @@ class GattPianoLink(
 
     /** One GATT operation: a MIDI packet, a piece of a console line, or switching on the console's replies. */
     private sealed interface Op {
-        class Midi(val packet: ByteArray) : Op
+        /** [mustArrive]: it lets a key or the pedal go (see [BleMidiFramer.mustArrive]). */
+        class Midi(val packet: ByteArray, val mustArrive: Boolean) : Op
 
         class Console(val chunk: ByteArray, val endsLine: Boolean) : Op
 
@@ -519,10 +571,17 @@ class GattPianoLink(
             WriteResult.Busy, WriteResult.Failed -> {
                 retryOp = op
                 if (++writeRetries > MAX_WRITE_RETRIES) {
+                    if (op is Op.Midi && op.mustArrive) {
+                        // Never given up while connected: the piano would hold a key or the pedal.
+                        if (writeRetries == MAX_WRITE_RETRIES + 1) log("A packet that lets keys go waits on a busy stack")
+                        executor.schedule(WRITE_RETRY_SLOW_MS, pump)
+                        return
+                    }
                     log(if (op is Op.Midi) "Dropped a packet the stack would not take" else "Dropped a console write the stack would not take")
                     retryOp = null
                     writeRetries = 0
                     done(op, dropped = true)
+                    if (op is Op.Midi) lostPacket()
                 }
                 executor.schedule(WRITE_RETRY_MS, pump)
             }
@@ -536,7 +595,7 @@ class GattPianoLink(
      */
     private fun nextOp(now: Long): Op? {
         if (subscribePending) return Op.Subscribe
-        writer.nextPacket(now, mtu, now / NANOS_PER_MS)?.let { return Op.Midi(it) }
+        writer.nextPacket(now, mtu, now / NANOS_PER_MS)?.let { return Op.Midi(it, BleMidiFramer.mustArrive(it)) }
         if (writer.pending > 0) return null
         val line = consoleQueue.peek() ?: return null
         val end = minOf(line.size, consoleOffset + (mtu - ATT_HEADER).coerceAtLeast(1))
@@ -555,6 +614,17 @@ class GattPianoLink(
                 consoleOffset += op.chunk.size
             }
         }
+    }
+
+    /**
+     * A MIDI packet was given up on (Note Ons only: see [BleMidiFramer.mustArrive]), so the piano and
+     * the player may disagree about what is down. The stop sequence replaces whatever waits, and a
+     * new epoch asks the player to re-sync: silence, then the pedal where the music is.
+     */
+    private fun lostPacket() {
+        writer.enqueue(silence, dropPending = true)
+        epoch++
+        publish()
     }
 
     /** From any thread: a console line joins the queue, behind MIDI. */
@@ -586,11 +656,11 @@ class GattPianoLink(
 
     private fun publish() {
         _state.value = when {
-            phase == Phase.Ready -> LinkState.Connected(piano?.name ?: PianoBluetooth.NAME, mtu)
+            phase == Phase.Ready -> LinkState.Connected(piano?.name ?: PianoBluetooth.NAME, mtu, epoch)
             reconnecting -> LinkState.Reconnecting(attempt)
             scanning -> LinkState.Scanning
             phase != Phase.None -> LinkState.Connecting
-            else -> error?.toState() ?: LinkState.Disconnected
+            else -> error?.toState(errorOther) ?: LinkState.Disconnected
         }
     }
 
@@ -620,7 +690,11 @@ class GattPianoLink(
         private const val WRITE_TIMEOUT_MS = 1_000L
         private const val WRITE_RETRY_MS = 5L
         private const val MAX_WRITE_RETRIES = 40
+        private const val WRITE_RETRY_SLOW_MS = 20L
         private const val EMERGENCY_RETRY_MS = 5L
+
+        /** How long a scan keeps looking for the known piano after another "Steven Piano" answered. */
+        private const val OTHER_PIANO_GRACE_MS = 3_000L
 
         /** Pedal up, then All Notes Off: the stop sequence, as packed messages. */
         private val STOP_SEQUENCE = intArrayOf(MidiBatch.pack(0xB0, 64, 0), MidiBatch.pack(0xB0, 123, 0))

@@ -20,29 +20,39 @@ import java.io.IOException
 
 /**
  * A picked photo made into a cover: read through the picker's short-lived grant, decoded no
- * larger than it needs to be, turned upright from its EXIF orientation, scaled so its longer side
- * is at most [MAX_PX] and saved as a JPEG. Blocking; null when the photo cannot be read.
+ * larger than it needs to be (and never past [MAX_DECODED_PIXELS], whatever its shape), turned
+ * upright from its EXIF orientation, scaled so its longer side is at most [MAX_PX] and saved as a
+ * JPEG. Blocking; null when the photo cannot be read, whatever the framework throws.
  */
 internal object PhotoImport {
     const val MAX_PX = 1024
     private const val QUALITY = 88
 
+    /** Four megapixels: 16 MB decoded, whatever the photo's shape. */
+    const val MAX_DECODED_PIXELS = 4_000_000L
+
+    /** The power-of-two sample that brings [width] x [height] under [maxPx] on its longer side (at most twice it) and under [MAX_DECODED_PIXELS]. Pure. */
+    fun sampleFor(width: Int, height: Int, maxPx: Int): Int {
+        val longer = maxOf(width, height)
+        var sample = 1
+        while (longer / (sample * 2) >= maxPx) sample *= 2
+        while ((width.toLong() / sample) * (height.toLong() / sample) > MAX_DECODED_PIXELS) sample *= 2
+        return sample
+    }
+
     fun jpeg(resolver: ContentResolver, uri: Uri, maxPx: Int): ByteArray? = try {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        val longer = maxOf(bounds.outWidth, bounds.outHeight)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             null
         } else {
-            var sample = 1
-            while (longer / (sample * 2) >= maxPx) sample *= 2
-            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            val options = BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds.outWidth, bounds.outHeight, maxPx) }
             val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
             decoded?.let { encode(it, rotation(resolver, uri), maxPx) }
         }
     } catch (e: IOException) {
         null
-    } catch (e: SecurityException) {   // the grant is gone
+    } catch (e: RuntimeException) {   // the grant is gone (SecurityException), a provider or the decoder gave up
         null
     } catch (e: OutOfMemoryError) {
         null
@@ -72,6 +82,8 @@ internal object PhotoImport {
             else -> 0
         }
     } catch (e: IOException) {
+        0
+    } catch (e: RuntimeException) {   // malformed EXIF: the framework's reader throws more than IOException
         0
     }
 }

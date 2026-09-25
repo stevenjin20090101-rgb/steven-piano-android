@@ -54,6 +54,15 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
         _state.value = LinkState.Reconnecting(1)
     }
 
+    /**
+     * A drop and a reconnection too quick for anyone watching the state to see: only the epoch of
+     * the connection tells (as the real link's does, also after it lost a packet).
+     */
+    fun reconnectQuietly() {
+        val connected = _state.value as LinkState.Connected
+        _state.value = connected.copy(epoch = connected.epoch + 1)
+    }
+
     /** Connected from the start, with [with] as its console: a link already up when a test begins. */
     fun connectedWith(with: FakeConsole?) {
         consoleOnConnect = with

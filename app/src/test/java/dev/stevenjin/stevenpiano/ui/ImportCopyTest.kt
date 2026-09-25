@@ -42,6 +42,14 @@ class ImportCopyTest {
     }
 
     @Test
+    fun `files another app sent are asked about before they are added`() {
+        assertEquals("Add 3 files to the library?", ImportCopy.addShared(3))
+        assertEquals("Add 1 file to the library?", ImportCopy.addShared(1))
+        assertEquals("Add 500 files to the library?", ImportCopy.addShared(500))
+        assertEquals("Another app sent this file. Adding copies it into Steven Piano.", ImportCopy.sharedDetail(1))
+    }
+
+    @Test
     fun `a shared file the app may not read says so, and what to do instead`() {
         assertEquals(
             "Couldn't read that file. Try Add files instead.",

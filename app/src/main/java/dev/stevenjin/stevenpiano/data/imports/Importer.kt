@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.data.imports
 
 import android.content.Context
 import android.util.Log
+import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -69,7 +70,7 @@ class Importer(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {   // unreadable zip, revoked grant, vanished folder, a provider that throws
-                log("Couldn't open the import: ${e.message}")
+                log("Couldn't open the import" + detail(e))
                 return@withContext ImportProgress(done = 1, total = 1, failed = 1).also { progress.value = it }
             } catch (e: OutOfMemoryError) {   // a listing too large for the memory left
                 log("Couldn't open the import: $TOO_LARGE")
@@ -80,7 +81,7 @@ class Importer(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RuntimeException) {   // not a file's fault (each is caught on its own): the rest count as failed
-                log("The import stopped: ${e.message}")
+                log("The import stopped" + detail(e))
                 val last = progress.value
                 last.copy(done = last.total, failed = last.failed + (last.total - last.done), current = null, finished = true)
                     .also { progress.value = it }
@@ -105,7 +106,7 @@ class Importer(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RuntimeException) {
-                log("Couldn't save ${batch.size} pieces: ${e.message}")
+                log("Couldn't save ${batch.size} pieces" + detail(e))
                 state.copy(failed = state.failed + batch.size)
             }
             batch.clear()
@@ -120,10 +121,10 @@ class Importer(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RuntimeException) {   // a sender's provider or the database threw: this file fails, the rest go on
-                log("${item.relativePath}: ${e.message}")
+                logFile(item, "couldn't be read" + detail(e))
                 Outcome.Failed
             } catch (e: OutOfMemoryError) {   // the parse's arrays are garbage again; the next file may fit
-                log("${item.relativePath}: $TOO_LARGE")
+                logFile(item, TOO_LARGE)
                 Outcome.Failed
             }
             when (outcome) {
@@ -142,6 +143,17 @@ class Importer(
         return state
     }
 
+    /**
+     * A file's trouble in the log. Debug builds name the file; release builds (whose warnings stay
+     * in the log) do not: paths come from the person's own folders and other apps' files.
+     */
+    private fun logFile(item: ImportItem, problem: String) {
+        log(if (BuildConfig.DEBUG) "${item.relativePath}: $problem" else "A file: $problem")
+    }
+
+    /** An exception's message for the log, in debug builds only: it may name a file or a URI. */
+    private fun detail(e: Throwable): String = if (BuildConfig.DEBUG) ": ${e.message}" else ""
+
     private sealed interface Outcome {
         class Ready(val piece: PieceEntity) : Outcome
         data object Duplicate : Outcome
@@ -152,10 +164,10 @@ class Importer(
         val bytes = try {
             item.open().use { ImportLimits.readCapped(it, MAX_BYTES) }
         } catch (e: IOException) {
-            log("${item.relativePath}: ${e.message}")
+            logFile(item, "couldn't be read" + detail(e))
             return Outcome.Failed
         } ?: run {
-            log("${item.relativePath}: larger than 8 MB, skipped")
+            logFile(item, "larger than 8 MB, skipped")
             return Outcome.Failed
         }
         val sha = sha256(bytes)
@@ -170,14 +182,14 @@ class Importer(
         val midi = try {
             SmfParser.parse(bytes)
         } catch (e: SmfException) {
-            log("${item.relativePath}: ${e.message}")
+            logFile(item, e.message.orEmpty())   // the parser's own plain-English reasons
             return Outcome.Failed
         }
-        midi.warnings.forEach { log("${item.relativePath}: $it") }
+        midi.warnings.forEach { logFile(item, it) }
         val fileName = try {
             files.write(sha, bytes)
         } catch (e: IOException) {
-            log("${item.relativePath}: ${e.message}")
+            logFile(item, "couldn't be saved" + detail(e))
             return Outcome.Failed
         }
         val meta = TitleHeuristics.metadata(item.name, row, midi.sequenceNames)

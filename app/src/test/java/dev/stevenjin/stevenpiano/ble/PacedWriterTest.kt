@@ -59,6 +59,34 @@ class PacedWriterTest {
     }
 
     @Test
+    fun `past 2,000 waiting messages the Note Ons are dropped, releases and the pedal kept in order`() {
+        val writer = PacedWriter()
+        val notes = MidiBatch().apply {
+            repeat(1_000) { i ->
+                add(0x90, 24 + i % 84, 64)
+                add(0x80, 24 + i % 84, 0)
+            }
+        }
+        assertEquals(0, writer.enqueue(notes))   // 2,000 waiting: at the cap, not past it
+        assertEquals(2_000, writer.pending)
+        val more = MidiBatch().apply {
+            add(0xB0, 64, 127)
+            add(0x90, 60, 64)
+            add(0x90, 62, 0)   // a Note On at velocity 0 is a release: kept
+        }
+        assertEquals(1_001, writer.enqueue(more))   // past the cap: every waiting Note On goes, the new one too
+        assertEquals(1_002, writer.pending)
+        val kept = mutableListOf<Int>()
+        var now = 0L
+        while (writer.pending > 0) {
+            now += 20 * ms
+            val packet = writer.nextPacket(now, 255, 0) ?: continue
+            for (i in 0 until (packet.size - 1) / 4) kept += packet[2 + i * 4].toInt() and 0xF0
+        }
+        assertEquals(List(1_000) { 0x80 } + 0xB0 + 0x90, kept)
+    }
+
+    @Test
     fun `order survives the queue growing and wrapping`() {
         val writer = PacedWriter(burst = 7)
         val sent = MidiBatch()

@@ -75,12 +75,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- "Open with" for MIDI files that arrive with a MIDI type. -->
+            <!-- "Open with" for MIDI files that arrive with a MIDI type. Content URIs only: a file://
+                 path from another app could point at this app's own files, a FIFO or /proc.
+                 Whatever arrives waits for the person's Add (MainActivity's ShareSheet). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:mimeType="audio/midi" />
                 <data android:mimeType="audio/mid" />
                 <data android:mimeType="audio/x-midi" />
@@ -93,7 +94,6 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:host="*" />
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="*/*" />

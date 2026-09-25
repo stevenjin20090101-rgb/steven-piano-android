@@ -19,7 +19,10 @@ package dev.stevenjin.stevenpiano.midi
  *    so a live key and a piece's note on the same key share it;
  *  - thins a strike that comes < 100 ms after the previous strike of an idle key, taps included;
  *  - forwards CC64 only; every other controller, program change, pitch bend and
- *    aftertouch is dropped.
+ *    aftertouch is dropped. A file's pedal changes go out at most 20 a second after a burst of
+ *    three (the actuator moves a real pedal): one that comes sooner waits, a newer one takes its
+ *    place, and [flushPedal] sends it when its turn comes ([pedalDueMicros]). The stop sequence
+ *    and the Keys screen's sustain are never held back.
  * Live keys are sources of their own, apart from the piece's: [silenceLive] lets go of them
  * (and of the Keys screen's sustain) while the piece's keys stay down.
  * Everything goes out on channel 1: the piano listens in omni mode.
@@ -36,6 +39,17 @@ class NoteRouter {
     private val refCount = IntArray(128)
     private val lastOnsetMicros = LongArray(128) { NEVER }
     private var pedal = UNKNOWN
+
+    /** A file's pedal change that came too soon, waiting its turn ([NONE]: none). */
+    private var pendingPedal = NONE
+
+    /** The pedal's token bucket, as microseconds of credit; a change costs [PEDAL_GAP_MICROS]. */
+    private var pedalCredit = PEDAL_CREDIT_MAX
+    private var pedalCreditAt = NEVER
+
+    /** When the waiting pedal change may go, in the same wall-clock microseconds as [route]'s; [Long.MAX_VALUE] when none waits. */
+    val pedalDueMicros: Long
+        get() = if (pendingPedal == NONE) Long.MAX_VALUE else pedalCreditAt + (PEDAL_GAP_MICROS - pedalCredit)
 
     /** Whether the Keys screen's sustain is latched down. */
     var liveSustainDown = false
@@ -61,8 +75,18 @@ class NoteRouter {
             0x90 -> if (data2 == 0) release(source, out)
             else if (accepts(channel)) noteOn(source, data1, data2, nowMicros, out)
             0x80 -> release(source, out)
-            0xB0 -> if (data1 == SUSTAIN && accepts(channel)) setPedal(data2, out)
+            0xB0 -> if (data1 == SUSTAIN && accepts(channel)) filePedal(data2, nowMicros, out)
         }
+    }
+
+    /** Sends the pedal change that was waiting, once its turn has come ([pedalDueMicros]). */
+    fun flushPedal(nowMicros: Long, out: MidiBatch) {
+        if (pendingPedal == NONE) return
+        refillPedal(nowMicros)
+        if (pedalCredit < PEDAL_GAP_MICROS) return
+        val value = pendingPedal
+        pendingPedal = NONE
+        spendPedal(value, out)
     }
 
     /**
@@ -86,6 +110,7 @@ class NoteRouter {
     /** The Keys screen's latching sustain: CC64 = 127 when [down], 0 when up. The piano has one pedal; the last change wins. */
     fun liveSustain(down: Boolean, out: MidiBatch) {
         liveSustainDown = down
+        pendingPedal = NONE   // the latest change wins, and this is it
         setPedal(if (down) PEDAL_DOWN else 0, out)
     }
 
@@ -106,6 +131,9 @@ class NoteRouter {
         sentKey.fill(KeyMap.UNPLAYABLE)
         refCount.fill(0)
         pedal = 0
+        pendingPedal = NONE
+        pedalCredit = PEDAL_CREDIT_MAX   // what follows a silence (a resumed piece's pedal) goes at once
+        pedalCreditAt = NEVER
         liveSustainDown = false
         activeLow = 0L
         activeHigh = 0L
@@ -134,6 +162,28 @@ class NoteRouter {
         if (value == pedal) return
         pedal = value
         out.add(0xB0, SUSTAIN, value)
+    }
+
+    /** A file's pedal change: now if the bucket allows, else it waits (replacing any change already waiting). */
+    private fun filePedal(value: Int, nowMicros: Long, out: MidiBatch) {
+        refillPedal(nowMicros)
+        if (pedalCredit >= PEDAL_GAP_MICROS) {
+            pendingPedal = NONE
+            spendPedal(value, out)
+        } else {
+            pendingPedal = if (value == pedal) NONE else value   // back where it is: nothing to send
+        }
+    }
+
+    private fun spendPedal(value: Int, out: MidiBatch) {
+        if (value == pedal) return
+        pedalCredit -= PEDAL_GAP_MICROS
+        setPedal(value, out)
+    }
+
+    private fun refillPedal(nowMicros: Long) {
+        if (pedalCreditAt != NEVER) pedalCredit = minOf(PEDAL_CREDIT_MAX, pedalCredit + (nowMicros - pedalCreditAt).coerceAtLeast(0L))
+        pedalCreditAt = nowMicros
     }
 
     private fun release(source: Int, out: MidiBatch) {
@@ -167,5 +217,13 @@ class NoteRouter {
         private const val SOURCES = LIVE + 128
         private const val NEVER = Long.MIN_VALUE / 2
         private const val UNKNOWN = -1
+        private const val NONE = -1
+
+        /** One pedal change per 50 ms (20 a second) once the burst is spent. */
+        const val PEDAL_GAP_MICROS = 50_000L
+
+        /** Pedal changes that may go back to back after a quiet spell. */
+        const val PEDAL_BURST = 3
+        private const val PEDAL_CREDIT_MAX = PEDAL_BURST * PEDAL_GAP_MICROS
     }
 }

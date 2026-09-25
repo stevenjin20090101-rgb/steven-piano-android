@@ -16,10 +16,17 @@ import dev.stevenjin.stevenpiano.midi.MidiBatch
  * 64-byte queue fills, so sends go through a token bucket: bursts of up to 20 messages,
  * then one message per millisecond. Messages keep their order. Thread-safe: the scheduler
  * enqueues while the Bluetooth thread drains.
+ *
+ * A file denser than the piano can play would grow the queue without end, and the piano would
+ * play on for minutes after the player stopped. So past [maxBacklog] messages (two seconds'
+ * worth) the Note Ons still waiting are dropped: late notes are no music anyway. Note Offs and
+ * controllers are always kept, in order, so nothing stays down and the pedal ends where the file
+ * left it.
  */
 class PacedWriter(
     private val burst: Int = BleMidiFramer.MAX_MESSAGES,
     private val nanosPerMessage: Long = 1_000_000L,
+    private val maxBacklog: Int = MAX_BACKLOG,
 ) {
     private var queue = IntArray(256)
     private var head = 0
@@ -32,11 +39,15 @@ class PacedWriter(
     val pending: Int
         @Synchronized get() = count
 
-    /** Queues [batch] after what is pending, or instead of it when [dropPending] (the stop sequence). */
+    /**
+     * Queues [batch] after what is pending, or instead of it when [dropPending] (the stop sequence).
+     * Returns how many waiting Note Ons were dropped to keep the backlog under [maxBacklog].
+     */
     @Synchronized
-    fun enqueue(batch: MidiBatch, dropPending: Boolean = false) {
+    fun enqueue(batch: MidiBatch, dropPending: Boolean = false): Int {
         if (dropPending) clearQueue()
         for (i in 0 until batch.size) push(batch.packedAt(i))
+        return if (count > maxBacklog) dropNoteOns() else 0
     }
 
     @Synchronized
@@ -88,5 +99,27 @@ class PacedWriter(
     private fun clearQueue() {
         head = 0
         count = 0
+    }
+
+    /** Removes every waiting Note On, keeping the rest in order; returns how many went. */
+    private fun dropNoteOns(): Int {
+        val mask = queue.size - 1
+        var kept = 0
+        for (i in 0 until count) {
+            val message = queue[(head + i) and mask]
+            if (isNoteOn(message)) continue
+            queue[(head + kept) and mask] = message   // kept <= i: never ahead of what is still to read
+            kept++
+        }
+        val dropped = count - kept
+        count = kept
+        return dropped
+    }
+
+    private fun isNoteOn(message: Int): Boolean = ((message ushr 16) and 0xF0) == 0x90 && (message and 0x7F) != 0
+
+    companion object {
+        /** Two seconds of the piano's pace. */
+        const val MAX_BACKLOG = 2_000
     }
 }

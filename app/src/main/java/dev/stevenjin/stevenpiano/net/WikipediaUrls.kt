@@ -92,19 +92,41 @@ object WikipediaUrls {
         return if (ok) url else null
     }
 
-    /** Whether the app may request [url]: HTTPS to one of [HOSTS]. */
-    fun allowed(url: String): Boolean = url.startsWith("https://") && hostOf(url) in HOSTS
+    /**
+     * Whether the app may request [url]: HTTPS to one of [HOSTS], read as `java.net.URI` reads it
+     * (so as the connection will), with no user info, no port but 443, and no backslash anywhere
+     * (OkHttp ends the authority at one, so `https://evil.com\@en.wikipedia.org/` would reach
+     * evil.com). A redirect's Location passes the same test.
+     */
+    fun allowed(url: String): Boolean {
+        val uri = parse(url) ?: return false
+        return uri.scheme == "https" && (uri.port == -1 || uri.port == HTTPS_PORT) && hostOf(uri) in HOSTS
+    }
 
-    /** The host of an absolute URL, lower-cased; "" when there is none. */
-    fun hostOf(url: String): String =
-        url.substringAfter("://", "").substringBefore('/').substringBefore('?').substringBefore('#')
-            .substringAfterLast('@').substringBefore(':').lowercase(Locale.ROOT)
+    /** The host of an absolute URL, lower-cased; "" when there is none, or when it carries user info or a backslash. */
+    fun hostOf(url: String): String = parse(url)?.let(::hostOf).orEmpty()
 
-    /** A Retry-After header in milliseconds; null when missing or given as a date. */
+    private fun hostOf(uri: URI): String = if (uri.rawUserInfo != null) "" else uri.host?.lowercase(Locale.ROOT).orEmpty()
+
+    private fun parse(url: String): URI? {
+        if ('\\' in url) return null
+        return try {
+            URI(url)
+        } catch (e: URISyntaxException) {
+            null
+        }
+    }
+
+    /** A Retry-After header in milliseconds, at most a day; null when missing or given as a date. */
     fun retryAfterMillis(header: String?): Long? {
         val seconds = header?.trim()?.toLongOrNull() ?: return null
-        return if (seconds < 0) null else seconds * 1000
+        return if (seconds < 0) null else seconds.coerceAtMost(MAX_RETRY_AFTER_SECONDS) * 1000
     }
+
+    private const val HTTPS_PORT = 443
+
+    /** A day: longer asks are read as a day (the worker waits at most a minute anyway). */
+    private const val MAX_RETRY_AFTER_SECONDS = 24L * 60 * 60
 
     /** [url] on [IMAGE_HOST] over HTTPS, without query or fragment; null for any other host. */
     private fun cleanImage(url: String): String? {

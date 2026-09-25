@@ -74,5 +74,13 @@ class ArtFilesTest {
         assertEquals(8, BitmapCache.sampleSize(960, 1245, ArtSize.Row.px))
         assertEquals(1, BitmapCache.sampleSize(960, 1245, ArtSize.Full.px))
         assertEquals(1, BitmapCache.sampleSize(0, 0, ArtSize.Tile.px))
+        // A panorama: its shorter side alone would decode it at 25 megapixels; 4 MP is the most.
+        assertEquals(8, BitmapCache.sampleSize(100_000, 1_000, ArtSize.Tile.px))
+        assertTrue((100_000L / 8) * (1_000L / 8) <= BitmapCache.MAX_DECODED_PIXELS)
+        // A picked photo: longer side near 1024, and never past 4 MP whatever its shape.
+        assertEquals(2, PhotoImport.sampleFor(4_000, 3_000, 1_024))
+        assertEquals(1, PhotoImport.sampleFor(1_000, 800, 1_024))
+        val tall = PhotoImport.sampleFor(2_000, 20_000, 20_000)
+        assertTrue((2_000L / tall) * (20_000L / tall) <= PhotoImport.MAX_DECODED_PIXELS)
     }
 }
