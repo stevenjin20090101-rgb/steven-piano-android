@@ -12,9 +12,10 @@
 An Android app that plays Standard MIDI Files on Steven's self-playing acoustic
 piano over Bluetooth LE MIDI. Pick a piece in the **Library**, watch it on
 **Now playing** as a paper roll, falling notes or a staff while the piano plays
-it, play the piano yourself on **Keys**, and connect and tune playback on the
-**Piano** tab. Phones and tablets alike. Sideloaded as an APK; no network, no
-accounts, no analytics. Made by Steven Jin.
+it, play the piano yourself on **Keys**, and on the **Piano** tab connect, adjust
+the piano's own lighting and feel, and tune playback. Phones and tablets alike.
+Sideloaded as an APK; no network, no accounts, no analytics. Made by Steven Jin.
+Version 1.1.
 
 ## What it does
 
@@ -25,7 +26,8 @@ accounts, no analytics. Made by Steven Jin.
   only, a line trailing each head for its length), scrolling through a playhead
   in step with the roll. Not engraved sheet music: no beams, rests or ties.
   Tempo, scrubbing, previous and next.
-- **Keys**: a playable keyboard over the piano's 84 keys, C1–B7. Every touch is a
+- **Keys**: a playable keyboard over the piano's 84 keys, C1–B7, never taller
+  than a real keyboard needs, along the bottom of the screen. Every touch is a
   Note On to the piano; chords with several fingers, a glissando by sliding.
   Where you touch a key sets how hard it plays: near the top softly (velocity
   24), near the bottom loudly (127); the last value shows as VELOCITY for a
@@ -36,9 +38,22 @@ accounts, no analytics. Made by Steven Jin.
   Keys shares the piano's safety rules with playback (never re-strike a held
   key, no same-key strikes closer than 100 ms), so it can be played while a
   piece plays.
-- **Piano**: the connection, the preferences (auto-connect, note display, wide
-  layout, default tempo, transpose, velocity, folding, drum channel) and the
-  About line.
+- **Piano settings**: the piano's own settings, from the Piano tab, over the
+  same Bluetooth connection (on firmware with its Bluetooth console; older
+  firmware just says it doesn't offer them yet). **Lighting**: the strip on or
+  off, mode, brightness, palette, length, offset, scale, glow, fade and a *Test
+  LED* that lights one key's LED to line the strip up. **Feel**: the Soft,
+  Cinematic, Expressive and Snappy presets, full power, volume, velocity curve,
+  the strike floors and ceiling (with a strike test), timing and release.
+  **Pedal**: on, half-pedalling, up and down positions. **Diagnostics**: the
+  power boards, I²C errors, uptime, the piano's own status report, *All keys
+  off* and *Save now*. The app reads every value when it connects, sends a
+  change as you make it and shows what the piano reports back; the piano saves
+  your changes when you leave the tab. Bench commands (firing solenoids, resets,
+  per-key force) stay at the piano's USB console.
+- **Piano**: the connection, the piano settings above, the app's preferences
+  (auto-connect, note display, wide layout, default tempo, transpose, velocity,
+  folding, drum channel) and the About line.
 - **Tablets and phones on their side**: a navigation rail on the left instead of
   the bottom bar. Now playing shows the staff and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
@@ -68,6 +83,13 @@ cd "Player Piano/android"
 If Gradle can't find the SDK, create `local.properties` with
 `sdk.dir=/opt/homebrew/share/android-commandlinetools` (it is not committed).
 `./gradlew testDebugUnitTest -Pcorpus` also parses every file under `../midi/`.
+The settings table's test reads `../firmware/docs/BLE_SETTINGS.md` and is
+skipped when the firmware folder isn't beside this one.
+
+On an emulator, debug builds reach an emulated piano instead of Bluetooth, with
+its console, so the Piano tab's settings work there (`adb logcat -s PianoLink`
+shows every line both ways). `adb shell setprop debug.stevenpiano.console none`
+before connecting stands in for firmware without the console.
 
 Both builds are signed with this Mac's debug key, so either installs over the
 other and keeps the library. A build from another computer has a different key:
@@ -153,6 +175,16 @@ the first play, so the lock screen shows play and pause.
 - [ ] On a tablet: the rail replaces the bottom bar; Now playing shows the staff
       over the roll upright and beside it on its side, in step with each other;
       Wide layout › Staff only and Notes only work while playing.
+- [ ] Piano settings (firmware with the Bluetooth console): on connect the Piano
+      tab fills in LIGHTING, FEEL, PEDAL and DIAGNOSTICS. Adjust a setting from
+      the Piano tab and confirm the piano's serial `status` shows it (Brightness
+      to 15 % prints `bright=40/255`). Choose Cinematic: the dependent settings
+      change to what the piano reports. Leave the tab, power the piano off and
+      on: the change is still there. *Test LED* lights the key's LED; Read
+      status shows the piano's report. With older firmware the tab says it
+      doesn't offer settings over Bluetooth yet, and playback works as before.
+- [ ] "Open with" from a file manager that gives no access: the Library says it
+      couldn't read the file (no crash); *Add files* imports it.
 
 ## Acknowledgements
 

@@ -19,5 +19,5 @@ import androidx.annotation.Keep
 @Keep
 object Provenance {
     const val TAG = "STEVEN-PIANO-PROVENANCE Made by Steven Jin <stevenjin20090101@gmail.com> Ed25519 fp eab16a502f679465"
-    val text = "Steven Piano · Made by Steven Jin · v1.0 · eab16a502f679465"
+    val text = "Steven Piano · Made by Steven Jin · v1.1 · eab16a502f679465"
 }

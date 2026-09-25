@@ -203,7 +203,7 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
 - Timers use `Tabular`; eyebrow labels are `uppercase()` at the call site.
 - Every icon-only control has a `contentDescription`. Layouts survive font scale 2.0.
 - About row on the Piano tab shows `Provenance.text` ("Steven Piano · Made by Steven Jin
-  · v1.0 · eab16a502f679465") and a one-line acknowledgement of the library sources.
+  · v1.1 · eab16a502f679465") and a one-line acknowledgement of the library sources.
 
 ## Authorship
 

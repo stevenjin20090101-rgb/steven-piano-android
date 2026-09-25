@@ -204,7 +204,7 @@ Indicator pill is `surfaceElevated`, not a tint.
   *Default tempo* · *Transpose* (−12…+12) · *Velocity* (50–150 %) · *Fold notes outside
   C1–B7* (switch, on) · *Skip drum channel* (switch, on).
 - About row at the very bottom, Eyebrow style: "Steven Piano · Made by Steven Jin ·
-  v1.0 · eab16a502f679465", and one quiet line acknowledging the library sources
+  v1.1 · eab16a502f679465", and one quiet line acknowledging the library sources
   (MAESTRO, piano-midi.de, Mutopia).
 - Playback keeps going with the screen off, from a monochrome media notification with
   play/pause; the piano is silenced on pause, stop, seek, a dropped link, or the app
