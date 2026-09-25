@@ -25,8 +25,11 @@ Folder: `Player Piano/android/` (its own git repo; never pushed without Steven's
 - `minSdk 26`, `targetSdk 34`, `compileSdk 36`. Gradle Kotlin DSL + version catalog.
 - Room (KSP), DataStore Preferences, coroutines/Flow, Navigation-Compose,
   androidx.media (`MediaSessionCompat`, MediaStyle notification).
-- No network. No analytics. No accounts. No Accompanist (archived) — permissions via
-  `rememberLauncherForActivityResult`.
+- No analytics. No accounts. No Accompanist (archived) — permissions via
+  `rememberLauncherForActivityResult`. Network (from v1.2, M11): exactly two hosts,
+  `en.wikipedia.org` and `upload.wikimedia.org`, for composers' portraits and notes; what is
+  sent is page titles and search terms made from the library's own names, nothing about the
+  person (see `v1.2 — M11 › Network policy`).
 - Toolchain on this Mac: `JAVA_HOME=/opt/homebrew/opt/openjdk@17`,
   `ANDROID_HOME=/opt/homebrew/share/android-commandlinetools`, `local.properties`
   `sdk.dir` pointing there. The `android` CLI needs `--sdk=$ANDROID_HOME`.
@@ -566,3 +569,140 @@ without reloading, repeat all wraps, play-next order, enqueue with nothing queue
 `SchemaV2Test`, `PlaylistOrderTest`, `SettingsRepositoryTest` (shuffle and repeat),
 `DragReorderTest`, `KeyboardGeometryTest` (rotation), `FormatTest` (playlist totals,
 monograms), `AdaptiveFrameTest` (tile columns).
+
+---
+
+# v1.2 — M11: artwork and notes, tiles with art, the piece sheet
+
+Read `DESIGN.md › v1.2 › Artwork and notes` first. Everything above stays except where this
+section says otherwise; M12 (score pages) adds its own section. Schema unchanged (v2).
+
+## Network policy
+
+- `INTERNET` and `ACCESS_NETWORK_STATE`. Two hosts, no others: `en.wikipedia.org` (REST
+  `api/rest_v1/page/summary/{title}`; `w/api.php?action=query&list=search&srsearch=…&srlimit=3&
+  srnamespace=0&format=json&formatversion=2`) and `upload.wikimedia.org` (portraits). HTTPS only:
+  `WikipediaUrls.allowed` refuses any other host, and redirects are followed by hand (at most 5)
+  through the same check. The summary API hands images out on `thumb.wikimedia.org` with `utm_*`
+  queries; they are rewritten to `upload.wikimedia.org` (the same files) without the query.
+- What is sent: page titles and search terms built from the library's composer names and piece
+  titles; nothing about the person. Every request, image downloads included, carries
+  `User-Agent: StevenPiano/1.2 (https://github.com/stevenjin20090101-rgb/steven-piano-android)`
+  and `Accept: application/json`.
+- `net/WikipediaClient.kt`: `WikiApi { summary(title): WikiSummary?; search(query): List<String>;
+  download(url, maxBytes): ByteArray? }` over `HttpURLConnection`: connect 10 s, read 15 s; 404/410
+  → null; 429/503 → `WikiBusyException(code, retryAfterMs)`; other non-2xx → `IOException`; bodies
+  capped before parsing (JSON 256 KB, past it an `IOException`; files at the caller's cap, 6 MB for
+  images, past it null). Titles: spaces → `_`, then UTF-8 percent-encoding. `WikiJson` (org.json,
+  kept thin: a stub on the JVM). Each request is logged at debug level (tag `Wikipedia`) with its
+  wall-clock time.
+- Image rule (`WikipediaUrls.image`): the original when ≤ 1024 px wide and jpg/png/gif/webp;
+  otherwise the thumbnail rewritten to **960 px**. Wikimedia renders thumbnails only at its
+  standard widths (… 330, 500, 960, 1280 …); `1024px-` answers HTTP 400 "Use thumbnail sizes
+  listed on https://w.wiki/GHai" (measured September 2026), so 960 is the widest step within the
+  1024 px limit. A narrower scan (TIFF) takes the widest step within its own width; drawings (SVG)
+  always 960.
+- `net/NetworkMonitor.kt`: `online: StateFlow<Boolean>` (default-network callback) for the UI,
+  `isOnline()` (INTERNET capability on the active network) for the worker.
+
+## Art keys, fetching and policy — `data/art/`
+
+- `ArtKey.Composer(composerKey, display)` → `composer:<composerKey>`; `ArtKey.Piece(id, title,
+  composer)` → `piece:<id>`; `playlist:<id>` rows are the person's photos, never fetched.
+  `ArtworkDao` gains `observeAll()`; `PieceDao` gains `idsByComposer(key, limit)` and
+  `firstComposerKey(playlistId)` (queries only).
+- `ArtworkFetcher` (pure over `WikiApi`): a composer's page name is `ComposerNames.canonical(key)`
+  (now public) or the display name; blank, "Traditional", "Anonymous", "Unknown", "Various" →
+  NOT_FOUND with no request; `type == "disambiguation"` → one retry as "{name} (composer)"; a
+  composer outside the canonical list is taken only when the page's description or extract is
+  about music (so a namesake's photograph never shows); the portrait is downloaded. A piece:
+  search "title composer" (the composer's full name); the first hit that is not the composer's
+  page nor a disambiguation and whose extract names the surname (accents folded) gives the
+  extract, title and URL; text only. `IOException` → FAILED; `WikiBusyException` → wait as asked
+  once (5 s when unsaid, never past 60 s) and retry; asked again → `Fetched.Busy`.
+- `ArtworkPolicy.shouldFetch(existing, now, force)`: nothing recorded → yes; OK → never; NOT_FOUND
+  → only when forced; FAILED → 24 h later, or when forced, or when the clock went backwards.
+
+## Repository, worker, files, bitmaps, roll cards
+
+- `ArtworkRepository` (`AppGraph.artwork`): `artwork(key): Flow<ArtworkEntity?>` (one shared map
+  of every row: one query per change to the table, however many rows and tiles watch), `peek(key)`,
+  `request(key, priority, force)`, `requestComposers(force): Int`, `composersDue()`,
+  `cancelBackground()`, `progress: StateFlow<ArtworkProgress(done, total, current, idle)>`
+  (background work only; a sheet's own request is not counted), `online`, `bitmap(row | key,
+  size)`, `cached(row, size)`, `setPlaylistPhoto(id, uri)` (copied at once through the picker's
+  transient grant, turned upright from EXIF, JPEG ≤ 1024 px on the longer side), `rollCard(pieceId)`,
+  `cachedRollCard(pieceId)`, `mosaicPieces(composerKey)` (first four by title, cached until the
+  pieces change), `firstComposerKey(playlistId)`, `forget(key)` (row and file, when a playlist or
+  piece is deleted).
+- `ArtworkWorker` (pure; confined to the app scope's main thread): one queue, strictly sequential;
+  `request` appends, or puts first when `priority`; duplicates merge (and move up); `requestAll`
+  queues only what is due; offline → skipped, nothing recorded (a failure seen while offline is
+  not recorded either); `Busy` → pause as asked (≥ 1 s), or past a minute drop the rest of the
+  background run for the next start. `RequestPacer` + `PacedWikiApi`: ≥ 250 ms between request
+  starts (measured on the emulator: 250–254 ms).
+- `ArtFiles`: `filesDir/art/<readable key>-<crc32>.<jpg|png|gif|webp|img>`, written atomically;
+  paths stored relative to `filesDir`. Downloads are kept as they came, after a decodability check.
+- `BitmapCache`: bounds pass, then the smallest power-of-two `inSampleSize` that brings the shorter
+  side to ≤ `ArtSize.Row` 128 / `Tile` 512 / `Full` 1024 px; `LruCache` sized by
+  `allocationByteCount` (⅛ of the heap, ≤ 48 MB); `OutOfMemoryError` → no picture.
+- `RollCard.render(notes)`: a 256 × 256 alpha map of the 20 s after the first note, 84 lanes (C1–B7,
+  folded by octave), time running up from the bottom row, alpha 120–255 by velocity, each lane's
+  last column left as paper, notes at least two rows tall. Drawn as an `ALPHA_8` bitmap tinted with
+  `onSurfaceVariant`, so no colour lives in it. A composer with no portrait shows a 2 × 2 mosaic of
+  their first four pieces' cards (two pieces as a checkerboard; a single piece's card whole).
+
+## Service — `service/ArtworkService.kt`
+
+dataSync foreground service, channel "artwork", notification "Fetching artwork and notes" with
+"Claude Debussy · 12 of 61" and a progress bar. `start(context, force)` queues
+`requestComposers(force)`, follows `progress` and stops itself when the worker is idle (unless
+another start is still queueing). Started by `ImportService` after an import with `imported > 0`,
+while that service still holds the foreground (Android 12+ refuses most background starts), when
+`fetchArtworkAutomatically`; by `MainActivity.onStart` → `AppGraph.fetchArtworkIfDue()` when
+automatic, online and a composer is due (a 1.1 library, an import made offline, a day-old failure);
+and by the `+` sheet's "Fetch artwork and notes for every composer" with `force = true`. If Android
+refuses the start, the same work runs in the app's process without the notification.
+`onTimeout(startId)` and `onTimeout(startId, fgsType)` drop the background queue and stop; nothing
+is recorded for the rest, so the next start fetches it.
+
+## Settings
+
+`artworkMonochrome: Boolean (false)`, `fetchArtworkAutomatically: Boolean (true)`. Piano tab rows
+"Artwork in black and white" and "Fetch artwork automatically" with the line "Uses Wikipedia.
+Nothing about you is sent." beneath; the About area adds that sentence and "Text from Wikipedia,
+CC BY-SA 4.0 · portraits from Wikimedia Commons".
+
+## UI
+
+- `ui/components/Artwork.kt`: `ArtFrame` (square, `surfaceVariant`, a 1 dp `LocalHairline`
+  outline drawn over the picture, `shapes.medium`, no semantics), `MonogramTile`, `Monochrome`
+  (saturation 0) through `LocalArtworkMonochrome` (provided by the nav host), `rememberArtworkRow`,
+  `rememberArtwork(key, size)`, `ArtworkImage(key, size, modifier, fallback)`, `RollCardImage`,
+  `MosaicTile`, `ComposerArt` (portrait → mosaic → monogram), `PlaylistCover` (photo → first
+  piece's composer portrait → monogram). Portraits crop a little above centre.
+- Library: tiles show art (`AppFrame.tileColumns`); playlist tiles long-press Rename · Change photo
+  | Delete; `PieceRow` leads with a 40 dp `ComposerArt` (divider inset to the text, 72 dp);
+  `ComposerHeader(portrait, name, meta, blurb = Sentences.firstTwo(description), sourceUrl, onBack)`
+  with a "From Wikipedia" link (the blurb is Wikipedia's text); `PlaylistHeader(…, onChangePhoto,
+  …)`; `PickVisualMedia(ImageOnly)`; `ArtworkBar` ("Fetching artwork 12 of 61") shares the import
+  bar's hairline progress row; the `+` sheet gains the fetch action under a hairline.
+- `ui/screens/piece/PieceDetailSheet(pieceId, onDismiss)`: `ModalBottomSheet` with its drag handle;
+  art = the composer's portrait (`Full`), else the piece's roll card; title `titleLarge`; composer
+  Eyebrow; then `PieceNotesChoice.of(piece, composer, online, waiting)`: the piece's extract, else
+  the composer's (once the piece's own fetch is done, or offline), with "From Wikipedia" and the
+  attribution Eyebrow; "No notes found for this piece."; "Notes need an internet connection." when
+  offline with nothing kept; a hairline while the piece's fetch runs (at most 12 s). Opening it
+  asks for the piece (and a never-looked-up composer) first in line. Opened from the Now playing
+  title (`onClickLabel = "About this piece"`) and from "About this piece" in the row menu
+  (`PieceActions.about`, first group, after Add to queue). Material 1.4's sheet keeps the height
+  it opened at when its content grows, so the sheet calls `expand()` again when its notes change.
+
+## Tests added in M11
+
+`WikipediaUrlsTest`, `ArtworkFetcherTest` (against `FakeWikipedia`), `ArtworkPolicyTest`,
+`ArtworkWorkerTest` (virtual time: strictly sequential, 250 ms spacing, offline skip and no record,
+priority to the front, FAILED backoff, busy waits and long waits, cancellation, progress),
+`RollCardTest` (identical bytes for the same notes; lane 0 marks the expected pixels), `ArtFilesTest`
+(names, signatures, atomic writes, sample sizes), `SentencesTest` ("J. S. Bach"), `ArtworkCopyTest`,
+`ComposerNamesTest` (+ `canonical`), `SettingsRepositoryTest` (+ the two keys).

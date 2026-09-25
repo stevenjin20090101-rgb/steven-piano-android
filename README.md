@@ -14,8 +14,9 @@ piano over Bluetooth LE MIDI. Pick a piece in the **Library**, watch it on
 **Now playing** as a paper roll, falling notes or a staff while the piano plays
 it, play the piano yourself on **Keys**, and on the **Piano** tab connect, adjust
 the piano's own lighting and feel, and tune playback. Phones and tablets alike.
-Sideloaded as an APK; no network, no accounts, no analytics. Made by Steven Jin.
-Version 1.1.
+Sideloaded as an APK; no accounts, no analytics, and the network only for
+composers' portraits and short notes from Wikipedia (see *Artwork and notes* below).
+Made by Steven Jin. Version 1.1.
 
 ## What it does
 
@@ -65,6 +66,26 @@ The app folds notes outside the piano's range (C1–B7) by octaves, never sends 
 key faster than the solenoids can strike it, and silences the piano (pedal up,
 then all notes off) whenever playback pauses, stops, seeks, loses the link, or
 the app is swiped away.
+
+## Artwork and notes: the app's only network use
+
+Composers get their Wikipedia portrait and a two-sentence blurb; a piece's sheet
+(*About this piece*) shows its Wikipedia notes when it has a page, otherwise its
+composer's. The app talks to **two hosts and no others**: `en.wikipedia.org` (page
+summaries and search) and `upload.wikimedia.org` (the portraits); a redirect anywhere
+else is refused. What it sends is a page title or a search made from the library's own
+composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),
+with the app's User-Agent. **Nothing about you is sent**: no account, no identifier, no
+location, nothing about what you play.
+
+- Composers are fetched after an import, when the app opens with composers not yet
+  looked up, and from **Library › + › Fetch artwork and notes for every composer**
+  (a notification shows the progress); a piece's notes when its sheet opens.
+  **Piano › Fetch artwork automatically** (on) turns the automatic fetching off.
+- One request at a time, at most four a second. Offline nothing is fetched and nothing
+  is recorded; a failed fetch is retried a day later. Without a portrait a composer
+  shows a mosaic of their pieces' first seconds drawn as a paper roll.
+- **Piano › Artwork in black and white** shows the portraits in black and white.
 
 ## Build
 
@@ -192,6 +213,9 @@ the first play, so the lock screen shows play and pause.
   SMuFL music font by Steinberg Media Technologies GmbH, bundled unmodified under
   the SIL Open Font License 1.1 (notice in `AUTHORS`, licence in
   `third_party/bravura/OFL.txt`).
+- Composers' blurbs and pieces' notes are text from Wikipedia (CC BY-SA 4.0), each
+  linked back to its article with *From Wikipedia*; portraits come from Wikimedia
+  Commons.
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
   domain); those files are not part of this repository.

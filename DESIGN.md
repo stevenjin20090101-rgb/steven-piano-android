@@ -491,5 +491,72 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
 
 ## Rotation
 
-Rotating while playing live keeps every held key sounding and keeps the keyboard's
-first visible key (clamped to the new width). Nothing on any tab resets on rotation.
+Rotating while playing live never cuts a note: Android cancels every touch when the
+display turns, so while any key is held the Keys screen holds its orientation and the
+requested rotation happens the moment the last finger lifts. The keyboard keeps its first
+visible key (clamped to the new width), the pedal stays where it was, and nothing on any
+tab resets on rotation.
+
+---
+
+# v1.3 — score fidelity and the waterfall format
+
+Steven's reference: a transcription app showing engraved notation above a waterfall,
+with chord symbols, finger numbers on notes and bars, the two hands in two colours, and
+the sounding keys lit on a keyboard. v1.2 already has the stacked score-over-waterfall
+layout, the lit keyboard strip, the playhead and the paged score with bar lines and note
+values. v1.3 adds the rest, in the app's own language.
+
+## Score fidelity (M13)
+
+- **Key signatures** at every system, from the file's key signature; accidentals are
+  spelled in the key (an E♭ piece reads in flats), with naturals where needed and one
+  accidental per pitch per bar, as engraving does. No key signature in the file: sharps,
+  as before.
+- **Beams** join flagged notes within one beat on one staff (single beam for eighths,
+  double for sixteenths); stems of a beamed group share a side. **Rests** fill gaps of a
+  sixteenth or longer on each staff. **Ties** carry a note across a bar line and join
+  durations that no single value can write (a quarter tied to a sixteenth). All Bravura.
+- **Tempo mark** (♩ = 80) at the first system from the tempo map; a new mark where the
+  tempo changes by more than 10 %. **Dynamics** (pp · p · mp · mf · f · ff) under the
+  treble staff where the bar's average velocity moves into a new band, in Bravura's
+  dynamics glyphs. Performed files show dynamics only when the change is clear.
+- Everything here is monochrome and follows the existing colours: staff `contentTertiary`,
+  glyphs `contentSecondary`, sounding notes `contentPrimary`, playhead `contentPrimary`.
+- Honest limits, in the README: no voices within a hand, no tuplets, no grace notes, no
+  pedal markings; performed files (MAESTRO) keep heads and duration bars.
+
+## The waterfall format (M14)
+
+- **Hands.** Files with two tracks named for the hands (or two tracks at all, as
+  piano-midi.de's) split by track; otherwise by a moving pitch split. The right hand's
+  notes are **filled** bars, the left hand's are **outlined** bars (1 dp hairline, the
+  elevated surface inside), on the roll, the falling notes and the keyboard strip
+  (outlined keys for the left hand). On the score, hands map to staves: the right hand on
+  the treble staff even below middle C.
+- **Hand colours** (a Piano-tab switch, off by default): tints the left hand green and the
+  right hand blue, muted for the dark and light surfaces, on the waterfall bars and the
+  keyboard highlights only. This is the one place colour may enter the interface besides
+  artwork; red keeps its single meaning. Tokens: `handLeft`, `handRight` in `Color.kt`,
+  each with a light and dark variant at ≥ 3:1 against its surface.
+- **Suggested fingering.** Computed per hand from the notes (a cost model over stretch,
+  crossing, thumb on black keys and repeated notes), shown as small tabular numerals
+  inside the waterfall bar at its leading edge, and above right-hand heads / below
+  left-hand heads on the score. A switch **Fingering** (on). Chords of five notes or more
+  get thumb-to-little assignment by spread. It is a suggestion, and the README says so.
+- **Chord names.** Detected per beat from the sounding pitch classes weighted by duration
+  (major, minor, dim, aug, sus2, sus4, 6, 7, maj7, m7, add9, maj9; slash bass when the
+  lowest note is not the root), spelled in the key. Shown above the score at each change,
+  and at the waterfall's left edge as an Eyebrow label at the time the chord begins,
+  scrolling with the notes, exactly where the reference puts them. A switch **Chord
+  names** (on).
+- Layout is unchanged: score above, waterfall below on medium and expanded widths; the
+  keyboard strip under the waterfall; on phones, whichever Note display is chosen.
+
+## Audit (before every release)
+
+A code audit runs before each release and its fixes ship in the same release: file
+imports (zip paths, content links), the MIDI parser on malformed files, the network
+layer (HTTPS only, redirects, size caps, headers), exported components and intents,
+foreground services and notifications, storage and backups, permissions, dependency
+vulnerabilities, and release signing with a real release key kept outside the repo.
