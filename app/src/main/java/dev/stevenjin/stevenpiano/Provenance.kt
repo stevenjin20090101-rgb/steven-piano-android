@@ -14,10 +14,14 @@ import androidx.annotation.Keep
 /**
  * Authorship compiled into the app. R8 keeps this object (see proguard-rules.pro), so [TAG] is
  * in every release DEX: `strings classes.dex | grep STEVEN-PIANO-PROVENANCE`. The About row on
- * the Piano tab shows [text]; the manifest carries [TAG] as meta-data too.
+ * the Piano tab shows [text]; every tab's header shows [byline]; the manifest carries [TAG] as
+ * meta-data too.
  */
 @Keep
 object Provenance {
     const val TAG = "STEVEN-PIANO-PROVENANCE Made by Steven Jin <stevenjin20090101@gmail.com> Ed25519 fp eab16a502f679465"
     val text = "Steven Piano · Made by Steven Jin · v1.1 · eab16a502f679465"
+
+    /** Under every tab's title, in the eyebrow style (which sets it in capitals). */
+    val byline = "Player piano · by Steven Jin"
 }

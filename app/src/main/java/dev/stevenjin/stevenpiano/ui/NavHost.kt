@@ -128,13 +128,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                     popExitTransition = { if (reduced) ExitTransition.None else FadeThrough.exit },
                 ) {
                     composable(Route.Library.path) {
-                        LibraryScreen(
-                            onPlay = { id, queue ->
-                                playback.play(id, queue)
-                                show(Route.NowPlaying)
-                            },
-                            onImport = onImport,
-                        )
+                        LibraryScreen(playback, onPlaying = { show(Route.NowPlaying) }, onImport = onImport)
                     }
                     composable(Route.NowPlaying.path) {
                         NowPlayingScreen(playback, onOpenPiano = { show(Route.Piano) })

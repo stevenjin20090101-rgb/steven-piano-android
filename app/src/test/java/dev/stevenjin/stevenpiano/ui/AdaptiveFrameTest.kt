@@ -73,6 +73,14 @@ class AdaptiveFrameTest {
     }
 
     @Test
+    fun `the Playlists and Composers grids have 2, 3 or 4 columns`() {
+        assertEquals(2, phone.tileColumns)
+        assertEquals(3, tabletUpright.tileColumns)
+        assertEquals(3, frame(891, 411).tileColumns)   // a phone on its side
+        assertEquals(4, tabletOnItsSide.tileColumns)
+    }
+
+    @Test
     fun `on a phone Note display picks the one canvas, the staff included`() {
         assertEquals(listOf(PAPER_ROLL, FALLING, STAFF), phone.noteDisplayChoices)
         assertEquals(NotesPlan(NotesLayout.ROLL, PAPER_ROLL), phone.notesPlan(PAPER_ROLL, STAFF_AND_NOTES))

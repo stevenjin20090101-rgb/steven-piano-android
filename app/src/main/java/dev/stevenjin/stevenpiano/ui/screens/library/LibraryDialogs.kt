@@ -42,23 +42,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 
-/** The dialogs a long-press can open. */
+/** The dialogs the menus can open. */
 sealed interface LibraryDialog {
-    data class AddToCollection(val piece: PieceEntity) : LibraryDialog
+    data class AddToPlaylist(val piece: PieceEntity) : LibraryDialog
 
     data class Rename(val piece: PieceEntity) : LibraryDialog
 
     data class Delete(val piece: PieceEntity) : LibraryDialog
 
-    data class RenameCollection(val collection: PlaylistSummary) : LibraryDialog
+    data class RenamePlaylist(val playlist: PlaylistSummary) : LibraryDialog
 
-    data class DeleteCollection(val collection: PlaylistSummary) : LibraryDialog
+    data class DeletePlaylist(val playlist: PlaylistSummary) : LibraryDialog
 }
 
 @Composable
 fun LibraryDialogs(dialog: LibraryDialog, vm: LibraryViewModel, onClose: () -> Unit) {
     when (dialog) {
-        is LibraryDialog.AddToCollection -> AddToCollectionDialog(dialog.piece, vm, onClose)
+        is LibraryDialog.AddToPlaylist -> AddToPlaylistDialog(dialog.piece, vm, onClose)
         is LibraryDialog.Rename -> RenamePieceDialog(dialog.piece, onClose) { title, composer ->
             vm.rename(dialog.piece, title, composer)
             onClose()
@@ -69,25 +69,25 @@ fun LibraryDialogs(dialog: LibraryDialog, vm: LibraryViewModel, onClose: () -> U
             confirm = "Delete piece",
             onClose = onClose,
         ) { vm.delete(dialog.piece) }
-        is LibraryDialog.RenameCollection -> RenameCollectionDialog(dialog.collection, vm, onClose)
-        is LibraryDialog.DeleteCollection -> ConfirmDialog(
-            title = "Delete “${dialog.collection.name}”?",
-            text = "Only the collection goes. Its pieces stay in the library.",
-            confirm = "Delete collection",
+        is LibraryDialog.RenamePlaylist -> RenamePlaylistDialog(dialog.playlist, vm, onClose)
+        is LibraryDialog.DeletePlaylist -> ConfirmDialog(
+            title = "Delete “${dialog.playlist.name}”?",
+            text = "Only the playlist goes. Its pieces stay in the library.",
+            confirm = "Delete playlist",
             onClose = onClose,
-        ) { vm.deleteCollection(dialog.collection.id) }
+        ) { vm.deletePlaylist(dialog.playlist.id) }
     }
 }
 
-/** Tick the collections the piece belongs in, or name a new one. Changes apply as they are made. */
+/** Tick the playlists the piece belongs in, or name a new one. Changes apply as they are made; a piece goes at a playlist's end. */
 @Composable
-private fun AddToCollectionDialog(piece: PieceEntity, vm: LibraryViewModel, onClose: () -> Unit) {
-    val collections by remember { vm.collections }.collectAsStateWithLifecycle(emptyList())
+private fun AddToPlaylistDialog(piece: PieceEntity, vm: LibraryViewModel, onClose: () -> Unit) {
+    val playlists by remember { vm.playlists }.collectAsStateWithLifecycle(emptyList())
     val member by remember(piece.id) { vm.membershipOf(piece.id) }.collectAsStateWithLifecycle(emptyList())
     var newName by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { DialogTitle("Add to collection") },
+        title = { DialogTitle("Add to playlist") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -98,18 +98,18 @@ private fun AddToCollectionDialog(piece: PieceEntity, vm: LibraryViewModel, onCl
                     overflow = TextOverflow.Ellipsis,
                 )
                 LazyColumn(Modifier.heightIn(max = 280.dp)) {
-                    items(collections, key = { it.id }) { collection ->
-                        val checked = collection.id in member
+                    items(playlists, key = { it.id }) { playlist ->
+                        val checked = playlist.id in member
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
-                                .toggleable(checked, role = Role.Checkbox) { vm.setMembership(collection.id, piece.id, it) },
+                                .toggleable(checked, role = Role.Checkbox) { vm.setMembership(playlist.id, piece.id, it) },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Checkbox(checked = checked, onCheckedChange = null)
                             Spacer(Modifier.width(12.dp))
-                            Text(collection.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                            Text(playlist.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -118,14 +118,14 @@ private fun AddToCollectionDialog(piece: PieceEntity, vm: LibraryViewModel, onCl
                         value = newName,
                         onValueChange = { newName = it },
                         modifier = Modifier.weight(1f),
-                        label = { Text("New collection") },
+                        label = { Text("New playlist") },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     )
                     TextButton(
                         onClick = {
-                            vm.addToNewCollection(newName.trim(), piece.id)
+                            vm.addToNewPlaylist(newName.trim(), piece.id)
                             newName = ""
                         },
                         enabled = newName.isNotBlank(),
@@ -156,23 +156,23 @@ private fun RenamePieceDialog(piece: PieceEntity, onClose: () -> Unit, onRename:
 }
 
 @Composable
-private fun RenameCollectionDialog(collection: PlaylistSummary, vm: LibraryViewModel, onClose: () -> Unit) {
-    val others by remember { vm.collections }.collectAsStateWithLifecycle(emptyList())
-    var name by rememberSaveable { mutableStateOf(collection.name) }
-    val taken = others.any { it.id != collection.id && it.name.equals(name.trim(), ignoreCase = true) }
+private fun RenamePlaylistDialog(playlist: PlaylistSummary, vm: LibraryViewModel, onClose: () -> Unit) {
+    val others by remember { vm.playlists }.collectAsStateWithLifecycle(emptyList())
+    var name by rememberSaveable { mutableStateOf(playlist.name) }
+    val taken = others.any { it.id != playlist.id && it.name.equals(name.trim(), ignoreCase = true) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { DialogTitle("Rename") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NameField(name, { name = it }, "Name")
-                if (taken) Text("Another collection has that name.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (taken) Text("Another playlist has that name.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    vm.renameCollection(collection.id, name)
+                    vm.renamePlaylist(playlist.id, name)
                     onClose()
                 },
                 enabled = name.isNotBlank() && !taken,

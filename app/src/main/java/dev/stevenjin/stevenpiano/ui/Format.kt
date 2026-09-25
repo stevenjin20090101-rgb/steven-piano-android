@@ -33,6 +33,15 @@ object Format {
     fun count(n: Int, one: String, many: String, locale: Locale = Locale.getDefault()): String =
         "${count(n, locale)} ${if (n == 1) one else many}"
 
+    /** A playlist's size and length together: "12 pieces · 41:20"; an empty one is just "0 pieces". */
+    fun piecesAndLength(count: Int, totalMillis: Long, locale: Locale = Locale.getDefault()): String {
+        val pieces = count(count, "piece", "pieces", locale)
+        return if (count == 0) pieces else "$pieces · ${clockMillis(totalMillis)}"
+    }
+
+    /** The letter a monogram tile shows for [name]: its first letter or digit, in capitals; a dash when it has none. */
+    fun initial(name: String): String = name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "–"
+
     fun percent(pct: Int): String = "$pct%"
 
     /** Semitones with their sign: "+2", "0", "−3" (a true minus sign). */

@@ -83,7 +83,7 @@ fun AddSheet(pickers: ImportPickers, onDismiss: () -> Unit) {
             onDismiss()
             pickers.addFiles()
         }
-        SheetOption("Add folder", "Every MIDI file inside, subfolders too. An INDEX.csv fills in collections and composers.") {
+        SheetOption("Add folder", "Every MIDI file inside, subfolders too. An INDEX.csv fills in playlists and composers.") {
             onDismiss()
             pickers.addFolder()
         }

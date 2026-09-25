@@ -35,7 +35,9 @@ import androidx.compose.runtime.LongState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -47,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.NowPlaying
@@ -61,6 +64,7 @@ import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
@@ -89,7 +93,8 @@ private const val SETTLE_NANOS = 400_000_000L
  * canvas (paper roll, falling notes or the staff, as Note display says); on wider screens the
  * staff and the notes together (stacked on medium widths, side by side on expanded ones), or
  * either alone, as Wide layout says. The roll always keeps its keyboard strip beneath it, lane
- * for key. The transport goes through [playback], which keeps the playback service running;
+ * for key. The transport goes through [playback], which keeps the playback service running, with
+ * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet.
  * [onOpenPiano] shows the Piano tab.
  */
 @Composable
@@ -102,14 +107,16 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val link by graph.pianoLink.state.collectAsStateWithLifecycle()
     val piece = state.piece
     val plan = frame.notesPlan(settings.noteDisplay, settings.wideLayout)
+    var upNext by rememberSaveable { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Too short for the note views to share the height (landscape, a small phone at a large
         // font): the screen scrolls and the views keep fixed heights instead of collapsing.
         val short = piece != null && maxHeight < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
         Column(if (short) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
-            NowPlayingContent(state, piece, plan, link is LinkState.Connected, player, playback, onOpenPiano, short)
+            NowPlayingContent(state, piece, plan, link is LinkState.Connected, player, playback, onOpenPiano, short) { upNext = true }
         }
     }
+    if (upNext) UpNextSheet { upNext = false }
 }
 
 @Composable
@@ -122,8 +129,11 @@ private fun ColumnScope.NowPlayingContent(
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
     short: Boolean,
+    onUpNext: () -> Unit,
 ) {
-    ScreenHeader("Now playing")
+    ScreenHeader("Now playing") {
+        if (piece != null) GlyphButton(R.drawable.ic_queue, "Up next", onClick = onUpNext)
+    }
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     if (piece != null) {
@@ -198,6 +208,10 @@ private fun ColumnScope.PieceView(
     TransportBar(
         playing = playing,
         hasNext = state.queue.hasNext,
+        shuffle = state.queue.shuffle,
+        repeat = state.queue.repeat,
+        onShuffle = { player.setShuffle(!state.queue.shuffle) },
+        onRepeat = { player.setRepeat(state.queue.repeat.cycled()) },
         onPrevious = {
             playback.previous()
             if (!playing) settle++

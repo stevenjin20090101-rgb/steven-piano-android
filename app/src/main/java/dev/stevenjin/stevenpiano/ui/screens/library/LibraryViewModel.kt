@@ -18,9 +18,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.TextKeys
-import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -40,17 +41,17 @@ import kotlinx.coroutines.launch
 /** The chips, Synthesia-style. */
 enum class Category(val label: String) {
     All("All"),
-    Collections("Collections"),
+    Playlists("Playlists"),
     Composers("Composers"),
     Favorites("Favorites"),
     Recent("Recent"),
 }
 
-/** A second-level list: one collection's pieces, or one composer's. */
+/** A second-level list: one playlist's pieces, or one composer's. */
 sealed interface Group {
     val name: String
 
-    data class Collection(val id: Long, override val name: String) : Group
+    data class Playlist(val id: Long, override val name: String) : Group
 
     data class Composer(val key: String, override val name: String) : Group
 }
@@ -59,12 +60,13 @@ sealed interface Group {
 sealed interface Listing {
     val isEmpty: Boolean
 
-    data class Pieces(val pieces: List<PieceEntity>) : Listing {
+    /** Pieces; inside a playlist, [playlist] is the whole playlist's name, size and length, whatever the search shows. */
+    data class Pieces(val pieces: List<PieceEntity>, val playlist: PlaylistSummary? = null) : Listing {
         override val isEmpty: Boolean get() = pieces.isEmpty()
     }
 
-    data class Collections(val collections: List<PlaylistSummary>) : Listing {
-        override val isEmpty: Boolean get() = collections.isEmpty()
+    data class Playlists(val playlists: List<PlaylistSummary>) : Listing {
+        override val isEmpty: Boolean get() = playlists.isEmpty()
     }
 
     data class Composers(val composers: List<ComposerGroup>) : Listing {
@@ -85,8 +87,8 @@ data class LibraryState(
 
 /**
  * The Library tab: the chosen category or group, filtered by the search field (title and
- * composer, case and accents ignored), and the long-press edits. Edits run in [writes], the
- * app's scope, so leaving the tab never cuts one short.
+ * composer, case and accents ignored), and the menus' edits. Edits run in [writes], the app's
+ * scope, so leaving the tab never cuts one short.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
@@ -112,7 +114,7 @@ class LibraryViewModel(
             .combine(library.count()) { state, count -> state.copy(pieceCount = count) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), LibraryState())
 
-    val collections: Flow<List<PlaylistSummary>> get() = library.playlists()
+    val playlists: Flow<List<PlaylistSummary>> get() = library.playlists()
 
     fun membershipOf(pieceId: Long): Flow<List<Long>> = library.playlistIdsOf(pieceId)
 
@@ -143,29 +145,48 @@ class LibraryViewModel(
 
     fun delete(piece: PieceEntity) = write { library.delete(piece.id) }
 
-    fun setMembership(collectionId: Long, pieceId: Long, member: Boolean) = write {
-        if (member) library.addToPlaylist(collectionId, pieceId) else library.removeFromPlaylist(collectionId, pieceId)
+    fun setMembership(playlistId: Long, pieceId: Long, member: Boolean) = write {
+        if (member) library.addToPlaylist(playlistId, pieceId) else library.removeFromPlaylist(playlistId, pieceId)
     }
 
-    /** Makes the collection (or finds the one with that name) and puts the piece in it. */
-    fun addToNewCollection(name: String, pieceId: Long) = write {
+    /** Makes the playlist (or finds the one with that name) and puts the piece at its end. */
+    fun addToNewPlaylist(name: String, pieceId: Long) = write {
         library.addToPlaylist(library.createPlaylist(name), pieceId)
     }
 
-    fun renameCollection(id: Long, name: String) = write { library.renamePlaylist(id, name) }
+    fun renamePlaylist(id: Long, name: String) = write { library.renamePlaylist(id, name) }
 
-    fun deleteCollection(id: Long) = write { library.deletePlaylist(id) }
+    /** Deletes the playlist (never its pieces); its page closes if it is open. */
+    fun deletePlaylist(id: Long) {
+        if ((selection.value.group as? Group.Playlist)?.id == id) closeGroup()
+        write { library.deletePlaylist(id) }
+    }
+
+    fun removeFromPlaylist(playlistId: Long, pieceId: Long) = write { library.removeFromPlaylist(playlistId, pieceId) }
+
+    /** Move up ([delta] -1) or Move down (+1) from a row's menu. */
+    fun movePiece(playlistId: Long, pieceId: Long, delta: Int) = write { library.movePiece(playlistId, pieceId, delta) }
+
+    /** A drag in the playlist ended with its pieces in [orderedIds]' order. */
+    fun reorderPlaylist(playlistId: Long, orderedIds: List<Long>) = write { library.reorderPlaylist(playlistId, orderedIds) }
+
+    /** A composer's pieces, by title, for Play all and Shuffle on the composer's tile. */
+    fun composerPieces(composerKey: String, then: (List<Long>) -> Unit) {
+        viewModelScope.launch { then(library.byComposer(composerKey).first().map { it.id }) }
+    }
 
     private fun listing(sel: Selection, query: String): Flow<Listing> {
         val key = TextKeys.fold(query)
         return when (val group = sel.group) {
-            is Group.Collection -> library.inPlaylist(group.id).map { Listing.Pieces(it.matching(key)) }
+            is Group.Playlist -> combine(library.inPlaylist(group.id), library.playlists()) { pieces, all ->
+                Listing.Pieces(pieces.matching(key), all.firstOrNull { it.id == group.id })
+            }
             is Group.Composer -> library.byComposer(group.key).map { Listing.Pieces(it.matching(key)) }
             null -> when (sel.category) {
                 Category.All -> (if (key.isEmpty()) library.all() else library.search(query)).map { Listing.Pieces(it) }
                 Category.Favorites -> library.favorites().map { Listing.Pieces(it.matching(key)) }
                 Category.Recent -> library.recent().map { Listing.Pieces(it.matching(key)) }
-                Category.Collections -> library.playlists().map { all -> Listing.Collections(all.filter { key in TextKeys.fold(it.name) }) }
+                Category.Playlists -> library.playlists().map { all -> Listing.Playlists(all.filter { key in TextKeys.fold(it.name) }) }
                 Category.Composers -> library.composers().map { all -> Listing.Composers(all.filter { key in TextKeys.fold(it.name) }) }
             }
         }
@@ -179,7 +200,7 @@ class LibraryViewModel(
                 block()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: RuntimeException) {   // e.g. a name another collection already has
+            } catch (e: RuntimeException) {   // e.g. a name another playlist already has
                 Log.w(TAG, "Library edit failed: ${e.message}")
             }
         }

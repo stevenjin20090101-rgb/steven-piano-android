@@ -41,7 +41,8 @@ data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay)
  * (600-840 dp: small tablets, phones on their side) and Expanded (840 dp and up: tablets on
  * their side) move the four destinations to a rail on the left. Never a rail and a bar at once.
  * The class also sets how Now playing arranges the staff and the notes, how many keys the Keys
- * screen shows, and which note-display choices the Piano tab offers.
+ * screen shows, how many tiles the Library's grids set side by side, and which note-display
+ * choices the Piano tab offers.
  *
  * A phone on its side is often 840 dp wide or more, but only 360-480 dp tall: an expanded width
  * over a compact height ([height]) counts as medium, so landscape phones get the medium layout,
@@ -65,6 +66,14 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
             WindowWidthSizeClass.Compact -> COMPACT_WHITES
             WindowWidthSizeClass.Medium -> MEDIUM_WHITES
             else -> KeyLayout.WHITE_KEYS
+        }
+
+    /** Columns in the Playlists and Composers grids: 2 on phones, 3 at medium widths, 4 on tablets on their side. */
+    val tileColumns: Int
+        get() = when (widthClass) {
+            WindowWidthSizeClass.Compact -> 2
+            WindowWidthSizeClass.Medium -> 3
+            else -> 4
         }
 
     /** Whether the Keys screen can scroll, and so shows the mini-map and the octave buttons. */

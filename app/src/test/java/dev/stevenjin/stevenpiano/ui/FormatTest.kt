@@ -34,6 +34,23 @@ class FormatTest {
     }
 
     @Test
+    fun `a playlist reads as its size and total length`() {
+        assertEquals("12 pieces · 41:20", Format.piecesAndLength(12, 2_480_000L, Locale.US))
+        assertEquals("1 piece · 4:31", Format.piecesAndLength(1, 271_999L, Locale.US))
+        assertEquals("1,727 pieces · 81:22:05", Format.piecesAndLength(1_727, 292_925_000L, Locale.US))
+        assertEquals("0 pieces", Format.piecesAndLength(0, 0L, Locale.US))
+    }
+
+    @Test
+    fun `a monogram is the first letter or digit, in capitals`() {
+        assertEquals("E", Format.initial("evening"))
+        assertEquals("É", Format.initial("“études”"))
+        assertEquals("2", Format.initial("20th century"))
+        assertEquals("–", Format.initial("· · ·"))
+        assertEquals("–", Format.initial(""))
+    }
+
+    @Test
     fun `semitones carry their sign, with a true minus`() {
         assertEquals("+2", Format.semitones(2))
         assertEquals("0", Format.semitones(0))
