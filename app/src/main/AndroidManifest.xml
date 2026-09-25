@@ -27,6 +27,12 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
+    <!-- Artwork and notes from Wikipedia: two hosts only (en.wikipedia.org, upload.wikimedia.org),
+         asked for page titles and searches made from the library's own names; nothing about the
+         person is sent. Offline, nothing is fetched. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Playback with the screen off, and imports that outlive the screen. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />

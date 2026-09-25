@@ -62,6 +62,14 @@ object ComposerNames {
     private val SUFFIXES = setOf("jr", "jr.", "sr", "sr.")
     private val NOT_KEY_CHARS = Regex("[^\\p{L}\\p{N} \\-]")
 
+    /**
+     * The full name of a well-known composer from their [key] (a folded surname, or another
+     * spelling of one): "debussy" is "Claude Debussy", "rachmaninow" "Sergei Rachmaninoff", "xmas"
+     * "Traditional". Null for anyone else, and for keys with initials that did not fit ("bach
+     * cpe"). Artwork asks Wikipedia for this name.
+     */
+    fun canonical(key: String): String? = CANONICAL[VARIANTS[key] ?: key]
+
     fun normalize(raw: String): Name {
         val text = TitleHeuristics.cleanText(raw)
         if (text.isEmpty()) return Name.Unknown

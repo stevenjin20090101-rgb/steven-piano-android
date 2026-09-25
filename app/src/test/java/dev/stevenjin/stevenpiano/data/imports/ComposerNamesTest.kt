@@ -87,6 +87,22 @@ class ComposerNamesTest {
     }
 
     @Test
+    fun `canonical gives the full name artwork asks Wikipedia for`() {
+        assertEquals("Claude Debussy", ComposerNames.canonical("debussy"))
+        assertEquals("Sergei Rachmaninoff", ComposerNames.canonical("rachmaninow"))
+        assertEquals("Friedrich Burgmüller", ComposerNames.canonical("burgmueller"))
+        assertEquals("Antonín Dvořák", ComposerNames.canonical("dvorak"))
+        assertEquals("Traditional", ComposerNames.canonical("xmas"))
+        assertEquals("Frédéric Chopin", ComposerNames.canonical(n("Chopin, F.").key))
+        assertEquals(null, ComposerNames.canonical("bach cpe"))
+        assertEquals(null, ComposerNames.canonical("zimmer"))
+        assertEquals(null, ComposerNames.canonical(""))
+        for (folder in listOf("albeniz", "balakirew", "mussorgsky", "tchaikovsky", "saint-saens", "janacek")) {
+            assertEquals(folder, n(folder).display, ComposerNames.canonical(n(folder).key))
+        }
+    }
+
+    @Test
     fun `folding flattens accents and ligatures`() {
         assertEquals("frederic chopin", TextKeys.fold("Frédéric Chopin"))
         assertEquals("strasse", TextKeys.fold("Straße"))
