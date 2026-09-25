@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,6 +64,23 @@ class SettingsRepositoryTest {
         assertEquals(107, repository.settings.first().keysViewportStart)
         repository.setKeysViewportStart(60)
         assertEquals(60, repository.settings.first().keysViewportStart)
+        scope.cancel()
+    }
+
+    @Test
+    fun `shuffle and repeat are remembered, and start off`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "modes.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(false, repository.settings.first().shuffle)
+        assertEquals(RepeatMode.OFF, repository.settings.first().repeat)
+        repository.setShuffle(true)
+        repository.setRepeat(RepeatMode.ONE)
+        assertEquals(true, repository.settings.first().shuffle)
+        assertEquals(RepeatMode.ONE, repository.settings.first().repeat)
+        repository.setRepeat(RepeatMode.ALL)
+        repository.setShuffle(false)
+        assertEquals(PianoSettings(repeat = RepeatMode.ALL), repository.settings.first())
         scope.cancel()
     }
 

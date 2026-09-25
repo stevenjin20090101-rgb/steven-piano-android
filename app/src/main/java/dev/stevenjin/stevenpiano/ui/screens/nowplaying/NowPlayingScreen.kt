@@ -197,7 +197,7 @@ private fun ColumnScope.PieceView(
     )
     TransportBar(
         playing = playing,
-        hasNext = state.queueIndex + 1 < state.queueSize,
+        hasNext = state.queue.hasNext,
         onPrevious = {
             playback.previous()
             if (!playing) settle++

@@ -29,6 +29,50 @@ data class NowPlaying(
     val notes: NoteList,
 )
 
+/**
+ * The queue as the UI, the playback service and the media session see it: piece [ids] in playing
+ * order with their entries' [uids], the [index] playing (-1 before anything has), and the two
+ * modes. See [Queue].
+ */
+data class QueueSnapshot(
+    val ids: List<Long> = emptyList(),
+    val uids: List<Long> = emptyList(),
+    val index: Int = -1,
+    val shuffle: Boolean = false,
+    val repeat: RepeatMode = RepeatMode.OFF,
+) {
+    val currentUid: Long? get() = uids.getOrNull(index)
+
+    /** The pieces after the current one, in playing order. */
+    val upNextIds: List<Long> get() = ids.drop(index + 1)
+
+    val upNextUids: List<Long> get() = uids.drop(index + 1)
+
+    /** Next has somewhere to go (Repeat all wraps to the top). */
+    val hasNext: Boolean get() = index + 1 < ids.size || (repeat == RepeatMode.ALL && ids.isNotEmpty())
+
+    /**
+     * Something plays once the current piece ends: a next piece, a wrap with Repeat all, or the
+     * same piece with Repeat one. The playback service stays in the foreground through that pause.
+     */
+    val advancesAtEnd: Boolean get() = index in ids.indices && (repeat != RepeatMode.OFF || index + 1 < ids.size)
+
+    /**
+     * The entries the system media controls are given: at most [max] (a Binder limit), starting a
+     * few before the current one.
+     */
+    fun window(max: Int = MEDIA_WINDOW): IntRange {
+        if (ids.isEmpty()) return IntRange.EMPTY
+        val first = (index - WINDOW_BEFORE).coerceIn(0, (ids.size - max).coerceAtLeast(0))
+        return first until minOf(ids.size, first + max)
+    }
+
+    companion object {
+        const val MEDIA_WINDOW = 50
+        const val WINDOW_BEFORE = 5
+    }
+}
+
 /** Everything about playback except the moving position, which [Player.positionMicrosNow] reads per frame. */
 data class PlayerState(
     val status: PlaybackStatus = PlaybackStatus.Stopped,
@@ -39,8 +83,11 @@ data class PlayerState(
     val velocityPct: Int = 100,
     val fold: Boolean = true,
     val skipDrums: Boolean = true,
-    val queueIndex: Int = -1,
-    val queueSize: Int = 0,
+    val queue: QueueSnapshot = QueueSnapshot(),
     /** Why the last piece could not be played, in plain English; null when all is well. */
     val problem: String? = null,
-)
+) {
+    val queueIndex: Int get() = queue.index
+
+    val queueSize: Int get() = queue.ids.size
+}

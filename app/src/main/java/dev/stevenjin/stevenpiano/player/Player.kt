@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
 
 /** Where the player gets pieces: the library, or a fake in tests. */
 interface PieceSource {
@@ -42,6 +43,8 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * (the main thread). The engine runs on the [Scheduler] thread and reports back through
  * [state], plus allocation-free [positionMicrosAt] and active-key bitsets for per-frame drawing.
  * When the link drops mid-piece the player pauses; when it comes back, Play resumes.
+ * Pieces play from a [Queue]: Next, Previous and the end of a piece move through it, Up next
+ * edits it, and its shuffle and repeat modes live with it ([random] shuffles; tests pass their own).
  * The Keys screen plays through here too ([liveNoteOn] and friends): its keys join the queue of
  * scheduler commands and go out through the engine's router, so they share the piece's
  * reference counts, 100 ms guard and silence. A dropped link lets go of them.
@@ -53,6 +56,7 @@ class Player(
     private val clock: NanoClock = NanoClock.System,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     prepareThread: () -> Unit = Scheduler.UrgentAudio,
+    private val random: Random = Random.Default,
 ) {
     private val engine = PlaybackEngine(link)
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -69,7 +73,7 @@ class Player(
     val liveSustain: StateFlow<Boolean> = _liveSustain.asStateFlow()
 
     // Owned by the scope's thread.
-    private var playlist = Playlist.Empty
+    private var queue = Queue.Empty
     private var defaultTempoPct = 100
     private var loadJob: Job? = null
     private var advanceJob: Job? = null
@@ -96,11 +100,46 @@ class Player(
     /** Keys the piano is playing, as bits `key - 88`: keys 88..107. */
     val activeKeysHigh: Long get() = activeHigh.get()
 
-    /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue]. */
+    /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue] (shuffled when shuffle is on). */
     fun play(pieceId: Long, queue: List<Long> = listOf(pieceId)) {
-        playlist = Playlist.startingAt(pieceId, queue)
+        setQueue(Queue.startingAt(pieceId, queue, this.queue, random))
         startCurrent()
     }
+
+    /** A playlist's Play (in order) or Shuffle (random order, and shuffle stays on) button. */
+    fun playAll(pieceIds: List<Long>, shuffle: Boolean) {
+        if (pieceIds.isEmpty()) return
+        setQueue(Queue.all(pieceIds, shuffle, queue, random))
+        startCurrent()
+    }
+
+    /** Queues [pieceIds] right after the current piece. With nothing in the queue yet they start playing: true then. */
+    fun playNext(pieceIds: List<Long>): Boolean = enqueue(pieceIds) { it.playNext(pieceIds) }
+
+    /** Queues [pieceIds] at the end. With nothing in the queue yet they start playing: true then. */
+    fun addToQueue(pieceIds: List<Long>): Boolean = enqueue(pieceIds) { it.addToQueue(pieceIds) }
+
+    /** Takes an up-next entry out of the queue. */
+    fun removeFromQueue(uid: Long) = setQueue(queue.remove(uid))
+
+    /** Up next's drag: entry [uid] to place [toIndex] among the pieces up next. */
+    fun moveInQueue(uid: Long, toIndex: Int) = setQueue(queue.move(uid, toIndex))
+
+    /** Up next's Clear: the current piece plays on, nothing follows it. */
+    fun clearUpNext() = setQueue(queue.clearUpNext())
+
+    /** Plays queue entry [uid] now; the entries skipped stay behind it. */
+    fun skipToQueueEntry(uid: Long) {
+        val skipped = queue.skipTo(uid)
+        if (skipped === queue) return
+        setQueue(skipped)
+        startCurrent()
+    }
+
+    /** Shuffle on: the current piece plays on and the rest follow in random order. Off: the order comes back. */
+    fun setShuffle(on: Boolean) = setQueue(queue.withShuffle(on, random))
+
+    fun setRepeat(mode: RepeatMode) = setQueue(queue.withRepeat(mode))
 
     fun togglePlayPause() {
         if (state.value.status == PlaybackStatus.Playing) pause() else resume()
@@ -118,17 +157,17 @@ class Player(
     fun seek(micros: Long) = command { engine.seek(micros, it) }
 
     fun next() {
-        if (!playlist.hasNext) return
-        playlist = playlist.next()
+        if (!queue.hasNext) return
+        setQueue(queue.next())
         startCurrent()
     }
 
     /** Restarts the piece when more than 3 s in (or first in the queue), else plays the one before. */
     fun previous() {
-        if (playlist.previousRestarts(positionMicrosNow())) {
+        if (queue.previousRestarts(positionMicrosNow())) {
             seek(0L)
         } else {
-            playlist = playlist.previous()
+            setQueue(queue.previous())
             startCurrent()
         }
     }
@@ -195,12 +234,28 @@ class Player(
         }
     }
 
+    private fun enqueue(pieceIds: List<Long>, change: (Queue) -> Queue): Boolean {
+        if (pieceIds.isEmpty()) return false
+        if (queue.current == null) {
+            play(pieceIds.first(), pieceIds)
+            return true
+        }
+        setQueue(change(queue))
+        return false
+    }
+
+    /** The queue changed: the UI, the service and the media session see it at once. */
+    private fun setQueue(changed: Queue) {
+        queue = changed
+        val snapshot = changed.snapshot()
+        _state.update { if (it.queue == snapshot) it else it.copy(queue = snapshot) }
+    }
+
     private fun startCurrent() {
         advanceJob?.cancel()
         loadJob?.cancel()
-        val list = playlist
-        val id = list.current ?: return
-        _state.update { it.copy(loading = true, problem = null, queueIndex = list.index, queueSize = list.pieceIds.size) }
+        val id = queue.current?.pieceId ?: return
+        _state.update { it.copy(loading = true, problem = null, queue = queue.snapshot()) }
         loadJob = scope.launch {
             val playable = try {
                 withContext(io) { source.load(id) }
@@ -225,15 +280,30 @@ class Player(
         }
     }
 
-    /** After a piece ends: the next one in the queue, 1.5 s later. */
+    /**
+     * After a piece ends, 1.5 s later, whatever the queue says follows it (asked again then, as
+     * Up next or the modes may have changed meanwhile): the next piece, or with Repeat one the
+     * same piece again from the top, already loaded, without reading it again.
+     */
     private fun autoAdvance() {
-        if (!playlist.hasNext) return
+        if (queue.afterEnd() == null) return
         advanceJob?.cancel()
         advanceJob = scope.launch {
             delay(AUTO_ADVANCE_DELAY_MS)
-            playlist = playlist.next()
-            startCurrent()
+            val ended = queue.current ?: return@launch
+            val after = queue.afterEnd() ?: return@launch
+            setQueue(after)
+            if (after.current?.uid == ended.uid) restartCurrent(ended.pieceId) else startCurrent()
         }
+    }
+
+    /** The piece that just ended plays again from its start: the engine still has it. */
+    private fun restartCurrent(pieceId: Long) {
+        scheduler.submit { now ->
+            engine.seek(0L, now)
+            engine.play(now)
+        }
+        scope.launch { withContext(io) { source.markPlayed(pieceId) } }
     }
 
     private fun onLinkState(linkState: LinkState) {

@@ -128,6 +128,65 @@ class PlayerTest {
     }
 
     @Test
+    fun `repeat one plays the piece again from the top without reading it again`() = runBlocking {
+        source.pieces[1] = piece(60, 30)
+        onMain {
+            player.setRepeat(RepeatMode.ONE)
+            player.play(1)
+        }
+        withTimeout(6_000) { while (link.messages.count { it == "90 3C 50" } < 2) delay(10) }
+        assertTrue(onMain { player.stopAndFlush(300) })
+        assertEquals(listOf(1L), source.loads.toList())
+        withTimeout(1_000) { while (source.played.size < 2) delay(10) }
+        assertEquals(listOf(1L, 1L), source.played.toList())
+        assertEquals(RepeatMode.ONE, player.state.value.queue.repeat)
+    }
+
+    @Test
+    fun `repeat all wraps from the last piece to the first`() = runBlocking {
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 30)
+        onMain {
+            player.setRepeat(RepeatMode.ALL)
+            player.play(1, listOf(1, 2))
+        }
+        withTimeout(8_000) { while (noteOns().size < 3) delay(10) }
+        assertTrue(onMain { player.stopAndFlush(300) })
+        assertEquals(listOf("90 3C 50", "90 3E 50", "90 3C 50"), noteOns().take(3))
+        assertEquals(0, player.state.value.queueIndex)
+    }
+
+    @Test
+    fun `play next plays before the rest of the queue`() = runBlocking {
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 30)
+        source.pieces[3] = piece(64, 30)
+        onMain {
+            player.play(1, listOf(1, 2))
+            player.playNext(listOf(3))
+        }
+        assertEquals(listOf(1L, 3L, 2L), player.state.value.queue.ids)
+        withTimeout(8_000) { while (noteOns().size < 3) delay(10) }
+        assertEquals(listOf("90 3C 50", "90 40 50", "90 3E 50"), noteOns())
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Stopped && it.queueIndex == 2 } }
+        assertTrue(onMain { player.stopAndFlush(300) })
+        assertEquals(listOf(1L, 3L, 2L), source.loads.toList())
+    }
+
+    @Test
+    fun `with nothing queued, play next and add to queue start playing`() = runBlocking {
+        source.pieces[4] = piece(65, 5_000)
+        val started = onMain { player.addToQueue(listOf(4)) }
+        assertTrue(started)
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        assertTrue(!onMain { player.addToQueue(listOf(4)) })   // now it queues
+        assertEquals(listOf(4L, 4L), player.state.value.queue.ids)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    private fun noteOns(): List<String> = link.messages.filter { it.startsWith("90 ") && !it.endsWith(" 00") }
+
+    @Test
     fun `a piece that can't be read says why`() = runBlocking {
         onMain { player.play(7) }
         val state = withTimeout(2_000) { player.state.first { it.problem != null } }
@@ -139,8 +198,10 @@ class PlayerTest {
     private class FakeSource : PieceSource {
         val pieces = ConcurrentHashMap<Long, MidiPiece>()
         val played = CopyOnWriteArrayList<Long>()
+        val loads = CopyOnWriteArrayList<Long>()
 
         override suspend fun load(pieceId: Long): PlayablePiece {
+            loads += pieceId
             val midi = pieces[pieceId] ?: throw SmfException("This isn't a MIDI file, or it is damaged.")
             return PlayablePiece(pieceId, "Piece $pieceId", "Composer", midi)
         }

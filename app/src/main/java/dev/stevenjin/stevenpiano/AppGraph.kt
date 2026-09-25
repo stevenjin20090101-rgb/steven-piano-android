@@ -32,7 +32,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -76,9 +78,23 @@ class AppGraph(private val app: Application) {
     /** The piano's own settings over its console, read on every connection. */
     val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
 
-    /** From [App.onCreate]: settings flow into the player; the piano is reached if the person allows it. */
+    /**
+     * From [App.onCreate]: settings flow into the player; the queue's shuffle and repeat start as
+     * they were left and are remembered whenever they change; the piano is reached if the person
+     * allows it.
+     */
     fun start() {
         pianoSettings.start()
+        appScope.launch {
+            val saved = settingsRepository.settings.first()
+            player.setShuffle(saved.shuffle)
+            player.setRepeat(saved.repeat)
+            player.state.map { it.queue.shuffle to it.queue.repeat }.distinctUntilChanged().collect { (shuffle, repeat) ->
+                val stored = settingsRepository.settings.first()
+                if (stored.shuffle != shuffle) settingsRepository.setShuffle(shuffle)
+                if (stored.repeat != repeat) settingsRepository.setRepeat(repeat)
+            }
+        }
         appScope.launch {
             settingsRepository.settings.collect { s ->
                 player.setDefaultTempo(s.defaultTempoPct)

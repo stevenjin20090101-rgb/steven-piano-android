@@ -21,6 +21,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
+import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -45,7 +46,7 @@ enum class NoteDisplay {
 /** What Now playing shows on medium and expanded widths. */
 enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
-/** The Piano tab's preferences, plus the last piano connected and where the Keys screen was. */
+/** The Piano tab's preferences, plus the last piano connected, where the Keys screen was, and the queue's two modes. */
 data class PianoSettings(
     val autoConnect: Boolean = true,
     val lastDeviceAddress: String? = null,
@@ -59,6 +60,10 @@ data class PianoSettings(
     val wideLayout: WideLayout = WideLayout.STAFF_AND_NOTES,
     /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
     val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
+    /** The transport's Shuffle, remembered across launches. */
+    val shuffle: Boolean = false,
+    /** The transport's Repeat, remembered across launches. */
+    val repeat: RepeatMode = RepeatMode.OFF,
 ) {
     companion object {
         const val DEFAULT_KEYS_VIEWPORT_START = 48
@@ -97,6 +102,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
 
+    suspend fun setShuffle(on: Boolean) = edit { it[SHUFFLE] = on }
+
+    suspend fun setRepeat(mode: RepeatMode) = edit { it[REPEAT] = mode.name }
+
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
@@ -115,6 +124,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
             wideLayout = WideLayout.entries.firstOrNull { it.name == this[WIDE_LAYOUT] } ?: defaults.wideLayout,
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
+            shuffle = this[SHUFFLE] ?: defaults.shuffle,
+            repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
         )
     }
 
@@ -130,5 +141,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
         val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
+        val SHUFFLE = booleanPreferencesKey("shuffle")
+        val REPEAT = stringPreferencesKey("repeat")
     }
 }

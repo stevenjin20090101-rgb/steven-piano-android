@@ -25,7 +25,8 @@ import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.service.PlaybackService
 
 /**
- * Playback started by a tap in the app: a library row or the transport. Anything that may start
+ * Playback started by a tap in the app: a library row, a playlist's Play or Shuffle, a row menu's
+ * Play next or Add to queue, or the transport. Anything that may start
  * the piano also starts the playback service, which must be started from the foreground; the
  * first time, the notification permission is asked for (API 33+), in context.
  */
@@ -33,6 +34,23 @@ class PlaybackStarter(private val context: Context, private val player: Player, 
     fun play(pieceId: Long, queue: List<Long>) {
         player.play(pieceId, queue)
         started()
+    }
+
+    /** A playlist's (or a composer's) Play, in order, or Shuffle. */
+    fun playAll(pieceIds: List<Long>, shuffle: Boolean) {
+        if (pieceIds.isEmpty()) return
+        player.playAll(pieceIds, shuffle)
+        started()
+    }
+
+    /** Right after the current piece; with nothing queued yet it plays now. */
+    fun playNext(pieceIds: List<Long>) {
+        if (player.playNext(pieceIds)) started()
+    }
+
+    /** At the end of the queue; with nothing queued yet it plays now. */
+    fun addToQueue(pieceIds: List<Long>) {
+        if (player.addToQueue(pieceIds)) started()
     }
 
     fun togglePlayPause() {

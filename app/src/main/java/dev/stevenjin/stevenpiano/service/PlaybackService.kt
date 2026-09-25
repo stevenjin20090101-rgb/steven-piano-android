@@ -54,7 +54,7 @@ class PlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         player = graph.player
-        session = MediaSessionHolder(this, player, ::stopNow)
+        session = MediaSessionHolder(this, player, scope, graph.library::summaries, ::stopNow)
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             .apply { setReferenceCounted(false) }
@@ -96,9 +96,10 @@ class PlaybackService : Service() {
     private fun render(state: PlayerState) {
         session.update(state)
         val playing = state.status == PlaybackStatus.Playing
-        // Between pieces of a queue the player is stopped for 1.5 s, then loads the next one.
+        // Between pieces of a queue the player is stopped for 1.5 s, then plays whatever follows:
+        // the next piece, the top again (Repeat all) or the same piece (Repeat one).
         val advancing = state.status == PlaybackStatus.Stopped && state.piece != null && state.problem == null &&
-            state.queueIndex + 1 < state.queueSize
+            state.queue.advancesAtEnd
         when {
             playing || state.loading || advancing -> {
                 if (!advancing) cancelStop()
