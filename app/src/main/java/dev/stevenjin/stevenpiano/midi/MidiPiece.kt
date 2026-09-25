@@ -37,6 +37,12 @@ class MidiPiece(
     val keySignatures: List<KeySignature>,
     /** Where each bar starts, in microseconds: bar 1 at 0 (see [Bars]). */
     val barStartsMicros: LongArray,
+    /**
+     * Each track's name, one per track read (0-based, in file order, as [NoteList.track] counts
+     * them): its first track-name meta (FF 03), or "" when it has none. The hands are read from
+     * these ("Piano right", "Piano left") when a file names them.
+     */
+    val trackNames: List<String> = emptyList(),
 ) {
     val sequenceName: String? get() = sequenceNames.firstOrNull()
     val noteCount: Int get() = notes.size
@@ -111,6 +117,8 @@ class EventList internal constructor(
 /**
  * Notes as parallel arrays sorted by start time, for drawing without allocation.
  * Note numbers are the file's own; the canvas maps them through [KeyMap] at draw time.
+ * [tracks] holds the track each note came from (0-based, in file order; see
+ * [MidiPiece.trackNames]): not part of what the piano plays, only of who plays it.
  */
 class NoteList(
     val startMicros: LongArray,
@@ -118,6 +126,7 @@ class NoteList(
     private val keys: ByteArray,
     private val velocities: ByteArray,
     private val channels: ByteArray,
+    private val tracks: ShortArray = ShortArray(startMicros.size),
 ) {
     val size: Int get() = startMicros.size
 
@@ -127,6 +136,9 @@ class NoteList(
     fun note(i: Int): Int = keys[i].toInt()
     fun velocity(i: Int): Int = velocities[i].toInt()
     fun channel(i: Int): Int = channels[i].toInt()
+
+    /** The track note [i] came from: 0 for the first track read. */
+    fun track(i: Int): Int = tracks[i].toInt()
 
     /** Index of the first note starting at or after [micros] ([size] when there is none). */
     fun firstStartingAtOrAfter(micros: Long): Int {

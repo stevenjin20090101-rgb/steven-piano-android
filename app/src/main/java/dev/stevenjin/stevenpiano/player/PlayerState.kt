@@ -25,7 +25,8 @@ object PlaybackLimits {
 
 /**
  * The piece in the player: what Now playing shows. [notes] feed the note canvas; the score also
- * reads the file's [tempoMap], [barStartsMicros] and signatures.
+ * reads the file's [tempoMap], [barStartsMicros] and signatures. [hands] (`score.Hands`, one per
+ * note; empty until known) are worked out once per piece, off the main thread, before it is shown.
  */
 data class NowPlaying(
     val pieceId: Long,
@@ -37,7 +38,11 @@ data class NowPlaying(
     val barStartsMicros: LongArray = longArrayOf(0L),
     val keySignatures: List<KeySignature> = emptyList(),
     val timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
+    val hands: ByteArray = ByteArray(0),
 ) {
+    /** The hands, when they have been worked out for these notes: one per note. */
+    val handsOrNull: ByteArray? get() = hands.takeIf { it.size == notes.size && it.isNotEmpty() }
+
     private companion object {
         const val DEFAULT_PPQ = 480
     }

@@ -68,6 +68,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.Hairline
+import dev.stevenjin.stevenpiano.ui.components.KeyHands
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
@@ -276,11 +277,16 @@ private fun NoteViews(
     modifier: Modifier,
 ) {
     val scoreWidth = LocalAppFrame.current.scoreWidth
+    val hands = piece.handsOrNull
+    // Which hand each sounding key belongs to, for the strip's outlined left-hand keys.
+    val keyHands = remember(piece.notes, hands, state.transpose, state.fold) {
+        hands?.let { KeyHands(piece.notes, it, state.transpose, state.fold) }
+    }
     val notes: @Composable (Modifier) -> Unit = { panel ->
         Panel(panel) {
-            NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth())
+            NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(), hands = hands)
             HairlineDivider()
-            KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
+            KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
         }
     }
     val score: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
@@ -298,10 +304,11 @@ private fun NoteViews(
                 clock = roll,
                 onSeek = onSeek,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
+                hands = hands,
             )
             if (strip) {
                 HairlineDivider()
-                KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
+                KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
             }
         }
     }

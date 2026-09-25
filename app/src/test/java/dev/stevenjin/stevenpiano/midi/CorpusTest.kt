@@ -15,6 +15,7 @@ import dev.stevenjin.stevenpiano.data.imports.IndexCsv
 import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics
 import dev.stevenjin.stevenpiano.data.imports.ZipSource
 import dev.stevenjin.stevenpiano.data.imports.isMidiName
+import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
 import dev.stevenjin.stevenpiano.score.ScoreMetrics
 import dev.stevenjin.stevenpiano.score.ScoreWidth
@@ -141,8 +142,13 @@ class CorpusTest {
         assertEquals(emptyList<String>(), mojibake)
     }
 
+    /**
+     * Every file is given hands for the waterfall format (DESIGN.md › v1.3 › The waterfall format)
+     * without an exception, timed apart from the parse, and laid out as a score with them on a
+     * phone's panel and a tablet's.
+     */
     @Test
-    fun `every file in the library lays out as a score, on a phone and on a tablet`() {
+    fun `every file in the library is given hands and lays out as a score, on a phone and on a tablet`() {
         val root = corpus()
         val files = midiFiles(root)
         // A phone's score panel (411 x 600 dp, one page) and a tablet's on its side (1280 x 700 dp, two pages).
@@ -161,15 +167,25 @@ class CorpusTest {
         var ties = 0L
         var tempoMarks = 0L
         var dynamics = 0L
+        var right = 0L
+        var handsNanos = 0L
         val started = System.nanoTime()
         for (file in files) {
             val piece = SmfParser.parse(file.readBytes())
             val keys = IntArray(piece.notes.size) { KeyMap.map(piece.notes.note(it), 0, true) }
+            val path = file.path
+            val t0 = System.nanoTime()
+            val hands = Hands.assign(piece.notes, piece.trackNames, piece.tempoMap, piece.timeSignatures)
+            handsNanos += System.nanoTime() - t0
+            assertEquals(path, piece.notes.size, hands.size)
+            assertTrue(path, hands.all { it == Hands.RIGHT || it == Hands.LEFT })
+            assertTrue(path, (0 until piece.notes.size).all { piece.notes.track(it) < piece.trackNames.size })
+            right += hands.count { it == Hands.RIGHT }
             val collection = file.relativeTo(root).path.substringBefore(File.separator)
             total.merge(collection, 1, Int::plus)
             for (metrics in panels) {
                 val score = ScoreLayoutEngine.layout(
-                    piece.notes, keys, piece.tempoMap, piece.barStartsMicros, piece.keySignatures, metrics, piece.timeSignatures,
+                    piece.notes, keys, piece.tempoMap, piece.barStartsMicros, piece.keySignatures, metrics, piece.timeSignatures, hands,
                 )
                 val where = "${file.path} on ${metrics.pages} page(s)"
                 assertEquals(where, (piece.barStartsMicros.size + metrics.barsPerSystem - 1) / metrics.barsPerSystem, score.systems.size)
@@ -215,6 +231,7 @@ class CorpusTest {
                 "$tempoMarks tempo marks, $dynamics dynamics",
         )
         total.keys.sorted().forEach { println("  $it: ${quantized[it] ?: 0} of ${total[it]} quantised") }
+        println("Corpus hands: %.1f s, %.1f %% of notes in the right hand".format(handsNanos / 1e9, 100.0 * right / notes))
     }
 
     private fun panel(width: ScoreWidth, widthDp: Float, heightDp: Float, density: Float) =

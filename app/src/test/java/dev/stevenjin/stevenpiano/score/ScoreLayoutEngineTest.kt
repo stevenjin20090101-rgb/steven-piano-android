@@ -50,7 +50,13 @@ class ScoreLayoutEngineTest {
         )
     }
 
-    private fun layout(piece: MidiPiece, metrics: ScoreMetrics = phone, transpose: Int = 0, fold: Boolean = true): ScoreLayout =
+    private fun layout(
+        piece: MidiPiece,
+        metrics: ScoreMetrics = phone,
+        transpose: Int = 0,
+        fold: Boolean = true,
+        hands: ByteArray? = null,
+    ): ScoreLayout =
         ScoreLayoutEngine.layout(
             piece.notes,
             IntArray(piece.notes.size) { KeyMap.map(piece.notes.note(it), transpose, fold) },
@@ -59,6 +65,7 @@ class ScoreLayoutEngineTest {
             piece.keySignatures.map { it.transposed(transpose) },
             metrics,
             piece.timeSignatures,
+            hands,
         )
 
     /** The note on [key] starting at [tick]. */
@@ -355,5 +362,39 @@ class ScoreLayoutEngineTest {
         assertEquals(4, score.systems[0].barCount)
         for (system in score.systems) assertEquals(system.page % 2, system.slot)
         assertTrue(score.systems.all { it.right <= tablet.pageWidth })
+    }
+    @Test
+    fun `a right-hand note below middle C lands on the treble staff, a left-hand one above it on the bass`() {
+        val crossing = piece {
+            note(0, 59, 480)       // B3, right hand
+            note(480, 62, 480)     // D4, left hand
+            note(960, 57, 2880)    // A3, right hand, tied over the bar line
+            note(960, 45, 480)     // A2, right hand: five ledger lines under the treble, so it goes to the bass
+            note(1440, 74, 480)    // D5, left hand: five above the bass, so it goes to the treble
+        }
+        val right = Hands.RIGHT
+        val left = Hands.LEFT
+        val given = mapOf(59 to right, 62 to left, 57 to right, 45 to right, 74 to left)
+        val hands = ByteArray(crossing.notes.size) { given.getValue(crossing.notes.note(it)) }
+        val score = layout(crossing, hands = hands)
+        val b3 = crossing.at(0, 59)
+        val d4 = crossing.at(480, 62)
+        val a3 = crossing.at(960, 57)
+        assertTrue(score.treble[b3])
+        assertEquals(-1, score.ledgers[b3].toInt())                      // B3 hangs under middle C's ledger line
+        assertFalse(score.treble[d4])
+        assertEquals(1, score.ledgers[d4].toInt())                        // D4 sits on middle C's line over the bass
+        assertTrue(score.treble[a3])
+        assertTrue(score.tiedHeadCount(a3) > 0)
+        for (k in 0 until score.tiedHeadCount(a3)) assertTrue(score.treble[score.tiedHead(a3, k)])   // its tied heads follow it
+        assertFalse(score.treble[crossing.at(960, 45)])
+        assertTrue(score.treble[crossing.at(1440, 74)])
+        // The bass staff's rests leave room for the left hand's D4 there, not on the treble.
+        val bar0Bass = (score.rests.inSystem(0)).filter { !score.rests.treble[it] && score.rests.bar[it] == 0 }
+        assertTrue(bar0Bass.none { score.rests.x[it] >= score.x[d4] - 0.01f && score.rests.x[it] < score.x[d4] + head })
+        // Without hands, the old rule: middle C and up on the treble staff.
+        val plain = layout(crossing)
+        assertFalse(plain.treble[b3])
+        assertTrue(plain.treble[d4])
     }
 }

@@ -21,10 +21,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
+import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
@@ -83,6 +85,9 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  *    keyboard strip; nothing below it.
  * Upcoming notes are the secondary colour; crossing the line a note brightens to the content
  * colour over 120 ms (a cut when motion is reduced) and stays bright for its duration.
+ * With [hands] (`score.Hands`, one per note) the right hand's notes are filled bars and the left
+ * hand's outlined ones: a 1 dp line in the same colours with the elevated surface inside
+ * (DESIGN.md › v1.3 › The waterfall format).
  *
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
@@ -97,9 +102,11 @@ fun NoteCanvas(
     frameNanos: LongState,
     clock: SongClock,
     modifier: Modifier = Modifier,
+    hands: ByteArray? = null,
 ) {
     val upcoming = MaterialTheme.colorScheme.onSurfaceVariant
     val sounding = MaterialTheme.colorScheme.onSurface
+    val inside = MaterialTheme.colorScheme.surfaceVariant
     val blackLane = MaterialTheme.colorScheme.surface
     val edge = LocalTertiary.current
     val reduced = rememberReducedMotion()
@@ -119,6 +126,9 @@ fun NoteCanvas(
                     minHeight = 2.dp.toPx(),
                     flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L,
                     ramp = colorRamp(upcoming, sounding),
+                    hands = hands?.takeIf { it.size == notes.size },
+                    inside = inside,
+                    outline = Stroke(width = Hairline.toPx()),
                 )
                 val bar = 2.dp.toPx()
                 val edgeGap = 6.dp.toPx()
@@ -152,6 +162,11 @@ private class Roll(
     val minHeight: Float,
     val flipMicros: Long,
     val ramp: Array<Color>,
+    /** Each note's hand, or null to draw every note filled. */
+    val hands: ByteArray?,
+    /** The inside of a left-hand (outlined) bar. */
+    val inside: Color,
+    val outline: Stroke,
 ) {
     /** Where notes sound: the tracker bar, or the bottom edge for falling notes. */
     val hitY: Float = if (paper) height * (1f - TRACKER_FROM_BOTTOM) else height
@@ -178,12 +193,27 @@ private class Roll(
             val bottom = hitY - (start - now) * pxPerMicro
             val top = min(hitY - (end - now) * pxPerMicro, bottom - minHeight)
             val width = keys.width(lane) - 2 * inset
-            scope.drawRoundRect(
-                color = ramp[rampLevel(now, start, end, flipMicros)],
-                topLeft = Offset(keys.left(lane) + inset, top),
-                size = Size(width, bottom - top),
-                cornerRadius = if (paper) CornerRadius(width / 2) else CornerRadius.Zero,
-            )
+            val left = keys.left(lane) + inset
+            val color = ramp[rampLevel(now, start, end, flipMicros)]
+            if (hands != null && hands[i] == Hands.LEFT) {
+                // Outlined: the elevated surface inside a 1 dp line drawn just within the bar's edge.
+                val line = outline.width
+                scope.drawRoundRect(inside, Offset(left, top), Size(width, bottom - top), if (paper) CornerRadius(width / 2) else CornerRadius.Zero)
+                scope.drawRoundRect(
+                    color = color,
+                    topLeft = Offset(left + line / 2, top + line / 2),
+                    size = Size(width - line, bottom - top - line),
+                    cornerRadius = if (paper) CornerRadius((width - line) / 2) else CornerRadius.Zero,
+                    style = outline,
+                )
+            } else {
+                scope.drawRoundRect(
+                    color = color,
+                    topLeft = Offset(left, top),
+                    size = Size(width, bottom - top),
+                    cornerRadius = if (paper) CornerRadius(width / 2) else CornerRadius.Zero,
+                )
+            }
             drawn++
         }
         return drawn

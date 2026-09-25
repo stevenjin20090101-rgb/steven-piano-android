@@ -51,6 +51,7 @@ object SmfParser {
 
         val raw = RawEvents()
         val header = Track0Meta()
+        val trackNames = ArrayList<String>()
         val warnings = Warnings()
         val open = OpenNotes()   // one table for every track, cleared between them
         val readable = min(declaredTracks, MAX_TRACKS)
@@ -64,8 +65,9 @@ object SmfParser {
             if (bytes.hasTag(pos.toInt(), "MTrk")) {
                 if (tracks < readable) {
                     if (cutShort) warnings += "Track ${tracks + 1} is cut short, so it plays as far as it goes."
-                    TrackReader(bytes, start.toInt(), min(end, bytes.size.toLong()).toInt(), tracks, raw, header, warnings, open)
-                        .read(warnOnTruncation = !cutShort)
+                    val reader = TrackReader(bytes, start.toInt(), min(end, bytes.size.toLong()).toInt(), tracks, raw, header, warnings, open)
+                    reader.read(warnOnTruncation = !cutShort)
+                    trackNames += reader.name.orEmpty()
                     tracks++
                 } else {
                     skipped = true   // past the tracks the header lists (or the cap): skipped whole
@@ -100,17 +102,22 @@ object SmfParser {
             copyright = header.copyright,
             durationMicros = durationMicros,
             events = events,
-            notes = pairNotes(events, durationMicros),
+            notes = pairNotes(events, raw.mergedTracks, durationMicros),
             warnings = warnings.list(),
             tempoMap = tempoMap,
             timeSignatures = timeSignatures,
             keySignatures = SignatureLists.keys(raw.keys, tempoMap),
             barStartsMicros = Bars.starts(tempoMap, timeSignatures, durationMicros),
+            trackNames = trackNames,
         )
     }
 
-    /** Pairs every Note On with its Note Off per channel and key; a re-strike ends the previous note. */
-    private fun pairNotes(events: EventList, durationMicros: Long): NoteList {
+    /**
+     * Pairs every Note On with its Note Off per channel and key; a re-strike ends the previous note.
+     * Each note keeps the track its Note On came from ([eventTracks], by event): the hands are read
+     * from it (`score.Hands`). Timing and pitch are exactly as before.
+     */
+    private fun pairNotes(events: EventList, eventTracks: ShortArray, durationMicros: Long): NoteList {
         var count = 0
         for (i in 0 until events.size) if (events.command(i) == 0x90) count++
         val starts = LongArray(count)
@@ -118,6 +125,7 @@ object SmfParser {
         val keys = ByteArray(count)
         val velocities = ByteArray(count)
         val channels = ByteArray(count)
+        val tracks = ShortArray(count)
         val open = IntArray(16 * 128) { -1 }
         var n = 0
         for (i in 0 until events.size) {
@@ -133,6 +141,7 @@ object SmfParser {
                     keys[n] = key.toByte()
                     velocities[n] = events.data2(i).toByte()
                     channels[n] = channel.toByte()
+                    tracks[n] = eventTracks[i]
                     open[source] = n++
                 }
                 0x80 -> if (open[source] >= 0) {
@@ -142,7 +151,7 @@ object SmfParser {
             }
         }
         for (i in 0 until n) if (ends[i] < 0) ends[i] = durationMicros
-        return NoteList(starts, ends, keys, velocities, channels)
+        return NoteList(starts, ends, keys, velocities, channels, tracks)
     }
 
     private class Track0Meta {
@@ -191,6 +200,10 @@ object SmfParser {
     ) {
         private val openIndex = open.index
         private val openTick = open.tick
+
+        /** The track's name: its first track-name meta (FF 03), or null when it has none. */
+        var name: String? = null
+            private set
 
         init {
             open.clear()
@@ -242,12 +255,15 @@ object SmfParser {
                 0x2F -> return false
                 0x51 -> if (length >= 3) {
                     val tempo = (b.u16(at) shl 8) or (b[at + 2].toInt() and 0xFF)
-                    if (tempo > 0) raw.add(tick, RANK_TEMPO, tempo)
+                    if (tempo > 0) raw.add(tick, RANK_TEMPO, tempo, track)
                 }
                 // Signatures stay beside the packed words (whose 2-bit rank is full): the score reads them.
                 0x58 -> if (length >= 2) raw.times += SignatureLists.Raw(tick, b[at].toInt() and 0xFF, b[at + 1].toInt() and 0xFF)
                 0x59 -> if (length >= 2) raw.keys += SignatureLists.Raw(tick, b[at].toInt(), b[at + 1].toInt() and 0xFF)
-                0x03 -> if (track == 0 && header.names.size < MAX_TEXTS) text(at, length)?.let(header.names::add)
+                0x03 -> {
+                    if (name == null) name = text(at, length)
+                    if (track == 0 && header.names.size < MAX_TEXTS) text(at, length)?.let(header.names::add)
+                }
                 0x01 -> if (track == 0 && header.texts.size < MAX_TEXTS) text(at, length)?.let(header.texts::add)
                 0x02 -> if (header.copyright == null) header.copyright = text(at, length)
             }
@@ -265,7 +281,7 @@ object SmfParser {
             when (command) {
                 0x90 -> if (data2 > 0) noteOn(tick, channel, data1, data2) else noteOff(tick, channel, data1)
                 0x80 -> noteOff(tick, channel, data1)
-                0xB0 -> raw.add(tick, RANK_CONTROL, MidiBatch.pack(status, data1, data2))
+                0xB0 -> raw.add(tick, RANK_CONTROL, MidiBatch.pack(status, data1, data2), track)
                 // Program change, pitch bend and aftertouch mean nothing to the piano.
             }
         }
@@ -274,9 +290,9 @@ object SmfParser {
             val source = channel * 128 + key
             if (openIndex[source] >= 0) {
                 if (openTick[source] == tick) return   // the same onset twice
-                raw.add(tick, RANK_NOTE_OFF, MidiBatch.pack(0x80 or channel, key, 0))
+                raw.add(tick, RANK_NOTE_OFF, MidiBatch.pack(0x80 or channel, key, 0), track)
             }
-            openIndex[source] = raw.add(tick, RANK_NOTE_ON, MidiBatch.pack(0x90 or channel, key, velocity))
+            openIndex[source] = raw.add(tick, RANK_NOTE_ON, MidiBatch.pack(0x90 or channel, key, velocity), track)
             openTick[source] = tick
         }
 
@@ -288,7 +304,7 @@ object SmfParser {
                 raw.cancel(open)   // a zero-length note: sorting off-before-on would leave it held
                 return
             }
-            raw.add(tick, RANK_NOTE_OFF, MidiBatch.pack(0x80 or channel, key, 0))
+            raw.add(tick, RANK_NOTE_OFF, MidiBatch.pack(0x80 or channel, key, 0), track)
         }
 
         private fun u8(): Int {
@@ -318,26 +334,36 @@ object SmfParser {
         }
     }
 
-    /** Events of every track in arrival order, as ticks plus packed words; signatures in lists of their own. */
+    /**
+     * Events of every track in arrival order, as ticks plus packed words and the track each came
+     * from (0-based, in file order); signatures in lists of their own.
+     */
     private class RawEvents {
         private var ticks = LongArray(1024)
         private var words = IntArray(1024)
+        private var tracks = ShortArray(1024)
         var size = 0
+            private set
+
+        /** After [merge]: the track of each merged event, by the merged index. */
+        var mergedTracks = ShortArray(0)
             private set
 
         /** Time signatures (numerator, power of two) and key signatures (sharps, signed; mode) as read. */
         val times = ArrayList<SignatureLists.Raw>()
         val keys = ArrayList<SignatureLists.Raw>()
 
-        /** [payload] is a packed message, or the tempo for [RANK_TEMPO]. Returns the event's index. */
-        fun add(tick: Long, rank: Int, payload: Int): Int {
+        /** [payload] is a packed message, or the tempo for [RANK_TEMPO], from [track]. Returns the event's index. */
+        fun add(tick: Long, rank: Int, payload: Int, track: Int): Int {
             if (size == MAX_EVENTS) throw SmfException(TOO_MANY_EVENTS)
             if (size == ticks.size) {
                 ticks = ticks.copyOf(size * 2)
                 words = words.copyOf(size * 2)
+                tracks = tracks.copyOf(size * 2)
             }
             ticks[size] = tick
             words[size] = (rank shl 24) or payload
+            tracks[size] = track.toShort()   // at most MAX_TRACKS (1,024) tracks are read
             return size++
         }
 
@@ -349,7 +375,8 @@ object SmfParser {
          * Stable merge by (tick, rank), then ticks to microseconds through the tempo map as it
          * builds up in [tempo]: a tempo change sorts first at its tick and times what follows.
          * The sort keys' array is reused for the events' times (event k is written at or before
-         * key k, which has been read by then), so the merge needs one long array, not two.
+         * key k, which has been read by then), so the merge needs one long array, not two. Each merged
+         * event's track goes to [mergedTracks].
          */
         fun merge(tempo: TempoMap.Builder): EventList {
             val order = LongArray(size) { i -> (ticks[i] shl 25) or ((rank(words[i]).toLong()) shl 23) or i.toLong() }
@@ -357,6 +384,7 @@ object SmfParser {
             var count = 0
             for (i in 0 until size) if (words[i] != CANCELED && rank(words[i]) != RANK_TEMPO) count++
             val packed = IntArray(count)
+            val merged = ShortArray(count)
             var n = 0
             for (k in 0 until size) {
                 val i = (order[k] and INDEX_MASK).toInt()
@@ -367,9 +395,11 @@ object SmfParser {
                 } else {
                     order[n] = tempo.micros(ticks[i])
                     packed[n] = word and 0xFFFFFF
+                    merged[n] = tracks[i]
                     n++
                 }
             }
+            mergedTracks = merged
             return EventList(order, packed, n)
         }
 

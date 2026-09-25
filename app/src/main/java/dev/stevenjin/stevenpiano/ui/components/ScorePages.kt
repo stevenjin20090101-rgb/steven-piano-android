@@ -170,9 +170,10 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * The score (DESIGN.md › v1.2 › Score): the piece as systems of bars on pages, one page, or two
  * side by side when the panel is 840 dp wide or more, laid out by [ScoreLayoutEngine] from the
  * file's tempo map, bars and signatures ([keySignatures] are the file's; [transpose] moves them
- * with the notes). Staff lines and bar lines are the tertiary grey; clefs, signatures, notes and their
- * beams, rests, ties, tempo marks and dynamics the secondary colour (DESIGN.md › v1.3 › Score
- * fidelity); bar numbers eyebrows above each system. A 2 dp cursor moves through the current
+ * with the notes), each note on its hand's staff when the [hands] are known (DESIGN.md › v1.3).
+ * Staff lines and bar lines are the tertiary grey; clefs, signatures, notes and their beams, rests,
+ * ties, tempo marks and dynamics the secondary colour (DESIGN.md › v1.3 › Score fidelity); bar
+ * numbers eyebrows above each system. A 2 dp cursor moves through the current
  * system, and sounding notes (and the heads tied to them, as the cursor reaches each) brighten with
  * the roll's 120 ms flip (a cut when motion is reduced). Pages turn by themselves so the cursor is
  * always in sight ([PageTurn]).
@@ -201,6 +202,7 @@ fun ScorePages(
     clock: SongClock,
     onSeek: (micros: Long) -> Unit,
     modifier: Modifier = Modifier,
+    hands: ByteArray? = null,
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -224,12 +226,12 @@ fun ScorePages(
         val metrics = remember(width, panelWidth, panelHeight, density, glyphs, numberHeight) {
             ScoreMetrics.forPanel(width, panelWidth, panelHeight, density.density, glyphs.headWidth, glyphs.clefWidth, numberHeight)
         }
-        val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics) {
+        val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics, hands) {
             if (value?.notes !== notes) value = null   // never another piece's pages under this one's cursor
             value = withContext(Dispatchers.Default) {
                 val keys = IntArray(notes.size) { KeyMap.map(notes.note(it), transpose, fold) }
                 val keysMoved = keySignatures.map { it.transposed(transpose) }
-                Laid(notes, ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures))
+                Laid(notes, ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, hands?.takeIf { it.size == notes.size }))
             }
         }
         laid?.let { ScoreView(it.layout, notes, glyphs, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek) }

@@ -356,4 +356,40 @@ class SmfParserTest {
         assertEquals(2_880L, piece.tempoMap.microsToTicks(piece.durationMicros))
         assertEquals(6.0, piece.tempoMap.microsToBeats(piece.durationMicros), 1e-9)
     }
+
+    @Test
+    fun `every note keeps the track it came from, and every track its name`() {
+        val piece = SmfParser.parse(
+            SmfBuilder(format = 1).track {
+                name(0, "Sonata")
+                name(0, "Second title")
+                tempo(0, 500_000)
+            }.track {
+                name(0, "Piano right")
+                noteOn(0, 72)
+                noteOff(480, 72)
+                noteOn(480, 60)          // the same key the other track strikes: each keeps its own track
+                noteOff(960, 60)
+            }.track {
+                noteOn(0, 48)
+                noteOn(240, 60, channel = 1)
+                noteOff(480, 48)
+                noteOff(960, 60, channel = 1)
+            }.track {
+                name(0, "")
+                name(0, "Piano left")    // an empty name is no name: the first one with text counts
+            }.build(),
+        )
+        assertEquals(listOf("Sonata", "Piano right", "", "Piano left"), piece.trackNames)
+        assertEquals(listOf("Sonata", "Second title"), piece.sequenceNames)
+        val byKeyAndStart = (0 until piece.notes.size).associate { (piece.notes.note(it) to piece.notes.startMicros[it]) to piece.notes.track(it) }
+        assertEquals(1, byKeyAndStart[72 to 0L])
+        assertEquals(2, byKeyAndStart[48 to 0L])
+        assertEquals(2, byKeyAndStart[60 to 250_000L])
+        assertEquals(1, byKeyAndStart[60 to 500_000L])
+        // Format 0: one track, and every note in it.
+        val single = SmfParser.parse(SmfBuilder(format = 0).track { noteOn(0, 60); noteOff(480, 60); noteOn(480, 62) }.build())
+        assertEquals(listOf(""), single.trackNames)
+        assertEquals(listOf(0, 0), (0 until single.notes.size).map { single.notes.track(it) })
+    }
 }

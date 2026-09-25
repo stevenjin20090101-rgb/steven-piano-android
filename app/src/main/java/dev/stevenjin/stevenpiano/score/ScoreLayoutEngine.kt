@@ -29,7 +29,10 @@ import kotlin.math.min
  * cursor passes as it sounds.
  *
  * Notes are spelled in the key ([Spelling]) with one accidental per pitch per bar, and placed on the
- * treble staff from middle C up, on the bass staff below. A file on a sixteenth grid ([Quantize]) is
+ * staff of the hand that plays them ([Hands]: the right hand on the treble staff even below middle C,
+ * the left on the bass staff; a note more than [ScoreLayoutEngine.MAX_HAND_LEDGERS] ledger lines off
+ * its hand's staff goes to the other staff when it reads with fewer there), or, without hands, on
+ * the treble staff from middle C up and on the bass staff below. A file on a sixteenth grid ([Quantize]) is
  * engraved: each note is written from its onset to its end on the grid, split at bar lines and into
  * values one note can write, the pieces joined by ties ([Ties]; the tied heads carry no accidental);
  * hollow whole and half heads, black heads with stems 3.5 spaces long (up below the middle line; a
@@ -55,10 +58,18 @@ object ScoreLayoutEngine {
     const val MIN_TIED_BUDGET = 4_096
 
     /**
+     * A note more ledger lines than this off its hand's staff is written on the other staff when it
+     * needs fewer there (a right-hand B2, a left-hand D5): the right hand keeps the treble staff down to
+     * C3, the left hand the bass staff up to C5.
+     */
+    const val MAX_HAND_LEDGERS = 4
+
+    /**
      * [notes] (sorted by start) are drawn at [keys], the keys they sound after transposing and
      * folding (`KeyMap.UNPLAYABLE` ones are left out); [bars] are the bar starts in microseconds;
      * [keySignatures] and [timeSignatures] as the file gives them (key signatures already moved by
-     * any transpose).
+     * any transpose). [hands] ([Hands.RIGHT] or [Hands.LEFT] per note) puts each note on its hand's
+     * staff; without them the staff is the pitch's, split at middle C.
      */
     fun layout(
         notes: NoteList,
@@ -68,9 +79,11 @@ object ScoreLayoutEngine {
         keySignatures: List<KeySignature>,
         metrics: ScoreMetrics,
         timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
+        hands: ByteArray? = null,
     ): ScoreLayout {
         require(keys.size == notes.size) { "One key per note" }
-        return Build(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures).run()
+        require(hands == null || hands.size == notes.size) { "One hand per note" }
+        return Build(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures, hands).run()
     }
 }
 
@@ -86,6 +99,7 @@ private class Build(
     keySignatures: List<KeySignature>,
     private val m: ScoreMetrics,
     timeSignatures: List<TimeSignature>,
+    private val hands: ByteArray?,
 ) {
     private val space = m.space
     private val half = m.space / 2
@@ -489,8 +503,8 @@ private class Build(
                 stateBar = b
                 stateKey = sharps
             }
-            val onTreble = key >= StaffPitch.MIDDLE_C
             val letter = Spelling.step(key, sharps)
+            val onTreble = if (hands == null) key >= StaffPitch.MIDDLE_C else handStaff(hands[i] == Hands.RIGHT, letter)
             val pos = StaffPitch.position(letter, onTreble)
             system[i] = s
             bar[i] = b
@@ -510,6 +524,18 @@ private class Build(
                 head[i] = Head.BLACK.toByte()
             }
         }
+    }
+
+    /**
+     * The staff a note at diatonic [step] is written on when the [right] hand (or the left) plays it:
+     * its hand's, unless it lies more than [ScoreLayoutEngine.MAX_HAND_LEDGERS] ledger lines off it
+     * and needs fewer on the other staff. True for the treble staff.
+     */
+    private fun handStaff(right: Boolean, step: Int): Boolean {
+        val own = abs(StaffPitch.ledgerLines(StaffPitch.position(step, right)))
+        if (own <= ScoreLayoutEngine.MAX_HAND_LEDGERS) return right
+        val other = abs(StaffPitch.ledgerLines(StaffPitch.position(step, !right)))
+        return if (other < own) !right else right
     }
 
     /**

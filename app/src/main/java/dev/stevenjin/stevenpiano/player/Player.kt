@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.player
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.midi.MidiPiece
+import dev.stevenjin.stevenpiano.score.Hands
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,7 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * The Keys screen plays through here too ([liveNoteOn] and friends): its keys join the queue of
  * scheduler commands and go out through the engine's router, so they share the piece's
  * reference counts, 100 ms guard and silence. A dropped link lets go of them.
+ * Each piece's hands are worked out on [compute] as it loads, before it is shown and played.
  */
 class Player(
     private val link: PianoLink,
@@ -57,6 +59,7 @@ class Player(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     prepareThread: () -> Unit = Scheduler.UrgentAudio,
     private val random: Random = Random.Default,
+    private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val engine = PlaybackEngine(link)
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -269,6 +272,7 @@ class Player(
             }
             val midi = playable.midi
             val tempo = defaultTempoPct
+            val hands = withContext(compute) { handsOf(midi) }
             _state.update {
                 it.copy(
                     loading = false,
@@ -282,6 +286,7 @@ class Player(
                         barStartsMicros = midi.barStartsMicros,
                         keySignatures = midi.keySignatures,
                         timeSignatures = midi.timeSignatures,
+                        hands = hands,
                     ),
                 )
             }
@@ -292,6 +297,18 @@ class Player(
             }
             withContext(io) { source.markPlayed(id) }
         }
+    }
+
+    /**
+     * The piece's hands; none if working them out fails (the score then splits the staves at middle C
+     * and the waterfall fills every bar): a suggestion must never stop a piece from playing.
+     */
+    private fun handsOf(midi: MidiPiece): ByteArray = try {
+        Hands.assign(midi.notes, midi.trackNames, midi.tempoMap, midi.timeSignatures)
+    } catch (e: Exception) {
+        ByteArray(0)
+    } catch (e: OutOfMemoryError) {
+        ByteArray(0)
     }
 
     /**
