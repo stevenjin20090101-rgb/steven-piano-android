@@ -15,6 +15,9 @@ import dev.stevenjin.stevenpiano.data.imports.IndexCsv
 import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics
 import dev.stevenjin.stevenpiano.data.imports.ZipSource
 import dev.stevenjin.stevenpiano.data.imports.isMidiName
+import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
+import dev.stevenjin.stevenpiano.score.ScoreMetrics
+import dev.stevenjin.stevenpiano.score.ScoreWidth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -108,6 +111,56 @@ class CorpusTest {
         println("Corpus: ${files.size} titles, $stubs still stubs, ${keys.size} composer groups")
         assertEquals(emptyList<String>(), mojibake)
     }
+
+    @Test
+    fun `every file in the library lays out as a score, on a phone and on a tablet`() {
+        val root = corpus()
+        val files = midiFiles(root)
+        // A phone's score panel (411 x 600 dp, one page) and a tablet's on its side (1280 x 700 dp, two pages).
+        val panels = listOf(
+            panel(ScoreWidth.COMPACT, 411f, 600f, 2.625f),
+            panel(ScoreWidth.EXPANDED, 1_280f, 700f, 2f),
+        )
+        assertEquals(listOf(1, 2), panels.map { it.pages })
+        val quantized = mutableMapOf<String, Int>()
+        val total = mutableMapOf<String, Int>()
+        var notes = 0L
+        var bars = 0L
+        val started = System.nanoTime()
+        for (file in files) {
+            val piece = SmfParser.parse(file.readBytes())
+            val keys = IntArray(piece.notes.size) { KeyMap.map(piece.notes.note(it), 0, true) }
+            val collection = file.relativeTo(root).path.substringBefore(File.separator)
+            total.merge(collection, 1, Int::plus)
+            for (metrics in panels) {
+                val score = ScoreLayoutEngine.layout(
+                    piece.notes, keys, piece.tempoMap, piece.barStartsMicros, piece.keySignatures, metrics, piece.timeSignatures,
+                )
+                val where = "${file.path} on ${metrics.pages} page(s)"
+                assertEquals(where, (piece.barStartsMicros.size + metrics.barsPerSystem - 1) / metrics.barsPerSystem, score.systems.size)
+                for (i in 0 until score.noteCount) {
+                    val system = score.systems[score.system[i]]
+                    assertTrue(where, i in system.firstNote until system.noteEnd)
+                    assertTrue(where, score.x[i] >= system.left && score.x[i] <= metrics.pageWidth)
+                }
+                if (metrics === panels[0]) {
+                    if (score.quantized) quantized.merge(collection, 1, Int::plus)
+                    notes += score.noteCount
+                    bars += score.bars.count
+                }
+            }
+        }
+        val seconds = (System.nanoTime() - started) / 1e9
+        val sequenced = quantized.values.sum()
+        println(
+            "Corpus score: ${files.size} files ($notes notes, $bars bars) laid out on both panels in %.1f s; ".format(seconds) +
+                "quantised (note values) %d = %.1f %%".format(sequenced, 100.0 * sequenced / files.size),
+        )
+        total.keys.sorted().forEach { println("  $it: ${quantized[it] ?: 0} of ${total[it]} quantised") }
+    }
+
+    private fun panel(width: ScoreWidth, widthDp: Float, heightDp: Float, density: Float) =
+        ScoreMetrics.forPanel(width, widthDp * density, heightDp * density, density, 1.18f * 6 * density, 2.74f * 6 * density)
 
     private fun File.sha256(): String =
         MessageDigest.getInstance("SHA-256").digest(readBytes()).joinToString("") { "%02x".format(it) }

@@ -12,12 +12,13 @@ package dev.stevenjin.stevenpiano.ui.components
 import dev.stevenjin.stevenpiano.midi.KeyMap
 
 /**
- * Where a key sits on the grand staff. Sharps only, and no key signatures: a black key takes the
- * staff step of the natural below it, with a sharp. Keys from middle C up sit on the treble
- * staff, keys below it on the bass staff. A position counts diatonic steps up from the staff's
- * bottom line (E4 on the treble, G2 on the bass): even positions are lines, odd ones spaces, and
- * the five lines are 0, 2, 4, 6 and 8; middle C is -2 on the treble, its own ledger line.
- * Pure, so it is unit-tested.
+ * Where a key sits on the grand staff. Keys from middle C up sit on the treble staff, keys below
+ * it on the bass staff. A position counts diatonic steps up from the staff's bottom line (E4 on
+ * the treble, G2 on the bass): even positions are lines, odd ones spaces, and the five lines are
+ * 0, 2, 4, 6 and 8; middle C is -2 on the treble, its own ledger line. With no key signature to
+ * spell by, a black key takes the step of the natural below it, with a sharp ([position] of a
+ * key); the score spells in the key (`score.Spelling`) and places the letter it chose
+ * ([position] of a step). Pure, so it is unit-tested.
  */
 object StaffPitch {
     const val MIDDLE_C = 60
@@ -38,8 +39,11 @@ object StaffPitch {
 
     fun onTreble(key: Int): Boolean = key >= MIDDLE_C
 
-    /** Steps up from the bottom line of [key]'s staff. */
-    fun position(key: Int): Int = diatonic(key) - if (onTreble(key)) TREBLE_BOTTOM else BASS_BOTTOM
+    /** Steps up from the bottom line of [key]'s staff, a black key spelled as a sharp. */
+    fun position(key: Int): Int = position(diatonic(key), onTreble(key))
+
+    /** Steps up from the bottom line of the [treble] or bass staff for a letter at diatonic [step] (C4 is 35). */
+    fun position(step: Int, treble: Boolean): Int = step - if (treble) TREBLE_BOTTOM else BASS_BOTTOM
 
     /** Ledger lines a head at [position] needs: negative below its staff, positive above, 0 on it. */
     fun ledgerLines(position: Int): Int = when {
