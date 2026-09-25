@@ -116,6 +116,38 @@ class ScoreLayoutBudgetTest {
     }
 
     @Test
+    fun `the metre in force is found by binary search, so 200,000 time signatures cost the layout nothing`() {
+        // 3/4 for a bar, then 4/4; 199,998 signatures more sit past the music, where each bar's lookup
+        // once scanned them all from the end (7.5 s).
+        val tempo = TempoMap.constant(480)
+        val times = ArrayList<TimeSignature>(200_000)
+        times += TimeSignature(0, 0, 3, 4)
+        times += TimeSignature(1_440, tempo.tickToMicros(1_440), 4, 4)
+        val after = 1_440L + 20_000 * 1_920L
+        for (k in 0 until 199_998) times += TimeSignature(after + k * 1_920L, tempo.tickToMicros(after + k * 1_920L), if (k % 2 == 0) 3 else 4, 4)
+        val count = 20_000
+        val notes = NoteList(
+            LongArray(count) { tempo.tickToMicros(1_440L + it * 1_920L) },
+            LongArray(count) { tempo.tickToMicros(1_440L + it * 1_920L + 1_920) },
+            ByteArray(count) { 67 },
+            ByteArray(count) { 80 },
+            ByteArray(count),
+        )
+        val bars = Bars.starts(tempo, times, notes.endMicros.max())
+        assertEquals(20_001, bars.size)
+        val started = System.nanoTime()
+        val score = ScoreLayoutEngine.layout(
+            notes, IntArray(count) { 67 }, tempo, bars, emptyList(), ScoreFixtures.metrics(), times,
+        )
+        val seconds = (System.nanoTime() - started) / 1e9
+        assertEquals(1_440.0 / 480, score.bars.startMicros[1] / 500_000.0, 1e-9)   // the 3/4 bar
+        fun digits(s: Int) = score.systems[s].signKind.filter { it >= Sign.DIGIT }.map { it - Sign.DIGIT }
+        assertEquals(listOf(3, 4, 3, 4, 4, 4, 4, 4), digits(0))                        // 3/4, then 4/4 in bar 2
+        assertTrue((1 until score.systems.size).all { digits(it).isEmpty() })
+        assertTrue("laid out in %.2f s".format(seconds), seconds < 1.0)
+    }
+
+    @Test
     fun `a piece of more than a hundred thousand notes is laid out as performed`() {
         // 300,000 notes a sixteenth apart, each held for three bars: engraved, they would want two tied
         // heads each (a million held notes once made three million heads, 861 MB).

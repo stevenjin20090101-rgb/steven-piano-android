@@ -139,6 +139,7 @@ private class Build(
     private val barCount = barMicros.size
     private val barTick = LongArray(barCount) { tempo.microsToTicks(barMicros[it]) }
     private val times = timeSignatures.filter { it.valid }.sortedBy { it.tick }
+    private val timeTicks = LongArray(times.size) { times[it].tick }
     private val keyList = keySignatures.sortedBy { it.tick }
     private val keyTicks = LongArray(keyList.size) { keyList[it].tick }
     private val keySharps = IntArray(keyList.size) { keyList[it].sharps.coerceIn(-7, 7) }
@@ -1235,8 +1236,20 @@ private class Build(
         return lo
     }
 
-    /** The metre in force at [tick]: 4/4 before the first signature. */
-    private fun timeAt(tick: Long): TimeSignature = times.lastOrNull { it.tick <= tick } ?: TimeSignature.Common
+    /**
+     * The metre in force at [tick]: the last signature at or before it (the last of any at one tick),
+     * 4/4 before the first. A binary search: asked for every bar, a scan from the end took 7.5 s for
+     * 200,000 signatures (the v1.3 delta audit, P1).
+     */
+    private fun timeAt(tick: Long): TimeSignature {
+        var lo = 0
+        var hi = timeTicks.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (timeTicks[mid] <= tick) lo = mid + 1 else hi = mid
+        }
+        return if (lo == 0) TimeSignature.Common else times[lo - 1]
+    }
 
     /** The key in force at [tick], in sharps (negative: flats); 0 before any key signature. */
     private fun sharpsAt(tick: Long): Int {

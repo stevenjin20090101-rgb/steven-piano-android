@@ -19,9 +19,10 @@ import kotlin.math.min
  *
  * A file is untrusted input, so what it can cost is bounded: at most [MAX_EVENTS] events (about
  * two million, 12 bytes each once merged), the tracks the header lists up to [MAX_TRACKS], text
- * metas read to [MAX_TEXT_BYTES] and [MAX_TEXTS] of each kind, [MAX_WARNINGS] warnings, and at
- * most [MAX_DURATION_MICROS] (a day) of music. Past a cap the file is refused in plain English
- * ([SmfException]) or the excess is skipped with a warning.
+ * metas read to [MAX_TEXT_BYTES] and [MAX_TEXTS] of each kind, [MAX_SIGNATURES] time signatures
+ * and as many key signatures, [MAX_WARNINGS] warnings, and at most [MAX_DURATION_MICROS] (a day)
+ * of music. Past a cap the file is refused in plain English ([SmfException]) or the excess is
+ * skipped with a warning.
  */
 object SmfParser {
     internal const val RANK_TEMPO = 0
@@ -36,6 +37,7 @@ object SmfParser {
     private const val NO_TRACKS = "This MIDI file has no tracks."
     private const val TOO_MANY_EVENTS = "This file has too many events."
     private const val TOO_LONG = "This file lasts longer than a day, which Steven Piano can't play."
+    private const val TOO_MANY_SIGNATURES = "Too many signature changes; some were ignored."
 
     fun parse(bytes: ByteArray): MidiPiece {
         if (bytes.size < 14 || !bytes.hasTag(0, "MThd")) throw SmfException(NOT_MIDI)
@@ -87,6 +89,7 @@ object SmfParser {
         } else if (tracks < declaredTracks) {
             warnings += "The file lists $declaredTracks tracks but holds $tracks."
         }
+        if (raw.signaturesDropped) warnings += TOO_MANY_SIGNATURES
 
         val tempo = TempoMap.Builder(division)
         val events = raw.merge(tempo)
@@ -258,8 +261,8 @@ object SmfParser {
                     if (tempo > 0) raw.add(tick, RANK_TEMPO, tempo, track)
                 }
                 // Signatures stay beside the packed words (whose 2-bit rank is full): the score reads them.
-                0x58 -> if (length >= 2) raw.times += SignatureLists.Raw(tick, b[at].toInt() and 0xFF, b[at + 1].toInt() and 0xFF)
-                0x59 -> if (length >= 2) raw.keys += SignatureLists.Raw(tick, b[at].toInt(), b[at + 1].toInt() and 0xFF)
+                0x58 -> if (length >= 2) raw.time(tick, b[at].toInt() and 0xFF, b[at + 1].toInt() and 0xFF)
+                0x59 -> if (length >= 2) raw.key(tick, b[at].toInt(), b[at + 1].toInt() and 0xFF)
                 0x03 -> {
                     if (name == null) name = text(at, length)
                     if (track == 0 && header.names.size < MAX_TEXTS) text(at, length)?.let(header.names::add)
@@ -349,9 +352,21 @@ object SmfParser {
         var mergedTracks = ShortArray(0)
             private set
 
-        /** Time signatures (numerator, power of two) and key signatures (sharps, signed; mode) as read. */
+        /** Time signatures (numerator, power of two) and key signatures (sharps, signed; mode) as read, [MAX_SIGNATURES] of each at most. */
         val times = ArrayList<SignatureLists.Raw>()
         val keys = ArrayList<SignatureLists.Raw>()
+
+        /** A signature past [MAX_SIGNATURES] of its kind was read and left out. */
+        var signaturesDropped = false
+            private set
+
+        fun time(tick: Long, numerator: Int, power: Int) {
+            if (times.size < MAX_SIGNATURES) times += SignatureLists.Raw(tick, numerator, power) else signaturesDropped = true
+        }
+
+        fun key(tick: Long, sharps: Int, mode: Int) {
+            if (keys.size < MAX_SIGNATURES) keys += SignatureLists.Raw(tick, sharps, mode) else signaturesDropped = true
+        }
 
         /** [payload] is a packed message, or the tempo for [RANK_TEMPO], from [track]. Returns the event's index. */
         fun add(tick: Long, rank: Int, payload: Int, track: Int): Int {
@@ -421,6 +436,13 @@ object SmfParser {
 
     /** Track names (FF 03) and texts (FF 01) kept from Track 0. */
     const val MAX_TEXTS = 16
+
+    /**
+     * Time signatures (FF 58) kept from a file, and key signatures (FF 59) likewise: a score's metre or
+     * key changes a few times, and every change the score and the chord names look up costs them time
+     * (the v1.3 delta audit, M1: 1.25 million key signatures took 7.7 s to name the chords).
+     */
+    const val MAX_SIGNATURES = 4_096
 
     /** Warnings kept; the rest are counted in one more. */
     const val MAX_WARNINGS = 20

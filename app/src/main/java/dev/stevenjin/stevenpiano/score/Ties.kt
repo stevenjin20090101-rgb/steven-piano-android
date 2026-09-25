@@ -67,13 +67,21 @@ object Ties {
     fun value(sixteenths: Int, ppq: Int): NoteValue = Quantize.value((sixteenths * ppq / 4.0).roundToLong(), ppq)
 
     /**
+     * A note is cut after this many bars in a row too short to hold any of it (under half a sixteenth
+     * each: bars no music has, which a crafted file can pack by the hundred thousand).
+     */
+    const val MAX_EMPTY_BARS = 64
+
+    /**
      * The written pieces of a note from [start] to [end] (ticks, on the grid; [step] ticks a sixteenth)
      * that starts in bar [bar] of bars from [barStart] to [barEnd] ([compound] for each bar in a
      * compound metre): split at every bar line it crosses, each bar's piece split into values
      * ([split]). Writes each piece's onset to [outTick] and its length in sixteenths to [outLength], at
      * most [max] pieces (the note is cut there), and returns how many. A piece shorter than half a
-     * sixteenth (an end a hair past a bar line) is dropped, and nothing is written past the last bar;
-     * a note always gets at least one piece.
+     * sixteenth (an end a hair past a bar line) is dropped, and nothing is written past the last bar
+     * or past [MAX_EMPTY_BARS] bars in a row that hold none of the note (the v1.3 delta audit, L4: a
+     * note held across a hundred thousand such bars walked every one); a note always gets at least
+     * one piece.
      */
     fun segments(
         start: Long,
@@ -90,9 +98,11 @@ object Ties {
         var count = 0
         var b = bar
         var from = start
-        while (from < end && b < barStart.size && count < max) {
+        var empty = 0
+        while (from < end && b < barStart.size && count < max && empty < MAX_EMPTY_BARS) {
             val until = minOf(end, barEnd[b])
             val sixteenths = Math.round((until - from) / step).toInt()
+            if (sixteenths <= 0) empty++ else empty = 0
             var done = 0
             var left = sixteenths
             while (left > 0 && count < max) {

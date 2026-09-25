@@ -9,10 +9,16 @@
 
 package dev.stevenjin.stevenpiano.score
 
+import dev.stevenjin.stevenpiano.midi.Bars
+import dev.stevenjin.stevenpiano.midi.KeySignature
 import dev.stevenjin.stevenpiano.midi.MidiPiece
+import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
 import dev.stevenjin.stevenpiano.midi.SmfParser
+import dev.stevenjin.stevenpiano.midi.TempoMap
+import dev.stevenjin.stevenpiano.midi.TimeSignature
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChordsTest {
@@ -135,6 +141,36 @@ class ChordsTest {
         val track = chords(arpeggio)
         assertEquals(listOf("C", "Dm7/C"), List(track.size) { track.name(it) })
         assertEquals(2_000_000L, track.startMicros[1])
+    }
+
+    @Test
+    fun `a piece of a hundred thousand key signatures is named in well under a second, each name in the key in force`() {
+        // 20,000 beats, a triad each: D♭ major on the even beats, in C major, and F♯ major on the odd
+        // ones, in G major. 80,000 signatures at the very start (the last, C major, holds) and one at
+        // every beat: a scan from the first key for each name read 90,000 on average.
+        val tempo = TempoMap.constant(480)
+        val beats = 20_000
+        val chord = arrayOf(intArrayOf(61, 65, 68), intArrayOf(66, 70, 73))
+        val count = 3 * beats
+        val notes = NoteList(
+            LongArray(count) { tempo.tickToMicros(it / 3 * 480L) },
+            LongArray(count) { tempo.tickToMicros(it / 3 * 480L + 480) },
+            ByteArray(count) { chord[it / 3 % 2][it % 3].toByte() },
+            ByteArray(count) { 80 },
+            ByteArray(count),
+        )
+        val keys = ArrayList<KeySignature>(100_000)
+        for (j in 0 until 80_000) keys += KeySignature(0, 0, if (j % 2 == 0) 1 else 0, false)
+        for (beat in 0 until beats) keys += KeySignature(beat * 480L, tempo.tickToMicros(beat * 480L), beat % 2, false)
+        assertEquals(100_000, keys.size)
+        val bars = Bars.starts(tempo, listOf(TimeSignature.Common), notes.endMicros.max())
+        val started = System.nanoTime()
+        val track = Chords.detect(notes, tempo, bars, listOf(TimeSignature.Common), keys)
+        val seconds = (System.nanoTime() - started) / 1e9
+        println("Chords: %d names under 100,000 key signatures in %.3f s".format(track.size, seconds))
+        assertEquals(beats, track.size)
+        for (i in 0 until track.size) assertEquals(if (i % 2 == 0) "D♭" else "F♯", track.name(i))
+        assertTrue("named in %.3f s".format(seconds), seconds < 0.5)
     }
 
     @Test

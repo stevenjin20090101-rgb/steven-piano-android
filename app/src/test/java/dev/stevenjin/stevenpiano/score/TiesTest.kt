@@ -78,6 +78,23 @@ class TiesTest {
     }
 
     @Test
+    fun `a note is cut after 64 bars in a row too short to hold any of it`() {
+        // Bars of 30 ticks (a 64th at 480 a quarter), a whole bar after them: sixteenths of 120 ticks.
+        fun across(tiny: Int): List<Pair<Long, Int>> {
+            val starts = LongArray(tiny + 1) { it * 30L }
+            val ends = LongArray(tiny + 1) { if (it < tiny) starts[it] + 30 else starts[it] + 1_920 }
+            val ticks = LongArray(16)
+            val lengths = IntArray(16)
+            val count = Ties.segments(0, ends[tiny], starts, ends, BooleanArray(tiny + 1), 0, 120.0, 16, ticks, lengths)
+            return (0 until count).map { ticks[it] to lengths[it] }
+        }
+        assertEquals(64, Ties.MAX_EMPTY_BARS)
+        assertEquals(listOf(1_890L to 16), across(63))           // 63 empty bars are crossed: the whole bar is written
+        assertEquals(listOf(0L to 1), across(64))                // 64 cut the note: its own head, a sixteenth
+        assertEquals(listOf(0L to 1), across(100_000))           // a hundred thousand are not walked
+    }
+
+    @Test
     fun `pieces stop at the cap, past the last bar, and never leave a note without a head`() {
         assertEquals(listOf(0L to 16, 1920L to 16), pieces(0, 7680, max = 2))
         assertEquals(4, pieces(0, 99_999).size)                                  // four bars and no more

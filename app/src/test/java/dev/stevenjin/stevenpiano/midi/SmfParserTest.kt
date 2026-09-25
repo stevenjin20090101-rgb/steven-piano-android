@@ -341,6 +341,35 @@ class SmfParserTest {
     }
 
     @Test
+    fun `at most 4096 time signatures and 4096 key signatures are kept, the rest dropped with one warning`() {
+        fun signatures(times: Int, keys: Int) = SmfParser.parse(
+            SmfBuilder(format = 1).track {
+                // Alternating, so none repeats the one before and every one read counts.
+                for (k in 0 until maxOf(times, keys)) {
+                    if (k < times) timeSignature(k * 960L, if (k % 2 == 0) 3 else 2, 4)
+                    if (k < keys) keySignature(k * 960L, if (k % 2 == 0) 2 else -2)
+                }
+            }.track {
+                noteOn(0, 60)
+                noteOff(5_000 * 960L, 60)
+            }.build(),
+        )
+        assertEquals(4_096, SmfParser.MAX_SIGNATURES)
+        val atCap = signatures(4_096, 4_096)
+        assertEquals(emptyList<String>(), atCap.warnings)
+        assertEquals(4_095 * 960L, atCap.timeSignatures.last().tick)
+        assertEquals(4_095 * 960L, atCap.keySignatures.last().tick)
+        val past = signatures(5_000, 5_000)
+        assertEquals(listOf("Too many signature changes; some were ignored."), past.warnings)
+        assertEquals(4_096, past.timeSignatures.size)
+        assertEquals(4_096, past.keySignatures.size)
+        assertEquals(4_095 * 960L, past.timeSignatures.last().tick)   // the first 4,096 read are kept
+        assertEquals(4_095 * 960L, past.keySignatures.last().tick)
+        assertEquals(listOf("Too many signature changes; some were ignored."), signatures(10, 4_097).warnings)   // either kind
+        assertEquals(1, past.noteCount)
+    }
+
+    @Test
     fun `the tempo map times bars and gives ticks back`() {
         val piece = SmfParser.parse(
             SmfBuilder(format = 1).track {

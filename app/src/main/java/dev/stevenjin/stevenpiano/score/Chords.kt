@@ -258,8 +258,7 @@ object Chords {
         if (count == 0) return ChordTrack.Empty
         windows.weigh()
         val path = decode(windows)
-        val keys = keySignatures.sortedBy { it.atMicros }
-        val guessed = if (keys.isEmpty()) guessKey(notes) else 0
+        val keys = KeysInForce(keySignatures.sortedBy { it.atMicros }, if (keySignatures.isEmpty()) guessKey(notes) else 0)
         val out = Labels()
         var last = -1
         var k = 0
@@ -276,7 +275,7 @@ object Chords {
                 val quality = chord % QUALITIES
                 val bass = windows.bass[first]
                 val start = windows.firstTone(first, MASK[chord])
-                out.add(start, root, quality, if (bass < 0 || bass == root) -1 else bass, sharpsAt(keys, start, guessed))
+                out.add(start, root, quality, if (bass < 0 || bass == root) -1 else bass, keys.sharpsAt(start))
                 last = chord
             }
             k = end
@@ -284,12 +283,21 @@ object Chords {
         return out.build()
     }
 
-    /** The key in force at [micros] as sharps (negative: flats); [guessed] when the file has none. */
-    private fun sharpsAt(keys: List<KeySignature>, micros: Long, guessed: Int): Int {
-        if (keys.isEmpty()) return guessed
-        var sharps = 0
-        for (key in keys) if (key.atMicros <= micros) sharps = key.sharps else break
-        return sharps.coerceIn(-7, 7)
+    /**
+     * The key in force as the labels are made, in time order (the v1.3 delta audit, M1): a forward index
+     * into [keys] (sorted by time), so each label costs what it moves on, not a scan from the start (a
+     * file of 1.25 million key signatures once took 7.7 s here). [guessed] when the file has none.
+     */
+    private class KeysInForce(private val keys: List<KeySignature>, private val guessed: Int) {
+        private var at = -1
+
+        /** The key in force at [micros] as sharps (negative: flats): the last signature at or before it, 0 before the first. */
+        fun sharpsAt(micros: Long): Int {
+            if (keys.isEmpty()) return guessed
+            if (at >= 0 && keys[at].atMicros > micros) at = -1   // asked out of order: from the start again
+            while (at + 1 < keys.size && keys[at + 1].atMicros <= micros) at++
+            return if (at < 0) 0 else keys[at].sharps.coerceIn(-7, 7)
+        }
     }
 
     /**
