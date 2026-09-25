@@ -73,7 +73,8 @@ class ScoreBars internal constructor(
  * key signature and (at the start and at changes) time signature as [signKind] glyphs placed at
  * [signX] (left edge) and [signY] (the glyph's SMuFL baseline). Page coordinates, in pixels.
  * Notes [firstNote] until [noteEnd] start in it (skip any whose system is another: unplayable
- * ones). Drawing keeps to [bandTop]..[bandBottom]: the neighbouring staves or the page's edges.
+ * ones), and the tied heads [firstTied] until [tiedEnd] are in it. Drawing keeps to
+ * [bandTop]..[bandBottom]: the neighbouring staves or the page's edges.
  */
 class ScoreSystem internal constructor(
     val index: Int,
@@ -92,6 +93,9 @@ class ScoreSystem internal constructor(
     val barCount: Int,
     val firstNote: Int,
     val noteEnd: Int,
+    /** Head indices of the tied heads drawn in this system (0 until 0 when there are none). */
+    val firstTied: Int,
+    val tiedEnd: Int,
     val bandTop: Float,
     val bandBottom: Float,
     val signKind: IntArray,
@@ -116,17 +120,23 @@ class ScoreSystem internal constructor(
 }
 
 /**
- * A piece laid out as systems of bars on pages, with every note placed: parallel arrays in the
- * note list's order (sorted by start). A note whose [system] is -1 is not drawn (unplayable with
- * folding off). Positions are page coordinates in pixels: [x] is the head's left edge, [y] its
- * centre line. When [quantized] (a sequenced file), heads have values, stems and flags; otherwise
- * (a performance) every head is black and a hairline runs to [durationEnd] for its length.
+ * A piece laid out as systems of bars on pages, with every note placed: parallel arrays of heads.
+ * Heads 0 until [noteCount] are the notes' own, in the note list's order (sorted by start); a note
+ * whose [system] is -1 is not drawn (unplayable with folding off). When [quantized] (a sequenced
+ * file) the score is engraved: heads have values, stems, flags or [beams], silences are [rests],
+ * and a note that crosses a bar line or lasts a length no one value writes has tied heads after
+ * [noteCount] ([tiedHeadCount], [tiedHead]; each [tiedNote]'s, sounding from [tiedStartMicros])
+ * joined to it by [ties]. Otherwise (a performance) every head is black and a hairline runs to
+ * [durationEnd] for its length. Positions are page coordinates in pixels: [x] is a head's left
+ * edge, [y] its centre line.
  */
 class ScoreLayout internal constructor(
     val metrics: ScoreMetrics,
     val quantized: Boolean,
     val bars: ScoreBars,
     val systems: List<ScoreSystem>,
+    /** The notes: heads 0 until this are each note's own. */
+    val noteCount: Int,
     val system: IntArray,
     val x: FloatArray,
     val y: FloatArray,
@@ -152,10 +162,27 @@ class ScoreLayout internal constructor(
     val moved: BooleanArray,
     /** Where a performed note's duration hairline ends (NaN: none). */
     val durationEnd: FloatArray,
+    /** The note each tied head (head [noteCount] + r) holds on, and when it is reached: its written onset. */
+    val tiedNote: IntArray,
+    val tiedStartMicros: LongArray,
+    /** Note i's tied heads are [tiedByNote] from tiedFrom[i] until tiedFrom[i + 1], in time order. */
+    private val tiedFrom: IntArray,
+    private val tiedByNote: IntArray,
     /** Beams joining flagged notes within a beat (sequenced files only; flags are then 0). */
     val beams: ScoreBeams,
+    /** Rests on each staff's silences (sequenced files only). */
+    val rests: ScoreRests,
+    /** Ties from each written piece of a note to the next (sequenced files only). */
+    val ties: ScoreTies,
 ) {
-    val noteCount: Int get() = x.size
+    /** Every head: the notes' own and the tied ones. */
+    val headCount: Int get() = x.size
+
+    /** How many tied heads note [note] has. */
+    fun tiedHeadCount(note: Int): Int = tiedFrom[note + 1] - tiedFrom[note]
+
+    /** The head index of note [note]'s tied head [k] (in time order). */
+    fun tiedHead(note: Int, k: Int): Int = tiedByNote[tiedFrom[note] + k]
 
     /** Pages at [ScoreMetrics.systemsPerPage] systems each. */
     val pageCount: Int get() = (systems.size + metrics.systemsPerPage - 1) / metrics.systemsPerPage
@@ -178,7 +205,7 @@ class ScoreLayout internal constructor(
         return first until minOf(systems.size, first + metrics.systemsPerPage)
     }
 
-    /** Width of note [i]'s head: a whole note's is wider. */
+    /** Width of head [i]: a whole note's is wider. */
     fun headWidth(i: Int): Float = if (head[i].toInt() == Head.WHOLE) metrics.headWidth * WHOLE_TO_BLACK else metrics.headWidth
 
     internal companion object {
@@ -231,4 +258,49 @@ internal class BySystem(system: IntArray, size: Int, systemCount: Int) {
         val next = start.copyOf(systemCount)
         for (k in 0 until size) order[next[system[k]]++] = k
     }
+}
+
+/**
+ * The rests as drawn: glyph [value] (in sixteenths: [Rests.WHOLE] 16, half 8, quarter 4, eighth 2,
+ * sixteenth 1) with its left edge at [x] and its SMuFL origin at [y]: the fourth line for a whole
+ * rest (it hangs from it), the middle line for the others. A [wholeBar] rest is centred in its [bar],
+ * whatever the metre. Sorted by system: [inSystem] gives a system's rests.
+ */
+class ScoreRests internal constructor(
+    val system: IntArray,
+    val x: FloatArray,
+    val y: FloatArray,
+    val value: ByteArray,
+    val wholeBar: BooleanArray,
+    val treble: BooleanArray,
+    val bar: IntArray,
+    private val systemStart: IntArray,
+) {
+    val size: Int get() = system.size
+
+    /** The rests drawn in system [s]. */
+    fun inSystem(s: Int): IntRange = runOf(systemStart, s)
+}
+
+/**
+ * The ties as drawn: an arc from ([x1], [y1]) to ([x2], [y2]) in page coordinates, bowing up when
+ * [above] (away from stems pointing down) and down otherwise, joining heads [from] and [to]. A tie
+ * across a system break is two arcs: the first to its system's end ([to] -1), the second in from
+ * the next system's start ([from] -1). Sorted by system: [inSystem] gives a system's ties.
+ */
+class ScoreTies internal constructor(
+    val system: IntArray,
+    val x1: FloatArray,
+    val y1: FloatArray,
+    val x2: FloatArray,
+    val y2: FloatArray,
+    val above: BooleanArray,
+    val from: IntArray,
+    val to: IntArray,
+    private val systemStart: IntArray,
+) {
+    val size: Int get() = system.size
+
+    /** The ties drawn in system [s]. */
+    fun inSystem(s: Int): IntRange = runOf(systemStart, s)
 }

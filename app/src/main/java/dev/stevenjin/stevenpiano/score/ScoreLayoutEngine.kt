@@ -21,20 +21,23 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Lays a piece out as a paged score (DESIGN.md › v1.2 › Score): systems of [ScoreMetrics.barsPerSystem]
- * bars stacked [ScoreMetrics.systemsPerPage] to a page, every bar of a system as wide as the others,
- * each system opening with its clefs and the key signature in force, the time signature at the
- * first system and wherever the metre changes (a key change mid-system draws the new key there).
- * Within a bar a note sits at its place in beats, which is where the cursor passes as it sounds.
+ * Lays a piece out as a paged score (DESIGN.md › v1.2 › Score, › v1.3 › Score fidelity): systems of
+ * [ScoreMetrics.barsPerSystem] bars stacked [ScoreMetrics.systemsPerPage] to a page, every bar of a
+ * system as wide as the others, each system opening with its clefs and the key signature in force,
+ * the time signature at the first system and wherever the metre changes (a key change mid-system
+ * draws the new key there). Within a bar a note sits at its place in beats, which is where the
+ * cursor passes as it sounds.
  *
  * Notes are spelled in the key ([Spelling]) with one accidental per pitch per bar, and placed on the
- * treble staff from middle C up, on the bass staff below. A file on a sixteenth grid ([Quantize])
- * gets note values: hollow whole and half heads, black heads with stems 3.5 spaces long (up below
- * the middle line; a chord's farthest head decides, and two values struck together on one staff
- * stem apart, the higher up), eighth and sixteenth flags, and dots. A performed file keeps black
- * heads with a hairline for each note's length. Heads a second apart move aside, accidentals in a
- * chord stack leftwards so they don't collide. In a sequenced file, flagged notes within a beat are
- * beamed ([Beams]). No tuplets or grace notes.
+ * treble staff from middle C up, on the bass staff below. A file on a sixteenth grid ([Quantize]) is
+ * engraved: each note is written from its onset to its end on the grid, split at bar lines and into
+ * values one note can write, the pieces joined by ties ([Ties]; the tied heads carry no accidental);
+ * hollow whole and half heads, black heads with stems 3.5 spaces long (up below the middle line; a
+ * chord's farthest head decides, and two values struck together on one staff stem apart, the higher
+ * up), flags, dots; flagged notes within a beat beamed ([Beams]); and each staff's silences of a
+ * sixteenth or more written as rests ([Rests]). A performed file keeps black heads with a hairline for
+ * each note's length. Heads a second apart move aside, accidentals in a chord stack leftwards so they
+ * don't collide. No tuplets, grace notes or voices within a hand.
  *
  * Pure (no Android, no Compose): it runs off the main thread and in the JVM tests.
  */
@@ -44,6 +47,12 @@ object ScoreLayoutEngine {
 
     /** Stem length from the head nearest its end, in staff spaces. */
     const val STEM_SPACES = 3.5f
+
+    /** A written note is cut after this many heads, its own and the tied ones (a note held for bars on end). */
+    const val MAX_HEADS_PER_NOTE = 64
+
+    /** Tied heads in one piece at most: twice its notes, and never fewer than this. */
+    const val MIN_TIED_BUDGET = 4_096
 
     /**
      * [notes] (sorted by start) are drawn at [keys], the keys they sound after transposing and
@@ -65,7 +74,10 @@ object ScoreLayoutEngine {
     }
 }
 
-/** One layout's working state. */
+/**
+ * One layout's working state. Heads are indexed like the notes for each note's own (first) head;
+ * a sequenced note's tied heads follow them, from index [n], in onset order.
+ */
 private class Build(
     private val notes: NoteList,
     private val keys: IntArray,
@@ -80,7 +92,7 @@ private class Build(
     private val stemWidth = m.density   // a 1 dp hairline
     private val ppq = tempo.ppq
 
-    /** A sixteenth in ticks: the grid written notes are counted on. */
+    /** A sixteenth in ticks: the grid written notes and rests are counted on. */
     private val step = ppq / 4.0
 
     private val barMicros = if (barStarts.isEmpty()) longArrayOf(0L) else barStarts
@@ -100,6 +112,7 @@ private class Build(
         if (b + 1 < barCount) barTick[b + 1] else barTick[b] + max(1L, timeAt(barTick[b]).ticksIn(1, ppq))
     }
     private val metre = Array(barCount) { timeAt(barTick[it]) }
+    private val barCompound = BooleanArray(barCount) { Beams.compound(metre[it]) }
     private val barKey = IntArray(barCount) { sharpsAt(barTick[it]) }
     private val barLeft = FloatArray(barCount)
     private val barRight = FloatArray(barCount)
@@ -121,74 +134,89 @@ private class Build(
     private val signs = Array(systemCount) { Signs() }
     private val noteFrom = IntArray(systemCount)
     private val noteEnd = IntArray(systemCount)
+    private val tiedFrom = IntArray(systemCount)
+    private val tiedEnd = IntArray(systemCount)
 
     // Notes.
     private val n = notes.size
-    private val system = IntArray(n) { -1 }
-    private val x = FloatArray(n)
-    private val y = FloatArray(n)
-    private val head = ByteArray(n)
-    private val treble = BooleanArray(n)
-    private val ledgers = ByteArray(n)
-    private val accidental = ByteArray(n)
-    private val accidentalX = FloatArray(n) { Float.NaN }
-    private val stemX = FloatArray(n) { Float.NaN }
-    private val stemFrom = FloatArray(n)
-    private val stemTo = FloatArray(n)
-    private val stemUp = BooleanArray(n)
-    private val flags = ByteArray(n)
-    private val dotted = BooleanArray(n)
-    private val dotX = FloatArray(n) { Float.NaN }
-    private val dotY = FloatArray(n)
-    private val moved = BooleanArray(n)
-    private val durationEnd = FloatArray(n) { Float.NaN }
-    private val position = IntArray(n)
-    private val startTick = LongArray(n)
-    private val bar = IntArray(n)
-    private val valueFlags = ByteArray(n)
     private val quantized = Quantize.onGrid(notes.startMicros, tempo)
+    private val written = WrittenNotes()
 
-    // Written notes (sequenced files): each note's onset on the sixteenth grid and where its written value ends.
-    private val writtenStart = LongArray(n)
-    private val writtenEnd = LongArray(n)
+    // Heads: each note's own, then the tied ones.
+    private val heads = n + written.tied
+    private val system = IntArray(heads) { -1 }
+    private val x = FloatArray(heads)
+    private val y = FloatArray(heads)
+    private val head = ByteArray(heads)
+    private val treble = BooleanArray(heads)
+    private val ledgers = ByteArray(heads)
+    private val accidental = ByteArray(heads)
+    private val accidentalX = FloatArray(heads) { Float.NaN }
+    private val stemX = FloatArray(heads) { Float.NaN }
+    private val stemFrom = FloatArray(heads)
+    private val stemTo = FloatArray(heads)
+    private val stemUp = BooleanArray(heads)
+    private val flags = ByteArray(heads)
+    private val dotted = BooleanArray(heads)
+    private val dotX = FloatArray(heads) { Float.NaN }
+    private val dotY = FloatArray(heads)
+    private val moved = BooleanArray(heads)
+    private val durationEnd = FloatArray(heads) { Float.NaN }
+    private val position = IntArray(heads)
+    private val headKey = IntArray(heads)
 
-    /** Playable notes in onset order. */
-    private val order = IntArray(n)
+    /** The tick a head is struck at, as chords are grouped: a note's own (exact), a tied head's (on the grid). */
+    private val startTick = LongArray(heads)
+    private val bar = IntArray(heads)
+    private val valueFlags = ByteArray(heads)
+
+    // Written values (sequenced files): where each head's written value starts and ends, on the grid.
+    private val writtenStart = LongArray(heads)
+    private val writtenEnd = LongArray(heads)
+
+    /** Heads in onset order (playable notes' and tied ones merged). */
+    private val order = IntArray(heads)
     private var orderSize = 0
 
     // Stems (sequenced files): each head's stem owner, and for each owner its value group's lowest and
     // highest heads, the chord's column, whether a second moved the stem between two columns, and the
     // sum of its heads' staff positions.
-    private val ownerOf = IntArray(n) { -1 }
-    private val stemLow = IntArray(n)
-    private val stemHigh = IntArray(n)
-    private val stemLeft = FloatArray(n)
-    private val stemShifted = BooleanArray(n)
-    private val positionSum = IntArray(n)
-    private val groupHeads = IntArray(n)
+    private val ownerOf = IntArray(heads) { -1 }
+    private val stemLow = IntArray(heads)
+    private val stemHigh = IntArray(heads)
+    private val stemLeft = FloatArray(heads)
+    private val stemShifted = BooleanArray(heads)
+    private val positionSum = IntArray(heads)
+    private val groupHeads = IntArray(heads)
 
     // Onsets: one chord on one staff, in time order, with the stem owner of its one flagged value (-1: none).
     private var onsets = 0
-    private val onsetHead = IntArray(n)
-    private val onsetOwner = IntArray(n)
+    private val onsetHead = IntArray(heads)
+    private val onsetOwner = IntArray(heads)
 
-    /** A silence of a sixteenth or more on the note's staff comes just before its onset (in its bar). */
-    private val silenceBefore = BooleanArray(n)
+    /** A rest comes just before this head's onset on its staff, in its bar. */
+    private val restBefore = BooleanArray(heads)
 
     private val beams = BeamSink()
+    private val rests = RestSink()
+    private val ties = TieSink()
 
     fun run(): ScoreLayout {
         for (s in 0 until systemCount) layoutSystem(s)
         placeNotes()
+        placeTied()
+        onsetOrder()
         chords()
-        silences()
+        rests()
         beam()
-        noteRanges()
+        tieArcs()
+        headRanges()
         return ScoreLayout(
             metrics = m,
             quantized = quantized,
             bars = scoreBars,
             systems = List(systemCount) { makeSystem(it) },
+            noteCount = n,
             system = system,
             x = x,
             y = y,
@@ -207,8 +235,91 @@ private class Build(
             dotY = dotY,
             moved = moved,
             durationEnd = durationEnd,
+            tiedNote = written.tiedNote,
+            tiedStartMicros = LongArray(written.tied) { tempo.tickToMicros(written.tiedTick[it]) },
+            tiedFrom = written.tiedFrom,
+            tiedByNote = written.tiedByNote,
             beams = beams.build(systemCount),
+            rests = rests.build(systemCount),
+            ties = ties.build(systemCount),
         )
+    }
+
+    /**
+     * Sequenced files: each note written on the sixteenth grid from its onset to its end, in the bar
+     * its onset is in, and split into pieces ([Ties.segments]): the first piece is the note's own
+     * head, the others its tied heads, numbered from [n] in onset order. A performance has none, and
+     * its notes keep their exact ticks and bars.
+     */
+    private inner class WrittenNotes {
+        /** Each note's exact tick, written onset (on the grid) and bar, and its first piece's length in sixteenths. */
+        val tick = LongArray(n)
+        val start = LongArray(n)
+        val noteBar = IntArray(n)
+        val firstLength = IntArray(n)
+
+        /** Note i's tied heads are [tiedByNote] from tiedFrom[i] until tiedFrom[i + 1], in time order. */
+        val tiedFrom = IntArray(n + 1)
+        val tiedByNote: IntArray
+        val tied: Int
+
+        /** By tied head (head n + r, in onset order): its onset, its length in sixteenths, its note. */
+        val tiedTick: LongArray
+        val tiedLength: IntArray
+        val tiedNote: IntArray
+
+        init {
+            var count = 0
+            var ticks = LongArray(0)
+            var lengths = IntArray(0)
+            var owners = IntArray(0)
+            val pieceTick = LongArray(ScoreLayoutEngine.MAX_HEADS_PER_NOTE)
+            val pieceLength = IntArray(ScoreLayoutEngine.MAX_HEADS_PER_NOTE)
+            val budget = max(ScoreLayoutEngine.MIN_TIED_BUDGET, 2 * n)
+            for (i in 0 until n) {
+                tiedFrom[i] = count
+                if (keys[i] == KeyMap.UNPLAYABLE) continue
+                val exact = tempo.microsToTicks(notes.startMicros[i])
+                tick[i] = exact
+                if (!quantized) {
+                    start[i] = exact
+                    noteBar[i] = barIndex(exact)
+                    continue
+                }
+                // On the grid: a note a hair early is the next bar's downbeat, and every note lasts a sixteenth at least.
+                val first = Math.round(exact / step)
+                val last = max(first + 1, Math.round(tempo.microsToTicks(notes.endMicros[i]) / step))
+                val from = Math.round(first * step)
+                val b = barIndex(from)
+                start[i] = from
+                noteBar[i] = b
+                val room = min(ScoreLayoutEngine.MAX_HEADS_PER_NOTE, 1 + budget - count)
+                val pieces = Ties.segments(from, Math.round(last * step), barTick, barEndTick, barCompound, b, step, room, pieceTick, pieceLength)
+                firstLength[i] = pieceLength[0]
+                if (pieces > 1) {
+                    if (count + pieces > ticks.size) {
+                        val grown = max(64, 2 * (count + pieces))
+                        ticks = ticks.copyOf(grown)
+                        lengths = lengths.copyOf(grown)
+                        owners = owners.copyOf(grown)
+                    }
+                    for (k in 1 until pieces) {
+                        ticks[count] = pieceTick[k]
+                        lengths[count] = pieceLength[k]
+                        owners[count] = i
+                        count++
+                    }
+                }
+            }
+            tiedFrom[n] = count
+            tied = count
+            val byTick = sortedByKey(ticks, count)
+            tiedTick = LongArray(count) { ticks[byTick[it]] }
+            tiedLength = IntArray(count) { lengths[byTick[it]] }
+            tiedNote = IntArray(count) { owners[byTick[it]] }
+            tiedByNote = IntArray(count)
+            for (r in 0 until count) tiedByNote[byTick[r]] = n + r
+        }
     }
 
     // --- Systems and bars --------------------------------------------------------------------
@@ -312,6 +423,8 @@ private class Build(
             barCount = count,
             firstNote = if (noteEnd[s] > 0) noteFrom[s] else 0,
             noteEnd = noteEnd[s],
+            firstTied = if (tiedEnd[s] > 0) tiedFrom[s] else 0,
+            tiedEnd = tiedEnd[s],
             bandTop = if (row == 0) 0f else trebleTop[s - 1] + 2 * m.staffHeight + m.staveGap,
             bandBottom = if (lastOnPage) m.pageHeight else trebleTop[s + 1],
             signKind = sign.kinds(),
@@ -323,34 +436,35 @@ private class Build(
     }
 
     /**
-     * Each system's notes: from its first to one past its last (0 until 0 when it has none).
-     * Systems follow each other in time, so their notes are runs of the start-sorted list.
+     * Each system's heads: its notes' own heads from the first to one past the last (0 until 0 when it
+     * has none), and its tied heads likewise. Systems follow each other in time, so both are runs.
      */
-    private fun noteRanges() {
+    private fun headRanges() {
         for (i in 0 until n) {
             val s = system[i]
             if (s < 0) continue
             if (noteEnd[s] == 0) noteFrom[s] = i
             noteEnd[s] = i + 1
         }
+        for (h in n until heads) {
+            val s = system[h]
+            if (tiedEnd[s] == 0) tiedFrom[s] = h
+            tiedEnd[s] = h + 1
+        }
     }
 
     // --- Notes -------------------------------------------------------------------------------
 
-    /** Each note's bar, place in it, spelling, staff position and value. */
+    /** Each note's own head: its bar, place in it, spelling, staff position and (sequenced) written value. */
     private fun placeNotes() {
         val accidentals = BarAccidentals()
         var stateBar = -1
         var stateKey = Int.MIN_VALUE
-        val starts = notes.startMicros
-        val ends = notes.endMicros
         for (i in 0 until n) {
             val key = keys[i]
             if (key == KeyMap.UNPLAYABLE) continue
-            val tick = tempo.microsToTicks(starts[i])
-            // A sequenced note belongs to the bar its written onset is in (one a hair early is the next bar's downbeat).
-            val written = if (quantized) onGrid(tick) else tick
-            val b = barIndex(written)
+            val tick = written.tick[i]
+            val b = written.noteBar[i]
             val s = b / barsPerSystem
             val sharps = sharpsAt(tick)
             if (b != stateBar || sharps != stateKey) {
@@ -359,35 +473,83 @@ private class Build(
                 stateKey = sharps
             }
             val onTreble = key >= StaffPitch.MIDDLE_C
-            val step = Spelling.step(key, sharps)
-            val pos = StaffPitch.position(step, onTreble)
-            val bottom = trebleTop[s] + m.staffHeight + if (onTreble) 0f else m.staveGap + m.staffHeight
+            val letter = Spelling.step(key, sharps)
+            val pos = StaffPitch.position(letter, onTreble)
             system[i] = s
             bar[i] = b
             startTick[i] = tick
             treble[i] = onTreble
             position[i] = pos
-            accidental[i] = accidentals.accidental(onTreble, step, Spelling.alteration(key, sharps)).toByte()
-            y[i] = bottom - pos * half
+            headKey[i] = key
+            accidental[i] = accidentals.accidental(onTreble, letter, Spelling.alteration(key, sharps)).toByte()
+            y[i] = staffBottom(s, onTreble) - pos * half
             ledgers[i] = StaffPitch.ledgerLines(pos).toByte()
-            val fraction = ((tick - barTick[b]).toDouble() / max(1L, barEndTick[b] - barTick[b])).coerceIn(0.0, 1.0)
-            x[i] = contentLeft[b] + (fraction * (contentRight[b] - contentLeft[b])).toFloat()
+            x[i] = xIn(b, tick)
             if (quantized) {
-                val value = Quantize.value(tempo.microsToTicks(ends[i]) - tick, ppq)
-                head[i] = (if (value.whole) Head.WHOLE else if (value.hollow) Head.HALF else Head.BLACK).toByte()
-                valueFlags[i] = value.flags.toByte()
-                dotted[i] = value.dotted
-                writtenStart[i] = written
-                writtenEnd[i] = written + Math.round(Math.scalb(1.0, value.power) * (if (value.dotted) 1.5 else 1.0) * ppq)
+                writeValue(i, written.firstLength[i])
+                writtenStart[i] = written.start[i]
+                writtenEnd[i] = written.start[i] + Math.round(written.firstLength[i] * step)
             } else {
                 head[i] = Head.BLACK.toByte()
             }
-            order[orderSize++] = i
         }
     }
 
-    /** [tick] on the sixteenth grid. */
-    private fun onGrid(tick: Long): Long = Math.round(Math.rint(tick / step) * step)
+    /**
+     * The tied heads: each at its onset in its bar, on its note's line or space (spelled as the note
+     * was, even past a change of key), with its piece's value and no accidental: the note is held, not
+     * struck, and the bar's accidentals are left as they were.
+     */
+    private fun placeTied() {
+        for (r in 0 until written.tied) {
+            val h = n + r
+            val i = written.tiedNote[r]
+            val tick = written.tiedTick[r]
+            val b = barIndex(tick)
+            val s = b / barsPerSystem
+            system[h] = s
+            bar[h] = b
+            startTick[h] = tick
+            treble[h] = treble[i]
+            position[h] = position[i]
+            headKey[h] = headKey[i]
+            y[h] = staffBottom(s, treble[i]) - position[i] * half
+            ledgers[h] = ledgers[i]
+            x[h] = xIn(b, tick)
+            writeValue(h, written.tiedLength[r])
+            writtenStart[h] = tick
+            writtenEnd[h] = tick + Math.round(written.tiedLength[r] * step)
+        }
+    }
+
+    /** Head [h]'s written value, [sixteenths] long: its head, flags (before beaming) and dot. */
+    private fun writeValue(h: Int, sixteenths: Int) {
+        val value = Ties.value(sixteenths, ppq)
+        head[h] = (if (value.whole) Head.WHOLE else if (value.hollow) Head.HALF else Head.BLACK).toByte()
+        valueFlags[h] = value.flags.toByte()
+        dotted[h] = value.dotted
+    }
+
+    /** The y of the bottom line of system [s]'s treble or bass staff. */
+    private fun staffBottom(s: Int, onTreble: Boolean): Float =
+        trebleTop[s] + m.staffHeight + if (onTreble) 0f else m.staveGap + m.staffHeight
+
+    /** The page x of [tick] in bar [b], held to the bar: where the cursor is at that moment. */
+    private fun xIn(b: Int, tick: Long): Float {
+        val fraction = ((tick - barTick[b]).toDouble() / max(1L, barEndTick[b] - barTick[b])).coerceIn(0.0, 1.0)
+        return contentLeft[b] + (fraction * (contentRight[b] - contentLeft[b])).toFloat()
+    }
+
+    /** Playable notes' heads and tied heads, merged by the tick they are struck at (a note before a tied head at one tick). */
+    private fun onsetOrder() {
+        var r = 0
+        for (i in 0 until n) {
+            if (system[i] < 0) continue
+            while (r < written.tied && startTick[n + r] < startTick[i]) order[orderSize++] = n + r++
+            order[orderSize++] = i
+        }
+        while (r < written.tied) order[orderSize++] = n + r++
+    }
 
     /** Chords: seconds moved aside, accidentals stacked, stems shared, dots and duration lines placed. */
     private fun chords() {
@@ -407,13 +569,13 @@ private class Build(
             }
             a = end
         }
-        for (j in 0 until n) {
+        for (j in 0 until heads) {
             if (system[j] < 0) continue
             if (dotted[j]) {
                 dotX[j] = x[j] + headWidth(j) + DOT_GAP * space
                 dotY[j] = if (Math.floorMod(position[j], 2) == 0) y[j] - half else y[j]   // a dot on a line moves up into the space
             }
-            if (!quantized) {
+            if (!quantized && j < n) {
                 val last = system[j] * barsPerSystem + min(barsPerSystem, barCount - system[j] * barsPerSystem) - 1
                 val endBar = scoreBars.barAt(notes.endMicros[j]).coerceIn(bar[j], last)
                 val endX = scoreBars.xAt(endBar, notes.endMicros[j])
@@ -422,7 +584,7 @@ private class Build(
         }
     }
 
-    /** Whether note [j] (playable, after [i]) belongs to the chord note [i] starts (same bar; same tick, or within [ScoreLayoutEngine.CHORD_MICROS] when performed). */
+    /** Whether head [j] (playable, after [i] in onset order) belongs to the chord [i] starts (same bar; same tick, or within [ScoreLayoutEngine.CHORD_MICROS] when performed). */
     private fun sameChord(i: Int, j: Int): Boolean {
         if (bar[j] != bar[i]) return false
         return if (quantized) startTick[j] == startTick[i] else notes.startMicros[j] - notes.startMicros[i] <= ScoreLayoutEngine.CHORD_MICROS
@@ -436,7 +598,7 @@ private class Build(
         for (k in 1 until count) {
             val below = chord[k - 1]
             val here = chord[k]
-            if (!moved[below] && keys[here] != keys[below] && position[here] - position[below] <= 1) {
+            if (!moved[below] && headKey[here] != headKey[below] && position[here] - position[below] <= 1) {
                 moved[here] = true
                 x[here] += headWidth(below)
             }
@@ -536,35 +698,71 @@ private class Build(
         return if (valueFlags[owner] > 0) owner else -1
     }
 
-    // --- Silences and beams (sequenced files) -----------------------------------------------
+    // --- Rests, beams and ties (sequenced files) ---------------------------------------------
 
     /**
-     * Marks each onset that follows a silence of a sixteenth or more on its staff within its bar:
-     * from the bar's start, or from where every earlier written note on that staff has ended.
+     * Rests ([Rests]): on each staff of each bar, every silence of a sixteenth or more, from the bar's
+     * start, between where all the written values so far have ended and the next onset, and to the
+     * bar's end. A staff with nothing in a bar gets a whole rest centred in it. The onset after a rest
+     * is marked: a rest ends a beam.
      */
-    private fun silences() {
+    private fun rests() {
         if (!quantized) return
         val covered = LongArray(2)
         val silentAt = LongArray(2)
-        var currentBar = -1
-        for (a in 0 until orderSize) {
-            val h = order[a]
-            val b = bar[h]
-            if (b != currentBar) {
-                currentBar = b
-                covered[0] = barTick[b]
-                covered[1] = barTick[b]
-                silentAt[0] = -1L
-                silentAt[1] = -1L
+        val restStart = IntArray(MAX_RESTS_PER_SILENCE)
+        val restLength = IntArray(MAX_RESTS_PER_SILENCE)
+        var a = 0
+        for (b in 0 until barCount) {
+            covered[0] = barTick[b]
+            covered[1] = barTick[b]
+            silentAt[0] = -1L
+            silentAt[1] = -1L
+            while (a < orderSize && bar[order[a]] <= b) {
+                val h = order[a++]
+                val staff = if (treble[h]) 0 else 1
+                if (writtenStart[h] - covered[staff] >= step / 2) {
+                    restsIn(b, treble[h], covered[staff], writtenStart[h], restStart, restLength)
+                    restBefore[h] = true
+                    silentAt[staff] = writtenStart[h]
+                } else if (writtenStart[h] == silentAt[staff]) {
+                    restBefore[h] = true   // the rest of the chord after the rest
+                }
+                covered[staff] = max(covered[staff], writtenEnd[h])
             }
-            val staff = if (treble[h]) 0 else 1
-            if (writtenStart[h] - covered[staff] >= step / 2) {
-                silenceBefore[h] = true
-                silentAt[staff] = writtenStart[h]
-            } else if (writtenStart[h] == silentAt[staff]) {
-                silenceBefore[h] = true   // the rest of that chord
+            for (staff in 0..1) {
+                if (barEndTick[b] - covered[staff] >= step / 2) restsIn(b, staff == 0, covered[staff], barEndTick[b], restStart, restLength)
             }
-            covered[staff] = max(covered[staff], writtenEnd[h])
+        }
+    }
+
+    /** The rests writing the silence from [from] to [to] (ticks) on one staff of bar [b]. */
+    private fun restsIn(b: Int, onTreble: Boolean, from: Long, to: Long, restStart: IntArray, restLength: IntArray) {
+        val length = Math.round((barEndTick[b] - barTick[b]) / step).toInt()
+        if (length <= 0) return
+        val time = metre[b]
+        val count = Rests.tile(
+            Math.round((from - barTick[b]) / step).toInt(),
+            Math.round((to - barTick[b]) / step).toInt(),
+            length,
+            Beams.beatSixteenths(time),
+            Beams.compound(time),
+            restStart,
+            restLength,
+        )
+        val s = b / barsPerSystem
+        val top = staffBottom(s, onTreble) - m.staffHeight
+        for (k in 0 until count) {
+            val wholeBar = restStart[k] == 0 && restLength[k] == length
+            val value = if (wholeBar) Rests.WHOLE else restLength[k]
+            val x = if (wholeBar) {
+                (contentLeft[b] + barRight[b]) / 2 - WHOLE_REST_WIDTH * space / 2
+            } else {
+                xIn(b, barTick[b] + Math.round(restStart[k] * step))
+            }
+            // A whole rest hangs from the fourth line; the others sit on or centre on the middle line.
+            val y = if (value == Rests.WHOLE) top + space else top + 2 * space
+            rests.add(s, x, y, value, wholeBar, onTreble, b)
         }
     }
 
@@ -591,7 +789,7 @@ private class Build(
                 beat[count] = sixteenths / beatLength
                 offset[count] = sixteenths % beatLength
                 beamable[count] = onsetOwner[u] >= 0
-                rest[count] = silenceBefore[h]
+                rest[count] = restBefore[h]
                 count++
             }
             Beams.group(onsetBar, beat, beamable, rest, count, groupOf)
@@ -677,11 +875,50 @@ private class Build(
         }
     }
 
+    /** Ties: an arc from each written piece of a note to the next, away from the stem; split in two across systems. */
+    private fun tieArcs() {
+        if (written.tied == 0) return
+        for (i in 0 until n) {
+            var from = i
+            for (k in written.tiedFrom[i] until written.tiedFrom[i + 1]) {
+                val to = written.tiedByNote[k]
+                arc(from, to)
+                from = to
+            }
+        }
+    }
+
+    /**
+     * The tie from head [a] to head [b]: from the right edge of the first (its centre plus half a head)
+     * to the left edge of the second, a little off the heads on the side away from the stem. Across a
+     * system break, the first half runs to the end of [a]'s system (at least a space, past the bar line
+     * when the head is the system's last) and the second comes in to [b].
+     */
+    private fun arc(a: Int, b: Int) {
+        val above = bowsUp(a)
+        val off = if (above) -TIE_OFFSET * space else TIE_OFFSET * space
+        val from = x[a] + headWidth(a)
+        if (system[a] == system[b]) {
+            ties.add(system[a], from, y[a] + off, max(from, x[b]), y[b] + off, above, a, b)
+        } else {
+            val lastBar = min(barCount, (system[a] + 1) * barsPerSystem) - 1
+            val end = max(barRight[lastBar] - TIE_CLEAR * space, from + TIE_MIN * space)
+            ties.add(system[a], from, y[a] + off, end, y[a] + off, above, a, -1)
+            ties.add(system[b], x[b] - TIE_LEAD * space, y[b] + off, x[b], y[b] + off, above, -1, b)
+        }
+    }
+
+    /** A tie bows away from its head's stem; with no stem (a whole note), up from the middle line and above, else down. */
+    private fun bowsUp(h: Int): Boolean {
+        val owner = ownerOf[h]
+        return if (owner >= 0) !stemUp[owner] else position[h] >= 4
+    }
+
     private fun sortByPosition(chord: IntArray, count: Int) {
         for (k in 1 until count) {
             val index = chord[k]
             var j = k - 1
-            while (j >= 0 && (position[chord[j]] > position[index] || (position[chord[j]] == position[index] && keys[chord[j]] > keys[index]))) {
+            while (j >= 0 && (position[chord[j]] > position[index] || (position[chord[j]] == position[index] && headKey[chord[j]] > headKey[index]))) {
                 chord[j + 1] = chord[j]
                 j--
             }
@@ -749,6 +986,9 @@ private class Build(
 
         val TREBLE_THEN_BASS = booleanArrayOf(true, false)
 
+        /** One silence is written with at most this many rests (a metre of hundreds of beats is not music). */
+        const val MAX_RESTS_PER_SILENCE = 64
+
         // Horizontal spacing, in staff spaces.
         const val CLEF_INSET = 0.5f
         const val AFTER_CLEF = 0.8f
@@ -765,6 +1005,14 @@ private class Build(
         /** Where a stem meets its head: this far from the head's centre line (Bravura's anchor). */
         const val STEM_ATTACH = 0.168f
 
+        // Ties, in staff spaces: their ends sit this far off the heads' centre lines, a half tie stops
+        // this short of its system's last bar line (and is at least TIE_MIN long), and the other half
+        // comes in from this far before its head.
+        const val TIE_OFFSET = 0.35f
+        const val TIE_CLEAR = 0.25f
+        const val TIE_LEAD = 1.5f
+        const val TIE_MIN = 1f
+
         /** Accidentals this many steps apart or more don't collide (they are about three spaces tall). */
         const val ACCIDENTAL_CLEARANCE = 6
 
@@ -773,6 +1021,7 @@ private class Build(
         const val FLAT_WIDTH = 0.904f
         const val NATURAL_WIDTH = 0.672f
         const val DIGIT_WIDTH = 1.8f
+        const val WHOLE_REST_WIDTH = 1.128f
 
         /** Key-signature positions on the treble staff (steps above E4), in the order they are added; the bass is a third lower. */
         val TREBLE_SHARPS = intArrayOf(8, 5, 9, 6, 3, 7, 4)
@@ -846,4 +1095,131 @@ private class BeamSink {
             systemStart = sorted.start,
         )
     }
+}
+
+/** Rests as the engine finds them, sorted by system when built. */
+private class RestSink {
+    private var system = IntArray(64)
+    private var x = FloatArray(64)
+    private var y = FloatArray(64)
+    private var value = ByteArray(64)
+    private var wholeBar = BooleanArray(64)
+    private var treble = BooleanArray(64)
+    private var bar = IntArray(64)
+    private var size = 0
+
+    fun add(s: Int, atX: Float, atY: Float, sixteenths: Int, whole: Boolean, onTreble: Boolean, b: Int) {
+        if (size == system.size) {
+            val grown = size * 2
+            system = system.copyOf(grown)
+            x = x.copyOf(grown)
+            y = y.copyOf(grown)
+            value = value.copyOf(grown)
+            wholeBar = wholeBar.copyOf(grown)
+            treble = treble.copyOf(grown)
+            bar = bar.copyOf(grown)
+        }
+        system[size] = s
+        x[size] = atX
+        y[size] = atY
+        value[size] = sixteenths.toByte()
+        wholeBar[size] = whole
+        treble[size] = onTreble
+        bar[size] = b
+        size++
+    }
+
+    fun build(systemCount: Int): ScoreRests {
+        val sorted = BySystem(system, size, systemCount)
+        val o = sorted.order
+        return ScoreRests(
+            system = IntArray(size) { system[o[it]] },
+            x = FloatArray(size) { x[o[it]] },
+            y = FloatArray(size) { y[o[it]] },
+            value = ByteArray(size) { value[o[it]] },
+            wholeBar = BooleanArray(size) { wholeBar[o[it]] },
+            treble = BooleanArray(size) { treble[o[it]] },
+            bar = IntArray(size) { bar[o[it]] },
+            systemStart = sorted.start,
+        )
+    }
+}
+
+/** Tie arcs as the engine finds them, sorted by system when built. */
+private class TieSink {
+    private var system = IntArray(64)
+    private var x1 = FloatArray(64)
+    private var y1 = FloatArray(64)
+    private var x2 = FloatArray(64)
+    private var y2 = FloatArray(64)
+    private var above = BooleanArray(64)
+    private var from = IntArray(64)
+    private var to = IntArray(64)
+    private var size = 0
+
+    fun add(s: Int, ax: Float, ay: Float, bx: Float, by: Float, bowsUp: Boolean, a: Int, b: Int) {
+        if (size == system.size) {
+            val grown = size * 2
+            system = system.copyOf(grown)
+            x1 = x1.copyOf(grown)
+            y1 = y1.copyOf(grown)
+            x2 = x2.copyOf(grown)
+            y2 = y2.copyOf(grown)
+            above = above.copyOf(grown)
+            from = from.copyOf(grown)
+            to = to.copyOf(grown)
+        }
+        system[size] = s
+        x1[size] = ax
+        y1[size] = ay
+        x2[size] = bx
+        y2[size] = by
+        above[size] = bowsUp
+        from[size] = a
+        to[size] = b
+        size++
+    }
+
+    fun build(systemCount: Int): ScoreTies {
+        val sorted = BySystem(system, size, systemCount)
+        val o = sorted.order
+        return ScoreTies(
+            system = IntArray(size) { system[o[it]] },
+            x1 = FloatArray(size) { x1[o[it]] },
+            y1 = FloatArray(size) { y1[o[it]] },
+            x2 = FloatArray(size) { x2[o[it]] },
+            y2 = FloatArray(size) { y2[o[it]] },
+            above = BooleanArray(size) { above[o[it]] },
+            from = IntArray(size) { from[o[it]] },
+            to = IntArray(size) { to[o[it]] },
+            systemStart = sorted.start,
+        )
+    }
+}
+
+/** The indices 0 until [size], ordered by [key] (stable: equal keys keep their order). A bottom-up merge sort. */
+private fun sortedByKey(key: LongArray, size: Int): IntArray {
+    var a = IntArray(size) { it }
+    if (size < 2) return a
+    var b = IntArray(size)
+    var width = 1
+    while (width < size) {
+        var lo = 0
+        while (lo < size) {
+            val mid = min(lo + width, size)
+            val hi = min(lo + 2 * width, size)
+            var i = lo
+            var j = mid
+            var k = lo
+            while (i < mid && j < hi) b[k++] = if (key[a[j]] < key[a[i]]) a[j++] else a[i++]
+            while (i < mid) b[k++] = a[i++]
+            while (j < hi) b[k++] = a[j++]
+            lo = hi
+        }
+        val t = a
+        a = b
+        b = t
+        width *= 2
+    }
+    return a
 }

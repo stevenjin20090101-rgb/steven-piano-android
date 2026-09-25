@@ -154,6 +154,10 @@ class CorpusTest {
         val total = mutableMapOf<String, Int>()
         var notes = 0L
         var bars = 0L
+        var tied = 0L
+        var beams = 0L
+        var rests = 0L
+        var ties = 0L
         val started = System.nanoTime()
         for (file in files) {
             val piece = SmfParser.parse(file.readBytes())
@@ -171,10 +175,24 @@ class CorpusTest {
                     assertTrue(where, i in system.firstNote until system.noteEnd)
                     assertTrue(where, score.x[i] >= system.left && score.x[i] <= metrics.pageWidth)
                 }
+                // M13's engraving: tied heads in their systems' runs, and every mark finite and on its page.
+                for (h in score.noteCount until score.headCount) {
+                    val system = score.systems[score.system[h]]
+                    assertTrue(where, h in system.firstTied until system.tiedEnd)
+                    assertTrue(where, score.x[h] >= system.left && score.x[h] <= metrics.pageWidth)
+                }
+                fun onPage(x: Float) = x.isFinite() && x >= 0f && x <= metrics.pageWidth
+                for (k in 0 until score.beams.size) assertTrue(where, onPage(score.beams.x1[k]) && onPage(score.beams.x2[k]) && score.beams.y1[k].isFinite() && score.beams.y2[k].isFinite())
+                for (k in 0 until score.rests.size) assertTrue(where, onPage(score.rests.x[k]) && score.rests.y[k].isFinite())
+                for (k in 0 until score.ties.size) assertTrue(where, onPage(score.ties.x1[k]) && onPage(score.ties.x2[k]) && score.ties.x2[k] >= score.ties.x1[k])
                 if (metrics === panels[0]) {
                     if (score.quantized) quantized.merge(collection, 1, Int::plus)
                     notes += score.noteCount
                     bars += score.bars.count
+                    tied += score.headCount - score.noteCount
+                    beams += (0 until score.beams.size).count { score.beams.level[it].toInt() == 1 }
+                    rests += score.rests.size
+                    ties += score.ties.size
                 }
             }
         }
@@ -184,6 +202,7 @@ class CorpusTest {
             "Corpus score: ${files.size} files ($notes notes, $bars bars) laid out on both panels in %.1f s; ".format(seconds) +
                 "quantised (note values) %d = %.1f %%".format(sequenced, 100.0 * sequenced / files.size),
         )
+        println("Corpus engraving (phone panel): $tied tied heads, $ties ties, $beams beamed groups, $rests rests")
         total.keys.sorted().forEach { println("  $it: ${quantized[it] ?: 0} of ${total[it]} quantised") }
     }
 
