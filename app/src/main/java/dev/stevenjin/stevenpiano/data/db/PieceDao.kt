@@ -35,11 +35,16 @@ interface PieceDao {
     @Query("SELECT * FROM pieces WHERE composerKey = :composerKey ORDER BY titleKey")
     fun byComposer(composerKey: String): Flow<List<PieceEntity>>
 
+    /** A playlist's pieces in its order: position, then title. */
     @Query(
         "SELECT p.* FROM pieces p JOIN collection_pieces cp ON cp.pieceId = p.id " +
-            "WHERE cp.collectionId = :collectionId ORDER BY p.titleKey",
+            "WHERE cp.collectionId = :playlistId ORDER BY cp.position, p.titleKey",
     )
-    fun inCollection(collectionId: Long): Flow<List<PieceEntity>>
+    fun inPlaylist(playlistId: Long): Flow<List<PieceEntity>>
+
+    /** The pieces among [ids] (at most 500 at a time: SQLite's variable limit), in no particular order. */
+    @Query("SELECT id, title, composerShort, durationMs, composerKey FROM pieces WHERE id IN (:ids)")
+    suspend fun summaries(ids: List<Long>): List<PieceSummary>
 
     @Query("SELECT * FROM composer_groups ORDER BY composerKey")
     fun composers(): Flow<List<ComposerGroup>>

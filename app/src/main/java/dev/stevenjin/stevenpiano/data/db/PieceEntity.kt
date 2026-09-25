@@ -30,7 +30,7 @@ data class PieceEntity(
     val composer: String,
     val composerKey: String,
     val composerShort: String,
-    /** The INDEX.csv collection it came with, if any. */
+    /** The playlist its INDEX.csv row named (the CSV's `collection` column), if any. */
     val collection: String?,
     val sha256: String,
     val fileName: String,
@@ -46,6 +46,9 @@ data class PieceEntity(
     val searchText: String,
     val titleKey: String,
 )
+
+/** What a queue or a list needs to name a piece without loading all of it. */
+data class PieceSummary(val id: Long, val title: String, val composerShort: String, val durationMs: Long, val composerKey: String)
 
 /** This piece with a new title and composer, and every key derived from them. */
 fun PieceEntity.named(title: String, composer: ComposerNames.Name): PieceEntity = copy(

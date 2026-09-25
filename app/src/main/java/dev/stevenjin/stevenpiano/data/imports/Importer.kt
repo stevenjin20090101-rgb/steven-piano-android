@@ -36,7 +36,7 @@ interface ImportStore {
 
     suspend fun fillComposer(piece: PieceEntity, composer: ComposerNames.Name)
 
-    /** Inserts in one transaction, linking each piece to its INDEX.csv collection; returns how many were new. */
+    /** Inserts in one transaction, adding each piece to the playlist its INDEX.csv row names (at the end); returns how many were new. */
     suspend fun insertAll(pieces: List<PieceEntity>): Int
 }
 

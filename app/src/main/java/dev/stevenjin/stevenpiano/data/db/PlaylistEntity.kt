@@ -9,27 +9,35 @@
 
 package dev.stevenjin.stevenpiano.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** A collection: one the person made, or one an imported INDEX.csv named ([imported]). */
+/**
+ * A playlist: one the person made, or one an imported INDEX.csv named ([imported]). The table
+ * keeps its v1 name, `collections`, so v1.1 libraries carry over untouched.
+ */
 @Entity(tableName = "collections", indices = [Index(value = ["name"], unique = true)])
-data class CollectionEntity(
+data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAt: Long,
     val imported: Boolean,
 )
 
-/** A piece in a collection. Deleting either side removes the link. */
+/**
+ * A piece in a playlist, at [position] (0 first; the order the person set, then the title for
+ * ties). Deleting either side removes the link. Table and column names are v1's; [position] is
+ * new in schema v2 and was filled in by `MIGRATION_1_2`.
+ */
 @Entity(
     tableName = "collection_pieces",
     primaryKeys = ["collectionId", "pieceId"],
     foreignKeys = [
         ForeignKey(
-            entity = CollectionEntity::class,
+            entity = PlaylistEntity::class,
             parentColumns = ["id"],
             childColumns = ["collectionId"],
             onDelete = ForeignKey.CASCADE,
@@ -41,9 +49,18 @@ data class CollectionEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("pieceId")],
+    indices = [Index("pieceId"), Index(value = ["collectionId", "position"])],
 )
-data class CollectionPieceEntity(val collectionId: Long, val pieceId: Long, val addedAt: Long)
+data class PlaylistPieceEntity(
+    /** The playlist ([PlaylistEntity.id]); the column keeps its v1 name. */
+    val collectionId: Long,
+    val pieceId: Long,
+    val addedAt: Long,
+    @ColumnInfo(defaultValue = "0") val position: Int = 0,
+)
 
-/** A collection with its size, for the Collections chip. */
-data class CollectionSummary(val id: Long, val name: String, val imported: Boolean, val pieceCount: Int)
+/** A playlist with its size and total length, for the Playlists tiles and a playlist's page. */
+data class PlaylistSummary(val id: Long, val name: String, val imported: Boolean, val pieceCount: Int, val durationMs: Long)
+
+/** Where one piece sits in a playlist. */
+data class PiecePosition(val pieceId: Long, val position: Int)

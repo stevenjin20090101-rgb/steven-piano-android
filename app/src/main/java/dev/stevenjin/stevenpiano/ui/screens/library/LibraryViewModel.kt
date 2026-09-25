@@ -18,7 +18,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.TextKeys
-import dev.stevenjin.stevenpiano.data.db.CollectionSummary
+import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
@@ -63,7 +63,7 @@ sealed interface Listing {
         override val isEmpty: Boolean get() = pieces.isEmpty()
     }
 
-    data class Collections(val collections: List<CollectionSummary>) : Listing {
+    data class Collections(val collections: List<PlaylistSummary>) : Listing {
         override val isEmpty: Boolean get() = collections.isEmpty()
     }
 
@@ -112,9 +112,9 @@ class LibraryViewModel(
             .combine(library.count()) { state, count -> state.copy(pieceCount = count) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), LibraryState())
 
-    val collections: Flow<List<CollectionSummary>> get() = library.collections()
+    val collections: Flow<List<PlaylistSummary>> get() = library.playlists()
 
-    fun membershipOf(pieceId: Long): Flow<List<Long>> = library.collectionIdsOf(pieceId)
+    fun membershipOf(pieceId: Long): Flow<List<Long>> = library.playlistIdsOf(pieceId)
 
     fun search(text: String) {
         query = text
@@ -144,28 +144,28 @@ class LibraryViewModel(
     fun delete(piece: PieceEntity) = write { library.delete(piece.id) }
 
     fun setMembership(collectionId: Long, pieceId: Long, member: Boolean) = write {
-        if (member) library.addToCollection(collectionId, pieceId) else library.removeFromCollection(collectionId, pieceId)
+        if (member) library.addToPlaylist(collectionId, pieceId) else library.removeFromPlaylist(collectionId, pieceId)
     }
 
     /** Makes the collection (or finds the one with that name) and puts the piece in it. */
     fun addToNewCollection(name: String, pieceId: Long) = write {
-        library.addToCollection(library.createCollection(name), pieceId)
+        library.addToPlaylist(library.createPlaylist(name), pieceId)
     }
 
-    fun renameCollection(id: Long, name: String) = write { library.renameCollection(id, name) }
+    fun renameCollection(id: Long, name: String) = write { library.renamePlaylist(id, name) }
 
-    fun deleteCollection(id: Long) = write { library.deleteCollection(id) }
+    fun deleteCollection(id: Long) = write { library.deletePlaylist(id) }
 
     private fun listing(sel: Selection, query: String): Flow<Listing> {
         val key = TextKeys.fold(query)
         return when (val group = sel.group) {
-            is Group.Collection -> library.inCollection(group.id).map { Listing.Pieces(it.matching(key)) }
+            is Group.Collection -> library.inPlaylist(group.id).map { Listing.Pieces(it.matching(key)) }
             is Group.Composer -> library.byComposer(group.key).map { Listing.Pieces(it.matching(key)) }
             null -> when (sel.category) {
                 Category.All -> (if (key.isEmpty()) library.all() else library.search(query)).map { Listing.Pieces(it) }
                 Category.Favorites -> library.favorites().map { Listing.Pieces(it.matching(key)) }
                 Category.Recent -> library.recent().map { Listing.Pieces(it.matching(key)) }
-                Category.Collections -> library.collections().map { all -> Listing.Collections(all.filter { key in TextKeys.fold(it.name) }) }
+                Category.Collections -> library.playlists().map { all -> Listing.Collections(all.filter { key in TextKeys.fold(it.name) }) }
                 Category.Composers -> library.composers().map { all -> Listing.Composers(all.filter { key in TextKeys.fold(it.name) }) }
             }
         }

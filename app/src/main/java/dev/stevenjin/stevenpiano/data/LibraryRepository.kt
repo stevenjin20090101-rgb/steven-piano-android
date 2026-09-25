@@ -10,12 +10,14 @@
 package dev.stevenjin.stevenpiano.data
 
 import androidx.room.withTransaction
-import dev.stevenjin.stevenpiano.data.db.CollectionEntity
-import dev.stevenjin.stevenpiano.data.db.CollectionPieceEntity
-import dev.stevenjin.stevenpiano.data.db.CollectionSummary
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.data.db.PiecePosition
+import dev.stevenjin.stevenpiano.data.db.PieceSummary
+import dev.stevenjin.stevenpiano.data.db.PlaylistEntity
+import dev.stevenjin.stevenpiano.data.db.PlaylistPieceEntity
+import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.imports.ImportStore
@@ -32,8 +34,9 @@ import java.io.IOException
 class PieceUnavailableException(message: String) : Exception(message)
 
 /**
- * The library: what the Library tab lists (all, search, collections, composers, favorites,
+ * The library: what the Library tab lists (all, search, playlists, composers, favorites,
  * recent), what its menus change, where the player reads pieces from, and where imports land.
+ * A playlist keeps its pieces in an order; every change to that order is one transaction.
  */
 class LibraryRepository(
     private val db: PianoDatabase,
@@ -42,7 +45,7 @@ class LibraryRepository(
     private val clock: () -> Long = System::currentTimeMillis,
 ) : PieceSource, ImportStore {
     private val pieces = db.pieces()
-    private val collections = db.collections()
+    private val playlists = db.playlists()
 
     /** Every piece, by title (accents ignored). */
     fun all(): Flow<List<PieceEntity>> = pieces.all()
@@ -59,11 +62,13 @@ class LibraryRepository(
 
     fun byComposer(composerKey: String): Flow<List<PieceEntity>> = pieces.byComposer(composerKey)
 
-    fun collections(): Flow<List<CollectionSummary>> = collections.summaries()
+    /** Every playlist by name, with its size and total length. */
+    fun playlists(): Flow<List<PlaylistSummary>> = playlists.summaries()
 
-    fun inCollection(collectionId: Long): Flow<List<PieceEntity>> = pieces.inCollection(collectionId)
+    /** A playlist's pieces in its order. */
+    fun inPlaylist(playlistId: Long): Flow<List<PieceEntity>> = pieces.inPlaylist(playlistId)
 
-    fun collectionIdsOf(pieceId: Long): Flow<List<Long>> = collections.collectionIdsOf(pieceId)
+    fun playlistIdsOf(pieceId: Long): Flow<List<Long>> = playlists.playlistIdsOf(pieceId)
 
     fun count(): Flow<Int> = pieces.count()
 
@@ -77,24 +82,56 @@ class LibraryRepository(
         pieces.update(piece.named(title.trim().ifEmpty { piece.title }, ComposerNames.normalize(composer)))
     }
 
-    /** Removes the piece, its collection links and its file. Irreversible. */
+    /**
+     * The pieces among [ids] still in the library, by id: what a queue needs to name its pieces.
+     * Asked [SQL_CHUNK] at a time, under SQLite's limit on query variables.
+     */
+    suspend fun summaries(ids: Collection<Long>): Map<Long, PieceSummary> {
+        val found = HashMap<Long, PieceSummary>(ids.size)
+        for (chunk in ids.distinct().chunked(SQL_CHUNK)) pieces.summaries(chunk).forEach { found[it.id] = it }
+        return found
+    }
+
+    /** Removes the piece, its playlist links and its file. Irreversible. */
     suspend fun delete(id: Long) {
         val piece = pieces.byId(id) ?: return
         pieces.delete(id)
         withContext(io) { files.delete(piece.fileName) }
     }
 
-    /** The collection called [name], made if needed. Returns its id. */
-    suspend fun createCollection(name: String): Long = collectionId(name.trim(), imported = false)
+    /** The playlist called [name], made if needed. Returns its id. */
+    suspend fun createPlaylist(name: String): Long = playlistId(name.trim(), imported = false)
 
-    suspend fun renameCollection(id: Long, name: String) = collections.rename(id, name.trim())
+    suspend fun renamePlaylist(id: Long, name: String) = playlists.rename(id, name.trim())
 
-    suspend fun deleteCollection(id: Long) = collections.delete(id)
+    /** Only the playlist goes; its pieces stay in the library. */
+    suspend fun deletePlaylist(id: Long) = playlists.delete(id)
 
-    suspend fun addToCollection(collectionId: Long, pieceId: Long) =
-        collections.addPiece(CollectionPieceEntity(collectionId, pieceId, clock()))
+    /** Puts the piece at the end of the playlist (nothing changes when it is there already). */
+    suspend fun addToPlaylist(playlistId: Long, pieceId: Long) {
+        db.withTransaction { link(playlistId, pieceId) }
+    }
 
-    suspend fun removeFromCollection(collectionId: Long, pieceId: Long) = collections.removePiece(collectionId, pieceId)
+    suspend fun removeFromPlaylist(playlistId: Long, pieceId: Long) = playlists.removePiece(playlistId, pieceId)
+
+    /**
+     * The pieces in [orderedIds] were dragged into that order (the list shown may be a search's
+     * subset; see [PlaylistOrder.reordered]). Only positions that change are written.
+     */
+    suspend fun reorderPlaylist(playlistId: Long, orderedIds: List<Long>) {
+        db.withTransaction {
+            val current = playlists.positions(playlistId)
+            writeOrder(playlistId, current, PlaylistOrder.reordered(current.map { it.pieceId }, orderedIds))
+        }
+    }
+
+    /** Move up ([delta] -1) or down (+1) from the row menu, stopping at either end. */
+    suspend fun movePiece(playlistId: Long, pieceId: Long, delta: Int) {
+        db.withTransaction {
+            val current = playlists.positions(playlistId)
+            writeOrder(playlistId, current, PlaylistOrder.move(current.map { it.pieceId }, pieceId, delta))
+        }
+    }
 
     override suspend fun load(pieceId: Long): PlayablePiece {
         val piece = pieces.byId(pieceId) ?: throw PieceUnavailableException("This piece is no longer in the library.")
@@ -119,16 +156,32 @@ class LibraryRepository(
             val id = this.pieces.insert(piece)
             if (id < 0) continue   // the same bytes arrived meanwhile
             inserted++
-            piece.collection?.let { name ->
-                collections.addPiece(CollectionPieceEntity(collectionId(name, imported = true), id, clock()))
-            }
+            piece.collection?.let { name -> link(playlistId(name, imported = true), id) }
         }
         inserted
     }
 
-    private suspend fun collectionId(name: String, imported: Boolean): Long =
-        collections.byName(name)?.id ?: collections.insert(CollectionEntity(name = name, createdAt = clock(), imported = imported))
+    private suspend fun playlistId(name: String, imported: Boolean): Long =
+        playlists.byName(name)?.id ?: playlists.insert(PlaylistEntity(name = name, createdAt = clock(), imported = imported))
+
+    /** Inside a transaction: the piece goes after the playlist's last one. */
+    private suspend fun link(playlistId: Long, pieceId: Long) {
+        playlists.addPiece(PlaylistPieceEntity(playlistId, pieceId, clock(), playlists.nextPosition(playlistId)))
+    }
+
+    /** Inside a transaction: numbers [order] 0, 1, 2… writing only the positions that differ from [current]. */
+    private suspend fun writeOrder(playlistId: Long, current: List<PiecePosition>, order: List<Long>) {
+        val stored = current.associate { it.pieceId to it.position }
+        order.forEachIndexed { position, pieceId ->
+            if (stored[pieceId] != position) playlists.setPosition(playlistId, pieceId, position)
+        }
+    }
 
     private fun likeEscape(text: String): String =
         text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    private companion object {
+        /** Ids per query: under SQLite's 999-variable limit on older Android versions. */
+        const val SQL_CHUNK = 500
+    }
 }

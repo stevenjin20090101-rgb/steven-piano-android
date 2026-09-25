@@ -14,19 +14,28 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
+/**
+ * The library. Schema v2 (app 1.2): playlists keep an order and artwork has its table. A v1
+ * database (app 1.1) is migrated by [MIGRATION_1_2]; there is deliberately no destructive
+ * fallback, so a migration problem fails loudly instead of wiping the library.
+ */
 @Database(
-    entities = [PieceEntity::class, CollectionEntity::class, CollectionPieceEntity::class],
+    entities = [PieceEntity::class, PlaylistEntity::class, PlaylistPieceEntity::class, ArtworkEntity::class],
     views = [ComposerGroup::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class PianoDatabase : RoomDatabase() {
     abstract fun pieces(): PieceDao
 
-    abstract fun collections(): CollectionDao
+    abstract fun playlists(): PlaylistDao
+
+    abstract fun artwork(): ArtworkDao
 
     companion object {
         fun open(context: Context): PianoDatabase =
-            Room.databaseBuilder(context, PianoDatabase::class.java, "steven-piano.db").build()
+            Room.databaseBuilder(context, PianoDatabase::class.java, "steven-piano.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
     }
 }

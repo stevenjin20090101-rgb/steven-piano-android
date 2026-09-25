@@ -39,7 +39,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.stevenjin.stevenpiano.data.db.CollectionSummary
+import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 
 /** The dialogs a long-press can open. */
@@ -50,9 +50,9 @@ sealed interface LibraryDialog {
 
     data class Delete(val piece: PieceEntity) : LibraryDialog
 
-    data class RenameCollection(val collection: CollectionSummary) : LibraryDialog
+    data class RenameCollection(val collection: PlaylistSummary) : LibraryDialog
 
-    data class DeleteCollection(val collection: CollectionSummary) : LibraryDialog
+    data class DeleteCollection(val collection: PlaylistSummary) : LibraryDialog
 }
 
 @Composable
@@ -156,7 +156,7 @@ private fun RenamePieceDialog(piece: PieceEntity, onClose: () -> Unit, onRename:
 }
 
 @Composable
-private fun RenameCollectionDialog(collection: CollectionSummary, vm: LibraryViewModel, onClose: () -> Unit) {
+private fun RenameCollectionDialog(collection: PlaylistSummary, vm: LibraryViewModel, onClose: () -> Unit) {
     val others by remember { vm.collections }.collectAsStateWithLifecycle(emptyList())
     var name by rememberSaveable { mutableStateOf(collection.name) }
     val taken = others.any { it.id != collection.id && it.name.equals(name.trim(), ignoreCase = true) }

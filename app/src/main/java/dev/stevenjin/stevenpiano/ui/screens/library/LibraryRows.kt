@@ -28,7 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.stevenjin.stevenpiano.data.db.CollectionSummary
+import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.ui.Format
@@ -70,7 +70,7 @@ fun PieceRow(piece: PieceEntity, onPlay: () -> Unit, onFavorite: (Boolean) -> Un
 
 /** A collection: its name over its size. Tap opens it; long-press renames or deletes it. */
 @Composable
-fun CollectionRow(collection: CollectionSummary, onOpen: () -> Unit, onDialog: (LibraryDialog) -> Unit) {
+fun CollectionRow(collection: PlaylistSummary, onOpen: () -> Unit, onDialog: (LibraryDialog) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Box {
         TextRow(
