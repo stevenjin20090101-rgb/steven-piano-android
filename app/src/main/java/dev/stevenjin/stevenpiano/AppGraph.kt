@@ -19,6 +19,7 @@ import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.Importer
+import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
@@ -71,8 +72,12 @@ class AppGraph(private val app: Application) {
 
     val player: Player by lazy { Player(pianoLink, library, appScope) }
 
+    /** The piano's own settings over its console, read on every connection. */
+    val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
+
     /** From [App.onCreate]: settings flow into the player; the piano is reached if the person allows it. */
     fun start() {
+        pianoSettings.start()
         appScope.launch {
             settingsRepository.settings.collect { s ->
                 player.setDefaultTempo(s.defaultTempoPct)
