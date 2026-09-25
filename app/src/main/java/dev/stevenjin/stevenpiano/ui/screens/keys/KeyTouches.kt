@@ -37,6 +37,9 @@ class KeyTouches(private val keys: Sink) {
 
     fun isPressed(key: Int): Boolean = key in 0..127 && fingers[key] > 0
 
+    /** Some key is held down. */
+    val anyHeld: Boolean get() = pressedLow != 0L || pressedHigh != 0L
+
     /** [pointer] touched down on [key] ([KeyboardGeometry.NONE] when off the keys). */
     fun down(pointer: Long, key: Int, velocity: Int) {
         up(pointer)

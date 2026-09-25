@@ -381,3 +381,115 @@ value the moment a control changes; the piano stores them itself.
 - If the piano runs older firmware without the channel, the whole section shows one
   line: "This piano's firmware doesn't offer settings over Bluetooth yet." and nothing
   else, so the app keeps working exactly as v1.0.
+
+---
+
+# v1.2 — byline, playlists, queue, artwork, score pages
+
+Steven's requests after using 1.1. Everything above still holds; this section adds and,
+in two named places, overrides. The approved plan (`~/.claude/plans/humming-prancing-finch.md`)
+holds the engineering detail; this section is the visual authority.
+
+## Byline (overrides the v1.0 "no wordmark" rule, at the owner's request)
+
+Under every tab title, in Eyebrow style and `contentTertiary`: **PLAYER PIANO · BY STEVEN JIN**.
+Same position on all four tabs, no divider, no animation (a plain cut: the press-play
+moment stays the app's only orchestrated motion). The About row drops the app's name so
+the name appears exactly once per screen ("Made by Steven Jin · v1.2 · eab16a502f679465").
+Design note: `branding.md › Best practices` warns against repeating a brand through an
+app; the owner chose this line knowingly, and the design keeps its cost to one 16 sp row.
+
+## Playlists (replaces Collections, one concept)
+
+- The chip reads **Playlists**. Imported INDEX sets appear as playlists too.
+- A playlist is a page: cover art (96 dp, `shapes.medium`), name in Title, an Eyebrow
+  "12 pieces · 41:20", then a filled 56 dp **Play** circle and an outlined **Shuffle**
+  button side by side, then the rows.
+- Rows inside a playlist carry a trailing **drag handle** (48 dp) for reordering; the row
+  menu also offers *Move up* and *Move down* so reordering works without dragging.
+- Row menu everywhere, in three groups with hairline separators (context menus scan best
+  with at most three groups, destructive items last): **Play next · Add to queue** |
+  **Add to playlist · Favorite · Rename** (+ *Move up · Move down* inside a playlist) |
+  **Remove from playlist** (inside a playlist) · **Delete**. Playlist menu, also on
+  long-press of a playlist tile: *Rename · Change photo · Delete*. Composer tiles
+  long-press to *Play all · Shuffle*. Menus appear wherever items appear, so people
+  learn where to find them once.
+- The dragged row lifts onto `surfaceElevated` and the others slide out of its way; the
+  drag handle is described as "Reorder" to screen readers.
+- The Playlists and Composers chips show **grids of tiles** (2 columns on phones, 3 on
+  medium widths, 4 on tablets in landscape): square art, name in Body, count in Eyebrow.
+  8 dp gutters, inside the 720 dp reading column.
+
+## Up next, shuffle and repeat
+
+- A queue glyph in the Now playing header opens the **Up next** sheet: a Material bottom
+  sheet with its drag handle, swipe-away, the current piece first, then the coming pieces
+  with drag handles ("Reorder") and a remove glyph ("Remove from queue"), and *Clear* at
+  the top right. Empty: "Nothing up next." Reordering here is the queue's order; it does
+  not touch any playlist. Shuffle and Repeat announce their state ("Shuffle on",
+  "Repeat all").
+- **Shuffle** and **Repeat** sit at the two ends of the transport row, outside previous
+  and next: `contentTertiary` when off; `contentPrimary` with a 4 dp dot beneath when on.
+  Repeat cycles off → all → one; "one" shows a small "1" glyph. Both remember their
+  state. Shuffle keeps the current piece where it is and restores the original order when
+  turned off. Repeat one restarts after the same 1.5 s pause as a normal advance.
+- The system media controls show the queue and the two modes.
+
+## Artwork and notes (the app now uses the internet, for two hosts only)
+
+- Composers get their Wikipedia portrait and a two-sentence blurb in the composer
+  header. Pieces get a **Piece sheet** (a bottom sheet with its drag handle; tap the title
+  on Now playing, or *About this piece* in the row menu): art, title, composer eyebrow,
+  the piece's Wikipedia extract if a page exists, otherwise the composer's, a *From
+  Wikipedia* link, and the attribution line in Eyebrow: "Text from Wikipedia, CC BY-SA
+  4.0 · portraits from Wikimedia Commons". With nothing found: "No notes found for this
+  piece."; offline: "Notes need an internet connection."
+- Every art surface (tile, cover, row portrait, sheet art) sits on `surfaceElevated`
+  inside a 1 dp hairline outline, so photographs read as prints mounted on the
+  instrument; the red dot stays the only interface colour.
+- Piece rows show a **40 dp composer portrait** at the left (this reverses the v1.0
+  "no thumbnails" call, at the owner's request); tiles show portraits; playlist covers
+  are the owner's photo (photo picker), else the first piece's composer portrait, else a
+  monogram tile (the initial in Display type on `surfaceElevated`). A composer with no
+  portrait gets a 2×2 mosaic of their pieces' roll cards rather than a monogram, so
+  Bach, Beethoven and Brahms never collapse into three "B" tiles.
+- Pieces with no portrait get a **roll card**: their own first 20 seconds drawn as
+  perforations, monochrome, generated on the device.
+- Portraits show **in colour** by default. A Piano-tab switch **Artwork in black and
+  white** applies a saturation-0 filter for the Leica Monochrom look. The rest of the
+  interface stays monochrome either way; red still means live and nothing else.
+- Fetching is quiet: composers are fetched automatically after an import (a foreground
+  notification "Fetching artwork and notes", one request at a time); pieces are fetched
+  when their sheet opens. A `+`-sheet action *Fetch artwork and notes for every composer*
+  and a switch *Fetch artwork automatically* (on) with one line beneath it: "Uses
+  Wikipedia. Nothing about you is sent." (repeated in the About area). While a fetch
+  runs, the Library shows the same hairline progress row imports use: "Fetching artwork
+  12 of 61". Offline or failing: the fallback art shows and nothing else is said.
+
+## Score (replaces "Staff")
+
+- The piece laid out as **systems of bars** stacked on **pages**: 4 bars per system on
+  tablets in landscape, 3 at medium widths, 2 on phones. **Two pages side by side when
+  the score panel itself is at least 840 dp wide** (Score only, tablet, landscape); one
+  page otherwise. Bar lines, clefs at each system, bar numbers as Eyebrows at each
+  system's start. Staff lines `contentTertiary`, clefs `contentSecondary`.
+- A 2 dp `contentPrimary` cursor moves within the current system; sounding notes brighten
+  with the same 120 ms flip as the roll. Pages turn so the cursor is always visible: with
+  two pages the left page turns to the page after next while the right page is being
+  finished, and vice versa.
+- Agency: swipe left or right to look at other pages; a small outlined **Follow** chip
+  appears while detached, and tapping it (or the next automatic turn) resumes following.
+  Tapping a bar seeks to it (the piano is silenced first, as with any seek). One eyebrow
+  line-height is reserved above each system so bar numbers never touch the staff at
+  large text sizes.
+- **Note values** when the file quantizes cleanly (sequenced files): hollow whole and half
+  heads, filled quarters and shorter, stems, eighth and sixteenth flags, dots. Performed
+  files (MAESTRO) keep filled heads with duration bars. Sharps only; no beams, rests, ties
+  or key signatures — said plainly in the README.
+- The grand staff keeps 6 dp line spacing; the gap between systems is 32 dp so the
+  lowest and highest ledger lines fit.
+
+## Rotation
+
+Rotating while playing live keeps every held key sounding and keeps the keyboard's
+first visible key (clamped to the new width). Nothing on any tab resets on rotation.

@@ -98,6 +98,15 @@ class KeyboardGeometryTest {
     }
 
     @Test
+    fun `a rotation keeps the first key, clamped to the new width`() {
+        // C4 (white key 21) leftmost: two octaves on a phone upright keep it; about four octaves
+        // on its side end at B7, so the view starts at 20; all 49 keys start at C1.
+        assertEquals(21f, clampFirst(21f, 15), 0f)
+        assertEquals(20f, clampFirst(21f, 29), 0f)
+        assertEquals(0f, clampFirst(21f, 49), 0f)
+    }
+
+    @Test
     fun `keys are named as the octave labels name them`() {
         assertEquals("C1", name(24))
         assertEquals("C4", name(60))

@@ -36,7 +36,10 @@ import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
  * The one activity: edge to edge, transparent system bars, the four destinations in a frame the
  * window's width class chooses. MIDI files that arrive by "Open with" or the share sheet, or
  * come from the Library's pickers, are imported by the import service (or, when the app may not
- * read them, the Library says so); the playback notification opens Now playing.
+ * read them, the Library says so); the playback notification opens Now playing. Rotation and
+ * resizing are handled here as configuration changes (the manifest's configChanges): the frame
+ * recomputes from the new configuration and nothing is recreated, so nothing may rely on
+ * recreation to refresh.
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
@@ -60,10 +63,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** In the background nothing may hold a key down: the Keys screen's keys and sustain let go. */
+    /**
+     * In the background nothing may hold a key down: the Keys screen's keys and sustain let go.
+     * Not when the activity only stops to be recreated for a configuration change (a rotation
+     * never gets here: the activity handles it without stopping); the Keys screen lets go of
+     * whatever its own window held as that window goes.
+     */
     override fun onStop() {
         super.onStop()
-        graph.player.silenceLive()
+        if (!isChangingConfigurations) graph.player.silenceLive()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -53,8 +53,11 @@
             android:name="dev.stevenjin.stevenpiano.provenance"
             android:value="STEVEN-PIANO-PROVENANCE Made by Steven Jin &lt;stevenjin20090101@gmail.com&gt; Ed25519 fp eab16a502f679465" />
 
+        <!-- Rotation and window resizes reach the activity as configuration changes instead of
+             recreating it, so keys held on the Keys screen keep sounding (see MainActivity.onStop). -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">

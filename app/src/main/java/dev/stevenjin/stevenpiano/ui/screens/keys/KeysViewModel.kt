@@ -51,10 +51,14 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
         private set
     private var velocityJob: Job? = null
 
-    /** The leftmost white key shown (0 = C1), fractional while the mini-map is dragged. */
+    /**
+     * The leftmost white key shown (0 = C1), fractional while the mini-map is dragged. It is kept
+     * as chosen and clamped only when read, so a rotation to a wider keyboard shows as much as
+     * fits from the same key, and rotating back returns to exactly where the keyboard was.
+     */
     private var first by mutableFloatStateOf(KeyboardGeometry.whiteIndexOf(graph.settings.value.keysViewportStart).toFloat())
 
-    /** The leftmost white key shown when [visibleWhites] fit across the screen. */
+    /** The leftmost white key shown when [visibleWhites] fit across the screen: [first], clamped to that width. */
     fun firstWhite(visibleWhites: Int): Float = KeyboardGeometry.clampFirst(first, visibleWhites)
 
     override fun noteOn(key: Int, velocity: Int) {

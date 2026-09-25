@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.keys
 
+import android.content.pm.ActivityInfo
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,9 +29,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -54,6 +59,8 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 /**
  * Keys: the piano, from the phone or tablet. A playable keyboard across the screen (two octaves
@@ -63,7 +70,8 @@ import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
  * barcode): they sit at the bottom, just above the latching Sustain, the VELOCITY of the last key
  * for a second, and the connection line, and whatever height is left over stays empty. Every key
  * and the pedal let go when the screen stops (another tab, the app in the background) and when
- * the link drops.
+ * the link drops. While a key is held the screen keeps its orientation ([HoldOrientationWhileHeld]):
+ * a rotation would end every touch; it turns once the keys are let go, from the same first key.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -85,6 +93,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
         vm.letGo()
     }
     DisposableEffect(vm) { onDispose { vm.letGo() } }
+    HoldOrientationWhileHeld(touches, pressed)
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val keysHeight = keysHeightCap(maxHeight)
@@ -155,6 +164,33 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                     notConnected = "Not connected. The piano won't play these keys.",
                 )
             }
+        }
+    }
+}
+
+/**
+ * Android ends every touch in progress when the display rotates (each window gets a cancel), which
+ * would let go of every key a finger holds. So while any key is held the activity keeps its
+ * orientation; once the last key is let go it may turn again, and a rotation asked for meanwhile
+ * happens then. Leaving the screen gives the orientation back as it was.
+ */
+@Composable
+private fun HoldOrientationWhileHeld(touches: KeyTouches, pressedVersion: MutableIntState) {
+    val activity = LocalActivity.current ?: return
+    val scope = rememberCoroutineScope()
+    DisposableEffect(activity, touches) {
+        val free = activity.requestedOrientation
+        val job = scope.launch {
+            snapshotFlow {
+                pressedVersion.intValue   // bumped after every touch
+                touches.anyHeld
+            }.distinctUntilChanged().collect { held ->
+                activity.requestedOrientation = if (held) ActivityInfo.SCREEN_ORIENTATION_LOCKED else free
+            }
+        }
+        onDispose {
+            job.cancel()
+            activity.requestedOrientation = free
         }
     }
 }

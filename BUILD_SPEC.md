@@ -428,3 +428,141 @@ Parser (dump/get/`!` facts/end/timeout → Unsupported), debounce and write-then
 ordering, error detection, preset → dump, `save` on leave, MIDI-before-console queue
 priority in the link (with the fake), and the settings table's ranges matching
 `BLE_SETTINGS.md` (a test asserts every name in the table is in the spec's list).
+
+---
+
+# v1.2 — M10: schema v2, playlists, the queue, the byline, rotation
+
+Read `DESIGN.md › v1.2` first. Everything above stays except where this section says
+otherwise. M11 (artwork) and M12 (score pages) add their own sections.
+
+## Collections are playlists
+
+One concept, called Playlists everywhere the person can see it (a grep for "collection" in
+`ui/` is empty). The data layer keeps v1's table and column names so v1.1 libraries carry
+over: `PlaylistEntity` is table `collections`, `PlaylistPieceEntity` is `collection_pieces`
+(its playlist column is still `collectionId`), and `PieceEntity.collection` remains the
+INDEX.csv `collection` column's value. `PlaylistDao` replaces `CollectionDao`.
+
+## Room schema v2 — `data/db/`
+
+- `collection_pieces` gains `position INTEGER NOT NULL DEFAULT 0` and an index on
+  `(collectionId, position)`. A playlist plays in `position` order, title for ties.
+- New table `artwork` (`ArtworkEntity(key PK, imagePath?, description?, sourceUrl?,
+  sourceTitle?, fetchedAt, status: OK | NOT_FOUND | FAILED)`, keys `composer:<composerKey>`,
+  `piece:<id>`, `playlist:<id>`) and `ArtworkDao` (`observe`, `get`, `upsert`, `delete`),
+  created now so v1.2 has one migration; the UI reads it from M11.
+- `MIGRATION_1_2` (`Migrations.kt`) runs `SchemaV2.DDL`: the position column added with the
+  exact definition in the exported `2.json` (the way Room's own auto-migrations add a column),
+  then 2.json's `createSql` for the new index and the artwork table. It then numbers every
+  playlist 0, 1, 2… ordered by `addedAt`, then title (then id), in Kotlin (API 26's SQLite has
+  no window functions). No destructive fallback. `SchemaV2Test` holds the statements equal to
+  `app/schemas/…/2.json` (and v2's link table equal to v1's plus that column); `1.json` is kept.
+- Note for owners of 1.1 libraries: 1.1 listed a collection by title; 1.2 plays a migrated
+  playlist in the order its pieces were added. Imported INDEX sets were added in import order.
+
+## Library — `data/LibraryRepository.kt`
+
+`playlists()` (summaries with `pieceCount` and total `durationMs`), `inPlaylist(id)`,
+`playlistIdsOf(pieceId)`, `createPlaylist`, `renamePlaylist`, `deletePlaylist`,
+`addToPlaylist(id, pieceId)` (one transaction: `nextPosition`, then insert at the end),
+`removeFromPlaylist`, `reorderPlaylist(id, orderedIds)` (a drag; the ids may be a search's
+subset, see `PlaylistOrder.reordered`), `movePiece(id, pieceId, delta)` (Move up / down), and
+`summaries(ids)` (`PieceSummary(id, title, composerShort, durationMs, composerKey)` by id,
+asked 500 ids at a time). Reorders write only the positions that change. The importer's
+INDEX.csv links go to the end of their playlist.
+
+## The queue — `player/Queue.kt` (replaces `Playlist.kt`)
+
+- `QueueEntry(uid, pieceId)`: every entry has its own uid (numbering carries across queues),
+  so a piece can be queued twice. `Queue(entries, index, original?, repeat, nextUid)` is
+  immutable: `next / previous / previousRestarts / afterEnd / playNext / addToQueue /
+  remove(uid) / move(uid, toUpNextIndex) / clearUpNext / skipTo / withShuffle(on, random) /
+  withRepeat`, factories `startingAt(pieceId, ids, previous, random)` and `all(ids, shuffle,
+  previous, random)`.
+- Shuffle: the current piece stays first and plays on; the rest follow in random order;
+  `original` keeps the order they had. Off: that order comes back. Play next goes after the
+  current piece in both orders; Add to queue while shuffled stays out of `original`, so
+  restoring puts it right after the current piece; moves in Up next change only the shown
+  order; remove and clear take entries out of both. The current entry is never removed.
+- Repeat (`RepeatMode.OFF | ALL | ONE`, the button cycles in that order): `afterEnd()` is the
+  next entry, the top again (all), the same entry (one), or null. Next wraps with repeat all.
+- `PlayerState.queue: QueueSnapshot(ids, uids, index, shuffle, repeat)` with `currentUid`,
+  `upNextIds`, `upNextUids`, `hasNext`, `advancesAtEnd` and `window()` (at most 50 entries
+  for the media session, starting five before the current one). `queueIndex` and `queueSize`
+  remain as computed properties.
+
+## Player — `player/Player.kt`
+
+- New: `playAll(ids, shuffle)` (a playlist's Play or Shuffle; sets the shuffle mode),
+  `playNext(ids)` and `addToQueue(ids)` (with nothing queued they start playing and return
+  true), `removeFromQueue(uid)`, `moveInQueue(uid, toIndex)`, `clearUpNext()`,
+  `skipToQueueEntry(uid)`, `setShuffle(on)`, `setRepeat(mode)`, and a `Random` constructor
+  parameter for tests. `play(id, queue)` keeps the current modes.
+- The end of a piece: 1.5 s later the player asks the queue again (Up next and the modes may
+  have changed); the same entry again restarts the loaded piece with `engine.seek(0)` then
+  `engine.play()`, without reading the file again (it still counts as a play).
+- Settings gain `shuffle: Boolean (false)` and `repeat: RepeatMode (OFF)`; `AppGraph.start()`
+  seeds the player with them and writes every change back.
+- `PlaybackStarter.playAll / playNext / addToQueue` start the playback service when playback
+  starts. `MediaSessionHolder` publishes the queue window (`setQueue`, uids as queue ids, names
+  from `library.summaries`), the shuffle and repeat modes, the active queue item, and handles
+  `onSkipToQueueItem`, `onSetShuffleMode`, `onSetRepeatMode`. `PlaybackService` keeps the
+  foreground through the pause between pieces whenever `queue.advancesAtEnd`.
+
+## UI
+
+- `ScreenHeader(title, modifier, byline = Provenance.byline, actions)`: the byline "Player
+  piano · by Steven Jin" in the eyebrow style under every tab title, no animation. The About
+  row's `Provenance.text` drops the app's name: "Made by Steven Jin · v1.2 · eab16a502f679465".
+- `TransportBar(playing, hasNext, shuffle, repeat, onShuffle, onRepeat, onPrevious,
+  onPlayPause, onNext)`: 48 dp Shuffle and Repeat at the ends (tertiary off; primary with a
+  4 dp dot on; descriptions "Shuffle on/off", "Repeat off/all/one"; Shuffle has the switch
+  role); gaps shrink to fit 360 dp.
+- Now playing: the queue glyph opens `UpNextSheet` (`UpNextViewModel`): a modal bottom sheet
+  with the current piece, then up next with "Remove from queue" and a "Reorder" handle, Clear,
+  tap to play, "Nothing up next." when empty. Its order is the queue's only.
+- Library: `Category.Playlists`, `Group.Playlist`, `Listing.Playlists`; grids of tiles for
+  Playlists and Composers (`AppFrame.tileColumns` 2 / 3 / 4, chunked rows inside the one
+  `LazyColumn`), art is `MonogramTile` (`ui/components/Artwork.kt`) until M11. Tiles
+  long-press: Rename · Delete (playlists; Change photo comes with M11), Play all · Shuffle
+  (composers). `PlaylistHeader(summary, cover, onBack, onPlay, onShuffle, onRename, onDelete)`.
+  Row menus through `PieceActions` (`PieceMenu`, three groups, destructive last); inside a
+  playlist, and only while no search narrows it, rows carry a drag handle and Move up / Move
+  down.
+- `ui/components/DragReorder.kt`: `rememberDragReorderState(listState, canMoveTo, onMove,
+  onDrop)`, `Modifier.dragHandle(state, key)` (consumes the drag, so a sheet stays put),
+  `Modifier.reorderable(state, key, itemScope)` (lift with `surfaceVariant`, hairline and
+  shadow; `animateItem()` for the others, a cut under reduced motion), `DragHandle` (48 dp,
+  "Reorder", Move up / Move down accessibility actions), pure `targetIndex`, `moved`,
+  `reorderedBy`. Keys are stable (`p<id>`, queue uids), comparisons are layoutInfo offsets only,
+  the list keeps its scroll when the first visible row moves, and it auto-scrolls near the edges.
+- New glyphs: `ic_shuffle`, `ic_repeat`, `ic_repeat_one`, `ic_queue`, `ic_drag_handle`, `ic_more`.
+
+## Rotation
+
+`MainActivity` handles `orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden`
+itself, so rotating never recreates it: nothing is silenced, the latched Sustain stays down (so
+struck strings keep ringing), and the window size class is recomputed from the new
+configuration. `onStop` silences live keys only when not `isChangingConfigurations`.
+`KeysViewModel` keeps the first white key as chosen and clamps it when read (21 stays 21 at 15
+visible keys, shows 20 at 29, 0 at 49). Nothing may rely on recreation to refresh.
+
+Android itself cancels every touch in progress when the display rotates (each window gets
+`ACTION_CANCEL`; measured on the emulator with a device-level touch in M10), and a cancel lets go
+of the key like a lift. So while any key is held (`KeyTouches.anyHeld`) the Keys screen asks for
+`SCREEN_ORIENTATION_LOCKED` and gives the orientation back when the last key is let go or the
+screen goes; a rotation asked for meanwhile happens then. Held keys and the pedal therefore
+never see a rotation, and a key is never kept down without a finger the app can see.
+
+## Version
+
+1.2, `versionCode 3`. Provenance is re-signed at the end of v1.2 (M12), not per run.
+
+## Tests added in M10
+
+`QueueTest` (v1.1's three `PlaylistTest` cases kept), `PlayerTest` (repeat one restarts
+without reloading, repeat all wraps, play-next order, enqueue with nothing queued),
+`SchemaV2Test`, `PlaylistOrderTest`, `SettingsRepositoryTest` (shuffle and repeat),
+`DragReorderTest`, `KeyboardGeometryTest` (rotation), `FormatTest` (playlist totals,
+monograms), `AdaptiveFrameTest` (tile columns).

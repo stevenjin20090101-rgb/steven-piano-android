@@ -38,6 +38,18 @@ class KeyTouchesTest {
     }
 
     @Test
+    fun `the keyboard knows while any key is held`() {
+        assertFalse(touches.anyHeld)
+        touches.down(1, 100, 90)   // key 100 is in the high bits (88-107)
+        touches.down(2, 30, 90)
+        assertTrue(touches.anyHeld)
+        touches.up(1)
+        assertTrue(touches.anyHeld)
+        touches.up(2)
+        assertFalse(touches.anyHeld)
+    }
+
+    @Test
     fun `moving within a key plays nothing new`() {
         touches.down(1, 60, 90)
         touches.move(1, 60, 20)
