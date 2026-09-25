@@ -19,18 +19,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.net.WikipediaUrls
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.WikipediaLink
 
 /**
  * A composer's page head: back, the [portrait] at 96 dp beside the name in Title over [meta]
@@ -70,11 +70,8 @@ fun ComposerHeader(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (sourceUrl != null) {
-                val uriHandler = LocalUriHandler.current
-                TextButton(onClick = { uriHandler.openUri(sourceUrl) }, modifier = Modifier.padding(horizontal = 4.dp)) {
-                    Text("From Wikipedia")
-                }
+            if (WikipediaUrls.pageLink(sourceUrl) != null) {
+                Column(Modifier.padding(horizontal = 4.dp)) { WikipediaLink(sourceUrl) }
             } else {
                 Spacer(Modifier.height(16.dp))
             }

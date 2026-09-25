@@ -24,7 +24,8 @@ import java.net.URL
 /**
  * A Wikipedia page's summary, as much of it as the app uses. [type] is "standard",
  * "disambiguation" and so on; [description] is the one-line Wikidata description ("German
- * composer (1685–1750)"); [imageUrl] is the image to download, already chosen by
+ * composer (1685–1750)"); [pageUrl] is the article's address when it passes
+ * [WikipediaUrls.pageLink], else null; [imageUrl] is the image to download, already chosen by
  * [WikipediaUrls.image], or null.
  */
 data class WikiSummary(
@@ -167,7 +168,7 @@ internal object WikiJson {
             type = page.text("type") ?: "standard",
             description = page.text("description"),
             extract = page.text("extract"),
-            pageUrl = page.optJSONObject("content_urls")?.optJSONObject("desktop")?.text("page"),
+            pageUrl = WikipediaUrls.pageLink(page.optJSONObject("content_urls")?.optJSONObject("desktop")?.text("page")),
             imageUrl = WikipediaUrls.image(original?.text("source"), original?.optInt("width") ?: 0, thumbnail?.text("source")),
         )
     }

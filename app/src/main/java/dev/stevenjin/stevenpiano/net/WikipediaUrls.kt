@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.net
 
+import java.net.URI
+import java.net.URISyntaxException
 import java.net.URLEncoder
 import java.util.Locale
 
@@ -70,6 +72,24 @@ object WikipediaUrls {
         val name = thumbnail.substring(cut)
         val size = SIZE_PREFIX.find(name) ?: return thumbnail
         return thumbnail.substring(0, cut) + name.replaceRange(size.groups[1]!!.range, step.toString())
+    }
+
+    /**
+     * [url] if it may be offered as a "From Wikipedia" link, else null: an article on English
+     * Wikipedia and nothing else, as `java.net.URI` reads it: scheme https, host exactly
+     * [API_HOST], no user info, no port, a path under `/wiki/`. Checked when a summary is read
+     * and again when the link is opened (rows fetched before this check existed pass it too).
+     */
+    fun pageLink(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        val uri = try {
+            URI(url)
+        } catch (e: URISyntaxException) {
+            return null
+        }
+        val ok = uri.scheme == "https" && uri.host == API_HOST && uri.rawUserInfo == null && uri.port == -1 &&
+            uri.rawPath?.startsWith("/wiki/") == true && uri.rawPath.length > "/wiki/".length
+        return if (ok) url else null
     }
 
     /** Whether the app may request [url]: HTTPS to one of [HOSTS]. */

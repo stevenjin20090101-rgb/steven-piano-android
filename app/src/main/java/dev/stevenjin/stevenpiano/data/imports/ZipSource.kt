@@ -11,9 +11,12 @@ package dev.stevenjin.stevenpiano.data.imports
 
 import android.content.ContentResolver
 import android.net.Uri
+import android.provider.OpenableColumns
 import java.io.Closeable
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
+import java.io.InputStream
 import java.nio.charset.Charset
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
@@ -23,6 +26,8 @@ import java.util.zip.ZipFile
  * A zip read with [ZipFile]: random access, so an INDEX.csv stored after the music is still
  * found first (ZipInputStream is sequential). Entry names are read as UTF-8, flagged or not
  * (the library's zip does not set the flag); a zip whose names are not UTF-8 is read as Latin-1.
+ * A zip with more than [ImportLimits.ZIP_ENTRIES] entries is refused before any is listed, and its
+ * INDEX.csv is read only up to [ImportLimits.INDEX_BYTES].
  */
 class ZipSource(private val file: File, private val deleteWhenClosed: Boolean = false) : Closeable {
     private val zip: ZipFile
@@ -53,8 +58,9 @@ class ZipSource(private val file: File, private val deleteWhenClosed: Boolean = 
         ImportItem(entry.name.substringAfterLast('/'), entry.name) { zip.getInputStream(entry) }
     }
 
+    /** The INDEX.csv, or null when there is none or it is larger than [ImportLimits.INDEX_BYTES] (then it is ignored). */
     fun readIndex(): IndexCsv? = indexEntry?.let { entry ->
-        IndexCsv.parse(zip.getInputStream(entry).use { it.readBytes().toString(Charsets.UTF_8) })
+        zip.getInputStream(entry).use { ImportLimits.readCapped(it, ImportLimits.INDEX_BYTES) }?.let { IndexCsv.parse(it.toString(Charsets.UTF_8)) }
     }
 
     override fun close() {
@@ -63,28 +69,77 @@ class ZipSource(private val file: File, private val deleteWhenClosed: Boolean = 
     }
 
     companion object {
+        private const val CHECK_SPACE_EVERY = 8L * 1024 * 1024
+
         private fun list(file: File, charset: Charset): Pair<ZipFile, List<ZipEntry>> {
             val zip = ZipFile(file, charset)
             return try {
+                // The count comes from the central directory: nothing is listed yet.
+                if (zip.size() > ImportLimits.ZIP_ENTRIES) throw IOException("The zip holds ${zip.size()} entries; at most ${ImportLimits.ZIP_ENTRIES} are read.")
                 zip to zip.entries().toList()
-            } catch (e: IllegalArgumentException) {
+            } catch (e: Exception) {
                 zip.close()
                 throw e
             }
         }
 
-        /** ZipFile needs a real file, so the picked document is copied into the cache first. */
+        /**
+         * ZipFile needs a real file, so the picked document is copied into the cache first: refused
+         * when it is (or turns out to be) larger than [ImportLimits.ZIP_BYTES], or when the copy would
+         * leave less than [ImportLimits.SPACE_MARGIN_BYTES] free.
+         */
         fun copyToCache(resolver: ContentResolver, uri: Uri, cacheDir: File): File {
+            val declared = sizeOf(resolver, uri)
+            return (resolver.openInputStream(uri) ?: throw FileNotFoundException("Can't open $uri")).use { copyToCache(it, cacheDir, declared) }
+        }
+
+        /** [copyToCache] from an open stream whose size may be known ([declaredSize]). Plain java.io, so it is unit-tested. */
+        fun copyToCache(
+            input: InputStream,
+            cacheDir: File,
+            declaredSize: Long?,
+            maxBytes: Long = ImportLimits.ZIP_BYTES,
+            usableSpace: () -> Long = { cacheDir.usableSpace },
+        ): File {
+            if (declaredSize != null && declaredSize > maxBytes) throw IOException(tooLarge(maxBytes))
+            if (usableSpace() < (declaredSize ?: 0L) + ImportLimits.SPACE_MARGIN_BYTES) throw IOException(NO_SPACE)
             val copy = File.createTempFile("import-", ".zip", cacheDir)
             try {
-                (resolver.openInputStream(uri) ?: throw FileNotFoundException("Can't open $uri")).use { input ->
-                    copy.outputStream().use { input.copyTo(it) }
+                copy.outputStream().use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    var sinceCheck = 0L
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        total += n
+                        if (total > maxBytes) throw IOException(tooLarge(maxBytes))
+                        sinceCheck += n
+                        if (sinceCheck >= CHECK_SPACE_EVERY) {
+                            sinceCheck = 0
+                            if (usableSpace() < ImportLimits.SPACE_MARGIN_BYTES) throw IOException(NO_SPACE)
+                        }
+                        out.write(buffer, 0, n)
+                    }
                 }
             } catch (e: Exception) {
                 copy.delete()
                 throw e
             }
             return copy
+        }
+
+        private const val NO_SPACE = "Not enough free space to read the zip."
+
+        private fun tooLarge(maxBytes: Long) = "The zip is larger than ${maxBytes / (1024 * 1024)} MB."
+
+        /** The document's size as its provider states it, or null when it does not say. */
+        private fun sizeOf(resolver: ContentResolver, uri: Uri): Long? = try {
+            resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0).takeIf { it >= 0 } else null
+            }
+        } catch (e: RuntimeException) {   // a provider that cannot answer: the copy's own count still applies
+            null
         }
     }
 }

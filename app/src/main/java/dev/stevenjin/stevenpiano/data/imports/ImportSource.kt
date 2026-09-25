@@ -34,13 +34,15 @@ class ImportItem(val name: String, val relativePath: String, val open: () -> Inp
 
 /**
  * A source opened for reading: its MIDI files, and its INDEX.csv when it has one. [indexBase]
- * is the folder the index sits in; the index lists paths relative to it. Close when done.
+ * is the folder the index sits in; the index lists paths relative to it. [limited] says what cut
+ * a folder's listing short, when a cap did (see [TreeWalk]). Close when done.
  */
 class OpenedSource(
     val items: List<ImportItem>,
     private val index: IndexCsv? = null,
     private val indexBase: String = "",
     private val release: () -> Unit = {},
+    val limited: String? = null,
 ) : Closeable {
     fun rowFor(item: ImportItem): IndexCsv.Row? {
         val csv = index ?: return null
@@ -60,8 +62,12 @@ fun isHiddenPath(path: String): Boolean =
 /** The folder part of [path] with its trailing slash, "" at the root. */
 fun folderOf(path: String): String = path.substringBeforeLast('/', "").let { if (it.isEmpty()) "" else "$it/" }
 
-/** Lists what [source] holds. Blocking I/O; SAF grants belong to this process, so run it in-app. */
-fun openSource(context: Context, source: ImportSource): OpenedSource {
+/**
+ * Lists what [source] holds. Blocking I/O; SAF grants belong to this process, so run it in-app.
+ * [cancelled] is asked as a folder tree is walked. An INDEX.csv over [ImportLimits.INDEX_BYTES]
+ * is ignored.
+ */
+fun openSource(context: Context, source: ImportSource, cancelled: () -> Boolean = { false }): OpenedSource {
     val resolver = context.contentResolver
     return when (source) {
         is ImportSource.Uris -> OpenedSource(
@@ -71,14 +77,15 @@ fun openSource(context: Context, source: ImportSource): OpenedSource {
             },
         )
         is ImportSource.Tree -> {
-            val listing = TreeWalker(resolver).walk(source.treeUri)
+            val listing = TreeWalker(resolver).walk(source.treeUri, cancelled)
             val index = listing.index?.let { entry ->
-                IndexCsv.parse(resolver.openStream(entry.uri).use { it.readBytes().toString(Charsets.UTF_8) })
+                resolver.openStream(entry.uri).use { ImportLimits.readCapped(it, ImportLimits.INDEX_BYTES) }?.let { IndexCsv.parse(it.toString(Charsets.UTF_8)) }
             }
             OpenedSource(
                 items = listing.files.map { entry -> ImportItem(entry.name, entry.relativePath) { resolver.openStream(entry.uri) } },
                 index = index,
                 indexBase = listing.index?.relativePath?.let(::folderOf).orEmpty(),
+                limited = listing.limited?.let { "The folder holds $it; the rest was left out." },
             )
         }
         is ImportSource.Zip -> {

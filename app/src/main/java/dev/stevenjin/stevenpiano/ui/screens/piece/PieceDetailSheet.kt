@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,7 +37,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -54,6 +52,7 @@ import dev.stevenjin.stevenpiano.ui.components.ArtworkImage
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.RollCardImage
+import dev.stevenjin.stevenpiano.ui.components.WikipediaLink
 import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -139,13 +138,8 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState) {
         when (notes) {
             is PieceNotesChoice.Text -> {
                 Text(notes.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-                notes.sourceUrl?.let { url ->
-                    val uriHandler = LocalUriHandler.current
-                    // Shifted by the button's own padding so its label lines up with the text.
-                    TextButton(onClick = { uriHandler.openUri(url) }, modifier = Modifier.padding(top = 4.dp).offset(x = (-12).dp)) {
-                        Text("From Wikipedia")
-                    }
-                }
+                // Shifted by the button's own padding so its label lines up with the text.
+                WikipediaLink(notes.sourceUrl, Modifier.padding(top = 4.dp).offset(x = (-12).dp))
                 Eyebrow(ArtworkCopy.ATTRIBUTION, Modifier.padding(top = 4.dp), uppercase = false)
             }
             PieceNotesChoice.Waiting -> ProgressHairline(null, Modifier.padding(vertical = 12.dp))

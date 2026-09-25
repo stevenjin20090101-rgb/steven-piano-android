@@ -104,6 +104,24 @@ class WikipediaUrlsTest {
     }
 
     @Test
+    fun `a From Wikipedia link is only ever an English Wikipedia article over HTTPS`() {
+        val bach = "https://en.wikipedia.org/wiki/Johann_Sebastian_Bach"
+        assertEquals(bach, WikipediaUrls.pageLink(bach))
+        assertEquals("https://en.wikipedia.org/wiki/Clair_de_lune_(Debussy)", WikipediaUrls.pageLink("https://en.wikipedia.org/wiki/Clair_de_lune_(Debussy)"))
+        assertEquals("https://en.wikipedia.org/wiki/Anton%C3%ADn_Dvo%C5%99%C3%A1k", WikipediaUrls.pageLink("https://en.wikipedia.org/wiki/Anton%C3%ADn_Dvo%C5%99%C3%A1k"))
+        for (bad in listOf(
+            null, "", "http://en.wikipedia.org/wiki/Bach", "javascript:alert(1)", "intent://en.wikipedia.org/wiki/Bach#Intent;end",
+            "file:///sdcard/Bach.html", "content://en.wikipedia.org/wiki/Bach", "https://de.wikipedia.org/wiki/Bach",
+            "https://en.wikipedia.org.evil.com/wiki/Bach", "https://evil.com/wiki/Bach?en.wikipedia.org", "https://en.wikipedia.org@evil.com/wiki/Bach",
+            "https://user@en.wikipedia.org/wiki/Bach", "https://en.wikipedia.org:8443/wiki/Bach", "https://en.wikipedia.org:443/wiki/Bach",
+            "https://en.wikipedia.org/w/index.php?title=Bach", "https://en.wikipedia.org/wiki/", "https://en.wikipedia.org",
+            "https://evil.com\\@en.wikipedia.org/wiki/Bach", "https://en.wikipedia.org/wiki/Bach Air", "HTTPS://EN.WIKIPEDIA.ORG/wiki/Bach",
+        )) {
+            assertNull(bad, WikipediaUrls.pageLink(bad))
+        }
+    }
+
+    @Test
     fun `Retry-After in seconds becomes milliseconds, a date or nothing is unknown`() {
         assertEquals(120_000L, WikipediaUrls.retryAfterMillis("120"))
         assertEquals(0L, WikipediaUrls.retryAfterMillis(" 0 "))

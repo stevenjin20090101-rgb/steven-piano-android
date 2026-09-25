@@ -20,15 +20,14 @@ import dev.stevenjin.stevenpiano.midi.SmfParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.security.MessageDigest
 
 /** What the importer needs from the library. */
@@ -64,8 +63,9 @@ class Importer(
     suspend fun import(context: Context, source: ImportSource): ImportProgress = running.withLock {
         withContext(io) {
             progress.value = ImportProgress(finished = false)
+            val job = currentCoroutineContext()[Job]
             val opened = try {
-                openSource(context, source)
+                openSource(context, source) { job?.isActive == false }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {   // unreadable zip, revoked grant, vanished folder, a provider that throws
@@ -90,6 +90,7 @@ class Importer(
 
     /** Imports everything [source] lists and returns the final tally. */
     suspend fun run(source: OpenedSource): ImportProgress {
+        source.limited?.let(log)
         val items = source.items.sortedByDescending { source.rowFor(it) != null }
         var state = ImportProgress(total = items.size, finished = false)
         progress.value = state
@@ -149,7 +150,7 @@ class Importer(
 
     private suspend fun prepare(item: ImportItem, row: IndexCsv.Row?, seen: MutableSet<String>): Outcome {
         val bytes = try {
-            item.open().use { readCapped(it) }
+            item.open().use { ImportLimits.readCapped(it, MAX_BYTES) }
         } catch (e: IOException) {
             log("${item.relativePath}: ${e.message}")
             return Outcome.Failed
@@ -204,18 +205,6 @@ class Importer(
         const val BATCH_SIZE = 25
         const val MAX_BYTES = 8 * 1024 * 1024
         const val TOO_LARGE = "File too large to read"
-
-        /** The whole stream, or null when it is larger than [MAX_BYTES]. */
-        fun readCapped(input: InputStream): ByteArray? {
-            val out = ByteArrayOutputStream()
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val n = input.read(buffer)
-                if (n < 0) return out.toByteArray()
-                if (out.size() + n > MAX_BYTES) return null
-                out.write(buffer, 0, n)
-            }
-        }
 
         fun sha256(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

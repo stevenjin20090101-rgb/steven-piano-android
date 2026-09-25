@@ -21,6 +21,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtFiles
 import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.TextRepair
+import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.Importer
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
@@ -111,9 +112,13 @@ class AppGraph(private val app: Application) {
     /**
      * From [App.onCreate]: settings flow into the player; the queue's shuffle and repeat start as
      * they were left and are remembered whenever they change; the piano is reached if the person
-     * allows it.
+     * allows it; files a crashed import left behind are swept away.
      */
     fun start() {
+        val startedAt = System.currentTimeMillis()
+        appScope.launch(Dispatchers.IO) {
+            runCatching { ImportLimits.sweepStale(app.cacheDir, app.filesDir, before = startedAt) }
+        }
         pianoSettings.start()
         appScope.launch {
             val saved = settingsRepository.settings.first()
