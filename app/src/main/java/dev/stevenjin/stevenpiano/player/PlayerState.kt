@@ -9,7 +9,10 @@
 
 package dev.stevenjin.stevenpiano.player
 
+import dev.stevenjin.stevenpiano.midi.KeySignature
 import dev.stevenjin.stevenpiano.midi.NoteList
+import dev.stevenjin.stevenpiano.midi.TempoMap
+import dev.stevenjin.stevenpiano.midi.TimeSignature
 
 enum class PlaybackStatus { Stopped, Playing, Paused }
 
@@ -20,14 +23,25 @@ object PlaybackLimits {
     val VelocityPct = 50..150
 }
 
-/** The piece in the player: what Now playing shows. [notes] feed the note canvas. */
+/**
+ * The piece in the player: what Now playing shows. [notes] feed the note canvas; the score also
+ * reads the file's [tempoMap], [barStartsMicros] and signatures.
+ */
 data class NowPlaying(
     val pieceId: Long,
     val title: String,
     val composer: String,
     val durationMicros: Long,
     val notes: NoteList,
-)
+    val tempoMap: TempoMap = TempoMap.constant(DEFAULT_PPQ),
+    val barStartsMicros: LongArray = longArrayOf(0L),
+    val keySignatures: List<KeySignature> = emptyList(),
+    val timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
+) {
+    private companion object {
+        const val DEFAULT_PPQ = 480
+    }
+}
 
 /**
  * The queue as the UI, the playback service and the media session see it: piece [ids] in playing

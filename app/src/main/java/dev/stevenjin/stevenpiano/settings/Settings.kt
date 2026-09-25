@@ -30,8 +30,9 @@ import java.io.IOException
 
 /**
  * How Now playing draws notes: the pianola roll (default), Synthesia-style falling notes, or the
- * staff. On wide screens the staff has its own place ([WideLayout]) and this chooses the roll's
- * style, Staff reading as the paper roll there.
+ * score (saved as STAFF, its v1.1 name, so the choice carries over). On wide screens the score has
+ * its own place ([WideLayout]) and this chooses the roll's style, the score reading as the paper
+ * roll there.
  */
 enum class NoteDisplay {
     PAPER_ROLL,
@@ -39,11 +40,11 @@ enum class NoteDisplay {
     STAFF,
     ;
 
-    /** The roll style this display draws the notes in: Staff has none of its own, so it takes the paper roll. */
+    /** The roll style this display draws the notes in: the score has none of its own, so it takes the paper roll. */
     val rollStyle: NoteDisplay get() = if (this == STAFF) PAPER_ROLL else this
 }
 
-/** What Now playing shows on medium and expanded widths. */
+/** What Now playing shows on medium and expanded widths: the score and the notes, or either alone (v1.1 names, kept). */
 enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
 /**

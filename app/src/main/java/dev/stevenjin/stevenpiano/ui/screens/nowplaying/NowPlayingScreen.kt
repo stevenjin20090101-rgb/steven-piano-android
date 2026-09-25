@@ -67,23 +67,28 @@ import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
+import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import dev.stevenjin.stevenpiano.ui.components.ScorePages
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
-import dev.stevenjin.stevenpiano.ui.components.StaffCanvas
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
-/** Below this height the screen scrolls, and the note views get fixed heights; the stacked views need more. */
+/**
+ * Below this height the screen scrolls, and the note views get fixed heights; the stacked views
+ * need more. The score's fixed height holds one system.
+ */
 private val SHORT_BELOW = 520.dp
 private val SHORT_BELOW_STACKED = 780.dp
 private val SHORT_ROLL = 240.dp
-private val SHORT_STAFF = 200.dp
+private val SHORT_SCORE = 200.dp
 private val PANEL_GAP = 8.dp
 
 /** After a change while paused (a seek), frames keep coming this long so the picture catches up. */
@@ -92,10 +97,10 @@ private const val SETTLE_NANOS = 400_000_000L
 /**
  * The signature screen: the title, the composer, the note views, the scrubber, the transport,
  * tempo and the connection line. The note views follow the window's width class: on a phone one
- * canvas (paper roll, falling notes or the staff, as Note display says); on wider screens the
- * staff and the notes together (stacked on medium widths, side by side on expanded ones), or
+ * canvas (paper roll, falling notes or the score, as Note display says); on wider screens the
+ * score and the notes together (stacked on medium widths, side by side on expanded ones), or
  * either alone, as Wide layout says. The roll always keeps its keyboard strip beneath it, lane
- * for key. The transport goes through [playback], which keeps the playback service running, with
+ * for key. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through [playback], which keeps the playback service running, with
  * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet, and
  * the title opens the piece sheet. [onOpenPiano] shows the Piano tab.
  */
@@ -191,6 +196,11 @@ private fun ColumnScope.PieceView(
         if (piece.composer.isNotBlank()) Eyebrow(piece.composer, Modifier.padding(top = 4.dp), maxLines = 1)
     }
     Spacer(Modifier.height(16.dp))
+    // Every seek (the scrubber, a bar of the score) silences the piano first; paused, the picture catches up.
+    val seek: (Long) -> Unit = {
+        player.seek(it)
+        if (!playing) settle++
+    }
     NoteViews(
         plan,
         piece,
@@ -199,6 +209,7 @@ private fun ColumnScope.PieceView(
         roll,
         player,
         short,
+        seek,
         (if (short) Modifier.height(shortHeight(plan.layout)) else Modifier.weight(1f))
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
@@ -207,10 +218,7 @@ private fun ColumnScope.PieceView(
         piece.durationMicros,
         frame,
         roll,
-        onSeek = {
-            player.seek(it)
-            if (!playing) settle++
-        },
+        onSeek = seek,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
     TransportBar(
@@ -244,15 +252,16 @@ private fun ColumnScope.PieceView(
     }
 }
 
-/** The fixed height the note views take when the screen scrolls. */
+/** The fixed height the note views take when the screen scrolls: one system of the score. */
 private fun shortHeight(layout: NotesLayout): Dp = when (layout) {
-    NotesLayout.STACKED -> SHORT_STAFF + PANEL_GAP + SHORT_ROLL
+    NotesLayout.STACKED -> SHORT_SCORE + PANEL_GAP + SHORT_ROLL
+    NotesLayout.SCORE -> SHORT_SCORE + Hairline + KeyboardStripHeight
     else -> SHORT_ROLL
 }
 
 /**
- * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the staff,
- * or both, each on the elevated surface with the card corners.
+ * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the score,
+ * or both, each on the elevated surface with the card corners. [onSeek] is a tap on a bar.
  */
 @Composable
 private fun NoteViews(
@@ -263,8 +272,10 @@ private fun NoteViews(
     roll: RollClock,
     player: Player,
     short: Boolean,
+    onSeek: (Long) -> Unit,
     modifier: Modifier,
 ) {
+    val scoreWidth = LocalAppFrame.current.scoreWidth
     val notes: @Composable (Modifier) -> Unit = { panel ->
         Panel(panel) {
             NoteCanvas(piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth())
@@ -272,9 +283,22 @@ private fun NoteViews(
             KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
         }
     }
-    val staff: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
+    val score: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
         Panel(panel) {
-            StaffCanvas(piece.notes, state.transpose, state.fold, frame, roll, Modifier.weight(1f).fillMaxWidth())
+            ScorePages(
+                notes = piece.notes,
+                tempo = piece.tempoMap,
+                bars = piece.barStartsMicros,
+                keySignatures = piece.keySignatures,
+                timeSignatures = piece.timeSignatures,
+                transpose = state.transpose,
+                fold = state.fold,
+                width = scoreWidth,
+                frameNanos = frame,
+                clock = roll,
+                onSeek = onSeek,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
             if (strip) {
                 HairlineDivider()
                 KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh })
@@ -283,16 +307,16 @@ private fun NoteViews(
     }
     when (plan.layout) {
         NotesLayout.ROLL -> notes(modifier)
-        NotesLayout.STAFF -> staff(modifier, true)
+        NotesLayout.SCORE -> score(modifier, true)
         NotesLayout.STACKED -> Column(modifier) {
-            staff(if (short) Modifier.height(SHORT_STAFF).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth(), false)
+            score(if (short) Modifier.height(SHORT_SCORE).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth(), false)
             Spacer(Modifier.height(PANEL_GAP))
             notes(if (short) Modifier.height(SHORT_ROLL).fillMaxWidth() else Modifier.weight(2f).fillMaxWidth())
         }
         // The keyboard strip stays under the roll, not across both views, so every lane still
         // meets its key.
         NotesLayout.SIDE_BY_SIDE -> Row(modifier) {
-            staff(Modifier.weight(1f).fillMaxHeight(), false)
+            score(Modifier.weight(1f).fillMaxHeight(), false)
             Spacer(Modifier.width(PANEL_GAP))
             notes(Modifier.weight(1f).fillMaxHeight())
         }

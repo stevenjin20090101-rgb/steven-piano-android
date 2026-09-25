@@ -269,7 +269,20 @@ class Player(
             val midi = playable.midi
             val tempo = defaultTempoPct
             _state.update {
-                it.copy(loading = false, piece = NowPlaying(playable.id, playable.title, playable.composer, midi.durationMicros, midi.notes))
+                it.copy(
+                    loading = false,
+                    piece = NowPlaying(
+                        pieceId = playable.id,
+                        title = playable.title,
+                        composer = playable.composer,
+                        durationMicros = midi.durationMicros,
+                        notes = midi.notes,
+                        tempoMap = midi.tempoMap,
+                        barStartsMicros = midi.barStartsMicros,
+                        keySignatures = midi.keySignatures,
+                        timeSignatures = midi.timeSignatures,
+                    ),
+                )
             }
             scheduler.submit { now ->
                 engine.load(midi, now)
