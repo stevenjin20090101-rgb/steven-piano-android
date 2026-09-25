@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.midi.TempoMap
 import dev.stevenjin.stevenpiano.midi.TimeSignature
 import dev.stevenjin.stevenpiano.ui.components.StaffPitch
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -44,7 +45,10 @@ import kotlin.math.min
  *
  * What a crafted file can cost is bounded (the v1.3 delta audit, H1): a piece of more than
  * [MAX_ENGRAVED_NOTES] notes is laid out as performed, a piece's tied heads stop at [tiedBudget] and
- * its rests at [restBudget], and a performed piece keeps none of engraving's working state.
+ * its rests at [restBudget], and a performed piece keeps none of engraving's working state. Each
+ * system's skyline ([ScoreSkyline]) is made here too, so the painter never scans a system's notes on
+ * the main thread (L2), and the caller's `checkpoint` is called between the passes, which throws to
+ * stop a layout a newer one replaces (L1).
  *
  * Pure (no Android, no Compose): it runs off the main thread and in the JVM tests.
  */
@@ -93,6 +97,8 @@ object ScoreLayoutEngine {
      * any transpose). [hands] ([Hands.RIGHT] or [Hands.LEFT] per note) puts each note on its hand's
      * staff; without them the staff is the pitch's, split at middle C. [fingers] ([Fingering], 1–5
      * per note, 0 for none) are set as numerals above the right hand's heads and below the left's.
+     * [checkpoint] is called between the passes (and every [CHECK_EVERY] notes within the longest); it
+     * throws to stop the layout.
      */
     fun layout(
         notes: NoteList,
@@ -104,12 +110,17 @@ object ScoreLayoutEngine {
         timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
         hands: ByteArray? = null,
         fingers: ByteArray? = null,
+        checkpoint: () -> Unit = {},
     ): ScoreLayout {
         require(keys.size == notes.size) { "One key per note" }
         require(hands == null || hands.size == notes.size) { "One hand per note" }
         require(fingers == null || fingers.size == notes.size) { "One finger per note" }
-        return Build(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures, hands, fingers).run()
+        checkpoint()
+        return Build(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures, hands, fingers, checkpoint).run()
     }
+
+    /** Within a pass, the checkpoint is called this often, in notes or heads (a power of two). */
+    const val CHECK_EVERY = 4_096
 }
 
 /**
@@ -126,6 +137,7 @@ private class Build(
     timeSignatures: List<TimeSignature>,
     private val hands: ByteArray?,
     private val fingers: ByteArray?,
+    private val checkpoint: () -> Unit,
 ) {
     private val space = m.space
     private val half = m.space / 2
@@ -253,20 +265,31 @@ private class Build(
     private var tiesBuilt: ScoreTies? = null
 
     fun run(): ScoreLayout {
+        // The checkpoint between the passes: a layout a newer one replaces stops there.
         for (s in 0 until systemCount) layoutSystem(s)
+        checkpoint()
         placeNotes()
         placeTied()
+        checkpoint()
         onsetOrder()
         chords()
+        checkpoint()
         rests()
+        checkpoint()
         beam()
         tieArcs()
         headRanges()
+        checkpoint()
         val tempoMarks = tempoMarks()
         val dynamics = dynamics()
         beamsBuilt = beams.build(systemCount)
         tiesBuilt = ties.build(systemCount)
-        val numerals = numerals()
+        checkpoint()
+        val profiles = Profiles()
+        val numerals = numerals(profiles)
+        checkpoint()
+        val skyline = skylines(profiles)
+        checkpoint()
         return ScoreLayout(
             metrics = m,
             quantized = quantized,
@@ -301,6 +324,7 @@ private class Build(
             tempoMarks = tempoMarks,
             dynamics = dynamics,
             fingers = numerals,
+            skyline = skyline,
         )
     }
 
@@ -343,6 +367,7 @@ private class Build(
             var from = 0L
             var b = 0
             for (i in 0 until n) {
+                if (i and (ScoreLayoutEngine.CHECK_EVERY - 1) == 0) checkpoint()
                 tiedFrom[i] = count
                 if (keys[i] == KeyMap.UNPLAYABLE) continue
                 val exact = tempo.microsToTicks(notes.startMicros[i])
@@ -1067,15 +1092,20 @@ private class Build(
      * (the highest note's on top) and under the left hand's (the lowest note's at the bottom), centred
      * on the chord's column, clear of whatever the staff holds there: heads and their accidentals,
      * stems and flags, beams, ties ([Profiles], the tempo mark's check above and the dynamics' below,
-     * made per staff). Placed after the beams, when every stem has its final length.
+     * made per staff, in [profiles], which also keep each stack's top for the system's skyline).
+     * Placed after the beams, when every stem has its final length.
      */
-    private fun numerals(): ScoreFingers {
+    private fun numerals(profiles: Profiles): ScoreFingers {
         val sink = FingerSink()
         if (fingers == null || hands == null || orderSize == 0) return sink.build(systemCount)
-        val profiles = Profiles()
         val chord = IntArray(CHORD_LIMIT)
         var a = 0
+        var checked = 0
         while (a < orderSize) {
+            if (a - checked >= ScoreLayoutEngine.CHECK_EVERY) {
+                checkpoint()
+                checked = a
+            }
             val first = order[a]
             var end = a + 1
             while (end < orderSize && sameChord(first, order[end])) end++
@@ -1110,6 +1140,7 @@ private class Build(
                 if (hand == Hands.RIGHT) {
                     val lowest = profiles.top(treble[chord[count - 1]], from, to) - FINGER_CLEARANCE * space
                     for (k in 0 until count) sink.add(s, centre, lowest - k * pitch, fingers[chord[k]], true, chord[k])
+                    profiles.numeral(from, to, lowest - (count - 1) * pitch - m.numeralHeight)   // the stack's top, for the skyline
                 } else {
                     val highest = profiles.bottom(treble[chord[0]], from, to) + FINGER_CLEARANCE * space + m.numeralHeight
                     for (k in 0 until count) sink.add(s, centre, highest + k * pitch, fingers[chord[count - 1 - k]], false, chord[count - 1 - k])
@@ -1121,24 +1152,56 @@ private class Build(
     }
 
     /**
+     * Each system's [ScoreSkyline]: [numerals] left most of them built in [profiles]; the systems it
+     * never reached (no fingered notes, or no fingering asked for) are built here, and a system
+     * without heads has nothing above its staff.
+     */
+    private fun skylines(profiles: Profiles): ScoreSkyline {
+        for (s in 0 until systemCount) {
+            if (s and (SKYLINE_CHECK - 1) == 0) checkpoint()
+            if (!profiles.reached(s) && (noteEnd[s] > 0 || tiedEnd[s] > 0)) profiles.of(s)
+        }
+        profiles.finish()
+        return profiles.skyline()
+    }
+
+    /**
      * What each staff of one system holds, column by column (half a space wide): the highest and
      * lowest point reached by heads (with their ledger lines and accidentals), stems (with their
-     * flags), beams and ties. Built once a system, as the numerals reach it.
+     * flags), beams and ties. Built once a system, as the numerals reach it (then for the systems they
+     * never reach). As it moves on from a system it keeps that system's skyline: how far above the
+     * treble staff's top line anything reaches in each column, the numerals over the right hand's
+     * heads included.
      */
     private inner class Profiles {
-        private val width = space / 2
-        private val columns = (m.pageWidth / width).toInt() + 2
-        private val top = Array(2) { FloatArray(columns) }
-        private val bottom = Array(2) { FloatArray(columns) }
+        val width = space / 2
+        val columns = (m.pageWidth / width).toInt() + 2
+        private val top = Array(2) { FloatArray(columns).also { it.fill(Float.POSITIVE_INFINITY) } }
+        private val bottom = Array(2) { FloatArray(columns).also { it.fill(Float.NEGATIVE_INFINITY) } }
         private var built = -1
+
+        // The columns the system built has marked: only these are read for its skyline and cleared for the next.
+        private var markedFrom = columns
+        private var markedTo = -1
+
+        /** The system built's numerals over heads: the top of each stack, by column (when [numerals]). */
+        private val numeralTop = FloatArray(columns).also { it.fill(Float.POSITIVE_INFINITY) }
+        private var numerals = false
+
+        // Each system's skyline as it is kept: its rise (whole pixels, rounded up) from its first column on.
+        private val rise = arrayOfNulls<ShortArray>(systemCount)
+        private val firstColumn = IntArray(systemCount)
+        private val reached = BooleanArray(systemCount)
+        private val scratch = ShortArray(columns)
+
+        fun reached(s: Int): Boolean = reached[s]
 
         fun of(s: Int) {
             if (s == built) return
+            finish()
+            clear()
             built = s
-            for (t in 0..1) {
-                top[t].fill(Float.POSITIVE_INFINITY)
-                bottom[t].fill(Float.NEGATIVE_INFINITY)
-            }
+            reached[s] = true
             if (noteEnd[s] > 0) for (i in noteFrom[s] until noteEnd[s]) if (system[i] == s) head(i)
             if (tiedEnd[s] > 0) for (h in tiedFrom[s] until tiedEnd[s]) head(h)
             val b = beamsBuilt
@@ -1162,6 +1225,75 @@ private class Build(
             }
         }
 
+        /** Clears what the last system built marked, and only that: the other columns were never touched. */
+        private fun clear() {
+            if (markedTo < markedFrom) return
+            for (t in 0..1) {
+                top[t].fill(Float.POSITIVE_INFINITY, markedFrom, markedTo + 1)
+                bottom[t].fill(Float.NEGATIVE_INFINITY, markedFrom, markedTo + 1)
+            }
+            if (numerals) numeralTop.fill(Float.POSITIVE_INFINITY, markedFrom, markedTo + 1)
+            numerals = false
+            markedFrom = columns
+            markedTo = -1
+        }
+
+        /** A stack of numerals over heads in the system built, from [x0] to [x1], its top at [y0]. */
+        fun numeral(x0: Float, x1: Float, y0: Float) {
+            val a = column(x0)
+            val b = column(x1)
+            for (c in a..b) if (y0 < numeralTop[c]) numeralTop[c] = y0
+            numerals = true
+            if (a < markedFrom) markedFrom = a
+            if (b > markedTo) markedTo = b
+        }
+
+        /**
+         * Keeps the skyline of the system built, in one pass over the columns it marked (merged with
+         * what an earlier build of it kept: heads of two systems may interleave in time where a note a
+         * hair early reads as the next bar's).
+         */
+        fun finish() {
+            val s = built
+            if (s < 0) return
+            built = -1
+            val line = trebleTop[s]
+            val high = top[0]
+            val low = top[1]
+            var lo = -1
+            var hi = -1
+            for (c in markedFrom..markedTo) {
+                var y = min(high[c], low[c])
+                if (numerals && numeralTop[c] < y) y = numeralTop[c]
+                if (y < line) {
+                    scratch[c] = ceil(line - y).toInt().coerceAtMost(Short.MAX_VALUE.toInt()).toShort()
+                    if (lo < 0) lo = c
+                    hi = c
+                } else {
+                    scratch[c] = 0
+                }
+            }
+            if (lo < 0) return
+            val old = rise[s]
+            if (old == null) {
+                rise[s] = scratch.copyOfRange(lo, hi + 1)
+                firstColumn[s] = lo
+                return
+            }
+            val oldFirst = firstColumn[s]
+            val from = min(lo, oldFirst)
+            val to = max(hi, oldFirst + old.size - 1)
+            val out = if (from == oldFirst && to == oldFirst + old.size - 1) old else ShortArray(to - from + 1).also { old.copyInto(it, oldFirst - from) }
+            for (c in lo..hi) if (scratch[c] > out[c - from]) out[c - from] = scratch[c]
+            rise[s] = out
+            firstColumn[s] = from
+        }
+
+        /** Every system's skyline, once all are finished. */
+        fun skyline(): ScoreSkyline = ScoreSkyline(width, columns, trebleTop, firstColumn, rise)
+
+        private fun column(x: Float): Int = (x / width).toInt().coerceIn(0, columns - 1)
+
         private fun head(h: Int) {
             val w = headWidth(h)
             mark(treble[h], x[h], x[h] + w, y[h] - half, y[h] + half)   // its ledger lines are within it
@@ -1177,12 +1309,16 @@ private class Build(
 
         private fun mark(onTreble: Boolean, x0: Float, x1: Float, y0: Float, y1: Float) {
             val t = if (onTreble) 0 else 1
-            val a = (x0 / width).toInt().coerceIn(0, columns - 1)
-            val b = (x1 / width).toInt().coerceIn(0, columns - 1)
+            val a = column(x0)
+            val b = column(x1)
+            val high = top[t]
+            val low = bottom[t]
             for (c in a..b) {
-                if (y0 < top[t][c]) top[t][c] = y0
-                if (y1 > bottom[t][c]) bottom[t][c] = y1
+                if (y0 < high[c]) high[c] = y0
+                if (y1 > low[c]) low[c] = y1
             }
+            if (a < markedFrom) markedFrom = a
+            if (b > markedTo) markedTo = b
         }
 
         /** The highest point the staff reaches between [x0] and [x1]. */
@@ -1289,6 +1425,9 @@ private class Build(
     private companion object {
         /** More heads than this in one chord on one staff are left as they are. */
         const val CHORD_LIMIT = 48
+
+        /** The skyline pass calls the checkpoint this often, in systems (a power of two). */
+        const val SKYLINE_CHECK = 64
 
         val HANDS = byteArrayOf(Hands.RIGHT, Hands.LEFT)
 

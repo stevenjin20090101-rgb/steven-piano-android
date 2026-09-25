@@ -11,6 +11,8 @@
 package dev.stevenjin.stevenpiano.score
 
 import dev.stevenjin.stevenpiano.midi.TempoMap
+import kotlin.math.max
+import kotlin.math.min
 
 /** Note head shapes. */
 object Head {
@@ -180,6 +182,8 @@ class ScoreLayout internal constructor(
     val dynamics: List<DynamicMark>,
     /** Suggested fingering: numerals above the right hand's heads and below the left hand's (when asked for). */
     val fingers: ScoreFingers = ScoreFingers.None,
+    /** How high each system's notes reach above its treble staff: where the tempo mark and chord names go. */
+    val skyline: ScoreSkyline = ScoreSkyline.None,
 ) {
     /** Every head: the notes' own and the tied ones. */
     val headCount: Int get() = x.size
@@ -329,6 +333,45 @@ class ScoreTies internal constructor(
 
     /** The ties drawn in system [s]. */
     fun inSystem(s: Int): IntRange = runOf(systemStart, s)
+}
+
+/**
+ * How high each system's notes reach above its treble staff (the v1.3 delta audit, L2), made with the
+ * layout off the main thread, so that the painter sets its tempo mark and chord names by reading a
+ * few columns, never by scanning the system's heads, beams, ties and numerals for each of them. The
+ * page is cut into columns [width] wide; for each system and column it keeps how far (in whole
+ * pixels, rounded up) anything reaches above the treble staff's top line there: heads and their
+ * accidentals, stems and their flags, dots, beams, ties, and the numerals over the right hand's heads.
+ * A system keeps only the columns from its first to its last that reach above the line.
+ */
+class ScoreSkyline internal constructor(
+    private val width: Float,
+    private val columns: Int,
+    /** Each system's treble top line (page y). */
+    private val trebleTop: FloatArray,
+    private val firstColumn: IntArray,
+    private val rise: Array<ShortArray?>,
+) {
+    /**
+     * The highest point (least y) system [s]'s notes reach between [from] and [to] (page x), where it
+     * is above the treble staff's top line; the top line itself where nothing reaches above it (all
+     * the tempo mark and the chord names need: they sit higher still). Infinity for no such system.
+     */
+    fun top(s: Int, from: Float, to: Float): Float {
+        if (s < 0 || s >= rise.size) return Float.POSITIVE_INFINITY
+        val line = trebleTop[s]
+        val r = rise[s] ?: return line
+        val first = firstColumn[s]
+        var best = 0
+        for (c in max(column(from), first)..min(column(to), first + r.size - 1)) if (r[c - first] > best) best = r[c - first].toInt()
+        return line - best
+    }
+
+    private fun column(x: Float): Int = (x / width).toInt().coerceIn(0, columns - 1)
+
+    companion object {
+        val None = ScoreSkyline(1f, 1, FloatArray(0), IntArray(0), emptyArray())
+    }
 }
 
 /**

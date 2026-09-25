@@ -122,7 +122,7 @@ private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
 }
 
 /** Under the Hand colours switch: what it colours, and what it leaves alone. */
-private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall only"
+private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall and the keyboard strip"
 
 /** A preference that is on or off; [note] is a line of explanation under its label. */
 @Composable

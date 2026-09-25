@@ -36,7 +36,9 @@ import kotlin.math.abs
  *    no rest between) then takes the hand most of its notes have, so a figure is not split between
  *    the staves.
  *
- * Pure, and linear in the notes but for a heap: it runs once per piece off the main thread.
+ * Pure, and linear in the notes but for a heap: it runs once per piece off the main thread, and calls
+ * its caller's `checkpoint` every [CHECK_EVERY] notes, which throws to stop it (a newer piece
+ * replacing this one; the v1.3 delta audit, L1).
  */
 object Hands {
     const val RIGHT: Byte = 0
@@ -59,6 +61,9 @@ object Hands {
 
     /** Ticks per quarter when no tempo map is given (a constant 120 BPM). */
     private const val DEFAULT_PPQ = 480
+
+    /** The checkpoint is called this often, in notes (a power of two). */
+    const val CHECK_EVERY = 4_096
 
     private val RIGHT_WORDS = setOf("right", "rh", "r.h", "treble", "upper", "righthand")
     private val LEFT_WORDS = setOf("left", "lh", "l.h", "bass", "lower", "lefthand")
@@ -101,17 +106,20 @@ object Hands {
     /**
      * The hand of each of [notes] ([RIGHT] or [LEFT]), from the tracks' [trackNames] (one per track,
      * as `MidiPiece.trackNames`), else the tracks, else the pitches. [tempo] and [timeSignatures]
-     * give the beat groups the pitch split's runs keep within.
+     * give the beat groups the pitch split's runs keep within. [checkpoint] is called every
+     * [CHECK_EVERY] notes; it throws to stop the work.
      */
     fun assign(
         notes: NoteList,
         trackNames: List<String>,
         tempo: TempoMap = TempoMap.constant(DEFAULT_PPQ),
         timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
+        checkpoint: () -> Unit = {},
     ): ByteArray {
         val n = notes.size
         val out = ByteArray(n)
         if (n == 0) return out
+        checkpoint()
         var trackCount = trackNames.size
         for (i in 0 until n) trackCount = maxOf(trackCount, notes.track(i) + 1)
         val perTrack = IntArray(trackCount)
@@ -129,7 +137,7 @@ object Hands {
             val hands = carrying.map { hand[it] }.filter { it != UNKNOWN }.toSet()
             val unnamed = carrying.any { hand[it] == UNKNOWN }
             if (hands.size == 2 || unnamed) {
-                val split = if (unnamed) pitchSplit(notes, tempo, timeSignatures) { hand[notes.track(it)] == UNKNOWN } else null
+                val split = if (unnamed) pitchSplit(notes, tempo, timeSignatures, checkpoint) { hand[notes.track(it)] == UNKNOWN } else null
                 for (i in 0 until n) {
                     val h = hand[notes.track(i)]
                     out[i] = if (h != UNKNOWN) h.toByte() else split!![i]
@@ -148,7 +156,7 @@ object Hands {
         }
 
         // 3. The pitch split.
-        return pitchSplit(notes, tempo, timeSignatures) { true }
+        return pitchSplit(notes, tempo, timeSignatures, checkpoint) { true }
     }
 
     /** Of tracks [a] and [b], the one with the higher median pitch (then the higher mean; then [a]). */
@@ -195,6 +203,7 @@ object Hands {
         notes: NoteList,
         tempo: TempoMap,
         timeSignatures: List<TimeSignature>,
+        checkpoint: () -> Unit = {},
         included: (Int) -> Boolean,
     ): ByteArray {
         val n = notes.size
@@ -206,6 +215,7 @@ object Hands {
         var next = 0
         var lastStart = Long.MIN_VALUE
         for (i in 0 until n) {
+            if (i and (CHECK_EVERY - 1) == 0) checkpoint()
             val s = starts[i]
             if (s != lastStart) {
                 while (next < n && starts[next] <= s + WINDOW_MICROS) {
@@ -227,7 +237,7 @@ object Hands {
                 else -> if (p >= MIDDLE_C) RIGHT else LEFT
             }
         }
-        smoothRuns(notes, out, tempo, timeSignatures, included)
+        smoothRuns(notes, out, tempo, timeSignatures, checkpoint, included)
         return out
     }
 
@@ -243,6 +253,7 @@ object Hands {
         hands: ByteArray,
         tempo: TempoMap,
         timeSignatures: List<TimeSignature>,
+        checkpoint: () -> Unit = {},
         included: (Int) -> Boolean,
     ) {
         val n = notes.size
@@ -265,7 +276,12 @@ object Hands {
             runSize = 0
         }
         var i = 0
+        var checked = 0
         while (i < n) {
+            if (i - checked >= CHECK_EVERY) {
+                checkpoint()
+                checked = i
+            }
             // One onset: the notes starting within TOGETHER_MICROS of this one.
             var end = i + 1
             while (end < n && notes.startMicros[end] - notes.startMicros[i] <= TOGETHER_MICROS) end++

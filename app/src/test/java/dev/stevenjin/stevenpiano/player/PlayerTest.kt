@@ -208,6 +208,20 @@ class PlayerTest {
     private fun noteOns(): List<String> = link.messages.filter { it.startsWith("90 ") && !it.endsWith(" 00") }
 
     @Test
+    fun `Next tapped again and again reads and works out only the first piece and the last`() = runBlocking {
+        for (id in 1L..5L) source.pieces[id] = piece(59 + id.toInt(), 5_000)
+        source.loadDelayMs = 100   // reading a file takes a while
+        onMain { player.play(1, listOf(1, 2, 3, 4, 5)) }
+        repeat(4) {
+            delay(10)
+            onMain { player.next() }
+        }
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 5L } }
+        assertEquals(listOf(1L, 5L), source.loads.toList())   // 2, 3 and 4 were replaced while they waited
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
     fun `a piece that can't be read says why`() = runBlocking {
         onMain { player.play(7) }
         val state = withTimeout(2_000) { player.state.first { it.problem != null } }
@@ -249,8 +263,12 @@ class PlayerTest {
         val played = CopyOnWriteArrayList<Long>()
         val loads = CopyOnWriteArrayList<Long>()
 
+        @Volatile
+        var loadDelayMs = 0L
+
         override suspend fun load(pieceId: Long): PlayablePiece {
             loads += pieceId
+            delay(loadDelayMs)
             val midi = pieces[pieceId] ?: throw SmfException("This isn't a MIDI file, or it is damaged.")
             return PlayablePiece(pieceId, "Piece $pieceId", "Composer", midi)
         }

@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,9 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * reference counts, 100 ms guard and silence. A dropped link lets go of them.
  * Each piece's hands, suggested fingering and chord names are worked out on [compute] as it loads,
  * before it is shown and played; the fingering again when transpose or folding changes the keys played.
+ * A piece or a fingering replaced while it is worked out stops at the analyses' next checkpoint, and a
+ * start that replaces one still running waits [SETTLE_MS] first, so a burst of Next taps or transpose
+ * steps reads and works out only the first and the last (the v1.3 delta audit, L1).
  */
 class Player(
     private val link: PianoLink,
@@ -258,9 +262,11 @@ class Player(
         val hands = piece.handsOrNull ?: return
         val transpose = s.transpose
         val fold = s.fold
+        val superseding = fingerJob?.isActive == true
         fingerJob?.cancel()
         fingerJob = scope.launch {
-            val fingers = withContext(compute) { fingersOf(piece.notes, hands, transpose, fold) }
+            if (superseding) delay(SETTLE_MS)   // the steps keep coming: work out only the last
+            val fingers = withContext(compute) { fingersOf(piece.notes, hands, transpose, fold, checkpoint()) }
             _state.update { now ->
                 val shown = now.piece
                 if (shown == null || shown.notes !== piece.notes) now
@@ -288,10 +294,12 @@ class Player(
 
     private fun startCurrent() {
         advanceJob?.cancel()
+        val superseding = loadJob?.isActive == true
         loadJob?.cancel()
         val id = queue.current?.pieceId ?: return
         _state.update { it.copy(loading = true, problem = null, queue = queue.snapshot()) }
         loadJob = scope.launch {
+            if (superseding) delay(SETTLE_MS)   // the taps keep coming: read and work out only the last
             val playable = try {
                 withContext(io) { source.load(id) }
             } catch (e: CancellationException) {
@@ -309,9 +317,9 @@ class Player(
             // tens of milliseconds for each on a phone.
             val (hands, fingers, chords) = withContext(compute) {
                 coroutineScope {
-                    val chords = async { chordsOf(midi) }
-                    val hands = handsOf(midi)
-                    Triple(hands, fingersOf(midi.notes, hands, transpose, fold), chords.await())
+                    val chords = async { chordsOf(midi, checkpoint()) }
+                    val hands = handsOf(midi, checkpoint())
+                    Triple(hands, fingersOf(midi.notes, hands, transpose, fold, checkpoint()), chords.await())
                 }
             }
             _state.update {
@@ -347,10 +355,13 @@ class Player(
 
     /**
      * The piece's hands; none if working them out fails (the score then splits the staves at middle C
-     * and the waterfall fills every bar): a suggestion must never stop a piece from playing.
+     * and the waterfall fills every bar): a suggestion must never stop a piece from playing. Stops (by
+     * [CancellationException]) at [checkpoint] once the piece is replaced.
      */
-    private fun handsOf(midi: MidiPiece): ByteArray = try {
-        Hands.assign(midi.notes, midi.trackNames, midi.tempoMap, midi.timeSignatures)
+    private fun handsOf(midi: MidiPiece, checkpoint: () -> Unit): ByteArray = try {
+        Hands.assign(midi.notes, midi.trackNames, midi.tempoMap, midi.timeSignatures, checkpoint)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         ByteArray(0)
     } catch (e: OutOfMemoryError) {
@@ -358,10 +369,12 @@ class Player(
     }
 
     /** The suggested fingering on the keys played at [transpose] and [fold]; none without hands or if it fails. */
-    private fun fingersOf(notes: NoteList, hands: ByteArray, transpose: Int, fold: Boolean): ByteArray {
+    private fun fingersOf(notes: NoteList, hands: ByteArray, transpose: Int, fold: Boolean, checkpoint: () -> Unit): ByteArray {
         if (hands.size != notes.size || hands.isEmpty()) return ByteArray(0)
         return try {
-            Fingering.assign(notes, hands, transpose, fold)
+            Fingering.assign(notes, hands, transpose, fold, checkpoint)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             ByteArray(0)
         } catch (e: OutOfMemoryError) {
@@ -370,12 +383,20 @@ class Player(
     }
 
     /** The piece's chord names; none if finding them fails. */
-    private fun chordsOf(midi: MidiPiece): ChordTrack = try {
-        Chords.detect(midi.notes, midi.tempoMap, midi.barStartsMicros, midi.timeSignatures, midi.keySignatures)
+    private fun chordsOf(midi: MidiPiece, checkpoint: () -> Unit): ChordTrack = try {
+        Chords.detect(midi.notes, midi.tempoMap, midi.barStartsMicros, midi.timeSignatures, midi.keySignatures, checkpoint)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         ChordTrack.Empty
     } catch (e: OutOfMemoryError) {
         ChordTrack.Empty
+    }
+
+    /** A checkpoint for the analyses running in this scope: it throws once the scope's job is cancelled. */
+    private fun CoroutineScope.checkpoint(): () -> Unit {
+        val context = coroutineContext
+        return { context.ensureActive() }
     }
 
     /**
@@ -471,5 +492,8 @@ class Player(
         const val AUTO_ADVANCE_DELAY_MS = 1_500L
         const val NANOS_PER_MS = 1_000_000L
         const val CANT_PLAY = "This piece can't be played."
+
+        /** A start that replaces one still running waits this long first: a burst of taps settles on its last. */
+        const val SETTLE_MS = 150L
     }
 }

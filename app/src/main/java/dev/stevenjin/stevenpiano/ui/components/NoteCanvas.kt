@@ -83,6 +83,30 @@ internal const val MAX_BACKOFF_MICROS = 30_000_000L
 /** Notes drawn per frame at most, however dense the file: the roll and the score's overlay alike. */
 internal const val MAX_NOTE_DRAWS = 4_000
 
+/** Chord names drawn per frame at most (names clear of each other fill the tallest canvas with about fifty). */
+internal const val MAX_CHORD_DRAWS = 64
+
+/** A system's run of rests, numerals, beams or ties as the score's page draws it: its first [MAX_NOTE_DRAWS] only. */
+internal fun IntRange.capped(): IntRange = if (last - first + 1 > MAX_NOTE_DRAWS) first until first + MAX_NOTE_DRAWS else this
+
+/**
+ * Of the chords starting at [starts] (in time order), the ones whose names the waterfall draws: each
+ * clear of the one kept before it, whose backing reaches [reach] (its index) microseconds past its
+ * start. Names travel together, so two that overlap always do: chosen once for the canvas's scale, the
+ * same names show every frame, never one popping in as another leaves.
+ */
+internal fun clearNames(starts: LongArray, reach: (Int) -> Long): IntArray {
+    val kept = IntArray(starts.size)
+    var count = 0
+    var clearFrom = Long.MIN_VALUE   // where the last kept name's backing ends, in time
+    for (i in starts.indices) {
+        if (starts[i] < clearFrom) continue
+        kept[count++] = i
+        clearFrom = starts[i] + reach(i)
+    }
+    return kept.copyOf(count)
+}
+
 /** Where a frame's scan starts: the first note that can still be sounding at [windowStart], within [MAX_BACKOFF_MICROS]. */
 internal fun NoteList.scanStart(windowStart: Long): Int =
     firstStartingAtOrAfter(windowStart - minOf(maxDurationMicros, MAX_BACKOFF_MICROS))
@@ -125,7 +149,9 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  * the bars take their hand's colour (`LocalHandTones`: the left hand green, the right blue, each easing
  * toward the content colour as it sounds); off, they are monochrome. With [chords], each chord's name stands
  * at the canvas's left edge where the chord begins, an eyebrow-sized label on a 4 dp backing of the
- * elevated surface (so it reads over the bars), travelling with the notes.
+ * elevated surface (so it reads over the bars), travelling with the notes; a name that would overlap
+ * the one before it is left out, and at most [MAX_CHORD_DRAWS] are drawn a frame (the v1.3 delta
+ * audit, L3: beats of a quarter of a millisecond once put 20,000 names in one frame).
  *
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
@@ -258,18 +284,31 @@ private class Roll(
     private val aheadMicros = (hitY / pxPerMicro).toLong()
     private val behindMicros = ((height - hitY) / pxPerMicro).toLong()
 
+    /** The chords whose names are drawn ([clearNames]): each clear of the one kept before it. */
+    private val shownChords: IntArray = run {
+        val chords = chords
+        val labels = chordLabels
+        if (chords == null || labels == null) IntArray(0)
+        else clearNames(chords.startMicros) { ((labels[it].size.height + 2 * chordPad) / pxPerMicro).toLong() }
+    }
+
     /**
-     * The chord names in view at [now]: each at the left edge, its backing's bottom on the line where
-     * its chord begins, so it travels with the notes. Allocation-free.
+     * The chord names in view at [now], at most [MAX_CHORD_DRAWS]: each at the left edge, its
+     * backing's bottom on the line where its chord begins, so it travels with the notes.
+     * Allocation-free.
      */
     fun drawChords(scope: DrawScope, now: Long) {
         val chords = chords ?: return
         val labels = chordLabels ?: return
+        val shown = shownChords
+        if (shown.isEmpty()) return
         val height = hitY + behindMicros * pxPerMicro
         // A label reaches this far above its line, so one that starts just below the top edge still shows.
         val reach = ((labels[0].size.height + 2 * chordPad) / pxPerMicro).toLong()
-        var i = chords.firstAtOrAfter(now - behindMicros)
-        while (i < chords.size) {
+        var k = firstShownAtOrAfter(chords, now - behindMicros)
+        var drawn = 0
+        while (k < shown.size && drawn < MAX_CHORD_DRAWS) {
+            val i = shown[k]
             val start = chords.startMicros[i]
             if (start > now + aheadMicros + reach) break
             val text = labels[i]
@@ -278,9 +317,22 @@ private class Roll(
             if (bottom > 0f && bottom - boxHeight < height) {
                 scope.drawRect(inside, Offset(chordInset, bottom - boxHeight), Size(text.size.width + 2 * chordPad, boxHeight))
                 scope.drawText(text, color = chordColor, topLeft = Offset(chordInset + chordPad, bottom - boxHeight + chordPad))
+                drawn++
             }
-            i++
+            k++
         }
+    }
+
+    /** The first of [shownChords] starting at or after [micros] (their count when there is none). */
+    private fun firstShownAtOrAfter(chords: ChordTrack, micros: Long): Int {
+        val shown = shownChords
+        var lo = 0
+        var hi = shown.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (chords.startMicros[shown[mid]] < micros) lo = mid + 1 else hi = mid
+        }
+        return lo
     }
 
     /** Draws the visible white (or black) notes, at most [budget] of them; returns how many it drew. */

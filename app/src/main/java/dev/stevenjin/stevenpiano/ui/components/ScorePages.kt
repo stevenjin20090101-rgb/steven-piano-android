@@ -95,6 +95,7 @@ import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -162,10 +163,11 @@ private const val TEMPO_DOT_GAP = 0.3f
 private const val TEMPO_DOT_WIDTH = 0.4f
 private const val TEMPO_TEXT_GAP = 0.6f
 
-/** A tempo mark keeps this far (in staff spaces) above the notes under it: stems, flags, beams, heads and their accidentals. */
+/**
+ * A tempo mark (and a chord name) keeps this far (in staff spaces) above the notes under it: stems,
+ * flags, beams, heads and their accidentals, as the layout's skyline has them.
+ */
 private const val TEMPO_CLEARANCE = 0.5f
-private const val ACCIDENTAL_RISE = 1.5f
-private const val FLAG_REACH = 1.1f
 
 /** A tie rises this share of its length, held to 0.3 to 0.9 of a staff space. */
 private const val TIE_RISE = 0.15f
@@ -199,7 +201,12 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * as paths once, with the layer); only the overlay (cursor and sounding notes) redraws per frame,
  * without allocating. A piece too large to lay out (the heap runs out, or the engine fails) leaves
  * the panel saying "This score is too large to show." instead of taking the app down, and a layout
- * is only ever drawn with the notes it was made for.
+ * is only ever drawn with the notes it was made for. A layout moments after another for the same
+ * piece (transpose tapped up and up, the fingering following it, the panel resizing) waits
+ * [RELAYOUT_SETTLE_MS] first, and a layout replaced while it runs stops at its next pass; a page's
+ * build reads the layout's skylines for the tempo mark and chord names and draws at most
+ * [MAX_NOTE_DRAWS] heads, rests, numerals, beams and ties a system, so the main thread's work per
+ * page is bounded whatever the file (the v1.3 delta audit, L1 and L2).
  */
 @Composable
 fun ScorePages(
@@ -267,12 +274,14 @@ fun ScorePages(
         }
         val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics, hands, fingers) {
             if (value?.notes !== notes) value = null   // never another piece's pages under this one's cursor
-            value = layOut(notes, Dispatchers.Default) {
+            // Another layout of the piece shown: wait for a burst of changes to end (a newer one cancels this one here).
+            if (value != null) delay(RELAYOUT_SETTLE_MS)
+            value = layOut(notes, Dispatchers.Default) { checkpoint ->
                 val keys = IntArray(notes.size) { KeyMap.map(notes.note(it), transpose, fold) }
                 val keysMoved = keySignatures.map { it.transposed(transpose) }
                 val handsHere = hands?.takeIf { it.size == notes.size }
                 val fingersHere = fingers?.takeIf { it.size == notes.size && handsHere != null }
-                ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, handsHere, fingersHere)
+                ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, handsHere, fingersHere, checkpoint)
             }
         }
         val chordText = remember(shownChords, chordNames, chordStyle) { if (shownChords != null && chordNames != null) ChordText(shownChords, chordNames, chordStyle) else null }
@@ -632,15 +641,16 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
 
     /**
      * System [system]'s beams (half-space bands, the thickness toward the heads) and ties (1 dp arcs
-     * rising a share of their length) as paths, and its tempo mark with its text measured in [style]:
-     * after the bar [number] on the numbers' line, lifted clear of any note that reaches up under it.
+     * rising a share of their length) as paths, at most [MAX_NOTE_DRAWS] of each, and its tempo mark
+     * with its text measured in [style]: after the bar [number] on the numbers' line, lifted clear of
+     * any note that reaches up under it (the layout's skyline).
      */
     fun marks(layout: ScoreLayout, system: ScoreSystem, number: TextLayoutResult, measurer: TextMeasurer, style: TextStyle): SystemMarks {
         val s = system.index
         val beams = Path()
         val thickness = Beams.THICKNESS * space
         val b = layout.beams
-        for (k in b.inSystem(s)) {
+        for (k in b.inSystem(s).capped()) {
             val inward = if (b.up[k]) thickness else -thickness
             beams.moveTo(b.x1[k], b.y1[k])
             beams.lineTo(b.x2[k], b.y2[k])
@@ -650,7 +660,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
         }
         val ties = Path()
         val t = layout.ties
-        for (k in t.inSystem(s)) {
+        for (k in t.inSystem(s).capped()) {
             val length = t.x2[k] - t.x1[k]
             if (length <= 0f) continue
             val rise = (length * TIE_RISE).coerceIn(TIE_LOWEST * space, TIE_HIGHEST * space)
@@ -666,7 +676,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
         val right = x + glyphWidth + TEMPO_TEXT_GAP * unit + text.size.width
         val height = max((TEMPO_HEAD_BELOW + TEMPO_NOTE_RISE) * unit, text.firstBaseline)
         val onLine = system.trebleTop - numberLift
-        val lifted = min(onLine, skyline(layout, system, x, right) - TEMPO_CLEARANCE * space)
+        val lifted = min(onLine, layout.skyline.top(s, x, right) - TEMPO_CLEARANCE * space)
         val baseline = max(lifted, min(onLine, system.bandTop + height))   // never above its band
         return SystemMarks(beams, ties, tempo, text, x, baseline, right, baseline - height)
     }
@@ -702,7 +712,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
             val x = max(system.left, min(at, layout.metrics.pageWidth - text.size.width))
             if (x < lastRight + chordSpacing) continue
             val right = x + text.size.width
-            var bottom = min(numberTop - chordGap, skyline(layout, system, x, right) - TEMPO_CLEARANCE * space)
+            var bottom = min(numberTop - chordGap, layout.skyline.top(system.index, x, right) - TEMPO_CLEARANCE * space)
             if (marks.tempo != null && right >= marks.tempoX && x <= marks.tempoRight) bottom = min(bottom, marks.tempoTop - chordGap)
             texts += text
             xs += x
@@ -713,39 +723,10 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     }
 
     /**
-     * The highest point (least y) the notes of [system] reach between [from] and [to]: heads (and the
-     * accidentals before them), stems with their flags, beams and ties bowing up.
-     */
-    private fun skyline(layout: ScoreLayout, system: ScoreSystem, from: Float, to: Float): Float {
-        var top = Float.POSITIVE_INFINITY
-        fun reach(i: Int) {
-            val x = layout.x[i]
-            val sharp = layout.accidental[i].toInt() != Accidental.NONE
-            val left = if (sharp) layout.accidentalX[i] else x
-            if (x + layout.headWidth(i) >= from && left <= to) top = min(top, layout.y[i] - if (sharp) ACCIDENTAL_RISE * space else space / 2)
-            val stem = layout.stemX[i]
-            if (!stem.isNaN() && stem >= from - FLAG_REACH * space && stem <= to) top = min(top, min(layout.stemFrom[i], layout.stemTo[i]))
-        }
-        for (i in system.firstNote until system.noteEnd) if (layout.system[i] == system.index) reach(i)
-        for (h in system.firstTied until system.tiedEnd) reach(h)
-        val b = layout.beams
-        for (k in b.inSystem(system.index)) {
-            if (b.x2[k] >= from && b.x1[k] <= to) top = min(top, min(b.y1[k], b.y2[k]) - if (b.up[k]) 0f else Beams.THICKNESS * space)
-        }
-        val t = layout.ties
-        for (k in t.inSystem(system.index)) {
-            if (t.above[k] && t.x2[k] >= from && t.x1[k] <= to) top = min(top, min(t.y1[k], t.y2[k]) - TIE_HIGHEST * space)
-        }
-        val f = layout.fingers
-        for (k in f.inSystem(system.index)) {
-            if (f.above[k] && f.x[k] + numerals.width / 2 >= from && f.x[k] - numerals.width / 2 <= to) top = min(top, f.baseline[k] - numerals.height)
-        }
-        return top
-    }
-
-    /**
      * One system: its staves, opening and bar lines, signs, bar number, tempo mark and chord names, then
      * its rests, ties, beams, notes and tied heads, its dynamics and its fingering, kept to its band.
+     * Heads, rests and numerals stop at [MAX_NOTE_DRAWS] each (a system holds a few bars; past that it
+     * is a crafted file, not music).
      */
     fun DrawScope.system(layout: ScoreLayout, s: ScoreSystem, number: TextLayoutResult, marks: SystemMarks, chords: ChordLabels?, colors: ScoreColors) {
         clipRect(top = s.bandTop, bottom = s.bandBottom) {
@@ -770,7 +751,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
             if (marks.tempo != null && marks.tempoText != null) tempoMark(marks.tempo, marks.tempoText, marks.tempoX, marks.tempoBaseline, colors.glyph)
             if (chords != null) for (k in chords.text.indices) drawText(chords.text[k], color = colors.glyph, topLeft = Offset(chords.x[k], chords.top[k]))
             val rests = layout.rests
-            for (k in rests.inSystem(s.index)) glyph(glyphs.rest(rests.value[k].toInt()), rests.x[k], rests.y[k], colors.upcoming)
+            for (k in rests.inSystem(s.index).capped()) glyph(glyphs.rest(rests.value[k].toInt()), rests.x[k], rests.y[k], colors.upcoming)
             drawPath(marks.ties, colors.upcoming, style = tieStroke)
             drawPath(marks.beams, colors.upcoming)
             // A system holds a few bars; past MAX_NOTE_DRAWS heads in one it is a crafted file, not music.
@@ -792,7 +773,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
                 glyph(glyphs.dynamic(mark.band), mark.x, mark.y, colors.glyph)
             }
             val f = layout.fingers
-            for (k in f.inSystem(s.index)) {
+            for (k in f.inSystem(s.index).capped()) {
                 val digit = numerals.digits[f.finger[k].toInt().coerceIn(0, 5)]
                 drawText(digit, color = colors.glyph, topLeft = Offset(f.x[k] - digit.size.width / 2f, f.baseline[k] - digit.firstBaseline))
             }

@@ -93,7 +93,9 @@ class ChordTrack internal constructor(
  * C) and a flat for the rest (B♭ in C major, E♭ in G major, as borrowed chords are written). A slash
  * bass that is a chord tone is spelled from the root (B♭/D, not B♭/E♭♭ or A♯/D).
  *
- * Pure: it runs once per piece off the main thread.
+ * Pure: it runs once per piece off the main thread, and calls its caller's `checkpoint` every
+ * [CHECK_EVERY] windows (and bars), which throws to stop it (a newer piece replacing this one; the
+ * v1.3 delta audit, L1).
  */
 object Chords {
     const val MAJOR = 0
@@ -164,6 +166,9 @@ object Chords {
 
     /** Pieces are named up to this many windows (about three hours at a beat a half second); past it the last name holds. */
     const val MAX_WINDOWS = 20_000
+
+    /** The checkpoint is called this often, in windows or bars (a power of two). */
+    const val CHECK_EVERY = 1_024
 
     /** Each quality's tones as a 12-bit mask for each root. */
     private val MASK = IntArray(CHORDS).also { mask ->
@@ -244,6 +249,7 @@ object Chords {
     /**
      * The chords of [notes] (drums, on channel 10, left out) in the bars starting at [bars] (as
      * `MidiPiece.barStartsMicros`), with the file's [timeSignatures] and [keySignatures].
+     * [checkpoint] is called every [CHECK_EVERY] windows and bars; it throws to stop the work.
      */
     fun detect(
         notes: NoteList,
@@ -251,18 +257,24 @@ object Chords {
         bars: LongArray,
         timeSignatures: List<TimeSignature> = listOf(TimeSignature.Common),
         keySignatures: List<KeySignature> = emptyList(),
+        checkpoint: () -> Unit = {},
     ): ChordTrack {
         if (notes.size == 0) return ChordTrack.Empty
-        val windows = Windows(notes, tempo, bars, timeSignatures)
+        val windows = Windows(notes, tempo, bars, timeSignatures, checkpoint)
         val count = windows.count
         if (count == 0) return ChordTrack.Empty
         windows.weigh()
-        val path = decode(windows)
+        val path = decode(windows, checkpoint)
         val keys = KeysInForce(keySignatures.sortedBy { it.atMicros }, if (keySignatures.isEmpty()) guessKey(notes) else 0)
         val out = Labels()
         var last = -1
         var k = 0
+        var checked = 0
         while (k < count) {
+            if (k - checked >= CHECK_EVERY) {
+                checkpoint()
+                checked = k
+            }
             val chord = path[k]
             var end = k + 1
             while (end < count && path[end] == chord) end++
@@ -305,7 +317,7 @@ object Chords {
      * chord scores as the evidence (none in a window with fewer than two pitch classes) and [CHANGE]
      * for every change. -1 for a window that is best left unnamed.
      */
-    private fun decode(windows: Windows): IntArray {
+    private fun decode(windows: Windows, checkpoint: () -> Unit): IntArray {
         val count = windows.count
         val none = CHORDS
         val states = CHORDS + 1
@@ -316,6 +328,7 @@ object Chords {
         val changed = LongArray(count * words)
         val bestBefore = IntArray(count)
         for (k in 0 until count) {
+            if (k and (CHECK_EVERY - 1) == 0) checkpoint()
             var best = 0
             for (s in 1..none) if (score[s] > score[best]) best = s
             bestBefore[k] = best
@@ -418,7 +431,13 @@ object Chords {
      * A window's evidence is its [CHORDS] chord scores ([score]), when two pitch classes or more sound
      * in it.
      */
-    private class Windows(private val notes: NoteList, tempo: TempoMap, bars: LongArray, signatures: List<TimeSignature>) {
+    private class Windows(
+        private val notes: NoteList,
+        tempo: TempoMap,
+        bars: LongArray,
+        signatures: List<TimeSignature>,
+        private val checkpoint: () -> Unit,
+    ) {
         val start: LongArray
         val end: LongArray
         val count: Int
@@ -438,6 +457,7 @@ object Chords {
             var signature = 0
             for (b in barList.indices) {
                 if (starts.size >= MAX_WINDOWS) break
+                if (b and (CHECK_EVERY - 1) == 0) checkpoint()
                 val from = tempo.microsToTicks(barList[b])
                 while (signature + 1 < times.size && times[signature + 1].tick <= from) signature++
                 val time = times[signature]
@@ -487,6 +507,7 @@ object Chords {
             var next = 0
             val n = notes.size
             for (k in 0 until count) {
+                if (k and (CHECK_EVERY - 1) == 0) checkpoint()
                 val ws = start[k]
                 val we = end[k]
                 val length = (we - ws).toDouble()

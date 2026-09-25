@@ -27,6 +27,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
 
 /** The score panel's layout, apart from Compose (the v1.3 delta audit, H1 and P2). */
 class ScoreLaidTest {
@@ -87,5 +88,30 @@ class ScoreLaidTest {
         job.cancelAndJoin()
         assertTrue(job.isCancelled)
         assertNull(result)
+    }
+
+    @Test
+    fun `a replaced layout stops at its next checkpoint (the v1_3 delta audit, L1)`() = runBlocking {
+        val (notes, _) = layoutOf(listOf(60))
+        val running = CountDownLatch(1)
+        val passes = AtomicInteger()
+        val job = launch(Dispatchers.Default) {
+            layOut(notes, Dispatchers.Default) { checkpoint ->
+                running.countDown()
+                repeat(400) {
+                    Thread.sleep(5)   // one of the engine's passes
+                    passes.incrementAndGet()
+                    checkpoint()
+                }
+                error("the layout ran to its end though it was replaced")
+            }
+        }
+        running.await()
+        job.cancelAndJoin()
+        val stopped = passes.get()
+        assertTrue("stopped after $stopped of 400 passes", stopped < 400)
+        Thread.sleep(50)
+        assertEquals(stopped, passes.get())
+        assertEquals(150L, RELAYOUT_SETTLE_MS)
     }
 }

@@ -40,7 +40,9 @@ import kotlin.math.roundToInt
  *   thumb to little finger by their spread (past five, the notes between share no finger).
  *
  * The result is a suggestion computed from the notes, not an editor's fingering. Pure; a piece's
- * first [MAX_NOTES] notes are fingered, the rest are left without.
+ * first [MAX_NOTES] notes are fingered, the rest are left without. The caller's `checkpoint` is
+ * called every [CHECK_EVERY] notes and events; it throws to stop the work (a newer piece or
+ * transpose replacing this one; the v1.3 delta audit, L1).
  */
 object Fingering {
     /** No finger suggested. */
@@ -54,6 +56,9 @@ object Fingering {
 
     /** Notes fingered in a piece at most (about 25 minutes of dense music); the rest get [NONE]. */
     const val MAX_NOTES = 250_000
+
+    /** The checkpoint is called this often, in notes or events (a power of two). */
+    const val CHECK_EVERY = 4_096
 
     const val CROSS_OK = 3f
     const val CROSS_BAD = 12f
@@ -227,20 +232,21 @@ object Fingering {
     /**
      * A finger (1–5, or [NONE]) for each of [notes], per hand as [hands] gives them (`Hands`), on the
      * keys the piano plays them on ([KeyMap] with [transpose] and [fold]; a note it can't play gets
-     * none).
+     * none). [checkpoint] is called every [CHECK_EVERY] notes and events; it throws to stop the work.
      */
-    fun assign(notes: NoteList, hands: ByteArray, transpose: Int = 0, fold: Boolean = true): ByteArray {
+    fun assign(notes: NoteList, hands: ByteArray, transpose: Int = 0, fold: Boolean = true, checkpoint: () -> Unit = {}): ByteArray {
         require(hands.size == notes.size) { "One hand per note" }
         val out = ByteArray(notes.size)
         val limit = min(notes.size, MAX_NOTES)
         for (hand in byteArrayOf(Hands.RIGHT, Hands.LEFT)) {
+            checkpoint()
             var count = 0
             for (i in 0 until limit) if (hands[i] == hand && KeyMap.map(notes.note(i), transpose, fold) != KeyMap.UNPLAYABLE) count++
             if (count == 0) continue
             val index = IntArray(count)
             var c = 0
             for (i in 0 until limit) if (hands[i] == hand && KeyMap.map(notes.note(i), transpose, fold) != KeyMap.UNPLAYABLE) index[c++] = i
-            HandPass(notes, index, hand == Hands.LEFT, transpose, fold, out).run()
+            HandPass(notes, index, hand == Hands.LEFT, transpose, fold, out, checkpoint).run()
         }
         return out
     }
@@ -253,6 +259,7 @@ object Fingering {
         private val transpose: Int,
         private val fold: Boolean,
         private val out: ByteArray,
+        private val checkpoint: () -> Unit,
     ) {
         private val n = index.size
 
@@ -283,6 +290,7 @@ object Fingering {
             var e = 0
             var a = 0
             while (a < n) {
+                if (e and (CHECK_EVERY - 1) == 0) checkpoint()
                 val start = notes.startMicros[index[a]]
                 var b = a + 1
                 while (b < n && notes.startMicros[index[b]] - start <= CHORD_MICROS) b++
@@ -429,6 +437,7 @@ object Fingering {
             val back = ByteArray(events * most)
             for (s in 0 until states(0)) cost[s] = own(0, s)
             for (e in 1 until events) {
+                if (e and (CHECK_EVERY - 1) == 0) checkpoint()
                 if (singleStep(e, cost, next, back, most) || chordStep(e, cost, next, back, most)) {
                     val t = cost
                     cost = next
