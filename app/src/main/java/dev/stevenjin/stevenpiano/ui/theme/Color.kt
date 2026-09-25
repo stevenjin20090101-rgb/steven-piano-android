@@ -37,3 +37,15 @@ val CarbonPrimary    = Color(0xFF141414)   // 15.6:1
 val CarbonSecondary  = Color(0xFF5C5851)   //  6.1:1
 val CarbonTertiary   = Color(0xFF6E6A62)   //  4.7:1
 val LiveRedLight     = Color(0xFFC81E28)   //  5.8:1
+
+// ---- The two hands (DESIGN.md › v1.3 › The waterfall format) -------------------
+// Colour enters the interface here only when the person turns on Piano › Hand colours, and
+// only on the waterfall's bars and the keyboard strip's highlights (read through
+// LocalHandTones by NoteCanvas and KeyboardStrip, nowhere else): the left hand a muted green,
+// the right a muted blue, each pair at one lightness so neither hand outweighs the other.
+// Red keeps its single meaning. Contrast, WCAG, against surface / surfaceElevated
+// (ColorTokensTest recomputes it; the floor is 3:1, for graphics):
+val HandLeftDark     = Color(0xFF6AA080)   // 6.4:1 / 5.8:1 on InkSurface / InkElevated
+val HandRightDark    = Color(0xFF7A97B8)   // 6.4:1 / 5.8:1
+val HandLeftLight    = Color(0xFF3D6C50)   // 5.4:1 / 5.8:1 on PaperSurface / PaperElevated
+val HandRightLight   = Color(0xFF3E6189)   // 5.7:1 / 6.1:1

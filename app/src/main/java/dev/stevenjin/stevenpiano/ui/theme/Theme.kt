@@ -17,6 +17,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,17 @@ import androidx.compose.ui.unit.dp
 // The live colour is deliberately NOT in the Material scheme so nothing picks it up
 // by accident. Only LiveDot reads it.
 val LocalLive = staticCompositionLocalOf { LiveRedDark }
+
+// The two hands' colours (Color.kt), kept out of the scheme like the live colour: only the
+// waterfall (NoteCanvas) and the keyboard strip read them, and only while LocalHandColours
+// (Piano › Hand colours, off by default) is true.
+@Immutable
+data class HandTones(val left: Color, val right: Color)
+
+val LocalHandTones = staticCompositionLocalOf { HandTones(HandLeftDark, HandRightDark) }
+
+// Whether the person has turned Hand colours on; the nav host provides it from the settings.
+val LocalHandColours = staticCompositionLocalOf { false }
 
 // Hairline and disabled-glyph tokens, also kept out of the scheme.
 val LocalHairline = staticCompositionLocalOf { InkHairline }
@@ -87,6 +99,7 @@ fun PianoTheme(
         LocalHairline provides (if (darkTheme) InkHairline else PaperHairline),
         LocalDisabledGlyph provides (if (darkTheme) InkDisabledGlyph else PaperDisabledGlyph),
         LocalTertiary provides (if (darkTheme) SilverTertiary else CarbonTertiary),
+        LocalHandTones provides (if (darkTheme) HandTones(HandLeftDark, HandRightDark) else HandTones(HandLeftLight, HandRightLight)),
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkScheme else LightScheme,

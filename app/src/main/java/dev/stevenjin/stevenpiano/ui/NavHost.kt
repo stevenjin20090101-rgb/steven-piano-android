@@ -73,6 +73,7 @@ import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoScreen
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.flow.first
@@ -82,7 +83,8 @@ import kotlin.math.min
  * The app's frame: four destinations (Library, Now playing, Keys, Piano) in a bottom navigation
  * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
  * with a 240 ms fade-through between them, or a cut when motion is reduced. Artwork everywhere
- * follows the Piano tab's black-and-white switch ([LocalArtworkMonochrome]). [requestedTab]
+ * follows the Piano tab's black-and-white switch ([LocalArtworkMonochrome]), and the waterfall its
+ * Hand colours switch ([LocalHandColours]). [requestedTab]
  * switches destination from outside (a shared file, the notification); [onImport] brings files
  * into the library.
  */
@@ -103,7 +105,11 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         onTabShown()
     }
 
-    CompositionLocalProvider(LocalAppFrame provides frame, LocalArtworkMonochrome provides settings.artworkMonochrome) {
+    CompositionLocalProvider(
+        LocalAppFrame provides frame,
+        LocalArtworkMonochrome provides settings.artworkMonochrome,
+        LocalHandColours provides settings.handColours,
+    ) {
         Row(
             Modifier
                 .fillMaxSize()

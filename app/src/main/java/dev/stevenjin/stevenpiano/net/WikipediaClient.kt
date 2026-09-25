@@ -138,7 +138,7 @@ class WikipediaClient(
     }
 
     companion object {
-        const val USER_AGENT = "StevenPiano/1.2 (https://github.com/stevenjin20090101-rgb/steven-piano-android)"
+        const val USER_AGENT = "StevenPiano/1.3 (https://github.com/stevenjin20090101-rgb/steven-piano-android)"
         const val JSON_CAP = 256 * 1024
         const val IMAGE_CAP = 6 * 1024 * 1024
         private const val TAG = "Wikipedia"

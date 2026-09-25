@@ -109,6 +109,9 @@ private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
     val display = if (frame.wide) settings.noteDisplay.rollStyle else settings.noteDisplay
     SingleChoice("Note display", frame.noteDisplayChoices, display, { it.label }, vm::setNoteDisplay)
     if (frame.wide) SingleChoice("Wide layout", WideLayout.entries, settings.wideLayout, { it.label }, vm::setWideLayout)
+    SwitchRow("Fingering", settings.fingering, vm::setFingering)
+    SwitchRow("Chord names", settings.chordNames, vm::setChordNames)
+    SwitchRow("Hand colours", settings.handColours, vm::setHandColours, note = HAND_COLOURS_NOTE)
     StepperRow("Default tempo", settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo)
     StepperRow("Transpose", settings.transpose, PlaybackLimits.Transpose, 1, Format::semitones, "Transpose down a semitone", "Transpose up a semitone", vm::setTranspose)
     StepperRow("Velocity", settings.velocityPct, PlaybackLimits.VelocityPct, 5, Format::percent, "Play softer", "Play louder", vm::setVelocity)
@@ -117,6 +120,9 @@ private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
     SwitchRow("Artwork in black and white", settings.artworkMonochrome, vm::setArtworkMonochrome)
     SwitchRow("Fetch artwork automatically", settings.fetchArtworkAutomatically, vm::setFetchArtworkAutomatically, note = ArtworkCopy.TRANSPARENCY)
 }
+
+/** Under the Hand colours switch: what it colours, and what it leaves alone. */
+private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall only"
 
 /** A preference that is on or off; [note] is a line of explanation under its label. */
 @Composable

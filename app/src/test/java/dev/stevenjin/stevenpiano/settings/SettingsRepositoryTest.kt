@@ -109,4 +109,24 @@ class SettingsRepositoryTest {
         assertEquals(NoteDisplay.PAPER_ROLL, NoteDisplay.STAFF.rollStyle)
         assertEquals(NoteDisplay.FALLING, NoteDisplay.FALLING.rollStyle)
     }
+
+    @Test
+    fun `fingering and chord names start on, hand colours off, and all three are remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "waterfall.preferences_pb") }
+        val repository = SettingsRepository(store)
+        val start = repository.settings.first()
+        assertEquals(true, start.fingering)
+        assertEquals(true, start.chordNames)
+        assertEquals(false, start.handColours)
+        repository.setFingering(false)
+        repository.setChordNames(false)
+        repository.setHandColours(true)
+        assertEquals(PianoSettings(fingering = false, chordNames = false, handColours = true), repository.settings.first())
+        repository.setFingering(true)
+        repository.setChordNames(true)
+        repository.setHandColours(false)
+        assertEquals(PianoSettings(), repository.settings.first())
+        scope.cancel()
+    }
 }

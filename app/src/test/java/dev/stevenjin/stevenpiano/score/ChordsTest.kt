@@ -103,6 +103,25 @@ class ChordsTest {
     }
 
     @Test
+    fun `a single line names no chords`() {
+        // A fugue's subject alone: C D E F G, then F E A D G C (quarters and eighths), one note at a time.
+        val subject = piece {
+            var tick = 0L
+            for ((key, length) in listOf(60 to 240L, 62 to 240L, 64 to 240L, 65 to 720L, 67 to 240L, 65 to 240L, 64 to 240L, 69 to 480L, 62 to 480L, 67 to 480L, 60 to 960L)) {
+                note(tick, key, length)
+                tick += length
+            }
+        }
+        assertEquals(emptyList<String>(), names(subject))
+        // Over a held chord a line is harmony: the chord is named.
+        val harmonised = piece {
+            listOf(48, 55, 64).forEach { note(0, it, 1_920) }
+            listOf(72, 76, 79, 76).forEachIndexed { k, key -> note(k * 480L, key, 480) }
+        }
+        assertEquals(listOf("C"), names(harmonised))
+    }
+
+    @Test
     fun `an arpeggio is named from its first beat, its third arriving on the second`() {
         val arpeggio = piece {
             listOf(48, 55, 64, 67, 72).forEach { note(0, it, 1_920) }                      // bar 1: C

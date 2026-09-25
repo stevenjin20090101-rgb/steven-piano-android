@@ -1077,3 +1077,295 @@ M14 completes v1.3; the provenance manifest is re-signed at the end of this run.
 `BeamsTest` (14), `RestsTest` (10), `TiesTest` (13), `TempoMarksTest` (6), `DynamicsTest` (8),
 `ScoreFixtures` (the pieces they share), and the engraving checks and counts in `CorpusTest`: 472 tests
 before, 523 after.
+
+---
+
+# v1.3 — M14: the waterfall format (hands, suggested fingering, chord names) and release 1.3
+
+Read `DESIGN.md › v1.3 › The waterfall format` first. Everything above stays except where this
+section says otherwise. This run completes v1.3: `versionCode` 5, `versionName` "1.3",
+`Provenance.text` "Made by Steven Jin · v1.3 · eab16a502f679465" (the About row), the Wikipedia
+User-Agent `StevenPiano/1.3 (…)`; the provenance manifest is signed again last.
+
+## Parser — `midi/`
+
+- Every note keeps the track its Note On came from: `RawEvents.add` takes the track (0-based, in file
+  order; a `Short`, as at most `MAX_TRACKS`, 1,024, are read), `merge` carries it beside the packed
+  words, and `pairNotes` stores it per note: `NoteList.track(i)` (a `ShortArray`; a list built by hand
+  has every note on track 0).
+- `MidiPiece.trackNames`: one entry per track read, its first track-name meta (FF 03, decoded to
+  `MAX_TEXT_BYTES`, 256), or "" without one. `sequenceNames` (Track 0's names) is unchanged.
+- Timing and pitch are untouched: the corpus digest is still `7192757e…870cc5`.
+
+## Hands — `score/Hands.kt` (pure)
+
+`Hands.assign(notes, trackNames, tempo = TempoMap.constant(480), timeSignatures = [4/4]): ByteArray`,
+`RIGHT` 0 and `LEFT` 1, by the first rule that applies:
+
+1. **Names** (`classify`): "right", "rh", "r.h", "treble", "upper" against "left", "lh", "l.h",
+   "bass", "lower" (and "righthand", "lefthand"), as whole words in any case. A name is split at
+   anything but letters and dots and where lower case turns to upper ("PianoRH"); a word of four
+   letters or more may carry one letter more (LilyPond's "uppera", "lowerb"). A name that says both
+   hands says neither. With exactly two tracks carrying notes and one of them named, the other is the
+   other hand; notes of any other unnamed track are split by pitch (rule 3, measured against every
+   note). Names that put every note in one hand decide nothing.
+2. **Two tracks** carrying notes, unnamed: the higher median pitch (then mean) is the right hand.
+3. **Pitch split**: each note against Otsu's threshold of the notes sounding within `WINDOW_MICROS`
+   (1 s) either side of its start: the cut between a lower and a higher group that maximises
+   n0 · n1 · (mean0 − mean1)², from a sliding pitch histogram (notes leave by a heap on their ends;
+   occupancy bits, so a split visits only the pitches present). A window spanning an octave or less
+   (`ONE_HAND_SPAN`) is one hand, by middle C, as is a note on the threshold. Then melodic runs keep
+   one hand (`smoothRuns`): consecutive onsets (notes within 30 ms are one onset) each holding exactly
+   one note shorter than the beat group, in one beat group (`Beams.beatSixteenths`: a quarter, a
+   dotted quarter in compound metres, a half in 2/2), each starting at most an eighth of the beat after
+   the last one ends and within an octave of it, at most 64 notes; a run of two or more takes the hand
+   most of its notes have (its first note's on a tie).
+
+## Staves by hand — `ScoreLayoutEngine`
+
+`layout(…, hands: ByteArray? = null, fingers: ByteArray? = null)`. With hands, a note goes on its
+hand's staff (a right-hand B3 on the treble staff); one more than `MAX_HAND_LEDGERS` (4) ledger lines
+off it goes to the other staff when it needs fewer there (the right hand below C3, the left above C5).
+Tied heads copy their note's staff; accidentals, chords, stems, rests, beams, ties and dynamics
+already worked per staff. Without hands, M12's split at middle C.
+
+## Suggested fingering — `score/Fingering.kt` (pure)
+
+`Fingering.assign(notes, hands, transpose = 0, fold = true): ByteArray`, 1–5 or `NONE` (0), each hand
+on its own, on the keys the piano plays (`KeyMap` with transpose and folding; a note it can't play
+gets none). A piece's first `MAX_NOTES` (250,000) notes are fingered (the corpus's largest file has
+25,076).
+
+- **Events**: the hand's notes starting within `CHORD_MICROS` (30 ms) of the first; their distinct
+  keys in rising order, the left hand mirrored (keys negated) so both hands read as a right hand.
+- **States**: every rising finger order for one to four keys (5, 10, 10 and 5 states); five keys go
+  1–5; more are spread (the lowest the thumb, the highest the little finger, each between the finger
+  its place in the chord's span gives, or the next free one; past the fourth finger, none).
+- **Costs**, summed along the line; a Viterbi over the events finds the cheapest:
+  - stretch between fingers a < b over d semitones (b's key less a's), from each pair's spans
+    (smallest comfortable; relaxed from–to; largest comfortable): 1–2: −3; 1–5; 7 · 1–3: −2; 3–7; 10 ·
+    1–4: −1; 5–9; 12 · 1–5: 1; 7–10; 14 · 2–3, 3–4, 4–5: 1; 1–2; 3 · 2–4: 1; 3–4; 5 · 2–5: 2; 5–6; 8 ·
+    3–5: 1; 3–4; 5. Free within the relaxed span; past it 1 a semitone for pairs with the thumb (2
+    without) up to the largest comfortable span, then 2 a semitone; short of it 2 a semitone with the
+    thumb (1 without), and 2 more a semitone below the smallest comfortable span (Parncutt et al.'s
+    large-span, small-span and stretch rules);
+  - crossings (d < 0): the thumb under 2, 3 or 4, or those over it, `CROSS_OK` 3; any other
+    `CROSS_BAD` 12;
+  - `THUMB_ON_BLACK` 1; `WEAK_FOURTH` 0.5 a use of finger 4; `SAME_FINGER` 4 for one finger on a new
+    key (a repeated key keeps its finger for nothing); `HELD` 6 for a finger still holding a key
+    `HELD_MICROS` (100 ms) into the next event;
+  - the hand's move: the thumb's implied place (each finger over its own white key; keys placed in
+    half white keys, a black key between its neighbours) shifting, `POSITION_STEP` 0.25 a white key,
+    `POSITION_CHANGE` 1 more past two white keys and 1 more past seven;
+  - chords: every pair's stretch; to or from a chord only its outer keys move (thumb side to thumb
+    side, little-finger side to little-finger side), without the same-finger cost, as a shape moves;
+    held fingers are checked key by key.
+- Single-to-single and chord steps come from tables (per finger pair, ±48 semitones and ±64 half
+  white keys; the functions past them), the chord before's states grouped by their outer fingers.
+
+Figures on the score (`ScoreLayoutEngine.numerals`, after the beams, when every stem is final): per
+onset and hand, a stack over the right hand's heads (the highest note's figure on top) and under the
+left hand's (the lowest note's at the bottom), centred on the chord's column, `FINGER_CLEARANCE`
+(0.4 space) clear of what that staff holds there, `FINGER_GAP` (0.2 of a figure's height) between
+figures. What a staff holds comes from per-system `Profiles`, half a space a column: heads with their
+ledger lines and accidentals, stems with flags, beams (`ScoreBeams.treble` now records each beam's
+staff) and ties. Output: `ScoreFingers` (system, x, baseline, finger, above, note), sorted by system;
+`ScoreMetrics.numeralHeight` and `numeralWidth` carry a figure's measured cap height and advance
+(8.6 and 6.8 dp at font scale 1).
+
+## Chord names — `score/Chords.kt` (pure)
+
+`Chords.detect(notes, tempo, bars, timeSignatures, keySignatures): ChordTrack`: for each chord its
+start, its root and bass pitch classes (bass −1 when it is the root), its quality (`MAJOR` … `MAJ9`)
+and the key it is spelled in, in the file's pitches; `ChordTrack.name(i, transpose)` spells it
+transposed ("B♭/D", "F♯m7").
+
+- **Windows** over the bars: a beat (a quarter in x/4, an eighth in x/8), a dotted quarter in compound
+  metres (6/8, 9/8, 12/8), half a bar in x/2, the whole bar in 3/8; at least an eighth, at most 16 a
+  bar, at most `MAX_WINDOWS` (20,000) a piece. A performance timed at 120 BPM (MAESTRO) gets half a
+  second a window.
+- **Weights** per pitch class: each note's share of the window, doubled when it is struck in the
+  window; a note running on from before counts only when it fills `TAIL` (a fifth) of the window.
+  Drums (channel 10) are left out; at most 512 notes a window. **Bass**: the lowest key struck in the
+  window's first half, or held from before past the tail.
+- **Scores** for the 144 chords: the weight of its tones − `OUTSIDE` 0.6 × the weight of the rest −
+  `MISSING` 0.2 a tone absent + `DOUBLED` 0.1 an extra key on its root (two at most) + `ON_BASS` 0.15
+  when its root is the bass − `EXTENSION` 0.4 a tone past the triad (6, 7, maj7, m7, add9: one; maj9:
+  two).
+- **Evidence**: a window counts only with two pitch classes or more and more than one line sounding
+  (its notes' shares add up past `MIN_VOICES`, 1.25).
+- **Decoding**: a Viterbi over the windows with the scores as evidence (a window without evidence
+  changes nothing) and `CHANGE` (1.2) for each change of chord. A stretch of one chord is named when
+  its scores summed over the stretch beat every chord of other notes by `MARGIN` (0.1): C6 and Am7,
+  the same notes, are told apart by the bass; a bare fifth is neither major nor minor. Its name starts
+  at the stretch's first window with evidence, at the first of its tones struck there. Otherwise, and
+  in silence, the name before holds; a name comes only when the chord changes, one a window at most.
+- **Spelling**: the key signature in force, or for a file without one the key its notes suggest
+  (pitch classes weighted by duration, at most 4 s a note, against Krumhansl and Kessler's profiles).
+  A root in the key takes the key's spelling (`Spelling`), as does the natural of a letter the key
+  alters; any other root is a sharp for a diminished chord (a leading tone: F♯dim in C) and a flat for
+  the rest (B♭ in C, E♭ in G). A slash bass that is a chord tone is spelled from the root (B♭/D,
+  Caug/G♯); any other as a root in the key.
+
+## The score — `ScorePages`
+
+- `ScorePages(…, hands, fingers, chords)`. `ScoreMetrics.forPanel(…, numeralHeight, numeralWidth,
+  chordHeight)`: with chord names, a chord line above each system's bar-number line (the measured
+  `bodyMedium` line, plus what the bar number rises over its own line, plus 2 dp); 0 without them.
+- The static page layer draws the fingering figures (`labelSmall`, the eyebrow's size, with `Tabular`,
+  untracked, `onSurfaceVariant`; they grow with the font scale only to 1.3×, `NUMERAL_MAX_SCALE`) and
+  the chord names (`bodyMedium`, `onSurfaceVariant`) at each chord's x: a name's box sits 2 dp above
+  the bar number's, lifted clear of notes, figures and the tempo mark (whose box `SystemMarks` now
+  records) but never above the system's band, and moved left to stay on the page; a name that would
+  come within 6 dp of the one before is left out on the score (the waterfall still shows it). The
+  tempo mark's lift now sees the figures too.
+
+## The waterfall — `NoteCanvas`, `KeyboardStrip`
+
+- `NoteCanvas(…, hands, fingers, chords)`: right-hand bars filled as before; left-hand bars outlined,
+  `surfaceVariant` inside a 1 dp line in the ramp's colour drawn just within the bar (rounded on the
+  paper roll).
+- A bar at least `NUMERALS_TALL` (3) figures tall and three quarters of one wide carries its finger at
+  its leading edge (the bottom, which meets the line first in both styles), 2 dp in and clear of a
+  perforation's round end: in `surfaceVariant` inside a filled bar, `onSurfaceVariant` inside an
+  outlined one.
+- Chord names: a `labelSmall` label in the chord's own case, `onSurfaceVariant`, on a `surfaceVariant`
+  backing 4 dp larger than the text, 4 dp from the left edge, the backing's bottom on the line where
+  the chord begins, travelling with the notes; each distinct name measured once per piece and
+  transpose; nothing allocated per frame.
+- `KeyboardStrip(…, hands: KeyHands?, clock: SongClock?)`: a key only the left hand is playing is
+  outlined (1.5 dp) instead of filled. `KeyHands` finds the notes sounding at the frame's song
+  position (±30 ms, so a key just struck or not yet let go still finds its note) by hand, as four
+  64-bit words, without allocating.
+- **Hand colours**: `Color.kt` `HandLeftDark` #6AA080, `HandRightDark` #7A97B8, `HandLeftLight`
+  #3D6C50, `HandRightLight` #3E6189 (WCAG on surface / elevated surface: dark 6.4 / 5.8 both; light
+  left 5.4 / 5.8, right 5.7 / 6.1; the floor is 3:1). `Theme.kt`: `HandTones`, `LocalHandTones`
+  (provided by `PianoTheme`, dark or light) and `LocalHandColours` (provided by the nav host from the
+  settings). Only `NoteCanvas` and `KeyboardStrip` read the tones, and only while the switch is on and
+  the piece has hands: each hand's ramp runs from its colour to that colour mixed 45 %
+  (`HAND_SOUNDING_MIX`) toward `onSurface` as it sounds, and a lit key takes the mixed colour, filled
+  or outlined. Off, all stays monochrome.
+
+## Wiring
+
+- `NowPlaying` gains `hands` (`handsOrNull`), `fingers` with the `fingersTranspose` and `fingersFold`
+  they were worked out for (`fingersFor(transpose, fold)` gives them only when those match) and
+  `chords`.
+- `Player` (new `compute` dispatcher, `Dispatchers.Default`) works them out as a piece loads, before it
+  is shown and played: the chords concurrently with the hands and then the fingering. A failure (an
+  exception or `OutOfMemoryError`) leaves that part empty and the piece plays. A change of transpose
+  or folding works the fingering out again (`refinger`); none shows meanwhile.
+- `NowPlayingScreen` gives the views the hands always, and fingering and chords only while their
+  switches are on.
+- Settings: `fingering` (true), `chordNames` (true), `handColours` (false), keys "fingering",
+  "chordNames", "handColours". Piano › App preferences, after Note display (and Wide layout on wide
+  windows): "Fingering", "Chord names", "Hand colours" with the note "Colours the two hands on the
+  waterfall only".
+
+## Measured (September 2026)
+
+- Tests: 560, none failing or skipped. `CorpusTest -Pcorpus` took 11.6 and 14.2 s for its five tests
+  over the last two runs; its layout test, which now also works out every file's hands, fingering and
+  chords and lays the file out with them, 5.7 and 6.5 s of that, on half the processors. The parse
+  digest is unchanged.
+- Analysis over the corpus (3,454 files, 15,869,424 notes), one thread, warm: hands 1.8 s, fingering
+  2.6 s, chords 3.8 s; the slowest file, Beethoven's op. 106 (23,469 notes), 12.9 ms for all three.
+  55.6 % of notes in the right hand, 99.9 % fingered, 15,860,444 figures on the phone panel's score,
+  803,556 chord names (one every 2.0 s of music).
+- Hands: with the 324 piano-midi.de files that name both hands merged into one track, the pitch split
+  gives 90.5 % of notes the hand their track names (the plan's median rule: 86.3 %).
+- Chords: Bach's C major prelude (piano-midi.de) reads, bar by bar from 1 to 22: C, Dm7/C, G7/B, C,
+  Am/C, D7/C, G/B, Cmaj7/B, Am7, D7, G, Gdim, Dm/F, Fdim, C/E, Fmaj7/E, Dm7, G7, C, C7, Fmaj7,
+  F♯dim. piano-midi.de: 52,097 names in 340 files (one every 1.6 s), 6.7 % of them maj9; MAESTRO:
+  341,931 in 1,276 performances (one every 2.1 s), 5.5 % maj9.
+- Frames: the phone emulator as a tablet held upright (1600 × 2560 px at 320 dpi, 800 × 1280 dp: the
+  score over falling notes), fingering and chord names on, 20 s of the Bach prelude, debug build: 4
+  janky frames of 1,201 (0.33 %); 50th, 90th and 99th percentiles 22, 25 and 29 ms.
+- Release: `apksigner` verifies v2 and v3, signer "CN=Steven Piano, O=Steven Jin, C=US"; `aapt2`
+  reads versionCode 5, versionName 1.3; the provenance string is in `classes.dex`.
+
+## Deviations from the run's rules, and why
+
+- Hands, names: whole words, not any name containing one ("Bassoon", "Copyright" and "Flower"
+  contain "bass", "right" and "lower").
+- Hands, rule 3: Otsu's threshold instead of the window's median (90.5 % against 86.3 %, above). A
+  window within an octave is one hand, by middle C (any split halves a melody alone). Runs are smoothed
+  only where the pitch split decided. `assign` takes the tempo map and time signatures as optional
+  arguments, for the beat groups.
+- The engine moves a note more than four ledger lines off its hand's staff to the other one (a
+  pitch-split outlier would otherwise hang eight ledger lines under the treble staff).
+- Fingering: the plan's spans (1–2: 5–7 and so on, +2 a semitone beyond) are read as the largest
+  relaxed and the largest comfortable span, with Parncutt's smaller spans under them and his graded
+  costs between. The hand's move is counted in white keys, not semitones (in semitones the Alberti
+  bass's E was as much a 2 as a 3). Finger 4 costs 0.5 (Parncutt's weak-finger rule: it settles C–E–G
+  as 1-3-5 over 1-2-4), and a finger still holding a key costs 6 to reuse. Chords of six keys or more
+  leave some keys without a figure.
+- The fingering is worked out again when transpose or folding changes, not only once a piece: which
+  keys are black decides where the thumb goes.
+- Score figures are placed against per-system profiles: the tempo mark's check (above) and the
+  dynamics' (below) made per staff, half a space a column, and built once a system, where a scan of
+  the system's notes for each of the corpus's 15.9 million figures would not do. They grow with the
+  font scale only to 1.3× (at 2× a sixteenth's figure ran into the next one's).
+- On the waterfall the figure inside a filled bar is in `surfaceVariant`, not `onSurface`: a sounding
+  bar is itself `onSurface` (1:1), and on an upcoming one, `onSurfaceVariant`, `onSurface` reads at
+  2.3:1 (dark) and 2.6:1 (light); the knocked-out figure reads at 5.8:1 or more. The leading edge is
+  the bottom in both styles: the plan's "bottom of a rising roll bar" assumed a rising roll, and here
+  both styles travel downward. A bar narrower than three quarters of a figure (a black key's lane on a
+  phone) carries none.
+- Chords, decoding: a Viterbi over the windows with a cost for each change, not a label decided window
+  by window: beat by beat, an arpeggio whose third arrives on its second beat was named a beat late and
+  a passing note flipped the name back and forth. `CHANGE` is 1.2: at 0.6 the prelude flips between
+  diminished triads in bars 12, 14, 22 and 23, and piano-midi.de gets 62,329 names instead of 52,097;
+  at 2.0 real one-bar chords were lost (Für Elise's).
+- Chords, evidence: a window needs more than one line sounding (`MIN_VOICES`: a fugue's subject alone
+  read Dsus2, Fsus2, Esus4), and a note merely ringing into a window counts only past a fifth of it
+  (`TAIL`), so the chord before does not colour the next beat.
+- Chords, scores: `EXTENSION` (0.4 a tone past the triad) is not in the plan: without it maj9 is
+  18.7 % of piano-midi.de's names and 22.8 % of MAESTRO's, and the prelude reads C6 in bar 4 and Cmaj9
+  in bar 34. The plan's root-doubling bonus is `DOUBLED`, 0.1 a key (two at most), and `ON_BASS` (0.15
+  for the root in the bass) is added: enough to tell C6 from Am7, never enough to outweigh a missing
+  tone. The margin is measured over the whole stretch against chords of other notes (a chord of the
+  same notes is no alternative: the bass decides that).
+- Chords, bass: the lowest key struck in the window's first half or held into it (the plan: the lowest
+  sounding at the window's start), so a bass played just after the beat, as in every performance,
+  still counts.
+- Chords, spelling: outside the key, a diminished chord's root is a sharp and any other root a flat,
+  in sharp keys too (E♭ in G major is written so; the plan said sharps in sharp keys). A file without
+  a key signature is spelled in the key its notes suggest, while the score still writes it in sharps
+  (M12).
+- Chord labels on the waterfall have the eyebrow's size and tracking but the chord's own case ("Am",
+  not "AM"). On the score a name is moved left to stay on the page, and one that would run into the
+  name before it is left out.
+- The player works hands, fingering and chords out as a piece loads rather than beside the score's
+  layout: the waterfall needs them without the score, and both take them from `NowPlaying`.
+- The hand tones reach the views through `LocalHandTones` beside the plan's `LocalHandColours`, so
+  the colours stay out of the Material scheme, as the live red does.
+- The keyboard strip outlines a left-hand key 1.5 dp thick (keys are narrow: a 1 dp line barely
+  shows).
+- `ColorTokensTest` checks the WCAG formula against WCAG's own figures (21:1; #767676 on white 4.54:1).
+  `DESIGN.md › Colour` gives #F2F2F2 on #0E0E0E as 16.9:1, which the formula puts at 17.2:1; the
+  table is left as it is.
+- `CorpusTest` runs its files in parallel (half the processors); each file's digest is combined in
+  file order, so the digest is the same.
+- Emulator evidence for the stacked layout was taken with the phone emulator at 1600 × 2560 (a tablet
+  held upright, medium width, where the score stands over the falling notes); at 2560 × 1600 (on its
+  side, expanded) the app puts the score and the roll side by side.
+
+## Tests added in M14
+
+`HandsTest` (10: names read as whole words; names over pitches; one named track of two; a third,
+unnamed track split by pitch; the two-track median rule; a name for one hand alone; the bass against
+the tune; an octave's window by middle C; a beamed run kept in one hand where the split would cut it;
+runs stopped by a rest, a leap and the beat), `FingeringTest` (9: the C major scale, right hand
+1-2-3-1-2-3-4-5 and left 5-4-3-2-1-3-2-1; octaves 1–5; a thumb kept off a black key; repeated notes;
+a five-note chord spread 1–5; a triad 1-3-5 and the Alberti bass 5-1-3-1; each hand on its own and
+unplayable notes left bare; stretch and crossing costs), `ChordsTest` (9: C, Am, C7, Ddim; G/B and
+B♭/D; spelling in E♭ major, in a key found from the notes, borrowed and leading-tone chords in C, and
+transposed; Gsus4, Fmaj9 and Csus2; names only at changes; an ambiguous stretch and silence keeping the
+name before; a single line naming nothing; an arpeggio named from its first beat; slash basses spelled
+from the chord), `ColorTokensTest` (3), `SmfParserTest` (+1: tracks and their names),
+`ScoreLayoutEngineTest` (+2: hands on their staves, with the four-ledger rule and tied heads; figures
+above and below, stacked, clear of an up stem), `ScoreMetricsTest` (+1: the chord line),
+`SettingsRepositoryTest` (+1: the three switches' defaults, remembered), `PlayerTest` (+1: hands and
+fingering arrive with the piece, and transposing fingers it again); `CorpusTest`'s layout test now
+analyses every file and lays it out with its hands and fingering. 523 tests before, 560 after.

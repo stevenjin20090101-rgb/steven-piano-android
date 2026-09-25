@@ -16,7 +16,7 @@ while the piano plays it, play the piano yourself on **Keys**, and on the
 **Piano** tab connect, adjust the piano's own lighting and feel, and tune
 playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
 analytics, and the network only for composers' portraits and short notes from
-Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.2.
+Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.3.
 
 ## What it does
 
@@ -61,17 +61,61 @@ Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.2.
   piece shows its tempo at the start (♩ = 74, or ♩. = 67 in a compound metre)
   and again where a system starts more than a tenth faster or slower, and
   dynamics (pp to ff) under the treble staff where the loudness of a bar, read
-  from the file's velocities, moves into a new band. Honest limits: no voices
-  within a hand (notes from middle C up are on the treble staff, the rest on the
-  bass, whichever hand plays them, so an arpeggio that crosses middle C leaves
-  rests on both staves), no tuplets, no grace notes, no pedal markings; values
-  shorter than a sixteenth read as sixteenths; notes sit where they sound in
+  from the file's velocities, moves into a new band. Each hand has its staff (the
+  right hand on the treble staff even below middle C; a note more than four ledger
+  lines off its hand's staff goes to the other one), and the score carries the
+  suggested fingering and the chord names described under *The waterfall format*.
+  Honest limits: no voices within a hand, no tuplets, no grace notes, no pedal
+  markings; values shorter than a sixteenth read as sixteenths; notes sit where they sound in
   time, so dense bars are tight on a phone; piano-midi.de writes its rubato as
   tempo changes, so its pieces carry several tempo marks. Recorded performances
   (MAESTRO) keep plain note heads with a line for each note's length, in bars
   counted at the file's own tempo, with their tempo and only the clear changes
   of dynamics (two bands or more). A file without a key signature is written in
   sharps.
+- **The waterfall format**: who plays what, with which finger, over which
+  chord, on the roll, the falling notes, the keyboard strip and the score.
+  - **Hands.** The right hand's notes are filled bars and the left hand's
+    outlined ones (a hairline around a hollow bar); the keyboard strip
+    outlines a key only the left hand is playing; on the score each hand has
+    its staff. The hands come from the file: tracks named for them ("Piano
+    right", "Piano left", "upper", "RH"…) decide; two unnamed tracks split by
+    their pitch (the higher one is the right hand); a single track (every
+    MAESTRO performance) is split by pitch as it goes, the notes sounding within
+    a second divided where they fall into a lower and a higher group, and a
+    beamed run kept in one hand.
+  - **Suggested fingering**: a finger, 1 (thumb) to 5, for every note, as small
+    figures inside the waterfall's bars at the end that reaches the line first
+    (on bars tall and wide enough to hold them) and above the right hand's heads
+    and below the left hand's on the score. It is a suggestion computed from
+    the notes, not an editor's fingering: a cost model after Parncutt et al.
+    (1997) weighs each finger pair's stretch, crossings (only the thumb passes
+    under), the thumb on black keys, the same finger on a new key and moves of
+    the hand, and picks the cheapest fingering for each hand's whole line. A C
+    major scale comes out 1-2-3-1-2-3-4-5 in the right hand and 5-4-3-2-1-3-2-1
+    in the left; transposing works it out again for the keys played.
+  - **Chord names** where the harmony changes, above the score and at the
+    waterfall's left edge where the chord begins (major, minor, dim, aug, sus2,
+    sus4, 6, 7, maj7, m7, add9, maj9, with the bass after a slash when it is not
+    the root: B♭/D), spelled in the key (a file without a key signature in the
+    key its notes suggest). A beat is named only when more than one line sounds
+    and the notes point to one chord; otherwise the name before holds.
+  - **Piano › Fingering** and **Chord names** (on) show or hide them; **Hand
+    colours** (off) tints the left hand green and the right hand blue on the
+    waterfall and the keyboard strip only: the one place colour enters the app
+    besides artwork, and red still means only that the piano is live.
+  - Honest limits: the hands of a single-track file are a guess (with
+    piano-midi.de's files that name both hands merged into one track, the split
+    gives nine notes in ten the hand their tracks name); a hand that crosses
+    over the other, or plays alone across a wide range, can be split wrongly.
+    Fingering sees the notes, not the music: no phrasing, no finger substitution
+    on held notes, ornaments and fast runs fingered as written notes, and chords
+    of six notes or more leave some keys without a figure; in dense passages of
+    a performance the score's figures crowd. Chord names come from beats of the
+    file's own metre (half a second a beat for performances): a melody moving
+    over a held chord can have its passing note named (Cadd9 for a D over C), a
+    fast run can read as a ninth chord, a diminished seventh shows as one of its
+    diminished triads, and a single line names nothing.
 - **Keys**: a playable keyboard over the piano's 84 keys, C1–B7, never taller
   than a real keyboard needs, along the bottom of the screen. Every touch is a
   Note On to the piano; chords with several fingers, a glissando by sliding.
@@ -99,9 +143,9 @@ Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.2.
   your changes when you leave the tab. Bench commands (firing solenoids, resets,
   per-key force) stay at the piano's USB console.
 - **Piano**: the connection, the piano settings above, the app's preferences
-  (auto-connect, note display, wide layout, default tempo, transpose, velocity,
-  folding, drum channel, artwork in black and white, fetching artwork
-  automatically) and the About line.
+  (auto-connect, note display, wide layout, fingering, chord names, hand
+  colours, default tempo, transpose, velocity, folding, drum channel, artwork in
+  black and white, fetching artwork automatically) and the About line.
 - **Tablets and phones on their side**: a navigation rail on the left instead of
   the bottom bar. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
@@ -270,6 +314,15 @@ the first play, so the lock screen shows play and pause.
       rest, eighths beamed in threes, ties over the bar lines, whole rests in
       the empty bass and p under bar 1; a tied note lights again as the cursor
       reaches its tied head.
+- [ ] The waterfall format, on a tablet upright with Falling notes: Bach's C
+      major prelude (piano-midi.de) shows its left hand as outlined bars and
+      outlined keys and its right hand filled; fingering figures sit in the long
+      left-hand bars and over and under the score's heads; the chord names read
+      C, Dm7/C, G7/B, C, Am/C over the first bars and arrive at the waterfall's
+      left edge as each bar begins. Piano › Hand colours colours the two hands
+      green and blue, in light and dark; Fingering and Chord names off take each
+      away. A MAESTRO performance splits its hands by pitch. The piano plays as
+      before whatever is shown.
 - [ ] Open a piece's sheet on Wi-Fi (its notes and the composer's portrait
       appear), then again in airplane mode (the art shown before is kept, and the
       sheet says notes need an internet connection when it has none).
@@ -318,6 +371,12 @@ The full audit, every finding and what was done about it, is in
 - Composers' blurbs and pieces' notes are text from Wikipedia (CC BY-SA 4.0), each
   linked back to its article with *From Wikipedia*; portraits come from Wikimedia
   Commons.
+- Suggested fingering follows the ergonomic cost model of R. Parncutt, J. A.
+  Sloboda, E. F. Clarke, M. Raekallio and P. Desain, "An ergonomic model of
+  keyboard fingering for melodic fragments" (Music Perception, 1997); a file
+  without a key signature is spelled in the key found with C. L. Krumhansl and
+  E. J. Kessler's key profiles (1982). Both are implemented from the published
+  descriptions; no code or data is copied.
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
   domain); those files are not part of this repository.

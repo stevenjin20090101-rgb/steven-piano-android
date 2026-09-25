@@ -111,6 +111,9 @@ private val LedgerOverhang = 2.dp
 private val FinalStroke = 3.dp
 private val FinalGap = 2.dp
 
+/** The score's fingering numerals follow the font scale up to this, then keep their size with the heads. */
+private const val NUMERAL_MAX_SCALE = 1.3f
+
 /** A chord name keeps this far above the bar number, and from the name before it. */
 private val ChordGap = 2.dp
 private val ChordSpacing = 6.dp
@@ -221,8 +224,12 @@ fun ScorePages(
     val numberHeight = remember(measurer, density, numberStyle) {
         measurer.measure("0", numberStyle, maxLines = 1, density = density).size.height.toFloat()
     }
-    // Fingering numerals: the eyebrow's size, tabular, untracked (one digit each).
-    val numerals = remember(measurer, density, numberStyle) { Numerals(measurer, density, numberStyle.merge(TextStyle(letterSpacing = 0.sp))) }
+    // Fingering numerals: the eyebrow's size, tabular, untracked (one digit each). They belong to the
+    // heads, which keep their size at any font scale, so they grow with the text only up to
+    // NUMERAL_MAX_SCALE: at twice the size a sixteenth's numeral ran into the next one's.
+    val numeralScale = min(density.fontScale, NUMERAL_MAX_SCALE) / density.fontScale
+    val numeralStyle = numberStyle.merge(TextStyle(letterSpacing = 0.sp, fontSize = numberStyle.fontSize * numeralScale))
+    val numerals = remember(measurer, density, numeralStyle) { Numerals(measurer, density, numeralStyle) }
     // Chord names: body text on a line of their own, reserved above each system's bar-number line.
     val chordStyle = MaterialTheme.typography.bodyMedium
     val shownChords = chords?.takeIf { it.size > 0 }
@@ -641,8 +648,8 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     /**
      * System [system]'s chord names ([chordText]): each where its chord begins in the system, its box
      * on the chord line just above the bar [number] (lifted clear of notes, numerals and the tempo mark
-     * that reach up into it, never above its band); a name that would run into the one before it is
-     * left out on the score (the waterfall still shows it).
+     * that reach up into it, never above its band, moved left to stay on the page); a name that would
+     * run into the one before it is left out on the score (the waterfall still shows it).
      */
     fun chordLabels(
         layout: ScoreLayout,
@@ -662,9 +669,12 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
         val tops = ArrayList<Float>()
         var lastRight = Float.NEGATIVE_INFINITY
         for (i in from until until) {
-            val x = system.xAt(chords.startMicros[i])
-            if (x < lastRight + chordSpacing) continue
+            val at = system.xAt(chords.startMicros[i])
+            if (at < lastRight + chordSpacing) continue
             val text = measurer.measure(chordText.names[i], chordText.style, maxLines = 1)
+            // A name near the system's end is moved left to stay on the page, not cut at its edge.
+            val x = max(system.left, min(at, layout.metrics.pageWidth - text.size.width))
+            if (x < lastRight + chordSpacing) continue
             val right = x + text.size.width
             var bottom = min(numberTop - chordGap, skyline(layout, system, x, right) - TEMPO_CLEARANCE * space)
             if (marks.tempo != null && right >= marks.tempoX && x <= marks.tempoRight) bottom = min(bottom, marks.tempoTop - chordGap)

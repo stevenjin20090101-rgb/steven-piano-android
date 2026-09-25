@@ -20,11 +20,14 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
+import dev.stevenjin.stevenpiano.ui.theme.LocalHandTones
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 val KeyboardStripHeight = 44.dp
@@ -37,7 +40,9 @@ private val KeyOutline = 1.5.dp
  * The piano's 84 keys under the roll, monochrome: white keys on the elevated surface split by
  * hairlines, black keys in the tertiary grey. A key the piano is playing inverts to the content
  * colour; with [hands], a key only the left hand is playing is outlined in it instead, as the
- * waterfall outlines the left hand's bars (DESIGN.md › v1.3). It redraws each frame [frameNanos]
+ * waterfall outlines the left hand's bars (DESIGN.md › v1.3), and with Hand colours on the right
+ * hand's keys fill with its blue and the left hand's outline in its green, as sounding bars show them
+ * (`LocalHandColours`, `LocalHandTones`). It redraws each frame [frameNanos]
  * changes, reading the player's key bitsets ([activeLow]: bit `key - 24`, keys 24-87; [activeHigh]:
  * bit `key - 88`) and, with [hands], which hand the notes sounding at [clock]'s position belong to,
  * without allocating.
@@ -52,7 +57,10 @@ fun KeyboardStrip(
     clock: SongClock? = null,
 ) {
     val body = MaterialTheme.colorScheme.surfaceVariant
-    val pressed = MaterialTheme.colorScheme.onSurface
+    val content = MaterialTheme.colorScheme.onSurface
+    val tones = if (LocalHandColours.current && hands != null) LocalHandTones.current else null
+    val pressed = tones?.let { lerp(it.right, content, HAND_SOUNDING_MIX) } ?: content
+    val pressedLeft = tones?.let { lerp(it.left, content, HAND_SOUNDING_MIX) } ?: content
     val blackKey = LocalTertiary.current
     val line = LocalHairline.current
     Spacer(
@@ -81,7 +89,7 @@ fun KeyboardStrip(
                     }
                     for (i in 0 until KeyMap.KEY_COUNT) {
                         if (keys.isBlack(i) || !isActive(i, low, high) || hands?.leftOnly(i) != true) continue
-                        drawRect(pressed, Offset(keys.left(i) + half, half), Size(keys.width(i) - outline.width, size.height - outline.width), style = outline)
+                        drawRect(pressedLeft, Offset(keys.left(i) + half, half), Size(keys.width(i) - outline.width, size.height - outline.width), style = outline)
                     }
                     for (i in 0 until KeyMap.KEY_COUNT) {
                         if (!keys.isBlack(i)) continue
@@ -90,7 +98,7 @@ fun KeyboardStrip(
                         val left = active && hands?.leftOnly(i) == true
                         drawRect(if (active && !left) pressed else blackKey, Offset(keys.left(i), 0f), Size(keys.width(i), blackHeight))
                         if (left) {
-                            drawRect(pressed, Offset(keys.left(i) + half, half), Size(keys.width(i) - outline.width, blackHeight - outline.width), style = outline)
+                            drawRect(pressedLeft, Offset(keys.left(i) + half, half), Size(keys.width(i) - outline.width, blackHeight - outline.width), style = outline)
                         }
                     }
                 }

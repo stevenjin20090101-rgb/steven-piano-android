@@ -81,7 +81,8 @@ class ChordTrack internal constructor(
  * Changes are found over the whole piece at once (a Viterbi over the windows, a change costing
  * [CHANGE]), so a beat that could be two chords follows its neighbours: an arpeggio whose third comes
  * on the second beat is named from its first, and a passing note does not flip the name back and
- * forth. A stretch is named only when it is confident: at least two pitch classes, and its chord ahead
+ * forth. A stretch is named only when it is confident: at least two pitch classes, more than one line
+ * sounding ([MIN_VOICES]), and its chord ahead
  * of every chord of other notes by [MARGIN] (C6 and Am7 are the same notes, told apart by the bass;
  * a bare fifth is major or minor, and so neither). Otherwise, and in silence, the name before holds.
  * Names come only at changes, at most one a window, where the chord's first tone sounds in it.
@@ -132,8 +133,13 @@ object Chords {
     /** ...and this when its root is the bass: enough to tell C6 from Am7, never to outweigh a missing tone. */
     const val ON_BASS = 0.15f
 
-    /** A change of chord costs this much evidence (in weight: a struck note filling a window weighs 2). */
-    const val CHANGE = 0.6f
+    /**
+     * A change of chord costs this much evidence (in weight: a struck note filling a window weighs 2):
+     * a chord of one beat must outweigh its neighbours by twice this. At 0.6 Bach's C major prelude
+     * flipped between two diminished triads within its bar 12; at 1.2 it reads a chord a bar, as
+     * written, and piano-midi.de's pieces carry a sixth fewer names (flips of that kind).
+     */
+    const val CHANGE = 1.2f
 
     /** A stretch's chord must beat every chord of other notes by this much to be named. */
     const val MARGIN = 0.1f
@@ -142,9 +148,17 @@ object Chords {
     const val TAIL = 0.2
 
     /**
+     * A window is evidence of harmony only when its notes together sound for more than this many
+     * windows' length: more than one line. A melody alone (a fugue's subject, a run in octaves' absence)
+     * names no chords, where each beat's two or three notes in turn read as sus chords.
+     */
+    const val MIN_VOICES = 1.25
+
+    /**
      * Each tone past the triad (the sixth, the seventh, the ninth) costs this much, so a passing note
-     * in a run is not taken for an added tone: with it, maj9 names 7.4 % of piano-midi.de's changes
-     * instead of 16.9 % (MAESTRO: 4.1 % instead of 16.8 %), and Bach's C major prelude reads as before.
+     * in a run is not taken for an added tone: with it, maj9 is 6.7 % of piano-midi.de's chord names
+     * instead of 18.7 % (MAESTRO's performances: 5.5 % instead of 22.8 %), and Bach's C major prelude
+     * reads as written (without it, C6 in bar 4 and Cmaj9 in bar 34).
      */
     const val EXTENSION = 0.4f
 
@@ -404,6 +418,7 @@ object Chords {
         private lateinit var weight: FloatArray
         private lateinit var keyCount: ByteArray
         private lateinit var present: IntArray
+        private lateinit var harmony: BooleanArray
 
         init {
             val times = signatures.filter { it.valid }.sortedBy { it.tick }.ifEmpty { listOf(TimeSignature.Common) }
@@ -454,6 +469,7 @@ object Chords {
             weight = FloatArray(count * 12)
             keyCount = ByteArray(count * 12)
             present = IntArray(count)
+            harmony = BooleanArray(count)
             val w = FloatArray(12)
             val keys = IntArray(12)
             var seenLow = 0L
@@ -479,6 +495,7 @@ object Chords {
                 seenLow = 0L
                 seenHigh = 0L
                 var low = Int.MAX_VALUE
+                var voices = 0.0
                 for (j in 0 until activeSize) {
                     val i = active[j]
                     val s = notes.startMicros[i]
@@ -486,6 +503,7 @@ object Chords {
                     val onset = s >= ws
                     val overlap = (min(e, we) - max(s, ws)) / length
                     if (!onset && overlap < TAIL) continue
+                    voices += overlap
                     val key = notes.note(i).coerceIn(0, 127)
                     val pc = key % 12
                     w[pc] += (overlap * if (onset) 2.0 else 1.0).toFloat()
@@ -510,11 +528,12 @@ object Chords {
                     keyCount[k * 12 + pc] = keys[pc].coerceAtMost(3).toByte()
                 }
                 present[k] = mask
+                harmony[k] = voices > MIN_VOICES
             }
         }
 
-        /** Two pitch classes or more sound in window [k]: it is evidence for a chord. */
-        fun evident(k: Int): Boolean = Integer.bitCount(present[k]) >= 2
+        /** Two pitch classes or more sound in window [k], more than one line at once: it is evidence for a chord. */
+        fun evident(k: Int): Boolean = harmony[k] && Integer.bitCount(present[k]) >= 2
 
         /**
          * Window [k]'s chord scores into [out] (by root * 12 + quality), from the triads' sums; false,
@@ -522,7 +541,7 @@ object Chords {
          */
         fun score(k: Int, out: FloatArray): Boolean {
             val mask = present[k]
-            if (Integer.bitCount(mask) < 2) return false
+            if (!evident(k)) return false
             val at = k * 12
             var total = 0f
             for (pc in 0 until 12) total += weight[at + pc]

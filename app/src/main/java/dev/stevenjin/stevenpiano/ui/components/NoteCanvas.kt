@@ -36,6 +36,8 @@ import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.ChordTrack
 import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
+import dev.stevenjin.stevenpiano.ui.theme.LocalHandTones
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
@@ -61,6 +63,12 @@ private val NumeralPad = 2.dp
 /** A chord name sits this far from the canvas's left edge, on a backing this much larger than its text. */
 private val ChordInset = 4.dp
 private val ChordPad = 4.dp
+
+/**
+ * With Hand colours on, a sounding note (and a key the strip lights) mixes its hand's colour this far
+ * toward the content colour: lighter on the dark surface, darker on the paper, as the grey ones brighten.
+ */
+internal const val HAND_SOUNDING_MIX = 0.45f
 
 /** Steps between upcoming and sounding colours, precomputed so drawing never allocates. */
 internal const val RAMP_STEPS = 12
@@ -113,7 +121,9 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  * [NUMERALS_TALL] numerals tall carries its suggested finger in small tabular figures inside it at
  * its leading edge, the end that reaches the line first: knocked out of a filled bar (the elevated
  * surface's colour; the content colour would vanish on a bar that is itself that colour as it
- * sounds) and in the secondary colour inside an outlined one. With [chords], each chord's name stands
+ * sounds) and in the secondary colour inside an outlined one. With Hand colours on (`LocalHandColours`)
+ * the bars take their hand's colour (`LocalHandTones`: the left hand green, the right blue, each easing
+ * toward the content colour as it sounds); off, they are monochrome. With [chords], each chord's name stands
  * at the canvas's left edge where the chord begins, an eyebrow-sized label on a 4 dp backing of the
  * elevated surface (so it reads over the bars), travelling with the notes.
  *
@@ -150,6 +160,7 @@ fun NoteCanvas(
     val upcoming = MaterialTheme.colorScheme.onSurfaceVariant
     val sounding = MaterialTheme.colorScheme.onSurface
     val inside = MaterialTheme.colorScheme.surfaceVariant
+    val handTones = if (LocalHandColours.current && hands != null) LocalHandTones.current else null
     val blackLane = MaterialTheme.colorScheme.surface
     val edge = LocalTertiary.current
     val reduced = rememberReducedMotion()
@@ -168,7 +179,8 @@ fun NoteCanvas(
                     inset = 1.dp.toPx(),
                     minHeight = 2.dp.toPx(),
                     flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L,
-                    ramp = colorRamp(upcoming, sounding),
+                    ramp = handTones?.let { colorRamp(it.right, lerp(it.right, sounding, HAND_SOUNDING_MIX)) } ?: colorRamp(upcoming, sounding),
+                    leftRamp = handTones?.let { colorRamp(it.left, lerp(it.left, sounding, HAND_SOUNDING_MIX)) },
                     hands = hands?.takeIf { it.size == notes.size },
                     inside = inside,
                     outline = Stroke(width = Hairline.toPx()),
@@ -214,7 +226,10 @@ private class Roll(
     val inset: Float,
     val minHeight: Float,
     val flipMicros: Long,
+    /** Upcoming to sounding colours: every note's, or with hand colours the right hand's... */
     val ramp: Array<Color>,
+    /** ...and the left hand's (null: the same as [ramp]). */
+    val leftRamp: Array<Color>?,
     /** Each note's hand, or null to draw every note filled. */
     val hands: ByteArray?,
     /** The inside of a left-hand (outlined) bar. */
@@ -289,8 +304,8 @@ private class Roll(
             val top = min(hitY - (end - now) * pxPerMicro, bottom - minHeight)
             val width = keys.width(lane) - 2 * inset
             val left = keys.left(lane) + inset
-            val color = ramp[rampLevel(now, start, end, flipMicros)]
             val outlined = hands != null && hands[i] == Hands.LEFT
+            val color = (if (outlined && leftRamp != null) leftRamp else ramp)[rampLevel(now, start, end, flipMicros)]
             if (outlined) {
                 // Outlined: the elevated surface inside a 1 dp line drawn just within the bar's edge.
                 val line = outline.width

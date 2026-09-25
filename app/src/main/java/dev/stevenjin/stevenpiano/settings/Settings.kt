@@ -50,7 +50,8 @@ enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
 /**
  * The Piano tab's preferences, plus the last piano connected, where the Keys screen was, the
- * queue's two modes, and how artwork looks and arrives.
+ * queue's two modes, how artwork looks and arrives, and what the waterfall and the score show
+ * beside the notes (fingering, chord names, the hands in colour).
  */
 data class PianoSettings(
     val autoConnect: Boolean = true,
@@ -73,6 +74,12 @@ data class PianoSettings(
     val artworkMonochrome: Boolean = false,
     /** Composers' portraits and notes fetched from Wikipedia after an import, and when the app opens. */
     val fetchArtworkAutomatically: Boolean = true,
+    /** Suggested fingering: numerals on the score's heads and in the waterfall's bars. */
+    val fingering: Boolean = true,
+    /** Chord names above the score and at the waterfall's left edge. */
+    val chordNames: Boolean = true,
+    /** The two hands in two colours on the waterfall and the keyboard strip (monochrome when off). */
+    val handColours: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_KEYS_VIEWPORT_START = 48
@@ -119,6 +126,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setFetchArtworkAutomatically(on: Boolean) = edit { it[FETCH_ARTWORK_AUTOMATICALLY] = on }
 
+    suspend fun setFingering(on: Boolean) = edit { it[FINGERING] = on }
+
+    suspend fun setChordNames(on: Boolean) = edit { it[CHORD_NAMES] = on }
+
+    suspend fun setHandColours(on: Boolean) = edit { it[HAND_COLOURS] = on }
+
     /** Whether the one-off repair of over-long library text (`TextRepair`) has run. Housekeeping, not a preference. */
     suspend fun textRepairDone(): Boolean =
         store.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.first()[TEXT_REPAIR_DONE] == true
@@ -147,6 +160,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
             artworkMonochrome = this[ARTWORK_MONOCHROME] ?: defaults.artworkMonochrome,
             fetchArtworkAutomatically = this[FETCH_ARTWORK_AUTOMATICALLY] ?: defaults.fetchArtworkAutomatically,
+            fingering = this[FINGERING] ?: defaults.fingering,
+            chordNames = this[CHORD_NAMES] ?: defaults.chordNames,
+            handColours = this[HAND_COLOURS] ?: defaults.handColours,
         )
     }
 
@@ -166,6 +182,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val REPEAT = stringPreferencesKey("repeat")
         val ARTWORK_MONOCHROME = booleanPreferencesKey("artworkMonochrome")
         val FETCH_ARTWORK_AUTOMATICALLY = booleanPreferencesKey("fetchArtworkAutomatically")
+        val FINGERING = booleanPreferencesKey("fingering")
+        val CHORD_NAMES = booleanPreferencesKey("chordNames")
+        val HAND_COLOURS = booleanPreferencesKey("handColours")
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
     }
 }

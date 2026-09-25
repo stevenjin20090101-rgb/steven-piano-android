@@ -86,6 +86,12 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsAc
 
     fun setFetchArtworkAutomatically(on: Boolean) = edit { setFetchArtworkAutomatically(on) }
 
+    fun setFingering(on: Boolean) = edit { setFingering(on) }
+
+    fun setChordNames(on: Boolean) = edit { setChordNames(on) }
+
+    fun setHandColours(on: Boolean) = edit { setHandColours(on) }
+
     private fun edit(change: suspend SettingsRepository.() -> Unit) {
         graph.appScope.launch { graph.settingsRepository.change() }
     }

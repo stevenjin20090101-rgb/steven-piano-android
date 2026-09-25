@@ -28,12 +28,13 @@ import kotlin.math.abs
  *    Mutopia's "up"/"down") gives the right hand to the track with the higher median pitch.
  * 3. **Pitch split.** Otherwise each note is compared with the split point of the notes sounding
  *    within [WINDOW_MICROS] of its start: the pitch that best separates them into a lower and a
- *    higher group (Otsu's threshold: the two groups' means as far apart as their sizes allow; on
- *    piano-midi.de's 304 two-hand files merged into one track it finds the right hand for 90.6 % of
- *    the notes, where the median finds 86.2 %). Notes all within an octave are one hand, by middle
- *    C (ties right from middle C up). A melodic run of short notes within one beat group (a beamed
- *    figure: single notes in turn, each within an octave of the last, no rest between) then takes
- *    the hand most of its notes have, so a figure is not split between the staves.
+ *    higher group (Otsu's threshold: the two groups' means as far apart as their sizes allow; with
+ *    the 324 piano-midi.de files that name both hands merged into one track, it gives 90.5 % of the
+ *    notes the hand their track names, where the window's median gives 86.3 %). Notes all within an
+ *    octave are one hand, by middle C (ties right from middle C up). A melodic run of short notes
+ *    within one beat group (a beamed figure: single notes in turn, each within an octave of the last,
+ *    no rest between) then takes the hand most of its notes have, so a figure is not split between
+ *    the staves.
  *
  * Pure, and linear in the notes but for a heap: it runs once per piece off the main thread.
  */

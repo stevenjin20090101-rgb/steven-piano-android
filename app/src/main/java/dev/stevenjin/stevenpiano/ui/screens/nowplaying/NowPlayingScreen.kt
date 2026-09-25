@@ -122,7 +122,8 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
         // font): the screen scrolls and the views keep fixed heights instead of collapsing.
         val short = piece != null && maxHeight < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
         Column(if (short) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
-            NowPlayingContent(state, piece, plan, link is LinkState.Connected, player, playback, onOpenPiano, short, { about = it }) { upNext = true }
+            val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
+            NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, { about = it }) { upNext = true }
         }
     }
     if (upNext) UpNextSheet { upNext = false }
@@ -134,6 +135,7 @@ private fun ColumnScope.NowPlayingContent(
     state: PlayerState,
     piece: NowPlaying?,
     plan: NotesPlan,
+    marks: Marks,
     connected: Boolean,
     player: Player,
     playback: PlaybackStarter,
@@ -148,7 +150,7 @@ private fun ColumnScope.NowPlayingContent(
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     if (piece != null) {
-        PieceView(piece, state, plan, connected, player, playback, onOpenPiano, short) { onAbout(piece.pieceId) }
+        PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short) { onAbout(piece.pieceId) }
     } else if (!state.loading) {
         Box(
             Modifier
@@ -172,6 +174,7 @@ private fun ColumnScope.PieceView(
     piece: NowPlaying,
     state: PlayerState,
     plan: NotesPlan,
+    marks: Marks,
     connected: Boolean,
     player: Player,
     playback: PlaybackStarter,
@@ -206,6 +209,7 @@ private fun ColumnScope.PieceView(
         plan,
         piece,
         state,
+        marks,
         frame,
         roll,
         player,
@@ -269,6 +273,7 @@ private fun NoteViews(
     plan: NotesPlan,
     piece: NowPlaying,
     state: PlayerState,
+    marks: Marks,
     frame: LongState,
     roll: RollClock,
     player: Player,
@@ -278,7 +283,8 @@ private fun NoteViews(
 ) {
     val scoreWidth = LocalAppFrame.current.scoreWidth
     val hands = piece.handsOrNull
-    val fingers = piece.fingersFor(state.transpose, state.fold)
+    val fingers = if (marks.fingering) piece.fingersFor(state.transpose, state.fold) else null
+    val chords = if (marks.chordNames) piece.chords else null
     // Which hand each sounding key belongs to, for the strip's outlined left-hand keys.
     val keyHands = remember(piece.notes, hands, state.transpose, state.fold) {
         hands?.let { KeyHands(piece.notes, it, state.transpose, state.fold) }
@@ -287,7 +293,7 @@ private fun NoteViews(
         Panel(panel) {
             NoteCanvas(
                 piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(),
-                hands = hands, fingers = fingers, chords = piece.chords,
+                hands = hands, fingers = fingers, chords = chords,
             )
             HairlineDivider()
             KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
@@ -310,7 +316,7 @@ private fun NoteViews(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 hands = hands,
                 fingers = fingers,
-                chords = piece.chords,
+                chords = chords,
             )
             if (strip) {
                 HairlineDivider()
@@ -378,3 +384,6 @@ private fun rememberFrameNanos(playing: Boolean, pieceId: Long, settle: Int, rol
 }
 
 private const val TEMPO_STEP = 5
+
+/** What the note views show beside the notes, as the Piano tab's switches say. */
+private data class Marks(val fingering: Boolean, val chordNames: Boolean)
