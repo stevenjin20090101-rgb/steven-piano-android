@@ -50,9 +50,9 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
- * A playlist's page head: back and the playlist menu (Rename, Delete), the [cover] at 96 dp, the
- * name in Title over "12 pieces · 41:20", then a filled 56 dp Play circle and an outlined
- * Shuffle button side by side (not shown for an empty playlist).
+ * A playlist's page head: back and the playlist menu (Rename, Change photo, Delete), the [cover]
+ * at 96 dp, the name in Title over "12 pieces · 41:20", then a filled 56 dp Play circle and an
+ * outlined Shuffle button side by side (not shown for an empty playlist).
  */
 @Composable
 fun PlaylistHeader(
@@ -62,6 +62,7 @@ fun PlaylistHeader(
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onRename: () -> Unit,
+    onChangePhoto: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -73,6 +74,7 @@ fun PlaylistHeader(
                 GlyphButton(R.drawable.ic_more, "Playlist options") { menu = true }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     MenuItem("Rename", { menu = false }, onRename)
+                    MenuItem("Change photo", { menu = false }, onChangePhoto)
                     HairlineDivider()
                     MenuItem("Delete", { menu = false }, onDelete)
                 }

@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,17 +33,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
-import dev.stevenjin.stevenpiano.ui.components.MonogramTile
+import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 
 /**
- * A piece: title over "Surname · m:ss". Tap plays; long-press opens its menu ([PieceMenu] with
+ * A piece: its composer's 40 dp portrait (else the mosaic of their roll cards, else a monogram),
+ * then the title over "Surname · m:ss". Tap plays; long-press opens its menu ([PieceMenu] with
  * [actions]; [place] offers Move up and Move down inside a reorderable playlist). [trailing] is
  * the drag handle inside a playlist.
  */
@@ -62,40 +68,54 @@ fun PieceRow(
             onClickLabel = "Play",
             onClick = onPlay,
             onLongClick = { menu = true },
+            leading = { ComposerArt(piece.composerKey, piece.composerShort.ifBlank { piece.title }, ArtSize.Row, Modifier.size(PORTRAIT)) },
             trailing = trailing,
         )
         PieceMenu(piece, actions, place, expanded = menu) { menu = false }
     }
 }
 
-/** A playlist's tile: its art, name and size. Tap opens it; long-press offers Rename and Delete. */
+/**
+ * A playlist's tile: its cover (the person's photo, else its first composer's portrait, else a
+ * monogram), name and size. Tap opens it; long-press offers Rename, Change photo and Delete.
+ */
 @Composable
-fun PlaylistTile(playlist: PlaylistSummary, onOpen: () -> Unit, onDialog: (LibraryDialog) -> Unit, modifier: Modifier = Modifier) {
+fun PlaylistTile(
+    playlist: PlaylistSummary,
+    onOpen: () -> Unit,
+    onChangePhoto: () -> Unit,
+    onDialog: (LibraryDialog) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var menu by remember { mutableStateOf(false) }
     Tile(
         name = playlist.name,
-        monogram = playlist.name,
         meta = Format.count(playlist.pieceCount, "piece", "pieces"),
+        art = { PlaylistCover(playlist.id, playlist.name, ArtSize.Tile, it) },
         onOpen = onOpen,
         onLongPress = { menu = true },
         modifier = modifier,
     ) {
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Rename", { menu = false }) { onDialog(LibraryDialog.RenamePlaylist(playlist)) }
+            MenuItem("Change photo", { menu = false }, onChangePhoto)
             HairlineDivider()
             MenuItem("Delete", { menu = false }) { onDialog(LibraryDialog.DeletePlaylist(playlist)) }
         }
     }
 }
 
-/** A composer's tile, by full name (the surname's initial as its art). Tap opens their pieces; long-press plays them all or shuffled. */
+/**
+ * A composer's tile, by full name: their portrait, else the mosaic of their pieces' roll cards.
+ * Tap opens their pieces; long-press plays them all or shuffled.
+ */
 @Composable
 fun ComposerTile(composer: ComposerGroup, onOpen: () -> Unit, onPlayAll: (shuffle: Boolean) -> Unit, modifier: Modifier = Modifier) {
     var menu by remember { mutableStateOf(false) }
     Tile(
         name = composerName(composer),
-        monogram = composer.shortName.ifBlank { composer.name },
         meta = Format.count(composer.pieceCount, "piece", "pieces"),
+        art = { ComposerArt(composer.composerKey, composer.shortName.ifBlank { composer.name }, ArtSize.Tile, it) },
         onOpen = onOpen,
         onLongPress = { menu = true },
         modifier = modifier,
@@ -123,12 +143,12 @@ fun TileRow(columns: Int, count: Int, content: @Composable RowScope.() -> Unit) 
     }
 }
 
-/** A tile: square art, the name in Body, the count as an eyebrow. [menu] is its long-press menu. */
+/** A tile: square [art], the name in Body, the count as an eyebrow. [menu] is its long-press menu. */
 @Composable
 private fun Tile(
     name: String,
-    monogram: String,
     meta: String,
+    art: @Composable (Modifier) -> Unit,
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier,
@@ -147,7 +167,7 @@ private fun Tile(
                 )
                 .padding(bottom = 8.dp),
         ) {
-            MonogramTile(monogram, Modifier.fillMaxWidth())
+            art(Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
             Text(
                 name,
@@ -162,7 +182,10 @@ private fun Tile(
     }
 }
 
-/** The library's row: text, 56 dp or more, a hairline divider inset to the text; [trailing] holds a row's glyphs. */
+/**
+ * The library's row: [leading] art, then the text, 56 dp or more, a hairline divider inset to the
+ * text; [trailing] holds a row's glyphs.
+ */
 @Composable
 private fun TextRow(
     title: String,
@@ -170,11 +193,12 @@ private fun TextRow(
     onClickLabel: String,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(
+            Row(
                 Modifier
                     .weight(1f)
                     .heightIn(min = 56.dp)
@@ -186,19 +210,30 @@ private fun TextRow(
                         onClick = onClick,
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (meta.isNotEmpty()) Eyebrow(meta, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false, maxLines = 1)
+                if (leading != null) {
+                    leading()
+                    Spacer(Modifier.width(LEADING_GAP))
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (meta.isNotEmpty()) Eyebrow(meta, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false, maxLines = 1)
+                }
             }
             trailing?.invoke(this)
         }
-        HairlineDivider(startInset = 16.dp)
+        HairlineDivider(startInset = if (leading != null) TEXT_INSET_WITH_ART else 16.dp)
     }
 }
+
+/** The composer portrait beside a piece row. */
+private val PORTRAIT: Dp = 40.dp
+private val LEADING_GAP: Dp = 16.dp
+private val TEXT_INSET_WITH_ART: Dp = 16.dp + PORTRAIT + LEADING_GAP

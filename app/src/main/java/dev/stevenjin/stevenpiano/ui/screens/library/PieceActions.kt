@@ -25,6 +25,8 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 class PieceActions(
     val playNext: (PieceEntity) -> Unit,
     val addToQueue: (PieceEntity) -> Unit,
+    /** The piece sheet: art, notes from Wikipedia and where they came from. */
+    val about: (PieceEntity) -> Unit,
     val addToPlaylist: (PieceEntity) -> Unit,
     val setFavorite: (PieceEntity, Boolean) -> Unit,
     val rename: (PieceEntity) -> Unit,
@@ -36,7 +38,7 @@ class PieceActions(
 ) {
     /** These actions, with the two a playlist adds. */
     fun forPlaylist(remove: (PieceEntity) -> Unit, move: (PieceEntity, Int) -> Unit): PieceActions =
-        PieceActions(playNext, addToQueue, addToPlaylist, setFavorite, rename, delete, remove, move)
+        PieceActions(playNext, addToQueue, about, addToPlaylist, setFavorite, rename, delete, remove, move)
 }
 
 /** A row's place in a reorderable playlist: which of Move up and Move down it can offer. */
@@ -47,15 +49,16 @@ data class RowPlace(val index: Int, val count: Int) {
 
 /**
  * A piece's menu, in three groups set apart by hairlines, destructive items last: Play next · Add
- * to queue | Add to playlist · Favorite · Rename (· Move up · Move down, inside a playlist that can
- * be reordered) | Remove from playlist (inside a playlist) · Delete. A move the row cannot make is
- * left out rather than shown disabled.
+ * to queue · About this piece | Add to playlist · Favorite · Rename (· Move up · Move down, inside
+ * a playlist that can be reordered) | Remove from playlist (inside a playlist) · Delete. A move the
+ * row cannot make is left out rather than shown disabled.
  */
 @Composable
 fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expanded: Boolean, onDismiss: () -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         MenuItem("Play next", onDismiss) { actions.playNext(piece) }
         MenuItem("Add to queue", onDismiss) { actions.addToQueue(piece) }
+        MenuItem("About this piece", onDismiss) { actions.about(piece) }
         HairlineDivider()
         MenuItem("Add to playlist", onDismiss) { actions.addToPlaylist(piece) }
         MenuItem(if (piece.favorite) "Unfavorite" else "Favorite", onDismiss) { actions.setFavorite(piece, !piece.favorite) }

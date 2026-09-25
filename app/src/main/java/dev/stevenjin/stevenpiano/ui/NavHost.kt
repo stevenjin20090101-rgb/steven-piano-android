@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -62,8 +64,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
+import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
 import dev.stevenjin.stevenpiano.ui.screens.keys.KeysScreen
 import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
@@ -77,7 +81,8 @@ import kotlin.math.min
 /**
  * The app's frame: four destinations (Library, Now playing, Keys, Piano) in a bottom navigation
  * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
- * with a 240 ms fade-through between them, or a cut when motion is reduced. [requestedTab]
+ * with a 240 ms fade-through between them, or a cut when motion is reduced. Artwork everywhere
+ * follows the Piano tab's black-and-white switch ([LocalArtworkMonochrome]). [requestedTab]
  * switches destination from outside (a shared file, the notification); [onImport] brings files
  * into the library.
  */
@@ -89,6 +94,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val entry by nav.currentBackStackEntryAsState()
     val current = Route.of(entry?.destination?.route) ?: Route.Library
     val show: (Route) -> Unit = remember(nav) { { route -> nav.showTab(route) } }
+    val settings by LocalContext.current.graph.settings.collectAsStateWithLifecycle()
 
     LaunchedEffect(requestedTab) {
         val tab = requestedTab ?: return@LaunchedEffect
@@ -97,7 +103,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         onTabShown()
     }
 
-    CompositionLocalProvider(LocalAppFrame provides frame) {
+    CompositionLocalProvider(LocalAppFrame provides frame, LocalArtworkMonochrome provides settings.artworkMonochrome) {
         Row(
             Modifier
                 .fillMaxSize()

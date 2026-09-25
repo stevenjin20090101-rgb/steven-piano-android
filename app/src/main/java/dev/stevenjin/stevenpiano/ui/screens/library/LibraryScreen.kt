@@ -10,6 +10,9 @@
 package dev.stevenjin.stevenpiano.ui.screens.library
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -52,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selectableGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -61,49 +63,72 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.data.art.ArtSize
+import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.Sentences
+import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
-import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
-import dev.stevenjin.stevenpiano.ui.components.MonogramTile
+import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.moved
 import dev.stevenjin.stevenpiano.ui.components.readingPadding
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
+import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
 import dev.stevenjin.stevenpiano.ui.components.rememberDragReorderState
 import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
+import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import kotlinx.coroutines.launch
 
 /**
  * The Library tab: search, the category chips, then text rows, or grids of tiles for Playlists
  * and Composers. Tapping a piece plays it (with the list it was in as the queue) and [onPlaying]
  * shows Now playing. A playlist opens as a page (its cover, Play and Shuffle) whose rows reorder
  * by their drag handles while no search narrows them. Row and tile menus act through [playback]
- * and the view model. [onImport] brings files in. On wide screens the content stays a 720 dp
- * column in the middle; the list still scrolls from anywhere across the screen.
+ * and the view model; "About this piece" opens the piece sheet and "Change photo" the photo
+ * picker. A composer opens with their portrait and blurb. [onImport] brings files in; artwork
+ * fetched in the background shows its progress under the import bar. On wide screens the content
+ * stays a 720 dp column in the middle; the list still scrolls from anywhere across the screen.
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (ImportSource) -> Unit) {
     val graph = LocalContext.current.graph
-    val vm = viewModel { LibraryViewModel(graph.library, graph.importProgress, graph.appScope) }
+    val vm = viewModel { LibraryViewModel(graph.library, graph.importProgress, graph.appScope, graph.artwork::forget) }
     val state by vm.state.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
+    val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var adding by rememberSaveable { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
+    var about by rememberSaveable { mutableStateOf<Long?>(null) }
+    var photoFor by rememberSaveable { mutableStateOf<Long?>(null) }
     val pickers = rememberImportPickers(onImport)
+    // The picker's grant ends with this screen: the photo is copied at once, in the app's scope.
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val playlistId = photoFor
+        photoFor = null
+        if (uri != null && playlistId != null) graph.appScope.launch { graph.artwork.setPlaylistPhoto(playlistId, uri) }
+    }
+    val changePhoto: (Long) -> Unit = { playlistId ->
+        photoFor = playlistId
+        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
     val actions = remember(vm, playback) {
         PieceActions(
             playNext = { playback.playNext(listOf(it.id)) },
             addToQueue = { playback.addToQueue(listOf(it.id)) },
+            about = { about = it.id },
             addToPlaylist = { dialog = LibraryDialog.AddToPlaylist(it) },
             setFavorite = vm::setFavorite,
             rename = { dialog = LibraryDialog.Rename(it) },
@@ -125,17 +150,20 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
             }
             HairlineDivider()
             ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
+            ArtworkBar(artworkProgress)
         }
         when {
             !state.loaded -> Unit
             state.empty -> EmptyLibrary(onAdd = { adding = true })
             else -> BoxWithConstraints(Modifier.fillMaxSize()) {
-                LibraryItems(state, vm, listState, readingPadding(maxWidth), actions, play) { dialog = it }
+                LibraryItems(state, vm, listState, readingPadding(maxWidth), actions, play, changePhoto) { dialog = it }
             }
         }
     }
-    if (adding) AddSheet(pickers) { adding = false }
+    val context = LocalContext.current
+    if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }) { adding = false }
     dialog?.let { LibraryDialogs(it, vm) { dialog = null } }
+    about?.let { PieceDetailSheet(it) { about = null } }
 }
 
 /** Playing from the library: the playback service starts, and Now playing is shown. */
@@ -165,6 +193,7 @@ private fun LibraryItems(
     padding: PaddingValues,
     actions: PieceActions,
     play: LibraryPlay,
+    onChangePhoto: (Long) -> Unit,
     onDialog: (LibraryDialog) -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
@@ -210,15 +239,26 @@ private fun LibraryItems(
                     ?: PlaylistSummary(group.id, group.name, false, pieces.size, pieces.sumOf { it.durationMs })
                 PlaylistHeader(
                     summary,
-                    cover = { MonogramTile(summary.name, it) },
+                    cover = { PlaylistCover(summary.id, summary.name, ArtSize.Tile, it) },
                     onBack = vm::closeGroup,
                     onPlay = { play.all(shown.map { it.id }, shuffle = false) },
                     onShuffle = { play.all(shown.map { it.id }, shuffle = true) },
                     onRename = { onDialog(LibraryDialog.RenamePlaylist(summary)) },
+                    onChangePhoto = { onChangePhoto(summary.id) },
                     onDelete = { onDialog(LibraryDialog.DeletePlaylist(summary)) },
                 )
             }
-            is Group.Composer -> item(key = "group") { GroupHeader(group, pieces.size, vm::closeGroup) }
+            is Group.Composer -> item(key = "group") {
+                val artwork = rememberArtworkRow(ArtworkEntity.forComposer(group.key))
+                ComposerHeader(
+                    portrait = { ComposerArt(group.key, group.name, ArtSize.Tile, it) },
+                    name = group.name,
+                    meta = Format.count(pieces.size, "piece", "pieces"),
+                    blurb = artwork?.description?.let(Sentences::firstTwo),
+                    sourceUrl = artwork?.sourceUrl,
+                    onBack = vm::closeGroup,
+                )
+            }
             null -> Unit
         }
         when (listing) {
@@ -253,6 +293,7 @@ private fun LibraryItems(
                             PlaylistTile(
                                 playlist,
                                 onOpen = { vm.openGroup(Group.Playlist(playlist.id, playlist.name)) },
+                                onChangePhoto = { onChangePhoto(playlist.id) },
                                 onDialog = onDialog,
                                 modifier = Modifier.weight(1f),
                             )
@@ -325,27 +366,6 @@ private fun CategoryChips(selected: Category, onSelect: (Category) -> Unit) {
                 },
             )
         }
-    }
-}
-
-/** Inside a composer: back, the name, how many pieces. */
-@Composable
-private fun GroupHeader(group: Group.Composer, pieceCount: Int, onBack: () -> Unit) {
-    Column {
-        Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            GlyphButton(R.drawable.ic_back, "Back to composers", onClick = onBack)
-            Spacer(Modifier.width(4.dp))
-            Column {
-                Text(
-                    group.name,
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Eyebrow(Format.count(pieceCount, "piece", "pieces"))
-            }
-        }
-        HairlineDivider()
     }
 }
 

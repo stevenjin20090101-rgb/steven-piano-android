@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 
 /** What the system pickers may offer. Some file managers call a .mid file octet-stream. */
 private val MidiTypes = arrayOf("audio/midi", "audio/mid", "audio/x-midi", "application/x-midi", "application/octet-stream")
@@ -65,10 +66,14 @@ fun rememberImportPickers(onChosen: (ImportSource) -> Unit): ImportPickers {
     return remember(files, folder, zip) { ImportPickers(files, folder, zip) }
 }
 
-/** The `+` sheet: Add files, Add folder, Add zip. */
+/**
+ * The `+` sheet: Add files, Add folder, Add zip; then, set apart by a hairline, Fetch artwork and
+ * notes for every composer ([onFetchArtwork]), which asks again even for composers not found
+ * before.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSheet(pickers: ImportPickers, onDismiss: () -> Unit) {
+fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
         Text(
             "Add MIDI files",
@@ -90,6 +95,11 @@ fun AddSheet(pickers: ImportPickers, onDismiss: () -> Unit) {
         SheetOption("Add zip", "A zip of MIDI files, such as ALL-SONGS.zip.") {
             onDismiss()
             pickers.addZip()
+        }
+        HairlineDivider(Modifier.padding(vertical = 8.dp))
+        SheetOption("Fetch artwork and notes for every composer", "Portraits and notes from Wikipedia. Nothing about you is sent.") {
+            onDismiss()
+            onFetchArtwork()
         }
         Spacer(Modifier.height(24.dp))
     }

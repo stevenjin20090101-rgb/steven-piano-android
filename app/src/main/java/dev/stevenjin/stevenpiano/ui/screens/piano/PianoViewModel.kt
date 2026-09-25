@@ -79,6 +79,10 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsAc
 
     fun setSkipDrums(on: Boolean) = edit { setSkipDrumChannel(on) }
 
+    fun setArtworkMonochrome(on: Boolean) = edit { setArtworkMonochrome(on) }
+
+    fun setFetchArtworkAutomatically(on: Boolean) = edit { setFetchArtworkAutomatically(on) }
+
     private fun edit(change: suspend SettingsRepository.() -> Unit) {
         graph.appScope.launch { graph.settingsRepository.change() }
     }

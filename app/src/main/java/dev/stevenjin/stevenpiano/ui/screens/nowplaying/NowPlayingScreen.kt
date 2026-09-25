@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui.screens.nowplaying
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -75,6 +76,7 @@ import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.StaffCanvas
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
+import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
 /** Below this height the screen scrolls, and the note views get fixed heights; the stacked views need more. */
@@ -94,8 +96,8 @@ private const val SETTLE_NANOS = 400_000_000L
  * staff and the notes together (stacked on medium widths, side by side on expanded ones), or
  * either alone, as Wide layout says. The roll always keeps its keyboard strip beneath it, lane
  * for key. The transport goes through [playback], which keeps the playback service running, with
- * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet.
- * [onOpenPiano] shows the Piano tab.
+ * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet, and
+ * the title opens the piece sheet. [onOpenPiano] shows the Piano tab.
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
@@ -108,15 +110,17 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val piece = state.piece
     val plan = frame.notesPlan(settings.noteDisplay, settings.wideLayout)
     var upNext by rememberSaveable { mutableStateOf(false) }
+    var about by rememberSaveable { mutableStateOf<Long?>(null) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Too short for the note views to share the height (landscape, a small phone at a large
         // font): the screen scrolls and the views keep fixed heights instead of collapsing.
         val short = piece != null && maxHeight < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
         Column(if (short) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
-            NowPlayingContent(state, piece, plan, link is LinkState.Connected, player, playback, onOpenPiano, short) { upNext = true }
+            NowPlayingContent(state, piece, plan, link is LinkState.Connected, player, playback, onOpenPiano, short, { about = it }) { upNext = true }
         }
     }
     if (upNext) UpNextSheet { upNext = false }
+    about?.let { PieceDetailSheet(it) { about = null } }
 }
 
 @Composable
@@ -129,6 +133,7 @@ private fun ColumnScope.NowPlayingContent(
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
     short: Boolean,
+    onAbout: (Long) -> Unit,
     onUpNext: () -> Unit,
 ) {
     ScreenHeader("Now playing") {
@@ -137,7 +142,7 @@ private fun ColumnScope.NowPlayingContent(
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     if (piece != null) {
-        PieceView(piece, state, plan, connected, player, playback, onOpenPiano, short)
+        PieceView(piece, state, plan, connected, player, playback, onOpenPiano, short) { onAbout(piece.pieceId) }
     } else if (!state.loading) {
         Box(
             Modifier
@@ -166,6 +171,7 @@ private fun ColumnScope.PieceView(
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
     short: Boolean,
+    onAbout: () -> Unit,
 ) {
     val playing = state.status == PlaybackStatus.Playing
     val roll = remember(player) { RollClock(player) }
@@ -173,8 +179,10 @@ private fun ColumnScope.PieceView(
     val frame = rememberFrameNanos(playing, piece.pieceId, settle, roll)
 
     Column(Modifier.padding(horizontal = 16.dp)) {
+        // The title opens the piece sheet: its art and notes.
         Text(
             piece.title,
+            modifier = Modifier.clickable(onClickLabel = "About this piece", onClick = onAbout),
             style = MaterialTheme.typography.displayMedium,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 3,

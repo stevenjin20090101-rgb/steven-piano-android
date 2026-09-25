@@ -47,6 +47,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.WideLayout
+import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
@@ -113,10 +114,13 @@ private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
     StepperRow("Velocity", settings.velocityPct, PlaybackLimits.VelocityPct, 5, Format::percent, "Play softer", "Play louder", vm::setVelocity)
     SwitchRow("Fold notes outside C1–B7", settings.foldOutOfRange, vm::setFold)
     SwitchRow("Skip drum channel", settings.skipDrumChannel, vm::setSkipDrums)
+    SwitchRow("Artwork in black and white", settings.artworkMonochrome, vm::setArtworkMonochrome)
+    SwitchRow("Fetch artwork automatically", settings.fetchArtworkAutomatically, vm::setFetchArtworkAutomatically, note = ArtworkCopy.TRANSPARENCY)
 }
 
+/** A preference that is on or off; [note] is a line of explanation under its label. */
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, note: String? = null) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -125,7 +129,14 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RowLabel(label, Modifier.weight(1f))
+        if (note == null) {
+            RowLabel(label, Modifier.weight(1f))
+        } else {
+            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Eyebrow(note, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
+            }
+        }
         Spacer(Modifier.width(16.dp))
         Switch(
             checked = checked,

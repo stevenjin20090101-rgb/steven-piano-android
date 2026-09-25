@@ -20,7 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.data.art.ArtworkProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.ImportCopy
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -36,10 +38,7 @@ fun ImportBar(progress: ImportProgress, dismissed: ImportProgress?, onDismiss: (
     val style = MaterialTheme.typography.bodyLarge.merge(Tabular)
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     when {
-        !progress.finished -> Column {
-            Text(ImportCopy.running(progress), Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = style, color = color)
-            ProgressHairline(if (progress.total == 0) null else progress.done.toFloat() / progress.total)
-        }
+        !progress.finished -> ProgressRow(ImportCopy.running(progress), if (progress.total == 0) null else progress.done.toFloat() / progress.total)
         progress.total > 0 && progress !== dismissed -> Column {
             Row(Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(ImportCopy.summary(progress), Modifier.weight(1f), style = style, color = color)
@@ -47,5 +46,29 @@ fun ImportBar(progress: ImportProgress, dismissed: ImportProgress?, onDismiss: (
             }
             HairlineDivider()
         }
+    }
+}
+
+/**
+ * Artwork arriving in the background: "Fetching artwork 12 of 61" over the same hairline progress
+ * line imports use. Nothing while no background fetch runs (a sheet's own fetch shows in the sheet).
+ */
+@Composable
+fun ArtworkBar(progress: ArtworkProgress) {
+    if (progress.idle || progress.total == 0) return
+    ProgressRow(ArtworkCopy.running(progress), progress.done.toFloat() / progress.total)
+}
+
+/** A line of progress copy over a hairline progress line; [progress] null is indeterminate. */
+@Composable
+private fun ProgressRow(text: String, progress: Float?) {
+    Column {
+        Text(
+            text,
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.bodyLarge.merge(Tabular),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ProgressHairline(progress)
     }
 }

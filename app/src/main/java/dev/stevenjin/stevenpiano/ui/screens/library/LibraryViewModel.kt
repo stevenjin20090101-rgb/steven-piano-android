@@ -18,6 +18,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.TextKeys
+import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
@@ -88,13 +89,15 @@ data class LibraryState(
 /**
  * The Library tab: the chosen category or group, filtered by the search field (title and
  * composer, case and accents ignored), and the menus' edits. Edits run in [writes], the app's
- * scope, so leaving the tab never cuts one short.
+ * scope, so leaving the tab never cuts one short. A deleted piece or playlist takes its artwork
+ * with it ([forgetArtwork]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val library: LibraryRepository,
     val importProgress: StateFlow<ImportProgress>,
     private val writes: CoroutineScope,
+    private val forgetArtwork: (String) -> Unit = {},
 ) : ViewModel() {
     private data class Selection(val category: Category, val group: Group?)
 
@@ -143,7 +146,10 @@ class LibraryViewModel(
 
     fun rename(piece: PieceEntity, title: String, composer: String) = write { library.rename(piece.id, title, composer) }
 
-    fun delete(piece: PieceEntity) = write { library.delete(piece.id) }
+    fun delete(piece: PieceEntity) {
+        write { library.delete(piece.id) }
+        forgetArtwork(ArtworkEntity.forPiece(piece.id))
+    }
 
     fun setMembership(playlistId: Long, pieceId: Long, member: Boolean) = write {
         if (member) library.addToPlaylist(playlistId, pieceId) else library.removeFromPlaylist(playlistId, pieceId)
@@ -160,6 +166,7 @@ class LibraryViewModel(
     fun deletePlaylist(id: Long) {
         if ((selection.value.group as? Group.Playlist)?.id == id) closeGroup()
         write { library.deletePlaylist(id) }
+        forgetArtwork(ArtworkEntity.forPlaylist(id))
     }
 
     fun removeFromPlaylist(playlistId: Long, pieceId: Long) = write { library.removeFromPlaylist(playlistId, pieceId) }
