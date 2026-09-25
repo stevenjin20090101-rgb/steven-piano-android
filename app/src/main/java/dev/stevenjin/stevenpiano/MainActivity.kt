@@ -35,8 +35,8 @@ import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
 /**
  * The one activity: edge to edge, transparent system bars, the four destinations in a frame the
  * window's width class chooses. MIDI files that arrive by "Open with" or the share sheet, or
- * come from the Library's pickers, are imported by the import service; the playback
- * notification opens Now playing.
+ * come from the Library's pickers, are imported by the import service (or, when the app may not
+ * read them, the Library says so); the playback notification opens Now playing.
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
@@ -71,14 +71,21 @@ class MainActivity : ComponentActivity() {
         route(intent)
     }
 
+    /**
+     * Shared files go to the import service and the Library shows their progress. A file the
+     * sender gave no access to cannot go (Android refuses the hand-over): the Library says it
+     * couldn't be read instead of the app crashing.
+     */
     private fun route(intent: Intent) {
         emulatorSet(intent)
         val shared = sharedMidi(intent)
-        if (shared.isNotEmpty()) {
-            ImportService.start(this, ImportSource.Uris(shared), fromPicker = false)
-            requestedTab = Route.Library
-        } else {
-            Route.of(intent.getStringExtra(EXTRA_TAB))?.let { requestedTab = it }
+        when (SharedFiles.hand(shared) { ImportService.start(this, ImportSource.Uris(it), fromPicker = false) }) {
+            SharedFiles.Outcome.Importing -> requestedTab = Route.Library
+            SharedFiles.Outcome.Unreadable -> {
+                graph.reportUnreadableShare(shared.size)
+                requestedTab = Route.Library
+            }
+            SharedFiles.Outcome.None -> Route.of(intent.getStringExtra(EXTRA_TAB))?.let { requestedTab = it }
         }
     }
 

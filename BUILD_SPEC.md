@@ -277,6 +277,10 @@ engine, data and BLE layers keep their v1.0 contracts except where stated.
 - Geometry from the existing `KeyLayout` (84 lanes, C1–B7) scaled to a chosen visible
   range with horizontal offset; white keys full height, black keys 60 % height drawn
   after whites. Hit-testing prefers black keys within their rectangle.
+- Keyboard height at most `min(320 dp, 45 % of the screen's height)` (M9 review: 790 dp
+  keys on an upright tablet read as a barcode). The keyboard and the Sustain / VELOCITY /
+  connection row sit at the bottom; the mini-map stays at the top; the space between is
+  left empty.
 - Multi-touch: track each pointer id → current key; on down send Note On; when a
   pointer crosses into another key send Note Off for the old key and Note On for the
   new (glissando); on up/cancel send Note Off. Velocity from the touch's y within the
@@ -317,7 +321,8 @@ engine, data and BLE layers keep their v1.0 contracts except where stated.
   via `TextMeasurer`; if the font cannot be obtained offline, hand-drawn vector paths
   for the two clefs and a plain ellipse head are acceptable. Add the OFL text to
   `AUTHORS`/`README` acknowledgements.
-- Colours: staff lines `LocalHairline`, clefs `onSurfaceVariant`, upcoming heads
+- Colours: staff lines `LocalTertiary` (M9 review: the hairline token all but vanished in
+  dark mode), ledger lines the note's colour, clefs `onSurfaceVariant`, upcoming heads
   `onSurfaceVariant`, active heads `onSurface` with the 120 ms flip (cut under reduced
   motion), playhead `onSurface`.
 

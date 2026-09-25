@@ -302,11 +302,13 @@ Window size classes decide the frame; nothing else changes with size.
 The piano, from the tablet. Every tap becomes a Note On over the same link the pieces
 use; the piano's own LED strip reacts as it does to any note.
 
-- **The keyboard** fills the screen: 84 keys, C1–B7, white keys `surfaceElevated` with
-  hairline gaps, black keys `contentTertiary` at 60 % height overlapping the white ones,
-  the octave letters (C1 … C7) in Eyebrow style at the bottom of each C. A pressed key
-  inverts to `contentPrimary` for as long as the finger is down. Multi-touch: chords.
-  Sliding across keys plays a glissando (off, then on, as the finger crosses a boundary).
+- **The keyboard** spans the screen's width at the bottom, never taller than 320 dp or
+  45 % of the screen's height (taller keys read as a barcode): 84 keys, C1–B7, white
+  keys `surfaceElevated` with hairline gaps, black keys `contentTertiary` at 60 % height
+  overlapping the white ones, the octave letters (C1 … C7) in Eyebrow style at the
+  bottom of each C. A pressed key inverts to `contentPrimary` for as long as the finger
+  is down. Multi-touch: chords. Sliding across keys plays a glissando (off, then on, as
+  the finger crosses a boundary).
 - **Loudness by touch position**: the vertical position of the touch on the key sets
   velocity, top = soft (velocity 24), bottom = loud (127), linear in between; black keys
   the same across their own height. A small Eyebrow readout **VELOCITY 84** under the
@@ -329,7 +331,8 @@ use; the piano's own LED strip reacts as it does to any note.
 Honest about what it is: pitch on a grand staff, in time, in sync with the roll. Not
 engraved notation (no beams, rests, ties or voices).
 
-- **Grand staff**: treble and bass, five hairlines each, staff line spacing 6 dp,
+- **Grand staff**: treble and bass, five 1 dp lines each in `contentTertiary` (the hairline
+  grey all but vanishes on the dark surface), staff line spacing 6 dp,
   40 dp between the staves, clefs at the left edge in `contentSecondary`. Notes at or
   above middle C sit on the treble staff, below it on the bass staff; middle C gets its
   own ledger line. Ledger lines as needed (the piano's C1 needs several below the

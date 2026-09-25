@@ -19,6 +19,9 @@ object ImportCopy {
 
     /** "Imported 12 pieces. 1 file couldn't be read." Duplicates pass without comment. */
     fun summary(progress: ImportProgress): String {
+        if (progress.unreadable) {
+            return if (progress.total == 1) "Couldn't read that file. Try Add files instead." else "Couldn't read those files. Try Add files instead."
+        }
         val imported = when {
             progress.imported > 0 -> "Imported ${Format.count(progress.imported, "piece", "pieces")}."
             progress.failed > 0 -> null

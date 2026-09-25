@@ -11,7 +11,8 @@ package dev.stevenjin.stevenpiano.data.imports
 
 /**
  * How an import is going ("Imported 1,204 of 1,727"): [done] of [total] files looked at so far.
- * [finished] is true when no import is running.
+ * [finished] is true when no import is running. [unreadable]: files another app sent that this
+ * app was given no access to, so they never reached the importer.
  */
 data class ImportProgress(
     val done: Int = 0,
@@ -21,6 +22,7 @@ data class ImportProgress(
     val failed: Int = 0,
     val current: String? = null,
     val finished: Boolean = true,
+    val unreadable: Boolean = false,
 ) {
     companion object {
         val Idle = ImportProgress()

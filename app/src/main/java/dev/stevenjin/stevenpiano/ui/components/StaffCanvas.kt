@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
-import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlin.math.max
@@ -71,7 +71,8 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * engraved notation (no beams, rests, ties or voices): a filled head per note, a sharp before
  * the head of a black key, and a hairline trailing the head for the note's length. Keys from
  * middle C up sit on the treble staff, the rest on the bass staff, with ledger lines (in the
- * note's colour) as far as the piano reaches. Time runs right to left at the roll's pixels per second through a 2 dp
+ * note's colour) as far as the piano reaches. The five lines of each staff are 1 dp in the
+ * tertiary grey, not the hairline token, which all but vanishes on the dark surface. Time runs right to left at the roll's pixels per second through a 2 dp
  * playhead a third of the way in; upcoming heads are the secondary colour, and a head brightens
  * over 120 ms as it crosses the playhead (a cut when motion is reduced) and stays bright for its
  * duration. Clefs, sharps and heads are Bravura's glyphs.
@@ -91,7 +92,7 @@ fun StaffCanvas(
 ) {
     val upcoming = MaterialTheme.colorScheme.onSurfaceVariant
     val sounding = MaterialTheme.colorScheme.onSurface
-    val line = LocalHairline.current
+    val line = LocalTertiary.current   // legible in the dark, still quieter than the notes
     val reduced = rememberReducedMotion()
     val measurer = rememberTextMeasurer()
     val staffNotes = remember(notes, transpose, fold) { StaffNotes(notes, transpose, fold) }

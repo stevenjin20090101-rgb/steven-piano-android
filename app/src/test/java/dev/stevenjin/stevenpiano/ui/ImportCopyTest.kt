@@ -40,4 +40,16 @@ class ImportCopyTest {
         assertEquals("That piece is already in the library.", ImportCopy.summary(ImportProgress(done = 1, total = 1, duplicates = 1)))
         assertEquals("Those pieces are already in the library.", ImportCopy.summary(ImportProgress(done = 3, total = 3, duplicates = 3)))
     }
+
+    @Test
+    fun `a shared file the app may not read says so, and what to do instead`() {
+        assertEquals(
+            "Couldn't read that file. Try Add files instead.",
+            ImportCopy.summary(ImportProgress(done = 1, total = 1, failed = 1, unreadable = true)),
+        )
+        assertEquals(
+            "Couldn't read those files. Try Add files instead.",
+            ImportCopy.summary(ImportProgress(done = 3, total = 3, failed = 3, unreadable = true)),
+        )
+    }
 }

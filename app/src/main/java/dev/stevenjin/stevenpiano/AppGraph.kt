@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano
 
 import android.app.Application
+import android.util.Log
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
@@ -94,6 +95,18 @@ class AppGraph(private val app: Application) {
         }
     }
 
+    /**
+     * [count] files another app sent could not be read (no access was given with them): the
+     * Library's import bar says so, unless an import is running, whose progress it keeps showing.
+     */
+    fun reportUnreadableShare(count: Int) {
+        if (!importState.value.finished) {
+            Log.w(TAG, "$count shared files couldn't be read (an import is running)")
+            return
+        }
+        importState.value = ImportProgress(done = count, total = count, failed = count, unreadable = true)
+    }
+
     /** Disconnect from the Piano tab: the player pauses first, so the piano is silenced, then the link drops. */
     fun disconnectPiano() {
         appScope.launch {
@@ -103,6 +116,7 @@ class AppGraph(private val app: Application) {
     }
 
     private companion object {
+        const val TAG = "AppGraph"
         const val DISCONNECT_FLUSH_MS = 300L
     }
 }
