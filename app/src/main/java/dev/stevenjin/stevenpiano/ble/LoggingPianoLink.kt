@@ -98,6 +98,12 @@ class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleMod
 
     override fun flush(timeoutMs: Long): Boolean = true
 
+    /** There is no piano to silence: the call is logged, so the crash path can be seen on the emulator. */
+    override fun emergencySilence(timeoutMs: Long): Boolean {
+        Log.d(TAG, "Emergency silence (${timeoutMs} ms): B0 40 00, B0 7B 00")
+        return _state.value is LinkState.Connected
+    }
+
     companion object {
         private const val TAG = "PianoLink"
         private const val LOGGED_MTU = 255

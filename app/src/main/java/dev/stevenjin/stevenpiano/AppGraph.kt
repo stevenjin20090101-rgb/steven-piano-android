@@ -85,8 +85,7 @@ class AppGraph(private val app: Application) {
         ArtworkRepository(app, database.artwork(), library, ArtFiles(app.filesDir), WikipediaClient(), network, appScope)
     }
 
-    /** The Bluetooth link; on an emulator in debug builds, a stand-in that logs what it would send. */
-    val pianoLink: PianoLink by lazy {
+    private val link = lazy {
         if (LoggingPianoLink.isWanted()) {
             LoggingPianoLink()
         } else {
@@ -97,6 +96,12 @@ class AppGraph(private val app: Application) {
             )
         }
     }
+
+    /** The Bluetooth link; on an emulator in debug builds, a stand-in that logs what it would send. */
+    val pianoLink: PianoLink by link
+
+    /** The link if something has made it already, else null: the crash handler's view, which must never make one. */
+    fun pianoLinkIfMade(): PianoLink? = if (link.isInitialized()) link.value else null
 
     val player: Player by lazy { Player(pianoLink, library, appScope) }
 

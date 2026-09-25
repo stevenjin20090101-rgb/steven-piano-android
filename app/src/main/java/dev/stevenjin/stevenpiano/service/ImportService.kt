@@ -22,11 +22,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
@@ -34,6 +36,7 @@ import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ImportCopy
 import dev.stevenjin.stevenpiano.ui.Route
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -67,10 +70,20 @@ class ImportService : Service() {
         if (progressJob == null) progressJob = scope.launch { graph.importProgress.collect(::post) }
         scope.launch {
             try {
-                val result = graph.importer.import(this@ImportService, request.source)
+                val result = try {
+                    graph.importer.import(this@ImportService, request.source)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {   // the importer counts every file's own failure; this is anything else
+                    stopped(e)
+                    null
+                } catch (e: OutOfMemoryError) {
+                    stopped(e)
+                    null
+                }
                 // Started now, while this service still holds the foreground: Android 12+ refuses
                 // a foreground service started from the background.
-                if (result.imported > 0 && graph.settingsRepository.settings.first().fetchArtworkAutomatically) {
+                if (result != null && result.imported > 0 && graph.settingsRepository.settings.first().fetchArtworkAutomatically) {
                     ArtworkService.start(this@ImportService, force = false)
                 }
             } finally {
@@ -85,6 +98,11 @@ class ImportService : Service() {
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
+    }
+
+    /** An import that failed as a whole: logged (in debug builds with its message, which may name a file), never a crash. */
+    private fun stopped(e: Throwable) {
+        if (BuildConfig.DEBUG) Log.w(TAG, "An import stopped", e) else Log.w(TAG, "An import stopped with an error")
     }
 
     private fun stopIfIdle() {
@@ -142,6 +160,7 @@ class ImportService : Service() {
     }
 
     companion object {
+        private const val TAG = "ImportService"
         const val CHANNEL_ID = "imports"
         private const val ID = 2
         private const val UPDATE_MS = 400L

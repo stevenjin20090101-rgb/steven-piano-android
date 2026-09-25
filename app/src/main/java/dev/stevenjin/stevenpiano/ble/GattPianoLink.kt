@@ -39,7 +39,8 @@ import kotlin.concurrent.withLock
  * a console line goes only while no MIDI is waiting, so it delays a MIDI packet by one write at most.
  * A drop: close() the gatt, then Reconnecting: a background connectGatt(autoConnect = true) on
  * the same piano, plus filtered scans with backoff 1, 2, 4, 8, 15 s starting after 20 s.
- * Every radio call and every callback runs on [executor]'s thread, which never blocks.
+ * Every radio call and every callback runs on [executor]'s thread, which never blocks, except
+ * [emergencySilence]: the crash handler's direct write of the stop sequence, from whatever thread.
  */
 class GattPianoLink(
     private val radio: BleRadio,
@@ -57,6 +58,10 @@ class GattPianoLink(
     private var ready = false
     @Volatile
     private var writing = false
+
+    /** The connection while Ready, for [emergencySilence] on any thread; null otherwise. */
+    @Volatile
+    private var readyConnection: GattConnection? = null
     private val pumpQueued = AtomicBoolean(false)
     private val drainLock = ReentrantLock()
     private val drained = drainLock.newCondition()
@@ -146,6 +151,33 @@ class GattPianoLink(
         if (!ready) return
         writer.enqueue(batch, dropPending)
         if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
+    }
+
+    /**
+     * The crash handler's stop: CC64 = 0 then CC123, in one packet, written directly on the
+     * connection (the link's thread may be the one crashing, and the queue may be long), retried
+     * every few milliseconds while the stack is busy, for at most [timeoutMs]. False when not
+     * connected or not written in time. Racing a write from the link's own thread is accepted:
+     * the process is about to end, and the piano silences itself on the disconnect that follows.
+     */
+    override fun emergencySilence(timeoutMs: Long): Boolean {
+        val connection = readyConnection ?: return false
+        val packet = BleMidiFramer.frame(STOP_SEQUENCE, 0, STOP_SEQUENCE.size, executor.nanoTime() / NANOS_PER_MS)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        while (true) {
+            val written = try {
+                connection.write(packet) == WriteResult.Sent
+            } catch (e: RuntimeException) {   // a revoked permission, a closed gatt
+                return false
+            }
+            if (written) return true
+            if (System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(EMERGENCY_RETRY_MS) > deadline) return false
+            try {
+                Thread.sleep(EMERGENCY_RETRY_MS)
+            } catch (e: InterruptedException) {
+                return false
+            }
+        }
     }
 
     /** Returns once the queue is written, the link is gone, or [timeoutMs] passes (false). Not on the link thread. */
@@ -319,6 +351,7 @@ class GattPianoLink(
         subscribePending = hasConsole   // the connection's first write, so no reply is lost
         consoleReady = hasConsole
         ready = true
+        readyConnection = connection
         val name = piano?.name ?: PianoBluetooth.NAME
         val address = piano?.address ?: preferredAddress
         publish()
@@ -429,6 +462,7 @@ class GattPianoLink(
         val connection = gatt ?: return
         gatt = null
         ready = false
+        readyConnection = null
         consoleReady = false
         writer.clear()
         consoleQueue.clear()
@@ -586,6 +620,10 @@ class GattPianoLink(
         private const val WRITE_TIMEOUT_MS = 1_000L
         private const val WRITE_RETRY_MS = 5L
         private const val MAX_WRITE_RETRIES = 40
+        private const val EMERGENCY_RETRY_MS = 5L
+
+        /** Pedal up, then All Notes Off: the stop sequence, as packed messages. */
+        private val STOP_SEQUENCE = intArrayOf(MidiBatch.pack(0xB0, 64, 0), MidiBatch.pack(0xB0, 123, 0))
         private const val RECONNECT_SCAN_AFTER_MS = 20_000L
         private val BACKOFF_MS = longArrayOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L)
 

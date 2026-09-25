@@ -47,6 +47,14 @@ interface PianoLink : MidiSink {
 
     /** Blocks until every queued message is written or [timeoutMs] passes; true when drained. Not on the main thread for long. */
     fun flush(timeoutMs: Long): Boolean
+
+    /**
+     * The last resort, for the crash handler: writes the stop sequence (CC64 = 0, then CC123) straight
+     * to the piano, past the paced queue and the link's own thread (which may be the one crashing),
+     * retrying a busy stack for at most [timeoutMs]. Callable from any thread; true when the stop went
+     * out. Nothing else may use it: it bypasses the one-operation-at-a-time rule.
+     */
+    fun emergencySilence(timeoutMs: Long): Boolean
 }
 
 sealed interface LinkState {

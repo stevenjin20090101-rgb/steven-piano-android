@@ -15,13 +15,18 @@ import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.service.PlaybackNotification
 
-/** Builds the [AppGraph] once per process, and the notification channels. */
+/**
+ * Builds the [AppGraph] once per process, and the notification channels. First of all it puts
+ * [CrashSilencer] in front of Android's crash handler, so a crash anywhere sends the piano the
+ * stop sequence before the process ends.
+ */
 class App : Application() {
     lateinit var graph: AppGraph
         private set
 
     override fun onCreate() {
         super.onCreate()
+        CrashSilencer.install { if (::graph.isInitialized) graph.pianoLinkIfMade() else null }
         PlaybackNotification.createChannel(this)
         ImportService.createChannel(this)
         ArtworkService.createChannel(this)

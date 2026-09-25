@@ -318,6 +318,34 @@ class GattPianoLinkTest {
     }
 
     @Test
+    fun `the emergency stop goes straight onto the connection, past a queue and a write in flight`() {
+        val gatt = connectFully()
+        link.send(notes(30), dropPending = false)
+        executor.runDue()   // one packet in flight, ten messages still queued behind it
+        assertTrue(link.emergencySilence(200))
+        val stop = gatt.writes.last().map { it.toInt() and 0xFF }
+        assertEquals(9, stop.size)
+        assertEquals(listOf(0xB0, 64, 0, 0xB0, 123, 0), listOf(stop[2], stop[3], stop[4], stop[6], stop[7], stop[8]))
+    }
+
+    @Test
+    fun `the emergency stop gives up when not connected, when the stack stays busy, or when it throws`() {
+        assertFalse(link.emergencySilence(200))
+        val gatt = connectFully()
+        gatt.nextWrite = WriteResult.Busy
+        val started = System.nanoTime()
+        assertFalse(link.emergencySilence(60))
+        val tookMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("retried for $tookMs ms", tookMs in 40L..1_000L)
+        gatt.nextWrite = WriteResult.Sent
+        gatt.revoked = true
+        assertFalse(link.emergencySilence(200))
+        link.disconnect()
+        executor.runDue()
+        assertFalse(link.emergencySilence(200))
+    }
+
+    @Test
     fun `scans stay under five in thirty seconds`() {
         val throttle = ScanThrottle()
         repeat(5) {

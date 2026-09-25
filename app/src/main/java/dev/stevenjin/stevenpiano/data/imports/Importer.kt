@@ -47,7 +47,9 @@ interface ImportStore {
  * the file name, else Track 0's name for stub titles), save, then insert 25 per transaction.
  * Files listed in INDEX.csv go first, so its names win over copies elsewhere in the tree.
  * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
- * (an [OutOfMemoryError]) counts as failed. One import runs at a time; [progress] follows it.
+ * (an [OutOfMemoryError]) counts as failed, and so does a file whose sender or database throws
+ * anything else: one bad file never ends the import, nor the app. One import runs at a time;
+ * [progress] follows it, and always finishes.
  */
 class Importer(
     private val store: ImportStore,
@@ -66,11 +68,23 @@ class Importer(
                 openSource(context, source)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {   // unreadable zip, revoked grant, vanished folder
+            } catch (e: Exception) {   // unreadable zip, revoked grant, vanished folder, a provider that throws
                 log("Couldn't open the import: ${e.message}")
                 return@withContext ImportProgress(done = 1, total = 1, failed = 1).also { progress.value = it }
+            } catch (e: OutOfMemoryError) {   // a listing too large for the memory left
+                log("Couldn't open the import: $TOO_LARGE")
+                return@withContext ImportProgress(done = 1, total = 1, failed = 1).also { progress.value = it }
             }
-            opened.use { run(it) }
+            try {
+                opened.use { run(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {   // not a file's fault (each is caught on its own): the rest count as failed
+                log("The import stopped: ${e.message}")
+                val last = progress.value
+                last.copy(done = last.total, failed = last.failed + (last.total - last.done), current = null, finished = true)
+                    .also { progress.value = it }
+            }
         }
     }
 
@@ -102,6 +116,11 @@ class Importer(
             progress.value = state
             val outcome = try {
                 prepare(item, source.rowFor(item), seen)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {   // a sender's provider or the database threw: this file fails, the rest go on
+                log("${item.relativePath}: ${e.message}")
+                Outcome.Failed
             } catch (e: OutOfMemoryError) {   // the parse's arrays are garbage again; the next file may fit
                 log("${item.relativePath}: $TOO_LARGE")
                 Outcome.Failed

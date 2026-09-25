@@ -68,6 +68,17 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
 
     override fun flush(timeoutMs: Long): Boolean = true
 
+    private val emergencies = mutableListOf<Long>()
+
+    /** The timeouts [emergencySilence] was called with, in order. */
+    val emergencySilences: List<Long> get() = synchronized(emergencies) { emergencies.toList() }
+
+    /** Records the call and does nothing else. */
+    override fun emergencySilence(timeoutMs: Long): Boolean {
+        synchronized(emergencies) { emergencies += timeoutMs }
+        return true
+    }
+
     fun clear() = synchronized(log) { log.clear() }
 }
 

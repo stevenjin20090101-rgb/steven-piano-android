@@ -158,6 +158,29 @@ class ImporterTest {
         assertTrue(logs.any { it == "huge.mid: File too large to read" })
     }
 
+    @Test
+    fun `a sender or a database that throws fails that file only, and the import finishes`() = runTest {
+        val source = OpenedSource(
+            listOf(
+                ImportItem("evil.mid", "evil.mid") { throw IllegalStateException("the provider died") },
+                ImportItem("denied.mid", "denied.mid") { throw SecurityException("no access") },
+                item("Chopin - Nocturne.mid", midi(62)),
+            ),
+        )
+        val result = importer.run(source)
+        assertEquals(ImportProgress(done = 3, total = 3, imported = 1, failed = 2, finished = true), result)
+
+        val broken = object : ImportStore {
+            override suspend fun findBySha(sha256: String): PieceEntity? = throw IllegalStateException("database disk image is malformed")
+            override suspend fun fillComposer(piece: PieceEntity, composer: ComposerNames.Name) = Unit
+            override suspend fun insertAll(pieces: List<PieceEntity>): Int = pieces.size
+        }
+        val again = Importer(broken, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it })
+            .run(OpenedSource(listOf(item("a.mid", midi(60)), item("b.mid", midi(61)))))
+        assertEquals(2, again.failed)
+        assertTrue(again.finished)
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()

@@ -12,7 +12,9 @@ package dev.stevenjin.stevenpiano
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.BadParcelableException
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -88,18 +90,24 @@ class MainActivity : ComponentActivity() {
     /**
      * Shared files go to the import service and the Library shows their progress. A file the
      * sender gave no access to cannot go (Android refuses the hand-over): the Library says it
-     * couldn't be read instead of the app crashing.
+     * couldn't be read instead of the app crashing. Any app can send this activity an intent, so
+     * nothing in one may crash it: a malformed intent (extras that cannot be unparcelled, a
+     * provider that throws) is logged and dropped.
      */
     private fun route(intent: Intent) {
-        emulatorSet(intent)
-        val shared = sharedMidi(intent)
-        when (SharedFiles.hand(shared) { ImportService.start(this, ImportSource.Uris(it), fromPicker = false) }) {
-            SharedFiles.Outcome.Importing -> requestedTab = Route.Library
-            SharedFiles.Outcome.Unreadable -> {
-                graph.reportUnreadableShare(shared.size)
-                requestedTab = Route.Library
+        try {
+            emulatorSet(intent)
+            val shared = sharedMidi(intent)
+            when (SharedFiles.hand(shared) { ImportService.start(this, ImportSource.Uris(it), fromPicker = false) }) {
+                SharedFiles.Outcome.Importing -> requestedTab = Route.Library
+                SharedFiles.Outcome.Unreadable -> {
+                    graph.reportUnreadableShare(shared.size)
+                    requestedTab = Route.Library
+                }
+                SharedFiles.Outcome.None -> Route.of(stringExtra(intent, EXTRA_TAB))?.let { requestedTab = it }
             }
-            SharedFiles.Outcome.None -> Route.of(intent.getStringExtra(EXTRA_TAB))?.let { requestedTab = it }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Ignored an intent the app could not read")
         }
     }
 
@@ -110,7 +118,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun emulatorSet(intent: Intent) {
         if (!LoggingPianoLink.isWanted()) return
-        val line = intent.getStringExtra(EXTRA_EMULATOR_SET)?.trim() ?: return
+        val line = stringExtra(intent, EXTRA_EMULATOR_SET)?.trim() ?: return
         graph.pianoSettings.set(line.substringBefore(' '), line.substringAfter(' ', ""))
     }
 
@@ -118,13 +126,31 @@ class MainActivity : ComponentActivity() {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
         private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
+        private const val TAG = "MainActivity"
     }
 }
 
-/** The files an "Open with" (VIEW) or share (SEND, SEND_MULTIPLE) intent carries. */
-private fun sharedMidi(intent: Intent): List<Uri> = when (intent.action) {
-    Intent.ACTION_VIEW -> listOfNotNull(intent.data)
-    Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
-    Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
-    else -> emptyList()
+/**
+ * The files an "Open with" (VIEW) or share (SEND, SEND_MULTIPLE) intent carries. Reading one
+ * extra unparcels all of them (before API 33, eagerly), and another app chose what they are: a
+ * class this app cannot unparcel throws BadParcelableException, which here means no files.
+ */
+private fun sharedMidi(intent: Intent): List<Uri> = try {
+    when (intent.action) {
+        Intent.ACTION_VIEW -> listOfNotNull(intent.data)
+        Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
+        Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+        else -> emptyList()
+    }
+} catch (e: BadParcelableException) {
+    emptyList()
+} catch (e: RuntimeException) {   // ClassCastException, IllegalStateException from a malformed bundle
+    emptyList()
+}
+
+/** A string extra, or null when the extras cannot be read (see [sharedMidi]). */
+private fun stringExtra(intent: Intent, name: String): String? = try {
+    intent.getStringExtra(name)
+} catch (e: RuntimeException) {
+    null
 }

@@ -29,6 +29,9 @@ fun interface NanoClock {
  * priority). It sleeps in a timed poll until the next event is due or a command arrives,
  * so wake-ups are sub-millisecond and no coroutine delay slack reaches the piano.
  * Commands run here, given the time they run at; [afterStep] runs after every step.
+ * Anything a step throws, an [Error] included (running out of memory, a stack overflow), stops
+ * playback through the engine, which silences the piano, and the thread carries on: a failure
+ * never ends it with keys down.
  */
 class Scheduler(
     private val engine: PlaybackEngine,
@@ -76,25 +79,37 @@ class Scheduler(
 
     private fun advance(): Long = try {
         engine.advance(clock.nanoTime())
-    } catch (e: RuntimeException) {
+    } catch (e: Throwable) {
+        if (e is InterruptedException) throw e
         fail(e)
         Long.MAX_VALUE
     } finally {
-        afterStep()
+        stepped()
     }
 
     private fun run(command: (Long) -> Unit) = try {
         command(clock.nanoTime())
-    } catch (e: RuntimeException) {
+    } catch (e: Throwable) {
+        if (e is InterruptedException) throw e
         fail(e)
     } finally {
-        afterStep()
+        stepped()
     }
 
-    /** A failed step stops playback, which silences the piano. */
-    private fun fail(e: RuntimeException) {
-        onError(e)
+    /** A failed step stops playback, which silences the piano, first; then it is reported. */
+    private fun fail(e: Throwable) {
         runCatching { engine.stop(clock.nanoTime()) }
+        runCatching { onError(e) }
+    }
+
+    /** [afterStep] publishes state; a failure there must not end the thread either. */
+    private fun stepped() {
+        try {
+            afterStep()
+        } catch (e: Throwable) {
+            if (e is InterruptedException) throw e
+            runCatching { onError(e) }
+        }
     }
 
     companion object {
