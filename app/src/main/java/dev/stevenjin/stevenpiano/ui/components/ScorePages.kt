@@ -63,6 +63,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -94,7 +95,6 @@ import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -197,7 +197,9 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * on a background thread whenever the notes, transpose, folding or the panel change; each visible
  * page is drawn into its own cached layer that never reads the frame clock (its beams and ties built
  * as paths once, with the layer); only the overlay (cursor and sounding notes) redraws per frame,
- * without allocating.
+ * without allocating. A piece too large to lay out (the heap runs out, or the engine fails) leaves
+ * the panel saying "This score is too large to show." instead of taking the app down, and a layout
+ * is only ever drawn with the notes it was made for.
  */
 @Composable
 fun ScorePages(
@@ -265,21 +267,45 @@ fun ScorePages(
         }
         val laid by produceState<Laid?>(null, notes, tempo, bars, keySignatures, timeSignatures, transpose, fold, metrics, hands, fingers) {
             if (value?.notes !== notes) value = null   // never another piece's pages under this one's cursor
-            value = withContext(Dispatchers.Default) {
+            value = layOut(notes, Dispatchers.Default) {
                 val keys = IntArray(notes.size) { KeyMap.map(notes.note(it), transpose, fold) }
                 val keysMoved = keySignatures.map { it.transposed(transpose) }
                 val handsHere = hands?.takeIf { it.size == notes.size }
                 val fingersHere = fingers?.takeIf { it.size == notes.size && handsHere != null }
-                Laid(notes, ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, handsHere, fingersHere))
+                ScoreLayoutEngine.layout(notes, keys, tempo, bars, keysMoved, metrics, timeSignatures, handsHere, fingersHere)
             }
         }
         val chordText = remember(shownChords, chordNames, chordStyle) { if (shownChords != null && chordNames != null) ChordText(shownChords, chordNames, chordStyle) else null }
-        laid?.let { ScoreView(it.layout, notes, glyphs, numerals, chordText, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek) }
+        // Only a layout made for these notes: for a frame after a change of piece the state still holds the last one's.
+        val shown = laid.madeFor(notes)
+        if (shown != null) {
+            val layout = shown.layout
+            if (layout != null) {
+                ScoreView(layout, shown.notes, glyphs, numerals, chordText, colors, measurer, numberStyle, frameNanos, clock, reduced, onSeek)
+            } else {
+                TooLarge()
+            }
+        }
     }
 }
 
-/** A layout and the notes it was made for. */
-private class Laid(val notes: NoteList, val layout: ScoreLayout)
+/** The panel when the piece is too large to lay out: one line of Body text, centred, in the secondary colour. */
+@Composable
+private fun TooLarge() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            SCORE_TOO_LARGE,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
 
 @Composable
 private fun ScoreView(

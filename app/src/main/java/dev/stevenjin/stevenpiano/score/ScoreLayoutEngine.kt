@@ -42,6 +42,10 @@ import kotlin.math.min
  * each note's length. Heads a second apart move aside, accidentals in a chord stack leftwards so they
  * don't collide. No tuplets, grace notes or voices within a hand.
  *
+ * What a crafted file can cost is bounded (the v1.3 delta audit, H1): a piece of more than
+ * [MAX_ENGRAVED_NOTES] notes is laid out as performed, a piece's tied heads stop at [tiedBudget] and
+ * its rests at [restBudget], and a performed piece keeps none of engraving's working state.
+ *
  * Pure (no Android, no Compose): it runs off the main thread and in the JVM tests.
  */
 object ScoreLayoutEngine {
@@ -54,8 +58,26 @@ object ScoreLayoutEngine {
     /** A written note is cut after this many heads, its own and the tied ones (a note held for bars on end). */
     const val MAX_HEADS_PER_NOTE = 64
 
-    /** Tied heads in one piece at most: twice its notes, and never fewer than this. */
+    /** Tied heads in one piece at most: twice its notes, never fewer than this... */
     const val MIN_TIED_BUDGET = 4_096
+
+    /** ...and never more than this (a million held notes once made two million tied heads). */
+    const val MAX_TIED_HEADS = 100_000
+
+    /** Rests in one piece at most: twice its notes, and never fewer than this (a file of one-tick notes in bars of 255 whole notes once asked for five million). */
+    const val MIN_REST_BUDGET = 4_096
+
+    /**
+     * A piece of more notes than this is laid out as performed, whatever its grid: heads with a line for
+     * each note's length, no written values, beams, rests or ties.
+     */
+    const val MAX_ENGRAVED_NOTES = 100_000
+
+    /** The tied heads a piece of [notes] notes may have: twice its notes, at least [MIN_TIED_BUDGET], at most [MAX_TIED_HEADS]. */
+    fun tiedBudget(notes: Int): Int = min(max(MIN_TIED_BUDGET, 2 * notes), MAX_TIED_HEADS)
+
+    /** The rests a piece of [notes] notes may have: twice its notes, at least [MIN_REST_BUDGET]. Past it, silences are left unwritten. */
+    fun restBudget(notes: Int): Int = max(MIN_REST_BUDGET, 2 * notes)
 
     /**
      * A note more ledger lines than this off its hand's staff is written on the other staff when it
@@ -157,11 +179,16 @@ private class Build(
 
     // Notes.
     private val n = notes.size
-    private val quantized = Quantize.onGrid(notes.startMicros, tempo)
+
+    /** Engraved: a sequenced file on the grid, of at most [ScoreLayoutEngine.MAX_ENGRAVED_NOTES] notes. Otherwise performed. */
+    private val quantized = n <= ScoreLayoutEngine.MAX_ENGRAVED_NOTES && Quantize.onGrid(notes.startMicros, tempo)
     private val written = WrittenNotes()
 
     // Heads: each note's own, then the tied ones.
     private val heads = n + written.tied
+
+    /** Heads that carry engraving's working state below: every head when engraved, none when performed. */
+    private val engraved = if (quantized) heads else 0
     private val system = IntArray(heads) { -1 }
     private val x = FloatArray(heads)
     private val y = FloatArray(heads)
@@ -186,11 +213,11 @@ private class Build(
     /** The tick a head is struck at, as chords are grouped: a note's own (exact), a tied head's (on the grid). */
     private val startTick = LongArray(heads)
     private val bar = IntArray(heads)
-    private val valueFlags = ByteArray(heads)
+    private val valueFlags = ByteArray(engraved)
 
     // Written values (sequenced files): where each head's written value starts and ends, on the grid.
-    private val writtenStart = LongArray(heads)
-    private val writtenEnd = LongArray(heads)
+    private val writtenStart = LongArray(engraved)
+    private val writtenEnd = LongArray(engraved)
 
     /** Heads in onset order (playable notes' and tied ones merged). */
     private val order = IntArray(heads)
@@ -199,21 +226,24 @@ private class Build(
     // Stems (sequenced files): each head's stem owner, and for each owner its value group's lowest and
     // highest heads, the chord's column, whether a second moved the stem between two columns, and the
     // sum of its heads' staff positions.
-    private val ownerOf = IntArray(heads) { -1 }
-    private val stemLow = IntArray(heads)
-    private val stemHigh = IntArray(heads)
-    private val stemLeft = FloatArray(heads)
-    private val stemShifted = BooleanArray(heads)
-    private val positionSum = IntArray(heads)
-    private val groupHeads = IntArray(heads)
+    private val ownerOf = IntArray(engraved) { -1 }
+    private val stemLow = IntArray(engraved)
+    private val stemHigh = IntArray(engraved)
+    private val stemLeft = FloatArray(engraved)
+    private val stemShifted = BooleanArray(engraved)
+    private val positionSum = IntArray(engraved)
+    private val groupHeads = IntArray(engraved)
 
     // Onsets: one chord on one staff, in time order, with the stem owner of its one flagged value (-1: none).
     private var onsets = 0
-    private val onsetHead = IntArray(heads)
-    private val onsetOwner = IntArray(heads)
+    private val onsetHead = IntArray(engraved)
+    private val onsetOwner = IntArray(engraved)
 
     /** A rest comes just before this head's onset on its staff, in its bar. */
-    private val restBefore = BooleanArray(heads)
+    private val restBefore = BooleanArray(engraved)
+
+    /** Rests the piece may still have ([ScoreLayoutEngine.restBudget]); at 0 silences are no longer written. */
+    private var restsLeft = ScoreLayoutEngine.restBudget(n)
 
     private val beams = BeamSink()
     private val rests = RestSink()
@@ -282,11 +312,11 @@ private class Build(
      * note's tick. A performance has none of this, and its notes keep their exact ticks and bars.
      */
     private inner class WrittenNotes {
-        /** Each note's tick (its chord's, for a rolled chord), written onset (on the grid) and bar, and its first piece's length in sixteenths. */
+        /** Each note's tick (its chord's, for a rolled chord) and bar; engraved, its written onset (on the grid) and first piece's length in sixteenths. */
         val tick = LongArray(n)
-        val start = LongArray(n)
+        val start = LongArray(if (quantized) n else 0)
         val noteBar = IntArray(n)
-        val firstLength = IntArray(n)
+        val firstLength = IntArray(if (quantized) n else 0)
 
         /** Note i's tied heads are [tiedByNote] from tiedFrom[i] until tiedFrom[i + 1], in time order. */
         val tiedFrom = IntArray(n + 1)
@@ -305,7 +335,7 @@ private class Build(
             var owners = IntArray(0)
             val pieceTick = LongArray(ScoreLayoutEngine.MAX_HEADS_PER_NOTE)
             val pieceLength = IntArray(ScoreLayoutEngine.MAX_HEADS_PER_NOTE)
-            val budget = max(ScoreLayoutEngine.MIN_TIED_BUDGET, 2 * n)
+            val budget = ScoreLayoutEngine.tiedBudget(n)
             var previous = Long.MIN_VALUE
             var chordTick = 0L
             var first = 0L
@@ -317,7 +347,6 @@ private class Build(
                 val exact = tempo.microsToTicks(notes.startMicros[i])
                 tick[i] = exact
                 if (!quantized) {
-                    start[i] = exact
                     noteBar[i] = barIndex(exact)
                     continue
                 }
@@ -757,7 +786,8 @@ private class Build(
      * Rests ([Rests]): on each staff of each bar, every silence of a sixteenth or more, from the bar's
      * start, between where all the written values so far have ended and the next onset, and to the
      * bar's end. A staff with nothing in a bar gets a whole rest centred in it. The onset after a rest
-     * is marked: a rest ends a beam.
+     * is marked: a rest ends a beam. Once the piece's [ScoreLayoutEngine.restBudget] is spent, silences
+     * are still found (and still end beams) but no longer written.
      */
     private fun rests() {
         if (!quantized) return
@@ -789,10 +819,10 @@ private class Build(
         }
     }
 
-    /** The rests writing the silence from [from] to [to] (ticks) on one staff of bar [b]. */
+    /** The rests writing the silence from [from] to [to] (ticks) on one staff of bar [b], while the budget lasts. */
     private fun restsIn(b: Int, onTreble: Boolean, from: Long, to: Long, restStart: IntArray, restLength: IntArray) {
         val length = Math.round((barEndTick[b] - barTick[b]) / step).toInt()
-        if (length <= 0) return
+        if (length <= 0 || restsLeft <= 0) return
         val time = metre[b]
         val count = Rests.tile(
             Math.round((from - barTick[b]) / step).toInt(),
@@ -802,7 +832,9 @@ private class Build(
             Beams.compound(time),
             restStart,
             restLength,
+            min(MAX_RESTS_PER_SILENCE, restsLeft),
         )
+        restsLeft -= count
         val s = b / barsPerSystem
         val top = staffBottom(s, onTreble) - m.staffHeight
         for (k in 0 until count) {
