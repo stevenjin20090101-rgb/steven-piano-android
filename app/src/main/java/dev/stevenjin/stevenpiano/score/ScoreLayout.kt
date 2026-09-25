@@ -212,6 +212,25 @@ class ScoreLayout internal constructor(
     /** Width of head [i]: a whole note's is wider. */
     fun headWidth(i: Int): Float = if (head[i].toInt() == Head.WHOLE) metrics.headWidth * WHOLE_TO_BLACK else metrics.headWidth
 
+    /** System [s]'s tempo mark, if it has one. */
+    fun tempoMarkIn(s: Int): TempoMark? =
+        tempoMarks.getOrNull(firstIndex(tempoMarks.size) { tempoMarks[it].system >= s })?.takeIf { it.system == s }
+
+    /** The [dynamics] under system [s] (they are in bar order). */
+    fun dynamicsIn(s: Int): IntRange =
+        firstIndex(dynamics.size) { dynamics[it].system >= s } until firstIndex(dynamics.size) { dynamics[it].system > s }
+
+    /** The first index in 0 until [size] where [reached] holds (it holds from there on), or [size]. */
+    private inline fun firstIndex(size: Int, reached: (Int) -> Boolean): Int {
+        var lo = 0
+        var hi = size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (reached(mid)) hi = mid else lo = mid + 1
+        }
+        return lo
+    }
+
     internal companion object {
         /** Bravura's whole head is 1.688 spaces wide, the black and half heads 1.18. */
         const val WHOLE_TO_BLACK = 1.688f / 1.18f

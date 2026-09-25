@@ -950,3 +950,130 @@ The roll and the score's overlay look back at most 30 s (`NoteList.scanStart`) a
 `PlayerTest`, `GattPianoLinkTest`, `PacedWriterTest`, `NoteRouterTest`, `WikipediaUrlsTest`,
 `TitleHeuristicsTest`, `ArtFilesTest`, `ArtworkWorkerTest`, `SharedFilesTest`, `ImportCopyTest` and
 `CorpusTest` (the corpus digest): 396 tests before, 472 after.
+
+---
+
+# v1.3 — M13: score fidelity (beams, rests, ties, tempo marks, dynamics)
+
+Read `DESIGN.md › v1.3 › Score fidelity` first (its key-signature bullet shipped in M12). Everything
+above stays except where this section says otherwise. The version stays 1.2 (`versionCode` 4) until
+M14 completes v1.3; the provenance manifest is re-signed at the end of this run.
+
+## The engine — `score/` (pure passes after M12's note placement)
+
+- **Heads, not notes.** `ScoreLayout`'s arrays are per head: heads 0 until `noteCount` are each
+  note's own head with M12's meaning; a sequenced note's further written pieces follow as tied heads
+  (`headCount`; `tiedNote`, `tiedStartMicros`, `tiedHeadCount(note)`, `tiedHead(note, k)`), sorted by
+  onset, with `ScoreSystem.firstTied`/`tiedEnd`. Drawing and the overlay treat every head alike.
+- **Written notes** (sequenced files only; `WrittenNotes` in the engine): a note's onset and end are
+  put on the sixteenth grid (`ppq / 4` ticks), it lasts a sixteenth at least, and it belongs to the bar
+  its written onset is in (a note a hair early is the next bar's downbeat; M12 used the exact tick).
+  A chord rolled or spread by a few ticks (each note less than 0.2 of a sixteenth after the one
+  before, all within a sixteenth of the first) is one chord, struck at its first note's tick: in the
+  quantised corpus the gaps under 0.2 sixteenth (2,667) are rolls and humanising, while 64ths (0.25)
+  and triplet 32nds (0.33) stay apart.
+- **Ties** (`Ties.kt`): a written note is split at every bar line it crosses and, within a bar, into
+  the largest single value (plain or dotted) that fits plus the remainder (5 sixteenths = 4 + 1,
+  7 = 6 + 1); in a compound metre (6/8, 9/8, 12/8 …) the plain half and whole are left out, so a full
+  bar of 9/8 is 12 + 6. Each piece's value is `Quantize.value` of its length. Caps: 64 heads a note,
+  tied heads at most `max(4,096, 2 × notes)` a piece; a piece under half a sixteenth is dropped and
+  nothing is written past the last bar. The first piece keeps the note's accidental; tied heads have
+  none, never touch `BarAccidentals`, and keep the note's spelling across a key change. Arcs
+  (`ScoreTies`: ends, `above`, `from`/`to` heads, sorted by system): from the right edge of a head (after
+  its dot) to the left edge of the next, 0.35 space off the heads away from the stem (a whole note by
+  its side of the middle line); across a system break two halves, the first to the system's end (at
+  least a space) with `to = -1`, the second from 1.5 spaces before its head with `from = -1`.
+- **Onsets and chords**: notes' heads and tied heads are merged by tick; chords are M12's (same bar and
+  tick when sequenced, 30 ms when performed), so a tied chord shares one stem and a tied eighth can be
+  beamed. `stems()` records each stem owner's value group (lowest and highest heads, column, position
+  sum) and whether the chord is one flagged value.
+- **Rests** (`Rests.kt`): per bar and staff, every silence of a sixteenth or more (from the bar's start,
+  where all written values so far have ended, and to the bar's end) is tiled with the largest plain
+  values on the beat grid: under a beat, inside one beat at a multiple of itself (in a compound metre a
+  quarter or eighth rest on any eighth of the beat); a beat or longer, on a multiple of itself from the
+  bar's start, never in a compound metre. A silent bar is one whole rest centred in it (any metre).
+  `ScoreRests`: glyph value in sixteenths, `wholeBar`, staff, bar; a whole rest hangs from the fourth
+  line, the others sit on or centre on the middle line. At most 64 rests a silence. The onset after a
+  rest is marked, and ends a beam.
+- **Beams** (`Beams.kt`): beat groups of a quarter (x/4 and any other metre), a dotted quarter (6/8,
+  9/8, 12/8) or a half (2/2); consecutive onsets of one bar and beat that are each one flagged value
+  form a group, broken by a rest, a quarter or two values struck together (those keep M12's stems and
+  flags); a group of one keeps its flag. Stems up when the heads' average position is below the middle
+  line; one straight beam whose slope follows the first and last far heads, held to one space over the
+  group and to a quarter of its width, 3.5 spaces clear of the nearest far head, reaching the middle line
+  at every stem. `ScoreBeams`: one entry per segment (outer edge x1,y1 to x2,y2, `up`, `level` 1 or 2,
+  `stub`, `group`), sorted by system; primary 0.5 space thick, secondary 0.75 space in (centre to
+  centre); a lone sixteenth's stub is a head wide, into the group (inside it, back toward the note it
+  completes an eighth with when its onset is off the eighth grid). Beamed notes have no flags.
+- **Tempo marks** (`TempoMarks.kt`, every file): the first system gets `TempoMap.tempoAt(0)` as
+  `round(60,000,000 / µs a quarter)` (a dotted quarter's in a compound metre: U+E1D5 with U+E1E7), and any
+  later system whose starting tempo is more than 10 % from the last mark's gets its own;
+  `TempoMark(system, x, bpm (1..9,999), dotted)` with `text` "= N"; `x` is the first bar's left.
+- **Dynamics** (`Dynamics.kt`, every file): each bar's mean velocity of the notes struck in it (both
+  staves) in bands pp < 32, p < 48, mp < 64, mf < 80, f < 96, ff; the first bar with notes is marked,
+  then a sequenced file marks where the mean has moved 3 velocity units past a band edge (a Schmitt
+  trigger: the band of the mean less 3 going up, plus 3 going down) and a performance where the band is
+  two or more from the last mark; silent bars neither mark nor reset. `DynamicMark(system, bar, x, y,
+  band)`: x the bar's first onset (a chord's leftmost head), y the baseline with the p's and m's tops
+  1.5 spaces under the treble staff, or half a space under the lowest treble head, accidental or
+  down-stem under the mark when one reaches further, never into the bass staff (`Dynamics.width` gives
+  the glyphs' width). `ScoreLayout.tempoMarkIn(s)` and `dynamicsIn(s)` find a system's by binary search.
+- `BySystem` (a stable counting sort) orders beams, rests and ties by system; `runOf` gives a system's run.
+
+## The painter — `ui/components/ScorePages.kt`
+
+- Glyphs, measured once: rests U+E4E3–E4E7, dynamics p/m/f U+E520–E522 set as words ("mp" = m then p),
+  and the tempo mark's note U+E1D5 (+ dot U+E1E7) in Bravura at 1.5 × the eyebrow's size in sp, so it
+  grows with the text beside it (the rest of the score stays in dp).
+- Each page's cached layer builds, per system: the beams as one filled `Path` (a parallelogram per
+  segment, the thickness toward the heads), the ties as one stroked `Path` (quadratic arcs, 1 dp, rising
+  0.15 of their length within 0.3–0.9 space), and the tempo mark measured and placed: after the bar
+  number on the numbers' baseline (over the clef and key signature), its note's head on the baseline,
+  then "= N" in the eyebrow style, lifted half a space clear of any stem, flag, beam, head, accidental or
+  upward tie under it and never above its band. Then it draws rests, ties, beams, notes, tied heads and
+  dynamics. Colours: rests, ties, beams and heads `onSurfaceVariant`; tempo marks and dynamics the glyph
+  colour (`onSurfaceVariant`); nothing new is ever red.
+- The overlay (per frame, no allocation): sounding notes as before, and each note's tied heads lit from
+  their written onset (`tiedStartMicros`) to the note's end, wherever a shown page holds them (a note
+  whose first head is on a page not shown still lights its tied heads). Beams, ties, rests and marks stay
+  in the static colour.
+
+## Measured (September 2026)
+
+- Corpus (`CorpusTest -Pcorpus`, which now also checks every tied head, beam, rest, tie, tempo mark and
+  dynamic of every file on both panels): 3,454 files lay out on both panels in 5.3–7.3 s (7.1 s in the
+  final run; 5.5 s before M13); on the phone panel 34,268 tied heads, 44,840 tie arcs, 178,172 beamed
+  groups, 205,132 rests, 10,316 tempo marks and 74,350 dynamics. The parse digest is unchanged.
+- On the phone panel: Clair de lune (9/8) 188 tied heads, 167 beamed groups, 115 rests, 13 tempo marks
+  (piano-midi.de writes its rubato as 733 tempo changes), 8 dynamics; Bach's C major prelude 255 beamed
+  groups, 4 tempo marks, 1 dynamic (mp); Chopin's op. 27 no. 2 (6/8, quantised at 80.3 %) 229 beamed
+  groups, 380 rests, 10 tempo marks, 15 dynamics; MAESTRO's op. 9 no. 2 one tempo mark (♩ = 120) and
+  three dynamics (mp, f at bar 92, mp at 96).
+- Frames on the phone emulator, 20 s of Clair de lune with the score alone (`dumpsys gfxinfo`, debug
+  build): 1 janky frame of 1,202 (0.08 %).
+
+## Deviations from the run's rules, and why
+
+- Compound metres leave the plain half and whole out of the tie values (the rule said the largest value
+  plus the remainder): a full 9/8 bar written as a whole note tied to an eighth hides the dotted-quarter
+  beat; it is a dotted half tied to a dotted quarter.
+- Sequenced files mark a dynamic only 3 velocity units past a band edge (the rule said at every change of
+  band): piano-midi.de shapes each phrase's velocities, and Clair de lune's first twelve bars (means
+  28.6–38.3 around p's floor of 32) flipped p/pp every bar: 22 marks became 8, Bach's prelude 5 became 1.
+  Performances keep the two-band rule as written.
+- The tempo mark starts after the bar number, over the clef, and is lifted when notes reach into its line
+  ("at the first bar's left"): set where the first bar's notes begin, stems of the upper voice ran through
+  it. Dynamics move down under low treble notes (middle C's ledger line touched Bach's mp).
+- Beam slope is also held to a quarter of the group's width: two sixteenths a sixteenth apart on a phone
+  otherwise got a flag-steep beam. Ties start after a dotted head's dot, not across it.
+- Rolled chords are one chord (not in the rules): six notes 20 ticks apart made six stems and six tie
+  chains.
+- A chord of two values struck together is not beamed (its values keep their own stems, as M12's voices
+  rule gives them); rests are plain values only, never dotted (the rules' own example).
+- ScoreLayoutEngineTest's note-values test now expects its beamed eighth and sixteenths without flags.
+
+## Tests added in M13
+
+`BeamsTest` (14), `RestsTest` (10), `TiesTest` (13), `TempoMarksTest` (6), `DynamicsTest` (8),
+`ScoreFixtures` (the pieces they share), and the engraving checks and counts in `CorpusTest`: 472 tests
+before, 523 after.

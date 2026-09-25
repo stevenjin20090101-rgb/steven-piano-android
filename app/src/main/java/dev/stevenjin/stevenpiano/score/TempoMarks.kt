@@ -15,7 +15,9 @@ import kotlin.math.abs
 
 /**
  * A tempo mark over [system]: a note glyph (a quarter, or a dotted quarter when [dotted]) and
- * [text], "= 80", on the system's bar-number line from [x] (page coordinates).
+ * [text], "= 80", on the system's bar-number line at its first bar's left, [x] (page coordinates;
+ * drawn after the bar number, over the clef and key signature, and lifted clear of any stem that
+ * reaches that high).
  */
 data class TempoMark(val system: Int, val x: Float, val bpm: Int, val dotted: Boolean) {
     /** What follows the note glyph. */

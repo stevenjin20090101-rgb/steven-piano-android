@@ -51,12 +51,27 @@ Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.2.
   bar being played, sounding notes light up, and pages turn by themselves so
   the cursor is always in sight. Swipe to look at other pages (**Follow** brings
   the score back to the music), and tap a bar to play from there. Files written
-  in a sequencer (most of piano-midi.de and Mutopia) show note values: whole,
-  half, quarter, eighth and sixteenth notes, stems, flags and dots. Honest
-  limits: no beams, rests, ties, tuplets or grace notes, and no voices within a
-  hand; recorded performances (MAESTRO) keep plain note heads with a line for
-  each note's length, in bars counted at the file's own tempo. A file without a
-  key signature is written in sharps.
+  in a sequencer (most of piano-midi.de and Mutopia) are engraved: whole, half,
+  quarter, eighth and sixteenth notes with stems and dots; eighths and
+  sixteenths beamed within each beat (in threes in 6/8, 9/8 and 12/8), with a
+  partial beam for a lone sixteenth; rests wherever a staff falls silent for a
+  sixteenth or more, and a whole rest for an empty bar; and ties where a note
+  crosses a bar line or lasts a length no single note can write (a quarter tied
+  to a sixteenth). A chord rolled a few ticks apart reads as one chord. Every
+  piece shows its tempo at the start (♩ = 74, or ♩. = 67 in a compound metre)
+  and again where a system starts more than a tenth faster or slower, and
+  dynamics (pp to ff) under the treble staff where the loudness of a bar, read
+  from the file's velocities, moves into a new band. Honest limits: no voices
+  within a hand (notes from middle C up are on the treble staff, the rest on the
+  bass, whichever hand plays them, so an arpeggio that crosses middle C leaves
+  rests on both staves), no tuplets, no grace notes, no pedal markings; values
+  shorter than a sixteenth read as sixteenths; notes sit where they sound in
+  time, so dense bars are tight on a phone; piano-midi.de writes its rubato as
+  tempo changes, so its pieces carry several tempo marks. Recorded performances
+  (MAESTRO) keep plain note heads with a line for each note's length, in bars
+  counted at the file's own tempo, with their tempo and only the clear changes
+  of dynamics (two bands or more). A file without a key signature is written in
+  sharps.
 - **Keys**: a playable keyboard over the piano's 84 keys, C1–B7, never taller
   than a real keyboard needs, along the bottom of the screen. Every touch is a
   Note On to the piano; chords with several fingers, a glissando by sliding.
@@ -251,7 +266,10 @@ the first play, so the lock screen shows play and pause.
       cursor keeps pace with the piano, a page turns before the cursor needs it
       (on a tablet on its side with Score only, the left page turns while the
       right one is being finished), and tapping a bar plays from there with no
-      key left sounding.
+      key left sounding. The first page reads ♩. = 67 over the clef, an eighth
+      rest, eighths beamed in threes, ties over the bar lines, whole rests in
+      the empty bass and p under bar 1; a tied note lights again as the cursor
+      reaches its tied head.
 - [ ] Open a piece's sheet on Wi-Fi (its notes and the composer's portrait
       appear), then again in airplane mode (the art shown before is kept, and the
       sheet says notes need an internet connection when it has none).
@@ -292,8 +310,9 @@ The full audit, every finding and what was done about it, is in
 
 ## Acknowledgements
 
-- The score's clefs, key and time signatures, accidentals, note heads, flags
-  and dots are drawn with **Bravura**, the SMuFL music font by Steinberg Media
+- The score's clefs, key and time signatures, accidentals, note heads, flags,
+  dots, rests, dynamics and the tempo mark's note are drawn with **Bravura**,
+  the SMuFL music font by Steinberg Media
   Technologies GmbH, bundled unmodified under the SIL Open Font License 1.1
   (notice in `AUTHORS`, licence in `third_party/bravura/OFL.txt`).
 - Composers' blurbs and pieces' notes are text from Wikipedia (CC BY-SA 4.0), each

@@ -20,7 +20,8 @@ Third-party
 -----------
 Bravura music font (app/src/main/res/font/bravura.otf, version 1.482,
 bundled unmodified), which draws the score's clefs, key and time
-signatures, accidentals, note heads, flags and dots:
+signatures, accidentals, note heads, flags, dots, rests, dynamics and the
+tempo mark's note:
   Copyright © 2026, Steinberg Media Technologies GmbH
   (http://www.steinberg.net/), with Reserved Font Name "Bravura".
   Licensed under the SIL Open Font License, Version 1.1; the full licence

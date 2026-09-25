@@ -10,7 +10,6 @@
 
 package dev.stevenjin.stevenpiano.score
 
-import dev.stevenjin.stevenpiano.score.ScoreFixtures.SPACE
 import dev.stevenjin.stevenpiano.score.ScoreFixtures.layout
 import dev.stevenjin.stevenpiano.score.ScoreFixtures.piece
 import org.junit.Assert.assertEquals
@@ -42,9 +41,9 @@ class TempoMarksTest {
         assertEquals(80, mark.bpm)
         assertFalse(mark.dotted)
         assertEquals("= 80", mark.text)
-        // On the bar-number line where the first bar's signatures end: after the clef and the 4/4.
-        assertEquals(score.bars.contentLeft[0] - 1.6f * SPACE, mark.x, 0.01f)
-        assertTrue(mark.x > score.systems[0].left)
+        // On the bar-number line at the first bar's left: over the clef, where no note reaches.
+        assertEquals(score.systems[0].left, mark.x, 0.01f)
+        assertEquals(score.bars.left[0], mark.x, 0.01f)
         // A file with no tempo at all reads at the standard 120.
         assertEquals(120, layout(eightBars()).tempoMarks.single().bpm)
     }
@@ -68,7 +67,7 @@ class TempoMarksTest {
         )
         assertEquals(listOf(0, 2), score.tempoMarks.map { it.system })
         assertEquals(listOf(120, 140), score.tempoMarks.map { it.bpm })
-        assertEquals(score.bars.contentLeft[4] - 1.6f * SPACE, score.tempoMarks[1].x, 0.01f)
+        assertEquals(score.systems[2].left, score.tempoMarks[1].x, 0.01f)
     }
 
     @Test

@@ -43,7 +43,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -72,14 +74,18 @@ import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.midi.TempoMap
 import dev.stevenjin.stevenpiano.midi.TimeSignature
 import dev.stevenjin.stevenpiano.score.Accidental
+import dev.stevenjin.stevenpiano.score.Beams
+import dev.stevenjin.stevenpiano.score.Dynamics
 import dev.stevenjin.stevenpiano.score.Head
 import dev.stevenjin.stevenpiano.score.PageTurn
+import dev.stevenjin.stevenpiano.score.Rests
 import dev.stevenjin.stevenpiano.score.ScoreLayout
 import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
 import dev.stevenjin.stevenpiano.score.ScoreMetrics
 import dev.stevenjin.stevenpiano.score.ScoreSystem
 import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.score.Sign
+import dev.stevenjin.stevenpiano.score.TempoMark
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
@@ -125,6 +131,37 @@ private const val FLAG_16TH_UP = ""
 private const val FLAG_16TH_DOWN = ""
 private const val DOT = ""
 private const val TIME_DIGIT_0 = 0xE080
+private const val REST_WHOLE = "\uE4E3"
+private const val REST_HALF = "\uE4E4"
+private const val REST_QUARTER = "\uE4E5"
+private const val REST_8TH = "\uE4E6"
+private const val REST_16TH = "\uE4E7"
+
+/** The tempo mark's note: Bravura's quarter note, stem up (U+E1D5), dotted with U+E1E7 in a compound metre. */
+private const val TEMPO_NOTE = "\uE1D5"
+
+/**
+ * The tempo mark's note is set in Bravura at this multiple of the bar number's (eyebrow) size, so it
+ * grows with the text; its head sits on the text's baseline (the head reaches 0.564 of its space
+ * below its own baseline), and the glyph is 1.328 spaces wide, the dot 0.4.
+ */
+private const val TEMPO_NOTE_SCALE = 1.5f
+private const val TEMPO_HEAD_BELOW = 0.564f
+private const val TEMPO_NOTE_RISE = 3.5f
+private const val TEMPO_NOTE_WIDTH = 1.328f
+private const val TEMPO_DOT_GAP = 0.3f
+private const val TEMPO_DOT_WIDTH = 0.4f
+private const val TEMPO_TEXT_GAP = 0.6f
+
+/** A tempo mark keeps this far (in staff spaces) above the notes under it: stems, flags, beams, heads and their accidentals. */
+private const val TEMPO_CLEARANCE = 0.5f
+private const val ACCIDENTAL_RISE = 1.5f
+private const val FLAG_REACH = 1.1f
+
+/** A tie rises this share of its length, held to 0.3 to 0.9 of a staff space. */
+private const val TIE_RISE = 0.15f
+private const val TIE_LOWEST = 0.3f
+private const val TIE_HIGHEST = 0.9f
 
 /** Bravura, the SMuFL reference music font (SIL Open Font Licence; see AUTHORS). */
 private val Bravura = FontFamily(Font(R.font.bravura))
@@ -133,10 +170,12 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * The score (DESIGN.md › v1.2 › Score): the piece as systems of bars on pages, one page, or two
  * side by side when the panel is 840 dp wide or more, laid out by [ScoreLayoutEngine] from the
  * file's tempo map, bars and signatures ([keySignatures] are the file's; [transpose] moves them
- * with the notes). Staff lines and bar lines are the tertiary grey, clefs, signatures and notes the
- * secondary colour, bar numbers eyebrows above each system. A 2 dp cursor moves through the
- * current system, and sounding notes brighten with the roll's 120 ms flip (a cut when motion is
- * reduced). Pages turn by themselves so the cursor is always in sight ([PageTurn]).
+ * with the notes). Staff lines and bar lines are the tertiary grey; clefs, signatures, notes and their
+ * beams, rests, ties, tempo marks and dynamics the secondary colour (DESIGN.md › v1.3 › Score
+ * fidelity); bar numbers eyebrows above each system. A 2 dp cursor moves through the current
+ * system, and sounding notes (and the heads tied to them, as the cursor reaches each) brighten with
+ * the roll's 120 ms flip (a cut when motion is reduced). Pages turn by themselves so the cursor is
+ * always in sight ([PageTurn]).
  *
  * Agency: a horizontal swipe looks at other pages, and a Follow chip then waits at the top right;
  * tapping it, or the next turn the music makes, follows again. Tapping a bar seeks to it
@@ -144,8 +183,9 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  *
  * Work is kept off the frame: glyphs are measured once on the main thread; the layout is computed
  * on a background thread whenever the notes, transpose, folding or the panel change; each visible
- * page is drawn into its own cached layer that never reads the frame clock; only the overlay
- * (cursor and sounding notes) redraws per frame, without allocating.
+ * page is drawn into its own cached layer that never reads the frame clock (its beams and ties built
+ * as paths once, with the layer); only the overlay (cursor and sounding notes) redraws per frame,
+ * without allocating.
  */
 @Composable
 fun ScorePages(
@@ -165,7 +205,7 @@ fun ScorePages(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val numberStyle = MaterialTheme.typography.labelSmall.merge(Tabular)
-    val glyphs = remember(measurer, density) { ScoreGlyphs(measurer, density) }
+    val glyphs = remember(measurer, density, numberStyle) { ScoreGlyphs(measurer, density, numberStyle) }
     val numberHeight = remember(measurer, density, numberStyle) {
         measurer.measure("0", numberStyle, maxLines = 1, density = density).size.height.toFloat()
     }
@@ -361,9 +401,10 @@ private fun PageLayer(
             .drawWithCache {
                 val systems = layout.systemsOn(page)
                 val numbers = systems.map { s -> measurer.measure((layout.systems[s].firstBar + 1).toString(), numberStyle, maxLines = 1) }
+                val marks = systems.mapIndexed { k, s -> painter.marks(layout, layout.systems[s], numbers[k], measurer, numberStyle) }
                 onDrawBehind {
                     with(painter) {
-                        for ((k, s) in systems.withIndex()) system(layout, layout.systems[s], numbers[k], colors)
+                        for ((k, s) in systems.withIndex()) system(layout, layout.systems[s], numbers[k], marks[k], colors)
                     }
                 }
             },
@@ -381,12 +422,19 @@ private data class ScoreColors(
     val spine: Color,
 )
 
-/** Bravura's glyphs, measured once on the main thread at four staff spaces to the em. */
-private class ScoreGlyphs(private val measurer: TextMeasurer, density: Density) {
+/**
+ * Bravura's glyphs, measured once on the main thread at four staff spaces to the em; the tempo
+ * mark's note at [TEMPO_NOTE_SCALE] times the [eyebrow]'s size.
+ */
+private class ScoreGlyphs(private val measurer: TextMeasurer, density: Density, eyebrow: TextStyle) {
     // In dp, not sp: the score is a drawing and keeps its size at any font scale, as the roll does.
     private val music = TextStyle(fontFamily = Bravura, fontSize = with(density) { (LineGap * 4).toSp() })
 
-    private fun glyph(text: String) = measurer.measure(text, music, overflow = TextOverflow.Visible, softWrap = false, maxLines = 1)
+    // The tempo mark's note is text-sized instead, in sp, so it keeps its size beside "= 80".
+    private val tempoMusic = TextStyle(fontFamily = Bravura, fontSize = eyebrow.fontSize * TEMPO_NOTE_SCALE)
+
+    private fun glyph(text: String, style: TextStyle = music) =
+        measurer.measure(text, style, overflow = TextOverflow.Visible, softWrap = false, maxLines = 1)
 
     private val gClef = glyph(G_CLEF)
     private val fClef = glyph(F_CLEF)
@@ -401,6 +449,17 @@ private class ScoreGlyphs(private val measurer: TextMeasurer, density: Density) 
     private val flag16thUp = glyph(FLAG_16TH_UP)
     private val flag16thDown = glyph(FLAG_16TH_DOWN)
     private val digits = Array(10) { glyph(String(Character.toChars(TIME_DIGIT_0 + it))) }
+    private val restWhole = glyph(REST_WHOLE)
+    private val restHalf = glyph(REST_HALF)
+    private val restQuarter = glyph(REST_QUARTER)
+    private val rest8th = glyph(REST_8TH)
+    private val rest16th = glyph(REST_16TH)
+    private val dynamics = Array(Dynamics.FF + 1) { glyph(Dynamics.glyphs(it)) }
+    val tempoNote = glyph(TEMPO_NOTE, tempoMusic)
+    val tempoDot = glyph(DOT, tempoMusic)
+
+    /** The tempo glyphs' staff space: a quarter of their em. */
+    val tempoSpace: Float = with(density) { tempoMusic.fontSize.toPx() } / 4
     val dot = glyph(DOT)
 
     val headWidth: Float = blackHead.size.width.toFloat()
@@ -431,7 +490,31 @@ private class ScoreGlyphs(private val measurer: TextMeasurer, density: Density) 
         count >= 2 -> if (up) flag16thUp else flag16thDown
         else -> if (up) flag8thUp else flag8thDown
     }
+
+    /** The rest of [value] sixteenths ([Rests]). */
+    fun rest(value: Int): TextLayoutResult = when {
+        value >= Rests.WHOLE -> restWhole
+        value >= Rests.HALF -> restHalf
+        value >= Rests.QUARTER -> restQuarter
+        value >= Rests.EIGHTH -> rest8th
+        else -> rest16th
+    }
+
+    fun dynamic(band: Int): TextLayoutResult = dynamics[band.coerceIn(0, dynamics.size - 1)]
 }
+
+/**
+ * A system's beams and ties as paths, and its tempo mark measured and placed (its left edge and its
+ * text's baseline): built with its page's cached layer, never per frame.
+ */
+private class SystemMarks(
+    val beams: Path,
+    val ties: Path,
+    val tempo: TempoMark?,
+    val tempoText: TextLayoutResult?,
+    val tempoX: Float,
+    val tempoBaseline: Float,
+)
 
 /** Draws a laid-out score: whole systems for the page layers, and the per-frame overlay. Allocation-free. */
 private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
@@ -441,12 +524,84 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
     private val cursor = with(density) { CursorWidth.toPx() }
     private val finalStroke = with(density) { FinalStroke.toPx() }
     private val finalGap = with(density) { FinalGap.toPx() }
+    private val tieStroke = Stroke(width = hair)
 
     /** From the treble's top line up to a bar number's baseline: over the clef's top, never on the staff. */
     private val numberLift = G_CLEF_RISE * space + with(density) { NumberClearance.toPx() }
 
-    /** One system: its staves, opening and bar lines, signs, bar number and notes, kept to its band. */
-    fun DrawScope.system(layout: ScoreLayout, s: ScoreSystem, number: TextLayoutResult, colors: ScoreColors) {
+    /**
+     * System [system]'s beams (half-space bands, the thickness toward the heads) and ties (1 dp arcs
+     * rising a share of their length) as paths, and its tempo mark with its text measured in [style]:
+     * after the bar [number] on the numbers' line, lifted clear of any note that reaches up under it.
+     */
+    fun marks(layout: ScoreLayout, system: ScoreSystem, number: TextLayoutResult, measurer: TextMeasurer, style: TextStyle): SystemMarks {
+        val s = system.index
+        val beams = Path()
+        val thickness = Beams.THICKNESS * space
+        val b = layout.beams
+        for (k in b.inSystem(s)) {
+            val inward = if (b.up[k]) thickness else -thickness
+            beams.moveTo(b.x1[k], b.y1[k])
+            beams.lineTo(b.x2[k], b.y2[k])
+            beams.lineTo(b.x2[k], b.y2[k] + inward)
+            beams.lineTo(b.x1[k], b.y1[k] + inward)
+            beams.close()
+        }
+        val ties = Path()
+        val t = layout.ties
+        for (k in t.inSystem(s)) {
+            val length = t.x2[k] - t.x1[k]
+            if (length <= 0f) continue
+            val rise = (length * TIE_RISE).coerceIn(TIE_LOWEST * space, TIE_HIGHEST * space)
+            val bow = if (t.above[k]) -2 * rise else 2 * rise   // a quadratic's middle reaches half its control point's offset
+            ties.moveTo(t.x1[k], t.y1[k])
+            ties.quadraticTo((t.x1[k] + t.x2[k]) / 2, (t.y1[k] + t.y2[k]) / 2 + bow, t.x2[k], t.y2[k])
+        }
+        val tempo = layout.tempoMarkIn(s) ?: return SystemMarks(beams, ties, null, null, 0f, 0f)
+        val text = measurer.measure(tempo.text, style, maxLines = 1)
+        val unit = glyphs.tempoSpace
+        val x = max(tempo.x, system.left + number.size.width + space)
+        val glyphWidth = TEMPO_NOTE_WIDTH * unit + if (tempo.dotted) (TEMPO_DOT_GAP + TEMPO_DOT_WIDTH) * unit else 0f
+        val right = x + glyphWidth + TEMPO_TEXT_GAP * unit + text.size.width
+        val height = max((TEMPO_HEAD_BELOW + TEMPO_NOTE_RISE) * unit, text.firstBaseline)
+        val onLine = system.trebleTop - numberLift
+        val lifted = min(onLine, skyline(layout, system, x, right) - TEMPO_CLEARANCE * space)
+        val baseline = max(lifted, min(onLine, system.bandTop + height))   // never above its band
+        return SystemMarks(beams, ties, tempo, text, x, baseline)
+    }
+
+    /**
+     * The highest point (least y) the notes of [system] reach between [from] and [to]: heads (and the
+     * accidentals before them), stems with their flags, beams and ties bowing up.
+     */
+    private fun skyline(layout: ScoreLayout, system: ScoreSystem, from: Float, to: Float): Float {
+        var top = Float.POSITIVE_INFINITY
+        fun reach(i: Int) {
+            val x = layout.x[i]
+            val sharp = layout.accidental[i].toInt() != Accidental.NONE
+            val left = if (sharp) layout.accidentalX[i] else x
+            if (x + layout.headWidth(i) >= from && left <= to) top = min(top, layout.y[i] - if (sharp) ACCIDENTAL_RISE * space else space / 2)
+            val stem = layout.stemX[i]
+            if (!stem.isNaN() && stem >= from - FLAG_REACH * space && stem <= to) top = min(top, min(layout.stemFrom[i], layout.stemTo[i]))
+        }
+        for (i in system.firstNote until system.noteEnd) if (layout.system[i] == system.index) reach(i)
+        for (h in system.firstTied until system.tiedEnd) reach(h)
+        val b = layout.beams
+        for (k in b.inSystem(system.index)) {
+            if (b.x2[k] >= from && b.x1[k] <= to) top = min(top, min(b.y1[k], b.y2[k]) - if (b.up[k]) 0f else Beams.THICKNESS * space)
+        }
+        val t = layout.ties
+        for (k in t.inSystem(system.index)) {
+            if (t.above[k] && t.x2[k] >= from && t.x1[k] <= to) top = min(top, min(t.y1[k], t.y2[k]) - TIE_HIGHEST * space)
+        }
+        return top
+    }
+
+    /**
+     * One system: its staves, opening and bar lines, signs, bar number and tempo mark, then its rests,
+     * ties, beams, notes and tied heads, and its dynamics, kept to its band.
+     */
+    fun DrawScope.system(layout: ScoreLayout, s: ScoreSystem, number: TextLayoutResult, marks: SystemMarks, colors: ScoreColors) {
         clipRect(top = s.bandTop, bottom = s.bandBottom) {
             val length = s.right - s.left
             for (n in 0..4) {
@@ -466,7 +621,12 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
             }
             for (k in s.signKind.indices) glyph(glyphs.sign(s.signKind[k]), s.signX[k], s.signY[k], colors.glyph)
             drawText(number, color = colors.number, topLeft = Offset(s.left, s.trebleTop - numberLift - number.firstBaseline))
-            // A system holds a few bars; past MAX_NOTE_DRAWS notes in one it is a crafted file, not music.
+            if (marks.tempo != null && marks.tempoText != null) tempoMark(marks.tempo, marks.tempoText, marks.tempoX, marks.tempoBaseline, colors.glyph)
+            val rests = layout.rests
+            for (k in rests.inSystem(s.index)) glyph(glyphs.rest(rests.value[k].toInt()), rests.x[k], rests.y[k], colors.upcoming)
+            drawPath(marks.ties, colors.upcoming, style = tieStroke)
+            drawPath(marks.beams, colors.upcoming)
+            // A system holds a few bars; past MAX_NOTE_DRAWS heads in one it is a crafted file, not music.
             var drawn = 0
             for (i in s.firstNote until s.noteEnd) {
                 if (drawn >= MAX_NOTE_DRAWS) break
@@ -475,7 +635,33 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
                     drawn++
                 }
             }
+            for (h in s.firstTied until s.tiedEnd) {
+                if (drawn >= MAX_NOTE_DRAWS) break
+                note(layout, s, h, colors.upcoming)
+                drawn++
+            }
+            for (k in layout.dynamicsIn(s.index)) {
+                val mark = layout.dynamics[k]
+                glyph(glyphs.dynamic(mark.band), mark.x, mark.y, colors.glyph)
+            }
         }
+    }
+
+    /**
+     * A tempo mark from [left] on [baseline] (see [marks]): the note glyph, its head on the baseline
+     * (dotted in a compound metre), then "= N" in the eyebrow style.
+     */
+    private fun DrawScope.tempoMark(mark: TempoMark, text: TextLayoutResult, left: Float, baseline: Float, color: Color) {
+        val unit = glyphs.tempoSpace
+        var x = left
+        val noteBaseline = baseline - TEMPO_HEAD_BELOW * unit
+        glyph(glyphs.tempoNote, x, noteBaseline, color)
+        x += TEMPO_NOTE_WIDTH * unit
+        if (mark.dotted) {
+            glyph(glyphs.tempoDot, x + TEMPO_DOT_GAP * unit, noteBaseline, color)
+            x += (TEMPO_DOT_GAP + TEMPO_DOT_WIDTH) * unit
+        }
+        drawText(text, color = color, topLeft = Offset(x + TEMPO_TEXT_GAP * unit, baseline - text.firstBaseline))
     }
 
     /**
@@ -510,19 +696,31 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, density: Density) {
             if (end + flipMicros < now) continue
             val level = rampLevel(now, start, end, flipMicros)
             if (level == 0) continue
-            val index = layout.system[i]
-            if (index < 0) continue
-            val s = layout.systems[index]
-            val slot = slotOf(shown, s.page)
-            if (slot < 0) continue
-            translate(left = slotLeft[slot]) {
-                clipRect(top = s.bandTop, bottom = s.bandBottom) { note(layout, s, i, ramp[level]) }
+            if (layout.system[i] < 0) continue
+            if (lit(layout, i, ramp[level], shown, slotLeft)) drawn++
+            // The heads tied to it light as the cursor reaches each of them (they are in time order).
+            for (k in 0 until layout.tiedHeadCount(i)) {
+                val h = layout.tiedHead(i, k)
+                val tiedStart = layout.tiedStartMicros[h - layout.noteCount]
+                if (tiedStart > now) break
+                val tiedLevel = rampLevel(now, tiedStart, end, flipMicros)
+                if (tiedLevel > 0 && lit(layout, h, ramp[tiedLevel], shown, slotLeft)) drawn++
             }
-            drawn++
         }
     }
 
-    /** Note [i] of [s] in [color]: ledger lines, its length's hairline (performances), stem and flag, accidental, head, dot. */
+    /** Draws head [h] in [color] over its page when that page is [shown]; whether it was. */
+    private fun DrawScope.lit(layout: ScoreLayout, h: Int, color: Color, shown: List<Int>, slotLeft: FloatArray): Boolean {
+        val s = layout.systems[layout.system[h]]
+        val slot = slotOf(shown, s.page)
+        if (slot < 0) return false
+        translate(left = slotLeft[slot]) {
+            clipRect(top = s.bandTop, bottom = s.bandBottom) { note(layout, s, h, color) }
+        }
+        return true
+    }
+
+    /** Head [i] of [s] in [color]: ledger lines, its length's hairline (performances), stem and flag, accidental, head, dot. */
     private fun DrawScope.note(layout: ScoreLayout, s: ScoreSystem, i: Int, color: Color) {
         val x = layout.x[i]
         val y = layout.y[i]

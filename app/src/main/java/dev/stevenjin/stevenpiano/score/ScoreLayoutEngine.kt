@@ -252,11 +252,13 @@ private class Build(
     /**
      * Sequenced files: each note written on the sixteenth grid from its onset to its end, in the bar
      * its onset is in, and split into pieces ([Ties.segments]): the first piece is the note's own
-     * head, the others its tied heads, numbered from [n] in onset order. A performance has none, and
-     * its notes keep their exact ticks and bars.
+     * head, the others its tied heads, numbered from [n] in onset order. A chord rolled or spread by a
+     * few ticks (each note less than [ROLL] of a sixteenth after the one before, all within a sixteenth
+     * of the first: piano-midi.de writes its arpeggiated chords so) is one chord, struck at its first
+     * note's tick. A performance has none of this, and its notes keep their exact ticks and bars.
      */
     private inner class WrittenNotes {
-        /** Each note's exact tick, written onset (on the grid) and bar, and its first piece's length in sixteenths. */
+        /** Each note's tick (its chord's, for a rolled chord), written onset (on the grid) and bar, and its first piece's length in sixteenths. */
         val tick = LongArray(n)
         val start = LongArray(n)
         val noteBar = IntArray(n)
@@ -280,6 +282,11 @@ private class Build(
             val pieceTick = LongArray(ScoreLayoutEngine.MAX_HEADS_PER_NOTE)
             val pieceLength = IntArray(ScoreLayoutEngine.MAX_HEADS_PER_NOTE)
             val budget = max(ScoreLayoutEngine.MIN_TIED_BUDGET, 2 * n)
+            var previous = Long.MIN_VALUE
+            var chordTick = 0L
+            var first = 0L
+            var from = 0L
+            var b = 0
             for (i in 0 until n) {
                 tiedFrom[i] = count
                 if (keys[i] == KeyMap.UNPLAYABLE) continue
@@ -290,11 +297,17 @@ private class Build(
                     noteBar[i] = barIndex(exact)
                     continue
                 }
-                // On the grid: a note a hair early is the next bar's downbeat, and every note lasts a sixteenth at least.
-                val first = Math.round(exact / step)
+                val rolled = previous != Long.MIN_VALUE && exact - previous < ROLL * step && exact - chordTick < step
+                previous = exact
+                if (!rolled) {
+                    // On the grid: a note a hair early is the next bar's downbeat, and every note lasts a sixteenth at least.
+                    chordTick = exact
+                    first = Math.round(exact / step)
+                    from = Math.round(first * step)
+                    b = barIndex(from)
+                }
+                tick[i] = chordTick
                 val last = max(first + 1, Math.round(tempo.microsToTicks(notes.endMicros[i]) / step))
-                val from = Math.round(first * step)
-                val b = barIndex(from)
                 start[i] = from
                 noteBar[i] = b
                 val room = min(ScoreLayoutEngine.MAX_HEADS_PER_NOTE, 1 + budget - count)
@@ -893,15 +906,15 @@ private class Build(
     }
 
     /**
-     * The tie from head [a] to head [b]: from the right edge of the first (its centre plus half a head)
-     * to the left edge of the second, a little off the heads on the side away from the stem. Across a
-     * system break, the first half runs to the end of [a]'s system (at least a space, past the bar line
-     * when the head is the system's last) and the second comes in to [b].
+     * The tie from head [a] to head [b]: from the right edge of the first (its centre plus half a head;
+     * past its dot when it has one) to the left edge of the second, a little off the heads on the side
+     * away from the stem. Across a system break, the first half runs to the end of [a]'s system (at
+     * least a space, past the bar line when the head is the system's last) and the second comes in to [b].
      */
     private fun arc(a: Int, b: Int) {
         val above = bowsUp(a)
         val off = if (above) -TIE_OFFSET * space else TIE_OFFSET * space
-        val from = x[a] + headWidth(a)
+        val from = if (dotted[a]) dotX[a] + DOT_WIDTH * space else x[a] + headWidth(a)
         if (system[a] == system[b]) {
             ties.add(system[a], from, y[a] + off, max(from, x[b]), y[b] + off, above, a, b)
         } else {
@@ -914,18 +927,19 @@ private class Build(
 
     // --- Tempo marks and dynamics (every file) ------------------------------------------------
 
-    /** [TempoMarks] at the systems' starts, each on the bar-number line where its first bar's signatures end. */
+    /** [TempoMarks] at the systems' starts, each on the bar-number line at its first bar's left (the painter sets it after the number). */
     private fun tempoMarks(): List<TempoMark> = TempoMarks.marks(
         tempo,
         LongArray(systemCount) { barTick[it * barsPerSystem] },
         BooleanArray(systemCount) { barCompound[it * barsPerSystem] },
-        FloatArray(systemCount) { contentLeft[it * barsPerSystem] - BAR_LEFT_PAD * space },
+        FloatArray(systemCount) { barLeft[it * barsPerSystem] },
     )
 
     /**
      * [Dynamics]: each bar's mean velocity over the notes struck in it (both staves), marked where the
      * band changes, under the treble staff at the bar's first onset: the p's and m's tops 1.5 spaces
-     * below the staff's bottom line.
+     * below the staff's bottom line, or half a space below the lowest treble head, stem or accidental
+     * under the mark when one reaches further down (never into the bass staff).
      */
     private fun dynamics(): List<DynamicMark> {
         val sum = DoubleArray(barCount)
@@ -951,9 +965,29 @@ private class Build(
         for (b in 0 until barCount) {
             if (bands[b] < 0) continue
             val s = b / barsPerSystem
-            marks += DynamicMark(s, b, firstX[b], staffBottom(s, true) + (DYNAMIC_BELOW + DYNAMIC_ASCENT) * space, bands[b])
+            val nominal = staffBottom(s, true) + (DYNAMIC_BELOW + DYNAMIC_ASCENT) * space
+            val floor = trebleFloor(s, firstX[b] - DYNAMIC_OVERHANG * space, firstX[b] + Dynamics.width(bands[b]) * space)
+            val lowest = staffBottom(s, false) - m.staffHeight - (DYNAMIC_DESCENT + DYNAMIC_CLEARANCE) * space
+            val y = min(max(nominal, floor + (DYNAMIC_CLEARANCE + DYNAMIC_ASCENT) * space), max(nominal, lowest))
+            marks += DynamicMark(s, b, firstX[b], y, bands[b])
         }
         return marks
+    }
+
+    /** The lowest y the treble staff's notes in system [s] reach between [from] and [to]: heads, their accidentals, stems pointing down. */
+    private fun trebleFloor(s: Int, from: Float, to: Float): Float {
+        var floor = Float.NEGATIVE_INFINITY
+        fun reach(h: Int) {
+            if (!treble[h] || system[h] != s) return
+            val left = if (accidental[h].toInt() != Accidental.NONE) accidentalX[h] else x[h]
+            if (x[h] + headWidth(h) >= from && left <= to) {
+                floor = max(floor, y[h] + if (accidental[h].toInt() != Accidental.NONE) ACCIDENTAL_DEPTH * space else half)
+            }
+            if (!stemX[h].isNaN() && !stemUp[h] && stemX[h] >= from && stemX[h] <= to) floor = max(floor, max(stemFrom[h], stemTo[h]))
+        }
+        if (noteEnd[s] > 0) for (i in noteFrom[s] until noteEnd[s]) reach(i)
+        if (tiedEnd[s] > 0) for (h in tiedFrom[s] until tiedEnd[s]) reach(h)
+        return floor
     }
 
     /** A tie bows away from its head's stem; with no stem (a whole note), up from the middle line and above, else down. */
@@ -1034,6 +1068,9 @@ private class Build(
 
         val TREBLE_THEN_BASS = booleanArrayOf(true, false)
 
+        /** Notes closer than this share of a sixteenth to the one before are one (rolled) chord: 64ths and triplet 32nds stay apart. */
+        const val ROLL = 0.2
+
         /** One silence is written with at most this many rests (a metre of hundreds of beats is not music). */
         const val MAX_RESTS_PER_SILENCE = 64
 
@@ -1049,6 +1086,9 @@ private class Build(
         const val BAR_LEFT_PAD = 1.6f
         const val ACCIDENTAL_GAP = 0.2f
         const val DOT_GAP = 0.35f
+
+        /** Bravura's augmentation dot, in spaces. */
+        const val DOT_WIDTH = 0.4f
 
         /** Where a stem meets its head: this far from the head's centre line (Bravura's anchor). */
         const val STEM_ATTACH = 0.168f
@@ -1074,6 +1114,14 @@ private class Build(
         /** Dynamics: the tops of p and m this far under the treble staff; Bravura's p and m rise this far above their baseline. */
         const val DYNAMIC_BELOW = 1.5f
         const val DYNAMIC_ASCENT = 1.096f
+
+        /** Bravura's f reaches this far below its baseline, and p this far left of its origin; a mark keeps this clear of notes. */
+        const val DYNAMIC_DESCENT = 0.608f
+        const val DYNAMIC_OVERHANG = 0.356f
+        const val DYNAMIC_CLEARANCE = 0.5f
+
+        /** A sharp or natural reaches about this far below its head's centre line. */
+        const val ACCIDENTAL_DEPTH = 1.4f
 
         /** Key-signature positions on the treble staff (steps above E4), in the order they are added; the bass is a third lower. */
         val TREBLE_SHARPS = intArrayOf(8, 5, 9, 6, 3, 7, 4)

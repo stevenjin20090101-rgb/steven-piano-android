@@ -25,9 +25,13 @@ data class DynamicMark(val system: Int, val bar: Int, val x: Float, val y: Float
 /**
  * Dynamics (DESIGN.md › v1.3 › Score fidelity): each bar's loudness is the mean velocity of the
  * notes struck in it, on both staves, read in bands: pp below 32, p below 48, mp below 64, mf below
- * 80, f below 96, ff from 96. The first bar with notes is marked, and after that a bar whose band is
- * not the last marked one: in a performance only when it is two bands or more away, so a nuance does
- * not litter the score. Bars without notes neither mark nor reset. Pure.
+ * 80, f below 96, ff from 96. The first bar with notes is marked with its band; after that a bar is
+ * marked where its band is not the last marked one: in a performance only when it is two bands or
+ * more away, so a nuance does not litter the score; in a sequenced file once its mean is [MARGIN]
+ * velocity units past the edge it crossed (the band of the mean less the margin going up, plus it
+ * going down), so a mean hovering on an edge (piano-midi.de shapes each phrase's velocities: Clair
+ * de lune's first twelve bars swing between 28.6 and 38.3 around p's floor of 32) does not flip the
+ * mark bar by bar. Bars without notes neither mark nor reset. Pure.
  */
 object Dynamics {
     const val PP = 0
@@ -40,9 +44,17 @@ object Dynamics {
     /** In a performance a band must move this far from the last mark to be marked. */
     const val PERFORMED_CHANGE = 2
 
+    /** In a sequenced file a bar's mean must be this far past a band's edge (velocity units) to mark the band beyond it. */
+    const val MARGIN = 3.0
+
     /** The lowest velocity of each band from p up. */
     private val FLOORS = doubleArrayOf(32.0, 48.0, 64.0, 80.0, 96.0)
     private val NAMES = arrayOf("pp", "p", "mp", "mf", "f", "ff")
+
+    /** Bravura's advance widths of p, m and f, in staff spaces. */
+    private const val P_WIDTH = 1.46f
+    private const val M_WIDTH = 1.748f
+    private const val F_WIDTH = 1.456f
 
     /** Bravura: p U+E520, m U+E521, f U+E522; a band's letters in order. */
     private val GLYPHS = Array(NAMES.size) { band ->
@@ -66,22 +78,36 @@ object Dynamics {
 
     fun glyphs(band: Int): String = GLYPHS[band.coerceIn(PP, FF)]
 
+    /** How wide a band's glyphs are set, in staff spaces. */
+    fun width(band: Int): Float = NAMES[band.coerceIn(PP, FF)].sumOf {
+        when (it) {
+            'p' -> P_WIDTH.toDouble()
+            'm' -> M_WIDTH.toDouble()
+            else -> F_WIDTH.toDouble()
+        }
+    }.toFloat()
+
     /**
      * For each bar's mean velocity in [means] (NaN: no notes in it), the band to mark there in
-     * [out], or -1 for none: the first bar with notes, then each bar whose band differs from the last
-     * marked one ([performed]: by [PERFORMED_CHANGE] bands or more). Returns how many are marked.
+     * [out], or -1 for none: the first bar with notes, then each bar whose band has moved from the
+     * last marked one ([performed]: by [PERFORMED_CHANGE] bands or more; otherwise by [MARGIN] past an
+     * edge). Returns how many are marked.
      */
     fun marks(means: DoubleArray, performed: Boolean, out: IntArray): Int {
-        val change = if (performed) PERFORMED_CHANGE else 1
         var last = -1
         var count = 0
         for (b in means.indices) {
             out[b] = -1
-            if (means[b].isNaN()) continue
-            val band = band(means[b])
-            if (last < 0 || kotlin.math.abs(band - last) >= change) {
-                out[b] = band
-                last = band
+            val mean = means[b]
+            if (mean.isNaN()) continue
+            val next = when {
+                last < 0 -> band(mean)
+                performed -> band(mean).takeIf { kotlin.math.abs(it - last) >= PERFORMED_CHANGE } ?: last
+                else -> band(mean - MARGIN).takeIf { it > last } ?: band(mean + MARGIN).takeIf { it < last } ?: last
+            }
+            if (next != last) {
+                out[b] = next
+                last = next
                 count++
             }
         }

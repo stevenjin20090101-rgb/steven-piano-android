@@ -24,8 +24,9 @@ import kotlin.math.min
  *
  * A group shares one stem direction: up when its heads' average staff position is below the middle
  * line. Its stems end on one straight beam whose slope follows the first and last heads but rises or
- * falls at most one staff space over the group, placed so the stem nearest to it is 3.5 spaces long
- * and every stem reaches the middle line. The primary beam is half a space thick; sixteenths add a
+ * falls at most one staff space over the group (and at most a quarter of its width, so two notes a
+ * sixteenth apart on a phone get a gentle beam, not a flag-steep one), placed so the stem nearest to
+ * it is 3.5 spaces long and every stem reaches the middle line. The primary beam is half a space thick; sixteenths add a
  * second beam 0.75 space further in (centre to centre, so 0.25 space apart), and a lone sixteenth
  * among eighths a stub one head wide pointing into the group.
  *
@@ -40,6 +41,9 @@ object Beams {
 
     /** A beam rises or falls at most this far over its whole group, in staff spaces. */
     const val MAX_RISE = 1f
+
+    /** ...and at most this share of the group's width. */
+    const val MAX_SLOPE = 0.25f
 
     /** The middle line's staff position (lines are 0, 2, 4, 6, 8 from the bottom). */
     private const val MIDDLE_LINE = 4
@@ -93,8 +97,9 @@ object Beams {
      * One group's beam: the tips of [count] stems at [x] (in order, left to right) on one straight
      * line. [far] is the y of each stem's far head (the highest with stems [up], the lowest with stems
      * down) and [middle] the y of its staff's middle line (page coordinates, y down). The line's slope
-     * follows the first and last far heads, its rise held to [MAX_RISE] spaces; it sits [stem] clear of
-     * the nearest far head and reaches the middle line at every stem. Writes each stem's tip to [tip].
+     * follows the first and last far heads, its rise held to [MAX_RISE] spaces and [MAX_SLOPE] of the
+     * group's width; it sits [stem] clear of the nearest far head and reaches the middle line at every
+     * stem. Writes each stem's tip to [tip].
      */
     fun line(
         x: FloatArray,
@@ -109,7 +114,8 @@ object Beams {
         if (count <= 0) return
         val x0 = x[0]
         val run = x[count - 1] - x0
-        val rise = (far[count - 1] - far[0]).coerceIn(-MAX_RISE * space, MAX_RISE * space)
+        val limit = min(MAX_RISE * space, MAX_SLOPE * kotlin.math.abs(run))
+        val rise = (far[count - 1] - far[0]).coerceIn(-limit, limit)
         val slope = if (run > 0f) rise / run else 0f
         var y0 = if (up) Float.MAX_VALUE else -Float.MAX_VALUE
         for (k in 0 until count) {

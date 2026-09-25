@@ -191,6 +191,30 @@ class TiesTest {
         val quarter = score.tiedHead(0, 0)
         assertEquals(Head.BLACK, score.head[quarter].toInt())
         assertTrue(score.dotted[quarter])
+        // A dotted head's tie starts after its dot.
+        val arc = (0 until score.ties.size).first { score.ties.from[it] == 0 }
+        assertEquals(score.dotX[0] + 0.4f * ScoreFixtures.SPACE, score.ties.x1[arc], 0.01f)
+    }
+
+    @Test
+    fun `a chord rolled by a few ticks is one chord, tied as one`() {
+        // Clair de lune's arpeggiated chords: each note 20 ticks after the one before, held to the bar line.
+        val rolled = piece(metas = { timeSignature(0, 9, 8) }) {
+            listOf(48, 55, 60, 64, 67, 72).forEachIndexed { k, key -> note(1340L + 20 * k, key, 2160 + 720 - 1340L - 20 * k) }
+            for (k in 0 until 24) note(2160L + 720 + 120 * k, 40, 120)   // sixteenths on the grid: the file is sequenced
+        }
+        val score = layout(rolled)
+        assertTrue(score.quantized)
+        val treble = (0 until score.noteCount).filter { score.treble[it] }
+        assertEquals(1, treble.map { score.x[it] }.distinct().size)                                   // one column
+        assertEquals(1, treble.count { !score.stemX[it].isNaN() })                                    // one stem
+        // Each written alike from the chord's onset: 6 + 1 sixteenths to the bar line, then a dotted quarter.
+        assertTrue(treble.all { score.tiedHeadCount(it) == 2 })
+        assertEquals(2 * treble.size, (score.noteCount until score.headCount).count { score.treble[it] })
+        // A run of 64ths (a quarter of a sixteenth apart) stays a run.
+        val run = layout(piece { for (k in 0 until 4) note(30L * k, 72 + 2 * k, 30); for (k in 0 until 24) note(480L + 120 * k, 40, 120) })
+        assertTrue(run.quantized)
+        assertEquals(4, (0 until 4).map { run.x[it] }.distinct().size)
     }
 
     @Test

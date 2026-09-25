@@ -45,9 +45,23 @@ class DynamicsTest {
     @Test
     fun `the first bar with notes is marked, then only a change of band`() {
         val nan = Double.NaN
-        assertEquals(listOf(-1, Dynamics.MP, -1, Dynamics.MF, -1, -1, Dynamics.PP), marks(listOf(nan, 50.0, 52.0, 70.0, 75.0, nan, 30.0)))
+        assertEquals(listOf(-1, Dynamics.MP, -1, Dynamics.MF, -1, -1, Dynamics.PP), marks(listOf(nan, 50.0, 52.0, 70.0, 75.0, nan, 20.0)))
         // A silent bar neither marks nor resets: the band after it is compared with the last mark.
         assertEquals(listOf(Dynamics.MF, -1, -1), marks(listOf(70.0, nan, 72.0)))
+    }
+
+    @Test
+    fun `a sequenced mean hovering on a band's edge does not flip the mark bar by bar`() {
+        // Clair de lune's first bars as piano-midi.de shapes them, around p's floor of 32.
+        val opening = listOf(38.3, 31.0, 35.8, 29.8, 35.0, 31.8, 35.7, 28.6, 31.4, 28.9, 33.8, 29.6, 36.9)
+        assertEquals(
+            listOf(Dynamics.P, -1, -1, -1, -1, -1, -1, Dynamics.PP, -1, -1, -1, -1, Dynamics.P),
+            marks(opening),
+        )
+        // Three units past the edge marks the band beyond it; a jump over two edges marks the band it has cleared.
+        assertEquals(listOf(Dynamics.PP, -1, Dynamics.P), marks(listOf(30.0, 34.0, 35.0)))
+        assertEquals(listOf(Dynamics.MF, Dynamics.MP), marks(listOf(70.0, 46.0)))   // 46 is only 2 below mp's floor
+        assertEquals(listOf(Dynamics.FF, Dynamics.F, Dynamics.FF), marks(listOf(120.0, 92.0, 99.0)))
     }
 
     @Test
@@ -64,7 +78,7 @@ class DynamicsTest {
         val loud = piece {
             note(0, 72, 480, velocity = 50); note(480, 74, 480, velocity = 54)       // bar 1: mp
             note(1920, 72, 480, velocity = 56); note(2400, 74, 480, velocity = 60)   // bar 2: still mp
-            note(3840 + 480, 60, 480, velocity = 100); note(3840 + 480, 48, 480, velocity = 96)   // bar 3: ff over both staves, from beat 2
+            note(3840 + 480, 60, 480, velocity = 110); note(3840 + 480, 48, 480, velocity = 100)   // bar 3: ff over both staves, from beat 2
         }
         val score = layout(loud)
         assertEquals(listOf(0, 2), score.dynamics.map { it.bar })
@@ -77,6 +91,21 @@ class DynamicsTest {
         assertEquals(1, third.system)
         assertEquals(minOf(score.x[loud.at(4320, 60)], score.x[loud.at(4320, 48)]), third.x, 0.01f)
         assertEquals("", third.glyphs)
+    }
+
+    @Test
+    fun `a mark under a low treble note moves down, clear of it, and never into the bass staff`() {
+        val low = layout(piece { note(0, 60, 1920) })          // middle C, a ledger line below the treble staff
+        val mark = low.dynamics.single()
+        val c = 0
+        // Its top (the baseline less the p's and m's rise) is half a space under the head.
+        assertEquals(low.y[c] + SPACE / 2 + 0.5f * SPACE + 1.096f * SPACE, mark.y, 0.01f)
+        assertTrue(mark.y > low.systems[0].trebleBottom + (1.5f + 1.096f) * SPACE)
+        assertTrue(mark.y + 0.608f * SPACE < low.systems[0].bassTop)
+        val high = layout(piece { note(0, 72, 1920) })         // C5 stays up: the mark keeps its place
+        assertEquals(high.systems[0].trebleBottom + (1.5f + 1.096f) * SPACE, high.dynamics.single().y, 0.01f)
+        assertEquals(2 * 1.46f, Dynamics.width(Dynamics.PP), 0.001f)
+        assertEquals(1.748f + 1.456f, Dynamics.width(Dynamics.MF), 0.001f)
     }
 
     @Test

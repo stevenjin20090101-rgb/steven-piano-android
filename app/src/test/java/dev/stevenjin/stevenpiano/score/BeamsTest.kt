@@ -90,6 +90,14 @@ class BeamsTest {
     }
 
     @Test
+    fun `a short group's beam is held to a quarter of its width`() {
+        val tip = FloatArray(2)
+        // Two stems 1.5 spaces apart over a leap: a quarter of 18 px is 4.5 px, less than a space.
+        Beams.line(floatArrayOf(0f, 1.5f * SPACE), floatArrayOf(100f, 60f), floatArrayOf(1_000f, 1_000f), 2, true, SPACE, 3.5f * SPACE, tip)
+        assertEquals(-0.25f * 1.5f * SPACE, tip[1] - tip[0], 0.01f)
+    }
+
+    @Test
     fun `a lone sixteenth's stub points into its group`() {
         assertTrue(Beams.stubPointsRight(0, 3, 0))
         assertFalse(Beams.stubPointsRight(2, 3, 3))
@@ -218,8 +226,13 @@ class BeamsTest {
         val c = leap.at(0, 72)
         val e = leap.at(240, 88)
         assertEquals(1, score.primaries().size)
-        assertEquals(SPACE, abs(score.stemTo[e] - score.stemTo[c]), 0.01f)
+        val run = score.stemX[e] - score.stemX[c]
+        assertEquals(minOf(SPACE, run / 4), abs(score.stemTo[e] - score.stemTo[c]), 0.01f)
+        assertTrue(abs(score.stemTo[e] - score.stemTo[c]) <= SPACE + 0.01f)
         assertTrue(score.stemTo[e] < score.stemTo[c])   // it still rises with the music
+        // On a wide page the same leap is held to one space exactly.
+        val wide = layout(leap, ScoreFixtures.metrics(widthDp = 1_600f, width = ScoreWidth.COMPACT))
+        assertEquals(SPACE, abs(wide.stemTo[e] - wide.stemTo[c]), 0.01f)
         val step = layout(piece { note(0, 72, 240); note(240, 74, 240) })   // C5 to D5: half a space
         val ends = (0 until step.noteCount).map { step.stemTo[it] }
         assertEquals(SPACE / 2, abs(ends[1] - ends[0]), 0.01f)
