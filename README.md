@@ -10,23 +10,53 @@
 # Steven Piano
 
 An Android app that plays Standard MIDI Files on Steven's self-playing acoustic
-piano over Bluetooth LE MIDI. Pick a piece in the **Library**, watch it on
-**Now playing** as a paper roll, falling notes or a staff while the piano plays
-it, play the piano yourself on **Keys**, and on the **Piano** tab connect, adjust
-the piano's own lighting and feel, and tune playback. Phones and tablets alike.
-Sideloaded as an APK; no accounts, no analytics, and the network only for
-composers' portraits and short notes from Wikipedia (see *Artwork and notes* below).
-Made by Steven Jin. Version 1.1.
+piano over Bluetooth LE MIDI. Pick a piece in the **Library** or a playlist,
+watch it on **Now playing** as a paper roll, falling notes or pages of score
+while the piano plays it, play the piano yourself on **Keys**, and on the
+**Piano** tab connect, adjust the piano's own lighting and feel, and tune
+playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
+analytics, and the network only for composers' portraits and short notes from
+Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.2.
 
 ## What it does
 
-- **Library**: search, collections, composers, favorites and recent pieces;
-  import single files, a whole folder (with its `INDEX.csv`) or a zip.
+- **Library**: search; **Playlists** and **Composers** as grids of tiles with
+  art; favorites and recent pieces. Import single files, a whole folder (with
+  its `INDEX.csv`, whose sets arrive as playlists) or a zip. A piece's menu
+  plays it next, adds it to the queue or to a playlist, favorites, renames or
+  deletes it, and opens *About this piece*.
+- **Playlists**: a playlist is a page with its cover (your photo, else its first
+  composer's portrait), **Play** and **Shuffle**, and its pieces in the order you
+  give them: drag a row by its handle, or use *Move up* and *Move down* in its
+  menu. Rename, change the photo or delete it from its menu.
+- **Up next, shuffle and repeat**: the queue glyph on Now playing opens *Up
+  next*, to reorder, remove, clear, or skip to a piece. **Shuffle** and
+  **Repeat** (off, all, one) sit at the two ends of the transport and are
+  remembered; shuffle keeps the current piece playing, and turning it off brings
+  the order back. The lock screen and the system media controls show the queue
+  and both modes.
+- **Artwork and notes**: composers' portraits and two-sentence blurbs, and each
+  piece's notes (tap the title on Now playing), from Wikipedia: the app talks to
+  `en.wikipedia.org` and `upload.wikimedia.org` and nothing else (see below).
+  Pieces without a portrait get a card drawn from their own first seconds.
 - **Now playing**: the pianola paper roll (the default), Synthesia-style falling
-  notes, or a **staff**: the notes on a grand staff (treble and bass, sharps
-  only, a line trailing each head for its length), scrolling through a playhead
-  in step with the roll. Not engraved sheet music: no beams, rests or ties.
-  Tempo, scrubbing, previous and next.
+  notes, or the **score**, with tempo, scrubbing, previous and next.
+- **The score**: the piece as sheet music, in systems of bars on pages (two
+  bars a system on a phone, three on a small tablet, four on a tablet on its
+  side, and two pages side by side when the score has a tablet's width to
+  itself). Every system opens with its clefs and the file's key signature; notes
+  are spelled in the key (an E-flat piece reads in flats), with one accidental
+  per pitch per bar and naturals where they are needed, and time signatures
+  show at the start and wherever the metre changes. A cursor moves through the
+  bar being played, sounding notes light up, and pages turn by themselves so
+  the cursor is always in sight. Swipe to look at other pages (**Follow** brings
+  the score back to the music), and tap a bar to play from there. Files written
+  in a sequencer (most of piano-midi.de and Mutopia) show note values: whole,
+  half, quarter, eighth and sixteenth notes, stems, flags and dots. Honest
+  limits: no beams, rests, ties, tuplets or grace notes, and no voices within a
+  hand; recorded performances (MAESTRO) keep plain note heads with a line for
+  each note's length, in bars counted at the file's own tempo. A file without a
+  key signature is written in sharps.
 - **Keys**: a playable keyboard over the piano's 84 keys, C1–B7, never taller
   than a real keyboard needs, along the bottom of the screen. Every touch is a
   Note On to the piano; chords with several fingers, a glissando by sliding.
@@ -38,7 +68,8 @@ Made by Steven Jin. Version 1.1.
   app in the background or losing the link lets go of every key and the pedal.
   Keys shares the piano's safety rules with playback (never re-strike a held
   key, no same-key strikes closer than 100 ms), so it can be played while a
-  piece plays.
+  piece plays. Turning the phone or tablet while keys are held never cuts them:
+  the screen turns once the last finger lifts.
 - **Piano settings**: the piano's own settings, from the Piano tab, over the
   same Bluetooth connection (on firmware with its Bluetooth console; older
   firmware just says it doesn't offer them yet). **Lighting**: the strip on or
@@ -54,12 +85,14 @@ Made by Steven Jin. Version 1.1.
   per-key force) stay at the piano's USB console.
 - **Piano**: the connection, the piano settings above, the app's preferences
   (auto-connect, note display, wide layout, default tempo, transpose, velocity,
-  folding, drum channel) and the About line.
+  folding, drum channel, artwork in black and white, fetching artwork
+  automatically) and the About line.
 - **Tablets and phones on their side**: a navigation rail on the left instead of
-  the bottom bar. Now playing shows the staff and the notes together: stacked on
+  the bottom bar. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
-  side; **Piano › Wide layout** can show either alone. The Library and the Piano
-  tab keep a comfortable 720 dp reading column in the middle of the screen.
+  side; **Piano › Wide layout** can show either alone (*Score only* on a tablet
+  on its side opens two pages). The Library and the Piano tab keep a comfortable
+  720 dp reading column in the middle of the screen.
 
 The phone does all the timing: the piano plays each note the moment it arrives.
 The app folds notes outside the piano's range (C1–B7) by octaves, never sends a
@@ -132,11 +165,11 @@ Copy the library to the phone first, for example
 whole `midi` folder over USB.
 
 - **Library › + › Add folder**, then choose the `midi` folder: every MIDI file
-  inside, subfolders included. Its `INDEX.csv` names the collections
-  (MAESTRO, piano-midi.de, Mutopia) and the composers, so the 1,727 pieces arrive
-  grouped. Copies of the same file are skipped.
+  inside, subfolders included. Its `INDEX.csv` puts them in playlists
+  (MAESTRO, piano-midi.de, Mutopia) and names the composers, so the 1,727 pieces
+  arrive grouped. Copies of the same file are skipped.
 - **Library › + › Add zip**, then `ALL-SONGS.zip`: the same 1,727 pieces, named
-  from their file names (no collections).
+  from their file names (no playlists).
 - **Library › + › Add files** for a few pieces, or send `.mid` files to Steven
   Piano from any file manager (*Open with* or *Share*).
 
@@ -183,8 +216,8 @@ the first play, so the lock screen shows play and pause.
 - [ ] Power-cycle the piano while connected: the app shows Not connected, then
       reconnects by itself within about 15 s of the piano advertising again, and
       the roll resumes from pause when Play is pressed.
-- [ ] Import the whole `midi` folder (or the zip): 1,727 pieces appear grouped by
-      collection and composer; search finds "Clair de lune"; a MAESTRO
+- [ ] Import the whole `midi` folder (or the zip): 1,727 pieces appear in
+      playlists and by composer; search finds "Clair de lune"; a MAESTRO
       performance plays with its recorded dynamics (piano in variable-force mode).
 - [ ] Keys: a tap plays the key; three fingers play a chord; sliding plays a
       glissando with each key released before the next; a touch near the top of a
@@ -193,9 +226,22 @@ the first play, so the lock screen shows play and pause.
       press Home, or power the piano off: every key and the pedal come up.
 - [ ] Keys while a piece plays: pressing a key the piece is holding does not
       re-strike it, and leaving Keys leaves the piece's notes sounding.
-- [ ] On a tablet: the rail replaces the bottom bar; Now playing shows the staff
+- [ ] On a tablet: the rail replaces the bottom bar; Now playing shows the score
       over the roll upright and beside it on its side, in step with each other;
-      Wide layout › Staff only and Notes only work while playing.
+      Wide layout › Score only and Notes only work while playing.
+- [ ] Shuffle a playlist and skip around while connected: every piece starts
+      cleanly, no key is left down between pieces, Previous and Next follow the
+      shuffled order, and turning Shuffle off keeps the current piece playing.
+- [ ] Keys: hold a chord and turn the phone (or the tablet): the chord keeps
+      sounding, and the screen turns once the fingers lift.
+- [ ] Clair de lune with the score showing, at 100 % and at 50 % tempo: the
+      cursor keeps pace with the piano, a page turns before the cursor needs it
+      (on a tablet on its side with Score only, the left page turns while the
+      right one is being finished), and tapping a bar plays from there with no
+      key left sounding.
+- [ ] Open a piece's sheet on Wi-Fi (its notes and the composer's portrait
+      appear), then again in airplane mode (the art shown before is kept, and the
+      sheet says notes need an internet connection when it has none).
 - [ ] Piano settings (firmware with the Bluetooth console): on connect the Piano
       tab fills in LIGHTING, FEEL, PEDAL and DIAGNOSTICS. Adjust a setting from
       the Piano tab and confirm the piano's serial `status` shows it (Brightness
@@ -209,10 +255,10 @@ the first play, so the lock screen shows play and pause.
 
 ## Acknowledgements
 
-- The staff view's clefs, sharps and note heads are drawn with **Bravura**, the
-  SMuFL music font by Steinberg Media Technologies GmbH, bundled unmodified under
-  the SIL Open Font License 1.1 (notice in `AUTHORS`, licence in
-  `third_party/bravura/OFL.txt`).
+- The score's clefs, key and time signatures, accidentals, note heads, flags
+  and dots are drawn with **Bravura**, the SMuFL music font by Steinberg Media
+  Technologies GmbH, bundled unmodified under the SIL Open Font License 1.1
+  (notice in `AUTHORS`, licence in `third_party/bravura/OFL.txt`).
 - Composers' blurbs and pieces' notes are text from Wikipedia (CC BY-SA 4.0), each
   linked back to its article with *From Wikipedia*; portraits come from Wikimedia
   Commons.

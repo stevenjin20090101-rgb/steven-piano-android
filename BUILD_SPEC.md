@@ -302,7 +302,7 @@ engine, data and BLE layers keep their v1.0 contracts except where stated.
 - No haptics. `contentDescription` on the keyboard describes it as a playable piano
   keyboard; TalkBack users get the octave buttons and sustain as focusable controls.
 
-## Staff view — `ui/components/StaffCanvas.kt`
+## Staff view — `ui/components/StaffCanvas.kt` (replaced in v1.2 by the score: see M12)
 
 - Same inputs as `NoteCanvas` (the `NoteList`, `positionMicrosAt(frameNanos)`, active
   keys); same frame loop and draw-phase-only state reads; same pixels-per-second so the
@@ -706,3 +706,159 @@ priority to the front, FAILED backoff, busy waits and long waits, cancellation, 
 `RollCardTest` (identical bytes for the same notes; lane 0 marks the expected pixels), `ArtFilesTest`
 (names, signatures, atomic writes, sample sizes), `SentencesTest` ("J. S. Bach"), `ArtworkCopyTest`,
 `ComposerNamesTest` (+ `canonical`), `SettingsRepositoryTest` (+ the two keys).
+
+---
+
+# v1.2 — M12: the score in pages, the parser's tempo map and signatures
+
+Read `DESIGN.md › v1.2 › Score` first; key signatures come forward from `DESIGN.md › v1.3 ›
+Score fidelity` (its first bullet only). Everything above stays except where this section says
+otherwise. This run closes v1.2: README, `AUTHORS` and the provenance manifest are updated with it.
+
+## Parser — `midi/`
+
+- `TempoMap` (`TempoMap.kt`): the tempo segments as ticks, microseconds and tempo. The merge builds
+  it as it goes (`TempoMap.Builder`: `micros(tick)`, `change(tick, tempo)`; a second change at one
+  tick replaces the first), with the parser's own arithmetic (`segmentMicros + (tick - segmentTick)
+  * tempo / ppq`, rounded down), so `tickToMicros` is exactly how events are timed and
+  `microsToTicks` (to the nearest tick) gives any event's tick back. `microsToBeats` and `ticksAt`
+  are fractional; `tempoAt(tick)`; `constant(ppq)`. All 3,454 corpus files' events, notes,
+  durations and warnings are byte-identical to the parser before M12 (digests compared).
+- Meta `0x58` (time signature: numerator, power-of-two denominator) and `0x59` (key signature:
+  signed sharps, mode) go to lists of their own beside the packed words, whose 2-bit rank is full.
+  `SignatureLists` (`Signatures.kt`) puts them in time order (stable across tracks), keeps the last
+  at any tick, drops unusable ones (time: numerator 1–255, denominator 1–64; key: -7..7 and mode
+  0/1) and removes any that repeats the signature in force. `TimeSignature(tick, atMicros,
+  numerator, denominator)` with `valid`, `sameAs`, `ticksIn(bars, ppq)`, `Common` (4/4 at 0);
+  `KeySignature(tick, atMicros, sharps, minor)` with `sameAs` and `transposed(semitones)` (seven
+  sharps a semitone, folded to -5..6; unchanged at 0).
+- `Bars` (`Bars.kt`): `startTicks(signatures, ppq, durationTicks)` and `starts(tempo, signatures,
+  durationMicros)`: bar 1 at 0, a new bar at every change of metre even mid-bar (a pickup, a
+  cadenza), bars of each metre's length measured from where it took over (rounded down per bar
+  count, so lines never drift), unusable and repeated signatures ignored, bars until the one
+  holding the piece's end, at most `MAX_BARS` = 100,000.
+- `MidiPiece` gains `tempoMap`, `timeSignatures` (never empty: 4/4 until the file says otherwise),
+  `keySignatures` (empty when the file has none) and `barStartsMicros`. `SmfBuilder.Track` gains
+  `timeSignature(tick, n, d)` and `keySignature(tick, sharps, minor)` for tests.
+
+## The score engine — `score/` (no Android, no Compose)
+
+- `ScoreWidth` (`COMPACT` 2, `MEDIUM` 3, `EXPANDED` 4 bars a system; `AppFrame.scoreWidth` maps the
+  window's width class). `ScoreMetrics.forPanel(width, panelWidthPx, panelHeightPx, density,
+  headWidth, clefWidth, numberHeight)`: two pages side by side (16 dp apart) when the panel is
+  840 dp wide or more; 6 dp staff space, 40 dp between the staves (an 88 dp grand staff), 32 dp
+  between systems, one bar-number line (`numberHeight`, the eyebrow's line height, measured, so it
+  grows with the font scale) above each system, 8 dp above the first system and 16 dp below the
+  last; systems a page = as many as fit (at least one), the room left over spread evenly above,
+  between and below them; 12 dp page margins. `staffTop(row)`, `slotLeft(slot)`.
+- `Quantize.onGrid(starts, tempo, tolerance = 0.12, share = 0.80)`: a file is sequenced when at
+  least 80 % of its onsets fall within 12 % of a sixteenth (ppq / 4 ticks), measured in ticks
+  through the tempo map, never in microseconds. `Quantize.value(durationTicks, ppq)`: dotted when
+  within 12 % of 1.5 times a value, otherwise the nearest of sixteenth … whole on a log2 scale
+  (a 32nd reads as a sixteenth, longer than a whole note as a whole note). `NoteValue(power,
+  dotted)` with `whole`, `hollow`, `flags`.
+- `Spelling` (pure, table-driven, allocation-free): `keyAlteration(letter, sharps)` (sharps added
+  F C G D A E B, flats B E A D G C F), `letter`, `alteration` (+1, -1, 0), `step` (diatonic, C4 = 35,
+  as `StaffPitch.diatonic`) and `name` ("B♭4", "B♮4") of a key in a key signature: the key's own
+  spelling when the pitch is in it, else the natural of a letter the key alters, else a flat in a
+  flat key and a sharp otherwise (so no key signature reads in sharps, as the staff did).
+  `BarAccidentals` shows an accidental only where the bar does not already read the note so, per
+  staff and octave, reset at every bar line and key change: one accidental per pitch per bar, a
+  natural on a return to the key's note. `StaffPitch.position(step, treble)` places a letter step;
+  `StaffPitch.position(key)` (sharps) stays for callers without a key.
+- `ScoreLayoutEngine.layout(notes, keys, tempo, bars, keySignatures, metrics, timeSignatures)` →
+  `ScoreLayout`. Systems of `barsPerSystem` bars, every bar of a system as wide as the others; each
+  system opens with its clefs and the key signature in force (standard positions: treble sharps
+  F5 C5 G5 D5 A4 E5 B4, flats B4 E5 A4 D5 G4 C5 F4, the bass a third lower), the time signature at
+  the first bar and at every change of metre (at a change mid-system, after its bar line; a key
+  change mid-system draws the new key there, naturals cancelling a change to no accidentals). A
+  note sits at its place in beats within its bar (`ScoreBars.xAt`; its head's left edge where the
+  cursor is as it sounds); treble from middle C up, bass below; spelled in the key; ledger lines
+  counted (`StaffPitch.ledgerLines`). Chords (the same tick when sequenced, within 30 ms and one bar
+  when performed) move heads a second apart one head right, stack accidentals leftwards in columns
+  (top down, six steps clear), and, when sequenced, give each value (head, flags, dot) one stem,
+  3.5 spaces from the head nearest its end and reaching the middle line from far notes: a lone
+  value points away from its farthest head (up when that is below the middle line); two values
+  struck together stem apart, the higher up. Flags on the stem's owner only; dots in the space
+  (a line's dot moves up). Performances keep black heads, no stems, and a hairline to where each
+  note ends (held to its system). Arrays in the note list's order: `system` (-1: unplayable),
+  `x`, `y`, `head`, `treble`, `ledgers`, `accidental` + `accidentalX`, `stemX`/`stemFrom`/`stemTo`/
+  `stemUp`, `flags`, `dotted` + `dotX`/`dotY`, `moved`, `durationEnd`. `ScoreSystem(index, page,
+  slot, trebleTop, bassTop, left, right, firstBar, barCount, firstNote, noteEnd, bandTop,
+  bandBottom, signKind/signX/signY, final)` with `xAt(micros)` and `barAtX(x)`; drawing keeps to
+  the band (the neighbouring staves or the page's edges), which clips the most extreme ledger lines.
+  `ScoreLayout.systemAt(micros)` and `ScoreBars.barAt(micros)` by binary search; `systemsOn(page)`,
+  `pageCount`, `quantized`.
+- `PageTurn.pagesShown(cursorSystem, systemCount, systemsPerPage, pages)` (and `visibleSystems`):
+  one page shows the cursor's; two show even pages left, odd right, the cursor's page in its slot
+  and the other slot the next page once the cursor is on its page's last system (or when there is
+  no page before), else the previous one (at the end, the previous). `PageTurn.browsing(first,
+  pageCount, pages)`: a page and the one after, held to even pages with two slots.
+
+## `ui/components/ScorePages.kt` (replaces `StaffCanvas.kt`)
+
+- Bravura at four spaces to the em, in dp (the score keeps its size at any font scale); glyphs:
+  heads U+E0A2/E0A3/E0A4, flags U+E240/E241/E242/E243, dot U+E1E7, sharp U+E262, flat U+E260,
+  natural U+E261, clefs U+E050/E062, time-signature digits U+E080–E089. All measured once with
+  `rememberTextMeasurer` on the main thread (`overflow = Visible`), drawn with their SMuFL origin on
+  the baseline. Colours: staff and bar lines `LocalTertiary`, clefs, signatures and upcoming notes
+  `onSurfaceVariant`, sounding notes through `colorRamp`/`rampLevel` to `onSurface` (the 120 ms
+  flip, a cut under reduced motion), the 2 dp cursor `onSurface`, bar numbers the tertiary
+  eyebrow, the spine between two pages `LocalHairline`. Final bar line thin-thick.
+- The layout is computed in `produceState` on `Dispatchers.Default`, keyed on the notes, tempo map,
+  bars, signatures, transpose, folding and metrics (a new piece clears the old pages first). Each
+  visible page is a `Spacer` in its own offscreen `graphicsLayer` drawn from `drawWithCache` keyed
+  on the layout and page (bar numbers measured there, on the main thread) and never reading the
+  frame clock; the overlay (its own layer) reads `frameNanos` in the draw phase only, draws the
+  cursor in the sounding system and re-draws each sounding note in its ramp colour over the page,
+  without allocating. The cursor's system comes from `derivedStateOf`, so composition (and the
+  page turn) happens only when it changes.
+- Bar numbers sit on a baseline 1.4 spaces + 1 dp above the treble's top line, clear of the G clef's
+  top (which rises 1.39 spaces), inside the reserved line and a few dp into the gap above.
+- Agency: a horizontal drag of 40 dp or more shows the next (left swipe) or previous spread of
+  pages and an outlined `SuggestionChip` "Follow" (surfaceVariant container, tertiary border) at
+  the top right; tapping it, or the next change of the followed spread, follows again. A tap picks
+  the slot, the nearest system and `barAtX`, and calls `onSeek(bar start)`. Semantics:
+  "Score", the pages shown as its state, custom actions Next page, Previous page, Follow the music.
+
+## Wiring
+
+- `NowPlaying` gains `tempoMap`, `barStartsMicros`, `keySignatures`, `timeSignatures` (defaults for
+  tests), filled from the `MidiPiece` in `Player.startCurrent`; its other fields are unchanged.
+- `NotesLayout.STAFF` is `SCORE`; `NoteViews` shows `ScorePages` in every plan (with the keyboard
+  strip when it is alone); a bar tap seeks as the scrubber does (`player.seek`, then the paused
+  picture's settle frames). Short screens give the score 200 dp (one system), plus the strip alone.
+  The title's piece sheet and the Up next sheet are as M10–M11 left them.
+- Labels: `NoteDisplay.label` ("Paper roll", "Falling notes", "Score") and `WideLayout.label`
+  ("Score and notes", "Notes only", "Score only") in `AdaptiveFrame.kt`; the saved names (`STAFF`,
+  `STAFF_AND_NOTES`, `STAFF_ONLY`) are unchanged, so settings carry over.
+
+## Measured (September 2026)
+
+- Corpus (`CorpusTest -Pcorpus`): all 3,454 files lay out on a 411 × 600 dp phone panel and a
+  1280 × 700 dp two-page tablet panel in 5 s; 20.9 % quantise (piano-midi.de 259 of 340, Mutopia
+  102 of 111, MAESTRO 0 of 1,276).
+- Frames on the emulator, 20 s of playback with the score visible (`dumpsys gfxinfo`): phone, score
+  alone, 1 janky frame of 1,203 (0.08 %); tablet upright, score over the roll, 0 of 1,203; tablet on
+  its side, two pages, 1 of 1,203 (0.08 %).
+
+## Deviations from the plan, and why
+
+- Key signatures and spelling in the key are in (the plan's "sharps only" is superseded, as the run
+  asked); a file without FF 59 spells as C major, sharps, with the one-accidental-per-bar rule, so a
+  C after a C♯ in a bar shows its natural.
+- `ScoreLayoutEngine.layout` also takes `timeSignatures` (bar lengths alone cannot tell 6/8 from
+  3/4), and `ScoreMetrics.forPanel` takes `ScoreWidth` (a pure enum, not the Compose width class)
+  and the measured `numberHeight`.
+- `ScoreLayout` holds more than the plan's arrays (accidental and dot positions, the chord's stem
+  ends, duration ends, `treble`) so drawing does no layout work; `PageTurn.pagesShown` and
+  `browsing` sit beside `visibleSystems`.
+- Bar numbers are lifted over the G clef (the reserved eyebrow line alone let the clef's top touch
+  a two-digit number).
+
+## Tests added in M12
+
+`TempoMapTest`, `BarsTest`, `SmfParserTest` (signatures, `FD 01` as three flats minor, collapsing,
+bars through tempo changes), `QuantizeTest`, `SpellingTest`, `ScoreMetricsTest`, `PageTurnTest`,
+`ScoreLayoutEngineTest`, `AdaptiveFrameTest` (the Score names, bars a system by width), and
+`CorpusTest` laying out every corpus file on both panels.
