@@ -381,3 +381,33 @@ up to about 14 MB of skylines.
 ### What the owner must do
 
 Install the release APK of versionCode 6 over 1.3 (same key, so it updates in place). Nothing else.
+
+## 1.3.1 — 2026-09-26
+
+The owner's first test on the piano could not connect, and the app could not say why. 1.3.1 makes
+the Bluetooth link explain itself (README › Connect to the piano). What that changes for this audit;
+nothing above is weakened:
+
+- **Logging (F17 holds).** The link logs its milestones with `Log.w` under the tag `PianoLink`,
+  which R8 keeps in release builds (it still strips `Log.v/d/i`). The lines hold Bluetooth addresses,
+  RSSI, GATT status codes, the piano's fixed name and the advertised names of the other BLE-MIDI
+  devices the filtered scan sees: no file names, titles, URLs, settings or location, no user data. A
+  name from the air has its control characters replaced and is cut at 40 characters, so it cannot
+  forge a log line; a device is logged once a scan, "the piano fell behind" once a connection.
+- **Pinning (F16 holds).** With a piano remembered, only its address is connected to by itself,
+  from a scan or when another app on the tablet already holds it; another "Steven Piano" is still
+  only offered. With none remembered, a nameless BLE-MIDI device is connected to only when no named
+  Steven Piano answered within a second, and becomes the piano only if its GAP Device Name reads
+  "Steven Piano"; otherwise it is disconnected before any MIDI is sent and passed over until the
+  next Connect.
+- **Pairing.** A piano this device is bonded with is reported ("Forget it there, then tap Retry")
+  instead of connected to; the app still never pairs.
+- **No new permissions.** The bond state and the connected-device list use `BLUETOOTH_CONNECT`,
+  already held; a `SecurityException` from either reads as "not paired" or "none", and every radio
+  call also catches the `IllegalStateException` Android throws while Bluetooth turns off.
+
+Tests went from 583 to 605.
+
+**What the owner must do:** install the release APK of versionCode 7 over 1.3 (same key, so it
+updates in place). To report a connection that fails, capture
+`adb logcat -s PianoLink:W BluetoothGatt:V BluetoothLeScanner:V` (README › Send a log).

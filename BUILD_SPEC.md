@@ -1391,3 +1391,30 @@ skyline for its tempo mark and chord names; the player's piece start and refinge
 one before (chosen once per scale) and at most `MAX_CHORD_DRAWS` (64) a frame. Tests: 583, adding
 `ScoreLayoutBudgetTest`, `ScoreLaidTest`, `AnalysisCancelTest`, `ScoreSkylineTest` and cases in
 `ChordsTest`, `SmfParserTest`, `TiesTest`, `CanvasBudgetTest` and `PlayerTest`.
+
+# v1.3.1 — the link explains itself (versionCode 7)
+
+The owner's first connection on the piano failed without a reason. `versionCode` 7, `versionName`
+"1.3.1", `Provenance.text` "Made by Steven Jin · v1.3.1 · eab16a502f679465". `GattPianoLink` logs its
+milestones with `Log.w` under `PianoLink` (R8 keeps `Log.w`): the connect request; each scan with its
+filter and mode; each device a scan sees, once per address per scan (address, name or "(no name)",
+RSSI, whether it advertised the MIDI service, and the decision); each connectGatt with autoConnect;
+connections made and lost with the GATT status (`BleCodes` names the common ones and makes an
+advertised name safe for one line); the MTU; the services (MIDI, console); the retry; each failure
+with its reason and the status or "timeout". `LinkError` is a sealed type: `NotFound(locationOff)`
+only from a scan's timeout (the Location sentence added when Location Services are off);
+`ConnectFailed(status)` after the one retry (null: the 15 s timeout; −1: connectGatt gave no
+connection); `ScanFailed(code)` from onScanFailed (−1, no scanner, reads as `BluetoothOff`); `Paired`
+when `BleRadio.isBonded`; `BluetoothOff`, `PermissionMissing`, `LocationOff`, `Unsupported`, `Failed`
+(no MIDI characteristic) and `OtherPiano` as before. Before each scan `BleRadio.connectedDevices()`
+(GATT and GATT_SERVER) is asked for the remembered address, or with none remembered a device named
+Steven Piano, and a piano another app holds is connected to directly. With no piano remembered, a
+nameless result that advertised the MIDI service is a candidate: connected to after
+`NAMELESS_GRACE_MS` (1 s) without a named Steven Piano, or at the scan's end; after discovery its GAP
+Device Name (0x1800/0x2A00) is read (3 s at most): "Steven Piano" makes it the piano, anything else
+disconnects it and the scan goes on without it until the next Connect. `guard` catches
+`IllegalStateException` as well; after `BluetoothOff`, the adapter coming back on clears the error
+and, with auto-connect on, connects. The card adds Open Bluetooth settings beside Retry for `Paired`,
+and for `NotFound` the tip "if the piano's screen reads “BLE MIDI: CONNECTED”, another device is
+connected to it" (the firmware's status label) with Retry and, when Location was off, Open Location
+settings. Tests: 605, adding `LinkErrorCopyTest` and 17 cases in `GattPianoLinkTest`.
