@@ -38,7 +38,8 @@ import androidx.core.location.LocationManagerCompat
  */
 @SuppressLint("MissingPermission")
 class AndroidBleRadio(private val context: Context) : BleRadio {
-    private val adapter: BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter
+    private val manager: BluetoothManager? = context.getSystemService(BluetoothManager::class.java)
+    private val adapter: BluetoothAdapter? = manager?.adapter
     private val scanner = adapter?.let(::PianoScanner)
 
     override fun blocker(): LinkError? {
@@ -90,6 +91,27 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
     override fun locationServicesOn(): Boolean =
         context.getSystemService(LocationManager::class.java)?.let(LocationManagerCompat::isLocationEnabled) ?: false
 
+    override fun isBonded(address: String): Boolean {
+        val adapter = adapter ?: return false
+        if (!BluetoothAdapter.checkBluetoothAddress(address)) return false
+        return try {
+            adapter.getRemoteDevice(address).bondState == BluetoothDevice.BOND_BONDED
+        } catch (e: SecurityException) {   // BLUETOOTH_CONNECT revoked: say "not paired", and let connecting report it
+            false
+        }
+    }
+
+    override fun connectedDevices(): List<FoundPiano> {
+        val manager = manager ?: return emptyList()
+        return try {
+            (manager.getConnectedDevices(BluetoothProfile.GATT) + manager.getConnectedDevices(BluetoothProfile.GATT_SERVER))
+                .distinctBy { it.address }
+                .map { FoundPiano(it.address, it.name) }
+        } catch (e: SecurityException) {   // BLUETOOTH_CONNECT revoked: nothing known, and the scan goes ahead
+            emptyList()
+        }
+    }
+
     /** Forwards callbacks, tagged with their connection so stale ones can be told apart. */
     private class Callback(private val connection: GattConnection, private val events: GattEvents) : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) = events.onConnectionChanged(
@@ -109,6 +131,22 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) =
             events.onConsoleSubscribed(connection, status == BluetoothGatt.GATT_SUCCESS)
+
+        // API 33+: the value arrives with the callback. Not calling super keeps the old callback below silent.
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            if (characteristic.uuid == PianoBluetooth.GAP_DEVICE_NAME_UUID) events.onDeviceName(connection, deviceName(value, status), status)
+        }
+
+        // API 26-32: the value sits in the characteristic.
+        @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            if (characteristic.uuid != PianoBluetooth.GAP_DEVICE_NAME_UUID) return
+            events.onDeviceName(connection, deviceName(characteristic.value, status), status)
+        }
+
+        /** The GAP Device Name is UTF-8, sometimes padded with NULs. */
+        private fun deviceName(value: ByteArray?, status: Int): String? =
+            if (status == BluetoothGatt.GATT_SUCCESS && value != null) String(value, Charsets.UTF_8).trimEnd('\u0000') else null
 
         // API 33+: the value arrives with the callback. Not calling super keeps the old callback below silent.
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
@@ -146,6 +184,11 @@ private class AndroidGattConnection(override val address: String) : GattConnecti
         consoleRx = service?.getCharacteristic(PianoConsole.RX_UUID)
         consoleCccd = service?.getCharacteristic(PianoConsole.TX_UUID)?.getDescriptor(PianoConsole.CCCD_UUID)
         return consoleRx != null && consoleCccd != null
+    }
+
+    override fun readDeviceName(): Boolean {
+        val name = gatt.getService(PianoBluetooth.GAP_SERVICE_UUID)?.getCharacteristic(PianoBluetooth.GAP_DEVICE_NAME_UUID) ?: return false
+        return gatt.readCharacteristic(name)
     }
 
     override fun requestHighPriority(): Boolean = gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)

@@ -36,6 +36,15 @@ import kotlin.concurrent.withLock
  * pinned: another BLE-MIDI device advertising as "Steven Piano" is never connected to by itself;
  * a scan that finds only such a one offers it ([LinkError.OtherPiano]) for the person to choose,
  * and reconnecting ignores it. Each connection has a new [LinkState.Connected.epoch].
+ * Before each scan: the piano does not advertise while connected, so when another app on this
+ * device holds it (the remembered address, or with none remembered a device named Steven Piano),
+ * it is connected to directly, as Android lets a second app do. A piano this device is paired with
+ * is not connected to ([LinkError.Paired]): it refuses encryption, so the bond would fail it.
+ * With no piano remembered, the name may be missing (a hardware scan filter can drop the scan
+ * response that carries it): a nameless BLE-MIDI device is a candidate, connected to when no named
+ * Steven Piano has answered within a second, and it becomes the piano only if its GAP Device Name
+ * (0x1800/0x2A00) reads "Steven Piano"; otherwise it is let go, before any MIDI, and the scan goes
+ * on without it.
  * The console: when discovery also finds the Nordic UART Service, the first operation on the
  * connection switches on its notifications (the CCCD write), and [console] carries lines both ways.
  * Writes: one GATT operation in flight, always: the next waits for its callback. MIDI goes first;
@@ -143,6 +152,15 @@ class GattPianoLink(
     /** "The piano fell behind" is logged once a connection: a file too dense to play would log it with every batch. */
     private val behindLogged = AtomicBoolean(false)
 
+    /** With no piano remembered: a nameless BLE-MIDI device the scan saw, which may be the piano without its scan response. */
+    private var candidate: FoundPiano? = null
+
+    /** The connection under way is to a nameless candidate: its GAP Device Name decides whether it is the piano. */
+    private var verifyName = false
+
+    /** Candidates whose GAP Device Name was not Steven Piano (upper case), passed over until the next Connect. */
+    private val rejected = HashSet<String>()
+
     /** The stop sequence, queued after a packet was given up on. Only ever read. */
     private val silence = MidiBatch().apply {
         add(0xB0, 64, 0)
@@ -160,7 +178,12 @@ class GattPianoLink(
     private val discoveryTimeout = Runnable { gatt?.let { onDiscovered(it, success = false, failure = "had no answer within ${DISCOVERY_TIMEOUT_MS / 1000} s") } }
     private val writeTimeout = Runnable { gatt?.let(::onWritten) }
     private val offerOther = Runnable { onOtherPianoOnly() }
-    private val timers = listOf(pump, startScan, scanTimeout, connectTimeout, retryConnect, retryInBackground, mtuTimeout, discoveryTimeout, writeTimeout, offerOther)
+    private val connectCandidate = Runnable { onCandidateWaited() }
+    private val nameTimeout = Runnable { gatt?.let { onNameRead(it, null, "no answer within ${NAME_TIMEOUT_MS / 1000} s") } }
+    private val timers = listOf(
+        pump, startScan, scanTimeout, connectTimeout, retryConnect, retryInBackground, mtuTimeout, discoveryTimeout, writeTimeout,
+        offerOther, connectCandidate, nameTimeout,
+    )
 
     private val events = object : GattEvents {
         override fun onConnectionChanged(connection: GattConnection, connected: Boolean, status: Int) =
@@ -182,6 +205,9 @@ class GattPianoLink(
 
         override fun onConsoleData(connection: GattConnection, data: ByteArray) =
             executor.execute { onConsoleNotified(connection, data) }
+
+        override fun onDeviceName(connection: GattConnection, name: String?, status: Int) =
+            executor.execute { onNameRead(connection, if (status == 0) name else null, "status ${BleCodes.gattStatus(status)}") }
     }
 
     init {
@@ -248,13 +274,18 @@ class GattPianoLink(
         error = null
         errorOther = null
         address?.let { preferredAddress = it }
+        rejected.clear()
         log("Connect: " + (preferredAddress?.let { "the remembered piano is $it" } ?: "no piano remembered yet"))
         beginScan()
     }
 
-    /** A filtered scan, kept under Android's silent limit of 5 scans in 30 s. */
+    /** A filtered scan, kept under Android's silent limit of 5 scans in 30 s; first, the piano if another app holds it. */
     private fun beginScan() {
         radio.blocker()?.let { return fail(it) }
+        heldPiano()?.let { held ->
+            log("${held.address} ${BleCodes.name(held.name)} is connected to this device already (another app holds it): connecting to it directly")
+            return connectFound(held)
+        }
         scanning = true
         val wait = throttle.delayBeforeNextScan(nowMs())
         if (wait > 0) {
@@ -295,7 +326,15 @@ class GattPianoLink(
                 sighted("the remembered piano, connecting")
                 connectFound(found)
             }
-            found.name != PianoBluetooth.NAME -> sighted(if (found.name == null) "ignored: no name" else "ignored: name is not Steven Piano")
+            pinned == null && found.name == null && found.advertisesMidi -> sighted(considerCandidate(found))
+            found.name != PianoBluetooth.NAME -> {
+                sighted(if (found.name == null) "ignored: no name" else "ignored: name is not Steven Piano")
+                if (found.name != null && candidate?.address.equals(found.address, ignoreCase = true)) {
+                    log("${found.address} is no candidate after all: its name is ${BleCodes.name(found.name)}")
+                    executor.cancel(connectCandidate)
+                    candidate = null
+                }
+            }
             pinned == null -> {   // no piano known yet: the first Steven Piano
                 sighted("connecting")
                 connectFound(found)
@@ -310,11 +349,66 @@ class GattPianoLink(
         }
     }
 
-    private fun connectFound(found: FoundPiano) {
+    /**
+     * With no piano remembered, a nameless BLE-MIDI device: perhaps the piano, its scan response lost.
+     * The first becomes the candidate, connected to after [NAMELESS_GRACE_MS] unless a named Steven
+     * Piano answers first. Returns what was decided, for the log.
+     */
+    private fun considerCandidate(found: FoundPiano): String {
+        val waiting = candidate
+        return when {
+            found.address.uppercase() in rejected -> "ignored: its GAP Device Name was not Steven Piano"
+            waiting == null -> {
+                candidate = found
+                executor.schedule(NAMELESS_GRACE_MS, connectCandidate)
+                "no name: a candidate, connected to in ${NAMELESS_GRACE_MS / 1000} s to read its name unless a named Steven Piano answers"
+            }
+            waiting.address.equals(found.address, ignoreCase = true) -> "no name: the candidate"
+            else -> "ignored for now: no name, and another candidate is waiting"
+        }
+    }
+
+    /** No named Steven Piano in time: the candidate is connected to, and its GAP Device Name will decide. */
+    private fun onCandidateWaited() {
+        val found = candidate ?: return
+        if (!scanning) return
+        log("No named Steven Piano within ${NAMELESS_GRACE_MS / 1000} s: connecting to ${found.address} to read its name")
+        connectFound(found, verify = true)
+    }
+
+    /**
+     * Connects to [found], found by a scan or held by another app, unless this device is paired with it.
+     * [verify]: it is a nameless candidate, taken only if its GAP Device Name is Steven Piano.
+     */
+    private fun connectFound(found: FoundPiano, verify: Boolean = false) {
         executor.cancel(offerOther)
         otherPiano = null
+        executor.cancel(connectCandidate)
+        candidate = null
         stopScanning()
+        if (guard { radio.isBonded(found.address) } == true) {
+            log("${found.address} is paired with this device in Bluetooth settings (bonded): the piano refuses encryption, so connecting would fail")
+            return fail(LinkError.Paired)
+        }
+        verifyName = verify
+        connectRetried = false
         connectDirect(found)
+    }
+
+    /**
+     * The piano, when another app on this device holds a connection to it: it does not advertise while
+     * connected, so no scan would find it. With a piano remembered only its address counts (never
+     * another "Steven Piano"); with none, the name does.
+     */
+    private fun heldPiano(): FoundPiano? {
+        val pinned = preferredAddress
+        return guard { radio.connectedDevices() }.orEmpty().firstOrNull { device ->
+            if (pinned != null) {
+                device.address.equals(pinned, ignoreCase = true)
+            } else {
+                device.name == PianoBluetooth.NAME && device.address.uppercase() !in rejected
+            }
+        }
     }
 
     /** Only another "Steven Piano" answered: offered, never connected to. */
@@ -333,6 +427,11 @@ class GattPianoLink(
             reconnecting -> {
                 log("Reconnect scan ended without the piano ($saw)")
                 scheduleNextScan()
+            }
+            candidate != null -> {
+                val found = candidate ?: return
+                log("Scan ended ($saw) with only a nameless candidate: connecting to ${found.address} to read its name")
+                connectFound(found, verify = true)
             }
             otherPiano != null -> fail(LinkError.OtherPiano, otherPiano?.address, "only another Steven Piano answered")
             else -> {
@@ -471,6 +570,7 @@ class GattPianoLink(
             log("Service discovery $failure")
         }
         when {
+            midi && verifyName -> readName(connection)
             midi -> becomeReady(connection)
             !discoveryRetried -> {
                 discoveryRetried = true
@@ -479,12 +579,60 @@ class GattPianoLink(
             }
             else -> {
                 log("No BLE-MIDI characteristic after two discoveries")
+                val found = piano
+                if (verifyName && found != null) {
+                    log("${found.address} is not the piano: disconnecting, and the scan goes on without it")
+                    return passOver(connection, found)
+                }
                 guard { connection.disconnect() }
                 closeGatt()
                 phase = Phase.None
                 if (reconnecting) connectInBackground() else fail(LinkError.Failed)
             }
         }
+    }
+
+    /** A nameless candidate, connected and discovered: its GAP Device Name decides whether it is the piano. */
+    private fun readName(connection: GattConnection) {
+        log("Reading the GAP Device Name of ${connection.address}")
+        if (guard { connection.readDeviceName() } == true) {
+            executor.schedule(NAME_TIMEOUT_MS, nameTimeout)
+        } else {
+            onNameRead(connection, null, "the device has none")
+        }
+    }
+
+    /**
+     * The candidate's GAP Device Name: "Steven Piano" makes it the piano; anything else, or no answer,
+     * lets it go (no MIDI has been sent) and the scan goes on without it until the next Connect.
+     */
+    private fun onNameRead(connection: GattConnection, name: String?, failure: String) {
+        if (connection !== gatt || phase != Phase.Negotiating || !verifyName) return
+        executor.cancel(nameTimeout)
+        val found = piano ?: return
+        if (name == PianoBluetooth.NAME) {
+            log("GAP Device Name ${BleCodes.name(name)}: it is the piano")
+            verifyName = false
+            piano = FoundPiano(found.address, PianoBluetooth.NAME, found.rssi, found.advertisesMidi)
+            becomeReady(connection)
+            return
+        }
+        log(
+            (if (name != null) "GAP Device Name ${BleCodes.name(name)} is not Steven Piano: " else "GAP Device Name not read: $failure. Not taken for the piano; ") +
+                "disconnecting, and the scan goes on without ${found.address}",
+        )
+        passOver(connection, found)
+    }
+
+    /** A candidate that is not the piano, or cannot be told to be: let go before any MIDI, and passed over until the next Connect. */
+    private fun passOver(connection: GattConnection, found: FoundPiano) {
+        rejected += found.address.uppercase()
+        guard { connection.disconnect() }
+        closeGatt()
+        phase = Phase.None
+        verifyName = false
+        piano = null
+        beginScan()
     }
 
     private fun becomeReady(connection: GattConnection) {
@@ -615,6 +763,8 @@ class GattPianoLink(
         stopScanning()
         timers.forEach(executor::cancel)
         otherPiano = null
+        candidate = null
+        verifyName = false
         gatt?.let { guard { it.disconnect() } }
         closeGatt()
         phase = Phase.None
@@ -838,6 +988,12 @@ class GattPianoLink(
 
         /** How long a scan keeps looking for the known piano after another "Steven Piano" answered. */
         private const val OTHER_PIANO_GRACE_MS = 3_000L
+
+        /** How long a nameless candidate waits for a named Steven Piano to answer before it is connected to. */
+        private const val NAMELESS_GRACE_MS = 1_000L
+
+        /** How long the candidate's GAP Device Name may take to read. */
+        private const val NAME_TIMEOUT_MS = 3_000L
 
         /** Pedal up, then All Notes Off: the stop sequence, as packed messages. */
         private val STOP_SEQUENCE = intArrayOf(MidiBatch.pack(0xB0, 64, 0), MidiBatch.pack(0xB0, 123, 0))

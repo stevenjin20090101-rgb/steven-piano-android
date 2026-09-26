@@ -16,10 +16,14 @@ import java.util.UUID
 
 /** How the piano shows itself over Bluetooth LE (firmware: BLE-MIDI 2.2 on NimBLE). */
 object PianoBluetooth {
-    /** In the scan response, not the advertisement: scans filter by service instead. */
+    /** In the scan response, not the advertisement: scans filter by service instead. Also the GAP Device Name. */
     const val NAME = "Steven Piano"
     val SERVICE_UUID: UUID = UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700")
     val CHARACTERISTIC_UUID: UUID = UUID.fromString("7772E5DB-3868-4112-A1A9-F2669D106BF3")
+
+    /** Generic Access (0x1800) and its Device Name (0x2A00), which NimBLE sets to [NAME]: a connection can read it. */
+    val GAP_SERVICE_UUID: UUID = UUID.fromString("00001800-0000-1000-8000-00805F9B34FB")
+    val GAP_DEVICE_NAME_UUID: UUID = UUID.fromString("00002A00-0000-1000-8000-00805F9B34FB")
 }
 
 /**
@@ -39,7 +43,10 @@ interface PianoLink : MidiSink {
     /**
      * Finds and connects to the piano. [address] (the last one used, or one the person chose) is
      * the only piano connected to by itself; another advertising as "Steven Piano" is offered
-     * ([LinkError.OtherPiano]), never taken. With no address, the first Steven Piano found is.
+     * ([LinkError.OtherPiano]), never taken. With no address, the first Steven Piano found is: named
+     * in its scan response, or else a nameless BLE-MIDI device whose GAP Device Name reads Steven
+     * Piano. A piano another app on this device holds is connected to directly; one this device is
+     * paired with is not connected to at all ([LinkError.Paired]).
      */
     fun connect(address: String? = null)
 

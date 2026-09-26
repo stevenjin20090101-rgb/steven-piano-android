@@ -61,6 +61,12 @@ class FakeRadio : BleRadio {
     /** Location Services, as [locationServicesOn] reports them. */
     var locationServices = true
 
+    /** Addresses this device is paired (bonded) with in its Bluetooth settings: none unless a test says. */
+    var bonded = setOf<String>()
+
+    /** Devices another app on this device is connected to: none unless a test says. */
+    var connectedElsewhere = listOf<FoundPiano>()
+
     /** Thrown by every scan, stop and connect call while set, as Android throws while Bluetooth turns off. */
     var failure: RuntimeException? = null
     private var onFound: ((FoundPiano) -> Unit)? = null
@@ -92,6 +98,10 @@ class FakeRadio : BleRadio {
     }
 
     override fun locationServicesOn(): Boolean = locationServices
+
+    override fun isBonded(address: String): Boolean = bonded.any { it.equals(address, ignoreCase = true) }
+
+    override fun connectedDevices(): List<FoundPiano> = connectedElsewhere
 
     /** A scan result; [midi]: its advertisement carried the BLE-MIDI service (the piano's always does). */
     fun find(address: String, name: String?, rssi: Int = -60, midi: Boolean = true) =
@@ -143,6 +153,14 @@ class FakeGatt(override val address: String, val autoConnect: Boolean, private v
     override fun hasMidiCharacteristic(): Boolean = hasMidi
 
     override fun hasConsole(): Boolean = hasConsole
+
+    /** GAP Device Name reads asked for; [nameRead] answers them. */
+    var nameReads = 0
+
+    override fun readDeviceName(): Boolean {
+        nameReads++
+        return true
+    }
 
     override fun requestHighPriority(): Boolean {
         highPriority = true
@@ -197,6 +215,9 @@ class FakeGatt(override val address: String, val autoConnect: Boolean, private v
     fun writeDone() = events.onWriteDone(this, success = true)
 
     fun subscribeDone(success: Boolean = true) = events.onConsoleSubscribed(this, success)
+
+    /** The device answers the GAP Device Name read: [name], with [status] (0 is GATT_SUCCESS). */
+    fun nameRead(name: String?, status: Int = 0) = events.onDeviceName(this, name, status)
 
     /** The piano notifies [bytes] on TX, [notifyChunk] bytes per notification. */
     fun notify(bytes: ByteArray) {

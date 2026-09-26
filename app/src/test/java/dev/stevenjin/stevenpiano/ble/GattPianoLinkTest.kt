@@ -603,6 +603,215 @@ class GattPianoLinkTest {
     }
 
     @Test
+    fun `a piano this device is paired with is refused with that reason, never connected to`() {
+        radio.bonded = setOf(address)
+        link.connect(null)
+        executor.runDue()
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()
+        assertEquals(LinkError.Paired.toState(), state())
+        assertTrue(radio.connections.isEmpty())
+        assertFalse(radio.scanning)
+        assertEquals(
+            listOf(
+                "$address is paired with this device in Bluetooth settings (bonded): the piano refuses encryption, so connecting would fail",
+                "Not connected: Paired",
+            ),
+            logged.takeLast(2),
+        )
+    }
+
+    /** Connected, MTU and discovery done, for a candidate: its GAP Device Name is being read. */
+    private fun connectCandidate(gatt: FakeGatt) {
+        gatt.connected()
+        executor.runDue()
+        gatt.mtu(255)
+        executor.runDue()
+        gatt.discovered()
+        executor.runDue()
+    }
+
+    @Test
+    fun `with no piano known, a nameless BLE-MIDI device is connected to after a second and kept when its GAP name is Steven Piano`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find(address, null)
+        executor.advance(999)
+        assertTrue("a named Steven Piano gets a second to answer", radio.connections.isEmpty())
+        assertTrue(radio.scanning)
+        executor.advance(1)
+        val gatt = radio.connections.single()
+        assertFalse(radio.scanning)
+        assertFalse(gatt.autoConnect)
+        connectCandidate(gatt)
+        assertEquals(1, gatt.nameReads)
+        assertEquals("not connected until the name is read", LinkState.Connecting, state())
+        assertTrue(remembered.isEmpty())
+
+        gatt.nameRead(PianoBluetooth.NAME)
+        executor.runDue()
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+        assertEquals(listOf(address to PianoBluetooth.NAME), remembered)
+        assertTrue(logged.contains("Seen $address (no name), RSSI -60 dBm, MIDI service yes: no name: a candidate, connected to in 1 s to read its name unless a named Steven Piano answers"))
+        assertTrue(logged.contains("GAP Device Name \"Steven Piano\": it is the piano"))
+    }
+
+    @Test
+    fun `a nameless device whose GAP name is another is let go, and the scan goes on without it`() {
+        val keyboard = "11:22:33:44:55:66"
+        link.connect(null)
+        executor.runDue()
+        radio.find(keyboard, null)
+        executor.advance(1_000)
+        val first = radio.connections.single()
+        connectCandidate(first)
+        first.nameRead("Someone's MIDI keyboard")
+        executor.runDue()
+        assertTrue(first.disconnected)
+        assertTrue(first.closed)
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(radio.scanning)
+        assertTrue(remembered.isEmpty())
+        assertTrue(logged.contains("GAP Device Name \"Someone's MIDI keyboard\" is not Steven Piano: disconnecting, and the scan goes on without $keyboard"))
+
+        radio.find(keyboard, null)
+        executor.advance(2_000)
+        assertEquals("passed over until the next Connect", 1, radio.connections.size)
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()
+        val piano = radio.connections.last()
+        assertEquals(address, piano.address)
+        finishConnecting(piano)
+        assertEquals(0, piano.nameReads)
+        assertEquals(listOf(address to PianoBluetooth.NAME), remembered)
+    }
+
+    @Test
+    fun `a nameless device whose GAP name can't be read is not taken for the piano`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find(address, null)
+        executor.advance(1_000)
+        val unread = radio.connections.single()
+        connectCandidate(unread)
+        unread.nameRead(null, status = 137)
+        executor.runDue()
+        assertTrue(unread.closed)
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(
+            logged.contains(
+                "GAP Device Name not read: status 137 (authentication failed). Not taken for the piano; " +
+                    "disconnecting, and the scan goes on without $address",
+            ),
+        )
+
+        link.disconnect()
+        executor.runDue()
+        link.connect(null)   // a new Connect: the device may be a candidate again
+        executor.runDue()
+        radio.find(address, null)
+        executor.advance(1_000)
+        val silent = radio.connections.last()
+        connectCandidate(silent)
+        executor.advance(3_000)   // the name never comes
+        assertTrue(silent.closed)
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(remembered.isEmpty())
+        assertTrue(logged.last().startsWith("Scan started"))
+        assertTrue(logged.contains("GAP Device Name not read: no answer within 3 s. Not taken for the piano; disconnecting, and the scan goes on without $address"))
+    }
+
+    @Test
+    fun `a nameless candidate without the MIDI characteristic is let go as well, not the end of the search`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find(address, null)
+        executor.advance(1_000)
+        val gatt = radio.connections.single()
+        gatt.hasMidi = false
+        connectCandidate(gatt)
+        gatt.discovered()   // the second discovery finds no MIDI either
+        executor.runDue()
+        assertEquals(2, gatt.discoveries)
+        assertEquals(0, gatt.nameReads)
+        assertTrue(gatt.closed)
+        assertEquals(LinkState.Scanning, state())
+    }
+
+    @Test
+    fun `a named Steven Piano answering within the second wins over a nameless candidate`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find("11:22:33:44:55:66", null)
+        executor.advance(500)
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()
+        executor.advance(5_000)
+        val gatt = radio.connections.single()
+        assertEquals(address, gatt.address)
+        finishConnecting(gatt)
+        assertEquals(0, gatt.nameReads)
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+    }
+
+    @Test
+    fun `a candidate whose name turns out to be another is dropped, and one the scan's end finds is still tried`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find("11:22:33:44:55:66", null)
+        radio.find("11:22:33:44:55:66", "Someone's MIDI keyboard")
+        executor.advance(2_000)
+        assertTrue(radio.connections.isEmpty())
+
+        executor.advance(9_500)   // 11.5 s into the scan
+        radio.find(address, null)
+        executor.advance(500)   // the scan ends before the candidate's second is up
+        assertEquals(address, radio.connections.single().address)
+        assertEquals(LinkState.Connecting, state())
+    }
+
+    @Test
+    fun `with a piano remembered, a nameless device is never a candidate`() {
+        link.connect(address)
+        executor.runDue()
+        radio.find("11:22:33:44:55:66", null)
+        executor.advance(5_000)
+        assertTrue(radio.connections.isEmpty())
+        assertTrue(logged.contains("Seen 11:22:33:44:55:66 (no name), RSSI -60 dBm, MIDI service yes: ignored: no name"))
+    }
+
+    @Test
+    fun `a piano another app on this device holds is connected to directly, without a scan`() {
+        radio.connectedElsewhere = listOf(FoundPiano(address, PianoBluetooth.NAME))
+        link.connect(null)
+        executor.runDue()
+        assertEquals(0, radio.scans)
+        val gatt = radio.connections.single()
+        assertEquals(address, gatt.address)
+        assertFalse(gatt.autoConnect)
+        finishConnecting(gatt)
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+        assertTrue(logged.contains("$address \"Steven Piano\" is connected to this device already (another app holds it): connecting to it directly"))
+    }
+
+    @Test
+    fun `with a piano remembered, only it is taken from another app, never another Steven Piano`() {
+        radio.connectedElsewhere = listOf(FoundPiano("D4:D4:D4:00:00:01", PianoBluetooth.NAME))
+        link.connect(address)
+        executor.runDue()
+        assertEquals(1, radio.scans)
+        assertTrue(radio.connections.isEmpty())
+        link.disconnect()
+        executor.runDue()
+
+        radio.connectedElsewhere = listOf(FoundPiano(address, null))
+        link.connect(address)
+        executor.runDue()
+        assertEquals(1, radio.scans)
+        assertEquals(address, radio.connections.single().address)
+    }
+
+    @Test
     fun `scans stay under five in thirty seconds`() {
         val throttle = ScanThrottle()
         repeat(5) {

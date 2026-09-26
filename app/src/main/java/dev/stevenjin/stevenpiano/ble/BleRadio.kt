@@ -35,12 +35,26 @@ interface BleRadio {
      * search that found nothing mentions them.
      */
     fun locationServicesOn(): Boolean
+
+    /**
+     * Whether this device is paired (bonded) with [address] in its Bluetooth settings. The piano
+     * refuses encryption, so a bond left from pairing makes every connection to it fail. False when
+     * it cannot be told (no permission, no adapter).
+     */
+    fun isBonded(address: String): Boolean
+
+    /**
+     * Devices some app on this device is connected to right now (GATT client or server), with their
+     * names as Android knows them. The piano stops advertising while connected, so a piano another
+     * app holds is found here, never by a scan. Empty when it cannot be told.
+     */
+    fun connectedDevices(): List<FoundPiano>
 }
 
 /**
  * A device the link may connect to: a scan result, with its [rssi] and whether its advertisement
- * carried the BLE-MIDI service ([advertisesMidi]). [name] comes from the scan response and may be
- * missing (the piano puts its name only there).
+ * carried the BLE-MIDI service ([advertisesMidi]), or a device already connected ([rssi] null).
+ * [name] comes from the scan response and may be missing (the piano puts its name only there).
  */
 class FoundPiano(val address: String, val name: String?, val rssi: Int? = null, val advertisesMidi: Boolean = false)
 
@@ -58,6 +72,12 @@ interface GattConnection {
 
     /** After discovery: true when the piano's console (Nordic UART: RX, and TX with its CCCD) is there too. */
     fun hasConsole(): Boolean
+
+    /**
+     * After discovery: reads the GAP Device Name (service 0x1800, characteristic 0x2A00), answered by
+     * [GattEvents.onDeviceName]. False when the device has none, or the read could not start.
+     */
+    fun readDeviceName(): Boolean
 
     fun requestHighPriority(): Boolean
 
@@ -93,6 +113,9 @@ interface GattEvents {
 
     /** A notification from the console's TX; [data] is the caller's own copy. */
     fun onConsoleData(connection: GattConnection, data: ByteArray)
+
+    /** The GAP Device Name read is done: [name] as UTF-8 when [status] is 0 (GATT_SUCCESS), else null. */
+    fun onDeviceName(connection: GattConnection, name: String?, status: Int)
 }
 
 /** The link's own thread: runs actions in order, now or after a delay. */
