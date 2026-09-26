@@ -20,6 +20,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +53,7 @@ import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoBluetooth
+import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
@@ -60,10 +63,15 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 /**
  * The piano: its name, the status with the dot, and one button that says what it will do:
  * Connect, Cancel (while looking), Disconnect (while connected). While looking, an indeterminate
- * hairline. A problem is copy in place, with Retry or the fix under it. Permission is asked for
- * here, in context, with a one-line reason. When only another piano called Steven Piano answered,
- * the phone connects to it only if the person taps Connect to it ([onConnectTo] with its address).
+ * hairline. A problem is copy in place, with Retry or the fix under it: Turn on Bluetooth, Open
+ * Location settings, Open Bluetooth settings (to forget a stale pairing, with Retry beside it). When
+ * the piano was not found, a tip in the eyebrow style says how its screen shows that another
+ * device holds it, with Retry and, when Location is off, Open Location settings. Permission is
+ * asked for here, in context, with a one-line reason. When only another piano called Steven Piano
+ * answered, the phone connects to it only if the person taps Connect to it ([onConnectTo] with its
+ * address). Monochrome throughout: the only red is the [LiveDot].
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConnectionCard(
     link: LinkState,
@@ -118,15 +126,27 @@ fun ConnectionCard(
                 if (refused) TextButton(onClick = { context.startActivity(appSettings(context)) }) { Text("Open app settings") }
             } else if (link is LinkState.Error) {
                 OutlinedBanner(link.message, Modifier.padding(top = 12.dp)) {
-                    when (link.reason) {
+                    val openLocation = { runCatching { fixThenRetry.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } }
+                    when (val reason = link.reason) {
                         LinkError.BluetoothOff -> TextButton(onClick = { runCatching { fixThenRetry.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) } }) {
                             Text("Turn on Bluetooth")
                         }
-                        LinkError.LocationOff -> TextButton(onClick = { runCatching { fixThenRetry.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } }) {
-                            Text("Open Location settings")
-                        }
+                        LinkError.LocationOff -> TextButton(onClick = { openLocation() }) { Text("Open Location settings") }
                         LinkError.OtherPiano -> link.otherAddress?.let { other ->
                             TextButton(onClick = { onConnectTo(other) }) { Text("Connect to it") }
+                        }
+                        LinkError.Paired -> FlowRow {
+                            TextButton(onClick = { runCatching { fixThenRetry.launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }) {
+                                Text("Open Bluetooth settings")
+                            }
+                            TextButton(onClick = onConnect) { Text("Retry") }
+                        }
+                        is LinkError.NotFound -> Column {
+                            Eyebrow(NOT_FOUND_TIP, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
+                            FlowRow(Modifier.padding(top = 4.dp)) {
+                                TextButton(onClick = onConnect) { Text("Retry") }
+                                if (reason.locationOff) TextButton(onClick = { openLocation() }) { Text("Open Location settings") }
+                            }
                         }
                         else -> TextButton(onClick = onConnect) { Text("Retry") }
                     }
@@ -141,6 +161,13 @@ fun ConnectionCard(
         }
     }
 }
+
+/**
+ * Under "Can't find Steven Piano": the piano's own screen names its Bluetooth state (firmware
+ * `ui_refresh_status`: "BLE MIDI: CONNECTED" while a central holds it, "BLE MIDI: advertising..."
+ * while it is free), and a connected piano cannot be found.
+ */
+private const val NOT_FOUND_TIP = "Tip: if the piano's screen reads “BLE MIDI: CONNECTED”, another device is connected to it."
 
 private fun statusOf(link: LinkState): String = when (link) {
     is LinkState.Connected -> "Connected"

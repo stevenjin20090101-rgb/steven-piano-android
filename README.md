@@ -250,20 +250,84 @@ in a notification. A full import takes about a minute.
 
 ## Connect to the piano
 
-1. Power the piano. It advertises as **Steven Piano**.
-2. If the phone was ever paired with "Steven Piano" in its Bluetooth settings,
-   **Forget** that device first. The piano refuses encryption, so a stale bond
-   stops the connection. The app itself never pairs.
-3. On the **Piano** tab, tap **Connect** and allow **Nearby devices** (Android
+1. Power the piano. While nothing is connected to it, it advertises as
+   **Steven Piano** and its screen reads *BLE MIDI: advertising...*.
+2. On the **Piano** tab, tap **Connect** and allow **Nearby devices** (Android
    12 and newer). On Android 11 and older, allow **Location** and keep Location
    turned on: those versions only find Bluetooth devices with it on. The app
    never reads your location.
-4. The dot turns red and the status reads **Connected**. With *Auto-connect on
-   launch* on (the default), the app reconnects by itself next time, and after
-   a dropped link it keeps trying in the background.
-5. The app remembers this piano and connects only to it. If another device calls
+3. The dot turns red and the status reads **Connected**; the piano's screen
+   reads *BLE MIDI: CONNECTED*. With *Auto-connect on launch* on (the default),
+   the app reconnects by itself next time, and after a dropped link it keeps
+   trying in the background.
+4. The app remembers this piano and connects only to it. If another device calls
    itself Steven Piano and the known one is not around, the Piano tab says so and
    offers **Connect to it**; the app never switches by itself.
+
+Don't pair the piano in the tablet's Bluetooth settings: the app connects
+without pairing, and a pairing stops it (below). The app itself never pairs.
+
+### When it won't connect
+
+The Piano tab says what went wrong, with the fix under the message.
+
+- **"Can't find Steven Piano…"** The piano talks to one device at a time and
+  stops advertising while one is connected, so nothing else can find it. An iPad
+  or phone app, or a Mac's Audio MIDI Setup, that connected to it once
+  reconnects by itself whenever it can, and hides the piano. If the piano's
+  screen reads *BLE MIDI: CONNECTED*, disconnect that device (or turn its
+  Bluetooth off) and tap **Retry**. Another app on this tablet holding the piano
+  is no problem: Steven Piano connects alongside it.
+- **"…also needs Location turned on."** Some tablets find nothing over Bluetooth
+  while Location is off, even on Android 12 and newer. Tap **Open Location
+  settings**, turn it on and come back: the app looks again.
+- **"This device is paired with Steven Piano…"** The tablet was paired with the
+  piano in its Bluetooth settings. The piano refuses pairing, so the leftover
+  pairing stops every connection. Tap **Open Bluetooth settings**, open Steven
+  Piano there (the gear beside it), tap **Forget** (or *Unpair*), then come back
+  and tap **Retry**.
+- **"Found Steven Piano but the connection failed (code N)."** Tap **Retry**; if
+  it keeps failing, restart the piano (switch it off and on).
+- **"Bluetooth scanning isn't available right now (code N)."** Turn Bluetooth
+  off and on in the tablet's quick settings, then tap **Retry**.
+- If Steven Piano never shows in the tablet's own Bluetooth settings among the
+  devices available to pair (look only; don't tap it) while nothing else is
+  connected to it, the piano's controller isn't advertising: restart the piano.
+
+The first time, the piano's name can go missing on the way (some tablets drop
+the part of its advertisement that carries it). The app then connects to the
+nameless MIDI device it found and asks it its name, and keeps it only if it
+answers Steven Piano.
+
+### Send a log
+
+The app writes each step of connecting to the tablet's log, and release builds
+keep it. To see why a connection fails, connect the tablet by USB with USB
+debugging on (see *Sideload*), then:
+
+```bash
+adb logcat -c    # start from an empty log
+adb logcat -s PianoLink:W BluetoothGatt:V BluetoothLeScanner:V | tee piano-log.txt
+```
+
+Tap **Connect** (or **Retry**), wait for the Piano tab's message, stop with
+Ctrl-C and send `piano-log.txt`. The `PianoLink` lines say what each scan saw
+(every MIDI device's address, name, signal strength and whether it advertised
+MIDI, once a scan), each step of the connection with Bluetooth's status codes,
+and why it stopped. They hold Bluetooth addresses and device names only, nothing
+from the library. A good first connection reads like this (addresses and
+numbers vary):
+
+```
+Connect: no piano remembered yet
+Scan started (filter: MIDI service 03B80E5A-EDE8-4B33-A751-6CE34EC4C700, mode: low latency), looking for any Steven Piano
+Seen C8:2E:18:00:11:22 "Steven Piano", RSSI -58 dBm, MIDI service yes: connecting
+connectGatt C8:2E:18:00:11:22, autoConnect=false
+GATT connected: C8:2E:18:00:11:22, status 0 (success)
+MTU 247 (asked for 255)
+Services discovered: MIDI yes, console yes
+Connected to Steven Piano (C8:2E:18:00:11:22), MTU 247, with its console
+```
 
 ## Keep playing with the screen off
 
@@ -280,6 +344,11 @@ the first play, so the lock screen shows play and pause.
       one-line reason.
 - [ ] Connect: the dot goes live and the status reads Connected within a few
       seconds of the piano advertising.
+- [ ] With an iPad (or a Mac's Audio MIDI Setup) connected to the piano, tap
+      Connect: after 12 s the card says it can't find the piano, that it hides
+      while another device is connected, and how the piano's screen shows it.
+      Disconnect the iPad and tap Retry: Connected. `adb logcat -s PianoLink:W`
+      shows each step (see *Send a log*).
 - [ ] Play a quiet piano-midi.de piece: the roll scrolls, notes brighten crossing
       the bar, the keyboard strip inverts, the timers count with tabular figures,
       the piano plays in time. Tempo 50 % halves the rate live. Switch Note
@@ -352,7 +421,8 @@ The full audit, every finding and what was done about it, is in
   own names, the app's User-Agent and, as with any connection, the device's IP
   address. No analytics, no crash reports, no accounts. Nothing is backed up to the
   cloud or carried to a new device by Android's transfer (the library stays where it
-  was imported). Release builds log no file names or URLs.
+  was imported). Release builds log no file names or URLs; the Bluetooth link logs
+  its steps, with Bluetooth addresses and device names only (*Send a log*).
 - **What a file may cost:** a MIDI file is read up to 8 MB and at most about two
   million events and a day of music; its text up to 256 bytes a name, and 4,096 time
   and 4,096 key signatures; titles and names
