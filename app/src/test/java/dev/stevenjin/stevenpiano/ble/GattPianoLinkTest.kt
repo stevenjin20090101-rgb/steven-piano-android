@@ -23,7 +23,8 @@ class GattPianoLinkTest {
     private val radio = FakeRadio()
     private val remembered = mutableListOf<Pair<String, String>>()
     private var autoConnect = true
-    private val link = GattPianoLink(radio, executor, { address, name -> remembered += address to name }, { autoConnect }, log = {})
+    private val logged = mutableListOf<String>()
+    private val link = GattPianoLink(radio, executor, { address, name -> remembered += address to name }, { autoConnect }, log = { logged += it })
     private val address = "C8:2E:18:00:11:22"
 
     private fun state() = link.state.value
@@ -88,13 +89,45 @@ class GattPianoLinkTest {
     }
 
     @Test
-    fun `nothing found in 12 s says the piano can't be reached`() {
+    fun `nothing found in 12 s says the piano can't be found, and why it may hide`() {
         link.connect(null)
         executor.advance(11_999)
         assertEquals(LinkState.Scanning, state())
         executor.advance(1)
-        assertEquals(LinkError.NotFound.toState(), state())
+        assertEquals(LinkError.NotFound().toState(), state())
         assertFalse(radio.scanning)
+        assertTrue((state() as LinkState.Error).message.contains("it hides while another device is connected"))
+        assertEquals("Not connected: NotFound (scan ended after 12 s, 0 BLE-MIDI devices seen)", logged.last())
+    }
+
+    @Test
+    fun `nothing found with Location off adds that some devices need it`() {
+        radio.locationServices = false
+        link.connect(null)
+        executor.runDue()
+        radio.find("11:22:33:44:55:66", "Someone's MIDI keyboard")
+        executor.advance(12_000)
+        val error = state() as LinkState.Error
+        assertEquals(LinkError.NotFound(locationOff = true), error.reason)
+        assertTrue(error.message.endsWith(" On some devices, Bluetooth scanning also needs Location turned on."))
+        assertEquals("Not connected: NotFound (scan ended after 12 s, 1 BLE-MIDI device seen, Location is off)", logged.last())
+    }
+
+    @Test
+    fun `a scan Android refuses is its own error, with the code`() {
+        link.connect(null)
+        executor.runDue()
+        radio.scanFailed(2)
+        executor.runDue()
+        assertEquals(LinkError.ScanFailed(2).toState(), state())
+        assertFalse(radio.scanning)
+        assertTrue(logged.contains("Scan failed: code 2 (the app could not register the scan)"))
+
+        link.connect(null)
+        executor.runDue()
+        radio.scanFailed(PianoScanner.NO_SCANNER)   // no scanner: Bluetooth went off
+        executor.runDue()
+        assertEquals(LinkError.BluetoothOff.toState(), state())
     }
 
     @Test
@@ -161,7 +194,39 @@ class GattPianoLinkTest {
         assertEquals(0, first.requestedMtu)
         second.dropped(status = 133)
         executor.runDue()
-        assertEquals(LinkError.NotFound.toState(), state())
+        assertEquals(LinkError.ConnectFailed(133).toState(), state())
+        assertTrue((state() as LinkState.Error).message.startsWith("Found Steven Piano but the connection failed (code 133)."))
+        val gattError = "133 (GATT_ERROR: Android's catch-all)"
+        assertEquals(
+            listOf(
+                "GATT disconnected: $address, status $gattError",
+                "Connecting to $address failed: status $gattError; one retry in 500 ms",
+                "connectGatt $address, autoConnect=false (the one retry)",
+                "GATT disconnected: $address, status $gattError",
+                "Not connected: ConnectFailed, status $gattError",
+            ),
+            logged.takeLast(5),
+        )
+    }
+
+    @Test
+    fun `a connection that never answers ends as a timeout, after its one retry`() {
+        link.connect(null)
+        executor.runDue()
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()
+        executor.advance(15_000)
+        assertTrue(radio.connections.single().closed)
+        assertEquals(LinkState.Connecting, state())
+        executor.advance(500)
+        assertEquals(2, radio.connections.size)
+        executor.advance(15_000)
+        assertEquals(LinkError.ConnectFailed(null).toState(), state())
+        assertEquals(
+            "Found Steven Piano but the connection failed (timeout). Tap Retry; if it keeps failing, restart the piano.",
+            (state() as LinkState.Error).message,
+        )
+        assertEquals(listOf("No connection to $address within 15 s", "Not connected: ConnectFailed, timeout"), logged.takeLast(2))
     }
 
     @Test
@@ -305,6 +370,94 @@ class GattPianoLinkTest {
         executor.runDue()
         assertEquals(LinkState.Reconnecting(1), state())
         assertTrue(radio.connections.last().autoConnect)
+    }
+
+    @Test
+    fun `Bluetooth coming back on clears "Bluetooth is off" and, with auto-connect on, looks for the piano`() {
+        radio.blocker = LinkError.BluetoothOff
+        link.connect(address)
+        executor.runDue()
+        assertEquals(LinkError.BluetoothOff.toState(), state())
+        radio.blocker = null
+        radio.adapter(on = true)
+        executor.runDue()
+        assertEquals(LinkState.Scanning, state())
+        radio.find(address, null)
+        executor.runDue()
+        finishConnecting(radio.connections.single())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+    }
+
+    @Test
+    fun `with auto-connect off, Bluetooth coming back on only clears "Bluetooth is off"`() {
+        autoConnect = false
+        radio.blocker = LinkError.BluetoothOff
+        link.connect(null)
+        executor.runDue()
+        radio.blocker = null
+        radio.adapter(on = true)
+        executor.runDue()
+        assertEquals(LinkState.Disconnected, state())
+        assertEquals(0, radio.scans)
+    }
+
+    @Test
+    fun `Bluetooth turning off in the middle of a call never crashes the link`() {
+        radio.failure = IllegalStateException("BT Adapter is not turned ON")
+        link.connect(null)
+        executor.runDue()   // the scan throws
+        radio.adapter(on = false)
+        executor.runDue()   // and so does stopping it
+        assertEquals(LinkError.BluetoothOff.toState(), state())
+        radio.failure = null
+        radio.adapter(on = true)
+        executor.runDue()
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(logged.contains("Bluetooth refused a call (BT Adapter is not turned ON): it is probably turning off"))
+
+        radio.failure = IllegalStateException("BT Adapter is not turned ON")
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()   // connectGatt throws
+        executor.advance(500)   // and throws again on the retry
+        assertEquals(LinkError.ConnectFailed(-1).toState(), state())
+        assertTrue(radio.connections.isEmpty())
+    }
+
+    @Test
+    fun `a connection's milestones are logged, and each device once a scan`() {
+        link.connect(null)
+        executor.runDue()
+        repeat(3) { radio.find("11:22:33:44:55:66", "Someone's MIDI keyboard", rssi = -71) }
+        radio.find("11:22:33:44:55:77", "Line one\nNot connected: forged", rssi = -80)
+        radio.find(address, PianoBluetooth.NAME, rssi = -58)
+        executor.runDue()
+        val gatt = radio.connections.single()
+        gatt.hasConsole = true
+        finishConnecting(gatt, mtu = 247)
+        assertEquals(
+            listOf(
+                "Connect: no piano remembered yet",
+                "Scan started (filter: MIDI service 03B80E5A-EDE8-4B33-A751-6CE34EC4C700, mode: low latency), looking for any Steven Piano",
+                "Seen 11:22:33:44:55:66 \"Someone's MIDI keyboard\", RSSI -71 dBm, MIDI service yes: ignored: name is not Steven Piano",
+                "Seen 11:22:33:44:55:77 \"Line one?Not connected: forged\", RSSI -80 dBm, MIDI service yes: ignored: name is not Steven Piano",
+                "Seen $address \"Steven Piano\", RSSI -58 dBm, MIDI service yes: connecting",
+                "connectGatt $address, autoConnect=false",
+                "GATT connected: $address, status 0 (success)",
+                "MTU 247 (asked for 255)",
+                "Services discovered: MIDI yes, console yes",
+                "Connected to Steven Piano ($address), MTU 247, with its console",
+            ),
+            logged,
+        )
+
+        gatt.dropped(status = 8)
+        executor.runDue()
+        executor.advance(20_000)   // the first reconnect scan
+        radio.find("11:22:33:44:55:66", "Someone's MIDI keyboard", rssi = -71)
+        executor.runDue()
+        assertEquals("a new scan logs the device again", 2, logged.count { it.startsWith("Seen 11:22:33:44:55:66") })
+        assertTrue(logged.contains("GATT disconnected: $address, status 8 (connection timeout: the piano went out of range or off)"))
+        assertTrue(logged.contains("connectGatt $address, autoConnect=true (in the background, until the piano is back)"))
     }
 
     @Test

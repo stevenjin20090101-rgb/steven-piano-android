@@ -57,29 +57,48 @@ class FakeRadio : BleRadio {
     var scans = 0
         private set
     val connections = mutableListOf<FakeGatt>()
+
+    /** Location Services, as [locationServicesOn] reports them. */
+    var locationServices = true
+
+    /** Thrown by every scan, stop and connect call while set, as Android throws while Bluetooth turns off. */
+    var failure: RuntimeException? = null
     private var onFound: ((FoundPiano) -> Unit)? = null
+    private var onFailed: ((Int) -> Unit)? = null
     private var adapterListener: ((Boolean) -> Unit)? = null
 
     override fun blocker(): LinkError? = blocker
 
     override fun startScan(onFound: (FoundPiano) -> Unit, onFailed: (errorCode: Int) -> Unit) {
+        failure?.let { throw it }
         scanning = true
         scans++
         this.onFound = onFound
+        this.onFailed = onFailed
     }
 
     override fun stopScan() {
+        failure?.let { throw it }
         scanning = false
     }
 
-    override fun connect(address: String, autoConnect: Boolean, events: GattEvents): GattConnection =
-        FakeGatt(address, autoConnect, events).also { connections += it }
+    override fun connect(address: String, autoConnect: Boolean, events: GattEvents): GattConnection {
+        failure?.let { throw it }
+        return FakeGatt(address, autoConnect, events).also { connections += it }
+    }
 
     override fun watchAdapter(onChange: (on: Boolean) -> Unit) {
         adapterListener = onChange
     }
 
-    fun find(address: String, name: String?) = onFound?.invoke(FoundPiano(address, name))
+    override fun locationServicesOn(): Boolean = locationServices
+
+    /** A scan result; [midi]: its advertisement carried the BLE-MIDI service (the piano's always does). */
+    fun find(address: String, name: String?, rssi: Int = -60, midi: Boolean = true) =
+        onFound?.invoke(FoundPiano(address, name, rssi, midi))
+
+    /** Android gave up on the scan with [code]. */
+    fun scanFailed(code: Int) = onFailed?.invoke(code)
 
     fun adapter(on: Boolean) = adapterListener?.invoke(on)
 }
@@ -90,7 +109,7 @@ class FakeRadio : BleRadio {
  * each whole line written to RX with notifications, [notifyChunk] bytes at a time (so lines arrive
  * split, as the firmware's MTU-sized notifications split them).
  */
-class FakeGatt(val address: String, val autoConnect: Boolean, private val events: GattEvents) : GattConnection {
+class FakeGatt(override val address: String, val autoConnect: Boolean, private val events: GattEvents) : GattConnection {
     var requestedMtu = 0
     var discoveries = 0
     var highPriority = false

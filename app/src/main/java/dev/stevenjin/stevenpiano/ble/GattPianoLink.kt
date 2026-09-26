@@ -47,13 +47,26 @@ import kotlin.concurrent.withLock
  * the same piano, plus filtered scans with backoff 1, 2, 4, 8, 15 s starting after 20 s.
  * Every radio call and every callback runs on [executor]'s thread, which never blocks, except
  * [emergencySilence]: the crash handler's direct write of the stop sequence, from whatever thread.
+ * A radio call that throws (SecurityException for a revoked permission, IllegalStateException while
+ * Bluetooth turns off) never crashes the app.
+ * Why a connection failed is kept apart, for the Piano tab: a search that found nothing
+ * ([LinkError.NotFound], mentioning Location when it is off), a piano found that would not connect
+ * ([LinkError.ConnectFailed], with the last GATT status or the timeout), a scan Android refused
+ * ([LinkError.ScanFailed], with its code). After "Bluetooth is off", Bluetooth coming back on clears
+ * the error and, with auto-connect on, looks for the piano again.
+ * [log] is the link's trail, kept in release builds (`Log.w`, tag "PianoLink": R8 strips only
+ * v, d and i): each scan with its filter, each device a scan sees (once per address per scan: its
+ * address, name, RSSI, whether it advertised the MIDI service, and what the link did about it), each
+ * connectGatt, connections made and lost with their status, the MTU, the services found and each
+ * failure with its reason, so `adb logcat -s PianoLink:W` shows why a connection failed. It holds
+ * Bluetooth addresses and advertised names only.
  */
 class GattPianoLink(
     private val radio: BleRadio,
     private val executor: LinkExecutor,
     private val onConnected: (address: String, name: String) -> Unit,
     private val shouldReconnect: () -> Boolean,
-    private val log: (String) -> Unit = { Log.i(TAG, it) },
+    private val log: (String) -> Unit = { Log.w(TAG, it) },
 ) : PianoLink {
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
@@ -118,6 +131,18 @@ class GattPianoLink(
     private var backoffStep = 0
     private val throttle = ScanThrottle()
 
+    /** Addresses the current scan has seen (upper case), so each is logged once a scan. */
+    private val seen = HashSet<String>()
+
+    /** How the last connection attempt ended: its GATT status, [NO_CONNECTION], or null for the timeout. */
+    private var connectStatus: Int? = null
+
+    /** Whether Bluetooth was last reported on, so each change is logged once (off comes as "turning off", then "off"). */
+    private var bluetoothOn: Boolean? = null
+
+    /** "The piano fell behind" is logged once a connection: a file too dense to play would log it with every batch. */
+    private val behindLogged = AtomicBoolean(false)
+
     /** The stop sequence, queued after a packet was given up on. Only ever read. */
     private val silence = MidiBatch().apply {
         add(0xB0, 64, 0)
@@ -128,18 +153,18 @@ class GattPianoLink(
     private val pump = Runnable { pumpNow() }
     private val startScan = Runnable { beginScan() }
     private val scanTimeout = Runnable { onScanTimeout() }
-    private val connectTimeout = Runnable { onConnectFailed() }
+    private val connectTimeout = Runnable { onConnectTimeout() }
     private val retryConnect = Runnable { piano?.let(::connectDirect) }
     private val retryInBackground = Runnable { connectInBackground() }
-    private val mtuTimeout = Runnable { discover() }
-    private val discoveryTimeout = Runnable { gatt?.let { onDiscovered(it, success = false) } }
+    private val mtuTimeout = Runnable { onMtuTimeout() }
+    private val discoveryTimeout = Runnable { gatt?.let { onDiscovered(it, success = false, failure = "had no answer within ${DISCOVERY_TIMEOUT_MS / 1000} s") } }
     private val writeTimeout = Runnable { gatt?.let(::onWritten) }
     private val offerOther = Runnable { onOtherPianoOnly() }
     private val timers = listOf(pump, startScan, scanTimeout, connectTimeout, retryConnect, retryInBackground, mtuTimeout, discoveryTimeout, writeTimeout, offerOther)
 
     private val events = object : GattEvents {
         override fun onConnectionChanged(connection: GattConnection, connected: Boolean, status: Int) =
-            executor.execute { if (connected) onGattConnected(connection) else onGattLost(connection, status) }
+            executor.execute { if (connected) onGattConnected(connection, status) else onGattLost(connection, status) }
 
         override fun onMtuChanged(connection: GattConnection, mtu: Int, success: Boolean) =
             executor.execute { onMtu(connection, mtu, success) }
@@ -170,7 +195,7 @@ class GattPianoLink(
     override fun send(batch: MidiBatch, dropPending: Boolean) {
         if (!ready) return
         val dropped = writer.enqueue(batch, dropPending)
-        if (dropped > 0) log("The piano fell behind: $dropped waiting notes dropped")
+        if (dropped > 0 && behindLogged.compareAndSet(false, true)) log("The piano fell behind: $dropped waiting notes dropped (logged once a connection)")
         if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
     }
 
@@ -223,6 +248,7 @@ class GattPianoLink(
         error = null
         errorOther = null
         address?.let { preferredAddress = it }
+        log("Connect: " + (preferredAddress?.let { "the remembered piano is $it" } ?: "no piano remembered yet"))
         beginScan()
     }
 
@@ -232,9 +258,15 @@ class GattPianoLink(
         scanning = true
         val wait = throttle.delayBeforeNextScan(nowMs())
         if (wait > 0) {
+            log("Scan waits $wait ms: Android allows 5 scans in 30 s")
             executor.schedule(wait, startScan)
         } else {
             throttle.record(nowMs())
+            seen.clear()
+            log(
+                "Scan started (filter: MIDI service ${PianoBluetooth.SERVICE_UUID.toString().uppercase()}, mode: ${PianoScanner.MODE}), " +
+                    "looking for " + (preferredAddress ?: "any Steven Piano"),
+            )
             guard {
                 radio.startScan(
                     onFound = { found -> executor.execute { onFound(found) } },
@@ -246,18 +278,35 @@ class GattPianoLink(
         publish()
     }
 
+    /** A scan result. The first of each address in a scan is logged with what the link does about it. */
     private fun onFound(found: FoundPiano) {
         if (!scanning) return
         val pinned = preferredAddress
+        val first = seen.add(found.address.uppercase())
+        fun sighted(decision: String) {
+            if (!first) return
+            log(
+                "Seen ${found.address} ${BleCodes.name(found.name)}, RSSI ${found.rssi?.let { "$it dBm" } ?: "unknown"}, " +
+                    "MIDI service ${yesNo(found.advertisesMidi)}: $decision",
+            )
+        }
         when {
-            pinned != null && found.address.equals(pinned, ignoreCase = true) -> connectFound(found)
-            found.name != PianoBluetooth.NAME -> Unit   // another BLE-MIDI device
-            pinned == null -> connectFound(found)   // no piano known yet: the first Steven Piano
-            reconnecting -> Unit   // a reconnection never switches pianos
+            pinned != null && found.address.equals(pinned, ignoreCase = true) -> {
+                sighted("the remembered piano, connecting")
+                connectFound(found)
+            }
+            found.name != PianoBluetooth.NAME -> sighted(if (found.name == null) "ignored: no name" else "ignored: name is not Steven Piano")
+            pinned == null -> {   // no piano known yet: the first Steven Piano
+                sighted("connecting")
+                connectFound(found)
+            }
+            reconnecting -> sighted("ignored: another Steven Piano (a reconnection never switches pianos)")
             otherPiano == null -> {   // the person decides, unless the known piano answers first
+                sighted("another Steven Piano: offered in ${OTHER_PIANO_GRACE_MS / 1000} s unless the remembered one answers")
                 otherPiano = found
                 executor.schedule(OTHER_PIANO_GRACE_MS, offerOther)
             }
+            else -> sighted("ignored: another Steven Piano")
         }
     }
 
@@ -273,23 +322,36 @@ class GattPianoLink(
         val other = otherPiano ?: return
         if (!scanning || reconnecting) return
         stopScanning()
-        fail(LinkError.OtherPiano, other.address)
+        fail(LinkError.OtherPiano, other.address, "the remembered piano did not answer within ${OTHER_PIANO_GRACE_MS / 1000} s")
     }
 
+    /** The only way to [LinkError.NotFound]: a search that ended without the piano. */
     private fun onScanTimeout() {
         stopScanning()
+        val saw = "${seen.size} BLE-MIDI device" + (if (seen.size == 1) "" else "s") + " seen"
         when {
-            reconnecting -> scheduleNextScan()
-            otherPiano != null -> fail(LinkError.OtherPiano, otherPiano?.address)
-            else -> fail(LinkError.NotFound)
+            reconnecting -> {
+                log("Reconnect scan ended without the piano ($saw)")
+                scheduleNextScan()
+            }
+            otherPiano != null -> fail(LinkError.OtherPiano, otherPiano?.address, "only another Steven Piano answered")
+            else -> {
+                val locationOff = guard { radio.locationServicesOn() } == false
+                val detail = "scan ended after ${PianoScanner.SCAN_TIMEOUT_MS / 1000} s, $saw" + if (locationOff) ", Location is off" else ""
+                fail(LinkError.NotFound(locationOff), detail = detail)
+            }
         }
     }
 
     private fun onScanFailed(code: Int) {
         if (!scanning) return
-        log("Scan failed with code $code")
+        log("Scan failed: code ${BleCodes.scanFailure(code)}")
         stopScanning()
-        if (reconnecting) scheduleNextScan() else fail(LinkError.Failed)
+        when {
+            reconnecting -> scheduleNextScan()
+            code == PianoScanner.NO_SCANNER -> fail(LinkError.BluetoothOff)   // no scanner while Bluetooth is off
+            else -> fail(LinkError.ScanFailed(code))
+        }
     }
 
     /** Connects straight away to a piano the scan has just seen. */
@@ -297,8 +359,13 @@ class GattPianoLink(
         piano = found
         closeGatt()
         discoveryRetried = false
+        log("connectGatt ${found.address}, autoConnect=false" + if (connectRetried) " (the one retry)" else "")
         val connection = guard { radio.connect(found.address, autoConnect = false, events = events) }
-            ?: return onConnectFailed()
+        if (connection == null) {
+            log("connectGatt ${found.address} gave no connection")
+            connectStatus = NO_CONNECTION
+            return onConnectFailed()
+        }
         gatt = connection
         phase = Phase.Connecting
         executor.schedule(CONNECT_TIMEOUT_MS, connectTimeout)
@@ -310,12 +377,23 @@ class GattPianoLink(
         val address = piano?.address ?: preferredAddress ?: return
         closeGatt()
         discoveryRetried = false
+        log("connectGatt $address, autoConnect=true (in the background, until the piano is back)")
         gatt = guard { radio.connect(address, autoConnect = true, events = events) }
         phase = if (gatt == null) Phase.None else Phase.Connecting
-        if (gatt == null) executor.schedule(BACKGROUND_RETRY_MS, retryInBackground)
+        if (gatt == null) {
+            log("connectGatt $address gave no connection: again in ${BACKGROUND_RETRY_MS / 1000} s")
+            executor.schedule(BACKGROUND_RETRY_MS, retryInBackground)
+        }
         publish()
     }
 
+    private fun onConnectTimeout() {
+        log("No connection to ${piano?.address ?: "the piano"} within ${CONNECT_TIMEOUT_MS / 1000} s")
+        connectStatus = null
+        onConnectFailed()
+    }
+
+    /** A connection attempt ended without a connection; [connectStatus] says how. */
     private fun onConnectFailed() {
         executor.cancel(connectTimeout)
         closeGatt()
@@ -326,22 +404,36 @@ class GattPianoLink(
                 if (!scanning) scheduleNextScan()
             }
             !connectRetried && piano != null -> {   // a first failure (often status 133) earns one retry
+                log("Connecting to ${piano?.address} failed: ${connectOutcome()}; one retry in $RETRY_CONNECT_MS ms")
                 connectRetried = true
                 phase = Phase.Connecting
                 executor.schedule(RETRY_CONNECT_MS, retryConnect)
             }
-            else -> return fail(LinkError.NotFound)
+            else -> return fail(LinkError.ConnectFailed(connectStatus))
         }
         publish()
     }
 
-    private fun onGattConnected(connection: GattConnection) {
+    /** How the last attempt ended, for the log. */
+    private fun connectOutcome(): String = when (val status = connectStatus) {
+        null -> "timeout"
+        NO_CONNECTION -> "connectGatt gave no connection"
+        else -> "status ${BleCodes.gattStatus(status)}"
+    }
+
+    private fun onGattConnected(connection: GattConnection, status: Int) {
         if (connection !== gatt) return
+        log("GATT connected: ${connection.address}, status ${BleCodes.gattStatus(status)}")
         executor.cancel(connectTimeout)
         stopScanning()
         phase = Phase.Negotiating
         mtu = DEFAULT_MTU
-        if (guard { connection.requestMtu(REQUESTED_MTU) } == true) executor.schedule(MTU_TIMEOUT_MS, mtuTimeout) else discover()
+        if (guard { connection.requestMtu(REQUESTED_MTU) } == true) {
+            executor.schedule(MTU_TIMEOUT_MS, mtuTimeout)
+        } else {
+            log("MTU request not sent: using $DEFAULT_MTU")
+            discover()
+        }
         publish()
     }
 
@@ -349,6 +441,13 @@ class GattPianoLink(
         if (connection !== gatt || phase != Phase.Negotiating) return
         executor.cancel(mtuTimeout)
         if (success) mtu = granted
+        log(if (success) "MTU $granted (asked for $REQUESTED_MTU)" else "MTU request failed: using $mtu")
+        discover()
+    }
+
+    private fun onMtuTimeout() {
+        if (phase != Phase.Negotiating) return
+        log("MTU: no answer within ${MTU_TIMEOUT_MS / 1000} s, using $mtu")
         discover()
     }
 
@@ -358,17 +457,24 @@ class GattPianoLink(
         if (guard { connection.discoverServices() } == true) {
             executor.schedule(DISCOVERY_TIMEOUT_MS, discoveryTimeout)
         } else {
-            onDiscovered(connection, success = false)
+            onDiscovered(connection, success = false, failure = "could not start")
         }
     }
 
-    private fun onDiscovered(connection: GattConnection, success: Boolean) {
+    private fun onDiscovered(connection: GattConnection, success: Boolean, failure: String = "failed") {
         if (connection !== gatt || phase != Phase.Negotiating) return
         executor.cancel(discoveryTimeout)
+        val midi = success && guard { connection.hasMidiCharacteristic() } == true
+        if (success) {
+            log("Services discovered: MIDI ${yesNo(midi)}, console ${yesNo(guard { connection.hasConsole() } == true)}")
+        } else {
+            log("Service discovery $failure")
+        }
         when {
-            success && guard { connection.hasMidiCharacteristic() } == true -> becomeReady(connection)
+            midi -> becomeReady(connection)
             !discoveryRetried -> {
                 discoveryRetried = true
+                log("Discovering the services once more")
                 discover()
             }
             else -> {
@@ -391,6 +497,7 @@ class GattPianoLink(
         errorOther = null
         epoch++
         connectRetried = false
+        behindLogged.set(false)
         executor.cancel(startScan)
         executor.cancel(retryInBackground)
         writer.clear()   // anything that slipped in while the last connection was going down
@@ -404,7 +511,7 @@ class GattPianoLink(
         val name = piano?.name ?: PianoBluetooth.NAME
         val address = piano?.address ?: preferredAddress
         publish()
-        log("Connected to $name, MTU $mtu" + if (hasConsole) ", with its console" else ", no console")
+        log("Connected to $name (${connection.address}), MTU $mtu, " + if (hasConsole) "with its console" else "no console")
         address?.let {
             preferredAddress = it
             onConnected(it, name)
@@ -419,7 +526,7 @@ class GattPianoLink(
             guard { connection.close() }   // a late callback from a replaced connection
             return
         }
-        log("Connection lost, status $status")
+        log("GATT disconnected: ${connection.address}, status ${BleCodes.gattStatus(status)}")
         val wasReady = phase == Phase.Ready
         closeGatt()
         phase = Phase.None
@@ -430,16 +537,21 @@ class GattPianoLink(
                 executor.schedule(BACKGROUND_RETRY_MS, retryInBackground)
                 publish()
             }
-            else -> onConnectFailed()
+            else -> {
+                connectStatus = status
+                onConnectFailed()
+            }
         }
     }
 
     private fun startReconnecting() {
         if (!shouldReconnect()) {
+            log("Auto-connect is off: not reconnecting")
             wanted = false
             publish()
             return
         }
+        log("Reconnecting: in the background at once, and with scans from ${RECONNECT_SCAN_AFTER_MS / 1000} s")
         reconnecting = true
         attempt = 1
         backoffStep = 0
@@ -451,13 +563,18 @@ class GattPianoLink(
 
     /** The next reconnect scan, backing off; after a while only the background connection waits on. */
     private fun scheduleNextScan() {
-        if (nowMs() - reconnectStartedMs > STOP_SCANNING_AFTER_MS) return
+        if (nowMs() - reconnectStartedMs > STOP_SCANNING_AFTER_MS) {
+            log("No more reconnect scans after ${STOP_SCANNING_AFTER_MS / 60_000} minutes; the background connection waits on")
+            return
+        }
         attempt++
         executor.schedule(BACKOFF_MS[minOf(backoffStep++, BACKOFF_MS.lastIndex)], startScan)
         publish()
     }
 
     private fun onAdapter(on: Boolean) {
+        if (bluetoothOn != on) log(if (on) "Bluetooth turned on" else "Bluetooth turned off")
+        bluetoothOn = on
         if (!on) {
             val keep = wanted
             halt()
@@ -467,19 +584,25 @@ class GattPianoLink(
         } else if (wanted && phase == Phase.None && !scanning && !reconnecting) {
             error = null
             if (piano != null) startReconnecting() else beginScan()
+        } else if (!wanted && error == LinkError.BluetoothOff) {
+            // Connect (or the app's start) found Bluetooth off: the error goes, and with auto-connect on the piano is looked for.
+            error = null
+            if (shouldReconnect()) startConnect(null) else publish()
         }
     }
 
-    /** The person pressed Disconnect. */
+    /** The person pressed Disconnect (or Cancel). */
     private fun stop() {
+        log("Disconnect")
         wanted = false
         halt()
         error = null
         publish()
     }
 
-    private fun fail(reason: LinkError, other: String? = null) {
-        log("Not connected: ${reason.name}")
+    /** Stops with [reason] for the Piano tab; [other] is another piano offered, [detail] says more in the log. */
+    private fun fail(reason: LinkError, other: String? = null, detail: String? = null) {
+        log("Not connected: ${describe(reason)}" + (other?.let { ", the other piano is $it" } ?: "") + (detail?.let { " ($it)" } ?: ""))
         wanted = false
         halt()
         error = reason
@@ -666,12 +789,29 @@ class GattPianoLink(
 
     private fun nowMs(): Long = executor.nanoTime() / NANOS_PER_MS
 
-    /** Runs a radio call. A revoked permission surfaces as SecurityException: the link then stops with an error. */
+    private fun yesNo(value: Boolean): String = if (value) "yes" else "no"
+
+    /** [reason] for the log, with the GATT status or the scan's code spelled out. */
+    private fun describe(reason: LinkError): String = when (reason) {
+        is LinkError.ConnectFailed -> "ConnectFailed, " + (reason.status?.let { "status ${BleCodes.gattStatus(it)}" } ?: "timeout")
+        is LinkError.ScanFailed -> "ScanFailed, code ${BleCodes.scanFailure(reason.code)}"
+        is LinkError.NotFound -> "NotFound"
+        else -> reason.toString()
+    }
+
+    /**
+     * Runs a radio call, which never crashes the app. A revoked permission surfaces as SecurityException:
+     * the link then stops with an error. Bluetooth turning off mid-call surfaces as IllegalStateException:
+     * it is logged, and the adapter's broadcast that follows stops the link ("Bluetooth is off").
+     */
     private inline fun <T> guard(block: () -> T): T? = try {
         block()
     } catch (e: SecurityException) {
         log("Bluetooth permission missing: ${e.message}")
         executor.execute { if (wanted || phase != Phase.None) fail(LinkError.PermissionMissing) }
+        null
+    } catch (e: IllegalStateException) {
+        log("Bluetooth refused a call (${e.message}): it is probably turning off")
         null
     }
 
@@ -683,6 +823,9 @@ class GattPianoLink(
         private const val ATT_HEADER = 3
         private const val CONSOLE_BUFFER_LINES = 512
         private const val CONNECT_TIMEOUT_MS = 15_000L
+
+        /** [connectStatus] when connectGatt gave no connection at all (there is no GATT status to report). */
+        private const val NO_CONNECTION = -1
         private const val RETRY_CONNECT_MS = 500L
         private const val BACKGROUND_RETRY_MS = 1_000L
         private const val MTU_TIMEOUT_MS = 3_000L

@@ -78,16 +78,68 @@ sealed interface LinkState {
     data class Error(val reason: LinkError, val message: String, val otherAddress: String? = null) : LinkState
 }
 
-/** Why a connection failed, so the Piano tab can offer the right fix. Messages are the copy to show. */
-enum class LinkError(val message: String) {
-    NotFound("Can't reach Steven Piano. Make sure it's powered on and within range."),
-    BluetoothOff("Bluetooth is off. Turn it on to connect to the piano."),
-    PermissionMissing("Steven Piano needs permission to find and connect to the piano."),
-    LocationOff("Location is off. This phone needs it on to find Bluetooth devices."),
-    Unsupported("This phone doesn't support Bluetooth LE, so it can't reach the piano."),
-    Failed("The connection to Steven Piano failed. Try again."),
-    OtherPiano("Another piano called Steven Piano is nearby, not the one this phone knows. Connect to it only if it's yours."),
-    ;
+/**
+ * Why a connection failed, so the Piano tab can offer the right fix. [message] is the copy to show;
+ * the reasons that carry a number (a GATT status, a scan error) show it, for the person to pass on.
+ */
+sealed interface LinkError {
+    val message: String
 
     fun toState(otherAddress: String? = null): LinkState.Error = LinkState.Error(this, message, otherAddress)
+
+    /**
+     * A search ended without the piano (the only reason a scan's timeout gives). [locationOff]: Location
+     * Services were off, which some devices need for Bluetooth scanning even on Android 12 and newer.
+     */
+    data class NotFound(val locationOff: Boolean = false) : LinkError {
+        override val message: String
+            get() = if (locationOff) "$NOT_FOUND_COPY $LOCATION_HINT_COPY" else NOT_FOUND_COPY
+    }
+
+    /** This device is paired (bonded) with the piano in Bluetooth settings; the piano refuses encryption, so connecting fails. */
+    data object Paired : LinkError {
+        override val message = "This device is paired with Steven Piano in Bluetooth settings. Forget it there, then tap Retry."
+    }
+
+    /** The piano was found, but connecting to it failed twice: [status] is the last GATT status, null when it timed out. */
+    data class ConnectFailed(val status: Int?) : LinkError {
+        override val message: String
+            get() = "Found Steven Piano but the connection failed (${status?.let { "code $it" } ?: "timeout"}). " +
+                "Tap Retry; if it keeps failing, restart the piano."
+    }
+
+    /** Android would not scan: [code] is the scan's error code (ScanCallback.SCAN_FAILED_*). */
+    data class ScanFailed(val code: Int) : LinkError {
+        override val message: String
+            get() = "Bluetooth scanning isn't available right now (code $code). Turn Bluetooth off and on, then tap Retry."
+    }
+
+    data object BluetoothOff : LinkError {
+        override val message = "Bluetooth is off. Turn it on to connect to the piano."
+    }
+
+    data object PermissionMissing : LinkError {
+        override val message = "Steven Piano needs permission to find and connect to the piano."
+    }
+
+    data object LocationOff : LinkError {
+        override val message = "Location is off. This phone needs it on to find Bluetooth devices."
+    }
+
+    data object Unsupported : LinkError {
+        override val message = "This phone doesn't support Bluetooth LE, so it can't reach the piano."
+    }
+
+    /** Connected, but the piano's BLE-MIDI characteristic never showed up. */
+    data object Failed : LinkError {
+        override val message = "The connection to Steven Piano failed. Try again."
+    }
+
+    data object OtherPiano : LinkError {
+        override val message = "Another piano called Steven Piano is nearby, not the one this phone knows. Connect to it only if it's yours."
+    }
 }
+
+private const val NOT_FOUND_COPY = "Can't find Steven Piano. Make sure it's powered on, within range, and that no iPad, phone " +
+    "or Mac is connected to it — it hides while another device is connected."
+private const val LOCATION_HINT_COPY = "On some devices, Bluetooth scanning also needs Location turned on."

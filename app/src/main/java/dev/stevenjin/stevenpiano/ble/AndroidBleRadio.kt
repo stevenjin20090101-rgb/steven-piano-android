@@ -47,13 +47,13 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
             adapter == null || !context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE) -> LinkError.Unsupported
             BlePermissions.missing(context).isNotEmpty() -> LinkError.PermissionMissing
             !adapter.isEnabled -> LinkError.BluetoothOff
-            BlePermissions.needsLocationServices(Build.VERSION.SDK_INT) && !locationOn() -> LinkError.LocationOff
+            BlePermissions.needsLocationServices(Build.VERSION.SDK_INT) && !locationServicesOn() -> LinkError.LocationOff
             else -> null
         }
     }
 
     override fun startScan(onFound: (FoundPiano) -> Unit, onFailed: (errorCode: Int) -> Unit) {
-        scanner?.start(onFound, onFailed) ?: onFailed(NO_ADAPTER)
+        scanner?.start(onFound, onFailed) ?: onFailed(PianoScanner.NO_ADAPTER)
     }
 
     override fun stopScan() {
@@ -63,7 +63,7 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
     override fun connect(address: String, autoConnect: Boolean, events: GattEvents): GattConnection? {
         val adapter = adapter ?: return null
         if (!BluetoothAdapter.checkBluetoothAddress(address)) return null
-        val connection = AndroidGattConnection()
+        val connection = AndroidGattConnection(address)
         val callback = Callback(connection, events)
         connection.gatt = adapter.getRemoteDevice(address)
             .connectGatt(context, autoConnect, callback, BluetoothDevice.TRANSPORT_LE) ?: return null
@@ -87,7 +87,7 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
         )
     }
 
-    private fun locationOn(): Boolean =
+    override fun locationServicesOn(): Boolean =
         context.getSystemService(LocationManager::class.java)?.let(LocationManagerCompat::isLocationEnabled) ?: false
 
     /** Forwards callbacks, tagged with their connection so stale ones can be told apart. */
@@ -123,14 +123,10 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
             events.onConsoleData(connection, value.copyOf())
         }
     }
-
-    private companion object {
-        const val NO_ADAPTER = -2
-    }
 }
 
 @SuppressLint("MissingPermission")
-private class AndroidGattConnection : GattConnection {
+private class AndroidGattConnection(override val address: String) : GattConnection {
     lateinit var gatt: BluetoothGatt
     private var midi: BluetoothGattCharacteristic? = null
     private var consoleRx: BluetoothGattCharacteristic? = null

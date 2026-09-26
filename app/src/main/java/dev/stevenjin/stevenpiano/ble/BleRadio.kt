@@ -28,13 +28,27 @@ interface BleRadio {
 
     /** Calls [onChange] as the Bluetooth adapter turns on (true) or off (false). */
     fun watchAdapter(onChange: (on: Boolean) -> Unit)
+
+    /**
+     * Whether Location Services are on. Android 11 and older need them for any scan ([blocker] says
+     * so); some devices on Android 12 and newer still find nothing without them, which is why a
+     * search that found nothing mentions them.
+     */
+    fun locationServicesOn(): Boolean
 }
 
-/** A scan result: [name] comes from the scan response and may be missing. */
-class FoundPiano(val address: String, val name: String?)
+/**
+ * A device the link may connect to: a scan result, with its [rssi] and whether its advertisement
+ * carried the BLE-MIDI service ([advertisesMidi]). [name] comes from the scan response and may be
+ * missing (the piano puts its name only there).
+ */
+class FoundPiano(val address: String, val name: String?, val rssi: Int? = null, val advertisesMidi: Boolean = false)
 
 /** One GATT client connection. Each call is one GATT operation; the link keeps one in flight. */
 interface GattConnection {
+    /** The piano's Bluetooth address, for the log. */
+    val address: String
+
     fun requestMtu(mtu: Int): Boolean
 
     fun discoverServices(): Boolean

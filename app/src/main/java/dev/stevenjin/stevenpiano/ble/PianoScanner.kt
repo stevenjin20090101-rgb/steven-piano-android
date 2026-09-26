@@ -19,12 +19,14 @@ import android.os.ParcelUuid
 
 /**
  * Finds BLE-MIDI devices with a hardware-filtered, low-latency scan. The piano's name is in its
- * scan response, which active scanning receives, so the filter is on the MIDI service UUID.
+ * scan response, which active scanning receives, so the filter is on the MIDI service UUID (a
+ * hardware filter may still drop the scan response: then the name is missing, see [GattPianoLink]).
  * Permissions are checked by [AndroidBleRadio.blocker] before every scan.
  */
 @SuppressLint("MissingPermission")
 class PianoScanner(private val adapter: BluetoothAdapter) {
     private var callback: ScanCallback? = null
+    private val midiService = ParcelUuid(PianoBluetooth.SERVICE_UUID)
 
     fun start(onFound: (FoundPiano) -> Unit, onFailed: (errorCode: Int) -> Unit) {
         stop()
@@ -37,7 +39,7 @@ class PianoScanner(private val adapter: BluetoothAdapter) {
             override fun onScanFailed(errorCode: Int) = onFailed(errorCode)
         }
         callback = scan
-        val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(PianoBluetooth.SERVICE_UUID)).build()
+        val filter = ScanFilter.Builder().setServiceUuid(midiService).build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         scanner.startScan(listOf(filter), settings, scan)
     }
@@ -48,12 +50,25 @@ class PianoScanner(private val adapter: BluetoothAdapter) {
         adapter.bluetoothLeScanner?.stopScan(scan)
     }
 
-    private fun ScanResult.toFound() = FoundPiano(device.address, scanRecord?.deviceName ?: device.name)
+    private fun ScanResult.toFound() = FoundPiano(
+        address = device.address,
+        name = scanRecord?.deviceName ?: device.name,
+        rssi = rssi,
+        advertisesMidi = scanRecord?.serviceUuids?.contains(midiService) == true,
+    )
 
     companion object {
         /** How long one search for the piano lasts. */
         const val SCAN_TIMEOUT_MS = 12_000L
-        private const val NO_SCANNER = -1
+
+        /** The scan's settings, as the link's log names them. */
+        const val MODE = "low latency"
+
+        /** [start]'s own failure code: no scanner, because Bluetooth is off. */
+        const val NO_SCANNER = -1
+
+        /** [AndroidBleRadio]'s own failure code: this device has no Bluetooth adapter. */
+        const val NO_ADAPTER = -2
     }
 }
 
