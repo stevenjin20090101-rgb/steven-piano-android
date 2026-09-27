@@ -561,3 +561,49 @@ imports (zip paths, content links), the MIDI parser on malformed files, the netw
 layer (HTTPS only, redirects, size caps, headers), exported components and intents,
 foreground services and notifications, storage and backups, permissions, dependency
 vulnerabilities, and release signing with a real release key kept outside the repo.
+
+---
+
+# v1.4 — updates that come to the piano, and bug reports that come back
+
+Steven asked for the app to update itself and for a way to get fixes out quickly. Three
+pieces, all quiet: an updater, silent installs on the school tablet, and a diagnostics
+share. No accounts, no analytics, nothing leaves the device unless Steven shares it.
+
+## Updates
+
+- The app checks for a newer release on launch and once a day: one small manifest fetched
+  over HTTPS from the app's GitHub repository (the only new host, plus GitHub's download
+  hosts for the file itself). Wi-Fi or data, a few hundred bytes.
+- When a newer version exists, the Piano tab shows a row above Preferences, Eyebrow header
+  **UPDATE**, then "Steven Piano 1.4 is available" in Body with the release notes beneath
+  in `contentSecondary`, and one filled button **Update**. Nothing red; no badge on the tab.
+- Update: a hairline progress row ("Downloading 1.4 · 1.2 of 2.3 MB"), the file's hash is
+  checked against the manifest, then Android's installer opens; one confirmation tap and
+  the app relaunches on the new version. Android itself refuses any file not signed with
+  the release key, so a wrong or tampered file can never install.
+- On a tablet set up as the app's **device owner** (the school tablet, a one-time cable
+  setup), the same flow installs with no tap and the row reads "Updated to 1.4; restart
+  to use it" with a **Restart** button.
+- Failures are one line under the row, in words: "Couldn't reach the update server." /
+  "The download didn't match the release; try again." Retry is the same Update button.
+- A switch in App preferences: **Check for updates automatically** (on). The row can also
+  be triggered by hand: "Check now" as a text button under the switch.
+
+## Diagnostics
+
+- The app keeps its own last crash reports (the last five) and the last 500 lines of the
+  connection log on the device. Nothing is sent anywhere by itself.
+- Piano tab, under Diagnostics: **Share diagnostics** (outlined button) builds one small
+  zip — app version and build, device model and Android version, the crash reports, the
+  connection log, the app preferences (no library contents, no photos, no Wikipedia
+  text) — and opens the system share sheet, so Steven can send it by any means. The row
+  explains it in one Eyebrow line: "A small file with the app's logs. Nothing personal."
+- After a crash, the next launch shows a one-line banner "The app crashed last time. Share
+  diagnostics?" with the button; dismissable.
+
+## Publishing (Steven's side, one command)
+
+A script in the repo builds the release, signs it with the key outside the repo, writes the
+manifest with the version, notes and hash, commits it, and attaches the APK to a GitHub
+release. The repository must be public for phones to read the manifest without a login.

@@ -1,0 +1,9 @@
+{
+  "versionCode": 8,
+  "versionName": "1.4",
+  "notes": "Steven Piano now keeps itself up to date: a new version shows on the Piano tab, and on the school tablet it installs without a tap. Share diagnostics sends the app's logs when something goes wrong.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.4/steven-piano-1.4.apk",
+  "sha256": "1426f3cc9b92999b5a3aa315432620c978408951d5d7bf75ce68365f7294d88c",
+  "sizeBytes": 2434545,
+  "minSdk": 26
+}

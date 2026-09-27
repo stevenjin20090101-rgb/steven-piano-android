@@ -16,7 +16,8 @@ import android.app.admin.DeviceAdminReceiver
  * set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin`, README › School tablet),
  * for one thing only: its own updates install without a tap (see `UpdateInstaller`). It asks for
  * no policies (`res/xml/device_admin.xml` lists none), locks nothing and hides nothing; the tablet
- * works as before. Its name must stay the same in every release, or an update would drop the
- * device owner. Only the system (holding BIND_DEVICE_ADMIN) can reach it.
+ * works as before. The way back, over adb, is [DeviceOwnerRelease]. Its name must stay the same in
+ * every release, or an update would drop the device owner. Only the system (holding
+ * BIND_DEVICE_ADMIN) can reach it.
  */
 class PianoDeviceAdmin : DeviceAdminReceiver()

@@ -29,7 +29,10 @@ Folder: `Player Piano/android/` (its own git repo; never pushed without Steven's
   `rememberLauncherForActivityResult`. Network (from v1.2, M11): exactly two hosts,
   `en.wikipedia.org` and `upload.wikimedia.org`, for composers' portraits and notes; what is
   sent is page titles and search terms made from the library's own names, nothing about the
-  person (see `v1.2 — M11 › Network policy`).
+  person (see `v1.2 — M11 › Network policy`). From v1.4, for the app's own updates only,
+  `raw.githubusercontent.com`, `github.com` (this repository's release downloads) and GitHub's
+  download hosts `objects.githubusercontent.com` and `release-assets.githubusercontent.com`;
+  nothing is sent but the request itself (see `v1.4 › Network policy`).
 - Toolchain on this Mac: `JAVA_HOME=/opt/homebrew/opt/openjdk@17`,
   `ANDROID_HOME=/opt/homebrew/share/android-commandlinetools`, `local.properties`
   `sdk.dir` pointing there. The `android` CLI needs `--sdk=$ANDROID_HOME`.
@@ -219,7 +222,7 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
 - `LICENSE` (MIT + attribution clause), `AUTHORS`, `PROVENANCE.md` adapted from
   `firmware/`; `provenance/sign.py` + `verify.py` variants over this tree (exclude
   `.git .gradle .kotlin .idea build .claude`; include `.kt .kts .toml .xml .md .py .pro
-  .pem`, `LICENSE`, `AUTHORS`, `.gitignore`, `gradlew`, `gradle.properties`,
+  .pem` (and `.sh` from v1.4), `LICENSE`, `AUTHORS`, `.gitignore`, `gradlew`, `gradle.properties`,
   `gradle-wrapper.properties`); public key copied from `firmware/provenance/`; the
   private key stays at `~/piano-authorship-PRIVATE-DO-NOT-SHARE.pem`, never in the repo
   (`.gitignore`: `*.pem`, `*PRIVATE*`, `!provenance/author_ed25519_public.pem`).
@@ -1418,3 +1421,241 @@ and, with auto-connect on, connects. The card adds Open Bluetooth settings besid
 and for `NotFound` the tip "if the piano's screen reads “BLE MIDI: CONNECTED”, another device is
 connected to it" (the firmware's status label) with Retry and, when Location was off, Open Location
 settings. Tests: 605, adding `LinkErrorCopyTest` and 17 cases in `GattPianoLinkTest`.
+
+# v1.4 — updates, silent installs, diagnostics, publishing (versionCode 8)
+
+Read `DESIGN.md › v1.4` first. Everything above stays except where this section says otherwise.
+`versionCode` 8, `versionName` "1.4", `Provenance.text` "Made by Steven Jin · v1.4 · eab16a502f679465"
+(the About row); the User-Agent now takes its version from `BuildConfig` ("StevenPiano/1.4 (…)").
+
+## Network policy (adds to M11's)
+
+- Four hosts more, for updates and nothing else: `raw.githubusercontent.com` (the manifest, only
+  under `/stevenjin20090101-rgb/steven-piano-android/`), `github.com` (only
+  `/stevenjin20090101-rgb/steven-piano-android/releases/download/<tag>/<file>`, two plain segments),
+  and GitHub's redirect targets `objects.githubusercontent.com` and
+  `release-assets.githubusercontent.com` (any path: signed, expiring addresses).
+  `UpdateSource.allowsHop` passes every hop, redirects included; `allowsApk` passes a manifest's
+  file (a release asset of this repository ending `.apk`, no query or fragment, no `.`/`..`
+  segment). HTTPS only, port 443, no user info, no backslash, hosts compared exactly, as
+  `java.net.URI` reads the address.
+- `net/HttpFetch.kt` is the Wikipedia client's path made general: `HttpFetch(allowed, accept,
+  connectTimeoutMs = 10 s, readTimeoutMs, transport, userAgent, log)`; `exchange(url) { answer -> }`
+  follows at most 5 redirects by hand (`RefusedRequestException` before anything is sent to a
+  refused hop), gives the caller the final answer and closes it; `readCapped`. `HttpTransport`
+  (`UrlConnectionTransport`: no caches, no automatic redirects) is a fake in tests.
+  `WikipediaClient` runs on it with its behaviour unchanged (10 s / 15 s, 256 KB JSON, 404/410
+  null, 429/503 busy, debug-only request log).
+- Updater requests (`HttpUpdateServer`): 10 s to connect, 30 s between reads, the app's
+  User-Agent; the manifest capped at 64 KB before it is decoded, the file at the manifest's size
+  and 50 MB; any answer but 2xx is a failure (a private repository answers 404).
+- Debug builds on an emulator only: `debug.stevenpiano.updateurl` (read with getprop, like the
+  console hook) makes `UpdateSource.local(url)`: one origin (scheme, host, port) for the manifest
+  and its file, plain HTTP allowed; `app/src/debug` adds a network security config that allows
+  cleartext to 10.0.2.2 and nowhere else. Release builds have neither.
+
+## The manifest — `update/UpdateManifest.kt`
+
+`releases/latest.json`: `{"versionCode", "versionName", "notes", "apkUrl", "sha256", "sizeBytes",
+"minSdk"}`, read with `org.json` (on the JVM `org.json:json` joins the unit-test classpath only).
+versionCode a JSON integer 1..2,100,000,000; versionName `[0-9A-Za-z][0-9A-Za-z._-]*`, at most 32
+(it names the downloaded file); notes optional, plain text (control characters but line breaks
+dropped), at most 1,000 characters; apkUrl `allowsApk`; sha256 64 hex digits (kept lower-case);
+sizeBytes 1..50 MB; minSdk optional, 1..1,000. Unknown fields are ignored. A manifest that fails
+throws `InvalidManifest(field)`.
+
+## State and checks — `update/UpdateState.kt`, `update/UpdateChecker.kt`
+
+- `UpdateState`: Idle · Checking · UpToDate · Available(manifest) · Downloading(manifest, bytes,
+  total) · ReadyToInstall(manifest, file) · Installing(manifest) · Installed(version, restartNeeded)
+  · Failed(message, manifest?). `busy` (Downloading, ReadyToInstall, Installing, Installed waiting
+  for Restart): no check replaces it.
+- `UpdateChecker(BuildConfig.VERSION_CODE, SDK_INT, source, server, NetworkMonitor.online, clock)`:
+  a higher versionCode is Available (Failed "Steven Piano 1.5 needs a newer version of Android."
+  when minSdk is above the device's), the same or lower UpToDate; an IOException "Couldn't reach
+  the update server.", a bad manifest "The update information couldn't be read."; a failure keeps
+  a release already on offer. Checks run one at a time (a Mutex), and one that started before a
+  download began never overwrites it.
+- `runSchedule(enabled)`, run by `MainActivity` through `AppGraph.runUpdateSchedule` inside
+  `repeatOnLifecycle(STARTED)`, after the first frame (a Choreographer callback): while the switch
+  is on (read from DataStore, never the default) and the device is online, a check when due (none
+  yet in this process, or 24 h after the last); switched off or offline, nothing is asked, and the
+  wait starts again from the last check when both are back. `checkNow()` ignores the switch;
+  offline it says "Checking for updates needs an internet connection." without asking.
+- Settings: `checkForUpdates: Boolean (true)`, key "checkForUpdates"; `crashNoticeSeenAt` (a Long,
+  housekeeping, outside `PianoSettings`).
+
+## Download — `update/UpdateDownloader.kt`, `update/Updater.kt`, `service/UpdateService.kt`
+
+- `cacheDir/updates/<versionName>.apk.part`, SHA-256 computed on the way and bytes counted: past
+  the manifest's size or 50 MB the part is deleted and "The download didn't match the release; try
+  again."; at the end size and hash are compared before the rename to `<versionName>.apk`, and a
+  mismatch deletes it with the same line. A drop after the first bytes is "The download stopped;
+  try again.", before them unreachable; less free space than the file plus 16 MB is "There isn't
+  enough free space for the update." Older downloads are removed first; `verified(file)` hashes
+  the file again just before it is installed; at process start, downloads older than the process
+  are swept.
+- `UpdateService`: a dataSync foreground service, channel "updates" (low importance), notification
+  "Downloading Steven Piano 1.4" with "1.2 of 2.3 MB", a progress bar and Cancel (an explicit,
+  immutable PendingIntent to the service), which puts the release back on offer; `onTimeout` in
+  both forms stops it; a refused start downloads in the app's process. `Updater.downloadAndInstall`
+  publishes the progress in at most 200 steps, then installs.
+
+## Install — `update/UpdateInstaller.kt`, `update/UpdateResultReceiver.kt`, `admin/`
+
+- Device owner (`DevicePolicyManager.isDeviceOwnerApp`): Installing; the piano is silenced (live
+  keys, `pauseAndFlush(300)`); a `PackageInstaller` session, `MODE_FULL_INSTALL`,
+  `setAppPackageName` (this package and no other), `USER_ACTION_NOT_REQUIRED` on API 31+, the file
+  streamed in and committed with an explicit broadcast PendingIntent to the non-exported
+  `UpdateResultReceiver` (`FLAG_MUTABLE` on API 31+, because the installer adds EXTRA_STATUS and
+  its message when it sends it).
+- Otherwise `ACTION_VIEW` of `application/vnd.android.package-archive` on
+  `AppFileProvider.uriFor(file)` with `FLAG_GRANT_READ_URI_PERMISSION`: Android's own confirmation.
+  The state stays ReadyToInstall, so Update opens it again if the person backs out. With
+  `canRequestPackageInstalls()` false the row shows "Allow this app to install updates" and Open
+  settings (`ACTION_MANAGE_UNKNOWN_APP_SOURCES` for the package), read again on resume.
+- `UpdateResultReceiver`: success where the installed versionCode equals `BuildConfig`'s (Android
+  stopped the old process for the install and started the new version for this broadcast) clears
+  the download, `markChecked`s, publishes Installed(version, restartNeeded = false) and reopens the
+  app on the Piano tab (the device owner may start an activity from the background); success heard
+  by old code publishes Installed(restartNeeded = true), whose Restart (`AppGraph.restartForUpdate`:
+  live keys off, `stopAndFlush(300)`, the launcher intent with NEW_TASK | CLEAR_TASK, then the
+  process exits) runs the new code; pending user action shows Android's confirmation; anything else
+  is "The update couldn't be installed." with the release still on offer. The class name never
+  changes: the old version's PendingIntent names the new version's receiver.
+- `admin/PianoDeviceAdmin` (a `DeviceAdminReceiver`, no policies: `res/xml/device_admin.xml`),
+  exported with `BIND_DEVICE_ADMIN` and the DEVICE_ADMIN_ENABLED filter. `DeviceOwnerRelease`: as
+  the app starts, while it is the device owner and `debug.stevenpiano.releaseowner` (settable only
+  over adb) is `yes`, `clearDeviceOwnerApp`.
+- `AppFileProvider`: authority `<package>.files`; `res/xml/file_paths.xml` names `cache-path
+  updates/` and `cache-path diagnostics/` and nothing else. Manifest: `REQUEST_INSTALL_PACKAGES`,
+  the service, both receivers, the provider.
+
+## Diagnostics — `diag/`
+
+- `LinkLog`: the last 500 lines, stamped `yyyy-MM-dd HH:mm:ss.SSS` in local time, one line each, at
+  most 400 characters; `LinkLog.warn` is `GattPianoLink`'s log (`Log.w` under PianoLink, then the
+  buffer), and the emulated link adds its connections.
+- `CrashReports`: `filesDir/diagnostics/crash-<epoch ms>.txt` (a second crash in one millisecond
+  gets `-1`): time, app and build, device, Android, thread, stack trace (64 KB at most; content and
+  file URIs, shared-storage paths and web addresses' paths scrubbed from messages), the link's last
+  50 lines; the newest 5 kept; it never throws. `CrashSilencer(link, previous, report)`: the stop
+  sequence first, then the report, then Android's handler.
+- `DiagnosticsExporter`: `cacheDir/diagnostics/steven-piano-diagnostics-<yyyy-MM-dd-HHmmss>.zip`
+  (the one before removed) with `about.txt` (`DiagnosticsText.about`), `settings.txt` (the 19
+  preferences, one a line), `link.log` and the crash reports (128 KB each at most); it is given
+  nothing from the library. `Diagnostics.share`: `ACTION_SEND` of `application/zip` with
+  EXTRA_STREAM and ClipData, the read grant, through the chooser "Share diagnostics".
+- The crash banner: `AppGraph.crashNotice` is true while the newest report is newer than
+  `crashNoticeSeenAt`; Share diagnostics (once the share sheet opens) or Dismiss moves it on.
+- Debug builds on an emulator: the intent extra `EMULATOR_CRASH` crashes the main thread outside
+  `route`'s guard.
+
+## UI
+
+- Piano tab: `UpdateRow` (`ui/screens/piano/UpdateRow.kt`) between the piano's sections and App
+  preferences, only while the state carries a manifest or is Installed; `CheckNowRow` under the
+  last preference, "Check for updates automatically"; `ShareDiagnosticsRow` closes DIAGNOSTICS
+  (`PianoSettingsSections(…, appDiagnostics)`), under a DIAGNOSTICS header of its own when the
+  firmware offers no settings.
+- Library: `CrashBanner` (an `OutlinedBanner` with Share diagnostics and Dismiss) under the import
+  and artwork bars.
+- `UpdateCopy` holds every line; megabytes are decimal, one decimal place, in the locale's form.
+  Nothing new is red, and nothing outside `ui/theme` names a colour.
+
+## Publishing — `tools/publish-release.sh`, `releases/`
+
+`tools/publish-release.sh <versionName> "<notes>"`: checks (the name, a clean tree on `main` not
+behind origin, no tag or release of that name, the keystore properties, `gh auth`, provenance
+verifies), `./gradlew assembleRelease`, checks the APK (its versionName is the one given, `apksigner`
+shows `CN=Steven Piano`, at most 50 MB), copies it to `../apk/steven-piano-<v>.apk`, takes its
+SHA-256 and size, pushes `main`, creates the release (`gh release create v<v> ../apk/steven-piano-<v>.apk
+--repo … --target <commit> --title "Steven Piano <v>" --notes "<notes>"`), then writes
+`releases/latest.json` (versionCode and minSdk read from the APK with `aapt2`), appends it with its
+tag and date to `releases/history.json`, commits (trailer "Co-Authored-By: Claude Fable 5.1") and
+pushes. `releases/latest.json` for 1.4 is committed with this release.
+
+## Measured (September 2026)
+
+- Tests: 661, none failing (5 skipped without `-Pcorpus`, as before).
+- Release: `app-release.apk` 2,434,545 bytes, SHA-256 `1426f3cc9b92999b5a3aa315432620c978408951d5d7bf75ce68365f7294d88c`; `apksigner` verifies v2 and v3,
+  signer `CN=Steven Piano, O=Steven Jin, C=US`; `aapt2` reads versionCode 8, versionName 1.4; the
+  provenance string is in `classes.dex`.
+- Emulator (`steven_piano`, API 34, debug builds, a server on the Mac through
+  `debug.stevenpiano.updateurl`, test releases with versionCode 9 to 12): the first check ran once
+  the first frame was up; a 15.1 MB file downloaded with the row counting "Downloading 1.4.1 · 4.0
+  of 15.1 MB"; Android's installer asked first for "Install unknown apps" and then "Do you want to
+  update this app?", and the update installed; a wrong hash left the line "The download didn't
+  match the release; try again." and no file; a missing file (404) left "Couldn't reach the update
+  server."; Cancel in the notification stopped a download, removed its part file and put the
+  release back on offer; as device owner, the session committed with no tap and the new version
+  reopened on the Piano tab ("Updated to 1.5") 0.65 s after the hand-over (logcat: the old
+  process killed "due to installPackageLI", the receiver's process started, the relaunch allowed
+  as BAL_ALLOW_ALLOWLISTED_COMPONENT); Restart sent B0 40 00, B0 7B 00, then started a fresh
+  process; the crash hook wrote `crash-<epoch>.txt` after "Emergency silence" and the next launch
+  showed the banner; the diagnostics zip held about.txt, settings.txt, link.log and the crash
+  report; `dpm remove-active-admin` was refused ("Attempt to remove non-test admin") and
+  `debug.stevenpiano.releaseowner` gave the role back; the Piano tab kept its layout at font scale
+  2.0 and in dark mode.
+
+## Deviations from the run's rules, and why
+
+- **Restart after a silent install is rarely reached.** Android 14 stops an app while it replaces
+  it (logcat "Killing … due to installPackageLI"), so the success is heard by the new version, not
+  by the old code that DESIGN's "Updated to 1.4; restart to use it" assumed. The new version's
+  receiver reopens the app on the Piano tab reading "Updated to 1.4" (no button: it is already the
+  new code), and the next automatic check waits a day. Installed(restartNeeded = true) with Restart
+  stays for an install the old process outlives; on the emulator it was reached once, when a test
+  manifest named versionCode 12 for a file that was 11 and the receiver compared the manifest's
+  number with its own. It now reads the installed package's versionCode instead, and that case
+  reopens too.
+- **Giving back the device owner.** `adb shell dpm remove-active-admin` refuses an admin that is not
+  a test-only build, and Android will not uninstall a device owner, so without help only a factory
+  reset undoes the setup. `DeviceOwnerRelease` gives the role back when `debug.stevenpiano.releaseowner`
+  is set over adb (no app can set a `debug.` property) and the app starts. It replaced the
+  debug-only intent hook this run first used on the emulator.
+- **Publishing order.** The script pushes `main` and creates the release (with `--repo` and
+  `--target <commit>`, so the tag names the commit that built the APK) before it commits and
+  pushes `releases/latest.json`: a tablet never reads a manifest whose file is not there yet. The
+  versionCode written is read from the built APK, so it cannot disagree with the file.
+- **Provenance and banners.** `releases/*.json` carry no banner (JSON has no comments, and a field
+  would join the format) and stay out of the signed manifest, since every publish changes them
+  without re-signing. `tools/*.sh` joins it: `provenance/sign.py` now includes `.sh`.
+- **The row says more than DESIGN lists, all in its words.** "Steven Piano 1.4 is ready to install"
+  for a verified file waiting on Android's installer (the Update button keeps its name); "Allow
+  this app to install updates" with Open settings (the run's rule); "Installing Steven Piano 1.4…"
+  over an indeterminate hairline while the device owner's session runs. Check now reports the last
+  check in one eyebrow line under it ("Steven Piano is up to date.", "Version 1.5 is available.",
+  or a failure's line), and offline says so without asking.
+- **States carry their release.** Downloading, ReadyToInstall, Installing and Failed hold the
+  manifest (the row needs its name and notes); Installed carries `restartNeeded`.
+- **The crash banner is on the Library**, the start tab, under the import and artwork bars, not
+  across the frame, so every tab keeps its title and byline where they are.
+- **Crash reports** also carry the link's last 50 lines (the in-memory log goes with the process),
+  and their messages are scrubbed of content and file URIs, storage paths and web paths, so a file
+  or piece name a message quotes does not travel.
+- **Share diagnostics** is always enabled (the piano's own diagnostics wait for a connection).
+- `notes` and `minSdk` are optional in a manifest; `org.json:json` joins the unit-test classpath
+  (android.jar's is a stub there); `UpdateService` lives with the other services in `service/`.
+
+## Tests added in v1.4
+
+`HttpFetchTest` (7: GitHub's redirect followed with the User-Agent on every hop; redirects off the
+list refused before anything is sent, http, another port, another repository and a backslash among
+them; a refused start; relative redirects; five redirects and not six; a redirect without Location;
+capped reads), `UpdateManifestTest` (10: a valid manifest; optional and unknown fields; each required
+field missing or null; wrong shapes; other hosts, look-alikes and user info; other repositories,
+paths, dot segments, queries and types; http and other ports; notes; the production and local
+sources), `UpdateCheckerTest` (9: newer, equal and older versionCodes; minSdk; failures keeping the
+release on offer; offline; the 24 h schedule on a virtual clock; a network lost part-way; the switch
+off with Check now still asking; busy states never replaced; after a silent update),
+`UpdateDownloaderTest` (6: a match kept under its name with progress; a hash mismatch deleted; the
+manifest's size and the cap; a short file; a dropped and a failed connection; older downloads
+cleared and a changed file no longer verifying), `HttpUpdateServerTest` (5), `CrashReportsTest` (5:
+contents, the last five, two in one millisecond, scrubbing, a folder that can't be written),
+`LinkLogTest` (4), `DiagnosticsExporterTest` (3: exactly the four kinds of entry; nothing from the
+library even inside a crash's message; each export replacing the one before), `UpdateCopyTest` (2),
+`ReleaseManifestTest` (1: the committed `releases/latest.json` passes the app's own checks, names no
+version above the source's, and ends `history.json`), and cases in `CrashSilencerTest` (+2: the
+report after the silence; failures still handed on) and `SettingsRepositoryTest` (+2: the crash
+banner's answer; checkForUpdates). 605 tests before, 661 after.

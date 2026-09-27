@@ -16,7 +16,8 @@ while the piano plays it, play the piano yourself on **Keys**, and on the
 **Piano** tab connect, adjust the piano's own lighting and feel, and tune
 playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
 analytics, and the network only for composers' portraits and short notes from
-Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.3.
+Wikipedia (see *Artwork and notes* below) and for the app's own updates from its
+GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
 
 ## What it does
 
@@ -149,7 +150,15 @@ Wikipedia (see *Artwork and notes* below). Made by Steven Jin. Version 1.3.
 - **Piano**: the connection, the piano settings above, the app's preferences
   (auto-connect, note display, wide layout, fingering, chord names, hand
   colours, default tempo, transpose, velocity, folding, drum channel, artwork in
-  black and white, fetching artwork automatically) and the About line.
+  black and white, fetching artwork automatically, checking for updates) and
+  the About line.
+- **Updates**: the app looks for a newer release when it opens and once a day,
+  and the Piano tab offers it under **UPDATE**: one tap downloads it, checks it
+  and hands it to Android's installer. On the school tablet it installs without
+  a tap (see *Updates* and *School tablet*).
+- **Diagnostics**: **Piano › Diagnostics › Share diagnostics** sends a small zip
+  of the app's own logs by any app you choose; after a crash, the Library offers
+  it (see *Diagnostics*).
 - **Tablets and phones on their side**: a navigation rail on the left instead of
   the bottom bar. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
@@ -163,13 +172,13 @@ key faster than the solenoids can strike it, and silences the piano (pedal up,
 then all notes off) whenever playback pauses, stops, seeks, loses the link, or
 the app is swiped away.
 
-## Artwork and notes: the app's only network use
+## Artwork and notes
 
 Composers get their Wikipedia portrait and a two-sentence blurb; a piece's sheet
 (*About this piece*) shows its Wikipedia notes when it has a page, otherwise its
-composer's. The app talks to **two hosts and no others**: `en.wikipedia.org` (page
-summaries and search) and `upload.wikimedia.org` (the portraits); a redirect anywhere
-else is refused. What it sends is a page title or a search made from the library's own
+composer's. For this the app talks to **two hosts and no others**: `en.wikipedia.org`
+(page summaries and search) and `upload.wikimedia.org` (the portraits); a redirect
+anywhere else is refused. (The only other network use is the app's own updates, below.) What it sends is a page title or a search made from the library's own
 composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),
 with the app's User-Agent. **Nothing about you is sent**: no account, no identifier, no
 location, nothing about what you play.
@@ -183,6 +192,91 @@ location, nothing about what you play.
   is recorded; a failed fetch is retried a day later. Without a portrait a composer
   shows a mosaic of their pieces' first seconds drawn as a paper roll.
 - **Piano › Artwork in black and white** shows the portraits in black and white.
+
+## Updates
+
+The app looks for a newer release when it opens (after its first screen is drawn) and
+once a day while it stays open, when **Piano › Check for updates automatically** is on
+(the default) and the tablet is online. **Check now**, under the switch, asks at once
+whatever the switch says, and says what it found ("Steven Piano is up to date.").
+
+A check reads one small file from this repository on GitHub,
+`https://raw.githubusercontent.com/stevenjin20090101-rgb/steven-piano-android/main/releases/latest.json`:
+the newest release's versionCode, name, notes, file address, SHA-256 and size. Nothing
+about you or the tablet goes with it beyond what every HTTPS request carries (the app's
+User-Agent and the tablet's IP address).
+
+When the release is newer than the app, the Piano tab shows **UPDATE** above App
+preferences: "Steven Piano 1.5 is available", its notes, and **Update**. Update
+downloads the file from the GitHub release (`github.com`, which hands it over from
+`objects.githubusercontent.com` or `release-assets.githubusercontent.com`) with a
+notification you can cancel ("Downloading Steven Piano 1.5"), then checks its size and
+SHA-256 against the manifest. A file that doesn't match is deleted before anything else
+happens to it ("The download didn't match the release; try again."). One that matches
+goes to Android's installer: "Do you want to update this app?", **Update**, then
+**Open**. The first time, Android asks you to allow Steven Piano to install apps; the
+row says so ("Allow this app to install updates") with **Open settings**.
+
+Why a wrong file cannot install:
+
+- the manifest comes from this repository over HTTPS, and may name only a release asset
+  of this repository (`https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/…`);
+  anything else is refused before it is fetched, and so is every redirect off those four
+  GitHub hosts;
+- the file must match the manifest's SHA-256 (and size, at most 50 MB) before it is
+  kept, and again just before it goes to the installer;
+- Android installs an update only when it is signed with the same key as the app
+  already installed, Steven Piano's release key, which never leaves this Mac. A file
+  that matched a tampered manifest still could not replace the app.
+
+The repository must be **public** for tablets to read the manifest without a login.
+While it is private GitHub answers 404, and Check now says "Couldn't reach the update
+server."; nothing else happens. Failures are one line under the row, in words; Update
+is the retry.
+
+## School tablet: updates without a tap
+
+When Steven Piano is the tablet's **device owner**, Update installs with no tap: the
+download, then the app closes and opens again on the new version about a second later,
+on the Piano tab, reading "Updated to 1.5" (Android adds its own notice, "Updated by
+your admin"). The piano is silenced first, as for any stop. Device owner is used for
+this one thing: the app asks for no policies, locks nothing and hides nothing, and the
+tablet works as before. There is no kiosk mode.
+
+One-time setup, with a computer and a USB cable:
+
+1. Start from a factory-fresh tablet (or reset it: Settings › System › Reset options ›
+   Erase all data, which clears everything on it). Go through Android's setup **without
+   adding a Google account**: Android refuses a device owner once any account is on
+   the device. Accounts can be added afterwards.
+2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
+   `adb install ../apk/steven-piano-1.4.apk`.
+3. Make the app the device owner:
+
+   ```bash
+   adb shell dpm set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
+   # Success: Device owner set to package dev.stevenjin.stevenpiano
+   ```
+
+4. Import the music and connect the piano as usual. USB debugging can go off again.
+
+What changes: updates install without Android's confirmation, and Android lists Steven
+Piano under the device admin apps. While it is the owner Android **will not uninstall
+it**, and `adb shell dpm remove-active-admin dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin`
+is refused ("Attempt to remove non-test admin": Android allows that command only for
+test builds). To give the role back, over adb:
+
+```bash
+adb shell setprop debug.stevenpiano.releaseowner yes
+adb shell am force-stop dev.stevenjin.stevenpiano
+adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity   # the app gives up the role as it starts
+adb shell dpm list-owners                                        # "no owners"
+adb shell setprop debug.stevenpiano.releaseowner ""
+```
+
+Only adb can set that property; no app on the tablet can. Afterwards updates ask
+again and the app can be uninstalled. A factory reset also removes the device owner,
+with everything else.
 
 ## Build
 
@@ -209,6 +303,15 @@ its console, so the Piano tab's settings work there (`adb logcat -s PianoLink`
 shows every line both ways). `adb shell setprop debug.stevenpiano.console none`
 before connecting stands in for firmware without the console.
 
+The updater can be tried on an emulator without GitHub: serve a manifest and an APK
+from this Mac, `adb shell setprop debug.stevenpiano.updateurl
+http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
+honour it; that address is then the only one the updater reaches (plain HTTP allowed,
+and only to 10.0.2.2). A copy that reads as newer than the one installed:
+`./gradlew assembleDebug -PversionCodeOverride=9`. A debug-only crash for the crash
+banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
+dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
+
 The debug build is signed with this Mac's debug key; the release build with
 Steven Piano's own release key, which lives outside this repository (see
 *Security*). Without `~/steven-piano-keystore.properties` the release build stops
@@ -228,6 +331,32 @@ The school tablet and any piano that stays gets the release build,
 - **With adb:** turn on USB debugging (Settings › About phone › tap *Build
   number* seven times, then Settings › System › Developer options), connect the
   phone and run `adb install -r app/build/outputs/apk/release/app-release.apk`.
+
+## Publishing a release
+
+One command on this Mac, after the version is set and committed:
+
+1. In `app/build.gradle.kts` raise `versionCode` by one and set `versionName` (and
+   `Provenance.text`, the README and BUILD_SPEC); commit, then re-sign provenance
+   (`~/.platformio/penv/bin/python3 provenance/sign.py && ~/.platformio/penv/bin/python3 provenance/verify.py`)
+   and commit `provenance/`.
+2. Run:
+
+   ```bash
+   tools/publish-release.sh 1.5 "Fixes for the school tablet."
+   ```
+
+It checks the tree (clean, on `main`, not behind GitHub, no release of that name yet)
+and the authorship signature; builds the release APK with the key in
+`~/steven-piano-keystore.properties`; checks that its versionName is the one given and
+that it is signed with Steven Piano's key; copies it to `../apk/steven-piano-1.5.apk`;
+pushes `main` and creates the GitHub release `v1.5` with the APK attached (`gh release
+create`); and only then writes `releases/latest.json` (versionCode read from the APK,
+the notes, the asset's address, SHA-256, size, minSdk), appends it to
+`releases/history.json`, commits and pushes. A tablet never sees a manifest whose file
+is not there yet. Installed copies offer the release within a day, or at once with
+Check now. It needs the GitHub CLI signed in (`brew install gh`, `gh auth login`) and a
+public repository.
 
 ## Bring in the music
 
@@ -329,6 +458,30 @@ Services discovered: MIDI yes, console yes
 Connected to Steven Piano (C8:2E:18:00:11:22), MTU 247, with its console
 ```
 
+Without a computer, **Share diagnostics** (below) carries the same lines: the app
+keeps the last 500 of them.
+
+## Diagnostics
+
+**Piano › Diagnostics › Share diagnostics** builds one small zip and opens Android's
+share sheet, so it can go by mail, Drive, Bluetooth or anything else you choose. It
+holds:
+
+- `about.txt`: the app's version and build, the tablet's model and Android version,
+  whether the app is the device owner, the updater's state, the piano link's state;
+- `settings.txt`: the app's preferences (the remembered piano's Bluetooth address
+  among them);
+- `link.log`: the last 500 lines of the piano link's log, with their times (Bluetooth
+  addresses, device names and status codes, as in *Send a log*);
+- the app's last five crash reports, if any: the time, version, device, thread and
+  stack trace, with any file address or web address in a message taken out.
+
+Nothing from the library (no titles, playlists or files), no photos, no Wikipedia text.
+Nothing is sent by itself: the zip leaves the tablet only when you share it. The crash
+reports stay in the app's private storage, and after a crash the next launch shows
+"The app crashed last time. Share diagnostics?" on the Library, with **Share
+diagnostics** and **Dismiss**.
+
 ## Keep playing with the screen off
 
 Playback runs in a foreground service with a media notification, which most
@@ -410,6 +563,16 @@ the first play, so the lock screen shows play and pause.
 - [ ] "Open with" from a file manager: the app asks "Add 1 file to the library?";
       Cancel adds nothing, Add imports it. From one that gives no access: after Add
       the Library says it couldn't read the file (no crash); *Add files* imports it.
+- [ ] Updates (once the repository is public and a newer release exists): Piano ›
+      Check now shows UPDATE with the release's notes; Update downloads it with the
+      progress row and a notification, then Android asks "Do you want to update this
+      app?"; after Update and Open the About line shows the new version and Check now
+      says it is up to date. On the school tablet (device owner) Update installs with
+      no tap and the app comes back on the Piano tab reading "Updated to …". While
+      the repository is private, Check now says "Couldn't reach the update server."
+- [ ] Share diagnostics opens the share sheet with `steven-piano-diagnostics-….zip`;
+      send it to yourself and check it holds about.txt, settings.txt, link.log and no
+      titles.
 
 ## Security
 
@@ -418,11 +581,19 @@ The full audit, every finding and what was done about it, is in
 
 - **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
   `upload.wikimedia.org`, carrying page titles and searches made from the library's
-  own names, the app's User-Agent and, as with any connection, the device's IP
-  address. No analytics, no crash reports, no accounts. Nothing is backed up to the
-  cloud or carried to a new device by Android's transfer (the library stays where it
-  was imported). Release builds log no file names or URLs; the Bluetooth link logs
-  its steps, with Bluetooth addresses and device names only (*Send a log*).
+  own names, and, for updates, to `raw.githubusercontent.com` (the manifest),
+  `github.com` (this repository's release downloads only) and
+  `objects.githubusercontent.com` / `release-assets.githubusercontent.com` (where
+  GitHub hands the file over), carrying nothing but the app's User-Agent and, as with
+  any connection, the device's IP address. No analytics, no accounts, and no crash
+  report goes anywhere by itself: diagnostics leave only when you share them. Nothing
+  is backed up to the cloud or carried to a new device by Android's transfer (the
+  library stays where it was imported). Release builds log no file names or URLs; the
+  Bluetooth link logs its steps, with Bluetooth addresses and device names only (*Send
+  a log*).
+- **Updates** install only a file whose SHA-256 matches the manifest and that Android
+  accepts as signed with the release key (see *Updates*); on the school tablet the
+  device owner role is used for silent updates and nothing else (see *School tablet*).
 - **What a file may cost:** a MIDI file is read up to 8 MB and at most about two
   million events and a day of music; its text up to 256 bytes a name, and 4,096 time
   and 4,096 key signatures; titles and names

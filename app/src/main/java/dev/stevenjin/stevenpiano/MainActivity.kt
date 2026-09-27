@@ -9,7 +9,6 @@
 
 package dev.stevenjin.stevenpiano
 
-import android.app.admin.DevicePolicyManager
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -128,7 +127,6 @@ class MainActivity : ComponentActivity() {
     private fun route(intent: Intent) {
         try {
             emulatorSet(intent)
-            emulatorReleaseOwner(intent)
             emulatorCrash(intent)
             val shared = sharedMidi(intent)
             if (shared.isNotEmpty()) {
@@ -177,21 +175,6 @@ class MainActivity : ComponentActivity() {
 
     /**
      * The emulator only (a debug build, as [emulatorSet]): `adb shell am start -n
-     * dev.stevenjin.stevenpiano/.MainActivity --ez dev.stevenjin.stevenpiano.EMULATOR_RELEASE_OWNER true`
-     * gives up the device owner the updater's silent-install test set, since `dpm
-     * remove-active-admin` refuses an admin that is not test-only. Inert on a phone or tablet.
-     */
-    private fun emulatorReleaseOwner(intent: Intent) {
-        if (!LoggingPianoLink.isWanted() || !booleanExtra(intent, EXTRA_EMULATOR_RELEASE_OWNER)) return
-        val policy = getSystemService(DevicePolicyManager::class.java) ?: return
-        if (!policy.isDeviceOwnerApp(packageName)) return
-        @Suppress("DEPRECATION")   // deprecated for enterprise use; still the device owner's own way out
-        policy.clearDeviceOwnerApp(packageName)
-        Log.w(TAG, "No longer the device owner (emulator)")
-    }
-
-    /**
-     * The emulator only (a debug build, as [emulatorSet]): `adb shell am start -n
      * dev.stevenjin.stevenpiano/.MainActivity --ez dev.stevenjin.stevenpiano.EMULATOR_CRASH true`
      * crashes the app on the main thread, outside [route]'s guard, so the crash handler, the crash
      * report and the next launch's banner can be seen. Inert on a phone or tablet.
@@ -205,7 +188,6 @@ class MainActivity : ComponentActivity() {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
         private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
-        private const val EXTRA_EMULATOR_RELEASE_OWNER = "dev.stevenjin.stevenpiano.EMULATOR_RELEASE_OWNER"
         private const val EXTRA_EMULATOR_CRASH = "dev.stevenjin.stevenpiano.EMULATOR_CRASH"
         private const val TAG = "MainActivity"
         private const val STATE_SHARED = "dev.stevenjin.stevenpiano.state.SHARED"

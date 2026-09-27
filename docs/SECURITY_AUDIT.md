@@ -411,3 +411,90 @@ Tests went from 583 to 605.
 **What the owner must do:** install the release APK of versionCode 7 over 1.3 (same key, so it
 updates in place). To report a connection that fails, capture
 `adb logcat -s PianoLink:W BluetoothGatt:V BluetoothLeScanner:V` (README › Send a log).
+
+## 1.4 — 2026-09-26
+
+1.4 lets the app update itself from its GitHub releases (with no tap on a tablet where it is the
+device owner) and share its own diagnostics (README › Updates, School tablet, Diagnostics). What
+that changes for this audit; nothing above is weakened:
+
+- **New hosts (F12 holds).** Four, for updates only: `raw.githubusercontent.com` (the manifest,
+  under this repository's path only), `github.com` (this repository's release downloads only),
+  `objects.githubusercontent.com` and `release-assets.githubusercontent.com` (where GitHub
+  redirects a release download). Every hop, each redirect included, passes
+  `UpdateSource.allowsHop` before anything is sent to it: HTTPS, port 443, no user info, no
+  backslash, the host compared exactly, the path's prefix. The Wikipedia client moved onto the
+  same path (`net/HttpFetch.kt`) with its behaviour and its two hosts unchanged. Caps: the
+  manifest 64 KB before it is decoded, the file at the manifest's size and 50 MB; 10 s to
+  connect, 30 s between reads. What is sent is the request and the User-Agent: nothing about the
+  person, nothing from the library.
+- **The update's trust model.** The manifest is fetched from the repository over HTTPS, and may
+  name only a release asset of this repository (`/stevenjin20090101-rgb/steven-piano-android/releases/download/<tag>/<file>.apk`).
+  The file's size and SHA-256 must match the manifest's before the file is kept (it is streamed
+  to a `.part` file and renamed only on a match), and it is hashed again just before it goes to
+  the installer. Android's package manager then enforces the signature: an update must be signed
+  with the key of the installed app, Steven Piano's release key, which never leaves the Mac. So a
+  wrong or tampered file cannot install. Residual: someone able to change the repository could
+  offer a file of their choosing (Android would refuse it), withhold updates, or make tablets
+  download up to 50 MB; the checker offers only a higher versionCode, and Android refuses a
+  downgrade anyway. While the repository is private the manifest answers 404 and the app says
+  "Couldn't reach the update server."; nothing else happens.
+- **`REQUEST_INSTALL_PACKAGES`.** It lets the app open Android's installer on its own verified
+  download. Android still asks the person to allow "Install unknown apps" for Steven Piano, and to
+  confirm every install. The app installs nothing but itself: the ACTION_VIEW path hands over only
+  the file it downloaded and verified, and the device owner's session is locked to the app's own
+  package (`setAppPackageName`).
+- **Device owner: its scope.** Only on a tablet set up by hand over adb (`dpm set-device-owner`,
+  possible only with no account on the device). `PianoDeviceAdmin` declares no policies, and the
+  app uses the role for one thing: a `PackageInstaller` session for its own package, committed
+  without a tap. No lock task, no restrictions, no hidden apps. Before the commit the piano is
+  silenced (live keys released, playback paused and flushed), since Android stops the running app
+  as it replaces it (measured on API 34); the firmware's release on a dropped link stays the
+  backstop. The new version's receiver reopens the app, which the role exempts from Android's
+  limits on starting activities from the background. While it is the owner the app cannot be
+  uninstalled, and `dpm remove-active-admin` refuses an admin that is not a test build; the role
+  is given back with `debug.stevenpiano.releaseowner` set over adb (a `debug.` property can be set
+  by the shell, not by an app) and a restart of the app, or by a factory reset.
+- **Exported components.** New and exported: `PianoDeviceAdmin`, protected by
+  `BIND_DEVICE_ADMIN`, which only the system holds. New and not exported: `UpdateResultReceiver`,
+  `UpdateService`, the FileProvider.
+- **One mutable PendingIntent, on purpose.** The session's status callback is
+  `PendingIntent.getBroadcast` with `FLAG_MUTABLE` (API 31+), because the package installer fills
+  in EXTRA_STATUS, EXTRA_STATUS_MESSAGE and, when it wants the person, EXTRA_INTENT as it sends it.
+  The intent is explicit (component and package set) to a receiver that is not exported, so what
+  is filled in cannot redirect it, and it is handed only to the platform's `PackageInstaller`.
+  Every other PendingIntent stays immutable (the download notification's content and Cancel among
+  them).
+- **FileProvider paths and grants.** One provider (`<package>.files`), not exported,
+  `grantUriPermissions`, naming `cache-path updates/` (the verified download, with a one-off read
+  grant on the ACTION_VIEW intent to Android's installer) and `cache-path diagnostics/` (the zip,
+  with a one-off read grant to the app the person picks in the share sheet). Nothing else in the
+  cache, and nothing in `files/`, the database or the library, can be named through it.
+- **Diagnostics (F17 holds).** Nothing leaves by itself. The app keeps its last five crash reports
+  in private storage (`filesDir/diagnostics`: time, version, device, thread, stack trace, the
+  link's last 50 lines; content and file URIs, shared-storage paths and web addresses' paths are
+  scrubbed from messages) and the link's last 500 lines in memory. Share diagnostics zips
+  `about.txt` (version and build, device model, Android version, device owner yes or no, the
+  updater's and the link's state), `settings.txt` (the preferences, the remembered piano's
+  Bluetooth address and name among them), `link.log` (Bluetooth addresses, names from the air and
+  status codes, as the 1.3.1 log) and the crash reports: no titles, playlists, files, photos or
+  Wikipedia text. The data extraction rules still keep everything out of backups and transfers.
+- **Debug-only hooks.** `debug.stevenpiano.updateurl` (one local origin for the updater, plain HTTP
+  through a network security config that exists only in debug builds and allows cleartext to
+  10.0.2.2 alone) and the `EMULATOR_CRASH` extra act only in debug builds on an emulator. Release
+  builds keep cleartext refused everywhere and ignore both.
+- **Build.** `org.json:json` is a unit-test dependency only (android.jar's `org.json` is a stub on
+  the JVM); nothing new ships in the APK. `versionCode` 8.
+
+Tests went from 605 to 661.
+
+**What the owner must do:**
+- Make the repository public (GitHub › Settings › General › Change repository visibility), or no
+  tablet can read the manifest.
+- Install 1.4 over 1.3.1 by hand once (same key, so it updates in place, library kept); from then on
+  the Piano tab offers each release. Publish them with `tools/publish-release.sh` (README ›
+  Publishing a release).
+- For silent updates on the school tablet: the one-time device-owner setup (README › School
+  tablet), which needs a factory-fresh tablet with no Google account on it.
+- Back up the release key more carefully than ever: without it no update can reach any installed
+  copy, and a device-owner tablet cannot even uninstall the app without first giving the role back.

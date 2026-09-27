@@ -13,6 +13,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
@@ -216,6 +217,7 @@ class AppGraph(private val app: Application) {
             runCatching { ImportLimits.sweepStale(app.cacheDir, app.filesDir, before = startedAt) }
             runCatching { updateDownloader.sweep(before = startedAt) }
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
+            runCatching { DeviceOwnerRelease.releaseIfAsked(app) }
         }
         pianoSettings.start()
         appScope.launch {
