@@ -16,11 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * A Wikipedia page's summary, as much of it as the app uses. [type] is "standard",
@@ -62,17 +59,27 @@ interface WikiApi {
 }
 
 /**
- * [WikiApi] over `HttpURLConnection`: HTTPS to [WikipediaUrls.HOSTS] only (redirects are followed
- * by hand, and only to those hosts), the app's User-Agent and `Accept: application/json` on every
- * request (Wikimedia answers 403 without a User-Agent), 10 s to connect and 15 s to read, and a
- * byte cap on every body before anything decodes it: 256 KB for JSON, the caller's for files.
- * In debug builds each request is logged with its time, so their spacing can be checked; release
- * builds log no URL (they carry names from the library).
+ * [WikiApi] over [HttpFetch]: HTTPS to [WikipediaUrls.HOSTS] only (redirects are followed by hand,
+ * and only to those hosts), the app's User-Agent and `Accept: application/json` on every request
+ * (Wikimedia answers 403 without a User-Agent), 10 s to connect and 15 s to read, and a byte cap
+ * on every body before anything decodes it: 256 KB for JSON, the caller's for files. In debug
+ * builds each request is logged with its time, so their spacing can be checked; release builds
+ * log no URL (they carry names from the library).
  */
 class WikipediaClient(
     private val io: CoroutineDispatcher = Dispatchers.IO,
-    private val log: (String) -> Unit = { Log.d(TAG, it) },
+    log: (String) -> Unit = { Log.d(TAG, it) },
+    transport: HttpTransport = UrlConnectionTransport,
 ) : WikiApi {
+    private val http = HttpFetch(
+        allowed = WikipediaUrls::allowed,
+        accept = "application/json",
+        connectTimeoutMs = HttpFetch.CONNECT_TIMEOUT_MS,
+        readTimeoutMs = READ_TIMEOUT_MS,
+        transport = transport,
+        log = if (BuildConfig.DEBUG) log else null,
+    )
+
     override suspend fun summary(title: String): WikiSummary? {
         val body = get(WikipediaUrls.summary(title), JSON_CAP, oversizeIsMissing = false) ?: return null
         return parse { WikiJson.summary(body.toString(Charsets.UTF_8)) }
@@ -86,43 +93,23 @@ class WikipediaClient(
     override suspend fun download(url: String, maxBytes: Int): ByteArray? = get(url, maxBytes, oversizeIsMissing = true)
 
     private suspend fun get(start: String, cap: Int, oversizeIsMissing: Boolean): ByteArray? = withContext(io) {
-        var url = start
-        repeat(MAX_REDIRECTS + 1) {
-            if (!WikipediaUrls.allowed(url)) throw IOException("Refused a request to ${WikipediaUrls.hostOf(url)}")
-            if (BuildConfig.DEBUG) log("GET $url · User-Agent: $USER_AGENT · at ${System.currentTimeMillis()} ms")
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                instanceFollowRedirects = false
-                useCaches = false
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
-            try {
-                val code = connection.responseCode
-                when {
-                    code in 300..399 -> {
-                        val location = connection.getHeaderField("Location") ?: throw IOException("HTTP $code without a Location")
-                        url = URL(URL(url), location).toString()
-                        return@repeat
+        http.exchange(start) { answer ->
+            val code = answer.code
+            when {
+                code == HttpURLConnection.HTTP_NOT_FOUND || code == HttpURLConnection.HTTP_GONE -> null
+                code == HTTP_TOO_MANY_REQUESTS || code == HttpURLConnection.HTTP_UNAVAILABLE ->
+                    throw WikiBusyException(code, WikipediaUrls.retryAfterMillis(answer.header("Retry-After")))
+                code !in 200..299 -> throw IOException("HTTP $code")
+                else -> {
+                    val body = if (answer.contentLength > cap) null else answer.body().use { HttpFetch.readCapped(it, cap) }
+                    when {
+                        body != null -> body
+                        oversizeIsMissing -> null
+                        else -> throw IOException("A response over $cap bytes")
                     }
-                    code == HttpURLConnection.HTTP_NOT_FOUND || code == HttpURLConnection.HTTP_GONE -> return@withContext null
-                    code == HTTP_TOO_MANY_REQUESTS || code == HttpURLConnection.HTTP_UNAVAILABLE ->
-                        throw WikiBusyException(code, WikipediaUrls.retryAfterMillis(connection.getHeaderField("Retry-After")))
-                    code !in 200..299 -> throw IOException("HTTP $code")
                 }
-                val declared = connection.contentLengthLong
-                val body = if (declared > cap) null else connection.inputStream.use { readCapped(it, cap) }
-                if (body == null) {
-                    if (oversizeIsMissing) return@withContext null
-                    throw IOException("A response over $cap bytes")
-                }
-                return@withContext body
-            } finally {
-                connection.disconnect()
             }
         }
-        throw IOException("More than $MAX_REDIRECTS redirects")
     }
 
     /**
@@ -138,26 +125,11 @@ class WikipediaClient(
     }
 
     companion object {
-        const val USER_AGENT = "StevenPiano/1.3 (https://github.com/stevenjin20090101-rgb/steven-piano-android)"
         const val JSON_CAP = 256 * 1024
         const val IMAGE_CAP = 6 * 1024 * 1024
         private const val TAG = "Wikipedia"
-        private const val CONNECT_TIMEOUT_MS = 10_000
         private const val READ_TIMEOUT_MS = 15_000
-        private const val MAX_REDIRECTS = 5
         private const val HTTP_TOO_MANY_REQUESTS = 429
-
-        /** The whole stream, or null once it passes [cap] bytes. */
-        private fun readCapped(input: InputStream, cap: Int): ByteArray? {
-            val out = ByteArrayOutputStream()
-            val buffer = ByteArray(16 * 1024)
-            while (true) {
-                val n = input.read(buffer)
-                if (n < 0) return out.toByteArray()
-                if (out.size() + n > cap) return null
-                out.write(buffer, 0, n)
-            }
-        }
     }
 }
 

@@ -21,6 +21,7 @@ datastore = "1.2.1"
 media = "1.8.0"
 coroutines = "1.10.2"
 junit = "4.13.2"
+orgJson = "20250517"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -43,6 +44,8 @@ androidx-media = { module = "androidx.media:media", version.ref = "media" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
+# Unit tests only: the real org.json on the JVM, where android.jar's is a stub (the update manifest is read with it).
+org-json = { module = "org.json:json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
