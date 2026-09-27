@@ -7,8 +7,7 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<resources>
-    <string name="app_name">Steven Piano</string>
-    <!-- Shown by Android's device-admin screens on the school tablet (README > School tablet). -->
-    <string name="device_admin_description">Installs Steven Piano\'s own updates without asking. Nothing else on this tablet is managed.</string>
-</resources>
+<!-- The device owner exists only so updates install without a tap (PianoDeviceAdmin): no policies. -->
+<device-admin>
+    <uses-policies />
+</device-admin>

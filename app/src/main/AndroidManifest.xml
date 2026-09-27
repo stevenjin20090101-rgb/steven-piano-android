@@ -29,9 +29,16 @@
 
     <!-- Artwork and notes from Wikipedia: two hosts only (en.wikipedia.org, upload.wikimedia.org),
          asked for page titles and searches made from the library's own names; nothing about the
-         person is sent. Offline, nothing is fetched. -->
+         person is sent. Updates (v1.4): the release manifest from raw.githubusercontent.com and the
+         file from github.com's release downloads (objects / release-assets.githubusercontent.com).
+         Offline, nothing is fetched. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Updates (v1.4): a downloaded release goes to Android's installer, which asks the person to
+         confirm (or, on the school tablet where the app is the device owner, installs it without a
+         tap). Android installs only a file signed with the release key. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Playback with the screen off, and imports that outlive the screen. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -141,6 +148,45 @@
             android:name=".service.ArtworkService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- A new release's download, with a progress notification and Cancel. -->
+        <service
+            android:name=".service.UpdateService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Where a silent install (device owner) reports; only the app's own explicit PendingIntent reaches it. -->
+        <receiver
+            android:name=".update.UpdateResultReceiver"
+            android:exported="false" />
+
+        <!-- The school tablet's device owner, for silent updates only: no policies (res/xml/device_admin.xml).
+             Exported for the system, which alone holds BIND_DEVICE_ADMIN. -->
+        <receiver
+            android:name=".admin.PianoDeviceAdmin"
+            android:description="@string/device_admin_description"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Shares two cache folders and nothing else, one read grant at a time: a downloaded update
+             with Android's installer, the diagnostics zip with the share sheet (res/xml/file_paths.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

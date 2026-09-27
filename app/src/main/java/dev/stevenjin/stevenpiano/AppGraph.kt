@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano
 
 import android.app.Application
+import android.content.Context
+import android.os.Build
 import android.util.Log
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
@@ -32,6 +34,13 @@ import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.settingsDataStore
+import dev.stevenjin.stevenpiano.update.HttpUpdateServer
+import dev.stevenjin.stevenpiano.update.UpdateChecker
+import dev.stevenjin.stevenpiano.update.UpdateDownloader
+import dev.stevenjin.stevenpiano.update.UpdateInstaller
+import dev.stevenjin.stevenpiano.update.UpdateOverride
+import dev.stevenjin.stevenpiano.update.UpdateSource
+import dev.stevenjin.stevenpiano.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +54,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * The app's objects, one per process, wired by hand. The [player] and the [pianoLink] are
@@ -109,6 +120,44 @@ class AppGraph(private val app: Application) {
     /** The piano's own settings over its console, read on every connection. */
     val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
 
+    /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, the test server [UpdateOverride] names. */
+    private val updateSource: UpdateSource by lazy { UpdateOverride.source() ?: UpdateSource.production }
+    private val updateServer by lazy { HttpUpdateServer(updateSource, log = debugLog(UPDATES_TAG)) }
+
+    /** Whether a newer release exists, and the updater's state, which the Piano tab shows. */
+    val updateChecker: UpdateChecker by lazy {
+        UpdateChecker(BuildConfig.VERSION_CODE, Build.VERSION.SDK_INT, updateSource, updateServer, network.online, log = debugLog(UPDATES_TAG) ?: {})
+    }
+
+    /** Downloads land in `cacheDir/updates`, the one folder the installer is shown. */
+    val updateDownloader: UpdateDownloader by lazy { UpdateDownloader(File(app.cacheDir, UPDATES_DIR), updateServer) }
+
+    /** Before a silent install replaces the running app, the piano is silenced: live keys let go, playback pauses. */
+    val updateInstaller: UpdateInstaller by lazy {
+        UpdateInstaller(app) {
+            withContext(Dispatchers.Main) {
+                player.silenceLive()
+                player.pauseAndFlush(INSTALL_FLUSH_MS)
+            }
+        }
+    }
+
+    /** The Update button's work: download, check, hand to Android. */
+    val updater: Updater by lazy { Updater(updateChecker, updateDownloader, updateInstaller) }
+
+    /**
+     * Automatic update checks, run by the activity while it is started (after its first frame): at
+     * once, then daily, while the switch is on and the device online. The switch is read from
+     * DataStore itself, so a check never runs on the default before the saved value is known.
+     */
+    suspend fun runUpdateSchedule() = updateChecker.runSchedule(settingsRepository.settings.map { it.checkForUpdates }.distinctUntilChanged())
+
+    /** Restart after a silent update: the piano is silenced first, then the new code starts. */
+    fun restartForUpdate(from: Context) = updateInstaller.restart(from) {
+        player.silenceLive()
+        player.stopAndFlush(INSTALL_FLUSH_MS)
+    }
+
     /**
      * From [App.onCreate]: settings flow into the player; the queue's shuffle and repeat start as
      * they were left and are remembered whenever they change; the piano is reached if the person
@@ -118,6 +167,7 @@ class AppGraph(private val app: Application) {
         val startedAt = System.currentTimeMillis()
         appScope.launch(Dispatchers.IO) {
             runCatching { ImportLimits.sweepStale(app.cacheDir, app.filesDir, before = startedAt) }
+            runCatching { updateDownloader.sweep(before = startedAt) }
         }
         pianoSettings.start()
         appScope.launch {
@@ -180,6 +230,12 @@ class AppGraph(private val app: Application) {
 
     private companion object {
         const val TAG = "AppGraph"
+        const val UPDATES_TAG = "Updates"
+        const val UPDATES_DIR = "updates"
         const val DISCONNECT_FLUSH_MS = 300L
+        const val INSTALL_FLUSH_MS = 300L
+
+        /** Debug builds log each request and check under [tag]; release builds log no address. */
+        fun debugLog(tag: String): ((String) -> Unit)? = if (BuildConfig.DEBUG) { line -> Log.d(tag, line) } else null
     }
 }

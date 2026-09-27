@@ -129,4 +129,17 @@ class SettingsRepositoryTest {
         assertEquals(PianoSettings(), repository.settings.first())
         scope.cancel()
     }
+
+    @Test
+    fun `automatic update checks start on and are remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "updates.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(true, repository.settings.first().checkForUpdates)
+        repository.setCheckForUpdates(false)
+        assertEquals(PianoSettings(checkForUpdates = false), repository.settings.first())
+        repository.setCheckForUpdates(true)
+        assertEquals(PianoSettings(), repository.settings.first())
+        scope.cancel()
+    }
 }

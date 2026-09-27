@@ -9,12 +9,14 @@
 
 package dev.stevenjin.stevenpiano
 
+import android.app.admin.DevicePolicyManager
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.BadParcelableException
 import android.os.Bundle
 import android.util.Log
+import android.view.Choreographer
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -27,6 +29,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import androidx.core.os.BundleCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.service.ImportService
@@ -35,6 +40,9 @@ import dev.stevenjin.stevenpiano.ui.PianoNavHost
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.screens.library.ShareSheet
 import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 /**
  * The one activity: edge to edge, transparent system bars, the four destinations in a frame the
@@ -44,7 +52,8 @@ import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
  * Library says so). The playback notification opens Now playing. Rotation and
  * resizing are handled here as configuration changes (the manifest's configChanges): the frame
  * recomputes from the new configuration and nothing is recreated, so nothing may rely on
- * recreation to refresh.
+ * recreation to refresh. After the first frame, and for as long as the activity is started, the
+ * app looks for its own updates (at once, then daily; see [AppGraph.runUpdateSchedule]).
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
@@ -73,6 +82,10 @@ class MainActivity : ComponentActivity() {
                 }
                 if (pendingShare.isNotEmpty()) ShareSheet(pendingShare.size, onAdd = ::addShared, onCancel = { pendingShare = emptyList() })
             }
+        }
+        lifecycleScope.launch {
+            awaitFrame()   // nothing about updates holds up the first frame
+            repeatOnLifecycle(Lifecycle.State.STARTED) { graph.runUpdateSchedule() }
         }
     }
 
@@ -113,6 +126,7 @@ class MainActivity : ComponentActivity() {
     private fun route(intent: Intent) {
         try {
             emulatorSet(intent)
+            emulatorReleaseOwner(intent)
             val shared = sharedMidi(intent)
             if (shared.isNotEmpty()) {
                 pendingShare = shared
@@ -158,10 +172,26 @@ class MainActivity : ComponentActivity() {
         graph.pianoSettings.set(line.substringBefore(' '), line.substringAfter(' ', ""))
     }
 
+    /**
+     * The emulator only (a debug build, as [emulatorSet]): `adb shell am start -n
+     * dev.stevenjin.stevenpiano/.MainActivity --ez dev.stevenjin.stevenpiano.EMULATOR_RELEASE_OWNER true`
+     * gives up the device owner the updater's silent-install test set, since `dpm
+     * remove-active-admin` refuses an admin that is not test-only. Inert on a phone or tablet.
+     */
+    private fun emulatorReleaseOwner(intent: Intent) {
+        if (!LoggingPianoLink.isWanted() || !booleanExtra(intent, EXTRA_EMULATOR_RELEASE_OWNER)) return
+        val policy = getSystemService(DevicePolicyManager::class.java) ?: return
+        if (!policy.isDeviceOwnerApp(packageName)) return
+        @Suppress("DEPRECATION")   // deprecated for enterprise use; still the device owner's own way out
+        policy.clearDeviceOwnerApp(packageName)
+        Log.w(TAG, "No longer the device owner (emulator)")
+    }
+
     companion object {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
         private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
+        private const val EXTRA_EMULATOR_RELEASE_OWNER = "dev.stevenjin.stevenpiano.EMULATOR_RELEASE_OWNER"
         private const val TAG = "MainActivity"
         private const val STATE_SHARED = "dev.stevenjin.stevenpiano.state.SHARED"
     }
@@ -191,4 +221,18 @@ private fun stringExtra(intent: Intent, name: String): String? = try {
     intent.getStringExtra(name)
 } catch (e: RuntimeException) {
     null
+}
+
+/** A boolean extra, false when the extras cannot be read. */
+private fun booleanExtra(intent: Intent, name: String): Boolean = try {
+    intent.getBooleanExtra(name, false)
+} catch (e: RuntimeException) {
+    false
+}
+
+/** Resumes at the next frame: called before the first one is drawn, after it. */
+private suspend fun awaitFrame() = suspendCancellableCoroutine { continuation ->
+    val callback = Choreographer.FrameCallback { if (continuation.isActive) continuation.resume(Unit) }
+    Choreographer.getInstance().postFrameCallback(callback)
+    continuation.invokeOnCancellation { Choreographer.getInstance().removeFrameCallback(callback) }
 }

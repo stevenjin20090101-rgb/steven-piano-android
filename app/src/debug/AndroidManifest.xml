@@ -7,8 +7,7 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<resources>
-    <string name="app_name">Steven Piano</string>
-    <!-- Shown by Android's device-admin screens on the school tablet (README > School tablet). -->
-    <string name="device_admin_description">Installs Steven Piano\'s own updates without asking. Nothing else on this tablet is managed.</string>
-</resources>
+<!-- Debug builds only: the emulator's update server may be plain HTTP (res/xml/network_security_config.xml). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>

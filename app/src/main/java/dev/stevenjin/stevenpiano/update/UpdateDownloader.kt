@@ -93,9 +93,17 @@ class UpdateDownloader(
         hex(digest.digest()) == manifest.sha256
     }
 
-    /** Removes every download (a new process starts clean; the installer has its own copy by then). */
+    /** Removes every download (after the update is installed, or a file that no longer matched). */
     fun clear() {
         dir.listFiles()?.forEach { it.delete() }
+    }
+
+    /**
+     * At the process's start: downloads older than [before] (wall-clock ms) are left from an earlier
+     * run (Android's installer has taken its own copy by then) and are removed.
+     */
+    fun sweep(before: Long) {
+        dir.listFiles()?.forEach { if (it.lastModified() < before) it.delete() }
     }
 
     companion object {
