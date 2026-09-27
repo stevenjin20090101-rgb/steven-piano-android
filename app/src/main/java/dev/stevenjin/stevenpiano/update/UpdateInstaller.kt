@@ -18,7 +18,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
-import androidx.core.content.FileProvider
+import dev.stevenjin.stevenpiano.AppFileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -110,7 +110,7 @@ class UpdateInstaller(context: Context, private val silence: suspend () -> Unit)
 
     private fun openInstaller(file: File, launcher: Context): Outcome {
         val uri = try {
-            FileProvider.getUriForFile(app, authority(app), file)
+            AppFileProvider.uriFor(app, file)
         } catch (e: IllegalArgumentException) {
             return Outcome.Failed
         }
@@ -145,8 +145,5 @@ class UpdateInstaller(context: Context, private val silence: suspend () -> Unit)
         private const val SESSION_FILE = "steven-piano.apk"
         private const val BUFFER_BYTES = 64 * 1024
         const val APK_TYPE = "application/vnd.android.package-archive"
-
-        /** The app's FileProvider: `cacheDir/updates/` (the downloads) and `cacheDir/diagnostics/` (the share), nothing else. */
-        fun authority(context: Context): String = "${context.packageName}.files"
     }
 }

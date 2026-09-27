@@ -17,6 +17,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.stevenjin.stevenpiano.midi.KeyMap
@@ -143,6 +144,18 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun markTextRepairDone() = edit { it[TEXT_REPAIR_DONE] = true }
 
+    /**
+     * The newest crash report the person has answered (shared or dismissed), as its epoch ms; 0
+     * when none. A newer report brings back the Library's "The app crashed last time" banner.
+     * Housekeeping, not a preference.
+     */
+    val crashNoticeSeenAt: Flow<Long> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[CRASH_NOTICE_SEEN_AT] ?: 0L }
+        .distinctUntilChanged()
+
+    suspend fun markCrashNoticeSeen(reportAt: Long) = edit { if ((it[CRASH_NOTICE_SEEN_AT] ?: 0L) < reportAt) it[CRASH_NOTICE_SEEN_AT] = reportAt }
+
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
@@ -193,5 +206,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val HAND_COLOURS = booleanPreferencesKey("handColours")
         val CHECK_FOR_UPDATES = booleanPreferencesKey("checkForUpdates")
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
+        val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
     }
 }

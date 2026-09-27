@@ -83,6 +83,11 @@ class UpdateChecker(
         return (last + INTERVAL_MS - at).coerceAtLeast(0L)
     }
 
+    /** An update has just been installed and this is it: nothing to ask for another day (Check now still asks). */
+    fun markChecked() {
+        lastCheckedAt = now()
+    }
+
     /** The download, the installer and the Piano tab move the state on from a release on offer. */
     fun publish(next: UpdateState) {
         _state.value = next

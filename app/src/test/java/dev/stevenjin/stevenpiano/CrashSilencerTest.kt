@@ -46,6 +46,31 @@ class CrashSilencerTest {
     }
 
     @Test
+    fun `the crash is written down after the piano is silenced, then goes on`() {
+        val link = FakePianoLink()
+        val order = mutableListOf<String>()
+        CrashSilencer({ link.also { order += "silence" } }, previous) { thread, error ->
+            assertSame(crash, error)
+            assertSame(Thread.currentThread(), thread)
+            assertEquals(listOf(200L), link.emergencySilences)
+            order += "report"
+        }.uncaughtException(Thread.currentThread(), crash)
+        assertEquals(listOf("silence", "report"), order)
+        assertSame(crash, delegated)
+    }
+
+    @Test
+    fun `a report that fails, or a silence that fails, still hands the crash on`() {
+        CrashSilencer({ FakePianoLink() }, previous) { _, _ -> throw OutOfMemoryError() }.uncaughtException(Thread.currentThread(), crash)
+        assertSame(crash, delegated)
+        delegated = null
+        var reported = false
+        CrashSilencer({ throw IllegalStateException("no link") }, previous) { _, _ -> reported = true }.uncaughtException(Thread.currentThread(), crash)
+        assertEquals(true, reported)
+        assertSame(crash, delegated)
+    }
+
+    @Test
     fun `install puts it in front of the handler there before`() {
         val before = Thread.getDefaultUncaughtExceptionHandler()
         try {

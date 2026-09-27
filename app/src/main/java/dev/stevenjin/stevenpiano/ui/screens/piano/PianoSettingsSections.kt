@@ -100,7 +100,9 @@ interface PianoSettingsActions {
  * piano has answered, everything is disabled, with a line saying why; firmware without the
  * console gets one line and nothing else. A refusal shows in an outlined banner in the section of
  * the control it concerns, right under that control, where the change was made. No red anywhere:
- * a fault reads in words.
+ * a fault reads in words. [appDiagnostics] (the app's own Share diagnostics, v1.4) closes the
+ * DIAGNOSTICS section whatever the piano's state, under its own header when the piano's firmware
+ * has no settings to show.
  */
 @Composable
 fun PianoSettingsSections(
@@ -110,10 +112,13 @@ fun PianoSettingsSections(
     statusReading: Boolean,
     actions: PianoSettingsActions,
     modifier: Modifier = Modifier,
+    appDiagnostics: @Composable () -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth()) {
         if (piano == PianoState.Unsupported) {
             Line("This piano's firmware doesn't offer settings over Bluetooth yet.", Modifier.padding(top = 8.dp))
+            Header(PianoSection.Diagnostics)
+            appDiagnostics()
             return@Column
         }
         val ready = piano as? PianoState.Ready
@@ -162,6 +167,7 @@ fun PianoSettingsSections(
         Header(PianoSection.Diagnostics)
         Diagnostics(ready, statusText, statusReading, actions)
         bannerAfter(DIAGNOSTICS)
+        appDiagnostics()
     }
 }
 

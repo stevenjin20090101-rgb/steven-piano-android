@@ -23,8 +23,9 @@ object UpdateCopy {
     /** The device owner's install, handed to Android. */
     fun installing(versionName: String): String = "Installing Steven Piano $versionName…"
 
-    /** Installed silently while this process kept the old code. */
-    fun installed(versionName: String): String = "Updated to $versionName; restart to use it"
+    /** Installed silently: "restart to use it" while this process still runs the old code. */
+    fun installed(versionName: String, restartNeeded: Boolean = true): String =
+        if (restartNeeded) "Updated to $versionName; restart to use it" else "Updated to $versionName"
 
     /** The progress row: "Downloading 1.4 · 1.2 of 2.3 MB". */
     fun downloading(versionName: String, bytes: Long, total: Long, locale: Locale = Locale.getDefault()): String =

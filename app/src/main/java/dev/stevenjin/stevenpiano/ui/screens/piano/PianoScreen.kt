@@ -30,6 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.ble.LinkState
@@ -53,15 +57,19 @@ import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import dev.stevenjin.stevenpiano.ui.components.ShareDiagnosticsRow
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.update.UpdateState
 
 /**
  * The Piano tab: the connection card, the piano's own settings (lighting, feel, pedal,
- * diagnostics), the app's few preferences, and the About row at the very bottom. On wide screens
- * it reads as a 720 dp column in the middle; it scrolls from anywhere. When the tab leaves the
- * foreground (another tab, the app in the background) the piano saves any change made here.
+ * diagnostics, where the app's Share diagnostics closes the section), the UPDATE row while a newer
+ * release is known, the app's few preferences (Check for updates automatically and Check now among
+ * them), and the About row at the very bottom. On wide screens it reads as a 720 dp column in the
+ * middle; it scrolls from anywhere. When the tab leaves the foreground (another tab, the app in
+ * the background) the piano saves any change made here.
  */
 @Composable
 fun PianoScreen() {
@@ -73,6 +81,13 @@ fun PianoScreen() {
     val piano by vm.piano.collectAsStateWithLifecycle()
     val statusText by vm.statusText.collectAsStateWithLifecycle()
     val statusReading by vm.statusReading.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var canInstall by remember { mutableStateOf(vm.canInstall()) }
+    LifecycleResumeEffect(Unit) {
+        canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
+        onPauseOrDispose { }
+    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.leave() }
     DisposableEffect(vm) { onDispose { vm.leave() } }
@@ -86,8 +101,15 @@ fun PianoScreen() {
         ) {
             Column(Modifier.readingWidth()) {
                 ConnectionCard(link, playing, vm::connect, vm::cancel, vm::disconnect, vm::connectTo, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                PianoSettingsSections(piano, link is LinkState.Connected, statusText, statusReading, vm)
-                Preferences(settings, vm)
+                PianoSettingsSections(piano, link is LinkState.Connected, statusText, statusReading, vm) { ShareDiagnosticsRow() }
+                UpdateRow(
+                    update,
+                    canInstall,
+                    onUpdate = { vm.update(context) },
+                    onRestart = { vm.restart(context) },
+                    onAllowInstalls = { runCatching { context.startActivity(vm.installPermissionSettings()) } },
+                )
+                Preferences(settings, update, vm)
                 AboutRow(Modifier.padding(16.dp))
             }
         }
@@ -95,7 +117,7 @@ fun PianoScreen() {
 }
 
 @Composable
-private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
+private fun Preferences(settings: PianoSettings, update: UpdateState, vm: PianoViewModel) {
     val frame = LocalAppFrame.current
     Eyebrow(
         "App preferences",
@@ -119,14 +141,16 @@ private fun Preferences(settings: PianoSettings, vm: PianoViewModel) {
     SwitchRow("Skip drum channel", settings.skipDrumChannel, vm::setSkipDrums)
     SwitchRow("Artwork in black and white", settings.artworkMonochrome, vm::setArtworkMonochrome)
     SwitchRow("Fetch artwork automatically", settings.fetchArtworkAutomatically, vm::setFetchArtworkAutomatically, note = ArtworkCopy.TRANSPARENCY)
+    SwitchRow("Check for updates automatically", settings.checkForUpdates, vm::setCheckForUpdates, divider = false)
+    CheckNowRow(update, vm::checkNow)
 }
 
 /** Under the Hand colours switch: what it colours, and what it leaves alone. */
 private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall and the keyboard strip"
 
-/** A preference that is on or off; [note] is a line of explanation under its label. */
+/** A preference that is on or off; [note] is a line of explanation under its label; [divider] false when a row that belongs to it follows. */
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, note: String? = null) {
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, note: String? = null, divider: Boolean = true) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -154,7 +178,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
             ),
         )
     }
-    HairlineDivider(startInset = 16.dp)
+    if (divider) HairlineDivider(startInset = 16.dp)
 }
 
 @Composable

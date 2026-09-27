@@ -26,6 +26,11 @@ import dev.stevenjin.stevenpiano.data.db.TextRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.Importer
+import dev.stevenjin.stevenpiano.diag.CrashReports
+import dev.stevenjin.stevenpiano.diag.Diagnostics
+import dev.stevenjin.stevenpiano.diag.DiagnosticsExporter
+import dev.stevenjin.stevenpiano.diag.DiagnosticsText
+import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
@@ -48,6 +53,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -152,6 +158,47 @@ class AppGraph(private val app: Application) {
      */
     suspend fun runUpdateSchedule() = updateChecker.runSchedule(settingsRepository.settings.map { it.checkForUpdates }.distinctUntilChanged())
 
+    /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
+    val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }
+
+    /**
+     * Share diagnostics' zip: about the app and device, the preferences, the link's last lines and
+     * the crash reports; nothing from the library.
+     */
+    val diagnostics: DiagnosticsExporter by lazy {
+        DiagnosticsExporter(
+            File(app.cacheDir, DIAGNOSTICS_DIR),
+            crashReports,
+            LinkLog.shared,
+            about = {
+                DiagnosticsText.about(
+                    Diagnostics.facts(),
+                    deviceOwner = updateInstaller.isDeviceOwner(),
+                    update = updateChecker.state.value,
+                    checkForUpdates = settings.value.checkForUpdates,
+                    lastCheckedAt = updateChecker.lastCheckedAt?.let { DiagnosticsText.stamp(it) },
+                    link = pianoLinkIfMade()?.state?.value,
+                    exportedAt = DiagnosticsText.stamp(System.currentTimeMillis()),
+                )
+            },
+            settings = { DiagnosticsText.settings(settings.value) },
+        )
+    }
+
+    /** When the newest crash report was written, read once at start (null: none). */
+    private val latestCrash = MutableStateFlow<Long?>(null)
+
+    /** The Library's "The app crashed last time" banner: a report newer than the last one answered. */
+    val crashNotice: StateFlow<Boolean> = combine(latestCrash, settingsRepository.crashNoticeSeenAt) { latest, seen ->
+        latest != null && latest > seen
+    }.stateIn(appScope, SharingStarted.Eagerly, false)
+
+    /** The banner was answered (shared or dismissed): it stays away until the next crash. */
+    fun answerCrashNotice() {
+        val latest = latestCrash.value ?: return
+        appScope.launch { settingsRepository.markCrashNoticeSeen(latest) }
+    }
+
     /** Restart after a silent update: the piano is silenced first, then the new code starts. */
     fun restartForUpdate(from: Context) = updateInstaller.restart(from) {
         player.silenceLive()
@@ -168,6 +215,7 @@ class AppGraph(private val app: Application) {
         appScope.launch(Dispatchers.IO) {
             runCatching { ImportLimits.sweepStale(app.cacheDir, app.filesDir, before = startedAt) }
             runCatching { updateDownloader.sweep(before = startedAt) }
+            latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
         }
         pianoSettings.start()
         appScope.launch {
@@ -232,6 +280,7 @@ class AppGraph(private val app: Application) {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"
         const val UPDATES_DIR = "updates"
+        const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L
         const val INSTALL_FLUSH_MS = 300L
 

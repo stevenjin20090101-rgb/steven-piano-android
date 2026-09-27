@@ -15,6 +15,8 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.BadParcelableException
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Choreographer
 import androidx.activity.ComponentActivity
@@ -127,6 +129,7 @@ class MainActivity : ComponentActivity() {
         try {
             emulatorSet(intent)
             emulatorReleaseOwner(intent)
+            emulatorCrash(intent)
             val shared = sharedMidi(intent)
             if (shared.isNotEmpty()) {
                 pendingShare = shared
@@ -187,11 +190,23 @@ class MainActivity : ComponentActivity() {
         Log.w(TAG, "No longer the device owner (emulator)")
     }
 
+    /**
+     * The emulator only (a debug build, as [emulatorSet]): `adb shell am start -n
+     * dev.stevenjin.stevenpiano/.MainActivity --ez dev.stevenjin.stevenpiano.EMULATOR_CRASH true`
+     * crashes the app on the main thread, outside [route]'s guard, so the crash handler, the crash
+     * report and the next launch's banner can be seen. Inert on a phone or tablet.
+     */
+    private fun emulatorCrash(intent: Intent) {
+        if (!LoggingPianoLink.isWanted() || !booleanExtra(intent, EXTRA_EMULATOR_CRASH)) return
+        Handler(Looper.getMainLooper()).post { throw IllegalStateException("A crash asked for on the emulator (debug build)") }
+    }
+
     companion object {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
         private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
         private const val EXTRA_EMULATOR_RELEASE_OWNER = "dev.stevenjin.stevenpiano.EMULATOR_RELEASE_OWNER"
+        private const val EXTRA_EMULATOR_CRASH = "dev.stevenjin.stevenpiano.EMULATOR_CRASH"
         private const val TAG = "MainActivity"
         private const val STATE_SHARED = "dev.stevenjin.stevenpiano.state.SHARED"
     }

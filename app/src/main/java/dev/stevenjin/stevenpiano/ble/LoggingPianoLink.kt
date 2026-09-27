@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +33,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * "console < ledbright=40"). The emulated piano keeps its values across connections, as a
  * powered piano does. [consoleMode] is asked on each connection: `adb shell setprop
  * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
- * to one whose console never answers; anything else, the full console.
+ * to one whose console never answers; anything else, the full console. Its connections (not the
+ * MIDI it logs) also go to [LinkLog], so the diagnostics share has a link log on the emulator too.
  */
 class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty) : PianoLink {
     /** Which piano the emulator pretends to reach. */
@@ -74,17 +76,20 @@ class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleMod
         mode = consoleMode()
         console = if (mode == ConsoleMode.None) null else channel
         Log.d(TAG, "Connected (emulated), console: ${mode.name.lowercase()}")
+        LinkLog.shared.add("Connected to Steven Piano (emulated), console: ${mode.name.lowercase()}")
         _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU)
     }
 
     override fun connect(address: String?) {
         if (_state.value is LinkState.Connected) return
+        LinkLog.shared.add("Connect (emulated): ${address ?: "no piano remembered yet"}")
         _state.value = LinkState.Scanning
         main.postDelayed(found, SCAN_MS)
     }
 
     override fun disconnect() {
         main.removeCallbacks(found)
+        if (_state.value != LinkState.Disconnected) LinkLog.shared.add("Disconnected (emulated)")
         console = null
         _state.value = LinkState.Disconnected
     }

@@ -19,8 +19,8 @@ sealed interface UpdateState {
     /** The release this state is about, when a newer one is known. */
     val manifest: UpdateManifest? get() = null
 
-    /** A download or an install is under way or done: a check never replaces it. */
-    val busy: Boolean get() = this is Downloading || this is ReadyToInstall || this is Installing || this is Installed
+    /** A download or an install is under way, or done and waiting for Restart: a check never replaces it. */
+    val busy: Boolean get() = this is Downloading || this is ReadyToInstall || this is Installing || (this is Installed && restartNeeded)
 
     /** Nothing asked yet in this process. */
     data object Idle : UpdateState
@@ -42,8 +42,12 @@ sealed interface UpdateState {
     /** Handed to Android's package installer with no tap needed (the app is the device owner). */
     data class Installing(override val manifest: UpdateManifest) : UpdateState
 
-    /** Installed silently while this process kept running the old code: Restart runs the new one. */
-    data class Installed(val version: String) : UpdateState
+    /**
+     * Installed silently. [restartNeeded] while this process still runs the old code (Restart runs
+     * the new one); false when Android replaced the running app and this is the new version, opened
+     * again by itself (what Android 14 does: it stops an app it replaces).
+     */
+    data class Installed(val version: String, val restartNeeded: Boolean = true) : UpdateState
 
     /** [message] is the one line the Piano tab shows; [manifest] is the release still on offer, if one is known. */
     data class Failed(val message: String, override val manifest: UpdateManifest? = null) : UpdateState

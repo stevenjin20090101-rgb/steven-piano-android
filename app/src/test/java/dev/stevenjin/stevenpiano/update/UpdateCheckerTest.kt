@@ -166,4 +166,18 @@ class UpdateCheckerTest {
             assertEquals(busy, checker.state.value)
         }
     }
+
+    @Test
+    fun `after an update Android restarted, the next automatic check waits a day, and Check now still asks`() = runTest {
+        val checker = checker(current = 8)
+        checker.publish(UpdateState.Installed("1.4", restartNeeded = false))
+        checker.markChecked()
+        backgroundScope.launch { checker.runSchedule(enabled) }
+        advanceTimeBy(23 * hour)
+        runCurrent()
+        assertEquals(0, server.manifestCalls)
+        assertEquals(UpdateState.Installed("1.4", restartNeeded = false), checker.state.value)
+        checker.checkNow()
+        assertEquals(UpdateState.UpToDate, checker.state.value)
+    }
 }

@@ -131,6 +131,20 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `the crash banner's answer only moves forward`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "crash.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(0L, repository.crashNoticeSeenAt.first())
+        repository.markCrashNoticeSeen(2_000L)
+        assertEquals(2_000L, repository.crashNoticeSeenAt.first())
+        repository.markCrashNoticeSeen(1_000L)
+        assertEquals(2_000L, repository.crashNoticeSeenAt.first())
+        assertEquals(PianoSettings(), repository.settings.first())
+        scope.cancel()
+    }
+
+    @Test
     fun `automatic update checks start on and are remembered`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "updates.preferences_pb") }

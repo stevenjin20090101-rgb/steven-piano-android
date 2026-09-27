@@ -78,6 +78,7 @@ import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.CrashBanner
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
@@ -99,8 +100,9 @@ import kotlinx.coroutines.launch
  * by their drag handles while no search narrows them. Row and tile menus act through [playback]
  * and the view model; "About this piece" opens the piece sheet and "Change photo" the photo
  * picker. A composer opens with their portrait and blurb. [onImport] brings files in; artwork
- * fetched in the background shows its progress under the import bar. On wide screens the content
- * stays a 720 dp column in the middle; the list still scrolls from anywhere across the screen.
+ * fetched in the background shows its progress under the import bar. On the launch after a crash,
+ * an outlined banner offers to share diagnostics. On wide screens the content stays a 720 dp
+ * column in the middle; the list still scrolls from anywhere across the screen.
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -109,6 +111,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
     val state by vm.state.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
+    val crashed by graph.crashNotice.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var adding by rememberSaveable { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
@@ -152,6 +155,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
             HairlineDivider()
             ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
             ArtworkBar(artworkProgress)
+            if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
         }
         when {
             !state.loaded -> Unit

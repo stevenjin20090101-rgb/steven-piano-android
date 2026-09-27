@@ -15,11 +15,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.IntentCompat
+import androidx.core.content.pm.PackageInfoCompat
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.ui.Route
 
 /**
  * Where Android's package installer reports a silent update (the device-owner path of
@@ -27,25 +31,28 @@ import dev.stevenjin.stevenpiano.graph
  * stay the same in every release, because the old version's PendingIntent names the new
  * version's receiver.
  *
+ * Which code hears it is read from the package itself: the versionCode now installed against
+ * the one this process runs (`BuildConfig.VERSION_CODE`).
  * - Success heard by the old code (the process outlived the install): [UpdateState.Installed],
  *   whose Restart runs the new code.
- * - Success heard by the new code (Android replaced the running app, then started it again for
- *   this broadcast): the update is live. The download is cleared and, as the device owner may,
- *   the app opens again by itself where the person left it.
+ * - Success heard by the new code (Android stops an app it replaces, then starts the new version
+ *   for this broadcast; Android 14 on the emulator, measured): the update is live. The download is
+ *   cleared, the Piano tab's row says "Updated to 1.4", and, as the device owner may, the app
+ *   opens again by itself on the Piano tab, where the person tapped Update.
  * - Anything else: [UpdateFailures.NOT_INSTALLED] under the UPDATE row, the release still on offer.
  */
 class UpdateResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val graph = context.graph
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-        val versionCode = intent.getIntExtra(EXTRA_VERSION_CODE, -1)
         val versionName = intent.getStringExtra(EXTRA_VERSION_NAME).orEmpty()
         val checker = graph.updateChecker
         when (status) {
-            PackageInstaller.STATUS_SUCCESS -> if (BuildConfig.VERSION_CODE >= versionCode) {
+            PackageInstaller.STATUS_SUCCESS -> if (runsInstalledCode(context)) {
                 Log.w(TAG, "Updated to $versionName; this is the new version")
                 graph.updateDownloader.clear()
-                checker.publish(UpdateState.UpToDate)
+                checker.markChecked()
+                checker.publish(UpdateState.Installed(versionName, restartNeeded = false))
                 if (graph.updateInstaller.isDeviceOwner()) reopen(context)
             } else {
                 Log.w(TAG, "Updated to $versionName; restart to run it")
@@ -61,21 +68,38 @@ class UpdateResultReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * Whether this process runs the code now installed (Android stopped the old process and started
+     * this one for the broadcast), read from the package, not from the manifest's number.
+     */
+    private fun runsInstalledCode(context: Context): Boolean = try {
+        val installed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        }
+        PackageInfoCompat.getLongVersionCode(installed) == BuildConfig.VERSION_CODE.toLong()
+    } catch (e: PackageManager.NameNotFoundException) {
+        true
+    }
+
     private fun fail(context: Context, why: String) {
         Log.w(TAG, "The update was not installed ($why)")
         val checker = context.graph.updateChecker
         checker.publish(UpdateState.Failed(UpdateFailures.NOT_INSTALLED, checker.state.value.manifest))
     }
 
-    /** The device owner may start an activity from the background: the app comes back after replacing itself. */
+    /** The device owner may start an activity from the background: the app comes back on the Piano tab after replacing itself. */
     private fun reopen(context: Context) {
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?.putExtra(MainActivity.EXTRA_TAB, Route.Piano.path) ?: return
         runCatching { context.startActivity(launch) }.onFailure { Log.w(TAG, "Couldn't reopen after the update: ${it.javaClass.simpleName}") }
     }
 
     companion object {
         private const val TAG = "Updates"
-        private const val EXTRA_VERSION_CODE = "dev.stevenjin.stevenpiano.extra.UPDATE_VERSION_CODE"
         private const val EXTRA_VERSION_NAME = "dev.stevenjin.stevenpiano.extra.UPDATE_VERSION_NAME"
         private const val REQUEST_CODE = 8
 
@@ -87,7 +111,6 @@ class UpdateResultReceiver : BroadcastReceiver() {
         fun statusSender(context: Context, manifest: UpdateManifest): IntentSender {
             val intent = Intent(context, UpdateResultReceiver::class.java)
                 .setPackage(context.packageName)
-                .putExtra(EXTRA_VERSION_CODE, manifest.versionCode)
                 .putExtra(EXTRA_VERSION_NAME, manifest.versionName)
             val mutable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
             return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT or mutable).intentSender

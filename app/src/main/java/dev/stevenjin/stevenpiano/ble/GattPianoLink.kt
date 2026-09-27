@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ble
 import android.content.Context
 import android.os.HandlerThread
 import android.util.Log
+import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -68,7 +69,8 @@ import kotlin.concurrent.withLock
  * address, name, RSSI, whether it advertised the MIDI service, and what the link did about it), each
  * connectGatt, connections made and lost with their status, the MTU, the services found and each
  * failure with its reason, so `adb logcat -s PianoLink:W` shows why a connection failed. It holds
- * Bluetooth addresses and advertised names only.
+ * Bluetooth addresses and advertised names only. The real link ([create]) writes it through
+ * [LinkLog.warn], which also keeps the last 500 lines in memory for the diagnostics share.
  */
 class GattPianoLink(
     private val radio: BleRadio,
@@ -1003,10 +1005,10 @@ class GattPianoLink(
         /** After this long, reconnect scans stop to spare the battery; the background connection keeps waiting. */
         private const val STOP_SCANNING_AFTER_MS = 10 * 60_000L
 
-        /** The real link: Android Bluetooth, on its own "steven-piano-ble" thread. */
+        /** The real link: Android Bluetooth, on its own "steven-piano-ble" thread; its trail goes to the log and to [LinkLog]. */
         fun create(context: Context, onConnected: (String, String) -> Unit, shouldReconnect: () -> Boolean): GattPianoLink {
             val thread = HandlerThread("steven-piano-ble").apply { start() }
-            return GattPianoLink(AndroidBleRadio(context.applicationContext), HandlerLinkExecutor(thread.looper), onConnected, shouldReconnect)
+            return GattPianoLink(AndroidBleRadio(context.applicationContext), HandlerLinkExecutor(thread.looper), onConnected, shouldReconnect, LinkLog::warn)
         }
     }
 }

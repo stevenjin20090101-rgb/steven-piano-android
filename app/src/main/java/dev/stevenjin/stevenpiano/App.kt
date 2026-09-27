@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano
 import android.app.Application
 import android.content.Context
 import android.os.StrictMode
+import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.service.PlaybackNotification
@@ -20,7 +21,8 @@ import dev.stevenjin.stevenpiano.service.UpdateService
 /**
  * Builds the [AppGraph] once per process, and the notification channels. First of all it puts
  * [CrashSilencer] in front of Android's crash handler, so a crash anywhere sends the piano the
- * stop sequence before the process ends.
+ * stop sequence before the process ends, and then writes the app's own crash report (the Piano
+ * tab's Share diagnostics sends it, and the next launch offers to).
  */
 class App : Application() {
     lateinit var graph: AppGraph
@@ -28,7 +30,11 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        CrashSilencer.install { if (::graph.isInitialized) graph.pianoLinkIfMade() else null }
+        val crashReports = Diagnostics.crashReports(this)
+        CrashSilencer.install(
+            link = { if (::graph.isInitialized) graph.pianoLinkIfMade() else null },
+            report = crashReports::write,
+        )
         if (BuildConfig.DEBUG) watchStrictly()
         PlaybackNotification.createChannel(this)
         ImportService.createChannel(this)
