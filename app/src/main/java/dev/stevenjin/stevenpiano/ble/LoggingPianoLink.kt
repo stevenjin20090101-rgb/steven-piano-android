@@ -15,6 +15,7 @@ import android.os.Looper
 import android.util.Log
 import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.diag.LinkLog
+import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,8 +36,16 @@ import kotlinx.coroutines.flow.asStateFlow
  * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
  * to one whose console never answers; anything else, the full console. Its connections (not the
  * MIDI it logs) also go to [LinkLog], so the diagnostics share has a link log on the emulator too.
+ * The firmware (v1.6.1 — M21): with `debug.stevenpiano.fakeota` naming a [FakeOta] scenario, the
+ * emulated piano reports its version and has the update service ([EmulatedOta]), and after an
+ * update's OK it restarts: it drops for [BOOT_MS] and comes back as the scenario says, pending its
+ * self-test and confirmed [CONFIRM_MS] later. Without the property it has neither, as firmware
+ * older than 2.0.0.
  */
-class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty) : PianoLink {
+class LoggingPianoLink(
+    private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty,
+    private val fakeOta: () -> FakeOta? = FakeOta::fromProperty,
+) : PianoLink {
     /** Which piano the emulator pretends to reach. */
     enum class ConsoleMode { Full, None, Mute }
 
@@ -72,12 +81,82 @@ class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleMod
         }
     }
 
+    private val version = MutableStateFlow<String?>(null)
+    override val firmwareVersion: StateFlow<String?> = version.asStateFlow()
+
+    @Volatile
+    override var ota: OtaChannel? = null
+        private set
+
+    /** The fake update scenario this connection plays, if any. */
+    private var scenario: FakeOta? = null
+
     private val found = Runnable {
         mode = consoleMode()
         console = if (mode == ConsoleMode.None) null else channel
-        Log.d(TAG, "Connected (emulated), console: ${mode.name.lowercase()}")
-        LinkLog.shared.add("Connected to Steven Piano (emulated), console: ${mode.name.lowercase()}")
+        val fake = fakeOta()
+        scenario = fake
+        val running = fake?.running
+        if (fake != null) {
+            synchronized(emulated) {
+                emulated.setFact("fw", running ?: "emulator")
+                if (running != null) emulated.setFact("ota", "none")
+            }
+        }
+        comeUp(running)
+        Log.d(TAG, "Connected (emulated), console: ${mode.name.lowercase()}, firmware: ${running ?: "no version"}")
+        LinkLog.shared.add("Connected to Steven Piano (emulated), console: ${mode.name.lowercase()}" + (fake?.let { ", firmware update scenario ${it.key}" } ?: ""))
         _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU)
+    }
+
+    /** The piano's version and update service for this connection: firmware 2.0.0 and later have both. */
+    private fun comeUp(running: String?) {
+        val fake = scenario
+        version.value = running
+        ota = if (running != null && fake != null) EmulatedOta(main, fake.script, onDrop = ::droppedMidUpdate, onRestart = ::restartAfterUpdate) else null
+    }
+
+    /** The scenario's disconnect: the piano goes, and is back [DROP_BACK_MS] later on the firmware it had. */
+    private fun droppedMidUpdate() {
+        goAway("The connection dropped mid-update (emulated)")
+        main.postDelayed({ comeBack(scenario?.running, "none") }, DROP_BACK_MS)
+    }
+
+    /** After OK: the piano drops in [inMs], restarts, and is back [BOOT_MS] later as the scenario says. */
+    private fun restartAfterUpdate(inMs: Int) {
+        main.postDelayed({
+            goAway("The piano restarts after its update (emulated)")
+            val after = scenario?.afterRestart ?: return@postDelayed
+            main.postDelayed({ comeBack(after.first, after.second) }, BOOT_MS)
+        }, inMs.toLong())
+    }
+
+    private fun goAway(line: String) {
+        LinkLog.shared.add(line)
+        console = null
+        ota = null
+        version.value = null
+        _state.value = LinkState.Reconnecting(1)
+    }
+
+    /** Back, running [running] with `!ota` [otaFact]; a pending image confirms itself [CONFIRM_MS] later. */
+    private fun comeBack(running: String?, otaFact: String) {
+        if (_state.value !is LinkState.Reconnecting) return
+        synchronized(emulated) {
+            emulated.setFact("fw", running ?: "emulator")
+            emulated.setFact("ota", otaFact)
+        }
+        if (otaFact == "pending") {
+            main.postDelayed({ synchronized(emulated) { emulated.setFact("ota", "confirmed") } }, CONFIRM_MS)
+        }
+        console = if (mode == ConsoleMode.None) null else channel
+        comeUp(running)
+        LinkLog.shared.add("Connected to Steven Piano (emulated) again, firmware ${running ?: "no version"}")
+        _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU)
+    }
+
+    override fun expectRestart(withinMs: Long) {
+        LinkLog.shared.add("The piano restarts after its update (emulated): a drop in the next ${withinMs / 1000} s is expected")
     }
 
     override fun connect(address: String?) {
@@ -91,6 +170,8 @@ class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleMod
         main.removeCallbacks(found)
         if (_state.value != LinkState.Disconnected) LinkLog.shared.add("Disconnected (emulated)")
         console = null
+        ota = null
+        version.value = null
         _state.value = LinkState.Disconnected
     }
 
@@ -116,6 +197,15 @@ class LoggingPianoLink(private val consoleMode: () -> ConsoleMode = ::consoleMod
         private const val REPLY_MS = 40L
         private const val REPLY_BUFFER_LINES = 512
         private const val CONSOLE_PROPERTY = "debug.stevenpiano.console"
+
+        /** How long the emulated piano is away while it restarts after an update. */
+        private const val BOOT_MS = 4_000L
+
+        /** How long after coming back a pending image confirms itself (the firmware's self-test: 30 s from boot). */
+        private const val CONFIRM_MS = 25_000L
+
+        /** How long the emulated piano is away after the scenario's disconnect. */
+        private const val DROP_BACK_MS = 3_000L
 
         /** Debug builds on an emulator, which has no piano to reach. */
         fun isWanted(): Boolean =
