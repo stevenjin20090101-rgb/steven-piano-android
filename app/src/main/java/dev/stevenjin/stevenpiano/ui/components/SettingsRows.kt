@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -38,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -412,11 +415,29 @@ private fun Modifier.clearOfRules(): Modifier = layout { measurable, constraints
 }
 
 /**
+ * What an outlined button's label reads in (DESIGN.md › v1.5 › Action row): the content colour, and
+ * the secondary colour when unavailable. Material 3 labels an outlined button in `onSurfaceVariant`
+ * whether it is enabled or not, so every outlined button of the app sets both ([actionButtonColors]).
+ */
+@Immutable
+data class ActionLabels(val enabled: Color, val disabled: Color) {
+    companion object {
+        fun of(scheme: ColorScheme): ActionLabels = ActionLabels(enabled = scheme.onSurface, disabled = scheme.onSurfaceVariant)
+    }
+}
+
+/** The colours of the app's outlined buttons: Material's outlined ones (no container) with [ActionLabels]. */
+@Composable
+fun actionButtonColors(): ButtonColors {
+    val labels = ActionLabels.of(MaterialTheme.colorScheme)
+    return ButtonDefaults.outlinedButtonColors(contentColor = labels.enabled, disabledContentColor = labels.disabled)
+}
+
+/**
  * The app's action control: an outlined button, a hairline border in the tertiary colour (the
  * hairline's own when unavailable), its label in the content colour, the secondary colour when
- * unavailable (Material 3's outlined label is the secondary ink, `onSurfaceVariant`, so both are
- * set here). [description] when the words need context TalkBack lacks ("Save now": "Save the
- * settings on the piano now").
+ * unavailable ([actionButtonColors]). [description] when the words need context TalkBack lacks
+ * ("Save now": "Save the settings on the piano now").
  */
 @Composable
 fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, description: String? = null) {
@@ -425,10 +446,7 @@ fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifi
         modifier = if (description != null) modifier.semantics { contentDescription = description } else modifier,
         enabled = enabled,
         border = BorderStroke(Hairline, if (enabled) LocalTertiary.current else LocalHairline.current),
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        colors = actionButtonColors(),
     ) {
         Text(label)
     }

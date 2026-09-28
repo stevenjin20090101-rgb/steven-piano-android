@@ -106,6 +106,7 @@ import dev.stevenjin.stevenpiano.ui.components.CrashBanner
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import dev.stevenjin.stevenpiano.ui.components.actionButtonColors
 import dev.stevenjin.stevenpiano.ui.components.moved
 import dev.stevenjin.stevenpiano.ui.components.readingPadding
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
@@ -538,7 +539,7 @@ private fun CategoryChips(selected: Category, onSelect: (Category) -> Unit) {
 @Composable
 private fun EmptyLibrary(onAdd: () -> Unit) {
     EmptyMessage("No pieces yet.", "Add a MIDI file to begin.") {
-        OutlinedButton(onClick = onAdd, border = BorderStroke(Hairline, LocalTertiary.current)) {
+        OutlinedButton(onClick = onAdd, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
             Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Add MIDI files")

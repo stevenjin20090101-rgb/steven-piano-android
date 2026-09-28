@@ -42,6 +42,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.actionButtonColors
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
@@ -100,7 +101,7 @@ fun PlaylistHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedButton(onClick = onShuffle, border = BorderStroke(Hairline, LocalTertiary.current)) {
+                OutlinedButton(onClick = onShuffle, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
                     Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Shuffle")

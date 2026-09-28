@@ -58,6 +58,7 @@ import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.actionButtonColors
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
@@ -154,8 +155,12 @@ fun ConnectionCard(
             }
             Spacer(Modifier.height(16.dp))
             when {
-                link is LinkState.Connected -> OutlinedButton(onClick = onDisconnect, border = BorderStroke(Hairline, LocalTertiary.current)) { Text("Disconnect") }
-                searching -> OutlinedButton(onClick = onCancel, border = BorderStroke(Hairline, LocalTertiary.current)) { Text("Cancel") }
+                link is LinkState.Connected -> OutlinedButton(onClick = onDisconnect, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
+                    Text("Disconnect")
+                }
+                searching -> OutlinedButton(onClick = onCancel, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
+                    Text("Cancel")
+                }
                 else -> Button(onClick = { if (missing.isEmpty()) onConnect() else askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
             }
         }

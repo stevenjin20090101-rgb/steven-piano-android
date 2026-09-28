@@ -49,7 +49,7 @@ val LocalTertiary = staticCompositionLocalOf { SilverTertiary }
 // Monochrome Material 3 mapping. `primary` is the content colour, so every system
 // button renders as light-on-dark (or dark-on-paper) with no tint anywhere.
 // `error` is ALSO monochrome, on purpose: red keeps its single meaning (live).
-private val DarkScheme = darkColorScheme(
+internal val DarkScheme = darkColorScheme(
     primary = SilverPrimary,          onPrimary = InkSurface,
     primaryContainer = InkElevated,   onPrimaryContainer = SilverPrimary,
     secondary = SilverSecondary,      onSecondary = InkSurface,
@@ -66,7 +66,7 @@ private val DarkScheme = darkColorScheme(
     scrim = Color(0xCC000000),
 )
 
-private val LightScheme = lightColorScheme(
+internal val LightScheme = lightColorScheme(
     primary = CarbonPrimary,          onPrimary = PaperSurface,
     primaryContainer = PaperElevated, onPrimaryContainer = CarbonPrimary,
     secondary = CarbonSecondary,      onSecondary = PaperSurface,
