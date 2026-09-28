@@ -942,13 +942,6 @@
     }
   }
 
-  /** "12:30" from minutes after midnight, and back. */
-  const hhmm = (minute) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-  const minutesOf = (value) => {
-    const match = /^(\d{1,2}):(\d{2})/.exec(value || '');
-    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
-  };
-
   /** Why the schedule being edited can't be saved, as the tablet says it; null when it can. */
   function scheduleProblem(d) {
     if (!d.days) return 'Choose at least one day.';
@@ -967,7 +960,7 @@
       data.last ? h('p', { class: 'note inset', text: data.last }) : null,
       data.exactAlarms ? null : h('div', { class: 'banner', role: 'status', text: 'Exact alarms are off on the tablet, so no schedule will start. Allow them there: Piano › Schedule › Allow exact alarms.' }),
       scheduling.editing ? scheduleEditor() : null,
-      h('ul', { class: 'rows' }, data.schedules.map(scheduleRow)),
+      h('ul', { class: 'rows schedule-list' }, data.schedules.map(scheduleRow)),
       data.schedules.length === 0 && !scheduling.editing ? h('p', { class: 'empty', text: 'No schedules yet. The piano can play by itself at set times: a channel, a playlist or a piece.' }) : null,
       h('p', { class: 'note inset', text: 'The tablet starts them: keep it on, charged and near the piano.' }));
   }
@@ -1073,14 +1066,22 @@
         h('button', { class: 'outlined', type: 'button', disabled: !!scheduleProblem(d), onclick: () => sendSchedule(fields(d), d.id, true) }, 'Save')));
   }
 
+  /** A time of day on the 24-hour clock, as the tablet shows it whatever the browser's own clock: the hour and the minutes. */
   function timeSetting(label, minute, note, onChange) {
-    const input = h('input', { class: 'field time-field', type: 'time', step: '60', 'aria-label': label });
-    input.value = hhmm(minute);
-    input.addEventListener('change', () => {
-      const m = minutesOf(input.value);
-      if (m !== null) onChange(m);
-    });
-    return h('div', { class: 'setting' }, h('div', { class: 'label' }, label, note ? h('span', { class: 'meta', text: note }) : null), input);
+    const select = (count, value, name) => {
+      const node = h('select', { class: 'field time-part', 'aria-label': `${label}, ${name}` },
+        Array.from({ length: count }, (_, i) => h('option', { value: String(i), text: String(i).padStart(2, '0') })));
+      node.value = String(value);
+      return node;
+    };
+    const hour = select(24, Math.floor(minute / 60), 'hour');
+    const minutes = select(60, minute % 60, 'minutes');
+    const changed = () => onChange(Number(hour.value) * 60 + Number(minutes.value));
+    hour.addEventListener('change', changed);
+    minutes.addEventListener('change', changed);
+    return h('div', { class: 'setting' },
+      h('div', { class: 'label' }, label, note ? h('span', { class: 'meta', text: note }) : null),
+      h('div', { class: 'time-field' }, hour, h('span', { class: 'time-colon', text: ':' }), minutes));
   }
 
   function switchSetting(label, on, note, onChange) {
@@ -1099,8 +1100,9 @@
       value.textContent = `${d.volumePct}%`;
     });
     return h('div', { class: 'setting stacked' },
-      h('div', { class: 'label' }, 'Volume', h('span', { class: 'eyebrow', text: '%' }), h('span', { class: 'meta', text: "The piano's own volume while it plays, or how hard its keys are struck where the piano has none. What was there comes back when it ends." })),
-      h('div', { class: 'with-value' }, range, value));
+      h('div', { class: 'label' }, 'Volume', h('span', { class: 'eyebrow', text: '%' })),
+      h('div', { class: 'with-value' }, range, value),
+      h('p', { class: 'meta', text: "The piano's own volume while it plays, or how hard its keys are struck where the piano has none. What was there comes back when it ends." }));
   }
 
   /** The choices for what to play, as rows with a check on the chosen one: the channels, the playlists, or pieces searched. */

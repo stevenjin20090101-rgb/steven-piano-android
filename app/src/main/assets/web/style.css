@@ -832,7 +832,16 @@ button, input, select { font: inherit; color: inherit; }
 
 .setting .label .meta { display: block; }
 
-.time-field { width: auto; min-width: 120px; min-height: 40px; font-variant-numeric: tabular-nums; }
+/* A time as two selects, hour and minutes, on the 24-hour clock whatever the browser's own. */
+.time-field { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+
+.time-part { width: auto; min-width: 64px; min-height: 40px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+
+.time-colon { font-weight: 500; }
+
+.schedule-list { border-top: 1px solid var(--hairline); margin-top: 8px; }
+
+.schedule-editor + .schedule-list { border-top: 0; margin-top: 0; }
 
 .choice .glyph { color: var(--primary); }
 
