@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui.screens.display
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -50,6 +51,9 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.Provenance
 import dev.stevenjin.stevenpiano.ble.LinkState
@@ -89,7 +93,7 @@ private const val BACKDROP_FADED = 0.72f
  * composer and, while one plays, the channel as an eyebrow, the paper roll and its keyboard strip
  * across the whole width, the live dot with "Sent to piano", and the byline at the foot. No
  * controls: any touch, or back, leaves ([onLeave]); the touch goes no further. The screen stays
- * on while it shows.
+ * on and the system bars step aside while it shows.
  */
 @Composable
 fun DisplayScreen(onLeave: () -> Unit) {
@@ -104,9 +108,18 @@ fun DisplayScreen(onLeave: () -> Unit) {
 
     BackHandler(onBack = onLeave)
     val view = LocalView.current
-    DisposableEffect(view) {
+    val window = LocalActivity.current?.window
+    DisposableEffect(view, window) {
         view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false }
+        // The whole screen for the display: the status and navigation bars (a tablet's taskbar
+        // among them) step aside while it shows, and come back with a swipe or when it leaves.
+        val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+        bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars?.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            view.keepScreenOn = false
+            bars?.show(WindowInsetsCompat.Type.systemBars())
+        }
     }
     DisplayTheme(black = settings.standbyCanvas == StandbyCanvas.BLACK, darkTheme = dark) {
         val canvas = MaterialTheme.colorScheme.surface

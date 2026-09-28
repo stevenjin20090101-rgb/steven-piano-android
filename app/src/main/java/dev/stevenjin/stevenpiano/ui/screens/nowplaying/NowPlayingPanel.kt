@@ -228,7 +228,8 @@ private fun ColumnScope.PanelPiece(
                 // Its 48 dp target (it opens the Piano tab when not connected) reaches past the 40 dp row.
                 ConnectionLine(connected, state.status == PlaybackStatus.Playing, onOpenPiano, Modifier.wrapContentHeight(unbounded = true))
             }
-            Spacer(Modifier.height(8.dp))
+            // The row is the panel's foot: it takes the place of the 8 dp that closed the column, so the
+            // strip keeps the height that lets the transport float on its history.
         }
     }
 }
