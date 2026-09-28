@@ -120,7 +120,8 @@ import kotlinx.coroutines.launch
  * and the view model; "About this piece" opens the piece sheet and "Change photo" the photo
  * picker. A composer opens with their portrait and blurb. [onImport] brings files in; artwork
  * fetched in the background shows its progress under the import bar. On the launch after a crash,
- * an outlined banner offers to share diagnostics. On wide screens the content stays a 720 dp
+ * an outlined banner offers to share diagnostics; while guests' requests wait for approval, another
+ * offers the oldest with Approve and Dismiss ([RequestsBanner]). On wide screens the content stays a 720 dp
  * column in the middle; the list still scrolls from anywhere across the screen, and under the tab
  * bar's glass, its last row able to rise above it ([LocalFloatingPadding]). An open playlist's Play
  * floats as a glass circle at the bottom end of its column ([FloatingPlayRequest]). On wide frames
@@ -136,6 +137,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
     val crashed by graph.crashNotice.collectAsStateWithLifecycle()
+    val requests by graph.web.requests.pending.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var adding by rememberSaveable { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
@@ -185,6 +187,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                 ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
                 ArtworkBar(artworkProgress)
                 if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
+                RequestsBanner(requests, onApprove = graph.web::approve, onDismiss = graph.web::dismiss, modifier = Modifier.padding(16.dp))
             }
             when {
                 !state.loaded -> Unit

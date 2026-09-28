@@ -146,4 +146,5 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.org.json)
     testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.zxing.core)
 }

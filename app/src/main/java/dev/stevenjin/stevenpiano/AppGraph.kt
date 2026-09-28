@@ -57,6 +57,7 @@ import dev.stevenjin.stevenpiano.update.UpdateInstaller
 import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
+import dev.stevenjin.stevenpiano.web.WebPanel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -227,6 +228,9 @@ class AppGraph(private val app: Application) {
      */
     suspend fun runUpdateSchedule() = updateChecker.runSchedule(settingsRepository.settings.map { it.checkForUpdates }.distinctUntilChanged())
 
+    /** The web panel (Piano › Remote control): its sessions, login guard, guests' requests, and where its service listens. */
+    val web: WebPanel by lazy { WebPanel(app, this) }
+
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
     val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }
 
@@ -320,6 +324,7 @@ class AppGraph(private val app: Application) {
         }
         channelPools.summaries   // the channels' pools are worked out from the start, for the Library's first look
         channelPlayer.start()
+        web.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.

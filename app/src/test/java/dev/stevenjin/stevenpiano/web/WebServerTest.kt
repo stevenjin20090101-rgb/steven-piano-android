@@ -44,7 +44,7 @@ class WebServerTest {
         "style.css" to ":root { }",
         "request.html" to "<!doctype html><title>Ask the piano</title>",
         "request.js" to "/* the request page */",
-        "poster.html" to "<!doctype html>",
+        "poster.html" to "<!doctype html><p>{{URL}}</p>{{QR}}",
     )
     private val assets = AssetSource { name ->
         asked += name
@@ -70,7 +70,8 @@ class WebServerTest {
     }
 
     private fun start(guestOnly: Boolean = false, names: List<String> = emptyList()): Pair<WebServer, RawHttp> {
-        val server = WebServer(WebServer.Config("127.0.0.1", 0, guestOnly, { names }, tmp.newFolder()), backend, sessions, guard, requests, assets, sockets)
+        val poster: suspend (String) -> ByteArray? = { url -> Poster.page(assets.read(WebAssets.POSTER.name), url) }
+        val server = WebServer(WebServer.Config("127.0.0.1", 0, guestOnly, { names }, tmp.newFolder()), backend, sessions, guard, requests, assets, sockets, poster)
         server.startListening()
         servers += server
         return server to RawHttp(server.listeningPort)
@@ -373,6 +374,22 @@ class WebServerTest {
         val second = requests.pending.value.single().id
         assertEquals(204, http.api("POST", "/api/requests/$second/dismiss", session = token).status)
         assertEquals("dismissed: nothing plays", listOf("requested 2"), backend.calls.toList())
+    }
+
+    @Test
+    fun `the poster shows the request page's address and its QR, on every listener, without a session`() {
+        for (guestOnly in listOf(false, true)) {
+            val (_, http) = start(guestOnly = guestOnly)
+            backend.state = WebState(web = WebAddresses(null, null))
+            assertEquals("no address yet", 503, http.get("/poster").status)
+            backend.state = WebState(web = WebAddresses("http://100.101.2.3:8737", "http://192.168.1.20:8737/request"))
+            val poster = http.get("/poster")
+            assertEquals(200, poster.status)
+            assertEquals("text/html; charset=utf-8", poster.header("content-type"))
+            assertTrue(poster.text.contains("<p>http://192.168.1.20:8737/request</p>"))
+            assertTrue(poster.text.contains("<svg class=\"qr\""))
+            assertEquals(405, http.send("POST", "/poster", "x".toByteArray()).status)
+        }
     }
 
     @Test

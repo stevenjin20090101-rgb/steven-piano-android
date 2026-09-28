@@ -24,6 +24,8 @@ junit = "4.13.2"
 orgJson = "20250517"
 # Unit tests only: a real SQLite on the JVM, so the schema migrations run on a real database.
 sqliteJdbc = "3.41.2.2"
+# Unit tests only: a QR reader, so PosterTest proves the poster's code scans back to its address.
+zxing = "3.5.3"
 # Haze 1.7.2, the newest release built on this app's Compose (UI 1.10) and Kotlin (2.3): 2.0.0 and
 # 1.7.3 need Compose UI 1.12, which requires compileSdk 37 and AGP 9.1 (BUILD_SPEC › v1.5 — M16).
 haze = "1.7.2"
@@ -64,6 +66,8 @@ qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrco
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 # Unit tests only: SQLite on the JVM (Apache-2.0), for SchemaV3Test's migration of a 1.4 database with its rows.
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteJdbc" }
+# Unit tests only: ZXing's core reader (Apache-2.0), which decodes the QR codes the app draws.
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
