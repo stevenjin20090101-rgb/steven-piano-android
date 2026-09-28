@@ -55,6 +55,17 @@ class AdaptiveFrameTest {
     }
 
     @Test
+    fun `the Piano tab's pages open beside its hub on anything wider than a phone held upright`() {
+        assertFalse(phone.twoPane)
+        assertFalse(frame(599, 900).twoPane)
+        assertTrue(frame(600, 900).twoPane)
+        assertTrue(tabletUpright.twoPane)
+        assertTrue(tabletOnItsSide.twoPane)
+        assertTrue("a phone on its side", frame(891, 411).twoPane)
+        for (f in listOf(phone, tabletUpright, tabletOnItsSide, frame(891, 411))) assertEquals(f.rail, f.twoPane)
+    }
+
+    @Test
     fun `a phone on its side gets the medium layout`() {
         val landscape = frame(891, 411)
         assertEquals(WindowWidthSizeClass.Medium, landscape.widthClass)

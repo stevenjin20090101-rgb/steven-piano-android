@@ -19,20 +19,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
-import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.update.UpdateState
 
 /**
- * The Piano tab's UPDATE row, above App preferences, while a newer release is known or has just
- * been installed (DESIGN.md › v1.4 › Updates): the eyebrow header, "Steven Piano 1.4 is available"
+ * The Piano tab's UPDATE row, on the hub between the connection card and the groups (it is
+ * transient and wants attention, so it never hides in a page), while a newer release is known or
+ * has just been installed (DESIGN.md › v1.4 › Updates, v1.5): the eyebrow header, "Steven Piano 1.4 is available"
  * in Body, the release notes in the secondary colour, and one filled Update button; while it
  * downloads, a hairline progress row ("Downloading 1.4 · 1.2 of 2.3 MB", tabular figures); after a
  * silent install, "Updated to 1.4; restart to use it" with Restart, or just "Updated to 1.4" when
@@ -45,13 +45,7 @@ import dev.stevenjin.stevenpiano.update.UpdateState
 fun UpdateRow(state: UpdateState, canInstall: Boolean, onUpdate: () -> Unit, onRestart: () -> Unit, onAllowInstalls: () -> Unit) {
     val manifest = state.manifest
     if (manifest == null && state !is UpdateState.Installed) return
-    Eyebrow(
-        "Update",
-        Modifier
-            .padding(start = 16.dp, top = 24.dp, bottom = 8.dp)
-            .semantics { heading() },
-    )
-    HairlineDivider()
+    SectionEyebrow("Update")
     Column(
         Modifier
             .fillMaxWidth()
@@ -112,33 +106,6 @@ fun UpdateRow(state: UpdateState, canInstall: Boolean, onUpdate: () -> Unit, onR
                     )
                 }
             }
-        }
-    }
-    HairlineDivider(startInset = 16.dp)
-}
-
-/**
- * Under the Check for updates automatically switch: Check now (whatever the switch says), and what
- * the last check found in one line ("Steven Piano is up to date.", "Couldn't reach the update
- * server.", …), read out as it changes.
- */
-@Composable
-fun CheckNowRow(state: UpdateState, onCheck: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 4.dp, end = 16.dp, bottom = 8.dp),
-    ) {
-        TextButton(onClick = onCheck, enabled = state != UpdateState.Checking && !state.busy) { Text("Check now") }
-        UpdateCopy.checkLine(state)?.let { line ->
-            Eyebrow(
-                line,
-                Modifier
-                    .padding(start = 12.dp)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                uppercase = false,
-            )
         }
     }
     HairlineDivider(startInset = 16.dp)

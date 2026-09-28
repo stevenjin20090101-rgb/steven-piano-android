@@ -11,6 +11,9 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.ScrollState
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
@@ -23,21 +26,26 @@ import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.WideLayout
 import dev.stevenjin.stevenpiano.service.UpdateService
+import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.update.UpdateState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * The Piano tab: the connection, the piano's own settings, the app's updates and preferences. The
- * piano's settings go through the app-wide [AppGraph.pianoSettings], which reads them on every
- * connection; [leave] saves them on the piano when the tab goes. Preferences are written in the
- * app's scope so leaving the tab never drops one; the player picks them up from the settings
- * flow. Update, Check now and Restart act through [AppGraph.updater].
+ * The Piano tab, its hub and its pages together (one instance for the tab's whole graph): the
+ * connection, the piano's own settings, the app's updates and preferences, and which page is open.
+ * The piano's settings go through the app-wide [AppGraph.pianoSettings], which reads them on every
+ * connection; [leave] saves them on the piano when the tab goes (not when a page closes).
+ * Preferences are written in the app's scope so leaving the tab never drops one; the player picks
+ * them up from the settings flow. Update, Check now and Restart act through [AppGraph.updater].
+ * The hub's row values come from [GroupSummaries], worked out from these same flows.
  */
-class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsActions {
+class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateHandle) : ViewModel(), PianoSettingsActions {
     val link: StateFlow<LinkState> = graph.pianoLink.state
     val settings: StateFlow<PianoSettings> = graph.settings
     val playing: StateFlow<Boolean> = graph.player.state
@@ -73,6 +81,54 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsAc
 
     /** The tab left the foreground: changes still waiting go now, and the piano saves them. */
     fun leave() = graph.pianoSettings.leave()
+
+    private val _selectedPage = MutableStateFlow(SettingsPage.of(saved.get<String>(SELECTED)) ?: SettingsPage.Feel)
+
+    /** The page open beside the hub on wide screens (Feel at first), and on phones the one last opened. */
+    val selectedPage: StateFlow<SettingsPage> = _selectedPage.asStateFlow()
+
+    /**
+     * Whether the person has a page open on a wide screen (they picked it, or it was open on the
+     * phone before it turned), so that a phone turned upright shows that page rather than the hub.
+     */
+    private var opened: Boolean
+        get() = saved.get<Boolean>(OPENED) == true
+        set(value) {
+            saved[OPENED] = value
+        }
+
+    /** Each page's scroll, shared by the page pushed on a phone and the page beside the hub, so turning the phone keeps it. */
+    private val scrolls = mutableStateMapOf(*SettingsPage.entries.map { it to ScrollState(0) }.toTypedArray())
+
+    fun scrollOf(page: SettingsPage): ScrollState = scrolls.getValue(page)
+
+    /** Phones: a row of the hub opens [page], from its top. */
+    fun open(page: SettingsPage) {
+        scrolls[page] = ScrollState(0)
+        choose(page, opened = false)
+    }
+
+    /** Wide screens: a row of the hub shows [page] beside it; another page starts from its top. */
+    fun pick(page: SettingsPage) {
+        if (page != _selectedPage.value) scrolls[page] = ScrollState(0)
+        choose(page, opened = true)
+    }
+
+    /** The window widened with [page] open on the phone: it stays open, beside the hub, where it was scrolled to. */
+    fun keepOpen(page: SettingsPage) = choose(page, opened = true)
+
+    /** The window narrowed: the page to put back over the hub, if the person had one open; asked once. */
+    fun takeOpened(): SettingsPage? {
+        if (!opened) return null
+        opened = false
+        return _selectedPage.value
+    }
+
+    private fun choose(page: SettingsPage, opened: Boolean) {
+        _selectedPage.value = page
+        saved[SELECTED] = page.key
+        this.opened = opened
+    }
 
     fun setAutoConnect(on: Boolean) = edit { setAutoConnect(on) }
 
@@ -135,5 +191,7 @@ class PianoViewModel(private val graph: AppGraph) : ViewModel(), PianoSettingsAc
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+        const val SELECTED = "selectedPage"
+        const val OPENED = "pageOpened"
     }
 }

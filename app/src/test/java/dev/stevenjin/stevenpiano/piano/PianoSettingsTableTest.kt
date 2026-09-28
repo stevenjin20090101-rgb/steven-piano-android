@@ -83,11 +83,11 @@ class PianoSettingsTableTest {
     }
 
     @Test
-    fun `names are unique and the sections run lighting, feel, pedal, diagnostics`() {
+    fun `names are unique and the table runs page by page, section by section`() {
         assertEquals(PianoSettings.all.size, PianoSettings.all.map { it.name }.toSet().size)
         val order = PianoSettings.all.map { it.section.ordinal }
         assertEquals(order.sorted(), order)
-        assertEquals(PianoSection.entries.toList(), PianoSettings.all.map { it.section }.distinct())
+        assertEquals(PianoPage.entries.toList(), PianoSettings.all.map { it.page }.distinct())
     }
 
     @Test

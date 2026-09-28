@@ -62,7 +62,8 @@ data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay)
  * their side) move the four destinations to a rail on the left. Never a rail and a bar at once.
  * The class also sets how Now playing arranges the score and the notes, how many bars a system of
  * the score holds, how many keys the Keys screen shows, how many tiles the Library's grids set side
- * by side, and which note-display choices the Piano tab offers.
+ * by side, which note-display choices the Piano tab offers, and whether the Piano tab's pages open
+ * beside its hub.
  *
  * A phone on its side is often 840 dp wide or more, but only 360-480 dp tall: an expanded width
  * over a compact height ([height]) counts as medium, so landscape phones get the medium layout,
@@ -109,6 +110,13 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
 
     /** Wide screens show the score beside or above the notes, as the Wide layout preference says. */
     val wide: Boolean get() = widthClass != WindowWidthSizeClass.Compact
+
+    /**
+     * A list with its detail beside it (DESIGN.md › v1.5): the Piano tab's hub with the open page at
+     * its side, iPad Settings style, on anything wider than a phone held upright (a phone on its side
+     * included). Compact widths push the page over the list instead.
+     */
+    val twoPane: Boolean get() = widthClass != WindowWidthSizeClass.Compact
 
     /**
      * The Note display choices the Piano tab offers: on compact widths the score is a third style;

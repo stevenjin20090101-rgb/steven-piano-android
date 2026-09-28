@@ -13,12 +13,33 @@ import androidx.compose.runtime.Immutable
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** The piano's own settings on the Piano tab, in four sections, in this order. */
-enum class PianoSection(val title: String) {
-    Lighting("Lighting"),
-    Feel("Feel"),
-    Pedal("Pedal"),
-    Diagnostics("Diagnostics"),
+/**
+ * The Piano tab's four piano pages (DESIGN.md › v1.5), in the hub's order: each opens from a row of
+ * the hub's PIANO group and shows its sections of the table below.
+ */
+enum class PianoPage { Feel, Lighting, Pedal, Firmware }
+
+/**
+ * The sections of the piano pages, in page order and then in the order each page shows them, each
+ * under its eyebrow ([title]; null for a page with one section, which needs none). Feel: PRESETS ·
+ * LOUDNESS · TOUCH · TIMING · RELEASE · DRIVE; Lighting: STRIP · LAYOUT · MOTION · PIANO'S SCREEN;
+ * Pedal: one section; Firmware and status: FIRMWARE · STATUS · ACTIONS.
+ */
+enum class PianoSection(val page: PianoPage, val title: String?) {
+    Presets(PianoPage.Feel, "Presets"),
+    Loudness(PianoPage.Feel, "Loudness"),
+    Touch(PianoPage.Feel, "Touch"),
+    Timing(PianoPage.Feel, "Timing"),
+    Release(PianoPage.Feel, "Release"),
+    Drive(PianoPage.Feel, "Drive"),
+    Strip(PianoPage.Lighting, "Strip"),
+    Layout(PianoPage.Lighting, "Layout"),
+    Motion(PianoPage.Lighting, "Motion"),
+    PianoScreen(PianoPage.Lighting, "Piano's screen"),
+    Pedal(PianoPage.Pedal, null),
+    Firmware(PianoPage.Firmware, "Firmware"),
+    Status(PianoPage.Firmware, "Status"),
+    Actions(PianoPage.Firmware, "Actions"),
 }
 
 /** How a setting is adjusted. Ranges are the firmware's (`firmware/docs/BLE_SETTINGS.md` › 4). */
@@ -53,7 +74,8 @@ sealed interface SettingKind {
 
 /**
  * One of the piano's settings. [name] is the firmware command that sets it and its name in
- * `dump`, so a change goes back as `name value`. [unit] is shown in the control's eyebrow.
+ * `dump`, so a change goes back as `name value`. It sits in one [section] of one [page] of the Piano
+ * tab. [unit] is shown in the control's eyebrow.
  * [readOnly] settings are shown but never sent. [zero] is how 0 reads where it means something
  * ("Off", "Never"); [asPercentOf255] shows a 0..255 value as a percentage, as the firmware's own
  * reply does; [times] shows a multiplier as "×1.00". [note] is a line of help under the control.
@@ -71,6 +93,9 @@ data class PianoSetting(
     val times: Boolean = false,
     val note: String? = null,
 ) {
+    /** The page the setting is on: its section's. */
+    val page: PianoPage get() = section.page
+
     /** How [wire] (the piano's value) reads on screen: "63", "1.60", "On", "Rainbow", "Off"; "—" when unknown. */
     fun display(wire: String?): String {
         if (wire == null) return NO_VALUE
@@ -113,9 +138,37 @@ data class PianoSetting(
 @Immutable
 data class Preset(val command: String, val label: String)
 
-/** A read-only fact from the dump's "!" lines. */
+/** A read-only fact from the dump's "!" lines, shown in [section]. */
 @Immutable
-data class Fact(val name: String, val label: String)
+data class Fact(val name: String, val label: String, val section: PianoSection)
+
+/**
+ * One row of a piano page, in the order [PianoSettings.rows] gives for its section: the settings
+ * from the table, the facts, and the rows that are not settings.
+ */
+@Immutable
+sealed interface PianoRow {
+    /** A setting from [PianoSettings.all], in the control its kind takes. */
+    data class Control(val setting: PianoSetting) : PianoRow
+
+    /** A fact the piano reports, read only. */
+    data class Reading(val fact: Fact) : PianoRow
+
+    /** PRESETS: the four feel presets as chips. */
+    data object Presets : PianoRow
+
+    /** TOUCH, after the floors and the ceiling: one key struck at its floor or at the ceiling. */
+    data object StrikeTest : PianoRow
+
+    /** LAYOUT, after the strip's geometry: one key's LED lit, to line the strip up. */
+    data object TestLed : PianoRow
+
+    /** STATUS, under the two key-force lines: where key force is set. */
+    data object KeyForceNote : PianoRow
+
+    /** ACTIONS: Read status (and the piano's report), All keys off, Save now. */
+    data object Actions : PianoRow
+}
 
 /** What the Piano tab may ask the piano to do besides settings. [takesKey]: followed by a MIDI key. */
 enum class PianoAction(val command: String, val takesKey: Boolean = false) {
@@ -128,70 +181,77 @@ enum class PianoAction(val command: String, val takesKey: Boolean = false) {
 }
 
 /**
- * The static table of the piano's settings the app shows, in section order (BUILD_SPEC.md ›
- * Piano settings over Bluetooth › The table). Every name is a firmware command; the unit test
- * checks each against BLE_SETTINGS.md's `dump` list. Not shown: `keyviz` (the piano's own
- * screen) and everything refused over Bluetooth.
+ * The static table of the piano's settings the app shows, in page and section order (BUILD_SPEC.md
+ * › v1.5 — M15 › The table). Every name is a firmware command; the unit test checks each against
+ * BLE_SETTINGS.md's `dump` list. Not shown: `keyviz` (the piano's own screen) and everything
+ * refused over Bluetooth.
  */
 object PianoSettings {
-    private val L = PianoSection.Lighting
-    private val F = PianoSection.Feel
-    private val P = PianoSection.Pedal
-    private val D = PianoSection.Diagnostics
+    private val LOUDNESS = PianoSection.Loudness
+    private val TOUCH = PianoSection.Touch
+    private val TIMING = PianoSection.Timing
+    private val RELEASE = PianoSection.Release
+    private val DRIVE = PianoSection.Drive
+    private val STRIP = PianoSection.Strip
+    private val LAYOUT = PianoSection.Layout
+    private val MOTION = PianoSection.Motion
+    private val SCREEN = PianoSection.PianoScreen
+    private val PEDAL = PianoSection.Pedal
+    private val STATUS = PianoSection.Status
 
     val all: List<PianoSetting> = listOf(
+        // FEEL (PRESETS, the chips, comes first and holds no setting)
+        PianoSetting("fullpower", "Full power (no dynamics)", LOUDNESS, SettingKind.Switch),
+        PianoSetting("volume", "Volume", LOUDNESS, SettingKind.Slider(0f, 100f), unit = "%"),
+        PianoSetting("velcurve", "Velocity curve", TOUCH, SettingKind.Slider(0.4f, 3.0f, step = 0.05f, decimals = 2)),
+        PianoSetting("velmult", "Velocity multiplier", TOUCH, SettingKind.Slider(0.1f, 5.0f, step = 0.1f, decimals = 2)),
+        PianoSetting("min", "White-key floor", TOUCH, SettingKind.Slider(0f, 4095f)),
+        PianoSetting("minblack", "Black-key floor (0 = same as white)", TOUCH, SettingKind.Slider(0f, 4095f)),
+        PianoSetting("max", "Ceiling", TOUCH, SettingKind.Slider(0f, 4095f)),
+        PianoSetting("humanvel", "Velocity scatter", TIMING, SettingKind.Stepper(0, 30)),
+        PianoSetting("humantime", "Timing scatter", TIMING, SettingKind.Stepper(0, 40), unit = "ms"),
+        PianoSetting("burstgap", "Burst window", TIMING, SettingKind.Stepper(0, 600, step = 10), unit = "ms"),
+        PianoSetting("burstboost", "Burst boost", TIMING, SettingKind.Slider(0f, 100f), unit = "%"),
+        PianoSetting("minstrike", "Shortest strike", TIMING, SettingKind.Stepper(0, 500, step = 5), unit = "ms"),
+        PianoSetting("isostrike", "Lone-note strike", TIMING, SettingKind.Stepper(0, 500, step = 5), unit = "ms"),
+        PianoSetting("isogap", "Silence before a lone note", TIMING, SettingKind.Stepper(0, 2000, step = 10), unit = "ms"),
+        PianoSetting("gap", "Repeat gap", TIMING, SettingKind.Stepper(0, 300), unit = "ms"),
+        PianoSetting("hold", "Longest hold", TIMING, SettingKind.Stepper(50, 4000, step = 50), unit = "ms"),
+        PianoSetting("restrike", "Re-strike held notes", TIMING, SettingKind.Stepper(0, 1000, step = 10, lowestOn = 40), unit = "ms", zero = "Off"),
+        PianoSetting("softrelease", "Soft release", RELEASE, SettingKind.Switch),
+        PianoSetting("releasepwm", "Release cushion", RELEASE, SettingKind.Slider(0f, 4095f)),
+        PianoSetting("releasems", "Release time", RELEASE, SettingKind.Stepper(0, 200), unit = "ms"),
+        PianoSetting("freq", "Drive frequency", DRIVE, SettingKind.Stepper(24, 1526, step = 10), unit = "Hz"),
         // LIGHTING
-        PianoSetting("leds", "Strip", L, SettingKind.Switch),
-        PianoSetting("ledmode", "Mode", L, SettingKind.Choice(listOf("Off", "Static", "Rainbow", "Reactive"))),
-        PianoSetting("ledbright", "Brightness", L, SettingKind.Slider(0f, 255f), unit = "%", asPercentOf255 = true),
+        PianoSetting("leds", "Strip", STRIP, SettingKind.Switch),
+        PianoSetting("ledmode", "Mode", STRIP, SettingKind.Choice(listOf("Off", "Static", "Rainbow", "Reactive"))),
+        PianoSetting("ledbright", "Brightness", STRIP, SettingKind.Slider(0f, 255f), unit = "%", asPercentOf255 = true),
         PianoSetting(
-            "reactcolor", "Reactive palette", L,
+            "reactcolor", "Reactive palette", STRIP,
             SettingKind.Choice(listOf("Rainbow", "Solid", "Velocity", "Fire", "Ocean", "Forest", "Lava", "Party")),
         ),
         PianoSetting(
-            "ledcount", "Strip length", L, SettingKind.Stepper(1, 300), unit = "LEDs",
+            "ledcount", "Strip length", LAYOUT, SettingKind.Stepper(1, 300), unit = "LEDs",
             note = "A new length maps notes at once; the strip itself follows after the piano restarts.",
         ),
-        PianoSetting("ledoffset", "Offset", L, SettingKind.Stepper(-300, 300), unit = "LEDs"),
-        PianoSetting("ledscale", "Scale", L, SettingKind.Stepper(10, 400), unit = "%"),
-        PianoSetting("ledtail", "Unlit at the end", L, SettingKind.Stepper(0, 255), unit = "LEDs"),
-        PianoSetting("ledreverse", "Strip runs high to low", L, SettingKind.Switch),
-        PianoSetting("ledglow", "Glow", L, SettingKind.Stepper(0, 10), unit = "LEDs each side"),
-        PianoSetting("velbright", "Brightness follows velocity", L, SettingKind.Switch),
-        PianoSetting("decay", "Fade speed", L, SettingKind.Stepper(1, 40)),
-        PianoSetting("rainspeed", "Rainbow speed", L, SettingKind.Stepper(1, 40)),
-        PianoSetting("dimsecs", "Piano screen dims after", L, SettingKind.Stepper(0, 3600, step = 30), unit = "s", zero = "Never"),
-        PianoSetting("dimfloor", "Dimmed screen brightness", L, SettingKind.Slider(0f, 255f)),
-        // FEEL (the preset chips come first)
-        PianoSetting("fullpower", "Full power (no dynamics)", F, SettingKind.Switch),
-        PianoSetting("volume", "Volume", F, SettingKind.Slider(0f, 100f), unit = "%"),
-        PianoSetting("velcurve", "Velocity curve", F, SettingKind.Slider(0.4f, 3.0f, step = 0.05f, decimals = 2)),
-        PianoSetting("velmult", "Velocity multiplier", F, SettingKind.Slider(0.1f, 5.0f, step = 0.1f, decimals = 2)),
-        PianoSetting("min", "White-key floor", F, SettingKind.Slider(0f, 4095f)),
-        PianoSetting("minblack", "Black-key floor (0 = same as white)", F, SettingKind.Slider(0f, 4095f)),
-        PianoSetting("max", "Ceiling", F, SettingKind.Slider(0f, 4095f)),
-        PianoSetting("humanvel", "Velocity scatter", F, SettingKind.Stepper(0, 30)),
-        PianoSetting("humantime", "Timing scatter", F, SettingKind.Stepper(0, 40), unit = "ms"),
-        PianoSetting("burstgap", "Burst window", F, SettingKind.Stepper(0, 600, step = 10), unit = "ms"),
-        PianoSetting("burstboost", "Burst boost", F, SettingKind.Slider(0f, 100f), unit = "%"),
-        PianoSetting("minstrike", "Shortest strike", F, SettingKind.Stepper(0, 500, step = 5), unit = "ms"),
-        PianoSetting("isostrike", "Lone-note strike", F, SettingKind.Stepper(0, 500, step = 5), unit = "ms"),
-        PianoSetting("isogap", "Silence before a lone note", F, SettingKind.Stepper(0, 2000, step = 10), unit = "ms"),
-        PianoSetting("gap", "Repeat gap", F, SettingKind.Stepper(0, 300), unit = "ms"),
-        PianoSetting("hold", "Longest hold", F, SettingKind.Stepper(50, 4000, step = 50), unit = "ms"),
-        PianoSetting("restrike", "Re-strike held notes", F, SettingKind.Stepper(0, 1000, step = 10, lowestOn = 40), unit = "ms", zero = "Off"),
-        PianoSetting("softrelease", "Soft release", F, SettingKind.Switch),
-        PianoSetting("releasepwm", "Release cushion", F, SettingKind.Slider(0f, 4095f)),
-        PianoSetting("releasems", "Release time", F, SettingKind.Stepper(0, 200), unit = "ms"),
-        PianoSetting("freq", "Drive frequency", F, SettingKind.Stepper(24, 1526, step = 10), unit = "Hz"),
+        PianoSetting("ledoffset", "Offset", LAYOUT, SettingKind.Stepper(-300, 300), unit = "LEDs"),
+        PianoSetting("ledscale", "Scale", LAYOUT, SettingKind.Stepper(10, 400), unit = "%"),
+        PianoSetting("ledtail", "Unlit at the end", LAYOUT, SettingKind.Stepper(0, 255), unit = "LEDs"),
+        PianoSetting("ledreverse", "Strip runs high to low", LAYOUT, SettingKind.Switch),
+        PianoSetting("ledglow", "Glow", LAYOUT, SettingKind.Stepper(0, 10), unit = "LEDs each side"),
+        PianoSetting("velbright", "Brightness follows velocity", MOTION, SettingKind.Switch),
+        PianoSetting("decay", "Fade speed", MOTION, SettingKind.Stepper(1, 40)),
+        PianoSetting("rainspeed", "Rainbow speed", MOTION, SettingKind.Stepper(1, 40)),
+        PianoSetting("dimsecs", "Piano screen dims after", SCREEN, SettingKind.Stepper(0, 3600, step = 30), unit = "s", zero = "Never"),
+        PianoSetting("dimfloor", "Dimmed screen brightness", SCREEN, SettingKind.Slider(0f, 255f)),
         // PEDAL (pedaltest is refused over Bluetooth, so not here)
-        PianoSetting("pedalon", "Sustain pedal", P, SettingKind.Switch),
-        PianoSetting("pedalhalf", "Half-pedalling", P, SettingKind.Switch),
-        PianoSetting("pedalup", "Up position", P, SettingKind.Stepper(80, 600)),
-        PianoSetting("pedaldown", "Down position", P, SettingKind.Stepper(80, 600)),
-        // DIAGNOSTICS: per-key force is set at the piano's USB console only
-        PianoSetting("keyforce_white", "White-key force", D, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
-        PianoSetting("keyforce_black", "Black-key force", D, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
+        PianoSetting("pedalon", "Sustain pedal", PEDAL, SettingKind.Switch),
+        PianoSetting("pedalhalf", "Half-pedalling", PEDAL, SettingKind.Switch),
+        PianoSetting("pedalup", "Up position", PEDAL, SettingKind.Stepper(80, 600)),
+        PianoSetting("pedaldown", "Down position", PEDAL, SettingKind.Stepper(80, 600)),
+        // FIRMWARE AND STATUS › STATUS: per-key force is set at the piano's USB console only
+        PianoSetting("keyforce_white", "White-key force", STATUS, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
+        PianoSetting("keyforce_black", "Black-key force", STATUS, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
     )
 
     private val byName: Map<String, PianoSetting> = all.associateBy { it.name }
@@ -200,7 +260,13 @@ object PianoSettings {
 
     fun inSection(section: PianoSection): List<PianoSetting> = all.filter { it.section == section }
 
-    /** The four feel presets, as a chip row at the top of FEEL. Each saves itself on the piano. */
+    /** [page]'s sections, in the order the page shows them. */
+    fun sections(page: PianoPage): List<PianoSection> = PianoSection.entries.filter { it.page == page }
+
+    /** What [section] shows, in order: its facts, its settings, and the rows that are not settings where they belong. */
+    fun rows(section: PianoSection): List<PianoRow> = rowsBySection.getValue(section)
+
+    /** The four feel presets, as the chip row of Feel's PRESETS. Each saves itself on the piano. */
     val presets: List<Preset> = listOf(
         Preset("soft", "Soft"),
         Preset("cinematic", "Cinematic"),
@@ -208,14 +274,29 @@ object PianoSettings {
         Preset("snappy", "Snappy"),
     )
 
-    /** Diagnostics' read-only facts, in the order shown. */
+    /** The read-only facts, in the order shown: the version under FIRMWARE, the rest under STATUS. */
     val facts: List<Fact> = listOf(
-        Fact("fw", "Firmware"),
-        Fact("boards", "Power boards"),
-        Fact("i2cfails", "I²C errors"),
-        Fact("pedalboard", "Pedal board"),
-        Fact("uptime", "Uptime"),
+        Fact("fw", "Piano firmware", PianoSection.Firmware),
+        Fact("boards", "Power boards", STATUS),
+        Fact("i2cfails", "I²C errors", STATUS),
+        Fact("pedalboard", "Pedal board", STATUS),
+        Fact("uptime", "Uptime", STATUS),
     )
+
+    private val rowsBySection: Map<PianoSection, List<PianoRow>> = PianoSection.entries.associateWith { section ->
+        buildList {
+            if (section == PianoSection.Presets) add(PianoRow.Presets)
+            facts.filter { it.section == section }.forEach { add(PianoRow.Reading(it)) }
+            inSection(section).forEach { add(PianoRow.Control(it)) }
+            when (section) {
+                PianoSection.Touch -> add(PianoRow.StrikeTest)
+                PianoSection.Layout -> add(PianoRow.TestLed)
+                PianoSection.Status -> add(PianoRow.KeyForceNote)
+                PianoSection.Actions -> add(PianoRow.Actions)
+                else -> Unit
+            }
+        }
+    }
 
     /** Facts that change while the piano runs: read again with the status. */
     val liveFacts: List<String> = listOf("boards", "i2cfails", "pedalboard", "uptime")
