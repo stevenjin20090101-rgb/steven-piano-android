@@ -20,11 +20,12 @@ The release is tagged `models` (never a version tag, so the updater's APK rules 
 created with --latest=false, so "Latest" stays on the newest app release. Assets are served at
 https://github.com/<repo>/releases/download/models/<file>, the updater's allowed shape.
 
-  python publish_models.py --work DIR                       # composer only (the default), no upload
-  python publish_models.py --work DIR --upload              # ... and publish
-  python publish_models.py --work DIR --models composer,transcription --upload
-The transcription model's weights are CC-BY-4.0 (see docs/STUDIO_SPIKE.md): it is listed only when
-asked for by name.
+  python publish_models.py --work DIR                       # both models, no upload
+  python publish_models.py --work DIR --upload              # ... and publish (assets replaced)
+  python publish_models.py --work DIR --models composer     # one model only
+The transcription model's weights are CC BY 4.0 (accepted 2026-09-28 with attribution in the app's
+About and AUTHORS; see docs/STUDIO_SPIKE.md); the composer's are Apache-2.0. `attribution` is the
+one-line credit the app shows.
 """
 
 import argparse
@@ -45,18 +46,13 @@ CATALOGUE = {
     "transcription": {
         "version": 1, "file": "transcription-v1.onnx", "licence": "CC-BY-4.0",
         "source": "https://zenodo.org/record/4034264 (" + sc.CHECKPOINT_NAME + ")",
-        "attribution": ("High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets "
-                        "Times, trained model by Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan and Yuxuan "
-                        "Wang (ByteDance), https://doi.org/10.5281/zenodo.4034264, licensed CC BY 4.0 "
-                        "(https://creativecommons.org/licenses/by/4.0/). Changed: converted to ONNX with one "
-                        "shared log-mel front end and quantised to INT8 for Steven Piano."),
+        "attribution": "Piano transcription model — Kong et al., ByteDance, CC BY 4.0, Zenodo 4034264",
     },
     "composer": {
         "version": 1, "file": "composer-v1.onnx", "licence": "Apache-2.0",
         "source": "https://huggingface.co/" + sc.COMPOSER_REPO + " (revision " + sc.COMPOSER_REVISION + ")",
-        "attribution": ("Anticipatory Music Transformer music-small-800k by John Thickstun, David Hall, Chris "
-                        "Donahue and Percy Liang (Stanford CRFM), Apache License 2.0. Changed: exported to "
-                        "ONNX with a KV cache, logits for the last position only, quantised to INT8."),
+        "attribution": ("Anticipatory Music Transformer — Thickstun et al., Stanford CRFM, Apache 2.0, "
+                        "Hugging Face stanford-crfm/music-small-800k"),
     },
 }
 
@@ -72,7 +68,7 @@ def io(model_path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work")
-    ap.add_argument("--models", default="composer", help="comma list from: " + ", ".join(CATALOGUE))
+    ap.add_argument("--models", default="composer,transcription", help="comma list from: " + ", ".join(CATALOGUE))
     ap.add_argument("--upload", action="store_true")
     args = ap.parse_args()
     work = sc.work_dir(args.work)
@@ -91,9 +87,9 @@ def main():
         if os.path.getsize(path) >= 2 * 1024 ** 3:
             raise SystemExit(f"{c['file']} is over GitHub's 2 GB asset limit: split it")
     manifest = {"models": entries}
-    text = json.dumps(manifest, indent=2) + "\n"
+    text = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
     for dest in (os.path.join(exports, "models.json"), os.path.join(ROOT, "releases", "models.json")):
-        with open(dest, "w") as f:
+        with open(dest, "w", encoding="utf-8") as f:
             f.write(text)
         print("wrote", dest)
     if not args.upload:

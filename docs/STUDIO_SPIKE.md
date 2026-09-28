@@ -24,39 +24,43 @@ could not push the bench into zram and hide resident pages; the AVD's config was
 | Peak memory | ≤ 1 GB; ≤ 1.5 GB | **715 868–744 072 kB** VmHWM (0.68–0.71 GiB) with ORT memory patterns off; 1 031 508–1 035 032 kB with ORT's defaults | **616 968–644 580 kB** (0.59–0.61 GiB) |
 | Agreement | ≥ 99 % fp32, ≥ 97 % INT8; 64 greedy tokens = PyTorch | fp32 **100 %** on all 3 clips; INT8 **100 / 99.93 / 99.59 %** | fp32: **64/64 on 5 of 5 seeds**; INT8: **64/64 on 2 of 5** (diverges at tokens 45, 21, 7) |
 
-- **Transcription: go on the numbers, with two conditions.** (1) Its weights are licensed
-  **CC-BY-4.0**, not Apache-2.0 as the plan assumed, and this run's rule allows Apache-2.0/MIT/CC0
-  only, so `transcription-v1.onnx` is built, verified and hashed but **not published**; publishing
-  it is one command once CC-BY-4.0 (attribution in the app) is accepted (§ Licences). (2) The
-  emulator is the M3's cores, not the tablet's: transcription runs at 0.32 × real time with 4
-  threads and 1.03 × real time on one M3 core, so a tablet more than about 5 × slower than the
-  emulator misses the 5-minute gate. M23 confirms on the tablet (§ Rerunning the bench).
+- **Transcription: go on the numbers; the tablet must confirm.** Its weights are licensed
+  **CC BY 4.0**, not Apache-2.0 as the plan assumed, which was outside this run's original
+  Apache-2.0/MIT/CC0 rule: the file was held back until the coordinator accepted CC BY 4.0
+  (2026-09-28; the app credits it in About and AUTHORS, as it credits Wikipedia and MAESTRO), and
+  `transcription-v1.onnx` is now published (§ Licences). The emulator is the M3's cores, not the
+  tablet's: transcription runs at 0.32 × real time with 4 threads and 1.03 × real time on one M3
+  core, so a tablet more than about 5 × slower than the emulator misses the 5-minute gate. M23
+  confirms on the tablet (§ Rerunning the bench).
 - **Composer: go.** The time gate passes with a tenfold margin, the memory gate with more than a
   twofold one. The letter of "64 greedy tokens match PyTorch" holds for the fp32 file only: no INT8
   variant reproduces PyTorch's greedy tokens on every seed, because greedy decoding here meets
   near-ties (PyTorch's own top-two margin is 0.15 logits where the INT8 file turns). The INT8 file's
   distribution is close: teacher-forced top-1 agreement 98.2 %, loss 0.6191 vs 0.6158 nats/token,
   mean KL 0.0019 nats. M24 samples (top-p, temperature), so this is the measure that matters.
-- **Runtime:** pin `com.microsoft.onnxruntime:onnxruntime-android` **1.28.0** (or the plan's
-  1.27.0). The newest 1.x that resolves is 1.30.0, but **1.29.0 and 1.30.0 send telemetry to
-  Microsoft from the app** (§ ONNX Runtime). All three were measured: same speed, same memory,
-  same outputs.
+- **Runtime:** `com.microsoft.onnxruntime:onnxruntime-android` pinned at **1.28.0** (confirmed by
+  the coordinator, 2026-09-28). The newest 1.x that resolves is 1.30.0, but **1.29.0 and 1.30.0
+  send telemetry to Microsoft from the app** (§ ONNX Runtime). 1.27.0, 1.28.0 and 1.30.0 were all
+  measured: same speed, same memory, same outputs.
 
 ## What exists now
 
 - Release **`models`**: https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/tag/models
-  (`--latest=false`; the tag points at `main` 6b9931a). Assets: `composer-v1.onnx` (173 193 820 bytes,
-  SHA-256 `86ddb19c7afce2bab6be13706cb0a0f44cd7a4271c021706d02394c10cbda7b1`) and `models.json`;
-  both downloaded back through GitHub and compared. The repository is still private, so these
-  URLs answer 404 to the app until it is public (as for `latest.json`).
+  (`--latest=false`; the tag points at `main` 6b9931a). Assets:
+  - `transcription-v1.onnx`: 124 511 036 bytes, SHA-256
+    `f5db051a0af4a3601c18b3ecf679be3150912d8d535e3a03554c9662c8525383`;
+  - `composer-v1.onnx`: 173 193 820 bytes, SHA-256
+    `86ddb19c7afce2bab6be13706cb0a0f44cd7a4271c021706d02394c10cbda7b1`;
+  - `models.json` (14 175 bytes, identical to `releases/models.json`).
+
+  Each asset was downloaded back through GitHub into an empty folder and its size and SHA-256
+  checked against `models.json`. The repository is still private, so these URLs answer 404 to the
+  app until it is public (as for `latest.json`).
 - `releases/models.json` (the same file): `{"models": [{name, version, file, url, sizeBytes, sha256,
-  licence, source, attribution, inputs, outputs}]}`, today the composer only; `source` and
-  `attribution` are additions to the brief's fields (CC-BY needs the attribution text; the app's
-  About can show it). It reaches `raw.githubusercontent.com/.../main/releases/models.json` once the
-  branch is merged.
-- Not published: `transcription-v1.onnx` (124 511 036 bytes, SHA-256
-  `f5db051a0af4a3601c18b3ecf679be3150912d8d535e3a03554c9662c8525383`), its catalogue entry ready in
-  `tools/studio/publish_models.py`.
+  licence, source, attribution, inputs, outputs}]}` with both models (composer first, then
+  transcription); `source` and `attribution` are additions to the brief's fields: `attribution` is
+  the one-line credit the app shows (§ Licences). It reaches
+  `raw.githubusercontent.com/.../main/releases/models.json` once the branch is merged.
 - `tools/studio/`: `requirements.txt` (the pinned environment), `studio_common.py`,
   `make_test_audio.py`, `export_transcription.py`, `verify_transcription.py`, `export_composer.py`,
   `verify_composer.py`, `publish_models.py`, `run_bench.sh`, and the fixtures.
@@ -76,7 +80,8 @@ could not push the bench into zram and hide resident pages; the AVD's config was
     and on the emulator with ORT 1.27, 1.28 and 1.30).
   - `bach_bwv846.mid` (3 141 bytes): the source of the seed and of the rendered Bach clip.
 - Commits: `73e6375` (step 1), `33e8d28` (step 2), `9e6661e` (step 3), `482c804` (the bench,
-  temporary), `e6af177` (its revert), then this document.
+  temporary), `e6af177` (its revert), `07af894` (this document), then the commit that publishes
+  the transcription model after the licence decision.
 
 ## Transcription — ByteDance high-resolution piano transcription
 
@@ -366,7 +371,7 @@ was at 187 668–201 548 kB (debug build, `App.onCreate` done).
 
 | Asset | Licence | Where recorded |
 |---|---|---|
-| Transcription weights (Zenodo 10.5281/zenodo.4034264, Qiuqiang Kong et al., ByteDance) | **CC-BY-4.0**: outside the allowed list | not published; `publish_models.py` CATALOGUE; here |
+| Transcription weights (Zenodo 10.5281/zenodo.4034264, Qiuqiang Kong et al., ByteDance) | **CC BY 4.0** (`CC-BY-4.0`); accepted by the coordinator 2026-09-28 | `models.json` (`licence`, `source`, `attribution`); the app's About and AUTHORS (M23); here |
 | `bytedance/piano_transcription` code | Apache-2.0 (its README; the repo has no LICENSE file) | here |
 | `piano_transcription_inference` 0.0.6 | MIT (setup.py classifier; no LICENSE file) | here |
 | torchlibrosa 0.1.0 | MIT | here |
@@ -378,13 +383,36 @@ was at 187 668–201 548 kB (debug build, `App.onCreate` done).
 | `cut_liszt.mp3` (Lang Lang, Liebestraum) | commercial recording | verification only; never committed |
 
 Training data, for the record: the transcription model was trained on MAESTRO (CC BY-NC-SA 4.0),
-the composer on the Lakh MIDI Dataset (CC-BY 4.0); the weights' licences are as published. If
-CC-BY-4.0 is accepted for the transcription model, its attribution (in `models.json` and the app's
-About): "High-resolution Piano Transcription with Pedals by Regressing Onsets and Offsets Times,
-trained model by Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan and Yuxuan Wang (ByteDance),
-doi:10.5281/zenodo.4034264, CC BY 4.0; converted to ONNX and quantised to INT8 for Steven Piano."
-Then: `python tools/studio/publish_models.py --work DIR --models composer,transcription --upload`
-and commit `releases/models.json`. The fixtures contain nothing from the Lang Lang recording.
+the composer on the Lakh MIDI Dataset (CC-BY 4.0); the weights' licences are as published. The
+fixtures contain nothing from the Lang Lang recording.
+
+**Attribution lines.** Each `models.json` entry's `attribution` is the one-line credit the app
+shows in About, as it credits Wikipedia and MAESTRO:
+
+- Piano transcription model — Kong et al., ByteDance, CC BY 4.0, Zenodo 4034264
+- Anticipatory Music Transformer — Thickstun et al., Stanford CRFM, Apache 2.0, Hugging Face stanford-crfm/music-small-800k
+
+CC BY 4.0 (§ 3(a)) also asks that the credit say the material was changed and link the licence,
+and Apache 2.0 (§ 4) that changes be stated and the licence be given. So the AUTHORS entries, in
+the form of its Wikipedia and Haze entries, would read:
+
+> Piano transcription model (downloaded by the app on demand, never bundled): "High-resolution
+> Piano Transcription with Pedals by Regressing Onsets and Offsets Times", trained model by
+> Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan and Yuxuan Wang (ByteDance),
+> https://doi.org/10.5281/zenodo.4034264. Licensed under the Creative Commons Attribution 4.0
+> International licence (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). Converted to
+> ONNX and quantised to INT8 for Steven Piano (tools/studio/). The model keeps its own licence;
+> the MIT licence of this project does not apply to it.
+>
+> Composing model (downloaded by the app on demand, never bundled): the Anticipatory Music
+> Transformer music-small-800k by John Thickstun, David Hall, Chris Donahue and Percy Liang
+> (Stanford CRFM), https://huggingface.co/stanford-crfm/music-small-800k. Licensed under the
+> Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Exported to ONNX with
+> a KV cache and quantised to INT8 for Steven Piano (tools/studio/). The model keeps its own
+> licence; the MIT licence of this project does not apply to it.
+
+`python tools/studio/publish_models.py --work DIR --upload` rebuilds `models.json` from the files
+and replaces the release's assets (both models by default).
 
 ## Reproducing the Mac side
 
@@ -432,9 +460,10 @@ holds 91 bytes). Results: `filesDir/studio/bench-<label>.json` and logcat tag `S
 
 ## Deviations from the brief, and why
 
-- **The transcription file is not published** (CC-BY-4.0 weights; the brief allows Apache-2.0/
-  MIT/CC0 only, and the plan's "Apache-2.0" was the code's licence). The release holds the composer
-  and `models.json`; `releases/models.json` lists the composer only.
+- **The transcription file was held back at first** (CC BY 4.0 weights; the brief allowed
+  Apache-2.0/MIT/CC0 only, and the plan's "Apache-2.0" was the code's licence). After the
+  coordinator accepted CC BY 4.0 it was published beside the composer; `releases/models.json`
+  lists both, each with `licence`, `source` and `attribution`.
 - **Exported as `Note_pedal` with one shared front end**, not `Regress_onset_offset_frame_velocity_CRNN`
   alone: the pedal outputs the brief lists live in the pedal model. Bit-identical outputs.
 - **INT8 on the transcription model's MatMul/Gemm only.** Convolutions in INT8 failed the 97 % gate
@@ -449,8 +478,8 @@ holds 91 bytes). Results: `filesDir/studio/bench-<label>.json` and logcat tag `S
   embedding too (173 MB, not ~130 MB).
 - **The INT8 composer does not reproduce PyTorch's 64 greedy tokens on 3 of 5 seeds** (fp32 does
   on all 5); reported with the distribution measures instead of retuned to pass one seed.
-- **onnxruntime-android 1.28.0, not the newest 1.30.0** (telemetry); the plan's 1.27.0 is equally
-  clean and measured the same. Memory patterns off in the session: ORT's default puts the
+- **onnxruntime-android 1.28.0, not the newest 1.30.0** (telemetry; the coordinator kept the pin
+  at 1.28.0); the plan's 1.27.0 is equally clean and measured the same. Memory patterns off in the session: ORT's default puts the
   transcription at 1.03 GB.
 - **The emulator ran with 4 GB** (`-memory 4096`, a launch flag; the AVD still says 2 GB).
 - **The bench adds a property trigger and fixture checks**, and debug builds carried
