@@ -126,11 +126,19 @@ class LibraryRepository(
     /** The playlist called [name] (cut to [TextLimits.COLLECTION]), made if needed. Returns its id. */
     suspend fun createPlaylist(name: String): Long = db.withTransaction { playlistId(playlistName(name), imported = false) }
 
-    /** A built-in playlist keeps its name (the app gives it). */
+    /**
+     * A built-in playlist keeps its name (the app gives it). Another may take a built-in list's
+     * name: the built-in one moves beside it ("Popular · built in"), as when a playlist is made.
+     */
     suspend fun renamePlaylist(id: Long, name: String) {
-        if (isBuiltIn(id)) return
-        playlists.rename(id, playlistName(name))
-        renamed.tryEmit(Unit)
+        val done = db.withTransaction {
+            if (isBuiltIn(id)) return@withTransaction false
+            val wanted = playlistName(name)
+            moveBuiltInAside(wanted)
+            playlists.rename(id, wanted)
+            true
+        }
+        if (done) renamed.tryEmit(Unit)
     }
 
     /** Only the playlist goes; its pieces stay in the library. A built-in playlist is never deleted. */
@@ -256,13 +264,21 @@ class LibraryRepository(
     private suspend fun playlistId(name: String, imported: Boolean): Long {
         val existing = playlists.byName(name)
         if (existing != null && !existing.builtIn) return existing.id
-        if (existing != null) {
-            val aside = BuiltInPlaylists.builtInName(existing.name) { candidate ->
-                candidate.equals(name, ignoreCase = true) || playlists.byName(candidate)?.let { it.id != existing.id } == true
-            }
-            playlists.rename(existing.id, aside)
-        }
+        moveBuiltInAside(name)
         return playlists.insert(PlaylistEntity(name = name, createdAt = clock(), imported = imported))
+    }
+
+    /**
+     * Inside a transaction: when a built-in list is called [name] (whatever the case, as names
+     * compare), it moves beside it ("Popular · built in", then "… 2") so another playlist can take
+     * the name. The built-in one takes its name back at the next refresh once it is free.
+     */
+    private suspend fun moveBuiltInAside(name: String) {
+        val holder = playlists.byName(name)?.takeIf { it.builtIn } ?: return
+        val aside = BuiltInPlaylists.builtInName(holder.name) { candidate ->
+            candidate.equals(name, ignoreCase = true) || playlists.byName(candidate)?.let { it.id != holder.id } == true
+        }
+        playlists.rename(holder.id, aside)
     }
 
     /** Inside a transaction: the piece goes after the playlist's last one. */
