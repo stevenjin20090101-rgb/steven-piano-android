@@ -64,6 +64,7 @@ class KioskModeTest {
         settings: SettingsRepository,
         letGoMs: Long = KioskMode.LET_GO_MS,
         release: OwnerRelease = FakeRelease(device),
+        settingsUnlockMs: Long = KioskMode.SETTINGS_UNLOCK_MS,
     ) = KioskMode(
         KioskController(device, PACKAGE),
         settings,
@@ -72,7 +73,10 @@ class KioskModeTest {
         ownerRelease = release,
         clock = { now },
         letGoMs = letGoMs,
+        settingsUnlockMs = settingsUnlockMs,
     )
+
+    private suspend fun KioskMode.awaitSettingsLocked(locked: Boolean) = withTimeout(5_000) { settingsLocked.first { it == locked } }
 
     private suspend fun KioskMode.awaitLock(wanted: Boolean) = withTimeout(5_000) { lockWanted.first { it == wanted } }
 
@@ -277,6 +281,57 @@ class KioskModeTest {
         device.calls.clear()
         kiosk(device, settings).start()
         assertEquals(emptyList<String>(), device.calls)
+    }
+
+    @Test
+    fun `in kiosk mode the settings are locked, and a right PIN opens them for their time, then they lock again`() = runBlocking<Unit> {
+        val kiosk = kiosk(FakeKioskDevice(), settings(), settingsUnlockMs = 1_200)
+        kiosk.start()
+        assertFalse("kiosk mode off: nothing is locked", kiosk.settingsLocked.value)
+        kiosk.setPin("123456")
+        kiosk.turnOn()
+        kiosk.awaitSettingsLocked(true)
+        assertEquals("the settings' PIN is the kiosk's", LoginGuard.Attempt.Right, kiosk.check("123456"))
+        kiosk.unlockSettings()
+        kiosk.awaitSettingsLocked(false)
+        assertTrue("the screen stays locked while the settings are open", kiosk.lockWanted.value)
+        delay(700)
+        assertFalse("still open within its time", kiosk.settingsLocked.value)
+        kiosk.unlockSettings()   // a second right PIN starts the time again
+        delay(700)
+        assertFalse("1.4 s after the first PIN, 0.7 s after the second: still open", kiosk.settingsLocked.value)
+        kiosk.awaitSettingsLocked(true)   // then it runs out
+    }
+
+    @Test
+    fun `coming to rest in display mode locks the settings again before their time is up`() = runBlocking<Unit> {
+        val kiosk = kiosk(FakeKioskDevice(), settings())   // five minutes
+        kiosk.start()
+        kiosk.setPin("123456")
+        kiosk.turnOn()
+        kiosk.awaitSettingsLocked(true)
+        kiosk.unlockSettings()
+        kiosk.awaitSettingsLocked(false)
+        kiosk.relock()   // display mode came: the tablet rests
+        kiosk.awaitSettingsLocked(true)
+    }
+
+    @Test
+    fun `unlock for now counts as open, and turning kiosk mode off leaves nothing locked`() = runBlocking<Unit> {
+        val kiosk = kiosk(FakeKioskDevice(), settings())
+        kiosk.start()
+        kiosk.setPin("123456")
+        kiosk.turnOn()
+        kiosk.awaitSettingsLocked(true)
+        kiosk.unlockForNow()
+        kiosk.awaitSettingsLocked(false)
+        kiosk.relock()
+        kiosk.awaitSettingsLocked(true)
+        kiosk.unlockSettings()
+        kiosk.turnOff()
+        kiosk.awaitSettingsLocked(false)
+        kiosk.turnOn()
+        kiosk.awaitSettingsLocked(true)   // on again: locked, with no unlock left over from before
     }
 
     @Test

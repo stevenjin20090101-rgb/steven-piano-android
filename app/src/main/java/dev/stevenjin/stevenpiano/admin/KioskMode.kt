@@ -15,6 +15,7 @@ import dev.stevenjin.stevenpiano.web.LoginGuard
 import dev.stevenjin.stevenpiano.web.PinHash
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -68,24 +70,41 @@ interface OwnerRelease {
  * (`startLockTask`) or letting go. [start] runs the adb way back first ([releaseIfAsked]: the
  * screen let go and kiosk mode ended before the device owner goes), then learns whether the app is
  * the device owner; the activity asks for the way back again whenever it starts or is sent an
- * intent, since Android will not force-stop a device owner's app.
+ * intent, since Android will not force-stop a device owner's app. While kiosk mode is on the
+ * settings are locked too ([settingsLocked]): the Piano tab's pages and switches and the Library's
+ * changes ask for the PIN, which opens them for [settingsUnlockMs] ([unlockSettings]), until the
+ * tablet rests, or for as long as it is unlocked for now.
  */
 class KioskMode(
     private val controller: KioskController,
     private val settings: SettingsRepository,
     kioskEnabled: Flow<Boolean>,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val ownerRelease: OwnerRelease,
     private val clock: () -> Long = System::currentTimeMillis,
     private val hashing: CoroutineContext = Dispatchers.Default,
     private val letGoMs: Long = LET_GO_MS,
     private val policy: CoroutineContext = Dispatchers.IO,
+    private val settingsUnlockMs: Long = SETTINGS_UNLOCK_MS,
 ) {
     private val _status = MutableStateFlow(KioskStatus())
     val status: StateFlow<KioskStatus> = _status.asStateFlow()
 
     /** The screen locked to the app: kiosk mode on, the app the device owner, the start-up checks done, not unlocked for now. */
     val lockWanted: StateFlow<Boolean> = combine(status, kioskEnabled) { s, on -> on && s.checked && s.owner && !s.unlockedForNow }
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    /** A right PIN opened the settings a while ago ([unlockSettings]); closed again when its time is up or the tablet rests. */
+    private val settingsOpen = MutableStateFlow(false)
+    private var settingsTimer: Job? = null
+
+    /**
+     * Settings locked in kiosk (DESIGN.md › v1.6 — M20): kiosk mode on, not unlocked for now, and no
+     * right PIN in the last [settingsUnlockMs]. The Piano tab's pages and switches and the Library's
+     * changes ask for the PIN while it is true; playing, queueing, browsing and Keys never do.
+     */
+    val settingsLocked: StateFlow<Boolean> = combine(kioskEnabled, status, settingsOpen) { on, s, open -> on && !s.unlockedForNow && !open }
         .distinctUntilChanged()
         .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -161,6 +180,7 @@ class KioskMode(
                 if (keptBefore == null) settings.setKioskStayOnBefore(result.stayOnBefore)
                 settings.setKioskEnabled(true)
                 leftWhileUnlocked = false
+                closeSettings()
                 _status.update { it.copy(owner = true, unlockedForNow = false, keyguardKept = !result.keyguardOff, problem = null) }
                 true
             }
@@ -188,6 +208,7 @@ class KioskMode(
         withContext(policy) { controller.disable(stayOnBefore) }
         settings.setKioskStayOnBefore(null)
         leftWhileUnlocked = false
+        closeSettings()
         _status.update { it.copy(unlockedForNow = false, keyguardKept = false, problem = null) }
     }
 
@@ -219,10 +240,33 @@ class KioskMode(
         _status.update { it.copy(unlockedForNow = true) }
     }
 
-    /** Locked again: the Kiosk page's Lock again, display mode coming, the app opened again. Nothing while not unlocked. */
+    /**
+     * Locked again: the Kiosk page's Lock again, display mode coming, the app opened again. Ends an
+     * "Unlock for now" and the settings a PIN opened ([unlockSettings]); nothing else changes.
+     */
     fun relock() {
         leftWhileUnlocked = false
+        closeSettings()
         if (_status.value.unlockedForNow) _status.update { it.copy(unlockedForNow = false) }
+    }
+
+    /**
+     * A right PIN before a locked setting: the settings stay open for [settingsUnlockMs] (five
+     * minutes), or until the tablet rests in display mode ([relock]), whichever comes first. Main thread.
+     */
+    fun unlockSettings() {
+        settingsTimer?.cancel()
+        settingsOpen.value = true
+        settingsTimer = scope.launch {
+            delay(settingsUnlockMs)
+            settingsOpen.value = false
+        }
+    }
+
+    private fun closeSettings() {
+        settingsTimer?.cancel()
+        settingsTimer = null
+        settingsOpen.value = false
     }
 
     /** The activity stopped (not for a configuration change): while unlocked for now, the next [appOpened] locks again. */
@@ -238,6 +282,9 @@ class KioskMode(
     companion object {
         /** How long [turnOff] waits for the activity to let go of the screen before undoing the policy anyway. */
         const val LET_GO_MS = 2_000L
+
+        /** How long a right PIN opens the settings in kiosk mode (DESIGN.md › v1.6 — M20). */
+        const val SETTINGS_UNLOCK_MS = 5 * 60_000L
 
         private const val POLL_MS = 50L
 
