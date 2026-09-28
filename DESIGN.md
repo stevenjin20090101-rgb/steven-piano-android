@@ -43,7 +43,7 @@ Two disciplines make the palette a choice rather than a default:
 |---|---|
 | Purpose | One job: pick a piece, send it to the piano, watch it play. Every screen serves that. |
 | Familiarity | Material 3 navigation and controls; identity lives in colour, type and the roll. |
-| Simplicity | Three tabs. Text-only library rows. One accent, one signature moment. |
+| Simplicity | Four tabs (three in v1.0; Keys joined in v1.1). Text-only library rows. One accent, one signature moment. |
 | Craft | Tabular figures on every timer, hairline rules, 48 dp targets, contrast computed not guessed. |
 | Delight | The roll starting to turn. That is the whole emotional budget, spent once. |
 
@@ -125,7 +125,8 @@ All sizes in `sp`. Layouts must survive system font scale 2.0× with hierarchy i
 
 ## Structure
 
-Bottom `NavigationBar`, three tabs, single-word labels, tabs navigate and never act.
+Bottom `NavigationBar`, four tabs since v1.1 (Library · Now playing · Keys · Piano; the
+sketch below is v1.0's three), short labels, tabs navigate and never act.
 Indicator pill is `surfaceElevated`, not a tint.
 
 ```
@@ -183,7 +184,7 @@ Indicator pill is `surfaceElevated`, not a tint.
     played, as the paper does on its way to the take-up spool.
   - *Falling notes*: block-styled bars (square ends), the hit line is the top edge of
     the keyboard strip, no history below it.
-  - Setting: Piano tab › *Note display*. Switching while playing is seamless.
+  - Setting: Piano tab › *Note display* (v1.5: Piano › Display). Switching while playing is seamless.
 - **Keyboard strip** under the roll: 84 keys, monochrome; an active key inverts
   (white key → contentPrimary fill).
 - Scrubber: hairline track, 12 dp round thumb, times in Eyebrow with tabular figures.
@@ -202,7 +203,8 @@ Indicator pill is `surfaceElevated`, not a tint.
 - Preferences (few, infrequent — this is the settings surface):
   *Auto-connect on launch* (switch) · *Note display* (Paper roll / Falling notes) ·
   *Default tempo* · *Transpose* (−12…+12) · *Velocity* (50–150 %) · *Fold notes outside
-  C1–B7* (switch, on) · *Skip drum channel* (switch, on).
+  C1–B7* (switch, on) · *Skip drum channel* (switch, on). *(Superseded by v1.5: these now
+  sit on the hub's APP group and on the Playback and Display pages.)*
 - About row at the very bottom, Eyebrow style: "Steven Piano · Made by Steven Jin ·
   v1.1 · eab16a502f679465", and one quiet line acknowledging the library sources
   (MAESTRO, piano-midi.de, Mutopia).
@@ -294,7 +296,9 @@ Window size classes decide the frame; nothing else changes with size.
   centre it; rows keep their 56 dp height and 17 sp body.
 - A new preference on wide screens, **Wide layout**: *Staff and notes* (default) ·
   *Notes only* · *Staff only*. On compact widths the *Note display* preference gains
-  *Staff* as a third option.
+  *Staff* as a third option. *(Since v1.2 the staff is the score, and the choices read
+  **Score and notes** · **Notes only** · **Score only**, and **Score**; the saved values
+  keep their v1.1 names.)*
 - Landscape phones use the Medium layout. Rotation keeps position and state.
 
 ## Keys — a playable keyboard
@@ -358,29 +362,43 @@ The firmware exposes its console commands over a Bluetooth text channel (see
 value the moment a control changes; the piano stores them itself.
 
 - Lives on the **Piano tab**, under the connection card and above the app preferences,
-  as sections with Eyebrow headers: **LIGHTING · FEEL · PEDAL · DIAGNOSTICS**. All of
+  as sections with Eyebrow headers: **LIGHTING · FEEL · PEDAL · DIAGNOSTICS**. *(Superseded
+  by v1.5: the piano's settings are four pages opened from the hub's PIANO group — Feel,
+  Lighting, Pedal, Firmware and status — in the sections that section lists.)* All of
   it is disabled, greyed with `disabledGlyph` handles, until the piano is connected and
   has answered the read; a one-line note explains: "Connect to the piano to adjust its
   settings."
 - Controls follow the value's shape: switches for on/off, steppers with tabular
   figures for numbers with few steps (count, offset, gap in ms), a hairline slider
   with the number beside it for continuous ones (brightness, volume, curve), and a
-  single-choice row for palettes and presets. Every control shows its unit
-  (%, ms, LEDs) in the eyebrow and its live value.
+  row of chips for modes, palettes and presets (the chosen chip carries a check). Every
+  control shows its unit (%, ms, LEDs) in the eyebrow and its live value.
 - **Feel presets** are a row of chips; choosing one applies the preset on the piano and
   every dependent control updates to what the piano reports back, so the user sees what
   a preset actually did.
 - **Lighting preview**: no on-screen strip; the piano is the preview. A *Test LED*
   action lights one key's LED (the firmware's `ledtest`) so offset and scale can be
   aligned from the app while standing at the piano.
+- **Strike test** (under the floors and the ceiling): a key chosen with a stepper, shown
+  by name (C4), and *Floor* / *Ceiling* strike it once as softly as its floor allows or as
+  hard as the ceiling (the firmware's `testmin` / `testmax`), so the floors can be set by
+  ear.
 - **Diagnostics** shows the piano's status text as it reports it (boards found,
   temperature, uptime) in Body on `surfaceElevated`, with *All keys off* as an outlined
-  button. No red anywhere; a fault reads in words.
+  button. No red anywhere; a fault reads in words. *(As built, and in v1.5's Firmware and
+  status page: the version; the seven power boards as OK / MISSING words, I²C errors, the
+  pedal board and uptime as read-only rows; two read-only key-force rows, "White-key
+  force ×1.00" and "Black-key force ×1.00", with "Key force is set at the piano's USB
+  console."; then Read status, whose report appears on `surfaceElevated` under it, All
+  keys off and Save now.)*
+- A refusal ("ledbright out of range") shows as an outlined banner, "The piano said: …"
+  with *Dismiss*, directly under the control it concerns.
 - Writes are rate-limited (150 ms after the last change) so dragging a slider does not
   flood the piano; the app never sends a value it has not shown.
 - If the piano runs older firmware without the channel, the whole section shows one
   line: "This piano's firmware doesn't offer settings over Bluetooth yet." and nothing
-  else, so the app keeps working exactly as v1.0.
+  else, so the app keeps working exactly as v1.0. *(v1.5: the rule holds per page; the
+  line also stands under the hub's connection card.)*
 
 ---
 
@@ -578,6 +596,8 @@ share. No accounts, no analytics, nothing leaves the device unless Steven shares
 - When a newer version exists, the Piano tab shows a row above Preferences, Eyebrow header
   **UPDATE**, then "Steven Piano 1.4 is available" in Body with the release notes beneath
   in `contentSecondary`, and one filled button **Update**. Nothing red; no badge on the tab.
+  *(Superseded by v1.5 for its place: on the hub, between the connection card and the
+  groups.)*
 - Update: a hairline progress row ("Downloading 1.4 · 1.2 of 2.3 MB"), the file's hash is
   checked against the manifest, then Android's installer opens; one confirmation tap and
   the app relaunches on the new version. Android itself refuses any file not signed with
@@ -588,13 +608,16 @@ share. No accounts, no analytics, nothing leaves the device unless Steven shares
 - Failures are one line under the row, in words: "Couldn't reach the update server." /
   "The download didn't match the release; try again." Retry is the same Update button.
 - A switch in App preferences: **Check for updates automatically** (on). The row can also
-  be triggered by hand: "Check now" as a text button under the switch.
+  be triggered by hand: "Check now" as a text button under the switch. *(v1.5: both are
+  rows of the hub's APP group; Check now is an action row with what the last check found
+  under it.)*
 
 ## Diagnostics
 
 - The app keeps its own last crash reports (the last five) and the last 500 lines of the
   connection log on the device. Nothing is sent anywhere by itself.
-- Piano tab, under Diagnostics: **Share diagnostics** (outlined button) builds one small
+- Piano tab, under Diagnostics: **Share diagnostics** (outlined button; *v1.5: the last row
+  of the hub's APP group, an action row*) builds one small
   zip — app version and build, device model and Android version, the crash reports, the
   connection log, the app preferences (no library contents, no photos, no Wikipedia
   text) — and opens the system share sheet, so Steven can send it by any means. The row
@@ -607,3 +630,118 @@ share. No accounts, no analytics, nothing leaves the device unless Steven shares
 A script in the repo builds the release, signs it with the key outside the repo, writes the
 manifest with the version, notes and hash, commits it, and attaches the APK to a GitHub
 release. The repository must be public for phones to read the manifest without a login.
+
+---
+
+# v1.5 — the Piano tab as groups
+
+Steven asked (2026-09-27) for the settings to be laid out "so it makes the most sense". The
+Piano tab had become one long page: the connection card, about forty-five of the piano's own
+controls in four sections, the update row, fifteen app preferences in a flat list, and About;
+and the v1.5 batch adds some twenty rows more. It becomes a **hub** whose rows open **pages**,
+iPad Settings style. Everything above still holds except where this section says it replaces
+it: the v1.1 placement of the piano's settings (under the card, above the preferences), the
+v1.0 and v1.4 preference lists, and the v1.4 places of the UPDATE row, Check now and Share
+diagnostics.
+
+## The hub
+
+The tab keeps its name, title and byline. Under them, in this order:
+
+- The **connection card**, unchanged, and under it the piano's status line while its
+  settings can't be changed: "Connect to the piano to adjust its settings." · "Reading the
+  piano's settings…" over an indeterminate hairline · "This piano's firmware doesn't offer
+  settings over Bluetooth yet." Nothing once the piano has answered.
+- **UPDATE**, only while a newer release is known or has just been installed. It is
+  transient and wants attention, so it stays on the hub, between the card and the groups,
+  and never hides in a page.
+- The **groups**, each an eyebrow over a full-width hairline, then its rows:
+  - **PIANO** — Feel · Lighting · Pedal · Firmware and status
+  - **PLAYING** — Playback · Display (Schedule joins in M19)
+  - **CONTROL** — Remote control (M18) · Kiosk (M20) · Studio (M23). A group with no rows
+    is not shown at all, not even its eyebrow: until M18 the hub has three groups.
+  - **APP** — Auto-connect on launch (switch) · Check for updates automatically (switch) ·
+    Check now · Share diagnostics
+- **About**, at the very bottom, as before.
+
+Each page row carries a one-line value, so the hub reads as a summary of the instrument:
+Feel "Full power", or "Volume 70%"; Lighting "Off", or the mode and the brightness as the
+piano rounds it, "Reactive · 62%"; Pedal "On" or "Off"; Firmware and status the version the
+piano reports; Playback the default tempo, "100%" (from M16, "2 s pause · 100%"); Display the
+note display's name (on wide screens the roll's style, as the page offers it there). The
+values come from what the app already holds and never cost a read. Until the piano has
+answered, its four rows read "—" and still open their pages.
+
+## Rows
+
+One set of rows for the whole tab, the piano's settings and the app's alike: at least 56 dp,
+the label in Body at the start 16 dp in, the value or control at the end, a hairline under
+it inset 16 dp to the text; the system ripple and nothing else.
+
+- **Page row**: the label in `contentPrimary`, the value in Body `contentSecondary` with
+  tabular figures, and a chevron in `contentTertiary`. When the two don't fit on one line
+  (large text, a long version string) the value goes under the label rather than squeezing
+  it. The chevron points the other way in right-to-left layouts.
+- **Action row** (Check now, Share diagnostics, and Read status, All keys off and Save now on
+  the Firmware page): the label in Body, and under it, when there is one, a line in the
+  eyebrow style, sentence case, `contentSecondary`: what the action does ("A small file with
+  the app's logs. Nothing personal.") or what it found ("Steven Piano is up to date."). No
+  chevron: it acts, it doesn't open.
+- Switches, steppers, sliders and chip rows as in v1.1, unchanged in size, type, rules and
+  colours. The Test LED and Strike test rows keep their outlined buttons.
+
+## Pages
+
+- **Header**: on phones a 48 dp back glyph (the app's arrow), then the page's title in
+  Title (22 sp); no byline, the tab's header carries it. Beside the hub, the title alone,
+  level with the hub's own title at every text size.
+- **Body**: a column at the reading width (720 dp) that scrolls from anywhere across the
+  pane, in sections under eyebrows. A page with a single section begins with the hairline
+  alone.
+- **Feel**: PRESETS (the chips) · LOUDNESS (full power, volume) · TOUCH (velocity curve and
+  multiplier, the two floors, the ceiling, the strike test) · TIMING (scatter, bursts, strike
+  lengths, gaps, hold, re-strike) · RELEASE · DRIVE.
+- **Lighting**: STRIP (on or off, mode, brightness, reactive palette) · LAYOUT (length,
+  offset, scale, the unlit end, direction, glow, Test LED) · MOTION (brightness following
+  velocity, fade and rainbow speeds) · PIANO'S SCREEN (when it dims, and how far).
+- **Pedal**: one section: the sustain pedal, half-pedalling, the up and down positions.
+- **Firmware and status**: FIRMWARE (the piano's firmware version, "Unknown" until it has
+  said; M21 adds updating it here) · STATUS (the seven power boards, I²C errors, the pedal
+  board, uptime, the two key-force rows and "Key force is set at the piano's USB console.") ·
+  ACTIONS (Read status with the piano's report under it, All keys off, Save now).
+- **Playback**: one section: Default tempo, Transpose, Velocity, Fold notes outside C1–B7,
+  Skip drum channel (M16 puts Pause before each piece first).
+- **Display**: NOTES (Note display as chips, with Wide layout under it on wide screens;
+  Fingering, Chord names, Hand colours) · ARTWORK (Artwork in black and white, Fetch artwork
+  automatically with its line) (M17 adds STANDBY).
+- The piano's pages carry the status line at their top; until the piano has answered, their
+  controls are there, disabled, under it. Firmware without the Bluetooth console: each piano
+  page shows that one line and nothing else (the v1.1 rule, now per page). A refusal shows
+  as the outlined banner "The piano said: …" with Dismiss, directly under its control.
+
+## Phones and wide screens
+
+- **Phones** (compact widths): the hub alone; a row pushes its page over it, with the tab
+  bar still there. The page slides in from the end edge in 240 ms while the hub gives way by
+  a quarter of its width, and back (the glyph or the gesture) reverses it; with animations
+  removed it is a cut. Choosing Piano in the bar while a page is open goes back to the hub;
+  another tab and back finds the page as it was left; a notification or "Not connected" on
+  Now playing or Keys opens the hub.
+- **Wide screens** (anything wider than a phone held upright, a phone on its side
+  included): the hub in a 360 dp column, a vertical hairline, and the open page beside it.
+  The open page's row is filled with `surfaceElevated` from edge to edge; rows there only
+  change which page is open (Feel at first).
+- Turning a phone keeps the open page and where it was scrolled: a page open on the phone
+  moves beside the hub, and a page chosen beside the hub comes back over it, without the
+  slide, when the phone is upright again.
+
+## Saving
+
+The piano saves its settings when the tab itself stops (another tab, the app in the
+background), as before; closing a page never does.
+
+## Later features add a page and a row here
+
+Every later feature with settings adds its page to the tab and one row to its group, with a
+value of a few words (Schedule "Next Wed 12:30", Remote control "On · 100.101.2.3", Kiosk
+"On", Studio "2 models"). Nothing else goes on the hub.

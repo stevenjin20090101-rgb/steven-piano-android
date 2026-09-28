@@ -191,9 +191,10 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
   contentTertiary = `LocalTertiary.current`, hairline = `LocalHairline.current`,
   surfaceElevated = `colorScheme.surfaceVariant`. No colour literal outside `ui/theme`.
   Red (`LocalLive.current`) is read by `LiveDot` only.
-- Screens and behaviour exactly as `DESIGN.md`. Bottom `NavigationBar`, three tabs:
-  Library, Now playing, Piano. Single activity, Navigation-Compose, fade-through 240 ms
-  between tabs (a cut under reduced motion).
+- Screens and behaviour exactly as `DESIGN.md`. Bottom `NavigationBar`, four tabs since
+  v1.1: Library, Now playing, Keys, Piano (v1.0 had the three without Keys). Single
+  activity, Navigation-Compose, fade-through 240 ms between tabs (a cut under reduced
+  motion); inside the Piano tab, pages push over its hub (v1.5 — M15).
 - `NoteCanvas` (one `Canvas`, two styles from the `noteDisplay` setting): 84 lanes for
   MIDI 24–107 via a shared `KeyLayout`; notes travel **downward** in both styles.
   *Paper roll*: perforation-styled rounded bars, tracker bar (2 dp `onSurface`) one third
@@ -383,53 +384,73 @@ commands in, replies out; `dump` / `get` for machine-readable state; allow-list)
 - `action(name)`: `off`, `save`, `ledtest <midi>`, `testmin <midi>`, `testmax <midi>`,
   `status` (its text lines are collected into `statusText` until 300 ms of silence).
 - `save()` is sent automatically when the Piano screen leaves the foreground after any
-  successful `set` since the last save.
+  successful `set` since the last save (v1.5: when the Piano tab's graph entry stops, never
+  when one of its pages closes).
 - On disconnect: `Unknown`. Values are never cached across connections (the piano is
   the source of truth).
 
-### The table — `piano/PianoSettings.kt`
+### The table — `piano/PianoSettings.kt` (rewritten in v1.5 — M15)
 
 A static list of `PianoSetting(name, label, section, kind, unit)` where `kind` is
 `Switch`, `Stepper(min, max, step)`, `Slider(min, max, step, decimals)` or
-`Choice(options)`. Names are the firmware command names. Sections and members, in order:
+`Choice(options)`; `section` is a `PianoSection`, and `page` (a `PianoPage`) is the section's.
+Names are the firmware command names. Pages (`PianoPage`, the hub's order) and their sections
+(`PianoSection(page, title)`), in order, with their members:
 
-- **LIGHTING**: `leds` Switch "Strip" · `ledmode` Choice Off/Static/Rainbow/Reactive ·
-  `ledbright` Slider 0–255 shown as % · `reactcolor` Choice Rainbow/Solid/Velocity/
-  Fire/Ocean/Forest/Lava/Party · `ledcount` Stepper 1–300 "LEDs" · `ledoffset` Stepper
-  −300–300 · `ledscale` Stepper 10–400 % · `ledtail` Stepper 0–255 · `ledreverse` Switch
-  · `ledglow` Stepper 0–10 · `velbright` Switch "Brightness follows velocity" · `decay`
-  Stepper 1–40 · `rainspeed` Stepper 1–40 · **Test LED**: a Stepper for a key (24–107,
-  default 60, shown as note name) and a *Light it* action (`ledtest`) · `dimsecs`
-  Stepper 0–3600 s step 30 · `dimfloor` Slider 0–255.
-- **FEEL**: presets chip row Soft · Cinematic · Expressive · Snappy · `fullpower` Switch
-  "Full power (no dynamics)" · `volume` Slider 0–100 % · `velcurve` Slider 0.4–3.0 step
-  0.05 · `velmult` Slider 0.1–5.0 step 0.1 · `min` Slider 0–4095 "White-key floor" ·
-  `minblack` Slider 0–4095 "Black-key floor (0 = same as white)" · `max` Slider 0–4095
-  "Ceiling" · `humanvel` Stepper 0–30 · `humantime` Stepper 0–40 ms · `burstgap`
-  Stepper 0–600 ms step 10 · `burstboost` Slider 0–100 % · `minstrike` Stepper 0–500 ms
-  step 5 · `isostrike` Stepper 0–500 ms step 5 · `isogap` Stepper 0–2000 ms step 10 ·
-  `gap` Stepper 0–300 ms · `hold` Stepper 50–4000 ms step 50 · `restrike` Stepper 0 or
-  40–1000 ms step 10 · `softrelease` Switch · `releasepwm` Slider 0–4095 · `releasems`
-  Stepper 0–200 ms · `freq` Stepper 24–1526 Hz step 10.
-- **PEDAL**: `pedalon` Switch · `pedalhalf` Switch · `pedalup` Stepper 80–600 ·
-  `pedaldown` Stepper 80–600. (`pedaltest` is refused over Bluetooth; not shown.)
-- **DIAGNOSTICS**: facts as read-only rows (`!fw`, `!boards` rendered as seven OK /
-  MISSING words, `!i2cfails`, `!pedalboard`, `!uptime` as h:mm) · *Read status* action
-  showing `statusText` in Body on `surfaceElevated` · *All keys off* (`off`) and *Save
-  now* (`save`) outlined buttons. `keyforce_white` / `keyforce_black` are shown
-  read-only ("Key force ×1.00") since setting them is refused over Bluetooth.
+- **Feel**: **PRESETS** chip row Soft · Cinematic · Expressive · Snappy (no setting) ·
+  **LOUDNESS** `fullpower` Switch "Full power (no dynamics)" · `volume` Slider 0–100 % ·
+  **TOUCH** `velcurve` Slider 0.4–3.0 step 0.05 · `velmult` Slider 0.1–5.0 step 0.1 · `min`
+  Slider 0–4095 "White-key floor" · `minblack` Slider 0–4095 "Black-key floor (0 = same as
+  white)" · `max` Slider 0–4095 "Ceiling" · **Strike test**: a Stepper for a key (24–107,
+  default 60, shown as note name) and *Floor* / *Ceiling* actions (`testmin` / `testmax`) ·
+  **TIMING** `humanvel` Stepper 0–30 · `humantime` Stepper 0–40 ms · `burstgap` Stepper
+  0–600 ms step 10 · `burstboost` Slider 0–100 % · `minstrike` Stepper 0–500 ms step 5 ·
+  `isostrike` Stepper 0–500 ms step 5 · `isogap` Stepper 0–2000 ms step 10 · `gap` Stepper
+  0–300 ms · `hold` Stepper 50–4000 ms step 50 · `restrike` Stepper 0 or 40–1000 ms step 10 ·
+  **RELEASE** `softrelease` Switch · `releasepwm` Slider 0–4095 · `releasems` Stepper 0–200
+  ms · **DRIVE** `freq` Stepper 24–1526 Hz step 10.
+- **Lighting**: **STRIP** `leds` Switch "Strip" · `ledmode` Choice Off/Static/Rainbow/
+  Reactive · `ledbright` Slider 0–255 shown as % · `reactcolor` Choice Rainbow/Solid/
+  Velocity/Fire/Ocean/Forest/Lava/Party · **LAYOUT** `ledcount` Stepper 1–300 "LEDs" ·
+  `ledoffset` Stepper −300–300 · `ledscale` Stepper 10–400 % · `ledtail` Stepper 0–255 ·
+  `ledreverse` Switch · `ledglow` Stepper 0–10 · **Test LED**: a Stepper for a key (24–107,
+  default 60, shown as note name) and a *Light it* action (`ledtest`) · **MOTION**
+  `velbright` Switch "Brightness follows velocity" · `decay` Stepper 1–40 · `rainspeed`
+  Stepper 1–40 · **PIANO'S SCREEN** `dimsecs` Stepper 0–3600 s step 30 · `dimfloor` Slider
+  0–255.
+- **Pedal** (one section, no eyebrow): `pedalon` Switch · `pedalhalf` Switch · `pedalup`
+  Stepper 80–600 · `pedaldown` Stepper 80–600. (`pedaltest` is refused over Bluetooth; not
+  shown.)
+- **Firmware and status**: **FIRMWARE** the fact `!fw` as a read-only row "Piano firmware"
+  ("Unknown" until reported) · **STATUS** facts as read-only rows (`!boards` rendered as
+  seven OK / MISSING words, `!i2cfails`, `!pedalboard`, `!uptime` as h:mm), then
+  `keyforce_white` / `keyforce_black` as two read-only rows ("White-key force ×1.00",
+  "Black-key force ×1.00"; setting them is refused over Bluetooth) and the line "Key force
+  is set at the piano's USB console." · **ACTIONS** *Read status* (its `statusText` in Body
+  on `surfaceElevated` under the row), *All keys off* (`off`) and *Save now* (`save`) as
+  action rows.
 
-### Screen — `ui/screens/piano/PianoSettingsSections.kt`
+`PianoSettings.rows(section)` gives each section's rows in that order (`PianoRow`: `Control`,
+`Reading`, `Presets`, `StrikeTest`, `TestLed`, `KeyForceNote`, `Actions`); the pages render
+nothing but that list.
 
-- Rendered on the Piano tab between the connection card and the app preferences, per
-  DESIGN. Every control reads its live value from `values`, shows the unit in its
-  eyebrow, and calls `set` on change; sliders call `set` on value change (the
-  repository debounces). Disabled with `LocalDisabledGlyph` handles while `Unknown`,
-  with the line "Connect to the piano to adjust its settings."; the single line "This
-  piano's firmware doesn't offer settings over Bluetooth yet." while `Unsupported`.
-- `lastError` shows as an `OutlinedBanner` under the control's section.
+### Screen — `ui/screens/piano/PianoSettingRows.kt` and `pages/` (rewritten in v1.5 — M15)
+
+- Each piano page (`FeelPage`, `LightingPage`, `PedalPage`, `FirmwarePage`) is
+  `PianoPageContent(page, report, actions)`: the status line, then its sections, each under a
+  `SectionEyebrow` (a page's only section under a plain `SectionRule`). Every control reads
+  its live value from `values`, shows the unit in its eyebrow, and calls `set` on change;
+  sliders call `set` on value change (the repository debounces). Choices and presets are
+  chip rows (`FilterChip` with a check on the chosen one; `SuggestionChip` for presets).
+  Disabled with `LocalDisabledGlyph` handles while `Unknown`, under the line "Connect to the
+  piano to adjust its settings." ("Reading the piano's settings…" over a hairline once
+  connected); while `Unsupported` each piano page shows the single line "This piano's
+  firmware doesn't offer settings over Bluetooth yet." and nothing else.
+- `lastError` shows as an `OutlinedBanner` ("The piano said: …", Dismiss) directly under
+  the control it concerns: the setting it names, the Test LED or strike-test row for their
+  commands, PRESETS for a preset, and the end of ACTIONS for anything else.
 - Every control has a `contentDescription` including its label and value; steppers'
-  ± buttons are 48 dp.
+  ± buttons are 48 dp. The rows themselves are `ui/components/SettingsRows.kt`'s.
 
 ### Tests
 
@@ -675,8 +696,8 @@ is recorded for the rest, so the next start fetches it.
 ## Settings
 
 `artworkMonochrome: Boolean (false)`, `fetchArtworkAutomatically: Boolean (true)`. Piano tab rows
-"Artwork in black and white" and "Fetch artwork automatically" with the line "Uses Wikipedia.
-Nothing about you is sent." beneath; the About area adds that sentence and "Text from Wikipedia,
+"Artwork in black and white" and "Fetch artwork automatically" (v1.5: Piano › Display › ARTWORK)
+with the line "Uses Wikipedia. Nothing about you is sent." beneath; the About area adds that sentence and "Text from Wikipedia,
 CC BY-SA 4.0 · portraits from Wikimedia Commons".
 
 ## UI
@@ -1264,6 +1285,7 @@ transposed ("B♭/D", "F♯m7").
   "chordNames", "handColours". Piano › App preferences, after Note display (and Wide layout on wide
   windows): "Fingering", "Chord names", "Hand colours" with the note "Colours the two hands on the
   waterfall and the keyboard strip" (the v1.3 delta audit's copy fix; it read "waterfall only").
+  (v1.5: Piano › Display › NOTES, in the same order.)
 
 ## Measured (September 2026)
 
@@ -1557,7 +1579,9 @@ throws `InvalidManifest(field)`.
   preferences, only while the state carries a manifest or is Installed; `CheckNowRow` under the
   last preference, "Check for updates automatically"; `ShareDiagnosticsRow` closes DIAGNOSTICS
   (`PianoSettingsSections(…, appDiagnostics)`), under a DIAGNOSTICS header of its own when the
-  firmware offers no settings.
+  firmware offers no settings. *(v1.5 — M15: `UpdateRow` sits on the hub between the card and
+  the groups; Check now and Share diagnostics are action rows of the hub's APP group;
+  `CheckNowRow` and `appDiagnostics` are gone.)*
 - Library: `CrashBanner` (an `OutlinedBanner` with Share diagnostics and Dismiss) under the import
   and artwork bars.
 - `UpdateCopy` holds every line; megabytes are decimal, one decimal place, in the locale's form.
@@ -1659,3 +1683,173 @@ library even inside a crash's message; each export replacing the one before), `U
 version above the source's, and ends `history.json`), and cases in `CrashSilencerTest` (+2: the
 report after the silence; failures still handed on) and `SettingsRepositoryTest` (+2: the crash
 banner's answer; checkForUpdates). 605 tests before, 661 after.
+
+# v1.5 — M15: the Piano tab as groups
+
+Read `DESIGN.md › v1.5 — the Piano tab as groups` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M15. Not a release: `versionCode` 8, `versionName` "1.4" and `Provenance.text` stay.
+
+## Files
+
+- `ui/components/SettingsRows.kt` (new): every row of the tab. `SectionEyebrow(text)` (Eyebrow,
+  padding 16/24/8, heading, full-width hairline; it replaces the three copies), `SectionRule()` (a
+  page's only section), `SwitchRow`, `StepperRow(label, unit, enabled, description, note, below,
+  control)` with `StepperButtons` (the piano's 48 dp repeating − value +; the app's rows keep
+  `StepperControl`), `SliderRow` (around the unchanged `HairlineSlider`), `ChoiceRow` (chips),
+  `NavRow(label, value, onClick, selected)`, `ActionRow(label, onClick, enabled, note,
+  description)`, `NoteLine`, `ReadingRow`, and `Modifier.mirrored(rtl)`. `NavRow` and `ReadingRow`
+  lay label and value out in a `FlowRow` whose arrangement spreads two items to the ends at least
+  16 dp apart, so a value that doesn't fit goes under its label. The two old row systems (the
+  private rows of `PianoScreen.kt` and `PianoSettingsSections.kt`) are gone.
+- `ui/components/PageHeader.kt` (new): `PageHeader(title, onBack)`; `onBack` null beside the hub
+  (the title with an empty byline line under it, so it sits level with `ScreenHeader`'s title).
+- `ui/screens/piano/PianoScreen.kt`: `PianoScreen(tab, onOpenPage, onReopenPage)` (the hub; on
+  `AppFrame.twoPane` the `Row` of hub 360 dp, `VerticalDivider`, page) and
+  `PianoPageScreen(tab, page, onBack)`.
+- `ui/screens/piano/PianoSettingRows.kt` (was `PianoSettingsSections.kt`): `PianoSettingsActions`,
+  `PianoStatusLine`, `PianoPageContent(page, report, actions)`, `PianoReport`, the Presets, Test
+  LED, Strike test, fact, board and action rows, the refusal banner and its placing.
+- `ui/screens/piano/pages/`: `FeelPage`, `LightingPage`, `PedalPage`, `FirmwarePage` (each
+  `PianoPageContent` for its `PianoPage`), `PlaybackPage`, `DisplayPage`.
+- `ui/screens/piano/GroupSummaries.kt`, `HubGroups.kt` (new, pure).
+- `ui/screens/piano/PianoViewModel.kt`: a `SavedStateHandle`; `selectedPage`, `open`, `pick`,
+  `keepOpen`, `takeOpened`, `scrollOf`.
+- `ui/screens/piano/UpdateRow.kt`: its header is a `SectionEyebrow`; `CheckNowRow` is gone.
+- `ui/components/DiagnosticsShare.kt`: `ShareDiagnosticsRow` is an `ActionRow`.
+- `piano/PianoSettings.kt`: `PianoPage`, `PianoSection(page, title)`, `PianoRow`, `rows(section)`,
+  `sections(page)`; `Fact` has a section; `all` is in page order.
+- `ui/Routes.kt`, `ui/NavHost.kt`, `ui/AdaptiveFrame.kt` (`twoPane`).
+
+## The table's new columns
+
+`PianoSetting.section` is now one of fourteen `PianoSection`s, each on one `PianoPage` (Feel,
+Lighting, Pedal, Firmware) with its eyebrow title (null for Pedal's only section);
+`PianoSetting.page` is the section's. `Fact.section`: `fw` (label "Piano firmware") under
+FIRMWARE, the rest under STATUS. `rows(section)` puts the rows that are not settings in their
+places: PRESETS is the chips alone, the strike test closes TOUCH, the Test LED closes LAYOUT, the
+key-force note closes STATUS, ACTIONS is the actions. Order and members: `v1.1 › The table`.
+
+## Routes
+
+- `Route.Piano`'s path `piano` is a nested graph: start `piano/hub`, and `piano/{page}?cut={cut}`
+  for the six keys `feel`, `lighting`, `pedal`, `firmware`, `playback`, `display`
+  (`SettingsPage`, with its title and its `PianoPage`). `Route.of` maps any `piano/…` to the tab.
+- The page argument is typed (`PianoRoutes.PageType`, a `NavType<SettingsPage>` that parses only
+  the six keys). Navigation 2.9 finds a graph's start destination, and a route to pop to, by the
+  first node whose pattern matches (`NavGraph.findNode(route)`, nodes in id order); with a string
+  argument `piano/{page}` matched `piano/hub` and the tab opened on a page called "hub" (Feel
+  by the fallback). A key that fails to parse makes the pattern not match.
+- `openTab(route)` (a notification's `EXTRA_TAB`, "Not connected" on Now playing and Keys, a piece
+  starting): for Piano, the tab and then `popBackStack("piano/hub")`, so it always lands on the hub.
+  `selectTab(route)` (the bar, the rail): a tab comes back as it was left (`restoreState`); Piano
+  chosen while showing pops to its hub.
+- A row pushes `piano/<key>` only while the hub is the top entry, and back pops only while the page
+  is (`isTop`), so a double tap never pushes two pages or pops the hub.
+- Transitions: between tabs, fade-through as before; inside the tab on phones, `PagePush`: the page
+  `slideIntoContainer(Start)` over 240 ms (`Motion.StandardMs`, `Motion.Standard`), the hub
+  `slideOutOfContainer(Start)` by a quarter of its width, the reverse on pop (NavHost draws the
+  popped page above); no transition at all (`EnterTransition.None`, `ExitTransition.None`) under
+  reduced motion, on wide frames, and for a page pushed with `cut=true`. The hub and pages draw the background colour themselves, so
+  the sliding page covers the hub.
+
+## One view model for the tab, and when the piano saves
+
+Both destinations take `nav.getBackStackEntry("piano")` (the graph's entry) and
+`viewModel(tab) { PianoViewModel(graph, createSavedStateHandle()) }`, so the hub and its pages
+share one instance, kept while the tab's stack is saved. `leave()` runs from
+`LifecycleEventEffect(ON_STOP, lifecycleOwner = tab)`: the graph entry stops when the tab is left
+(popped with `saveState`, through STOPPED) or the app goes to the background, and stays RESUMED
+while a page is pushed or popped inside it (NavController resumes the parents of the top
+destination). The old `DisposableEffect { onDispose { leave() } }` is gone: it would have sent
+`save` on every page pop.
+
+## The split and rotation
+
+- `AppFrame.twoPane` = `widthClass != Compact` (a phone on its side included). The hub
+  destination then shows the hub (360 dp) and `vm.selectedPage` beside it (Feel at first);
+  its rows call `pick`.
+- The selection and whether a page is open live in the view model's `SavedStateHandle`
+  (`selectedPage`, `pageOpened`), not in a `rememberSaveable` of one destination, because the
+  pushed page and the split are different destinations. Each page's `ScrollState` lives in the
+  view model too (a row that opens or picks a page starts it at the top).
+- A phone turned on its side with a page open: the page destination sees `twoPane`, calls
+  `keepOpen(page)` and pops itself (no transition on wide frames); the split shows that page,
+  scrolled where it was. Turned upright again: the hub's `LaunchedEffect(twoPane)` asks
+  `takeOpened()` and pushes the page with `cut=true` (no slide). A page chosen beside the hub
+  comes back over it the same way; the default Feel never does.
+
+## `GroupSummaries` (pure, `ui/screens/piano/GroupSummaries.kt`)
+
+`from(piano, settings, wide)`, from state already held (never a read). Not `Ready`: the four piano
+rows read "—". Feel: "Full power" while `fullpower` is on, else "Volume N%" (`Format.percent`);
+Lighting: "Off" while `leds` is off or `ledmode` is Off, else the mode's name and the brightness
+as the table shows it (the firmware's `(v × 100) / 255`), "Reactive · 62%"; Pedal: `pedalon` "On"
+or "Off"; Firmware and status: `!fw` trimmed; Playback: the default tempo, "100%"; Display: the
+note display's label, `rollStyle`'s on wide frames. A value the piano didn't report reads "—".
+The hub computes it with `remember(piano, settings, frame.wide)`.
+
+## Hub groups (`HubGroups`)
+
+`all` = PIANO (the four piano pages), PLAYING (Playback, Display), CONTROL (empty until M18), APP
+(`AutoConnect`, `CheckForUpdates`, `CheckNow`, `ShareDiagnostics`); `shown` drops a group without
+rows. A later run adds its `SettingsPage`, its page file and one `HubRow` here.
+
+## Measured (September 2026, `steven_piano`, debug build, the emulated piano)
+
+- Tests: 681, none failing (5 skipped without `-Pcorpus`, as before). `lint`: 0 errors; its 19
+  warnings are all in files this run did not touch.
+- Rows: the Feel page against v1.4's FEEL section, the same emulator and values (1080 × 2400 px,
+  420 dpi), measured from the UI tree top to top: all 17 pairs of neighbouring rows within one
+  section are as far apart as in v1.4 (150 px between steppers, 244 px between sliders, 254 px
+  from Full power to Volume); each of the four new section breaks (TOUCH, TIMING, RELEASE, DRIVE)
+  adds 124 px, its eyebrow and hairline. Type, hairlines and switch colours match in the
+  screenshots.
+- Save: toggling Full power sent `fullpower 0` and `get fullpower`; back to the hub sent nothing;
+  choosing Library then sent `save` (logcat `PianoLink`).
+- Navigation: `EXTRA_TAB=piano` with the Pedal page open landed on the hub; Library and back to
+  Piano restored the Lighting page; Piano chosen again popped to the hub.
+- Rotation: the Feel page scrolled to TIMING (its eyebrow 408 px from the top) moved beside the
+  hub with TIMING at 408 px, and came back over the hub at 408 px; Lighting picked in the split
+  came back over the hub when the phone was upright again, and with nothing picked the hub
+  came back.
+- Transitions, animations slowed 10 ×: the page slid in over the hub while the hub moved a
+  quarter left, and back reversed it; with animations removed, the frames around a tap showed
+  the hub, then the settled page.
+- States: not connected (the status line, "—" on the four rows, the pages' controls disabled);
+  Unsupported (`debug.stevenpiano.console none`: the one line on the hub and on each piano page);
+  a refusal (`EMULATOR_SET "ledbright 300"`: "The piano said: ledbright out of range (0..255)"
+  directly under Brightness); UPDATE on the hub from a manifest served on 10.0.2.2; font scale
+  2.0 (values move under their labels, nothing clipped); light and dark; the split on the phone
+  on its side and at 1600 × 2560 and 2560 × 1600 px, 320 dpi (tablet upright and on its side).
+
+## Deviations from the plan, and why
+
+- **Percentages read "70%"**, not "70 %": `Format.percent`, as the tempo, the steppers and every
+  other percentage in the app.
+- **Lighting reads "Off" when the mode is Off** as well as when the strip is: "Off · 62%" would
+  describe a dark strip as lit.
+- **The hub keeps the piano's status line** under the card (the brief's "status line"): it says
+  why the four rows read "—".
+- **Note display and Wide layout are chip rows**, as every choice (the shared `ChoiceRow`); in
+  v1.4 they were radio rows. PRESETS lost its inner "Presets" label, which repeated its eyebrow.
+- **Actions are rows**: Check now, Share diagnostics, and Read status, All keys off and Save now
+  were a text button and outlined buttons; the Test LED and Strike test keep their outlined
+  buttons, which sit in their rows.
+- **The hub route is `piano/hub`** (the graph takes the tab's `piano`), and the page argument is
+  typed (above). The selection lives in the view model's `SavedStateHandle` instead of a
+  `rememberSaveable` (above); `cut=true` is a query argument of the page route.
+- **The firmware version row reads "Unknown"** until the piano reports it; the other facts keep "—".
+- The table lives in `piano/PianoSettings.kt` (not `settings/`), as since v1.1.
+
+## Tests added in M15
+
+`RoutesTest` (6: the tabs' paths; `piano/…` belongs to the Piano tab; a route per page, with
+`cut`; the graph's start and the page pattern; `PageType` refuses "hub" and anything not a page;
+the pages' titles and piano pages), `GroupSummariesTest` (7: Feel; Lighting with the firmware's
+rounding and a mode that is Off; Pedal and Firmware; dashes until the piano answers while the app's
+rows still read; Playback; Display on phones and wide screens; each page's row takes its own
+value), `PianoPagesTest` (6: every setting on one page and section in the design's order; each
+page's sections and eyebrows; the rows that are not settings in their places; every setting and
+fact exactly once; the hub's groups and rows, CONTROL hidden while empty; every page opened from
+exactly one row), `AdaptiveFrameTest` (+1: `twoPane`), and `PianoSettingsTableTest`'s order test
+now checks pages and sections. 661 tests before, 681 after.

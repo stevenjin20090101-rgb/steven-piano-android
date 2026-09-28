@@ -105,7 +105,7 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
     the root: B♭/D), spelled in the key (a file without a key signature in the
     key its notes suggest). A beat is named only when more than one line sounds
     and the notes point to one chord; otherwise the name before holds.
-  - **Piano › Fingering** and **Chord names** (on) show or hide them; **Hand
+  - **Piano › Display › Fingering** and **Chord names** (on) show or hide them; **Hand
     colours** (off) tints the left hand green and the right hand blue on the
     waterfall and the keyboard strip only: the one place colour enters the app
     besides artwork, and red still means only that the piano is live.
@@ -136,33 +136,38 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   the screen turns once the last finger lifts.
 - **Piano settings**: the piano's own settings, from the Piano tab, over the
   same Bluetooth connection (on firmware with its Bluetooth console; older
-  firmware just says it doesn't offer them yet). **Lighting**: the strip on or
-  off, mode, brightness, palette, length, offset, scale, glow, fade and a *Test
-  LED* that lights one key's LED to line the strip up. **Feel**: the Soft,
-  Cinematic, Expressive and Snappy presets, full power, volume, velocity curve,
-  the strike floors and ceiling (with a strike test), timing and release.
-  **Pedal**: on, half-pedalling, up and down positions. **Diagnostics**: the
-  power boards, I²C errors, uptime, the piano's own status report, *All keys
-  off* and *Save now*. The app reads every value when it connects, sends a
-  change as you make it and shows what the piano reports back; the piano saves
-  your changes when you leave the tab. Bench commands (firing solenoids, resets,
-  per-key force) stay at the piano's USB console.
-- **Piano**: the connection, the piano settings above, the app's preferences
-  (auto-connect, note display, wide layout, fingering, chord names, hand
-  colours, default tempo, transpose, velocity, folding, drum channel, artwork in
-  black and white, fetching artwork automatically, checking for updates) and
-  the About line.
+  firmware just says it doesn't offer them yet). **Feel**: the Soft, Cinematic,
+  Expressive and Snappy presets, full power, volume, velocity curve, the strike
+  floors and ceiling (with a strike test), timing, release and drive.
+  **Lighting**: the strip on or off, mode, brightness, palette, length, offset,
+  scale, glow, fade, the piano's own screen, and a *Test LED* that lights one
+  key's LED to line the strip up. **Pedal**: on, half-pedalling, up and down
+  positions. **Firmware and status**: the piano's firmware version, the power
+  boards, I²C errors, uptime, the piano's own status report, *All keys off* and
+  *Save now*. The app reads every value when it connects, sends a change as you
+  make it and shows what the piano reports back; the piano saves your changes
+  when you leave the tab. Bench commands (firing solenoids, resets, per-key
+  force) stay at the piano's USB console.
+- **Piano**: one page of groups. The connection card on top, then **PIANO**
+  (Feel · Lighting · Pedal · Firmware and status, the piano's settings above),
+  **PLAYING** (**Playback**: default tempo, transpose, velocity, folding, drum
+  channel; **Display**: note display, wide layout, fingering, chord names, hand
+  colours, artwork in black and white, fetching artwork automatically) and
+  **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
+  then the About line. Each row says in a few words what its page holds
+  ("Volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
+  (back returns), on a tablet or a phone on its side the page opens beside it.
 - **Updates**: the app looks for a newer release when it opens and once a day,
   and the Piano tab offers it under **UPDATE**: one tap downloads it, checks it
   and hands it to Android's installer. On the school tablet it installs without
   a tap (see *Updates* and *School tablet*).
-- **Diagnostics**: **Piano › Diagnostics › Share diagnostics** sends a small zip
+- **Diagnostics**: **Piano › Share diagnostics** sends a small zip
   of the app's own logs by any app you choose; after a crash, the Library offers
   it (see *Diagnostics*).
 - **Tablets and phones on their side**: a navigation rail on the left instead of
   the bottom bar. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
-  side; **Piano › Wide layout** can show either alone (*Score only* on a tablet
+  side; **Piano › Display › Wide layout** can show either alone (*Score only* on a tablet
   on its side opens two pages). The Library and the Piano tab keep a comfortable
   720 dp reading column in the middle of the screen.
 
@@ -186,12 +191,12 @@ location, nothing about what you play.
 - Composers are fetched after an import, when the app opens with composers not yet
   looked up, and from **Library › + › Fetch artwork and notes for every composer**
   (a notification shows the progress); a piece's notes when its sheet opens.
-  **Piano › Fetch artwork automatically** (on) turns the automatic fetching off; then a
+  **Piano › Display › Fetch artwork automatically** (on) turns the automatic fetching off; then a
   piece's sheet asks Wikipedia only when you tap **Fetch notes**.
 - One request at a time, at most four a second. Offline nothing is fetched and nothing
   is recorded; a failed fetch is retried a day later. Without a portrait a composer
   shows a mosaic of their pieces' first seconds drawn as a paper roll.
-- **Piano › Artwork in black and white** shows the portraits in black and white.
+- **Piano › Display › Artwork in black and white** shows the portraits in black and white.
 
 ## Updates
 
@@ -206,8 +211,8 @@ the newest release's versionCode, name, notes, file address, SHA-256 and size. N
 about you or the tablet goes with it beyond what every HTTPS request carries (the app's
 User-Agent and the tablet's IP address).
 
-When the release is newer than the app, the Piano tab shows **UPDATE** above App
-preferences: "Steven Piano 1.5 is available", its notes, and **Update**. Update
+When the release is newer than the app, the Piano tab shows **UPDATE** under the
+connection card, above its groups: "Steven Piano 1.5 is available", its notes, and **Update**. Update
 downloads the file from the GitHub release (`github.com`, which hands it over from
 `objects.githubusercontent.com` or `release-assets.githubusercontent.com`) with a
 notification you can cancel ("Downloading Steven Piano 1.5"), then checks its size and
@@ -463,7 +468,7 @@ keeps the last 500 of them.
 
 ## Diagnostics
 
-**Piano › Diagnostics › Share diagnostics** builds one small zip and opens Android's
+**Piano › Share diagnostics** (the last row of APP) builds one small zip and opens Android's
 share sheet, so it can go by mail, Drive, Bluetooth or anything else you choose. It
 holds:
 
@@ -545,7 +550,7 @@ the first play, so the lock screen shows play and pause.
       outlined keys and its right hand filled; fingering figures sit in the long
       left-hand bars and over and under the score's heads; the chord names read
       C, Dm7/C, G7/B, C, Am/C over the first bars and arrive at the waterfall's
-      left edge as each bar begins. Piano › Hand colours colours the two hands
+      left edge as each bar begins. Piano › Display › Hand colours colours the two hands
       green and blue, in light and dark; Fingering and Chord names off take each
       away. A MAESTRO performance splits its hands by pitch. The piano plays as
       before whatever is shown.
@@ -553,12 +558,14 @@ the first play, so the lock screen shows play and pause.
       appear), then again in airplane mode (the art shown before is kept, and the
       sheet says notes need an internet connection when it has none).
 - [ ] Piano settings (firmware with the Bluetooth console): on connect the Piano
-      tab fills in LIGHTING, FEEL, PEDAL and DIAGNOSTICS. Adjust a setting from
-      the Piano tab and confirm the piano's serial `status` shows it (Brightness
-      to 15 % prints `bright=40/255`). Choose Cinematic: the dependent settings
-      change to what the piano reports. Leave the tab, power the piano off and
-      on: the change is still there. *Test LED* lights the key's LED; Read
-      status shows the piano's report. With older firmware the tab says it
+      tab's PIANO rows fill in ("Full power", "Reactive · 62%", the firmware
+      version) and their pages come alive. On Lighting, set Brightness to 15 % and
+      confirm the piano's serial `status` shows it (`bright=40/255`); the hub's row
+      then reads "… · 15%". On Feel, choose Cinematic: the dependent settings
+      change to what the piano reports. Going back to the hub saves nothing yet;
+      leave the tab, power the piano off and on: the change is still there. *Test
+      LED* lights the key's LED; Firmware and status › Read status shows the
+      piano's report. With older firmware the hub and each piano page say it
       doesn't offer settings over Bluetooth yet, and playback works as before.
 - [ ] "Open with" from a file manager: the app asks "Add 1 file to the library?";
       Cancel adds nothing, Add imports it. From one that gives no access: after Add
