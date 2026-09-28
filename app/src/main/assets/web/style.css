@@ -677,6 +677,11 @@ button, input, select { font: inherit; color: inherit; }
   .now-side { border-top: 0; border-left: 1px solid var(--hairline); min-height: calc(100vh - 1px); }
 }
 
+/* From 1280 px Up next widens with the window (three fifths of Now playing's column), never below 360 px. */
+@media (min-width: 1280px) {
+  .now { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.6fr); }
+}
+
 /* ---- Up next ------------------------------------------------------------------------------- */
 
 .queue-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px var(--inset); border-bottom: 1px solid var(--hairline); }
@@ -684,6 +689,16 @@ button, input, select { font: inherit; color: inherit; }
 .queue-row { padding-right: 4px; }
 
 .queue-row .handle { cursor: grab; color: var(--tertiary); }
+
+/* Up next's titles take a second line rather than an ellipsis; the composer · length line stays single. */
+.queue-row .title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+}
 
 .queue-row.current { background: var(--elevated); }
 
