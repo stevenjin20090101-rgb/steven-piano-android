@@ -29,6 +29,14 @@ tempo mark's note:
   The font keeps its own licence; the MIT licence of this project does not
   apply to it.
 
+Haze (dev.chrisbanes.haze:haze 1.7.2, linked unmodified from Maven
+Central), which blurs the content beneath the glass of the floating
+controls:
+  Copyright 2023, Christopher Banes and the Haze project contributors.
+  Licensed under the Apache License, Version 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0). The library keeps its own
+  licence; the MIT licence of this project does not apply to it.
+
 Wikipedia text (fetched while the app runs, never bundled): composers'
 blurbs and pieces' notes are text from Wikipedia, the free encyclopedia,
 by its contributors:

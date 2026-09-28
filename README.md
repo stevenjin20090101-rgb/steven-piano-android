@@ -27,9 +27,10 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   plays it next, adds it to the queue or to a playlist, favorites, renames or
   deletes it, and opens *About this piece*.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
-  composer's portrait), **Play** and **Shuffle**, and its pieces in the order you
-  give them: drag a row by its handle, or use *Move up* and *Move down* in its
-  menu. Rename, change the photo or delete it from its menu.
+  composer's portrait), **Shuffle**, and its pieces in the order you give them:
+  drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**
+  floats as a glass circle at the bottom of the list, wherever it is scrolled.
+  Rename, change the photo or delete it from its menu.
 - **Up next, shuffle and repeat**: the queue glyph on Now playing opens *Up
   next*, to reorder, remove, clear, or skip to a piece. **Shuffle** and
   **Repeat** (off, all, one) sit at the two ends of the transport and are
@@ -41,7 +42,22 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   `en.wikipedia.org` and `upload.wikimedia.org` and nothing else (see below).
   Pieces without a portrait get a card drawn from their own first seconds.
 - **Now playing**: the pianola paper roll (the default), Synthesia-style falling
-  notes, or the **score**, with tempo, scrubbing, previous and next.
+  notes, or the **score**, with tempo, scrubbing, previous and next. Over the
+  paper roll the scrubber and the transport float on glass above the notes just
+  played, never over the tracker bar or the keys.
+- **A pause before each piece**: two seconds of silence before every piece starts
+  (**Piano › Playback › Pause before each piece**: off, or half seconds up to
+  5 s). Meanwhile the play button already reads pause, the time stays at 0:00,
+  *STARTING* shows under the composer, and the first notes travel down the roll to
+  meet the tracker bar as the piano plays them. Resuming after a pause never
+  waits; a seek plays at once; two pieces are about 2 s apart.
+- **The mini player**: on a phone, whatever is playing sits above the tab bar
+  with its portrait, title and composer, play/pause and next; tap it for Now
+  playing.
+- **Glass**: the tab bar, the rail, the mini player, the transport and a
+  playlist's Play are frosted glass over the content, monochrome. With *High
+  contrast text* on (Android's accessibility setting), or on Android 11 and
+  older, they are solid, as before.
 - **The score**: the piece as sheet music, in systems of bars on pages (two
   bars a system on a phone, three on a small tablet, four on a tablet on its
   side, and two pages side by side when the score has a tablet's width to
@@ -49,7 +65,7 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   are spelled in the key (an E-flat piece reads in flats), with one accidental
   per pitch per bar and naturals where they are needed, and time signatures
   show at the start and wherever the metre changes. A cursor moves through the
-  bar being played, sounding notes light up, and pages turn by themselves so
+  bar being played, sounding notes turn yellow, and pages turn by themselves so
   the cursor is always in sight. Swipe to look at other pages (**Follow** brings
   the score back to the music), and tap a bar to play from there. Files written
   in a sequencer (most of piano-midi.de and Mutopia) are engraved: whole, half,
@@ -150,8 +166,9 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   force) stay at the piano's USB console.
 - **Piano**: one page of groups. The connection card on top, then **PIANO**
   (Feel · Lighting · Pedal · Firmware and status, the piano's settings above),
-  **PLAYING** (**Playback**: default tempo, transpose, velocity, folding, drum
-  channel; **Display**: note display, wide layout, fingering, chord names, hand
+  **PLAYING** (**Playback**: the pause before each piece, default tempo,
+  transpose, velocity, folding, drum channel; **Display**: note display, wide
+  layout, fingering, chord names, hand
   colours, artwork in black and white, fetching artwork automatically) and
   **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
   then the About line. Each row says in a few words what its page holds
@@ -169,7 +186,10 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   a small tablet or a phone on its side, side by side on a large tablet on its
   side; **Piano › Display › Wide layout** can show either alone (*Score only* on a tablet
   on its side opens two pages). The Library and the Piano tab keep a comfortable
-  720 dp reading column in the middle of the screen.
+  720 dp reading column in the middle of the screen. The Library is two panes: the
+  list, and beside it a now-playing panel (the portrait, the title, a small live
+  roll, the scrubber and the transport, Up next), so playing a piece keeps you in
+  the Library; the Now playing tab is still there for the full score.
 
 The phone does all the timing: the piano plays each note the moment it arrives.
 The app folds notes outside the piano's range (C1–B7) by octaves, never sends a
@@ -511,6 +531,10 @@ the first play, so the lock screen shows play and pause.
       the bar, the keyboard strip inverts, the timers count with tabular figures,
       the piano plays in time. Tempo 50 % halves the rate live. Switch Note
       display to Falling notes and back while playing.
+- [ ] The pause before each piece: tap a piece and the piano stays silent for two
+      seconds while *STARTING* shows, then plays its first notes as they reach the
+      tracker bar; at the end of a piece the next one starts about 2 s later. Pause
+      during the pause and press Play: the piece starts at once.
 - [ ] Pause: the piano is silent within a second, no key left down, pedal up.
       Seek while playing: the same. Lock the phone: playback continues, and the
       notification plays and pauses.
@@ -630,6 +654,8 @@ The full audit, every finding and what was done about it, is in
   without a key signature is spelled in the key found with C. L. Krumhansl and
   E. J. Kessler's key profiles (1982). Both are implemented from the published
   descriptions; no code or data is copied.
+- The glass is drawn with **Haze** by Chris Banes and the Haze contributors
+  (Apache License 2.0), linked unmodified from Maven Central (notice in `AUTHORS`).
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
   domain); those files are not part of this repository.

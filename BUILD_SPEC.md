@@ -33,6 +33,8 @@ Folder: `Player Piano/android/` (its own git repo; never pushed without Steven's
   `raw.githubusercontent.com`, `github.com` (this repository's release downloads) and GitHub's
   download hosts `objects.githubusercontent.com` and `release-assets.githubusercontent.com`;
   nothing is sent but the request itself (see `v1.4 › Network policy`).
+- From v1.5 (M16): Haze 1.7.2 (`dev.chrisbanes.haze:haze`, Apache-2.0), the blur behind the glass of
+  the floating controls; only `ui/components/Glass.kt` names it (see `v1.5 — M16`).
 - Toolchain on this Mac: `JAVA_HOME=/opt/homebrew/opt/openjdk@17`,
   `ANDROID_HOME=/opt/homebrew/share/android-commandlinetools`, `local.properties`
   `sdk.dir` pointing there. The `android` CLI needs `--sdk=$ANDROID_HOME`.
@@ -193,6 +195,10 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
   Red (`LocalLive.current`) is read by `LiveDot` only. The sounding yellow
   (`LocalNoteSounding.current`, v1.5 — M16) is read by `ScorePainter.overlay` only: a grep for it
   outside `ui/theme` finds `ScorePages.kt` alone.
+- The floating controls are glass (v1.5 — M16): `GlassSurface` in `ui/components/Glass.kt`, the only
+  file that names Haze; the glass sources are the navigation content (`NavHost.kt`) and the note
+  panel (`nowplaying/NotePanel.kt`), no others. The content draws beneath the bar and the rail, and
+  every screen keeps clear of them through `LocalFloatingPadding`. No `Modifier.blur` anywhere.
 - Screens and behaviour exactly as `DESIGN.md`. Bottom `NavigationBar`, four tabs since
   v1.1: Library, Now playing, Keys, Piano (v1.0 had the three without Keys). Single
   activity, Navigation-Compose, fade-through 240 ms between tabs (a cut under reduced
@@ -257,8 +263,10 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
 5. Rotate, font scale 2.0, TalkBack: nothing overlaps, everything is labelled.
 6. Unit tests green; no colour literal outside `ui/theme`; `LocalLive` only in
    `LiveDot.kt`; `LocalNoteSounding` only in `ScorePages.kt` outside `ui/theme`
-   (`grep -rn "LocalNoteSounding" app/src/main` finds `Theme.kt` and `ScorePages.kt`); provenance
-   verifies; the provenance string is in the release DEX.
+   (`grep -rn "LocalNoteSounding" app/src/main` finds `Theme.kt` and `ScorePages.kt`);
+   `grep -rn "hazeSource\|hazeBlur\|hazeChild\|HazeState" app/src/main` finds `Glass.kt`,
+   `NavHost.kt` and `NotePanel.kt` only, and no `Modifier.blur`; provenance verifies; the
+   provenance string is in the release DEX.
 
 ---
 
@@ -1869,3 +1877,284 @@ page's sections and eyebrows; the rows that are not settings in their places; ev
 fact exactly once; the hub's groups and rows, CONTROL hidden while empty; every page opened from
 exactly one row), `AdaptiveFrameTest` (+1: `twoPane`), and `PianoSettingsTableTest`'s order test
 now checks pages and sections. 661 tests before, 681 after.
+
+---
+
+# v1.5 — M16: glass, yellow, the pause before each piece, the mini player, two panes
+
+Read `DESIGN.md › v1.5 — M16` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M16. Not a release: `versionCode` 8, `versionName` "1.4" and `Provenance.text` stay (M17 releases
+1.5).
+
+## Files
+
+Added:
+
+- `ui/theme/Glass.kt`: `GlassTokens` (`ContainerAlpha` 0.72, `LensAlpha` 0.60, `LensVeilAlpha` =
+  1 − (1 − 0.72) / (1 − 0.60) = 0.30, `Blur` 24 dp, `Edge` 1 dp); `GlassEdgeDark` `#1AFFFFFF` and
+  `GlassEdgeLight` `#B3FFFFFF` (the only new literals), `LocalGlassEdge` (provided by `PianoTheme`);
+  `rememberReducedTransparency()` (`Settings.Secure` `high_text_contrast_enabled == 1`, followed by a
+  `ContentObserver`, or in debug builds `debug.stevenpiano.noblur` set, read once per process);
+  `GlassCanBlur` (API 31 and up).
+- `ui/components/Glass.kt`, the only file that names Haze: `typealias HazeState`,
+  `rememberHazeState()` (blurring on where `GlassCanBlur`), `Modifier.hazeSource(state)`,
+  `LocalHazeState` (the navigation content's, provided by the nav host), `LocalReducedTransparency`
+  (provided once by the nav host), `LocalOnGlass` (true inside a surface that has the glass's look),
+  `glassAvailable()`, `enum class GlassEdge { Top, End, Outline }`,
+  `GlassSurface(modifier, shape = RectangleShape, source = LocalHazeState.current, edge,
+  containerAlpha = 0.72, blur = true, lens = false, content: BoxScope.() -> Unit)` and
+  `GlassLens(modifier, content)`.
+- `ui/components/MiniPlayer.kt`: `MiniPlayer(state, onOpen, onPlayPause, onNext, modifier)`,
+  `PlayerState.miniPlayerShown`.
+- `ui/components/FloatingPlay.kt`: `FloatingPlaySlot`, `LocalFloatingPlaySlot`,
+  `FloatingPlayRequest(visible, anchor, onPlay)`, `FloatingPlayLayer(slot, shown)`,
+  `FloatingPlayButton(onPlay, modifier)`, `FloatingPlaySize` 56 dp, `FloatingPlayMargin` 16 dp,
+  `FloatingPlayClearance` 88 dp.
+- `ui/components/RollStrip.kt`: `RollStrip(notes, transpose, fold, frameNanos, clock, activeLow,
+  activeHigh, modifier)`, `ROLL_STRIP_DP_PER_SECOND` 48, `RollStripCanvasHeight` 120 dp,
+  `RollStripHeight` (with the hairline and the keyboard strip).
+- `ui/screens/nowplaying/NotePanel.kt`: `Panel` (the note views' card, moved from
+  `NowPlayingScreen.kt`), `GlassTransportPanel(modifier, stripHeight, panel, controls)`,
+  `transportFloats(plan, height)`, `TransportHeight` (128 dp), `PANEL_GAP`, and
+  `ColumnScope.TransportControls(piece, state, frame, roll, player, playback, onSeek, onMoved)`
+  (the scrubber over the transport, shared by Now playing and the panel).
+- `ui/screens/nowplaying/NowPlayingPanel.kt`: `NowPlayingPanel(playback, modifier)`.
+- `ui/screens/nowplaying/FrameClock.kt`: `internal fun rememberFrameNanos(playing, pieceId, settle,
+  roll)`, moved from `NowPlayingScreen.kt` unchanged.
+- Tests: `ui/components/GlassTokensTest.kt`, `ui/screens/nowplaying/TransportFloatsTest.kt`, and the
+  helper `ui/theme/Wcag.kt` (the WCAG formula and source-over blends, shared with `ColorTokensTest`).
+
+Changed: `gradle/libs.versions.toml`, `app/build.gradle.kts` (Haze); `ui/theme/Color.kt`, `Theme.kt`;
+`ui/components/ScorePages.kt`, `NoteCanvas.kt` (`dpPerSecond`, `TRACKER_FROM_BOTTOM` internal),
+`Scrubber.kt`, `TransportBar.kt`, `LiveDot.kt`, `Artwork.kt` (`PieceArt`), `ReadingWidth.kt`
+(`readingPadding(available, bottom)`); `player/PlaybackEngine.kt`, `Player.kt`, `PlayerState.kt`;
+`settings/Settings.kt`; `AppGraph.kt`; `diag/DiagnosticsExporter.kt`; `data/LibraryRepository.kt`;
+`service/MediaSessionHolder.kt`; `MainActivity.kt`; `ui/NavHost.kt`, `AdaptiveFrame.kt`
+(`LocalFloatingPadding`), `Format.kt` (`seconds`); `ui/screens/library/LibraryScreen.kt`,
+`PlaylistHeader.kt`; `ui/screens/nowplaying/NowPlayingScreen.kt`, `RollClock.kt` (its note);
+`ui/screens/keys/KeysScreen.kt`; `ui/screens/piano/PianoScreen.kt`, `PianoViewModel.kt`
+(`setPreRoll`), `GroupSummaries.kt`, `pages/PlaybackPage.kt`.
+
+## Haze
+
+Haze **1.7.2**, not the plan's 2.0.0 (see *Deviations*). In 1.x the blur is part of the `haze`
+artifact. Used: `HazeState(initialBlurEnabled = GlassCanBlur)`, `Modifier.hazeSource(state)`, and
+`Modifier.hazeEffect(state, HazeStyle(backgroundColor = surface, tints = [HazeTint(surface at the
+container's alpha)], blurRadius = 24 dp, noiseFactor = 0)) { inputScale = HazeInputScale.Auto;
+expandLayerBounds = false }` (`@OptIn(ExperimentalHazeApi::class)`). No tint beyond the surface, no
+noise, no progressive blur, no mask. Where the glass cannot blur, `GlassSurface` draws the solid
+surface itself; Haze's own scrim fallback is never reached.
+
+## The glass (`GlassSurface`)
+
+- Modifier chain: `clip(shape)`, the edge (`glassEdge`: over the content, a 1 dp hairline and inside
+  it the 1 dp specular line; along the top for `Top`, the end for `End`, the outline for `Outline`
+  with the line fading out over the upper half), then `hazeEffect` or `background(surface)`.
+- `blurring` = `glassAvailable()` (`GlassCanBlur` and not `LocalReducedTransparency`) and `blur` and
+  the source has an area; `glass` (the look: the specular line and `LocalOnGlass`) = available and
+  (`!blur` or the source has an area). `blur = false` draws the look over the surface colour: what
+  the blur of the bare background under the tint comes to, pixel for pixel.
+- `lens = true`: the surface is blurred under `LensAlpha` and a `LensVeil` (the surface colour at
+  `LensVeilAlpha` everywhere but the circle a `GlassLens` inside it reports through
+  `LocalGlassLens`) brings the rest to `ContainerAlpha`; the lens needs no blur of its own.
+- Contrast (`GlassTokensTest`, WCAG over the worst backdrop: white under the dark container, black
+  under the light one): `contentPrimary` on the container 7.1:1 and 8.3:1; the play glyph on the
+  lens 4.5:1 and 5.8:1; `contentSecondary` glyphs 3.2:1 (≥ 3:1); the tertiary grey under 3:1, so it
+  never sits on glass.
+
+## Where the glass is, and the floating padding (`ui/NavHost.kt`)
+
+- `RailFrame(rail, modifier, content: (railWidth: Dp) -> Unit)`: a `SubcomposeLayout` that measures
+  the rail first, lays the content out at full size and places the rail over its start edge; the
+  rail is a sibling of the content, never inside its source.
+- The `Scaffold`'s `contentWindowInsets` are the system bars and the cutout; the `NavHost` takes
+  only `padding(top)`, `consumeWindowInsets(top)` and `hazeSource(content)`. `LocalFloatingPadding`
+  (`AdaptiveFrame.kt`) = `PaddingValues(start = max(inset start, rail width), end = inset end,
+  bottom = the Scaffold's bottom padding)`: the bar column's measured height on phones (it follows
+  the mini player), the navigation bar alone on wide frames.
+- Screens: the Library pads its sides and gives its list the bottom less the keyboard (≥ 0) as
+  content padding (`readingPadding(maxWidth, bottom)`); the Piano hub and pages pad their sides and
+  end each scroll column with a spacer; Keys and Now playing take all of it as padding.
+- `BottomBar` = `GlassSurface(blur = current is Library or Piano) { Column { the mini player and a
+  hairline (the moving hairline while loading) in an AnimatedVisibility; TabBar } }`; `TabBar` is a
+  `NavigationBar(containerColor = Transparent)`; `TabRail` = `GlassSurface(fillMaxHeight, edge = End,
+  blur = false) { NavigationRail(containerColor = Transparent) }`. Labels on glass are all
+  `onSurface`; on the solid surface the unselected ones stay `onSurfaceVariant`. The pills are as
+  before.
+- `FloatingPlayLayer(slot, shown = current == Library)` beside the `NavHost` in the Scaffold's
+  content `Box`.
+
+## The pause before each piece
+
+- `PlaybackEngine.play(nowNanos, preRollNanos = 0L)`: `anchorNanos = now + preRoll`, status Playing,
+  the pedal restored; `positionMicros` runs below zero until the anchor, `advance` sends nothing and
+  wakes at the anchor, so the first event leaves at exactly `now + preRoll`. `startMicros`: where
+  this run began (below zero during a pause). `pause` holds `max(position, 0)` (a pause inside the
+  pause resumes from 0 at once); `seek` is unchanged but for `startMicros` (it ends the pause);
+  `setTempo` re-anchors (it scales what is left of the pause); `resync` inside the pause only
+  silences.
+- `Player.setPreRoll(ms)` (0–5000), fed by `AppGraph.start`'s settings collector; `startCurrent` and
+  `restartCurrent` pass it, `resume` never; `autoAdvance` waits `max(1500 − preRoll, 0)` ms, so the
+  gap between pieces is `max(1.5 s, preRoll)`. `PositionClock.at`: while running,
+  `max(min(position, duration), min(startMicros, duration))`; held, `position` within 0..duration.
+- Readers that need zero or more: `Scrubber` (the thumb's fraction and the elapsed seconds);
+  `MediaSessionHolder` (position `max(0, position)`, speed 0 while the pause runs, published again
+  when it ends); `ScorePainter.overlay` (draws nothing while `now < 0`).
+- `PianoSettings.preRollMs` (key "preRollMs", default 2000, `PlaybackLimits.PreRollMs` 0..5000 on
+  read and write), `SettingsRepository.setPreRoll`, listed in `settings.txt` (20 lines).
+- UI: the Playback page's first row, `StepperRow("Pause before each piece")` over a
+  `StepperControl` from 0 to 5000 in steps of 500 showing "Off" or `Format.seconds` ("0.5 s", "1 s",
+  "2 s", "2.5 s"); `GroupSummaries.playback` = "2 s pause · 100%" or "No pause · 100%". Now playing
+  and the panel: `StartingLine(starting)` under the composer, `starting = derivedStateOf { playing &&
+  roll.positionAt(frame) < 0 }`, `AnimatedVisibility` with a 120 ms fade (none under reduced
+  motion), its line always reserved.
+- `RollClock` needs no change: its ease starts from the position at the first frame, now the
+  pause's start, and `cut()` runs only while not playing (the pause is playing).
+
+## Yellow
+
+`Color.kt` `NoteSoundingDark` `#F2C94C`, `NoteSoundingLight` `#9C7A00`; `Theme.kt`
+`LocalNoteSounding`, provided by `PianoTheme` beside `LocalLive`; `ScorePages`'s `ScoreColors` gains
+`cursor` (`onSurface`) and takes `sounding` from `LocalNoteSounding`, which feeds only the overlay's
+`colorRamp(upcoming, sounding)`; the playhead uses `cursor`.
+
+## The mini player, the transport, the floating Play, the panel
+
+- `MiniPlayer`: `heightIn(min = 64 dp)`, `clickable(onClickLabel = "Open Now playing")`,
+  `PieceArt(pieceId, composerKey, ArtSize.Row, 48 dp)` (`Artwork.kt`: the composer's portrait, else
+  the piece's roll card), the title in `bodyLarge` over the composer `Eyebrow` (`onSurface` on
+  glass), 48 dp `GlyphButton`s play/pause and next; "Opening the piece…" while a first piece loads.
+  Shown when `!frame.twoPane && (piece != null || loading) && current != NowPlaying`, entering with
+  `expandVertically + fadeIn` and leaving with `shrinkVertically + fadeOut` over 240 ms (none under
+  reduced motion). `NowPlaying.composerKey` comes from `PieceEntity.composerKey` through
+  `LibraryRepository.load` (`PlayablePiece.composerKey`).
+- Now playing: when the screen does not scroll, the views sit in a `BoxWithConstraints(weight 1)`;
+  `glassAvailable() && transportFloats(plan, maxHeight)` puts the controls in the roll's card
+  (`GlassTransportPanel`: the card is the source; the glass, a sibling across its width with its
+  bottom on the strip's top edge, holds the `TransportControls` with `lens = true`), else they follow
+  the views, solid. `transportFloats`: the paper roll only; the roll's card is the whole height
+  (roll alone, side by side) or two thirds of it less the gap (stacked); its canvas, less the
+  hairline and the 44 dp strip, times one third must hold `TransportHeight` + 12 dp.
+- `TransportBar` on glass: `PlayPauseButton` is a `GlassLens` (72 dp) with the glyph in `onSurface`;
+  `ModeToggle` off is `onSurfaceVariant`. The scrubber's times are `onSurface` on glass, and its
+  track draws in its own `graphicsLayer`.
+- A playlist's Play: `LibraryItems` asks `FloatingPlayRequest(playlist open && pieces shown, anchor,
+  play.all(shown))`, where `anchor` is the list box's `boundsInRoot` narrowed to the reading column
+  and raised by the list's bottom padding; the list adds `FloatingPlayClearance` to its bottom
+  padding meanwhile. The nav host's layer places `FloatingPlayButton` 16 dp in from the anchor's end
+  (its start in right-to-left) and above its bottom. `PlaylistHeader` loses `onPlay` and its circle.
+- The two-pane Library (`AppFrame.twoPane`): `Row { library(weight 0.55); VerticalDivider;
+  NowPlayingPanel(weight 0.45, padding(bottom = floating bottom)) }`, else `library()`; the list's
+  state lives above the split. `LibraryPlay` calls `onPlaying` only when `!frame.twoPane`.
+- `NowPlayingPanel`: a 64 dp row with the NOW PLAYING eyebrow and the Up next glyph
+  (`UpNextSheet`); the loading hairline and the problem banner; then `PieceArt(ArtSize.Full)` at
+  `min(320 dp, width − 32 dp, height − 469 dp)` (469 dp: the header row, the words, the strip at its smallest, the solid controls), at least 96 dp, the title (`titleLarge`, the piece
+  sheet), the composer eyebrow (the channel's slot), `StartingLine`; then the `RollStrip`
+  (`weight(1)`, at least `RollStripHeight`) with the controls on glass over its history when
+  `glassAvailable() && transportFloats(roll plan, height)`, else the strip and the controls solid
+  under it. Under 560 dp the panel scrolls with the strip at `RollStripHeight`. It uses
+  `RollClock`, `rememberFrameNanos`, `TransportControls` and the `PlaybackStarter`; its sheets'
+  state is positional (`rememberSaveable` without keys).
+
+## Performance
+
+- `MainActivity.capRefreshRate()`: `window.attributes.preferredRefreshRate = 60f` when
+  `display.supportedModes` offer a rate above 61 Hz; the scheduler thread is untouched.
+- Two sources only (the navigation content, the note panel). Each blur is worked out inside its
+  surface's bounds (`expandLayerBounds = false`) from a third-resolution copy
+  (`HazeInputScale.Auto`), drawn clipped to its shape. Surfaces with nothing beneath (`blur = false`)
+  and the lens (the veil) cost no blur.
+- Per-frame drawing keeps to its own layers so it does not redraw the glass: the scrubber's track,
+  the live dot's breath (its layer's alpha), the roll and the strip (the note panel's card), the
+  score's overlay.
+
+## Greps (v1.5 — M16)
+
+- `grep -rn "Color(0x" app/src/main --include=*.kt | grep -v ui/theme`: nothing.
+- `grep -rn "LocalNoteSounding" app/src/main`: `Theme.kt`, `ScorePages.kt`.
+- `grep -rn "hazeSource\|hazeBlur\|hazeChild\|HazeState" app/src/main`: `Glass.kt`, `NavHost.kt`,
+  `NotePanel.kt`.
+- `grep -rln "dev.chrisbanes" app/src/main`: `Glass.kt`.
+- `grep -rn "Modifier.blur" app/src/main`: nothing.
+
+## Measured (September 2026, `steven_piano`, debug build)
+
+The emulator runs headless and draws with SwiftShader through ANGLE (`gles_mode_selected:swangle`):
+the GPU's work runs on the CPU, so the glass costs far more here than on a tablet's GPU.
+
+- Tests: 701, none failing (5 skipped without `-Pcorpus`). `lint`: 0 errors; its 28 warnings are in
+  files this run did not write, but for the version catalog's "newer version" notices (Haze 2.0.0
+  among them, see *Deviations*).
+- Frames, `dumpsys gfxinfo`, 20 s of Clair de lune: a tablet held upright (1600 × 2560 px, 320 dpi:
+  the score stacked over the roll, the transport on glass) 5 janky frames of 1,197 (0.42 %) dark
+  and 5 of 1,199 (0.42 %) light, 50th / 90th / 99th percentiles 26 / 31 / 42 ms (dark); the phone
+  (1080 × 2400 px, 420 dpi: the roll, the transport on glass) 1 of 1,201 (0.08 %). The blur off
+  (`debug.stevenpiano.noblur`): 1 of 1,203 (0.08 %) on the tablet frame. On the way there: the blur
+  at full resolution 25.1 % on the phone; at a third, 0.75 % on the phone but 21.6 % on the tablet
+  frame, where the rail (2,560 px tall) was re-blurred every frame the roll drew (with the rail
+  solid, 0.17 %) and the lens was a second blur (about 2 points).
+- The pause: the engine's virtual-clock tests; on the emulator, STARTING about a second after a tap
+  with the timer at 0:00 and the first notes descending, then the notes meeting the tracker bar as
+  the pause ends; the media session at position 0, speed 0 during it and running after it.
+- The glass: the tab bar over a scrolled Library (rows blurred beneath it), the mini player with a
+  piece loaded (and at font scale 2.0: the row grows, the composer ellipsizes), the transport over
+  the roll's history with the lens, the playlist's floating Play (the last row clear of it at the
+  list's end), Keys with the keyboard above the mini player and the bar, the two panes at
+  2560 × 1600 px, 240 dpi (the panel's roll and glass transport), High contrast text on (the bars
+  and the mini player solid, the transport back under the roll), light and dark each; the search
+  field with the keyboard open (the list ends at the keyboard); the rail on a phone on its side.
+
+## Deviations from the plan, and why
+
+- **Haze 1.7.2, not 2.0.0.** 2.0.0 (and 1.7.3) depend on Compose UI 1.12.0, whose AAR requires
+  `compileSdk` 37 and AGP 9.1.0; this app builds with `compileSdk` 36, AGP 9.0.1, Kotlin 2.3.20 and
+  Compose 1.10.6. 1.7.2 resolves onto them unchanged (only `androidx.tracing` moves 1.2.0 → 1.3.0).
+  Its API is `hazeSource` / `hazeEffect` (`hazeChild` is its deprecated alias); the blur is in the
+  one artifact.
+- **The floating Play is drawn by the nav host,** not as a sibling of the `LazyColumn`: the list is
+  inside the navigation content, the glass's source, and a glass surface inside its own source
+  finds nothing to draw (Haze excludes it); a second source for the list would break the one-source
+  rule and the grep. Drawn beside the content, the glass blurs the rows beneath it.
+- **The scrubber rides in the transport's glass,** not above it on the bare roll: its times are text.
+- **Glass without a blur where nothing passes beneath** (the rail; the tab bar over Now playing and
+  Keys), and **the lens as a veil over one blur** instead of a second `GlassSurface`: the same
+  pixels, and what brought the tablet frame from 21.6 % janky to 0.42 % (above). `HazeInputScale.Auto`
+  and `expandLayerBounds = false` likewise.
+- **`LiveDot` breathes through its layer's alpha:** drawn in its canvas, the breath redrew the whole
+  screen every frame while playing, and with it the glass.
+- **Without glass the transport does not float** (below API 31, High contrast text): a solid band over
+  the roll would hide its history; it stands under the roll as before.
+- **`PositionClock` holds to where the run began** rather than `−preRoll`: the same during the pause,
+  and a frame never reads a position before a seek's target.
+- **The media session stands at 0:00 with speed 0 through the pause** and is published again when it
+  ends, rather than only clamping: the system's clock then never shows a negative time.
+- **In the panel the roll strip takes the pane's height** (at least 120 dp): at 120 dp its history
+  (40 dp) could never hold the 128 dp transport and the plan's own fallback would always apply; on a
+  tall pane it now carries the glass transport, on a short one the transport stands under it.
+- **`PieceArt`** (the composer's portrait, else the piece's own roll card, as the piece sheet) for the
+  mini player and the panel, rather than `ComposerArt`, whose fallback is a mosaic of other pieces
+  (for an unknown composer, of unrelated ones).
+- **On glass the tab labels are all `onSurface`:** the unselected ones in `onSurfaceVariant` would read
+  3.2:1 over the worst backdrop, under 4.5:1 for text; the pill and the glyph tell the chosen tab.
+- **The mini player is not shown on Now playing** (the full player is there), reads "Opening the
+  piece…" while a first piece loads, and the hairline between it and the tabs moves meanwhile.
+- **The panel's Up next glyph sits in a NOW PLAYING eyebrow row** at its top (the plan named the glyph,
+  not its place). The panel scrolls under 560 dp instead of squeezing.
+- **`rememberSaveable` without keys:** its `key` parameter is deprecated in Compose 1.10; the panel's
+  sheets are remembered where it is composed, apart from Now playing's.
+- **`Format.seconds` reads "0 s" at 0;** the stepper shows "Off" there, and the hub "No pause".
+
+## Tests added in M16
+
+`ColorTokensTest` (+2: the sounding yellow clears 3:1 on both surfaces of its appearance, with the
+recorded figures; a yellow, hue 40–55°, and not a red), `PlaybackEngineTest` (+5, virtual clock: the
+first event exactly 2 s after play and nothing before; the position below zero and a tempo change
+inside the pause; a pause inside it resuming from 0 at once; a seek inside it playing at once; the
+wake time at the anchor), `PlayerTest` (+2: the pause before each piece and the gap between two;
+resume without a pause; the hands test also checks `composerKey`), `SettingsRepositoryTest` (+1:
+2 s at first, remembered, held to 0–5 s), `FormatTest` (+1: `seconds`), `GlassTokensTest` (6: the
+tokens; text on the container; the play glyph on the lens; secondary glyphs and why nothing tertiary;
+the specular whites; the veiled lens equals the container), `TransportFloatsTest` (3); `GroupSummariesTest`
+(the Playback value) and `DiagnosticsExporterTest` (20 lines) changed; `Wcag` shared. 681 tests
+before, 701 after.
+
