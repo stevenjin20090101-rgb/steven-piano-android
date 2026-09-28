@@ -138,6 +138,9 @@ dependencies {
     implementation(libs.androidx.media)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.haze)
+    implementation(libs.nanohttpd)
+    implementation(libs.nanohttpd.websocket)
+    implementation(libs.qrcode.kotlin)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
