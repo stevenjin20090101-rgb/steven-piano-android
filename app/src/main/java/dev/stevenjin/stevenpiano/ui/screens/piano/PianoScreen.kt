@@ -44,6 +44,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
@@ -63,6 +64,7 @@ import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.DisplayPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FeelPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareReport
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
@@ -176,6 +178,8 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val piano by vm.piano.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     val web by vm.web.collectAsStateWithLifecycle()
+    val firmware by vm.firmware.collectAsStateWithLifecycle()
+    val firmwarePiano by vm.firmwarePiano.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val context = LocalContext.current
     var canInstall by remember { mutableStateOf(vm.canInstall()) }
@@ -183,7 +187,9 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web) { GroupSummaries.from(piano, settings, frame.wide, web) }
+    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano) {
+        GroupSummaries.from(piano, settings, frame.wide, web, firmware, (firmwarePiano as? FirmwarePiano.Connected)?.text)
+    }
 
     Column(modifier) {
         ScreenHeader("Piano", Modifier.readingWidth())
@@ -252,7 +258,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Feel -> FeelPage(pianoReport(vm), vm)
                     SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)
                     SettingsPage.Pedal -> PedalPage(pianoReport(vm), vm)
-                    SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm)
+                    SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm, firmwareReport(vm), vm)
                     SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                     SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
                     SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
@@ -272,6 +278,14 @@ private fun pianoReport(vm: PianoViewModel): PianoReport {
     val statusText by vm.statusText.collectAsStateWithLifecycle()
     val statusReading by vm.statusReading.collectAsStateWithLifecycle()
     return PianoReport(piano, link is LinkState.Connected, statusText, statusReading)
+}
+
+/** The piano's firmware and its update, as they change. */
+@Composable
+private fun firmwareReport(vm: PianoViewModel): FirmwareReport {
+    val piano by vm.firmwarePiano.collectAsStateWithLifecycle()
+    val state by vm.firmware.collectAsStateWithLifecycle()
+    return FirmwareReport(piano, state)
 }
 
 /** Where the web panel listens, as it changes. */

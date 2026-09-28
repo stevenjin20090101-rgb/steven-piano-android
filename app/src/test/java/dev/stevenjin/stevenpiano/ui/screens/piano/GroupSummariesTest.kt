@@ -9,6 +9,10 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
+import dev.stevenjin.stevenpiano.firmware.FirmwareFailures
+import dev.stevenjin.stevenpiano.firmware.FirmwareManifest
+import dev.stevenjin.stevenpiano.firmware.FirmwareState
+import dev.stevenjin.stevenpiano.firmware.OtaExample
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
@@ -108,6 +112,39 @@ class GroupSummariesTest {
             listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "On · 100.101.2.3"),
             SettingsPage.entries.map { rows.of(it) },
         )
+    }
+
+    @Test
+    fun `Firmware and status reads Update available while a newer release is known, and the release the piano reports`() {
+        val manifest = FirmwareManifest.parse(OtaExample.manifestJson())
+        val connected = ready(facts = mapOf("fw" to "2.0.0+a1b2c3d"))
+        assertEquals("the release, without the build", "2.0.0", GroupSummaries.firmware(connected, FirmwareState.Idle, "2.0.0+a1b2c3d"))
+        assertEquals("Device Information's version first", "2.1.0", GroupSummaries.firmware(connected, FirmwareState.Idle, "2.1.0+0000000"))
+        assertEquals("the dump's when there is no other", "2.0.0", GroupSummaries.firmware(connected, FirmwareState.Idle, null))
+        assertEquals("older firmware's hash as it was", "a1b2c3d", GroupSummaries.firmware(ready(facts = mapOf("fw" to "a1b2c3d")), FirmwareState.Idle, null))
+        assertEquals(unknown, GroupSummaries.firmware(PianoState.Unknown, FirmwareState.Idle, null))
+        for (offered in listOf(
+            FirmwareState.Available(manifest),
+            FirmwareState.UsbOnly(manifest),
+            FirmwareState.NeedsNewerApp(manifest),
+            FirmwareState.Failed(FirmwareFailures.DIDNT_FINISH, retryable = true, manifest = manifest),
+            FirmwareState.Failed(FirmwareFailures.OFFLINE, retryable = true, manifest = manifest, check = true),
+        )) {
+            assertEquals(offered.toString(), "Update available", GroupSummaries.firmware(connected, offered, "2.0.0+a1b2c3d"))
+            assertEquals("also before the piano answers", "Update available", GroupSummaries.firmware(PianoState.Unknown, offered, null))
+        }
+        for (busy in listOf(
+            FirmwareState.Downloading(manifest, 0, 1),
+            FirmwareState.Sending(manifest, 1, 2, 0),
+            FirmwareState.Restarting(manifest),
+        )) {
+            assertEquals("Updating…", GroupSummaries.firmware(connected, busy, "2.0.0+a1b2c3d"))
+        }
+        assertEquals("2.0.0", GroupSummaries.firmware(connected, FirmwareState.UpToDate("2.0.0"), "2.0.0+a1b2c3d"))
+        assertEquals("a refusal Retry won't mend offers nothing", "2.0.0",
+            GroupSummaries.firmware(connected, FirmwareState.Failed(FirmwareFailures.DIDNT_FINISH, retryable = false, manifest = manifest), "2.0.0+a1b2c3d"))
+        val rows = GroupSummaries.from(connected, PianoSettings(), wide = false, firmwareUpdate = FirmwareState.Available(manifest), firmwareVersion = "2.0.0+a1b2c3d")
+        assertEquals("Update available", rows.of(SettingsPage.Firmware))
     }
 
     @Test

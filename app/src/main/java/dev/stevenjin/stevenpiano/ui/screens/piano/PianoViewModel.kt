@@ -19,6 +19,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
+import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -28,8 +30,10 @@ import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.WideLayout
+import dev.stevenjin.stevenpiano.service.FirmwareService
 import dev.stevenjin.stevenpiano.service.UpdateService
 import dev.stevenjin.stevenpiano.ui.SettingsPage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareActions
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.PosterPrint
 import dev.stevenjin.stevenpiano.web.WebStatus
@@ -50,7 +54,7 @@ import kotlinx.coroutines.launch
  * them up from the settings flow. Update, Check now and Restart act through [AppGraph.updater].
  * The hub's row values come from [GroupSummaries], worked out from these same flows.
  */
-class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateHandle) : ViewModel(), PianoSettingsActions {
+class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateHandle) : ViewModel(), PianoSettingsActions, FirmwareActions {
     val link: StateFlow<LinkState> = graph.pianoLink.state
     val settings: StateFlow<PianoSettings> = graph.settings
     val playing: StateFlow<Boolean> = graph.player.state
@@ -67,6 +71,24 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** Where the web panel listens (Remote control's address and QR, and the hub's row). */
     val web: StateFlow<WebStatus> = graph.web.status
+
+    /** The piano's firmware update (v1.6.1 — M21): the Firmware page's FIRMWARE section, and the hub's row. */
+    val firmware: StateFlow<FirmwareState> = graph.firmwareUpdater.state
+
+    /** The piano as the firmware updater sees it: its version, and whether it can be updated. */
+    val firmwarePiano: StateFlow<FirmwarePiano> = graph.firmwareUpdater.piano
+
+    override fun checkFirmware() = graph.firmwareUpdater.checkNow()
+
+    override fun checkFirmwareOnOpen() = graph.firmwareUpdater.checkOnOpen()
+
+    /** Update or Retry: the transfer starts in the app's scope, and the foreground service follows it. */
+    override fun updateFirmware(context: Context) {
+        graph.firmwareUpdater.update()
+        if (graph.firmwareUpdater.state.value.busy) FirmwareService.start(context.applicationContext)
+    }
+
+    override fun cancelFirmware() = graph.firmwareUpdater.cancel()
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 
