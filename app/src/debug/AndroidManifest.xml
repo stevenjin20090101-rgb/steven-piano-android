@@ -8,6 +8,22 @@
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
 <!-- Debug builds only: the emulator's update server may be plain HTTP (res/xml/network_security_config.xml). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/network_security_config" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <!-- M22 Studio spike, temporary: adb shell am start -n dev.stevenjin.stevenpiano/.studio.StudioBenchActivity -->
+        <activity
+            android:name=".studio.StudioBenchActivity"
+            android:exported="true" />
+        <!-- M22 Studio spike, temporary: runs the bench named by debug.stevenpiano.studiobench at process start -->
+        <provider
+            android:name=".studio.StudioBenchTrigger"
+            android:authorities="${applicationId}.studiobench"
+            android:exported="false" />
+        <!-- M22 Studio spike, temporary: onnxruntime-android 1.29+ ships a telemetry uploader; remove it -->
+        <provider
+            android:name="ai.onnxruntime.TelemetryInitializer"
+            android:authorities="${applicationId}.onnxruntime_telemetry_initializer"
+            tools:node="remove" />
+    </application>
 </manifest>

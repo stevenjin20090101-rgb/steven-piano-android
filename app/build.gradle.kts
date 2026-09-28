@@ -53,6 +53,10 @@ android {
     }
 
     buildTypes {
+        // M22 Studio spike, temporary: the bench runs on arm64 only (reverted with the bench).
+        debug {
+            ndk { abiFilters += "arm64-v8a" }
+        }
         release {
             // Steven's release key (above); the debug build keeps the debug key.
             signingConfig = signingConfigs.findByName("release")
@@ -142,6 +146,8 @@ dependencies {
     implementation(libs.nanohttpd.websocket)
     implementation(libs.qrcode.kotlin)
     implementation(libs.eddsa)
+    // M22 Studio spike, temporary: ONNX Runtime for the debug-only bench (app/src/debug/.../studio).
+    debugImplementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
