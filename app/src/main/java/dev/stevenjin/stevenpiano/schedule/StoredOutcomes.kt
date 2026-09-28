@@ -14,6 +14,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -27,19 +28,23 @@ private val Context.scheduleStore: DataStore<Preferences> by preferencesDataStor
 /**
  * The Schedule page's "Last" line kept on the device ("Last: Wednesday 12:30, Calm channel", or
  * "Missed: Wednesday 12:30 (piano not connected)"), so a start missed while nobody looked is still
- * there when someone opens the page, whatever became of the app's process meanwhile. Not in Share
- * diagnostics' settings: the link's trail carries the missed starts, without names.
+ * there when someone opens the page, whatever became of the app's process meanwhile, for six days.
+ * Not in Share diagnostics' settings: the link's trail carries the missed starts, without names.
  */
-class StoredOutcomes(context: Context) : ScheduleOutcomes {
+class StoredOutcomes(context: Context, private val clock: () -> Long = System::currentTimeMillis) : ScheduleOutcomes {
     private val store = context.applicationContext.scheduleStore
 
+    /** The last line while it is recent ([ScheduleCopy.recent]: six days, so its weekday is unambiguous). */
     override val last: Flow<String?> = store.data
         .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
-        .map { it[LAST] }
+        .map { ScheduleCopy.recent(it[LAST], it[LAST_AT], clock()) }
 
     override suspend fun record(line: String) {
         try {
-            store.edit { it[LAST] = line }
+            store.edit {
+                it[LAST] = line
+                it[LAST_AT] = clock()
+            }
         } catch (e: IOException) {
             // The line is lost; the link's trail still has what happened.
         }
@@ -47,5 +52,6 @@ class StoredOutcomes(context: Context) : ScheduleOutcomes {
 
     private companion object {
         val LAST = stringPreferencesKey("last")
+        val LAST_AT = longPreferencesKey("lastAt")
     }
 }

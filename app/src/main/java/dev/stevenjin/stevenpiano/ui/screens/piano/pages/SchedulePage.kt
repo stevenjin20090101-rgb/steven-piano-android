@@ -94,7 +94,10 @@ fun SchedulePage() {
     }
 
     NextScheduleLine(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
-    last?.let { Eyebrow(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false) }
+    // What the last one did, while there are schedules for it to be about.
+    last?.takeIf { !rows.isNullOrEmpty() }?.let {
+        Eyebrow(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
+    }
     if (!exact) {
         ActionRow(Modifier.padding(top = 8.dp), note = EXACT_ALARMS_NOTE) {
             ActionButton("Allow exact alarms", onClick = { openExactAlarmSettings(context) })

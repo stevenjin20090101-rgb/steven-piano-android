@@ -957,7 +957,7 @@
     $('schedule-add').hidden = !!scheduling.editing;
     fill(body,
       data.next ? h('p', { class: 'eyebrow inset schedule-next', text: data.next }) : null,
-      data.last ? h('p', { class: 'note inset', text: data.last }) : null,
+      data.last && data.schedules.length ? h('p', { class: 'note inset', text: data.last }) : null,
       data.exactAlarms ? null : h('div', { class: 'banner', role: 'status', text: 'Exact alarms are off on the tablet, so no schedule will start. Allow them there: Piano › Schedule › Allow exact alarms.' }),
       scheduling.editing ? scheduleEditor() : null,
       h('ul', { class: 'rows schedule-list' }, data.schedules.map(scheduleRow)),

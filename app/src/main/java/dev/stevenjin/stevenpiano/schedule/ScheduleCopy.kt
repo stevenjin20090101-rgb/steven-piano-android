@@ -85,6 +85,17 @@ object ScheduleCopy {
     /** A start that played, for the page's last line: "Last: Wednesday 12:30, Calm channel". */
     fun played(at: ZonedDateTime, kind: ScheduleKind, name: String): String = "Last: ${moment(at)}, ${target(kind, name)}"
 
+    /**
+     * The last line as the page shows it: [line], recorded at [atMillis], while it is less than
+     * [LAST_SHOWN_MS] old at [nowMillis], so its weekday ("Missed: Monday 10:32 …") can only mean the
+     * last one; null after that, or when there is none.
+     */
+    fun recent(line: String?, atMillis: Long?, nowMillis: Long): String? =
+        line?.takeIf { atMillis != null && nowMillis - atMillis in 0 until LAST_SHOWN_MS }
+
+    /** Six days: a weekday named in the last line is always the last such day. */
+    const val LAST_SHOWN_MS = 6 * 24 * 60 * 60 * 1_000L
+
     /** A channel's name where the channels are not known (yet): its key, capitalised ("calm" → "Calm"). */
     fun channelFallback(key: String): String = key.replaceFirstChar { it.titlecase(Locale.ENGLISH) }
 

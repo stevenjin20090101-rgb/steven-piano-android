@@ -52,6 +52,18 @@ class ScheduleCopyTest {
     }
 
     @Test
+    fun `the last line shows for six days, so its weekday is always the last such day`() {
+        val line = "Missed: Monday 10:32 (piano not connected)"
+        val at = 1_000_000L
+        assertEquals(line, ScheduleCopy.recent(line, at, at))
+        assertEquals(line, ScheduleCopy.recent(line, at, at + ScheduleCopy.LAST_SHOWN_MS - 1))
+        assertEquals(null, ScheduleCopy.recent(line, at, at + ScheduleCopy.LAST_SHOWN_MS))
+        assertEquals("a clock set back", null, ScheduleCopy.recent(line, at, at - 1))
+        assertEquals("a line kept before its time was", null, ScheduleCopy.recent(line, null, at))
+        assertEquals(null, ScheduleCopy.recent(null, at, at))
+    }
+
+    @Test
     fun `times are the tablet's, on the 24-hour clock`() {
         assertEquals("00:00", ScheduleCopy.clock(0))
         assertEquals("09:05", ScheduleCopy.clock(545))
