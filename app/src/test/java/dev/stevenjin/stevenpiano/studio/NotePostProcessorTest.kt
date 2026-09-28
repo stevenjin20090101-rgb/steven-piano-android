@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.studio
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import kotlin.random.Random
 
@@ -207,5 +208,42 @@ class NotePostProcessorTest {
         assertEquals(listOf(PedalEvent(0.2f, 0.6f)), byFall.pedals)
         assertEquals("still down at the end: not reported (the package's rule)", emptyList<PedalEvent>(), single(100, pedalFrame = { if (it >= 20) 0.9f else 0.1f }).pedals)
         assertEquals("down from the very first frame: never rising, never reported", emptyList<PedalEvent>(), single(100, pedalFrame = { 0.9f }).pedals)
+    }
+
+    @Test
+    fun `a level onset above the threshold is a peak at every frame, and a recording's notes stop at 200,000 (audit delta 2)`() {
+        // The package's rule: a peak's neighbours need only not rise, so a level onset output of 0.9 (a
+        // saturated model) is a peak at every frame, and a note at every frame of every key: 8,800 a second.
+        val frames = 1_001
+        val level = FloatArray(frames * CLASSES) { 0.9f }
+        val sounding = FloatArray(frames * CLASSES) { 0.8f }
+        val quiet = FloatArray(frames)
+        fun feed(pp: NotePostProcessor) = pp.append(level, FloatArray(frames * CLASSES), sounding, level, quiet, quiet, 0, frames)
+
+        val every = NotePostProcessor().apply { feed(this) }.finish()
+        assertEquals("every frame but the two at each end, on every key", (frames - 4) * CLASSES, every.notes.size)
+
+        // So a recording's notes are counted, and past the cap it is refused in words rather than held.
+        try {
+            NotePostProcessor(maxNotes = 10_000).apply { feed(this) }.finish()
+            fail("not refused")
+        } catch (e: StudioFailure) {
+            assertEquals(StudioFailures.TOO_MANY_NOTES, e.message)
+        }
+        assertEquals(200_000, NotePostProcessor.MAX_NOTES)
+        // At the default cap three windows of that are refused (the densest audio measured made 78 notes a
+        // second, 94,000 in twenty minutes, well under it).
+        val pp = NotePostProcessor()
+        try {
+            repeat(3) { feed(pp) }
+            pp.finish()
+            fail("not refused")
+        } catch (e: StudioFailure) {
+            assertEquals(StudioFailures.TOO_MANY_NOTES, e.message)
+        }
+    }
+
+    private companion object {
+        const val CLASSES = NotePostProcessor.CLASSES
     }
 }

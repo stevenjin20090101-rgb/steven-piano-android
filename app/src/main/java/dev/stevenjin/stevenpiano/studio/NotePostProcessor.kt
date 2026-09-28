@@ -45,6 +45,8 @@ class Transcription(val notes: List<TranscribedNote>, val pedals: List<PedalEven
  *   frames of that. A pedal still down at the end is not reported (the package's rule).
  *   `reg_pedal_onset_output` is not used.
  *
+ * At most [MAX_NOTES] notes: past that the recording is refused ([StudioFailures.TOO_MANY_NOTES]).
+ *
  * The package's Python truth tests (`if bgn:`) treat frame 0 as "none", and so does this port. It
  * runs as the frames come ([append], a window's frames at a time, in order) and needs only the last
  * few, so a long recording never holds all its outputs: a frame is decided once the four after it
@@ -56,7 +58,11 @@ class NotePostProcessor(
     private val frameThreshold: Float = FRAME_THRESHOLD,
     private val pedalOffsetThreshold: Float = PEDAL_OFFSET_THRESHOLD,
     private val pedalFrameThreshold: Float = PEDAL_FRAME_THRESHOLD,
+    /** The most notes a recording may make ([MAX_NOTES]); past it [StudioFailures.TOO_MANY_NOTES]. */
+    private val maxNotes: Int = MAX_NOTES,
 ) {
+    private var notes = 0
+
     // The last RING frames of each output ([frame % RING] × CLASSES + key).
     private val onsetRing = FloatArray(RING * CLASSES)
     private val offsetRing = FloatArray(RING * CLASSES)
@@ -204,6 +210,7 @@ class NotePostProcessor(
     }
 
     private fun close(k: Int, fin: Int, finShift: Float) {
+        if (++notes > maxNotes) throw StudioFailure(StudioFailures.TOO_MANY_NOTES)
         closed[k] += TranscribedNote(
             onset = seconds(bgn[k], onsetShift[k]),
             offset = seconds(fin, finShift),
@@ -258,6 +265,14 @@ class NotePostProcessor(
 
         /** A note is cut after this many frames (6 s) without an offset. */
         const val MAX_NOTE_FRAMES = 600
+
+        /**
+         * The most notes one recording may make (audit delta 2): the densest audio measured made 78 a second
+         * (94,000 in 20 minutes), but a note can start at any frame of each of 88 keys, 8,800 a second, which
+         * held and written would run the heap out long before the importer's event cap refused the file.
+         * 200,000 is about 170 a second for 20 minutes.
+         */
+        const val MAX_NOTES = 200_000
 
         /** Frames the pedal waits for an offset peak after its frame output fell. */
         const val PEDAL_WAIT_FRAMES = 10

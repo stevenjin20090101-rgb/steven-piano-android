@@ -38,6 +38,7 @@ object StudioFailures {
     const val BUSY = "Close other apps and try again."
     const val RAN_OUT = "The tablet ran short of memory, so the transcription stopped. Close other apps and try again."
     const val NO_NOTES = "No piano was heard in this recording."
+    const val TOO_MANY_NOTES = "More notes were heard in this recording than a piece can hold."
     const val FAILED = "The transcription didn't finish."
     const val NOT_SAVED = "The piece couldn't be added to the library."
 }
