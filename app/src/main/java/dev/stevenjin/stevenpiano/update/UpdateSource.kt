@@ -34,21 +34,29 @@ import java.util.Locale
  * [FIRMWARE_DOWNLOAD_PREFIX] on `github.com`, and GitHub's two asset hosts for the redirect. Its own
  * cap ([MAX_FIRMWARE_BYTES]), apart from the APK's. The two allow-lists never overlap: the app's
  * source refuses the firmware's addresses and the firmware's refuses the app's.
+ *
+ * [models] (v1.7 — M23, Studio): the models' list at [MODELS_MANIFEST_URL] exactly, and the files it
+ * names: `.onnx` assets of this repository's release tagged [MODELS_TAG] on `github.com`
+ * ([allowsModel]), with GitHub's two asset hosts for the redirect; its own cap ([MAX_MODEL_BYTES]).
+ * [localModels] is its emulator stand-in (debug builds only, as [local]).
  */
 class UpdateSource private constructor(
     /** The manifest's address. */
     val manifestUrl: String,
     private val origin: Origin?,
-    /** The piano's firmware releases rather than the app's ([firmware]). */
-    private val forFirmware: Boolean = false,
+    /** Whose releases: the app's own, the piano's firmware ([firmware]) or Studio's models ([models]). */
+    private val kind: Kind = Kind.App,
 ) {
     private data class Origin(val scheme: String, val host: String, val port: Int)
 
+    private enum class Kind { App, Firmware, Models }
+
     /** Whether a request, or a redirect of one, may go to [url]. */
     fun allowsHop(url: String): Boolean {
-        if (forFirmware) return allowsFirmwareManifest(url) || allowsFirmwareBinary(url)
+        if (kind == Kind.Firmware) return allowsFirmwareManifest(url) || allowsFirmwareBinary(url)
         val uri = parse(url) ?: return false
         if (origin != null) return originOf(uri) == origin
+        if (kind == Kind.Models) return allowsModelManifest(url) || allowsModelBinary(url)
         if (!secure(uri)) return false
         val path = uri.rawPath.orEmpty()
         return when (uri.host.lowercase(Locale.ROOT)) {
@@ -65,12 +73,27 @@ class UpdateSource private constructor(
      * with no query or fragment; with a [local] source, an `.apk` on its origin.
      */
     fun allowsApk(url: String): Boolean {
-        if (forFirmware) return false
+        if (kind != Kind.App) return false
         val uri = parse(url) ?: return false
         if (uri.rawQuery != null || uri.rawFragment != null) return false
         val path = uri.rawPath.orEmpty()
         if (origin != null) return originOf(uri) == origin && path.endsWith(".apk") && safeSegments(path)
         return secure(uri) && uri.host.lowercase(Locale.ROOT) == DOWNLOAD_HOST && releaseAsset(path) && path.endsWith(".apk")
+    }
+
+    /**
+     * Whether a models' list may name [url] as a model's file: with [models], an `.onnx` asset of this
+     * repository's release tagged [MODELS_TAG] on `github.com`, a plain name, no query or fragment
+     * ([allowsModelFile]); with [localModels], an `.onnx` file on its origin. Never for the app's own
+     * or the firmware's source.
+     */
+    fun allowsModel(url: String): Boolean {
+        if (kind != Kind.Models) return false
+        val uri = parse(url) ?: return false
+        if (uri.rawQuery != null || uri.rawFragment != null) return false
+        val path = uri.rawPath.orEmpty()
+        if (origin != null) return originOf(uri) == origin && path.endsWith(".onnx") && safeSegments(path)
+        return allowsModelFile(url)
     }
 
     /** Whether this is the production source (the only one release builds have). */
@@ -117,7 +140,74 @@ class UpdateSource private constructor(
         const val MAX_FIRMWARE_BYTES = 4L * 1024 * 1024
 
         /** The piano's firmware releases: their manifest, their binaries and GitHub's asset hosts, nothing else. */
-        val firmware = UpdateSource(FIRMWARE_MANIFEST_URL, origin = null, forFirmware = true)
+        val firmware = UpdateSource(FIRMWARE_MANIFEST_URL, origin = null, kind = Kind.Firmware)
+
+        /** Studio's models (v1.7 — M23): assets of this repository's release with this tag, never a version tag. */
+        const val MODELS_TAG = "models"
+
+        /** The models' list, `releases/models.json` on `main`: this address exactly. */
+        const val MODELS_MANIFEST_URL = "https://$MANIFEST_HOST/$REPOSITORY/main/releases/models.json"
+
+        /** The models' files: `/<owner>/<repo>/releases/download/models/<file>.onnx`. */
+        const val MODELS_DOWNLOAD_PREFIX = "$DOWNLOAD_PREFIX$MODELS_TAG/"
+
+        /**
+         * The largest model the app downloads: today's are 124.5 MB and 173.2 MB. Its own cap, apart from
+         * the APK's and the firmware's.
+         */
+        const val MAX_MODEL_BYTES = 1024L * 1024 * 1024
+
+        /** Studio's models: their list, their files, and GitHub's asset hosts; nothing else. */
+        val models = UpdateSource(MODELS_MANIFEST_URL, origin = null, kind = Kind.Models)
+
+        /** Whether [url] is the models' list: [MODELS_MANIFEST_URL] exactly (HTTPS on 443, no query or fragment). */
+        fun allowsModelManifest(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (!secure(uri) || uri.rawQuery != null || uri.rawFragment != null) return false
+            return uri.host.lowercase(Locale.ROOT) == MANIFEST_HOST && uri.rawPath == "/$REPOSITORY/main/releases/models.json"
+        }
+
+        /**
+         * Whether a model's download, or a redirect of one, may go to [url]: an asset of the release
+         * tagged [MODELS_TAG] on `github.com`, or one of GitHub's two asset hosts (signed, expiring
+         * addresses). HTTPS on port 443 only.
+         */
+        fun allowsModelBinary(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (!secure(uri)) return false
+            return when (uri.host.lowercase(Locale.ROOT)) {
+                DOWNLOAD_HOST -> modelAsset(uri.rawPath.orEmpty())
+                in ASSET_HOSTS -> true
+                else -> false
+            }
+        }
+
+        /**
+         * Whether the models' list may name [url] as a model's file: an `.onnx` asset of the release
+         * tagged [MODELS_TAG] on `github.com`, no query or fragment. An asset host is never named
+         * directly (GitHub redirects there by itself).
+         */
+        fun allowsModelFile(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (uri.rawQuery != null || uri.rawFragment != null || !secure(uri)) return false
+            val path = uri.rawPath.orEmpty()
+            return uri.host.lowercase(Locale.ROOT) == DOWNLOAD_HOST && modelAsset(path) && path.endsWith(".onnx")
+        }
+
+        /**
+         * The models' list and files at one origin, for the emulator (debug builds only, as [local]): the
+         * list at [manifestUrl], its files `.onnx` on the same scheme, host and port; HTTP allowed.
+         * Null when [manifestUrl] is not an absolute http(s) address.
+         */
+        fun localModels(manifestUrl: String): UpdateSource? {
+            val uri = parse(manifestUrl.trim()) ?: return null
+            val origin = originOf(uri) ?: return null
+            if (origin.scheme != "http" && origin.scheme != "https") return null
+            return UpdateSource(manifestUrl.trim(), origin, Kind.Models)
+        }
+
+        /** `/<owner>/<repo>/releases/download/models/<file>`, the file a plain name. */
+        private fun modelAsset(path: String): Boolean = releaseAsset(path) && path.startsWith(MODELS_DOWNLOAD_PREFIX)
 
         /** Whether [url] is the firmware's release manifest: [FIRMWARE_MANIFEST_URL] exactly (HTTPS, port 443, no query or fragment). */
         fun allowsFirmwareManifest(url: String): Boolean {

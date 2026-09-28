@@ -43,9 +43,11 @@ class HttpUpdateServer(
     transport: HttpTransport = UrlConnectionTransport,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     log: ((String) -> Unit)? = null,
+    /** What a file request accepts: an APK by default; Studio's models ask for [BINARY_ACCEPT]. */
+    fileAccept: String = APK_ACCEPT,
 ) : UpdateServer {
     private val manifestFetch = HttpFetch(source::allowsHop, "application/json", readTimeoutMs = READ_TIMEOUT_MS, transport = transport, log = log)
-    private val fileFetch = HttpFetch(source::allowsHop, APK_ACCEPT, readTimeoutMs = READ_TIMEOUT_MS, transport = transport, log = log)
+    private val fileFetch = HttpFetch(source::allowsHop, fileAccept, readTimeoutMs = READ_TIMEOUT_MS, transport = transport, log = log)
 
     override suspend fun manifest(): String = withContext(io) {
         manifestFetch.exchange(source.manifestUrl) { answer ->
@@ -75,9 +77,12 @@ class HttpUpdateServer(
         }
     }
 
-    private companion object {
-        const val READ_TIMEOUT_MS = 30_000
-        const val BUFFER_BYTES = 64 * 1024
-        const val APK_ACCEPT = "application/vnd.android.package-archive, application/octet-stream;q=0.9, */*;q=0.8"
+    companion object {
+        private const val READ_TIMEOUT_MS = 30_000
+        private const val BUFFER_BYTES = 64 * 1024
+        private const val APK_ACCEPT = "application/vnd.android.package-archive, application/octet-stream;q=0.9, */*;q=0.8"
+
+        /** Any file of bytes: Studio's models (v1.7 — M23). */
+        const val BINARY_ACCEPT = "application/octet-stream, */*;q=0.8"
     }
 }

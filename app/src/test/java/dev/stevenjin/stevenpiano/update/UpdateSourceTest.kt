@@ -119,6 +119,85 @@ class UpdateSourceTest {
         assertTrue("the app's own manifest is still reachable", app.allowsHop(UpdateSource.MANIFEST_URL))
     }
 
+    private val appRepo = "stevenjin20090101-rgb/steven-piano-android"
+    private val models = "https://raw.githubusercontent.com/$appRepo/main/releases/models.json"
+    private val model = "https://github.com/$appRepo/releases/download/models/transcription-v1.onnx"
+
+    @Test
+    fun `the models' list is one address exactly, and names only onnx assets of the release tagged models`() {
+        assertEquals(models, UpdateSource.MODELS_MANIFEST_URL)
+        assertTrue(UpdateSource.allowsModelManifest(models))
+        assertTrue(UpdateSource.allowsModelManifest("https://RAW.githubusercontent.com:443/$appRepo/main/releases/models.json"))
+        for (refused in listOf(
+            "http://raw.githubusercontent.com/$appRepo/main/releases/models.json",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/latest.json",
+            "https://raw.githubusercontent.com/$appRepo/dev/releases/models.json",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/models.json?x=1",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/../releases/models.json",
+            "https://raw.githubusercontent.com/$repo/main/releases/models.json",
+            "https://evil.example@raw.githubusercontent.com/$appRepo/main/releases/models.json",
+        )) {
+            assertFalse(refused, UpdateSource.allowsModelManifest(refused))
+        }
+        val source = UpdateSource.models
+        assertTrue(source.allowsModel(model))
+        assertTrue(source.allowsModel("https://github.com/$appRepo/releases/download/models/composer-v1.onnx"))
+        for (refused in listOf(
+            "https://github.com/$appRepo/releases/download/v1.6.2/transcription-v1.onnx",
+            "https://github.com/$appRepo/releases/download/models/steven-piano-1.6.2.apk",
+            "https://github.com/$appRepo/releases/download/models/transcription-v1.onnx?download=1",
+            "https://github.com/$appRepo/releases/download/models/transcription-v1.onnx#x",
+            "https://github.com/$appRepo/releases/download/models/sub/transcription-v1.onnx",
+            "https://github.com/$appRepo/releases/download/models/..",
+            "https://github.com/someone-else/steven-piano-android/releases/download/models/transcription-v1.onnx",
+            "https://github.com/$repo/releases/download/models/transcription-v1.onnx",
+            "https://release-assets.githubusercontent.com/github-production-release-asset/1.onnx",
+            "http://github.com/$appRepo/releases/download/models/transcription-v1.onnx",
+            "https://github.com:8443/$appRepo/releases/download/models/transcription-v1.onnx",
+        )) {
+            assertFalse(refused, source.allowsModel(refused))
+        }
+    }
+
+    @Test
+    fun `the models' source reaches its list, its files and the asset hosts, and nothing of the app's or the firmware's`() {
+        val source = UpdateSource.models
+        assertEquals(models, source.manifestUrl)
+        assertTrue(source.isProduction)
+        assertTrue(source.allowsHop(models))
+        assertTrue(source.allowsHop(model))
+        assertTrue(source.allowsHop("https://objects.githubusercontent.com/any/path?sig=1"))
+        assertTrue(source.allowsHop("https://release-assets.githubusercontent.com/github-production-release-asset/2/3?sp=r"))
+        assertFalse(source.allowsHop(UpdateSource.MANIFEST_URL))
+        assertFalse(source.allowsHop("https://github.com/$appRepo/releases/download/v1.6.2/steven-piano-1.6.2.apk"))
+        assertFalse(source.allowsHop(manifest))
+        assertFalse(source.allowsHop(binary))
+        assertFalse(source.allowsApk(model))
+        assertFalse("the app's own source never names a model as its APK", UpdateSource.production.allowsApk(model))
+        assertFalse("nor does the firmware's", UpdateSource.firmware.allowsHop(model))
+        assertFalse(UpdateSource.production.allowsModel(model))
+        assertFalse(UpdateSource.firmware.allowsModel(model))
+    }
+
+    @Test
+    fun `the emulator's models server is one origin, onnx files only`() {
+        val local = UpdateSource.localModels("http://10.0.2.2:8766/models.json")!!
+        assertFalse(local.isProduction)
+        assertTrue(local.allowsHop("http://10.0.2.2:8766/models.json"))
+        assertTrue(local.allowsModel("http://10.0.2.2:8766/transcription-v1.onnx"))
+        assertFalse(local.allowsModel("http://10.0.2.2:8766/app.apk"))
+        assertFalse(local.allowsModel("http://10.0.2.2:8767/transcription-v1.onnx"))
+        assertFalse(local.allowsModel(model))
+        assertFalse(local.allowsApk("http://10.0.2.2:8766/app.apk"))
+        assertEquals(null, UpdateSource.localModels("not a url"))
+    }
+
+    @Test
+    fun `a model has a cap of its own, 1 GB`() {
+        assertEquals(1024L * 1024 * 1024, UpdateSource.MAX_MODEL_BYTES)
+        assertTrue("the composer is 173 MB", 173_193_820L <= UpdateSource.MAX_MODEL_BYTES)
+    }
+
     @Test
     fun `a firmware binary has a cap of its own, apart from the APK's`() {
         assertEquals(4L * 1024 * 1024, UpdateSource.MAX_FIRMWARE_BYTES)
