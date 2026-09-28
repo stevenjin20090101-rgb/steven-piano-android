@@ -65,12 +65,14 @@ import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.PlayerState
+import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
@@ -215,7 +217,9 @@ private fun ColumnScope.PieceView(
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
-        if (piece.composer.isNotBlank()) Eyebrow(piece.composer, Modifier.padding(top = 4.dp), maxLines = 1)
+        // The composer, and while a channel plays its name: "CLAUDE DEBUSSY · CALM · CHANNEL".
+        val eyebrow = ChannelCopy.eyebrow(piece.composer, rememberChannelName(state.channel))
+        if (eyebrow.isNotEmpty()) Eyebrow(eyebrow, Modifier.padding(top = 4.dp), maxLines = 1)
         StartingLine(starting, Modifier.padding(top = 2.dp))
     }
     Spacer(Modifier.height(8.dp))

@@ -123,6 +123,12 @@ data class PlayerState(
     val queue: QueueSnapshot = QueueSnapshot(),
     /** Why the last piece could not be played, in plain English; null when all is well. */
     val problem: String? = null,
+    /**
+     * The channel playing ("calm"; DESIGN.md › v1.5 — M17), or null. Set by [Player.playAll] with a
+     * channel, kept by Next, Previous, Play next and Add to queue, and gone when anything else takes
+     * over the queue or playback stops (see [Player]).
+     */
+    val channel: String? = null,
 ) {
     val queueIndex: Int get() = queue.index
 

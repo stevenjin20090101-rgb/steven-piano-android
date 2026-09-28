@@ -217,7 +217,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                             },
                         ) {
                             composable(Route.Library.path) {
-                                LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onImport = onImport)
+                                LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onOpenPiano = { open(Route.Piano) }, onImport = onImport)
                             }
                             composable(Route.NowPlaying.path) {
                                 NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })

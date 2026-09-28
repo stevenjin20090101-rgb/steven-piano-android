@@ -111,6 +111,24 @@ class PianoSettingsRepository(
 
     fun set(name: String, value: Float) = set(name, PianoSettings.wire(value))
 
+    /**
+     * Holds setting [name] at [value] for a while (a channel's volume; DESIGN.md › v1.5 — M17): sent
+     * as [set] sends it, but never counted for a save, and while anything is held a save [leave]
+     * asks for waits until [releaseTemporary], so the piano never stores the held value.
+     */
+    fun holdTemporarily(name: String, value: Int) {
+        session?.set(name, PianoSettings.wire(value), temporary = true)
+    }
+
+    /**
+     * Ends [holdTemporarily]: [value] (what the setting held before) goes back, unless the person
+     * has set [name] since, whose choice stands; then a save that waited goes. Also after the link
+     * dropped and came back meanwhile (the piano kept the held value): the value goes back then too.
+     */
+    fun releaseTemporary(name: String, value: Int) {
+        session?.release(name, PianoSettings.wire(value))
+    }
+
     /** Applies a feel preset on the piano, then reads everything again: a preset changes several settings. */
     fun preset(command: String) {
         session?.preset(command)
@@ -155,6 +173,18 @@ class PianoSettingsRepository(
         private var savedThrough = 0   // writes up to this one are covered by a save
         private var acceptedThrough = 0   // the latest write the piano accepted
 
+        /** Settings held for now ([holdTemporarily]); a save waits while any is. */
+        private val held = HashSet<String>()
+
+        /** Settings whose next write is a temporary one, never counted for a save. */
+        private val temporaryWrites = HashSet<String>()
+
+        /** A save [leave] asked for while something was held: it goes once nothing is. */
+        private var saveWhenReleased = false
+
+        /** Settings the person changed on this connection: a release never overrides them. */
+        private val setByPerson = HashSet<String>()
+
         private var lastCommand: String? = null
         private var statusLines: MutableList<String>? = null
         private var statusEnd: Job? = null
@@ -177,11 +207,19 @@ class PianoSettingsRepository(
 
         fun close() = job.cancel()
 
-        fun set(name: String, value: String) {
+        fun set(name: String, value: String, temporary: Boolean = false) {
             val setting = PianoSettings.named(name)
             if (!ready || setting == null || setting.readOnly || !WIRE_VALUE.matches(value)) {
                 log("Not sent: $name $value")
                 return
+            }
+            if (temporary) {
+                held += name
+                temporaryWrites += name
+            } else {
+                held -= name   // the person's own value: it stands, and is saved as any other
+                temporaryWrites -= name
+                setByPerson += name
             }
             latest[name] = value
             values[name] = value   // shown at once; the piano's answer confirms or corrects it
@@ -222,8 +260,25 @@ class PianoSettingsRepository(
         fun leave() {
             if (!ready) return
             flushPending()
-            val unconfirmed = awaiting.any { (it.write?.number ?: 0) > savedThrough }
-            if (acceptedThrough > savedThrough || unconfirmed) save()
+            val unconfirmed = awaiting.any { it.write?.let { w -> w.persist && w.number > savedThrough } == true }
+            if (acceptedThrough > savedThrough || unconfirmed) {
+                if (held.isEmpty()) save() else saveWhenReleased = true
+            }
+        }
+
+        /**
+         * Ends a hold on [name]: [value] goes back unless the person set it since (on this
+         * connection; a hold made before a reconnection is put back too); then a save that waited goes.
+         */
+        fun release(name: String, value: String) {
+            if (name in held || name !in setByPerson) {
+                set(name, value, temporary = true)
+                held -= name
+            }
+            if (held.isEmpty() && saveWhenReleased) {
+                saveWhenReleased = false
+                save()
+            }
         }
 
         private fun save() {
@@ -243,7 +298,7 @@ class PianoSettingsRepository(
         /** `name value`, then `get name` (and whatever that setting changes too) to read back what the piano holds. */
         private fun write(name: String) {
             val value = latest.remove(name) ?: return
-            val write = Write(++sentWrites, errors)
+            val write = Write(++sentWrites, errors, persist = temporaryWrites.remove(name).not())
             send("$name $value")
             for (read in listOf(name) + PianoSettings.alsoRead[name].orEmpty()) {
                 awaiting += Awaited(read, if (read == name) write else null)
@@ -317,7 +372,7 @@ class PianoSettingsRepository(
                 if (errors == write.errorsBefore) {   // nothing refused since this write went out: it went through
                     lastError = null
                     errorAbout = null
-                    acceptedThrough = maxOf(acceptedThrough, write.number)
+                    if (write.persist) acceptedThrough = maxOf(acceptedThrough, write.number)   // a held value is never saved
                 }
             }
             if (ready && dump == null) publish()
@@ -353,8 +408,11 @@ class PianoSettingsRepository(
     /** A `get` waiting for its answer; [write] when it reads back a change. */
     private class Awaited(val name: String, val write: Write?)
 
-    /** The [number]th change written this connection, and how many errors had been seen before it went. */
-    private class Write(val number: Int, val errorsBefore: Int)
+    /**
+     * The [number]th change written this connection, and how many errors had been seen before it
+     * went; [persist] false for a held value ([holdTemporarily]), which never calls for a save.
+     */
+    private class Write(val number: Int, val errorsBefore: Int, val persist: Boolean = true)
 
     private companion object {
         const val TAG = "PianoSettings"

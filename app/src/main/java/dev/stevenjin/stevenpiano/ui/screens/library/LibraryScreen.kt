@@ -127,7 +127,7 @@ import kotlinx.coroutines.launch
  * playing tab remains for the full score.
  */
 @Composable
-fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (ImportSource) -> Unit) {
+fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit) {
     val graph = LocalContext.current.graph
     val vm = viewModel { LibraryViewModel(graph.library, graph.importProgress, graph.appScope, graph.artwork::forget) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -223,6 +223,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
             NowPlayingPanel(
                 playback,
+                onOpenPiano,
                 Modifier
                     .weight(1f - LIST_SHARE)
                     .fillMaxHeight()

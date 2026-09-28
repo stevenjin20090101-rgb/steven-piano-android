@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.player
 
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
+import dev.stevenjin.stevenpiano.channels.ChannelDeck
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.ChordTrack
@@ -65,6 +66,12 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * Every piece that starts (a tap, the end of the one before, Repeat one) begins with the pause
  * before each piece ([setPreRoll]; DESIGN.md › v1.5 — M16): the position runs below zero and the
  * piano stays silent until it ends. Resuming never pauses first, and a seek ends the pause.
+ * A channel (DESIGN.md › v1.5 — M17) is a queue [playAll] started with its key: [PlayerState.channel]
+ * says so while Next, Previous, the end of a piece, Play next and Add to queue move through it (what
+ * the person adds joins the channel), and the channel's own [addToQueue] tops it up. It ends
+ * (null) when a piece is played from a list ([play]), a list is played without a channel, the person
+ * skips to an entry the channel did not deal, or playback stops ([stop], [stopAndFlush],
+ * [leaveChannel]: the notification's dismiss).
  */
 class Player(
     private val link: PianoLink,
@@ -75,11 +82,11 @@ class Player(
     prepareThread: () -> Unit = Scheduler.UrgentAudio,
     private val random: Random = Random.Default,
     private val compute: CoroutineDispatcher = Dispatchers.Default,
-) {
+) : ChannelDeck {
     private val engine = PlaybackEngine(link)
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
     private val _state = MutableStateFlow(PlayerState())
-    val state: StateFlow<PlayerState> = _state.asStateFlow()
+    override val state: StateFlow<PlayerState> = _state.asStateFlow()
 
     @Volatile
     private var position = PositionClock.Zero
@@ -99,6 +106,9 @@ class Player(
     private var fingerJob: Job? = null
     private var linkConnected = false
     private var linkEpoch: Long? = null
+
+    /** The queue entries the playing channel dealt (its first pieces and its top-ups); empty without a channel. */
+    private var channelUids: Set<Long> = emptySet()
 
     // Owned by the scheduler thread: what was last published.
     private var shownStatus = PlaybackStatus.Stopped
@@ -121,24 +131,42 @@ class Player(
     /** Keys the piano is playing, as bits `key - 88`: keys 88..107. */
     val activeKeysHigh: Long get() = activeHigh.get()
 
-    /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue] (shuffled when shuffle is on). */
+    /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue] (shuffled when shuffle is on). A channel ends. */
     fun play(pieceId: Long, queue: List<Long> = listOf(pieceId)) {
+        setChannel(null)
         setQueue(Queue.startingAt(pieceId, queue, this.queue, random))
         startCurrent()
     }
 
-    /** A playlist's Play (in order) or Shuffle (random order, and shuffle stays on) button. */
-    fun playAll(pieceIds: List<Long>, shuffle: Boolean) {
+    /**
+     * A playlist's Play (in order) or Shuffle (random order, and shuffle stays on) button; or with
+     * [channel], a channel's first pieces (dealt in the order given): the channel plays until
+     * something else takes over.
+     */
+    override fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String?) {
         if (pieceIds.isEmpty()) return
         setQueue(Queue.all(pieceIds, shuffle, queue, random))
+        channelUids = if (channel == null) emptySet() else queue.entries.mapTo(HashSet()) { it.uid }
+        setChannel(channel)
         startCurrent()
     }
 
-    /** Queues [pieceIds] right after the current piece. With nothing in the queue yet they start playing: true then. */
+    /** Queues [pieceIds] right after the current piece (a channel plays on around them). With nothing in the queue yet they start playing: true then. */
     fun playNext(pieceIds: List<Long>): Boolean = enqueue(pieceIds) { it.playNext(pieceIds) }
 
-    /** Queues [pieceIds] at the end. With nothing in the queue yet they start playing: true then. */
-    fun addToQueue(pieceIds: List<Long>): Boolean = enqueue(pieceIds) { it.addToQueue(pieceIds) }
+    /**
+     * Queues [pieceIds] at the end (a channel plays on after them). With nothing in the queue yet
+     * they start playing: true then. [channel] marks them as that channel's own top-up while it plays.
+     */
+    override fun addToQueue(pieceIds: List<Long>, channel: String?): Boolean {
+        val before = queue.nextUid
+        val started = enqueue(pieceIds) { it.addToQueue(pieceIds) }
+        if (!started && channel != null && channel == _state.value.channel) channelUids = channelUids + (before until queue.nextUid)
+        return started
+    }
+
+    /** The notification was dismissed while paused: the channel is over (the queue stays as it was). */
+    fun leaveChannel() = setChannel(null)
 
     /** Takes an up-next entry out of the queue. */
     fun removeFromQueue(uid: Long) = setQueue(queue.remove(uid))
@@ -149,10 +177,11 @@ class Player(
     /** Up next's Clear: the current piece plays on, nothing follows it. */
     fun clearUpNext() = setQueue(queue.clearUpNext())
 
-    /** Plays queue entry [uid] now; the entries skipped stay behind it. */
+    /** Plays queue entry [uid] now; the entries skipped stay behind it. An entry the playing channel did not deal ends the channel. */
     fun skipToQueueEntry(uid: Long) {
         val skipped = queue.skipTo(uid)
         if (skipped === queue) return
+        if (uid !in channelUids) setChannel(null)
         setQueue(skipped)
         startCurrent()
     }
@@ -170,7 +199,8 @@ class Player(
 
     fun pause() = command { engine.pause(it) }
 
-    fun stop() {
+    override fun stop() {
+        setChannel(null)
         loadJob?.cancel()
         command { engine.stop(it) }
     }
@@ -223,14 +253,15 @@ class Player(
 
     fun setTranspose(semitones: Int) = configure { copy(transpose = semitones.coerceIn(PlaybackLimits.Transpose)) }
 
-    fun setVelocity(pct: Int) = configure { copy(velocityPct = pct.coerceIn(PlaybackLimits.VelocityPct)) }
+    override fun setVelocity(pct: Int) = configure { copy(velocityPct = pct.coerceIn(PlaybackLimits.VelocityPct)) }
 
     fun setFold(fold: Boolean) = configure { copy(fold = fold) }
 
     fun setSkipDrums(skip: Boolean) = configure { copy(skipDrums = skip) }
 
-    /** Stops, then waits until the stop sequence has been written. Blocks up to [timeoutMs]: for service teardown. */
+    /** Stops, then waits until the stop sequence has been written. Blocks up to [timeoutMs]: for service teardown. A channel ends. */
     fun stopAndFlush(timeoutMs: Long): Boolean {
+        setChannel(null)
         advanceJob?.cancel()
         loadJob?.cancel()
         return settle(timeoutMs) { engine.stop(it) }
@@ -296,6 +327,12 @@ class Player(
         }
         setQueue(change(queue))
         return false
+    }
+
+    /** The channel playing, or none: seen at once. */
+    private fun setChannel(channel: String?) {
+        if (channel == null) channelUids = emptySet()
+        _state.update { if (it.channel == channel) it else it.copy(channel = channel) }
     }
 
     /** The queue changed: the UI, the service and the media session see it at once. */

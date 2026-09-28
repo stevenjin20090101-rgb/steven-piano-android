@@ -19,18 +19,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import dev.stevenjin.stevenpiano.channels.ChannelPlayer
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.service.PlaybackService
 
 /**
- * Playback started by a tap in the app: a library row, a playlist's Play or Shuffle, a row menu's
- * Play next or Add to queue, or the transport. Anything that may start
+ * Playback started by a tap in the app: a library row, a playlist's Play or Shuffle, a channel's
+ * card, a row menu's Play next or Add to queue, or the transport. Anything that may start
  * the piano also starts the playback service, which must be started from the foreground; the
  * first time, the notification permission is asked for (API 33+), in context.
  */
-class PlaybackStarter(private val context: Context, private val player: Player, private val askForNotifications: () -> Unit) {
+class PlaybackStarter(
+    private val context: Context,
+    private val player: Player,
+    private val channels: ChannelPlayer,
+    private val askForNotifications: () -> Unit,
+) {
     fun play(pieceId: Long, queue: List<Long>) {
         player.play(pieceId, queue)
         started()
@@ -41,6 +47,13 @@ class PlaybackStarter(private val context: Context, private val player: Player, 
         if (pieceIds.isEmpty()) return
         player.playAll(pieceIds, shuffle)
         started()
+    }
+
+    /** Channel [key], endlessly, from a fresh shuffle of its pool (a card's tap). False when its pool is too small to play. */
+    fun playChannel(key: String): Boolean {
+        if (!channels.play(key)) return false
+        started()
+        return true
     }
 
     /** Right after the current piece; with nothing queued yet it plays now. */
@@ -96,7 +109,7 @@ fun rememberPlaybackStarter(): PlaybackStarter {
     val context = LocalContext.current
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }   // playback goes on either way
     return remember(context) {
-        PlaybackStarter(context.applicationContext, context.graph.player) {
+        PlaybackStarter(context.applicationContext, context.graph.player, context.graph.channelPlayer) {
             if (PlaybackStarter.shouldAskForNotifications(context)) {
                 PlaybackStarter.markAsked()
                 ask.launch(Manifest.permission.POST_NOTIFICATIONS)

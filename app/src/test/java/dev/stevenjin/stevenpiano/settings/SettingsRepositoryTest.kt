@@ -173,4 +173,29 @@ class SettingsRepositoryTest {
         assertEquals(0, repository.settings.first().preRollMs)
         scope.cancel()
     }
+
+    @Test
+    fun `channel volumes start at 70, are remembered each on its own, and are held to 0-100`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "channels.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(70, repository.settings.first().channelVolume("calm"))
+        repository.setChannelVolume("calm", 40)
+        repository.setChannelVolume("epic", 250)
+        repository.setChannelVolume("baroque", -5)
+        val saved = repository.settings.first()
+        assertEquals(mapOf("calm" to 40, "epic" to 100, "baroque" to 0), saved.channelVolumes)
+        assertEquals(70, saved.channelVolume("romantic"))
+        repository.setChannelVolume("calm", 55)
+        assertEquals(mapOf("calm" to 55, "epic" to 100, "baroque" to 0), repository.settings.first().channelVolumes)
+        scope.cancel()
+    }
+
+    @Test
+    fun `channel volumes that cannot be read read as none`() {
+        assertEquals(emptyMap<String, Int>(), ChannelVolumesJson.read("{not json"))
+        assertEquals(emptyMap<String, Int>(), ChannelVolumesJson.read(null))
+        assertEquals(mapOf("calm" to 60), ChannelVolumesJson.read("""{"calm":60,"epic":"loud"}"""))
+        assertEquals("""{"calm":60,"epic":80}""", ChannelVolumesJson.write(mapOf("epic" to 80, "calm" to 60)))
+    }
 }

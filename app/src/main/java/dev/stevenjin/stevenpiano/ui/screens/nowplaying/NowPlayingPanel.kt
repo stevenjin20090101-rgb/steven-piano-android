@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.NowPlaying
@@ -51,9 +53,11 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
@@ -64,14 +68,18 @@ import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.RollStrip
 import dev.stevenjin.stevenpiano.ui.components.RollStripHeight
 import dev.stevenjin.stevenpiano.ui.components.glassAvailable
+import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+
+/** The connection line's row at the panel's foot (declared before PANEL_FIXED, which counts it). */
+private val CONNECTION_ROW = 40.dp
 
 /** The panel's art: at most this, centred, and smaller where the pane is short. */
 private val MAX_ART = 320.dp
 private val MIN_ART = 96.dp
 
-/** What the panel needs besides its art: the header row, the words, the strip at its smallest and the solid transport. */
-private val PANEL_FIXED = 48.dp + 104.dp + RollStripHeight + TransportHeight + 24.dp
+/** What the panel needs besides its art: the header row, the words, the strip at its smallest, the solid transport and the connection line. */
+private val PANEL_FIXED = 48.dp + 104.dp + RollStripHeight + TransportHeight + 24.dp + CONNECTION_ROW
 
 /** Below this height the panel scrolls rather than squeezing. */
 private val PANEL_ROOMY = 560.dp
@@ -83,18 +91,21 @@ private val StripPlan = NotesPlan(NotesLayout.ROLL, NoteDisplay.PAPER_ROLL)
  * The now-playing panel beside the Library's list on wide frames (DESIGN.md › v1.5 — M16): the
  * queue glyph (Up next) at the top, the piece's art (its composer's portrait, else its roll card;
  * at most 320 dp, centred, smaller where the pane is short), the title in Title (it opens the
- * piece sheet), the composer as an eyebrow (M17 adds the channel beside it) with "STARTING" under
+ * piece sheet), the composer as an eyebrow (and the channel while one plays) with "STARTING" under
  * it during the pause before the piece, the live [RollStrip], then the scrubber and the transport:
  * on glass over the strip's history where it can hold them (the composition Now playing uses),
- * solid under the strip where it cannot. With nothing loaded: "Choose a piece from the library."
+ * solid under the strip where it cannot; and at its foot, in a 40 dp row at the end edge, the
+ * connection line Now playing shows ("● Sent to piano", or not connected: it opens the Piano tab,
+ * [onOpenPiano]). With nothing loaded: "Choose a piece from the library."
  * It reuses Now playing's clock ([RollClock], [rememberFrameNanos]) and plays through [playback].
  * Its sheets' state lives where the panel is composed, apart from Now playing's.
  */
 @Composable
-fun NowPlayingPanel(playback: PlaybackStarter, modifier: Modifier = Modifier) {
+fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier: Modifier = Modifier) {
     val graph = LocalContext.current.graph
     val player = graph.player
     val state by player.state.collectAsStateWithLifecycle()
+    val link by graph.pianoLink.state.collectAsStateWithLifecycle()
     // Remembered where the panel is composed: apart from Now playing's sheets and from the phone's layout.
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -113,7 +124,7 @@ fun NowPlayingPanel(playback: PlaybackStarter, modifier: Modifier = Modifier) {
         if (state.loading) ProgressHairline(null)
         state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (piece != null) {
-            PanelPiece(piece, state, player, playback, onAbout = { about = piece.pieceId })
+            PanelPiece(piece, state, player, playback, link is LinkState.Connected, onOpenPiano, onAbout = { about = piece.pieceId })
         } else if (!state.loading) {
             Box(
                 Modifier
@@ -135,7 +146,15 @@ fun NowPlayingPanel(playback: PlaybackStarter, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ColumnScope.PanelPiece(piece: NowPlaying, state: PlayerState, player: Player, playback: PlaybackStarter, onAbout: () -> Unit) {
+private fun ColumnScope.PanelPiece(
+    piece: NowPlaying,
+    state: PlayerState,
+    player: Player,
+    playback: PlaybackStarter,
+    connected: Boolean,
+    onOpenPiano: () -> Unit,
+    onAbout: () -> Unit,
+) {
     val playing = state.status == PlaybackStatus.Playing
     val roll = remember(player) { RollClock(player) }
     var settle by remember { mutableIntStateOf(0) }
@@ -175,7 +194,7 @@ private fun ColumnScope.PanelPiece(piece: NowPlaying, state: PlayerState, player
                     .size(art),
             )
             Spacer(Modifier.height(16.dp))
-            PanelTitle(piece, starting, onAbout)
+            PanelTitle(piece, rememberChannelName(state.channel), starting, onAbout)
             Spacer(Modifier.height(12.dp))
             if (roomy) {
                 // The strip takes what is left; the controls float on its history when it can hold them.
@@ -198,14 +217,28 @@ private fun ColumnScope.PanelPiece(piece: NowPlaying, state: PlayerState, player
                 Panel(Modifier.height(RollStripHeight).fillMaxWidth(), strip)
                 controls()
             }
+            // Where the piece goes, as Now playing says it at its bottom right: "● Sent to piano".
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(CONNECTION_ROW),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Its 48 dp target (it opens the Piano tab when not connected) reaches past the 40 dp row.
+                ConnectionLine(connected, state.status == PlaybackStatus.Playing, onOpenPiano, Modifier.wrapContentHeight(unbounded = true))
+            }
             Spacer(Modifier.height(8.dp))
         }
     }
 }
 
-/** The title in Title (it opens the piece sheet), the composer eyebrow and, during the pause before the piece, STARTING. */
+/**
+ * The title in Title (it opens the piece sheet), the composer eyebrow (with the channel while one
+ * plays: "CLAUDE DEBUSSY · CALM · CHANNEL") and, during the pause before the piece, STARTING.
+ */
 @Composable
-private fun PanelTitle(piece: NowPlaying, starting: Boolean, onAbout: () -> Unit) {
+private fun PanelTitle(piece: NowPlaying, channel: String?, starting: Boolean, onAbout: () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             piece.title,
@@ -215,8 +248,7 @@ private fun PanelTitle(piece: NowPlaying, starting: Boolean, onAbout: () -> Unit
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        // M17 adds the channel here: "CLAUDE DEBUSSY · CALM · CHANNEL".
-        val eyebrow = listOfNotNull(piece.composer.ifBlank { null }).joinToString(" · ")
+        val eyebrow = ChannelCopy.eyebrow(piece.composer, channel)
         if (eyebrow.isNotEmpty()) Eyebrow(eyebrow, maxLines = 1)
         StartingLine(starting)
     }

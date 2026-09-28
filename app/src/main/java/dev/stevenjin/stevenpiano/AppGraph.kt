@@ -18,6 +18,11 @@ import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
+import dev.stevenjin.stevenpiano.channels.Channel
+import dev.stevenjin.stevenpiano.channels.ChannelPlayer
+import dev.stevenjin.stevenpiano.channels.ChannelPools
+import dev.stevenjin.stevenpiano.channels.Channels
+import dev.stevenjin.stevenpiano.channels.PianoVolume
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.art.ArtFiles
@@ -37,6 +42,7 @@ import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
+import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.settings.PianoSettings
@@ -68,6 +74,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.roundToInt
 
 /**
  * The app's objects, one per process, wired by hand. The [player] and the [pianoLink] are
@@ -145,6 +152,33 @@ class AppGraph(private val app: Application) {
 
     /** The piano's own settings over its console, read on every connection. */
     val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
+
+    /** The channels, in their order on screen (Calm, Epic, Baroque…), read from the app's assets the first time, off the main thread. */
+    val channels: List<Channel> by lazy { Channels.load(app, builtIns.lists) }
+
+    /** Every channel's pool and card, kept up to date with the library. */
+    val channelPools: ChannelPools by lazy { ChannelPools({ channels }, library.all(), appScope) }
+
+    /** Endless play from a channel's pool, at the channel's volume. */
+    val channelPlayer: ChannelPlayer by lazy {
+        ChannelPlayer(
+            player,
+            pools = { key -> channelPools.summary(key)?.ids },
+            volumeOf = { key -> settings.value.channelVolume(key) },
+            piano = pianoVolume,
+            scope = appScope,
+        )
+    }
+
+    /** The piano's volume for a channel: held while it plays and put back after, never saved on the piano. */
+    private val pianoVolume = object : PianoVolume {
+        override fun current(): Int? =
+            (pianoSettings.state.value as? PianoState.Ready)?.values?.get(PIANO_VOLUME)?.toFloatOrNull()?.roundToInt()
+
+        override fun hold(pct: Int) = pianoSettings.holdTemporarily(PIANO_VOLUME, pct)
+
+        override fun release(pct: Int) = pianoSettings.releaseTemporary(PIANO_VOLUME, pct)
+    }
 
     /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, the test server [UpdateOverride] names. */
     private val updateSource: UpdateSource by lazy { UpdateOverride.source() ?: UpdateSource.production }
@@ -255,15 +289,22 @@ class AppGraph(private val app: Application) {
             }
         }
         appScope.launch {
+            // Each value reaches the player when it changes, not whenever another setting does: a
+            // channel's velocity (ChannelPlayer) stands until the person changes Velocity itself.
+            var applied: PianoSettings? = null
             settingsRepository.settings.collect { s ->
-                player.setDefaultTempo(s.defaultTempoPct)
-                player.setPreRoll(s.preRollMs)
-                player.setTranspose(s.transpose)
-                player.setVelocity(s.velocityPct)
-                player.setFold(s.foldOutOfRange)
-                player.setSkipDrums(s.skipDrumChannel)
+                val was = applied
+                if (was?.defaultTempoPct != s.defaultTempoPct) player.setDefaultTempo(s.defaultTempoPct)
+                if (was?.preRollMs != s.preRollMs) player.setPreRoll(s.preRollMs)
+                if (was?.transpose != s.transpose) player.setTranspose(s.transpose)
+                if (was?.velocityPct != s.velocityPct) player.setVelocity(s.velocityPct)
+                if (was?.foldOutOfRange != s.foldOutOfRange) player.setFold(s.foldOutOfRange)
+                if (was?.skipDrumChannel != s.skipDrumChannel) player.setSkipDrums(s.skipDrumChannel)
+                applied = s
             }
         }
+        channelPools.summaries   // the channels' pools are worked out from the start, for the Library's first look
+        channelPlayer.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
@@ -310,6 +351,9 @@ class AppGraph(private val app: Application) {
         const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L
         const val INSTALL_FLUSH_MS = 300L
+
+        /** The piano's own volume setting, which a channel holds while it plays. */
+        const val PIANO_VOLUME = "volume"
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L

@@ -381,6 +381,64 @@ class PianoSettingsRepositoryTest {
         assertEquals(listOf("dump"), silent.sent)
     }
 
+    @Test
+    fun `a held value is sent and read back, but never saved`() = runTest {
+        val repo = connected()
+        console.clearSent()
+        repo.holdTemporarily("volume", 60)
+        settle()
+        assertEquals(listOf("volume 60", "get volume", "get fullpower"), console.sent)
+        assertEquals("60", repo.ready().values["volume"])
+        repo.leave()
+        assertEquals("no save for a held value", listOf("volume 60", "get volume", "get fullpower"), console.sent)
+    }
+
+    @Test
+    fun `a save due while a value is held waits for its release, and the old value goes back first`() = runTest {
+        val repo = connected()
+        repo.set("ledbright", 40)
+        settle()
+        repo.holdTemporarily("volume", 60)
+        settle()
+        console.clearSent()
+        repo.leave()
+        assertTrue("the save waits: ${console.sent}", console.sent.none { it == "save" })
+        repo.releaseTemporary("volume", 85)
+        assertEquals(listOf("volume 85", "get volume", "get fullpower", "save"), console.sent)
+    }
+
+    @Test
+    fun `a volume the person chooses while one is held stands, and is saved`() = runTest {
+        val repo = connected()
+        repo.holdTemporarily("volume", 60)
+        settle()
+        repo.set("volume", 90)
+        settle()
+        console.clearSent()
+        repo.releaseTemporary("volume", 85)
+        settle()
+        assertTrue("nothing put back: ${console.sent}", console.sent.isEmpty())
+        repo.leave()
+        assertEquals(listOf("save"), console.sent)
+    }
+
+    @Test
+    fun `after the link dropped and came back, a release still puts the volume back, unsaved`() = runTest {
+        val repo = connected()
+        repo.holdTemporarily("volume", 60)
+        settle()
+        link.drop()
+        runCurrent()
+        link.connect(null)
+        runCurrent()
+        console.clearSent()
+        repo.releaseTemporary("volume", 85)
+        settle()
+        assertEquals(listOf("volume 85", "get volume", "get fullpower"), console.sent)
+        repo.leave()
+        assertEquals("no save", listOf("volume 85", "get volume", "get fullpower"), console.sent)
+    }
+
     private companion object {
         const val DEBOUNCE_AND_A_BIT = 151L
     }

@@ -298,6 +298,45 @@ class PlayerTest {
         assertTrue(onMain { player.stopAndFlush(300) })
     }
 
+    @Test
+    fun `a channel is set by its playAll and kept by next and additions, and a piece from a list, stop or a dismissal ends it`() = runBlocking {
+        (1L..6L).forEach { source.pieces[it] = piece(60, 5_000) }
+        fun channel() = player.state.value.channel
+        fun uidOf(pieceId: Long): Long = player.state.value.queue.let { q -> q.uids[q.ids.indexOf(pieceId)] }
+
+        onMain { player.playAll(listOf(1, 2, 3), shuffle = false, channel = "calm") }
+        assertEquals("calm", channel())
+        onMain {
+            player.next()
+            player.addToQueue(listOf(4))   // the person's, joining the channel
+            player.playNext(listOf(5))
+        }
+        assertEquals("calm", channel())
+        onMain { player.skipToQueueEntry(uidOf(3)) }   // one the channel dealt
+        assertEquals("calm", channel())
+        onMain { player.skipToQueueEntry(uidOf(4)) }   // the person's own: the channel is over
+        assertNull(channel())
+
+        onMain {
+            player.playAll(listOf(1, 2), shuffle = false, channel = "epic")
+            player.addToQueue(listOf(6), channel = "epic")   // the channel's own top-up
+            player.skipToQueueEntry(uidOf(6))
+        }
+        assertEquals("epic", channel())
+        onMain { player.play(3) }
+        assertNull(channel())
+
+        for (end in listOf<(Player) -> Unit>({ it.playAll(listOf(1, 2), shuffle = false) }, { it.stop() }, { it.leaveChannel() })) {
+            onMain { player.playAll(listOf(1, 2), shuffle = false, channel = "epic") }
+            assertEquals("epic", channel())
+            onMain { end(player) }
+            assertNull(channel())
+        }
+        onMain { player.playAll(listOf(1, 2), shuffle = false, channel = "epic") }
+        assertTrue(onMain { player.stopAndFlush(300) })
+        assertNull(channel())
+    }
+
     private class FakeSource : PieceSource {
         val pieces = ConcurrentHashMap<Long, MidiPiece>()
         val played = CopyOnWriteArrayList<Long>()

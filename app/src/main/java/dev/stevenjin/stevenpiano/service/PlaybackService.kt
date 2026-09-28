@@ -69,6 +69,7 @@ class PlaybackService : Service() {
             ACTION_PREVIOUS -> player.previous()
             ACTION_NEXT -> player.next()
             ACTION_DISMISS -> {
+                player.leaveChannel()   // dismissed while paused: a channel is over
                 stopNow()
                 return START_NOT_STICKY
             }

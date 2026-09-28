@@ -142,6 +142,7 @@ object DiagnosticsText {
         line("chordNames", s.chordNames)
         line("handColours", s.handColours)
         line("checkForUpdates", s.checkForUpdates)
+        line("channelVolumes", s.channelVolumes.toSortedMap().entries.joinToString(", ", "{", "}") { (key, pct) -> "$key=$pct" })
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

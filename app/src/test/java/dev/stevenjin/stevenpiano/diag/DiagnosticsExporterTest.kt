@@ -72,7 +72,8 @@ class DiagnosticsExporterTest {
         assertTrue("transpose = -2\n" in prefs)
         assertTrue("checkForUpdates = true\n" in prefs)
         assertTrue("preRollMs = 2000\n" in prefs)
-        assertEquals(20, prefs.lines().count { it.isNotEmpty() })
+        assertTrue("channelVolumes = {}\n" in prefs)
+        assertEquals(21, prefs.lines().count { it.isNotEmpty() })
 
         assertTrue(entries.getValue("link.log").endsWith("with its console\n"))
         assertTrue("IllegalStateException: second" in entries.getValue("crash-${now}.txt"))

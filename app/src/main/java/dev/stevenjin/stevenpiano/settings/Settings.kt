@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONException
+import org.json.JSONObject
 import java.io.IOException
 
 /**
@@ -86,8 +88,16 @@ data class PianoSettings(
     val checkForUpdates: Boolean = true,
     /** Silence before every piece starts, in milliseconds, 0-5000 (Piano › Playback, "Pause before each piece"). */
     val preRollMs: Int = DEFAULT_PRE_ROLL_MS,
+    /** Each channel's volume as the person set it, 0-100 %, by channel key; a channel not here plays at [DEFAULT_CHANNEL_VOLUME]. */
+    val channelVolumes: Map<String, Int> = emptyMap(),
 ) {
+    /** Channel [key]'s volume: the person's, else 70 %. */
+    fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
+
     companion object {
+        /** A channel's volume until the person sets it (DESIGN.md › v1.5 — M17). */
+        const val DEFAULT_CHANNEL_VOLUME = 70
+
         const val DEFAULT_KEYS_VIEWPORT_START = 48
 
         /** Two seconds of silence before every piece (Steven's choice, DESIGN.md › v1.5 — M16). */
@@ -145,6 +155,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setPreRoll(ms: Int) = edit { it[PRE_ROLL_MS] = ms.coerceIn(PlaybackLimits.PreRollMs) }
 
+    /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
+    suspend fun setChannelVolume(key: String, pct: Int) = edit {
+        it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
+    }
+
     /** Whether the one-off repair of over-long library text (`TextRepair`) has run. Housekeeping, not a preference. */
     suspend fun textRepairDone(): Boolean =
         store.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.first()[TEXT_REPAIR_DONE] == true
@@ -190,6 +205,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             handColours = this[HAND_COLOURS] ?: defaults.handColours,
             checkForUpdates = this[CHECK_FOR_UPDATES] ?: defaults.checkForUpdates,
             preRollMs = (this[PRE_ROLL_MS] ?: defaults.preRollMs).coerceIn(PlaybackLimits.PreRollMs),
+            channelVolumes = ChannelVolumesJson.read(this[CHANNEL_VOLUMES]),
         )
     }
 
@@ -214,7 +230,23 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val HAND_COLOURS = booleanPreferencesKey("handColours")
         val CHECK_FOR_UPDATES = booleanPreferencesKey("checkForUpdates")
         val PRE_ROLL_MS = intPreferencesKey("preRollMs")
+        val CHANNEL_VOLUMES = stringPreferencesKey("channelVolumes")
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
     }
+}
+
+/** `channelVolumes` as DataStore keeps it: `{"calm":60,"epic":80}`. Anything unreadable reads as none; values are held to 0-100. */
+internal object ChannelVolumesJson {
+    fun read(text: String?): Map<String, Int> {
+        if (text.isNullOrBlank()) return emptyMap()
+        return try {
+            val json = JSONObject(text)
+            json.keys().asSequence().mapNotNull { key -> (json.opt(key) as? Number)?.let { key to it.toInt().coerceIn(0, 100) } }.toMap()
+        } catch (e: JSONException) {
+            emptyMap()
+        }
+    }
+
+    fun write(volumes: Map<String, Int>): String = JSONObject(volumes.toSortedMap() as Map<*, *>).toString()
 }
