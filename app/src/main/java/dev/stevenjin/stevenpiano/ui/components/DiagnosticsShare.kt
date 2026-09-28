@@ -12,6 +12,8 @@ package dev.stevenjin.stevenpiano.ui.components
 import android.content.Context
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,6 +25,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.graph
@@ -74,20 +80,31 @@ fun rememberDiagnosticsSharer(): DiagnosticsSharer {
 }
 
 /**
- * The Piano tab's hub, last row of APP: Share diagnostics, with the eyebrow line saying what it
- * sends (or, when the file couldn't be written or shared, saying so). Always available, whether or
- * not the piano is connected; unavailable only while the file is being written.
+ * The Piano tab's hub, last row of APP: the outlined Share diagnostics button with the eyebrow line
+ * saying what it sends, and under it, when the file couldn't be written or shared, a line saying
+ * so. Always available, whether or not the piano is connected; unavailable only while the file is
+ * being written.
  */
 @Composable
 fun ShareDiagnosticsRow(modifier: Modifier = Modifier) {
     val sharer = rememberDiagnosticsSharer()
-    ActionRow(
-        "Share diagnostics",
-        onClick = { sharer.share() },
-        modifier = modifier,
-        enabled = !sharer.busy,
-        note = if (sharer.failed) DIAGNOSTICS_FAILED else DIAGNOSTICS_NOTE,
-    )
+    val failure: (@Composable () -> Unit)? = if (sharer.failed) {
+        {
+            Text(
+                DIAGNOSTICS_FAILED,
+                Modifier
+                    .padding(top = 8.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    } else {
+        null
+    }
+    ActionRow(modifier, note = DIAGNOSTICS_NOTE, below = failure) {
+        ActionButton("Share diagnostics", onClick = { sharer.share() }, enabled = !sharer.busy)
+    }
 }
 
 /**

@@ -45,6 +45,7 @@ import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
+import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.NavRow
@@ -205,12 +206,9 @@ private fun HubRowView(
         is HubRow.Page -> NavRow(row.page.title, summaries.of(row.page), onClick = { onPage(row.page) }, selected = selected?.let { it == row.page })
         HubRow.AutoConnect -> SwitchRow("Auto-connect on launch", settings.autoConnect, vm::setAutoConnect)
         HubRow.CheckForUpdates -> SwitchRow("Check for updates automatically", settings.checkForUpdates, vm::setCheckForUpdates)
-        HubRow.CheckNow -> ActionRow(
-            "Check now",
-            onClick = vm::checkNow,
-            enabled = update != UpdateState.Checking && !update.busy,
-            note = UpdateCopy.checkLine(update),
-        )
+        HubRow.CheckNow -> ActionRow(note = UpdateCopy.checkLine(update)) {
+            ActionButton("Check now", onClick = vm::checkNow, enabled = update != UpdateState.Checking && !update.busy)
+        }
         HubRow.ShareDiagnostics -> ShareDiagnosticsRow()
     }
 }

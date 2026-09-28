@@ -5,8 +5,8 @@
 
 cb0ae805ea2d82b41bf921fdf79382e17197653ee23c65ce75c4031925c7203c  .gitignore
 1c97aac62d401a1140c2c3d0814ba4de0a3b3ccac0383402cb04f9bbafa4e98f  AUTHORS
-4ba55f980aa5e6110d1a6f54c20772ea8c08f540542b416691932643c9e84eb5  BUILD_SPEC.md
-cff295e842dea4b26657559789ec6c9431224f2e9f330be0a648ba35c32bbae5  DESIGN.md
+6d75ad075c698e8d1292e7b4c651de0f8d058d33461b11df0368789f6c2f83f5  BUILD_SPEC.md
+f245db560c0c8336ca9319a14e4e82876e40698192c808eaff3a4b391fe851fe  DESIGN.md
 8fd886face2eb6212f28f4d89f19f8b0170b398b56dc38ca51b2f93cd65646a6  LICENSE
 0105a012f251da8d5994e8be96da68a93ab9238ddbba266b56e0e87132112a1e  PROVENANCE.md
 da4d7dcb0631bacef804520876a89f53ab9abd6a4e6acf0bdc1eafae1dedfc98  README.md
@@ -127,7 +127,7 @@ caa38b8d4b56ddafa1abd3547fc40e726851b66afd2d5cafde70b885d7f7d69d  app/src/main/j
 3ed89221d1272bea96b4d707a3efac151f3b756e6670df18469bec6fac8be907  app/src/main/java/dev/stevenjin/stevenpiano/ui/UpdateCopy.kt
 a4a4361a8b4304354060d13a231d755f97002ef0baa0c000d34000aea2713190  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/Artwork.kt
 e90cb16d7807031d185cc0d5e3f08601925309cf662453aa38a649eebf4b8434  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ConnectionLine.kt
-fb954ff40f78da9616906ccf52925e134c6a0f3c1be5d8566028220970495914  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/DiagnosticsShare.kt
+e2c1b23c8d10b86f323abac95656ad7e195c6945aac5fe465a479c013137cab3  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/DiagnosticsShare.kt
 edb66c803159f42136e70caadbd1c82a757f255fe71b70496148682071834e62  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/DragReorder.kt
 cea14eca20c3f2f591d18542e7939ed7a85955dd6c641263d350a6b345b189e9  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/Eyebrow.kt
 83b4ecd18a5a25f59a15a479930937347a53f6cea6e19981da8f639fbd591731  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/GlyphButton.kt
@@ -145,7 +145,7 @@ f30f4743b13e619662eeaff8b81146cf44727a026aeae9b02f94ae170862ac41  app/src/main/j
 95324f59c33717359d3bfb8237d7decf014c47d734f6c1a633e61b56fa5f6fa5  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ScorePages.kt
 806e47f2e92e66da1cda8ffcae342962d70fc4d2abe17313210e2c4b8e458ca9  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ScreenHeader.kt
 36ea661a12712c4c78f95011754107940d66e26d3effd3bf596884d0821f8799  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/Scrubber.kt
-3463c838c30247188699d6a2d2fbd6b58b0b5f5c39fed5a1e16ac1699f315f74  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/SettingsRows.kt
+6f21a0b6dac4ce3811d4e2b423e0b297567eb016066cc8ac40dc123e8a0c1642  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/SettingsRows.kt
 bb831b233f8bd82c6d71cf26a292fe75379f43d80b7de844c55a1a683f90e19b  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/SongClock.kt
 8b5a12091599df3874c2463cdafa89f3af901a86f4f233385ef22fd7a9d16282  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/StaffPitch.kt
 99d7aaeb145500903a7522955a63215058e729c53aad15e4e4f9a9e96295a9f9  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/StepperControl.kt
@@ -176,8 +176,8 @@ e800c2fd8cb92aa9c84db3fdcb19a374210067aa11f17a08536aa9476061e6e9  app/src/main/j
 2b87d6947507eb7342f678f7cc5c80bfba18a74c27eac9056df7ac2c22239f12  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/ConnectionCard.kt
 8b93848764cd12a5c30925972373c2afab461215f4ebff4e7e7a7deb5382addd  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/GroupSummaries.kt
 e5e9a4ef0c63b8ff7c445679506c38ddff3401d1a85f059b4d83fdec125f47ed  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/HubGroups.kt
-7338e7179b7970c253dc30230d865fa0a28666dfd8df561f6e6d41706025980e  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/PianoScreen.kt
-5ac9e1d077348503a6edcb2db78eb70d4e6e42712943a48a4cd18ecaf5ab93f9  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/PianoSettingRows.kt
+7b7ff17212f8886587cc618df6baf7c9ac6a7fe438ff893fad16d548412dd6a9  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/PianoScreen.kt
+2a8c9e454dff63aeeb81984d1c92d5b0ed8211db40e4721c26d36d2a9a05b9d1  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/PianoSettingRows.kt
 dfe6d4d8588d644db18b96faace7df77334ad26a3dd55c80442edf0dab297bcf  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/PianoViewModel.kt
 ff19721800c15e6f3494c0be855350d38b0948b98b2d1792bf9c729e3ce2d4cd  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/UpdateRow.kt
 ef0aed6d8d6efa5179e18f61abf88c4e6ae91940bf706a34d23893b34bdbfa85  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/DisplayPage.kt

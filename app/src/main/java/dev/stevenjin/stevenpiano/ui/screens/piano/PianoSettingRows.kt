@@ -9,16 +9,13 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
@@ -46,10 +43,10 @@ import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.piano.Preset
 import dev.stevenjin.stevenpiano.piano.SettingKind
+import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.ChoiceRow
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
-import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
@@ -272,7 +269,7 @@ private fun PresetChip(preset: Preset, enabled: Boolean, onClick: () -> Unit) {
 private fun TestLedRow(enabled: Boolean, actions: PianoSettingsActions) {
     var key by rememberSaveable { mutableIntStateOf(PianoSettings.TEST_KEY_DEFAULT) }
     TestKeyRow("Test LED", key, { key = it }, enabled) {
-        ActionButton("Light it", "Light the LED for ${spokenKey(key)}", enabled) { actions.runPianoAction(PianoAction.LedTest, key) }
+        ActionButton("Light it", { actions.runPianoAction(PianoAction.LedTest, key) }, enabled = enabled, description = "Light the LED for ${spokenKey(key)}")
     }
 }
 
@@ -281,8 +278,8 @@ private fun TestLedRow(enabled: Boolean, actions: PianoSettingsActions) {
 private fun StrikeTestRow(enabled: Boolean, actions: PianoSettingsActions) {
     var key by rememberSaveable { mutableIntStateOf(PianoSettings.TEST_KEY_DEFAULT) }
     TestKeyRow("Strike test", key, { key = it }, enabled, "Plays the key once, as softly as its floor allows or as hard as the ceiling.") {
-        ActionButton("Floor", "Strike ${spokenKey(key)} at its floor", enabled) { actions.runPianoAction(PianoAction.TestMin, key) }
-        ActionButton("Ceiling", "Strike ${spokenKey(key)} at the ceiling", enabled) { actions.runPianoAction(PianoAction.TestMax, key) }
+        ActionButton("Floor", { actions.runPianoAction(PianoAction.TestMin, key) }, enabled = enabled, description = "Strike ${spokenKey(key)} at its floor")
+        ActionButton("Ceiling", { actions.runPianoAction(PianoAction.TestMax, key) }, enabled = enabled, description = "Strike ${spokenKey(key)} at the ceiling")
     }
 }
 
@@ -326,42 +323,52 @@ private fun FactRow(name: String, label: String, ready: PianoState.Ready?) {
 }
 
 /**
- * ACTIONS: Read status (the piano's report appears under it, as it wrote it, on the elevated
- * surface), All keys off and Save now. Available once the piano has answered.
+ * ACTIONS, as v1.4's DIAGNOSTICS had them: Read status (while it reads, a hairline; then the
+ * piano's report as it wrote it, on the elevated surface, under the button), then All keys off
+ * and Save now side by side. Outlined buttons, available once the piano has answered.
  */
 @Composable
 private fun ActionRows(ready: PianoState.Ready?, statusText: String?, statusReading: Boolean, actions: PianoSettingsActions) {
     val enabled = ready != null
-    ActionRow(
-        if (statusReading) "Reading status…" else "Read status",
-        onClick = { actions.runPianoAction(PianoAction.Status, 0) },
-        enabled = enabled && !statusReading,
-    )
-    if (statusReading) ProgressHairline(null, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-    if (statusText != null) {
-        Surface(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-        ) {
-            Text(
-                statusText.ifEmpty { "The piano didn't answer." },
-                Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+    val report: (@Composable () -> Unit)? = if (statusReading || statusText != null) {
+        {
+            if (statusReading) ProgressHairline(null, Modifier.padding(top = 8.dp))
+            if (statusText != null) {
+                Surface(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        statusText.ifEmpty { "The piano didn't answer." },
+                        Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
-        HairlineDivider(startInset = 16.dp)
+    } else {
+        null
     }
-    ActionRow("All keys off", onClick = { actions.runPianoAction(PianoAction.AllKeysOff, 0) }, enabled = enabled)
-    ActionRow(
-        "Save now",
-        onClick = { actions.runPianoAction(PianoAction.Save, 0) },
-        enabled = enabled,
-        description = "Save the settings on the piano now",
-    )
+    ActionRow(below = report) {
+        ActionButton(
+            if (statusReading) "Reading status…" else "Read status",
+            onClick = { actions.runPianoAction(PianoAction.Status, 0) },
+            enabled = enabled && !statusReading,
+        )
+    }
+    ActionRow {
+        ActionButton("All keys off", onClick = { actions.runPianoAction(PianoAction.AllKeysOff, 0) }, enabled = enabled)
+        ActionButton(
+            "Save now",
+            onClick = { actions.runPianoAction(PianoAction.Save, 0) },
+            enabled = enabled,
+            description = "Save the settings on the piano now",
+        )
+    }
 }
 
 /** The seven power boards, one per octave (C1 … C7), each OK or MISSING in words. */
@@ -409,20 +416,6 @@ private fun factText(name: String, value: String?): String {
 
 /** "C sharp 4" for C♯4: how TalkBack should say a key. */
 private fun spokenKey(key: Int): String = KeyboardGeometry.name(key).replace("♯", " sharp ")
-
-/** An outlined button in the hairline style, for the test rows; [description] when its words need the context TalkBack lacks. */
-@Composable
-private fun ActionButton(text: String, description: String?, enabled: Boolean, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = if (description != null) Modifier.semantics { contentDescription = description } else Modifier,
-        enabled = enabled,
-        border = BorderStroke(Hairline, if (enabled) LocalTertiary.current else LocalHairline.current),
-        colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-    ) {
-        Text(text)
-    }
-}
 
 @Composable
 private fun ErrorBanner(message: String, onDismiss: () -> Unit) {

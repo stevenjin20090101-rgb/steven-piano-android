@@ -389,8 +389,8 @@ value the moment a control changes; the piano stores them itself.
   status page: the version; the seven power boards as OK / MISSING words, I²C errors, the
   pedal board and uptime as read-only rows; two read-only key-force rows, "White-key
   force ×1.00" and "Black-key force ×1.00", with "Key force is set at the piano's USB
-  console."; then Read status, whose report appears on `surfaceElevated` under it, All
-  keys off and Save now.)*
+  console."; then Read status, whose report appears on `surfaceElevated` under it, and All
+  keys off and Save now side by side, all three outlined buttons.)*
 - A refusal ("ledbright out of range") shows as an outlined banner, "The piano said: …"
   with *Dismiss*, directly under the control it concerns.
 - Writes are rate-limited (150 ms after the last change) so dragging a slider does not
@@ -609,8 +609,8 @@ share. No accounts, no analytics, nothing leaves the device unless Steven shares
   "The download didn't match the release; try again." Retry is the same Update button.
 - A switch in App preferences: **Check for updates automatically** (on). The row can also
   be triggered by hand: "Check now" as a text button under the switch. *(v1.5: both are
-  rows of the hub's APP group; Check now is an action row with what the last check found
-  under it.)*
+  rows of the hub's APP group; Check now is an outlined button in an action row, with what
+  the last check found under it.)*
 
 ## Diagnostics
 
@@ -683,10 +683,15 @@ it inset 16 dp to the text; the system ripple and nothing else.
   (large text, a long version string) the value goes under the label rather than squeezing
   it. The chevron points the other way in right-to-left layouts.
 - **Action row** (Check now, Share diagnostics, and Read status, All keys off and Save now on
-  the Firmware page): the label in Body, and under it, when there is one, a line in the
-  eyebrow style, sentence case, `contentSecondary`: what the action does ("A small file with
-  the app's logs. Nothing personal.") or what it found ("Steven Piano is up to date."). No
-  chevron: it acts, it doesn't open.
+  the Firmware page): the app's action control, the outlined button of the connection card's
+  Disconnect and the test rows (a hairline border in `contentTertiary`, the label in
+  `contentPrimary`, 40 dp tall in a 48 dp target), left-aligned at the 16 dp inset in the 56 dp
+  row; several actions share a row side by side (All keys off · Save now, as v1.4 had them).
+  Under the button, when there is one, a line in the eyebrow style, sentence case,
+  `contentSecondary`: what the action does ("A small file with the app's logs. Nothing
+  personal.") or what it found ("Steven Piano is up to date."). With large text the button
+  keeps clear of the row's hairlines. So the tab reads at a glance: a chevron opens a page, an
+  outlined button acts, a row with neither only reads (STATUS).
 - Switches, steppers, sliders and chip rows as in v1.1, unchanged in size, type, rules and
   colours. The Test LED and Strike test rows keep their outlined buttons.
 
@@ -708,7 +713,8 @@ it inset 16 dp to the text; the system ripple and nothing else.
 - **Firmware and status**: FIRMWARE (the piano's firmware version, "Unknown" until it has
   said; M21 adds updating it here) · STATUS (the seven power boards, I²C errors, the pedal
   board, uptime, the two key-force rows and "Key force is set at the piano's USB console.") ·
-  ACTIONS (Read status with the piano's report under it, All keys off, Save now).
+  ACTIONS (Read status with the piano's report under it, then All keys off and Save now side
+  by side).
 - **Playback**: one section: Default tempo, Transpose, Velocity, Fold notes outside C1–B7,
   Skip drum channel (M16 puts Pause before each piece first).
 - **Display**: NOTES (Note display as chips, with Wide layout under it on wide screens;

@@ -428,7 +428,7 @@ Names are the firmware command names. Pages (`PianoPage`, the hub's order) and t
   "Black-key force ×1.00"; setting them is refused over Bluetooth) and the line "Key force
   is set at the piano's USB console." · **ACTIONS** *Read status* (its `statusText` in Body
   on `surfaceElevated` under the row), *All keys off* (`off`) and *Save now* (`save`) as
-  action rows.
+  outlined buttons in action rows, All keys off and Save now side by side as in v1.4.
 
 `PianoSettings.rows(section)` gives each section's rows in that order (`PianoRow`: `Control`,
 `Reading`, `Presets`, `StrikeTest`, `TestLed`, `KeyForceNote`, `Actions`); the pages render
@@ -1580,8 +1580,8 @@ throws `InvalidManifest(field)`.
   last preference, "Check for updates automatically"; `ShareDiagnosticsRow` closes DIAGNOSTICS
   (`PianoSettingsSections(…, appDiagnostics)`), under a DIAGNOSTICS header of its own when the
   firmware offers no settings. *(v1.5 — M15: `UpdateRow` sits on the hub between the card and
-  the groups; Check now and Share diagnostics are action rows of the hub's APP group;
-  `CheckNowRow` and `appDiagnostics` are gone.)*
+  the groups; Check now and Share diagnostics are outlined buttons in action rows of the hub's
+  APP group; `CheckNowRow` and `appDiagnostics` are gone.)*
 - Library: `CrashBanner` (an `OutlinedBanner` with Share diagnostics and Dismiss) under the import
   and artwork bars.
 - `UpdateCopy` holds every line; megabytes are decimal, one decimal place, in the locale's form.
@@ -1696,8 +1696,13 @@ Read `DESIGN.md › v1.5 — the Piano tab as groups` first. Plan: `~/.claude/pl
   page's only section), `SwitchRow`, `StepperRow(label, unit, enabled, description, note, below,
   control)` with `StepperButtons` (the piano's 48 dp repeating − value +; the app's rows keep
   `StepperControl`), `SliderRow` (around the unchanged `HairlineSlider`), `ChoiceRow` (chips),
-  `NavRow(label, value, onClick, selected)`, `ActionRow(label, onClick, enabled, note,
-  description)`, `NoteLine`, `ReadingRow`, and `Modifier.mirrored(rtl)`. `NavRow` and `ReadingRow`
+  `NavRow(label, value, onClick, selected)`, `ActionRow(note, below, buttons)` with
+  `ActionButton(label, onClick, enabled, description)` (the app's outlined button: hairline
+  border in `LocalTertiary`, `LocalHairline` when disabled; the test rows use it too),
+  `NoteLine`, `ReadingRow`, and `Modifier.mirrored(rtl)`. `ActionRow` sets its buttons in a
+  `FlowRow` at the 16 dp inset with 4 dp above and below (a 56 dp row around the 48 dp target),
+  and 4 dp more each side once a button outgrows 48 dp (large text), so a pill never meets a
+  hairline. `NavRow` and `ReadingRow`
   lay label and value out in a `FlowRow` whose arrangement spreads two items to the ends at least
   16 dp apart, so a value that doesn't fit goes under its label. The two old row systems (the
   private rows of `PianoScreen.kt` and `PianoSettingsSections.kt`) are gone.
@@ -1798,6 +1803,12 @@ rows. A later run adds its `SettingsPage`, its page file and one `HubRow` here.
 
 - Tests: 681, none failing (5 skipped without `-Pcorpus`, as before). `lint`: 0 errors; its 19
   warnings are all in files this run did not touch.
+- Action rows: 151 px from Read status to All keys off, a 56 dp row and its hairline (the
+  steppers' pitch is 150 px); at font scale 2.0 the pills keep 8 dp from the hairlines, and All
+  keys off and Save now still fit side by side on the phone.
+- Reading width: at 2560 × 1600 px, 240 dpi (1707 dp wide) the page pane beside the hub is about
+  1264 dp and the page's column runs from 714.7 to 1434.7 dp: 720 dp, centred (`readingWidth()`
+  wraps the page's header and its column, as the hub's).
 - Rows: the Feel page against v1.4's FEEL section, the same emulator and values (1080 × 2400 px,
   420 dpi), measured from the UI tree top to top: all 17 pairs of neighbouring rows within one
   section are as far apart as in v1.4 (150 px between steppers, 244 px between sliders, 254 px
@@ -1832,9 +1843,10 @@ rows. A later run adds its `SettingsPage`, its page file and one `HubRow` here.
   why the four rows read "—".
 - **Note display and Wide layout are chip rows**, as every choice (the shared `ChoiceRow`); in
   v1.4 they were radio rows. PRESETS lost its inner "Presets" label, which repeated its eyebrow.
-- **Actions are rows**: Check now, Share diagnostics, and Read status, All keys off and Save now
-  were a text button and outlined buttons; the Test LED and Strike test keep their outlined
-  buttons, which sit in their rows.
+- **Actions are outlined buttons in rows** (the design review's fix: the first build drew them as
+  plain rows, which read like the STATUS rows above them): Check now, a text button in v1.4, is
+  outlined like Share diagnostics and the Firmware page's actions; the Test LED and Strike test
+  keep their buttons, now the shared `ActionButton`.
 - **The hub route is `piano/hub`** (the graph takes the tab's `piano`), and the page argument is
   typed (above). The selection lives in the view model's `SavedStateHandle` instead of a
   `rememberSaveable` (above); `cut=true` is a query argument of the page route.

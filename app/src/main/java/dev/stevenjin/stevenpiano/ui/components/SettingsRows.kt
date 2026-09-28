@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,10 +28,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -39,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -339,49 +343,76 @@ fun NavRow(
 }
 
 /**
- * A row that does something at once (Check now, Share diagnostics, All keys off): the label in
- * Body, and under it an optional [note] in the eyebrow style, sentence case, read out as it changes
- * (what the action found, or what it does). [description] when the words need context TalkBack lacks.
+ * A row that does something at once: the app's action control ([ActionButton], the outlined button
+ * of the connection card and the test rows) at the 16 dp inset, in the 56 dp rhythm; [buttons] side
+ * by side when there are several (All keys off · Save now). Under them an optional [note] in the
+ * eyebrow style, sentence case, read out as it changes (what the action does, or what it found),
+ * then [below] (the piano's report, a failure). So the tab reads at a glance: a chevron opens a
+ * page, an outlined button acts, a row with neither only reads.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ActionRow(
-    label: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
     note: String? = null,
-    description: String? = null,
+    below: (@Composable () -> Unit)? = null,
+    buttons: @Composable () -> Unit,
 ) {
-    Row(
+    Column(
         modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = RowInset),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = RowInset, end = RowInset, top = 4.dp, bottom = if (note != null || below != null) 12.dp else 4.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column(
-            Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp),
-        ) {
-            Text(
-                label,
-                modifier = if (description != null) Modifier.semantics { contentDescription = description } else Modifier,
-                style = MaterialTheme.typography.bodyLarge,
-                color = labelColor(enabled),
+        FlowRow(
+            Modifier.clearOfRules(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) { buttons() }
+        if (note != null) {
+            Eyebrow(
+                note,
+                Modifier
+                    .padding(top = 4.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                uppercase = false,
             )
-            if (note != null) {
-                Eyebrow(
-                    note,
-                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    uppercase = false,
-                )
-            }
         }
+        below?.invoke()
     }
     HairlineDivider(startInset = RowInset)
+}
+
+/**
+ * A 40 dp button sits in a 48 dp touch target, which leaves it 4 dp clear above and below; with
+ * large text it outgrows the target and loses that space, so then it gets 4 dp of its own and never
+ * crowds the row's hairlines.
+ */
+private fun Modifier.clearOfRules(): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0))
+    val extra = if (placeable.height > 48.dp.roundToPx()) 4.dp.roundToPx() else 0
+    val height = (placeable.height + 2 * extra).coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(placeable.width, height) { placeable.place(0, extra) }
+}
+
+/**
+ * The app's action control: an outlined button, a hairline border in the tertiary colour (the
+ * hairline's own when unavailable), its label in the content colour. [description] when the words
+ * need context TalkBack lacks ("Save now": "Save the settings on the piano now").
+ */
+@Composable
+fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, description: String? = null) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = if (description != null) modifier.semantics { contentDescription = description } else modifier,
+        enabled = enabled,
+        border = BorderStroke(Hairline, if (enabled) LocalTertiary.current else LocalHairline.current),
+        colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+    ) {
+        Text(label)
+    }
 }
 
 /** A line of explanation in the secondary colour, in Body: the pages' status line, a control's help. */
