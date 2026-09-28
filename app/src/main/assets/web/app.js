@@ -1062,9 +1062,15 @@
       return h('li', { class: 'row' },
         h('div', { class: 'text' },
           h('p', { class: 'title', text: upload.name }),
-          h('p', { class: 'meta', text: `${(upload.size / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 })} MB · ${upload.status}` }),
+          h('p', { class: 'meta', text: `${size(upload.size)} · ${upload.status}` }),
           upload.pending || upload.sending ? bar : null));
     }));
+  }
+
+  /** "1.7 KB", "2.4 MB": decimal units to one place, as the app writes sizes (UpdateCopy). */
+  function size(bytes) {
+    const [value, unit] = bytes < 1e6 ? [bytes / 1e3, 'KB'] : [bytes / 1e6, 'MB'];
+    return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}`;
   }
 
   /** One upload at a time, as the tablet takes them: the file is the request's whole body. */
@@ -1091,7 +1097,7 @@
       uploading = false;
       if (request.status === 202) {
         upload.progress = 1;
-        upload.status = 'Sent · the tablet is adding it';
+        upload.status = 'Sent to the tablet';
       } else if (request.status === 401) {
         upload.status = 'Not added: enter the PIN again';
         showGate();
