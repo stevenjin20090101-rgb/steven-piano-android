@@ -1,0 +1,618 @@
+{
+  "models": [
+    {
+      "name": "composer",
+      "version": 1,
+      "file": "composer-v1.onnx",
+      "url": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/models/composer-v1.onnx",
+      "sizeBytes": 173193820,
+      "sha256": "86ddb19c7afce2bab6be13706cb0a0f44cd7a4271c021706d02394c10cbda7b1",
+      "licence": "Apache-2.0",
+      "source": "https://huggingface.co/stanford-crfm/music-small-800k (revision fa800530aa1126dd6b58b38f3bdb8fcec9c9d4f5)",
+      "attribution": "Anticipatory Music Transformer — Thickstun et al., Stanford CRFM, Apache 2.0, Hugging Face stanford-crfm/music-small-800k",
+      "inputs": [
+        {
+          "name": "input_ids",
+          "type": "int64",
+          "shape": [
+            "batch_size",
+            "sequence_length"
+          ]
+        },
+        {
+          "name": "past_key_values.0.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.0.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.1.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.1.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.2.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.2.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.3.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.3.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.4.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.4.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.5.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.5.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.6.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.6.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.7.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.7.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.8.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.8.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.9.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.9.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.10.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.10.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.11.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.11.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "attention_mask",
+          "type": "int64",
+          "shape": [
+            "batch_size",
+            "past_sequence_length + sequence_length"
+          ]
+        },
+        {
+          "name": "position_ids",
+          "type": "int64",
+          "shape": [
+            "batch_size",
+            "sequence_length"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            1,
+            55028
+          ]
+        },
+        {
+          "name": "present.0.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.0.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.1.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.1.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.2.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.2.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.3.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.3.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.4.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.4.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.5.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.5.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.6.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.6.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.7.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.7.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.8.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.8.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.9.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.9.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.10.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.10.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.11.key",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "present.11.value",
+          "type": "float32",
+          "shape": [
+            "batch_size",
+            12,
+            "past_sequence_length + sequence_length",
+            64
+          ]
+        }
+      ]
+    },
+    {
+      "name": "transcription",
+      "version": 1,
+      "file": "transcription-v1.onnx",
+      "url": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/models/transcription-v1.onnx",
+      "sizeBytes": 124511036,
+      "sha256": "f5db051a0af4a3601c18b3ecf679be3150912d8d535e3a03554c9662c8525383",
+      "licence": "CC-BY-4.0",
+      "source": "https://zenodo.org/record/4034264 (CRNN_note_F1=0.9677_pedal_F1=0.9186.pth)",
+      "attribution": "Piano transcription model — Kong et al., ByteDance, CC BY 4.0, Zenodo 4034264",
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "float32",
+          "shape": [
+            1,
+            160000
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "reg_onset_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            88
+          ]
+        },
+        {
+          "name": "reg_offset_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            88
+          ]
+        },
+        {
+          "name": "frame_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            88
+          ]
+        },
+        {
+          "name": "velocity_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            88
+          ]
+        },
+        {
+          "name": "reg_pedal_onset_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            1
+          ]
+        },
+        {
+          "name": "reg_pedal_offset_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            1
+          ]
+        },
+        {
+          "name": "pedal_frame_output",
+          "type": "float32",
+          "shape": [
+            1,
+            1001,
+            1
+          ]
+        }
+      ]
+    }
+  ]
+}
