@@ -3578,6 +3578,12 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, its notes;
   pointed at them. README: *Kiosk* stands after *Updating the piano's firmware* (it followed
   Authorship); the introduction, *What it does* (CONTROL's Kiosk, and a Kiosk entry), *School tablet*
   and *Security* (the device owner's use; kiosk mode's PIN and its limits) say what M20 added.
+- **Clearing `debug.stevenpiano.releaseowner`**: the documented `adb shell setprop
+  debug.stevenpiano.releaseowner ""` answers "usage: setprop NAME VALUE" (adb drops an empty
+  argument) and leaves the property at yes, so setting the device owner again, as *Kiosk* says to,
+  was given back the moment the app started (measured on `steven_piano_int`). README (both
+  sequences) and `DeviceOwnerRelease`'s KDoc quote the whole command now:
+  `adb shell "setprop debug.stevenpiano.releaseowner ''"`, which clears it.
 - **With 1.6's firmware updates**: Firmware and status is locked like every page. An update started
   while the settings were open carries on when they lock again (the tablet rests after a minute
   without a touch, or the five minutes run out): the updater runs in the app's scope and its service

@@ -350,7 +350,7 @@ adb shell setprop debug.stevenpiano.releaseowner yes
 adb shell am force-stop dev.stevenjin.stevenpiano
 adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity   # the app gives up the role as it starts
 adb shell dpm list-owners                                        # "no owners"
-adb shell setprop debug.stevenpiano.releaseowner ""
+adb shell "setprop debug.stevenpiano.releaseowner ''"            # quoted whole: adb drops a bare ""
 ```
 
 Only adb can set that property; no app on the tablet can. Afterwards updates ask
@@ -735,7 +735,7 @@ silent updates:
 adb shell setprop debug.stevenpiano.releaseowner yes
 adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity   # the app ends kiosk mode, then gives up the role
 adb shell dpm list-owners                                        # "no owners"
-adb shell setprop debug.stevenpiano.releaseowner ""
+adb shell "setprop debug.stevenpiano.releaseowner ''"            # quoted whole: adb drops a bare ""
 ```
 
 (`am force-stop`, in *School tablet*'s sequence, is ignored by Android 14 for a device

@@ -23,7 +23,7 @@ import android.util.Log
  * adb shell setprop debug.stevenpiano.releaseowner yes
  * adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity
  * adb shell dpm list-owners        # "no owners"
- * adb shell setprop debug.stevenpiano.releaseowner ""
+ * adb shell "setprop debug.stevenpiano.releaseowner ''"   # quoted whole: adb drops a bare ""
  * ```
  *
  * Checked as the app starts and whenever its activity starts or is sent an intent (`am start`), and
