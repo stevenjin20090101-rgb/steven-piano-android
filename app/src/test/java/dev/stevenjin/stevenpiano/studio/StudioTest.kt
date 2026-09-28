@@ -140,6 +140,7 @@ class StudioTest {
         override fun run(window: FloatArray): WindowOutputs {
             threads += Thread.currentThread().name
             windowGate?.await(5, TimeUnit.SECONDS)
+            modelError?.let { throw it }
             return WindowOutputs(onset, FloatArray(1001 * 88), frame, FloatArray(1001 * 88) { 0.5f }, FloatArray(1001), FloatArray(1001), FloatArray(1001))
         }
 
@@ -147,6 +148,9 @@ class StudioTest {
     }
 
     private var silentModel = false
+
+    /** What the transcription model throws from its next window, when set (an Error the runtime might raise). */
+    private var modelError: Throwable? = null
 
     /** When set, the library's add has put the piece in (as an import does) and waits here before it answers. */
     private var addGate: CompletableDeferred<Unit>? = null
@@ -546,5 +550,23 @@ class StudioTest {
         assertEquals(listOf("10-late"), added)
         assertEquals(setOf(101L), studio.review.undecided.value)
         assertEquals(listOf<AudioSource>(recording("10-late.wav")), released)
+    }
+
+    @Test
+    fun `an Error from the runtime fails the job in words, and Studio goes on (audit delta 2)`() = runBlocking {
+        val studio = studio()
+        studio.download(tiny)
+        studio.settled()
+        modelError = StackOverflowError()
+        val broken = studio.transcribe(recording("10-broken.wav"))
+        // Before: the Error left the job "Running" for good (on the tablet it crashed the app, notification and all).
+        val ended = studio.settled().single { it.id == broken.id }
+        assertEquals(JobState.Failed, ended.state)
+        assertEquals(StudioFailures.FAILED, ended.error)
+        assertEquals(listOf<AudioSource>(recording("10-broken.wav")), released)
+        modelError = null
+        val next = studio.transcribe(recording("10-next.wav"))
+        assertEquals(JobState.Done, studio.settled().single { it.id == next.id }.state)
+        assertFalse(studio.jobs.busy)
     }
 }

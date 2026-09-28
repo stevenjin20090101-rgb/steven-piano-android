@@ -365,7 +365,10 @@ class Studio(
             failed(e.message ?: AudioFailure.UNREADABLE)
         } catch (e: OutOfMemoryError) {
             failed(if (jobs.get(id)?.kind == JobKind.Compose) ComposeFailures.RAN_OUT else StudioFailures.RAN_OUT)
-        } catch (e: Exception) {   // the runtime's own errors (OrtException), the library's: this job fails, Studio goes on
+        } catch (e: Throwable) {
+            // The runtime's own errors (OrtException), the library's, and any Error but running out of memory (audit
+            // delta 2: one used to escape into the app's scope, crash the app and leave its notification): this job
+            // fails, Studio goes on.
             log("Studio: job $id failed: ${e.javaClass.simpleName}: ${e.message}")
             failed(
                 when (jobs.get(id)?.kind) {
