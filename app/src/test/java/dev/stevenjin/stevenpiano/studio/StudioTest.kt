@@ -24,6 +24,7 @@ import dev.stevenjin.stevenpiano.studio.compose.SeedPiece
 import dev.stevenjin.stevenpiano.update.FakeUpdateServer
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -147,6 +148,10 @@ class StudioTest {
 
     private var silentModel = false
 
+    /** When set, the library's add has put the piece in (as an import does) and waits here before it answers. */
+    private var addGate: CompletableDeferred<Unit>? = null
+    private val addStarted = CompletableDeferred<Unit>()
+
     /** What the library was given: each piece's bytes, composer and file name, and each piece's line. */
     private val addedFiles = mutableListOf<Triple<String, String, ByteArray>>()
     private val described = mutableMapOf<Long, String>()
@@ -155,7 +160,10 @@ class StudioTest {
         override suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long {
             added += title
             addedFiles += Triple(fileName, composer, bytes)
-            return 100L + added.size
+            val id = 100L + added.size
+            addStarted.complete(Unit)
+            addGate?.await()
+            return id
         }
 
         override suspend fun describe(pieceId: Long, description: String) {
@@ -518,5 +526,25 @@ class StudioTest {
         val job = studio.compose(order(pieceId = 7L))
         assertEquals("a job fails in words, Studio goes on", JobState.Failed, studio.settled().single { it.id == job.id }.state)
         assertTrue(added.isEmpty())
+    }
+
+    @Test
+    fun `a cancel while the piece is saved changes nothing - it is kept and waits for Keep or Discard (audit delta 2)`() = runBlocking {
+        val studio = studio()
+        studio.download(tiny)
+        studio.settled()
+        addGate = CompletableDeferred()
+        val job = studio.transcribe(recording("10-late.wav"))
+        withTimeout(5_000) { addStarted.await() }
+        assertEquals(JobStep.Saving, studio.jobs.get(job.id)!!.step)
+        studio.cancel(job.id)   // the notification's Cancel, as the import puts the piece in
+        addGate!!.complete(Unit)
+        val ended = studio.settled().single { it.id == job.id }
+        // Before: "Cancelled", while the piece stayed in the library with no Keep or Discard ever asked.
+        assertEquals(JobState.Done, ended.state)
+        assertEquals(101L, ended.pieceId)
+        assertEquals(listOf("10-late"), added)
+        assertEquals(setOf(101L), studio.review.undecided.value)
+        assertEquals(listOf<AudioSource>(recording("10-late.wav")), released)
     }
 }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.first
@@ -279,9 +280,7 @@ class Studio(
         }
         val transcribedAt = elapsed()
         jobs.update(id) { it.copy(step = JobStep.Saving, progress = null) }
-        val piece = pieces.add(result, pending.name, clock())
-        review.made(piece.id)
-        done = { it.copy(state = JobState.Done, step = JobStep.Waiting, progress = 1f, pieceId = piece.id, title = piece.title) }
+        save { pieces.add(result, pending.name, clock()) }
         val figures = "Studio: transcribed %.1f s of audio in %.1f s (read %.1f s, %d windows, model %.1f s), %d notes, %d pedal; peak VmHWM %d kB"
             .format(
                 java.util.Locale.ROOT,
@@ -323,9 +322,7 @@ class Studio(
         val composedAt = elapsed()
         jobs.update(id) { it.copy(step = JobStep.Saving, progress = null) }
         val composition = Postprocess.compose(generation.events, prompt.bpm, prompt.mood, chance)
-        val piece = pieces.addComposition(composition, prompt.mannerOf, clock())
-        review.made(piece.id)
-        done = { it.copy(state = JobState.Done, step = JobStep.Waiting, progress = 1f, pieceId = piece.id, title = piece.title) }
+        save { pieces.addComposition(composition, prompt.mannerOf, clock()) }
         val seconds = (composedAt - startedAt) / 1e9
         val figures = "Studio: composed %.1f s of music in %.1f s (%d tokens, %.1f ms a token, %d slides, stop %s), %d notes at %d bpm, %s, %d min; seed %d; peak VmHWM %d kB"
             .format(
@@ -342,6 +339,17 @@ class Studio(
     /** How the job running now ended, when it did: published after its cleanup. */
     private var done: ((StudioJob) -> StudioJob)? = null
 
+    /**
+     * The piece [add] makes goes into the library and waits for Keep or Discard, and the job is done: all
+     * of it once it has begun, whatever cancel comes meanwhile (audit delta 2: a cancel during the import
+     * left the piece in the library, its job "Cancelled" and no Keep or Discard asked).
+     */
+    private suspend fun save(add: suspend () -> StudioPiece) = withContext(NonCancellable) {
+        val piece = add()
+        review.made(piece.id)
+        done = { it.copy(state = JobState.Done, step = JobStep.Waiting, progress = 1f, pieceId = piece.id, title = piece.title) }
+    }
+
     /** Runs [block], whose every outcome becomes job [id]'s state, once [cleanup] has run. */
     private suspend fun outcome(id: Long, cleanup: () -> Unit = {}, block: suspend () -> Unit) {
         done = null
@@ -349,7 +357,8 @@ class Studio(
             block()
             done ?: { it.copy(state = JobState.Done, step = JobStep.Waiting, progress = 1f) }
         } catch (e: CancellationException) {
-            { it.copy(state = JobState.Cancelled, step = JobStep.Waiting, progress = null) }
+            // A cancel that came once the piece was saved changes nothing: it is in the library, waiting for Keep or Discard.
+            done ?: { it.copy(state = JobState.Cancelled, step = JobStep.Waiting, progress = null) }
         } catch (e: StudioFailure) {
             failed(e.message ?: StudioFailures.FAILED)
         } catch (e: AudioFailure) {
