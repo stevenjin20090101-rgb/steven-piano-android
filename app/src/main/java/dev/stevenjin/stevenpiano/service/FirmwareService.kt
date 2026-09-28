@@ -69,7 +69,7 @@ class FirmwareService : Service() {
             return START_NOT_STICKY
         }
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(updater.state.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            ServiceCompat.startForeground(this, ID, notificationFor(updater.state.value), CONNECTED_DEVICE)
         } catch (e: RuntimeException) {   // refused: the update goes on in the app's process, without the notification
             Log.w(TAG, "Updating the piano without the foreground service: ${e.javaClass.simpleName}")
             stopSelf(startId)
@@ -193,6 +193,9 @@ class FirmwareService : Service() {
         private const val UPDATE_MS = 400L
         private const val PROGRESS_MAX = 1_000
         private const val ACTION_CANCEL = "dev.stevenjin.stevenpiano.action.CANCEL_FIRMWARE"
+
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val CONNECTED_DEVICE = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
 
         fun createChannel(context: Context) {
             val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
