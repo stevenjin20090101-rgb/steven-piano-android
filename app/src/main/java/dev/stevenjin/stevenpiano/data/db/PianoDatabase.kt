@@ -16,14 +16,16 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * The library. Schema v2 (app 1.2): playlists keep an order and artwork has its table. A v1
- * database (app 1.1) is migrated by [MIGRATION_1_2]; there is deliberately no destructive
- * fallback, so a migration problem fails loudly instead of wiping the library.
+ * The library. Schema v3 (app 1.5): the built-in playlists are marked in the playlists table and
+ * the schedules have their table (v2, app 1.2: playlists keep an order and artwork has its table).
+ * A v1 database (app 1.1) is migrated by [MIGRATION_1_2] and then [MIGRATION_2_3], a v2 one (apps
+ * 1.2 to 1.4) by [MIGRATION_2_3]; there is deliberately no destructive fallback, so a migration
+ * problem fails loudly instead of wiping the library.
  */
 @Database(
-    entities = [PieceEntity::class, PlaylistEntity::class, PlaylistPieceEntity::class, ArtworkEntity::class],
+    entities = [PieceEntity::class, PlaylistEntity::class, PlaylistPieceEntity::class, ArtworkEntity::class, ScheduleEntity::class],
     views = [ComposerGroup::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class PianoDatabase : RoomDatabase() {
@@ -33,11 +35,13 @@ abstract class PianoDatabase : RoomDatabase() {
 
     abstract fun artwork(): ArtworkDao
 
+    abstract fun schedules(): ScheduleDao
+
     companion object {
         /** [onOpen] runs as the database first opens, before any query (the one-off [TextRepair]). */
         fun open(context: Context, onOpen: (SupportSQLiteDatabase) -> Unit = {}): PianoDatabase =
             Room.databaseBuilder(context, PianoDatabase::class.java, "steven-piano.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(
                     object : Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) = onOpen(db)

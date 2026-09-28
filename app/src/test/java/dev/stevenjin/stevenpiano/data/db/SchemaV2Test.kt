@@ -13,7 +13,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Schema v2 against Room's own export: the migration's statements are the ones Room generated
@@ -22,8 +21,8 @@ import java.io.File
  * it, Room validates on open) runs on the emulator.
  */
 class SchemaV2Test {
-    private val v1 = schema(1)
-    private val v2 = schema(2)
+    private val v1 = ExportedSchema.read(1)
+    private val v2 = ExportedSchema.read(2)
 
     @Test
     fun `positions number each playlist's links from 0 in the order given`() {
@@ -72,41 +71,5 @@ class SchemaV2Test {
         }
         assertEquals(v1.views, v2.views)
         assertEquals(setOf("pieces", "collections", "collection_pieces", "artwork"), v2.tables.keys)
-    }
-
-    /** One exported schema: createSql per table and index, table names filled in. */
-    private class Schema(val version: Int, val tables: Map<String, String>, val indexSql: Map<String, Map<String, String>>, val views: List<String>) {
-        fun table(name: String): String = tables[name] ?: error("No table $name in schema v$version")
-
-        fun indices(table: String): Map<String, String> = indexSql[table].orEmpty()
-
-        fun index(table: String, name: String): String = indices(table)[name] ?: error("No index $name in schema v$version")
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun schema(version: Int): Schema {
-        val root = MiniJson.parse(schemaFile(version).readText()) as Map<String, Any?>
-        val database = root["database"] as Map<String, Any?>
-        val tables = LinkedHashMap<String, String>()
-        val indices = LinkedHashMap<String, Map<String, String>>()
-        for (entity in database["entities"] as List<Map<String, Any?>>) {
-            val name = entity["tableName"] as String
-            tables[name] = (entity["createSql"] as String).replace("\${TABLE_NAME}", name)
-            indices[name] = (entity["indices"] as List<Map<String, Any?>>? ?: emptyList())
-                .associate { (it["name"] as String) to (it["createSql"] as String).replace("\${TABLE_NAME}", name) }
-        }
-        val views = (database["views"] as List<Map<String, Any?>>).map { (it["createSql"] as String).replace("\${VIEW_NAME}", it["viewName"] as String) }
-        return Schema((database["version"] as Double).toInt(), tables, indices, views)
-    }
-
-    /** `app/schemas/…/<version>.json`, found from wherever the tests run. */
-    private fun schemaFile(version: Int): File {
-        val relative = "schemas/dev.stevenjin.stevenpiano.data.db.PianoDatabase/$version.json"
-        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
-        while (dir != null) {
-            for (candidate in listOf(File(dir, relative), File(dir, "app/$relative"))) if (candidate.isFile) return candidate
-            dir = dir.parentFile
-        }
-        error("Room's exported schema $relative is missing: it is part of the repo")
     }
 }

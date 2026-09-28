@@ -16,15 +16,23 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * A playlist: one the person made, or one an imported INDEX.csv named ([imported]). The table
- * keeps its v1 name, `collections`, so v1.1 libraries carry over untouched.
+ * A playlist: one the person made, one an imported INDEX.csv named ([imported]), or one of the
+ * app's built-in lists ([builtIn], found by [builtInKey]: "popular", "recognisable", "epic"),
+ * whose pieces the app sets from the library and the person cannot rename, reorder or delete.
+ * The table keeps its v1 name, `collections`, so v1.1 libraries carry over untouched; the two
+ * built-in columns are new in schema v3 (`MIGRATION_2_3`).
  */
-@Entity(tableName = "collections", indices = [Index(value = ["name"], unique = true)])
+@Entity(
+    tableName = "collections",
+    indices = [Index(value = ["name"], unique = true), Index(value = ["builtInKey"], unique = true)],
+)
 data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAt: Long,
     val imported: Boolean,
+    @ColumnInfo(defaultValue = "0") val builtIn: Boolean = false,
+    val builtInKey: String? = null,
 )
 
 /**
@@ -59,8 +67,19 @@ data class PlaylistPieceEntity(
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )
 
-/** A playlist with its size and total length, for the Playlists tiles and a playlist's page. */
-data class PlaylistSummary(val id: Long, val name: String, val imported: Boolean, val pieceCount: Int, val durationMs: Long)
+/**
+ * A playlist with its size and total length, for the Playlists tiles and a playlist's page. A
+ * built-in one ([builtIn], [builtInKey]) is the app's: its menus offer Change photo only.
+ */
+data class PlaylistSummary(
+    val id: Long,
+    val name: String,
+    val imported: Boolean,
+    val pieceCount: Int,
+    val durationMs: Long,
+    val builtIn: Boolean = false,
+    val builtInKey: String? = null,
+)
 
 /** Where one piece sits in a playlist. */
 data class PiecePosition(val pieceId: Long, val position: Int)

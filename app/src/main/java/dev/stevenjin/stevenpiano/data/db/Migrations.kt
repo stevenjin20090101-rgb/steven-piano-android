@@ -91,3 +91,44 @@ object SchemaV2 {
         }
     }
 }
+
+/**
+ * Schema v2 (apps 1.2 to 1.4) to v3 (app 1.5): the playlists table learns which playlists are
+ * built in (two columns, added as Room's own auto-migrations add a column, and a unique index on
+ * the key), and the schedules table is created for M19. Nothing is dropped or rewritten: every
+ * piece, playlist, link and picture stays as it was, and every playlist reads as the person's own
+ * (builtIn 0, no key) until the built-in lists are made. [SchemaV3.DDL] is copied from Room's
+ * generated `schemas/…/3.json` (SchemaV3Test holds the two equal). Runs inside Room's migration
+ * transaction.
+ */
+val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        SchemaV3.DDL.forEach(db::execSQL)
+    }
+}
+
+/** Schema v3's statements, as Room generated them in `3.json`. Pure: unit-tested. */
+object SchemaV3 {
+    /** `collections.builtIn`, exactly as 3.json's createSql for the table declares it. */
+    const val BUILT_IN_COLUMN = "`builtIn` INTEGER NOT NULL DEFAULT 0"
+
+    /** `collections.builtInKey`, exactly as 3.json declares it. */
+    const val BUILT_IN_KEY_COLUMN = "`builtInKey` TEXT"
+
+    const val ADD_BUILT_IN = "ALTER TABLE `collections` ADD COLUMN $BUILT_IN_COLUMN"
+
+    const val ADD_BUILT_IN_KEY = "ALTER TABLE `collections` ADD COLUMN $BUILT_IN_KEY_COLUMN"
+
+    /** 3.json's createSql for the new index, with the table name filled in. SQLite lets any number of rows hold NULL in it. */
+    const val CREATE_BUILT_IN_KEY_INDEX =
+        "CREATE UNIQUE INDEX IF NOT EXISTS `index_collections_builtInKey` ON `collections` (`builtInKey`)"
+
+    /** 3.json's createSql for the schedules table, with the table name filled in. */
+    const val CREATE_SCHEDULES =
+        "CREATE TABLE IF NOT EXISTS `schedules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `days` INTEGER NOT NULL, " +
+            "`startMinute` INTEGER NOT NULL, `kind` TEXT NOT NULL, `target` TEXT NOT NULL, `endMinute` INTEGER, `volumePct` INTEGER, " +
+            "`enabled` INTEGER NOT NULL DEFAULT 1, `createdAt` INTEGER NOT NULL)"
+
+    /** The migration's DDL, in order. */
+    val DDL: List<String> = listOf(ADD_BUILT_IN, ADD_BUILT_IN_KEY, CREATE_BUILT_IN_KEY_INDEX, CREATE_SCHEDULES)
+}
