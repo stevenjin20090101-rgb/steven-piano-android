@@ -146,8 +146,11 @@ class ImportLimitsTest {
         val staleCard = make(File(cache, "rollcards"), "v1-3.a8.gz.part", start - 1)
         val piece = make(File(files, "pieces"), "abc.mid", start - 60_000)
         val other = make(cache, "other.zip", start - 60_000)
-        assertEquals(4, ImportLimits.sweepStale(cache, files, before = start))
-        listOf(staleZip, stalePiece, staleArt, staleCard).forEach { assertFalse(it.path, it.exists()) }
-        listOf(freshZip, piece, other).forEach { assertTrue(it.path, it.exists()) }
+        val staleUpload = make(File(cache, "web"), "upload-8812.zip", start - 5_000)
+        val staleTemp = make(File(cache, "web"), "nano-1.tmp", start - 5_000)
+        val freshUpload = make(File(cache, "web"), "upload-9001.zip", start + 500)
+        assertEquals(6, ImportLimits.sweepStale(cache, files, before = start))
+        listOf(staleZip, stalePiece, staleArt, staleCard, staleUpload, staleTemp).forEach { assertFalse(it.path, it.exists()) }
+        listOf(freshZip, piece, other, freshUpload).forEach { assertTrue(it.path, it.exists()) }
     }
 }

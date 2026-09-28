@@ -20,6 +20,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.imports.ImportItem
+import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.OpenedSource
 import dev.stevenjin.stevenpiano.data.imports.ZipSource
 import dev.stevenjin.stevenpiano.piano.PianoAction
@@ -454,8 +455,8 @@ class AppWebBackend(
     companion object {
         private const val TAG = "WebPanel"
 
-        /** `cacheDir/web`: uploads while they are read, and the server's temporary files. */
-        const val UPLOAD_DIR = "web"
+        /** `cacheDir/web`: uploads while they are read, and the server's temporary files (swept at start, `ImportLimits.sweepStale`). */
+        const val UPLOAD_DIR = ImportLimits.WEB_DIR
 
         private const val MICROS_PER_MS = 1_000L
         private const val MAX_VOLUME = 100

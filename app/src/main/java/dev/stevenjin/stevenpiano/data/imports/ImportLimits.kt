@@ -55,15 +55,20 @@ object ImportLimits {
     }
 
     /**
-     * Files a crashed import or save left behind: `import-*.zip` copies in [cacheDir] and `*.part`
-     * files in [filesDir]'s pieces and art and the cache's roll cards. Only files last written
-     * before [before] (when the app started), so an import that has just begun keeps its copy.
-     * Returns how many were deleted. Blocking.
+     * Files a crashed import or save left behind: `import-*.zip` copies in [cacheDir], `*.part`
+     * files in [filesDir]'s pieces and art and the cache's roll cards, and whatever the web panel's
+     * uploads left in `cacheDir/web` (an `upload-*.zip` read when the app stopped, a server's
+     * temporary file). Only files last written before [before] (when the app started), so an import
+     * that has just begun keeps its copy. Returns how many were deleted. Blocking.
      */
     fun sweepStale(cacheDir: File, filesDir: File, before: Long): Int {
         val candidates = cacheDir.listFiles { f -> f.name.startsWith("import-") && f.name.endsWith(".zip") }.orEmpty().asList() +
             listOf(File(filesDir, "pieces"), File(filesDir, "art"), File(cacheDir, "rollcards"))
-                .flatMap { dir -> dir.listFiles { f -> f.name.endsWith(".part") }.orEmpty().asList() }
+                .flatMap { dir -> dir.listFiles { f -> f.name.endsWith(".part") }.orEmpty().asList() } +
+            File(cacheDir, WEB_DIR).listFiles().orEmpty().asList()
         return candidates.count { it.isFile && it.lastModified() < before && it.delete() }
     }
+
+    /** The web panel's uploads and temporary files: `cacheDir/web`. */
+    const val WEB_DIR = "web"
 }

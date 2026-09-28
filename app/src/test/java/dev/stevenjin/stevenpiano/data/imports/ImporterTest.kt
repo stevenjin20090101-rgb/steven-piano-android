@@ -208,6 +208,27 @@ class ImporterTest {
         assertTrue(closed)
     }
 
+    @Test
+    fun `a zip the web panel saved imports through importOpened and is deleted once read`() = runTest {
+        val web = tmp.newFolder("cache", "web")
+        val zip = File(web, "upload-1.zip")
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { out ->
+            for ((name, key) in listOf("Satie - Gymnopedie 1.mid" to 60, "folder/Chopin - Waltz.mid" to 62)) {
+                out.putNextEntry(java.util.zip.ZipEntry(name))
+                out.write(midi(key))
+                out.closeEntry()
+            }
+            out.putNextEntry(java.util.zip.ZipEntry("notes.txt"))
+            out.write("not music".toByteArray())
+            out.closeEntry()
+        }
+        val source = ZipSource(zip, deleteWhenClosed = true)
+        val result = importer.importOpened(OpenedSource(source.items(), source.readIndex(), source.indexBase, source::close))
+        assertEquals(2, result.imported)
+        assertEquals(setOf("Gymnopedie 1", "Waltz"), store.pieces.map { it.title }.toSet())
+        assertTrue("the upload's copy is gone once read", !zip.exists())
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()
