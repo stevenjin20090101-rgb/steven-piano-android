@@ -28,12 +28,19 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.SequenceInputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
+import java.net.URLDecoder
 import java.security.SecureRandom
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Collections
+import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
@@ -72,8 +79,10 @@ interface WebSockets {
  *   read, one at a time.
  * - **Threads**: a pool of [POOL_THREADS] with a short queue ([BoundedRunner]); NanoHTTPD's reverse
  *   lookup of every peer's name is skipped ([createClientHandler]); a socket read waits at most
- *   [SOCKET_READ_TIMEOUT_MS]; a handler that needs the app waits at most [CALL_TIMEOUT_MS] for it;
- *   a listening socket that keeps failing closes itself rather than spin ([SteadyServerSocket]).
+ *   [SOCKET_READ_TIMEOUT_MS] and a whole request at most [REQUEST_DEADLINE_MS] ([DeadlineInput]),
+ *   its head read and checked before NanoHTTPD sees it ([RequestHead]); a handler that needs the
+ *   app waits at most [CALL_TIMEOUT_MS] for it; a listening socket that keeps failing closes
+ *   itself rather than spin ([SteadyServerSocket]).
  * - **The socket** (`/ws`, [WebSockets]) opens only for a session, from the panel's own origin, on a
  *   listener that serves the panel.
  */
@@ -92,8 +101,9 @@ class WebServer(
     /**
      * One listener: the address it binds ([host]), its [port] (0 in tests: any free one),
      * [guestOnly] for the Wi-Fi address without Panel on Wi-Fi too, the other [names] requests may
-     * call it by (the person's `webHostName`; "localhost" for the emulator's loopback listener), and
-     * [tempDir] (`cacheDir/web`) for the server's temporary files and the uploads.
+     * call it by (the person's `webHostName`; "localhost" for the emulator's loopback listener),
+     * [tempDir] (`cacheDir/web`) for the server's temporary files and the uploads, and
+     * [requestDeadlineMs], how long a whole request (its head and any JSON body) may take to arrive.
      */
     data class Config(
         val host: String,
@@ -101,10 +111,14 @@ class WebServer(
         val guestOnly: Boolean = false,
         val names: () -> List<String> = { emptyList() },
         val tempDir: File,
+        val requestDeadlineMs: Long = REQUEST_DEADLINE_MS,
     )
 
     private val runner = BoundedRunner(POOL_THREADS, QUEUE_LENGTH)
     private val uploading = ReentrantLock()
+
+    /** The connection a request thread is serving, so a route that may rightly take long (an upload, a socket) can lift its deadline. */
+    private val connection = ThreadLocal<DeadlineInput>()
 
     init {
         setAsyncRunner(runner)
@@ -164,7 +178,7 @@ class WebServer(
             Access.LOGIN -> checkHeaderAndOrigin(session, host)?.let { return it }
             Access.PUBLIC -> if (method != Method.GET) checkOrigin(session, host)?.let { return it }
         }
-        val call = Call(session, route.pattern.matchEntire(path)!!.groupValues.drop(1), host, token, cookies)
+        val call = Call(session, route.pattern.matchEntire(path)!!.groupValues.drop(1), host, token, cookies, connection.get())
         return runBlocking {
             if (route.timed) withTimeout(CALL_TIMEOUT_MS) { route.handle(call) } else route.handle(call)
         }
@@ -208,6 +222,7 @@ class WebServer(
         if (!sessions.isValid(WebCookies.parse(session.headers[COOKIE])[WebCookies.SESSION])) return refuse(401, "session", "Enter the PIN first.")
         if (session.headers[ORIGIN] != "http://$host") return refuse(403, "origin", "This request came from another site.")
         if (!sockets.hasRoom()) return refuse(503, "sockets", "Too many panels are open.")
+        connection.get()?.lift()   // a socket lives long by design: its reads keep the per-read timeout, which the pings feed
         return super.serve(session)   // the handshake; its version and key are checked there
     }
 
@@ -228,13 +243,17 @@ class WebServer(
         val handle: suspend (Call) -> Response,
     )
 
-    /** A request that passed its route's checks: [groups] from its path, the [host] it named, its session [token] and cookies. */
-    inner class Call(
+    /**
+     * A request that passed its route's checks: [groups] from its path, the [host] it named, its
+     * session [token] and cookies, and its [connection] (null only outside a request thread).
+     */
+    inner class Call internal constructor(
         val session: IHTTPSession,
         val groups: List<String>,
         val host: String,
         val token: String?,
         val cookies: Map<String, String>,
+        internal val connection: DeadlineInput? = null,
     ) {
         val address: String get() = session.remoteIpAddress ?: "unknown"
 
@@ -469,6 +488,9 @@ class WebServer(
         if (length == 0L) throw ApiError(400, "empty", "The file is empty.")
         if (!uploading.tryLock()) throw ApiError(409, "busy", "Another file is being added. Try again in a moment.")
         try {
+            // Signed in and checked: the body may take longer than a request's deadline (64 MB over slow Wi-Fi);
+            // each read still waits at most the socket's per-read timeout.
+            call.connection?.lift()
             val input = LimitedInputStream(call.session.inputStream, length)
             when (kind) {
                 UploadKind.MIDI -> {
@@ -591,10 +613,19 @@ class WebServer(
     /**
      * NanoHTTPD's own handler asks DNS for every peer's name (`InetAddress.getHostName`), a lookup
      * that can take seconds on a school network, for every request. This one hands the session an
-     * address named by its own digits, so no lookup ever happens; the rest is NanoHTTPD's loop.
+     * address named by its own digits, so no lookup ever happens.
      */
     override fun createClientHandler(finalAccept: Socket, inputStream: InputStream): ClientHandler = LiteralClientHandler(inputStream, finalAccept)
 
+    /**
+     * One connection, one request (every answer closes it, but a socket's handshake). The request's
+     * head is read here first, under a deadline for the whole request ([Config.requestDeadlineMs],
+     * not only NanoHTTPD's per-read timeout, which a peer sending a byte every few seconds never
+     * trips), and checked ([RequestHead]): whatever NanoHTTPD 2.3.1 would have answered by itself —
+     * without the panel's headers, kept alive, echoing the method — is answered here, with them
+     * (audit 1.5.1, W3). A head that passes goes to NanoHTTPD with every byte read so far, and the
+     * rest of the connection, still under the deadline, follows it.
+     */
     private inner class LiteralClientHandler(private val input: InputStream, private val socket: Socket) : ClientHandler(input, socket) {
         override fun run() {
             var output: OutputStream? = null
@@ -602,10 +633,24 @@ class WebServer(
                 output = socket.getOutputStream()
                 val peer = socket.inetAddress
                 val named = InetAddress.getByAddress(peer.hostAddress, peer.address)
-                val session = HTTPSession(tempFileManagerFactory.create(), input, output, named)
-                while (!socket.isClosed) session.execute()
+                val timed = DeadlineInput(socket, input, SOCKET_READ_TIMEOUT_MS, config.requestDeadlineMs)
+                when (val head = RequestHead.read(timed)) {
+                    RequestHead.Empty -> Unit   // connected and said nothing (a browser's preconnect, a port scan): no answer owed
+                    is RequestHead.Refused -> {
+                        output.write(refusal(head))
+                        output.flush()
+                    }
+                    is RequestHead.Ok -> {
+                        connection.set(timed)
+                        try {
+                            HTTPSession(tempFileManagerFactory.create(), SequenceInputStream(ByteArrayInputStream(head.bytes), timed), output, named).execute()
+                        } finally {
+                            connection.remove()
+                        }
+                    }
+                }
             } catch (e: Exception) {
-                // A closed or broken connection, or a read that timed out: NanoHTTPD's own loop ends the same way.
+                // A closed or broken connection, a read that timed out, or the answer's own end (NanoHTTPD's "Shutdown").
             } finally {
                 linger()
                 closeQuietly(output)
@@ -615,21 +660,40 @@ class WebServer(
             }
         }
 
+        /** The answer to a head refused before NanoHTTPD saw it: the panel's headers, JSON, closed, and nothing of the request in it. */
+        private fun refusal(head: RequestHead.Refused): ByteArray {
+            val body = WebApi.error(head.code, head.message).toString().toByteArray(Charsets.UTF_8)
+            val lines = StringBuilder()
+                .append("HTTP/1.1 ").append(head.status).append(' ').append(RequestHead.reason(head.status)).append("\r\n")
+                .append("Content-Type: ").append(JSON).append("\r\n")
+                .append("Date: ").append(HTTP_DATE.format(ZonedDateTime.now(ZoneOffset.UTC))).append("\r\n")
+            for ((name, value) in securityHeaders("${config.host}:$listeningPort")) lines.append(name).append(": ").append(value).append("\r\n")
+            lines.append("Cache-Control: no-store\r\n")
+                .append("Connection: close\r\n")
+                .append("Content-Length: ").append(body.size).append("\r\n\r\n")
+            return lines.toString().toByteArray(Charsets.ISO_8859_1) + body
+        }
+
         /**
          * A refusal answered before the body was read (411, 413, 415…) would otherwise close on
          * unread bytes, and the peer's stack may then drop the answer with a reset. So the answer's
          * end is sent first, then up to [LINGER_BYTES] of what is still coming are read and thrown
-         * away for at most [LINGER_MS]: the browser sees the refusal, never "connection reset".
+         * away for at most [LINGER_MS] **in all** (audit W3: it was per read, so a peer sending a
+         * byte every few hundred milliseconds kept the thread draining for hours): the browser sees
+         * the refusal, never "connection reset", and no peer keeps the thread.
          */
         private fun linger() {
             if (socket.isClosed) return
             try {
                 socket.shutdownOutput()
-                socket.soTimeout = LINGER_MS
+                val end = System.nanoTime() + LINGER_MS * NANOS_PER_MS
                 val drain = ByteArray(COPY_BUFFER)
                 var left = LINGER_BYTES
                 val raw = socket.getInputStream()
                 while (left > 0) {
+                    val waitMs = (end - System.nanoTime()) / NANOS_PER_MS
+                    if (waitMs <= 0) break
+                    socket.soTimeout = waitMs.toInt()
                     val n = raw.read(drain, 0, minOf(drain.size, left))
                     if (n < 0) break
                     left -= n
@@ -767,6 +831,159 @@ private fun pauseQuietly(ms: Long) {
     }
 }
 
+/**
+ * A connection's input with a deadline for the whole request on top of the socket's per-read
+ * timeout (audit 1.5.1, W3). NanoHTTPD's only guard is that per-read timeout, so a peer sending one
+ * byte every few seconds held a request thread for as long as its head took to reach 8 KB — hours —
+ * and four such peers held a listener. Here no read starts once [deadlineMs] has passed since the
+ * connection's thread took it up, and none waits past it ([readTimeoutMs] at most). [lift] ends the
+ * deadline for what may rightly take long once it is checked and signed in (an upload's body, a
+ * socket's life): their reads keep the per-read timeout alone, as before.
+ */
+internal class DeadlineInput(
+    private val socket: Socket,
+    private val raw: InputStream,
+    private val readTimeoutMs: Int,
+    deadlineMs: Long,
+    private val nanos: () -> Long = System::nanoTime,
+) : InputStream() {
+    @Volatile
+    private var deadline: Long = nanos() + deadlineMs * NANOS_PER_MS
+
+    /** Whether the deadline still holds. */
+    val deadlined: Boolean get() = deadline != LIFTED
+
+    override fun read(): Int {
+        arm()
+        return raw.read()
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        arm()
+        return raw.read(b, off, len)
+    }
+
+    override fun available(): Int = raw.available()
+
+    override fun close() = raw.close()
+
+    /** No deadline from now on, only the per-read timeout. */
+    fun lift() {
+        deadline = LIFTED
+        socket.soTimeout = readTimeoutMs
+    }
+
+    /** The next read waits at most what is left before the deadline; past it, none starts. */
+    private fun arm() {
+        val at = deadline
+        if (at == LIFTED) return
+        val leftMs = (at - nanos()) / NANOS_PER_MS
+        if (leftMs <= 0) throw SocketTimeoutException("The request took too long to arrive")
+        socket.soTimeout = minOf(readTimeoutMs.toLong(), leftMs).toInt()
+    }
+
+    private companion object {
+        const val LIFTED = Long.MAX_VALUE
+    }
+}
+
+/**
+ * A request's head, its request line and headers, as it arrived: read by the server itself before
+ * NanoHTTPD 2.3.1 sees it, at most [MAX_BYTES] within the request's deadline, and checked (audit
+ * 1.5.1, W3). Everything NanoHTTPD would have answered by itself — without the panel's security
+ * headers, keeping the connection alive, and echoing the method into its answer — or mishandled is
+ * refused here instead, answered with them: a request line that isn't `METHOD /target HTTP/1.x`
+ * (400), a method NanoHTTPD doesn't know (501), another HTTP version (505), a target whose percent
+ * escapes don't decode (400; NanoHTTPD dropped the connection unanswered), a head over 8 KB (431;
+ * NanoHTTPD cut it short and served what was left), a second `Host` (400, RFC 9112 § 3.2). [Ok]
+ * carries every byte read, the head and whatever of the body came with it, for NanoHTTPD to read
+ * again from the start. Lines are split as NanoHTTPD's reader splits them (CR, LF or CRLF).
+ */
+internal sealed interface RequestHead {
+    class Ok(val bytes: ByteArray) : RequestHead
+
+    data class Refused(val status: Int, val code: String, val message: String) : RequestHead
+
+    /** The peer connected and closed, or waited out the deadline, without a byte: no answer is owed. */
+    data object Empty : RequestHead
+
+    companion object {
+        /** NanoHTTPD's own head buffer: a longer head it would cut short without a word. */
+        const val MAX_BYTES = 8 * 1024
+
+        fun read(input: InputStream): RequestHead {
+            val buffer = ByteArray(MAX_BYTES)
+            var length = 0
+            while (true) {
+                val n = try {
+                    input.read(buffer, length, MAX_BYTES - length)
+                } catch (e: SocketTimeoutException) {
+                    return if (length == 0) Empty else Refused(408, "slow", "The request took too long to arrive.")
+                }
+                if (n < 0) return if (length == 0) Empty else Refused(400, "request", "The request ended before its head did.")
+                length += n
+                val end = headEnd(buffer, length)
+                if (end > 0) return check(buffer.copyOf(length), end)
+                if (length == MAX_BYTES) return Refused(431, "too-large", "The request's head is larger than 8 KB.")
+            }
+        }
+
+        /** The head that is [bytes]' first [end] bytes, checked as NanoHTTPD will read it. */
+        fun check(bytes: ByteArray, end: Int): RequestHead {
+            val lines = String(bytes, 0, end, Charsets.ISO_8859_1).split(LINE_BREAK)
+            val line = lines.first()
+            val parts = line.split(' ')
+            if (parts.size != 3 || parts.any { it.isEmpty() } || line.any { it !in ' '..'~' }) return Refused(400, "request", NOT_A_REQUEST)
+            val (method, target, version) = parts
+            if (NanoHTTPD.Method.values().none { it.name == method }) return Refused(501, "method", "The panel doesn't answer that kind of request.")
+            if (!target.startsWith('/')) return Refused(400, "request", NOT_A_REQUEST)
+            if (version != "HTTP/1.1" && version != "HTTP/1.0") return Refused(505, "version", "The panel speaks HTTP/1.1.")
+            if (!decodes(target)) return Refused(400, "request", "The address holds a broken escape.")
+            val hosts = lines.drop(1).count { ':' in it && it.substringBefore(':').trim().equals("host", ignoreCase = true) }
+            if (hosts > 1) return Refused(400, "host", "The request names its host twice.")
+            return Ok(bytes)
+        }
+
+        /** The reason phrase for a status [check] or [read] answers with. */
+        fun reason(status: Int): String = when (status) {
+            400 -> "Bad Request"
+            408 -> "Request Timeout"
+            431 -> "Request Header Fields Too Large"
+            501 -> "Not Implemented"
+            505 -> "HTTP Version Not Supported"
+            else -> "Error"
+        }
+
+        /** Whether NanoHTTPD's decoding (`URLDecoder`, UTF-8) takes [target]'s path and query without throwing. */
+        private fun decodes(target: String): Boolean {
+            val query = target.indexOf('?')
+            return try {
+                URLDecoder.decode(if (query >= 0) target.substring(0, query) else target, "UTF-8")
+                if (query >= 0) URLDecoder.decode(target.substring(query + 1), "UTF-8")
+                true
+            } catch (e: IllegalArgumentException) {
+                false
+            }
+        }
+
+        /** Where the head ends, exactly as NanoHTTPD finds it (CRLF CRLF, or LF LF); 0 before it has. */
+        private fun headEnd(buf: ByteArray, length: Int): Int {
+            var at = 0
+            while (at + 1 < length) {
+                if (buf[at] == CR && buf[at + 1] == LF && at + 3 < length && buf[at + 2] == CR && buf[at + 3] == LF) return at + 4
+                if (buf[at] == LF && buf[at + 1] == LF) return at + 2
+                at++
+            }
+            return 0
+        }
+
+        private const val CR = '\r'.code.toByte()
+        private const val LF = '\n'.code.toByte()
+        private const val NOT_A_REQUEST = "That isn't a request the panel reads."
+        private val LINE_BREAK = Regex("\r\n|\r|\n")
+    }
+}
+
 /** The panel's cookies: the session, the guest's id, and reading a `Cookie` header. */
 object WebCookies {
     const val SESSION = "sp_session"
@@ -834,6 +1051,14 @@ private val IMAGE_TYPES = setOf("image/png", "image/jpeg", "image/gif", "image/w
 
 /** How long a socket read may wait. */
 const val SOCKET_READ_TIMEOUT_MS = 10_000
+
+/** How long a whole request (its head, and any JSON body) may take to arrive; an upload's body and a socket are exempt once checked. */
+const val REQUEST_DEADLINE_MS = 10_000L
+
+private const val NANOS_PER_MS = 1_000_000L
+
+/** An HTTP date (IMF-fixdate), for the answers the server writes itself. */
+private val HTTP_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
 
 /** How long a handler waits for the app. */
 const val CALL_TIMEOUT_MS = 10_000L

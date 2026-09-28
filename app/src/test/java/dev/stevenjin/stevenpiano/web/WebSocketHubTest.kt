@@ -146,6 +146,26 @@ class WebSocketHubTest {
     }
 
     @Test
+    fun `a socket outlives a request's deadline, its reads keeping only the per-read timeout (audit W3)`() {
+        val quick = WebServer(
+            WebServer.Config("127.0.0.1", 0, tempDir = tmp.newFolder(), requestDeadlineMs = 500),
+            FakeWebBackend(tmp.newFolder("quick-uploads")), sessions, LoginGuard(), GuestRequests(), { null }, hub,
+        )
+        quick.startListening()
+        try {
+            Client(quick.listeningPort, sessions.open()).use { client ->
+                assertEquals(101, client.handshake())
+                client.text()
+                Thread.sleep(1_500)   // three deadlines, the page silent meanwhile (its pongs unsent)
+                changes.tryEmit(Unit)
+                assertEquals("still open, still told", "state", JSONObject(client.text()).getString("type"))
+            }
+        } finally {
+            quick.stop()
+        }
+    }
+
+    @Test
     fun `stopping the hub closes every socket`() {
         val client = Client(server.listeningPort, sessions.open())
         client.use {

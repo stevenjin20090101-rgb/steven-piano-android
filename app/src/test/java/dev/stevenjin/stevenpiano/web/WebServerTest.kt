@@ -69,9 +69,9 @@ class WebServerTest {
         servers.forEach { it.stop() }
     }
 
-    private fun start(guestOnly: Boolean = false, names: List<String> = emptyList()): Pair<WebServer, RawHttp> {
+    private fun start(guestOnly: Boolean = false, names: List<String> = emptyList(), deadlineMs: Long = REQUEST_DEADLINE_MS): Pair<WebServer, RawHttp> {
         val poster: suspend (String) -> ByteArray? = { url -> Poster.page(assets.read(WebAssets.POSTER.name), url) }
-        val server = WebServer(WebServer.Config("127.0.0.1", 0, guestOnly, { names }, tmp.newFolder()), backend, sessions, guard, requests, assets, sockets, poster)
+        val server = WebServer(WebServer.Config("127.0.0.1", 0, guestOnly, { names }, tmp.newFolder(), deadlineMs), backend, sessions, guard, requests, assets, sockets, poster)
         server.startListening()
         servers += server
         return server to RawHttp(server.listeningPort)
@@ -179,6 +179,143 @@ class WebServerTest {
         // the wait unchecked: eight or more were weighed. Now exactly the five before the lock are.
         assertEquals("weighed: $statuses", 5, statuses.count { it == 401 })
         assertEquals("refused uncounted: $statuses", 5, statuses.count { it == 429 })
+    }
+
+    @Test
+    fun `a request NanoHTTPD could not parse is refused with the panel's own headers, echoing nothing (audit W3)`() {
+        val (server, _) = start()
+        val port = server.listeningPort
+        val host = "Host: 127.0.0.1:$port\r\n"
+        // Each of these NanoHTTPD 2.3.1 used to answer by itself (no security headers, kept alive,
+        // the method echoed), drop unanswered (a broken escape), cut short (a head over 8 KB) or pass
+        // on as something else (another version, an absolute target, a second Host).
+        val cases = listOf(
+            "HELLO\r\n$host\r\n" to 400,
+            "<script> / HTTP/1.1\r\n$host\r\n" to 501,
+            "get / HTTP/1.1\r\n$host\r\n" to 501,
+            "GET /%zz HTTP/1.1\r\n$host\r\n" to 400,
+            "GET /api/library?q=%E HTTP/1.1\r\n$host\r\n" to 400,
+            "GET / HTTP/2.0\r\n$host\r\n" to 505,
+            "GET http://127.0.0.1:$port/ HTTP/1.1\r\n$host\r\n" to 400,
+            "GET  / HTTP/1.1\r\n$host\r\n" to 400,
+            "GET / HTTP/1.1\r\n${host}Host: evil.example:$port\r\n\r\n" to 400,
+            "GET / HTTP/1.1\r\n${host}X-Pad: ${"a".repeat(9_000)}\r\n\r\n" to 431,
+        )
+        for ((request, status) in cases) {
+            val what = request.take(48).replace("\r\n", "⏎")
+            val answer = rawAnswer(port, request.toByteArray(Charsets.ISO_8859_1))
+            assertTrue("an answer to $what", answer != null)
+            answer!!
+            assertEquals(what, status, answer.status)
+            assertEquals(what, "nosniff", answer.header("x-content-type-options"))
+            assertEquals(what, "DENY", answer.header("x-frame-options"))
+            assertEquals(what, "no-referrer", answer.header("referrer-policy"))
+            assertEquals(what, "same-origin", answer.header("cross-origin-resource-policy"))
+            assertTrue(what, answer.header("content-security-policy")!!.startsWith("default-src 'self'; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:$port;"))
+            assertEquals(what, "close", answer.header("connection")?.lowercase())
+            assertEquals(what, "no-store", answer.header("cache-control"))
+            for (echo in listOf("script", "HELLO", "evil", "zz", "aaaa")) assertFalse("$what: nothing of the request echoed", echo in answer.text)
+        }
+        assertEquals("the listener answers the next request", 200, RawHttp(port).get("/").status)
+        val bareLf = rawAnswer(port, "GET / HTTP/1.1\nHost: 127.0.0.1:$port\n\n".toByteArray())
+        assertEquals("a head ended by bare line feeds, which NanoHTTPD tolerates, still passes", 200, bareLf?.status)
+    }
+
+    @Test
+    fun `a head trickled a byte at a time is cut off at the request's deadline, and the listener answers meanwhile (audit W3)`() {
+        val (server, http) = start(deadlineMs = 1_000)
+        val port = server.listeningPort
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val peers = (1..POOL_THREADS).map {
+            Socket().apply {
+                connect(InetSocketAddress("127.0.0.1", port), 5_000)
+                soTimeout = 10_000
+                getOutputStream().write("GET / HTTP/1.1\r\nHost: 127.0.0.1:$port\r\nX-Slow: ".toByteArray())
+            }
+        }
+        // A byte every 200 ms from each, far inside the 10 s per-read timeout: only the deadline ends this.
+        val trickle = Thread {
+            while (!stop.get()) {
+                for (p in peers) runCatching { p.getOutputStream().write('a'.code) }
+                runCatching { Thread.sleep(200) }
+            }
+        }.apply { start() }
+        try {
+            Thread.sleep(300)   // the four hold the four request threads
+            val started = System.nanoTime()
+            val answer = http.send("GET", "/", readTimeoutMs = 5_000)
+            val tookMs = (System.nanoTime() - started) / 1_000_000
+            assertEquals(200, answer.status)
+            assertTrue("answered once the deadline freed a thread, not never: $tookMs ms", tookMs < 3_000)
+            for (p in peers) {
+                val cut = RawHttp.read(p.getInputStream())
+                assertEquals("a peer too slow with its head is told so", 408, cut.status)
+                assertEquals("nosniff", cut.header("x-content-type-options"))
+            }
+        } finally {
+            stop.set(true)
+            trickle.join()
+            peers.forEach { it.close() }
+        }
+    }
+
+    @Test
+    fun `a signed-in upload's body may take longer than a request's deadline (audit W3)`() {
+        val (server, http) = start(deadlineMs = 1_000)
+        val token = login(http)
+        val auth = mapOf("X-Steven-Piano" to "1", "Cookie" to "sp_session=$token")
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", server.listeningPort), 5_000)
+            socket.soTimeout = 10_000
+            val body = ByteArray(1_000) { 3 }
+            socket.getOutputStream().write(http.head("PUT", "/api/upload?name=slow.mid", body, auth))
+            socket.getOutputStream().write(body, 0, 400)
+            socket.getOutputStream().flush()
+            Thread.sleep(1_500)   // past the deadline: the body is exempt once the upload is checked and signed in
+            socket.getOutputStream().write(body, 400, 600)
+            socket.getOutputStream().flush()
+            assertEquals(202, RawHttp.read(socket.getInputStream()).status)
+        }
+        assertEquals(listOf("midi slow.mid 1000"), backend.imported.toList())
+    }
+
+    @Test
+    fun `a peer that keeps trickling after its answer is let go within half a second (audit W3)`() {
+        val (server, http) = start()
+        val port = server.listeningPort
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        // As many peers as there are request threads: each takes its answer, then sends a byte every
+        // 200 ms, inside the drain's per-read timeout, which (before the fix) kept each thread draining.
+        val peers = (1..POOL_THREADS).map {
+            val socket = Socket().apply {
+                connect(InetSocketAddress("127.0.0.1", port), 5_000)
+                soTimeout = 5_000
+            }
+            socket.getOutputStream().write("GET / HTTP/1.1\r\nHost: 127.0.0.1:$port\r\n\r\n".toByteArray())
+            assertEquals(200, RawHttp.read(socket.getInputStream()).status)
+            Thread {
+                try {
+                    while (!stop.get()) {
+                        socket.getOutputStream().write('x'.code)
+                        Thread.sleep(200)
+                    }
+                } catch (e: java.io.IOException) {
+                    // Let go by the server: what the test wants.
+                }
+            }.apply { start() }
+            socket
+        }
+        try {
+            Thread.sleep(300)
+            val started = System.nanoTime()
+            val answer = http.send("GET", "/", readTimeoutMs = 4_000)
+            val tookMs = (System.nanoTime() - started) / 1_000_000
+            assertEquals(200, answer.status)
+            assertTrue("answered as the drains ended, not when the peers stopped: $tookMs ms", tookMs < 2_000)
+        } finally {
+            stop.set(true)
+            peers.forEach { it.close() }
+        }
     }
 
     @Test
@@ -569,6 +706,21 @@ class WebServerTest {
             val expected = listOf(20L) + (1 until SteadyServerSocket.MAX_ACCEPT_FAILURES).map { n -> minOf(n * 20L, 500L) }
             assertEquals(expected, pauses)
             assertTrue("never more than half a second at a time", pauses.all { ms -> ms <= SteadyServerSocket.MAX_ACCEPT_PAUSE_MS })
+        }
+    }
+
+    /** [bytes] sent exactly as they are, and the answer read; null when the server closed without one. */
+    private fun rawAnswer(port: Int, bytes: ByteArray): RawHttp.Answer? {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", port), 5_000)
+            socket.soTimeout = 15_000
+            socket.getOutputStream().write(bytes)
+            socket.getOutputStream().flush()
+            return try {
+                RawHttp.read(socket.getInputStream())
+            } catch (e: IllegalArgumentException) {
+                null   // no complete response: the connection just ended
+            }
         }
     }
 
