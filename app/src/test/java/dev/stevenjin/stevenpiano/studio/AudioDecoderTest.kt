@@ -84,6 +84,24 @@ class AudioDecoderTest {
     }
 
     @Test
+    fun `a data chunk of unknown size is sized from the file's length, not grown from a minute (audit delta 2)`() {
+        // Two and a half minutes at 16 kHz whose header never got its length: 4.8 MB of audio.
+        val frames = 16_000 * 150
+        val bytes = wav(16_000, 1, frames, dataSize = 0xFFFF_FFFFL) { f, _ -> 0.25 * sin(f / 10.0) }
+        val sized = WavReader.decode(ByteArrayInputStream(bytes), fileBytes = bytes.size.toLong())
+        assertEquals(frames, sized.size)
+        assertTrue("one buffer, sized once: ${sized.samples.size} for ${sized.size}", sized.samples.size - sized.size <= 64)
+        // Without the length, a minute's buffer grew by quarters (on the tablet, two copies alive at each step:
+        // 158 MB of heap measured at the 20-minute cap, 78 MB with the length known), to the same samples.
+        val grown = decode(bytes)
+        assertTrue("grown past what it needed: ${grown.samples.size} for ${grown.size}", grown.samples.size - grown.size > 64)
+        assertTrue(sized.samples.copyOf(sized.size).contentEquals(grown.samples.copyOf(grown.size)))
+        // A length that says more than is there, or less, only sizes the buffer: what came is what counts.
+        assertEquals(frames, WavReader.decode(ByteArrayInputStream(bytes), fileBytes = bytes.size * 3L).size)
+        assertEquals(frames, WavReader.decode(ByteArrayInputStream(bytes), fileBytes = 100L).size)
+    }
+
+    @Test
     fun `the length is refused before a sample is decoded, and so is anything past 20 minutes`() {
         // The header announces 20 minutes and a second at 16 kHz mono: refused without the data being there.
         val announced = wav(16_000, 1, 10, dataSize = (20L * 60 + 1) * 16_000 * 2) { _, _ -> 0.0 }

@@ -113,8 +113,10 @@ class MonoTo16k(private val rate: Int, private val channels: Int, estimatedFrame
  * the JVM: PCM of 8, 16, 24 or 32 bits, IEEE float of 32 or 64 bits, and WAVE_FORMAT_EXTENSIBLE of
  * those, any rate from 1 kHz to 768 kHz and 1 to 16 channels, made 16 kHz mono by [MonoTo16k] as it is
  * read. A `data` chunk whose size is 0 or 0xFFFFFFFF (a recorder that never went back to write it)
- * runs to the end of the file. The announced length is checked before anything is decoded (20
- * minutes at most). Everything else is [AudioFailure.UNREADABLE].
+ * runs to the end of the file, its buffer sized from the file's length when that is known (audit delta 2:
+ * sized for a minute, it grew by quarters, two copies alive at once, 158 MB of heap at the 20-minute cap
+ * against 78 MB for the same audio with its length written). The announced length is checked before
+ * anything is decoded (20 minutes at most). Everything else is [AudioFailure.UNREADABLE].
  */
 object WavReader {
     /** Whether [header] (the file's first 12 bytes) starts a WAV file. */
@@ -128,16 +130,21 @@ object WavReader {
                 (String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "RMID")
             )
 
-    /** Decodes the WAV file [input] (its first byte next); [cancelled] is asked between blocks. Blocking. */
-    fun decode(input: InputStream, cancelled: () -> Boolean = { false }): DecodedAudio {
+    /**
+     * Decodes the WAV file [input] (its first byte next); [cancelled] is asked between blocks. [fileBytes], the
+     * file's length when known, sizes the buffer of a `data` chunk whose own size was never written. Blocking.
+     */
+    fun decode(input: InputStream, cancelled: () -> Boolean = { false }, fileBytes: Long = -1L): DecodedAudio {
         try {
             val header = ByteArray(12)
             readFully(input, header)
             if (!isWav(header)) throw AudioFailure(AudioFailure.UNREADABLE)
             var format: Format? = null
+            var read = header.size.toLong()
             while (true) {
                 val chunk = ByteArray(8)
                 if (!readChunkHeader(input, chunk)) throw AudioFailure(if (format == null) AudioFailure.UNREADABLE else AudioFailure.EMPTY)
+                read += chunk.size
                 val id = String(chunk, 0, 4, Charsets.US_ASCII)
                 val size = u32(chunk, 4)
                 when (id) {
@@ -146,6 +153,7 @@ object WavReader {
                         val body = ByteArray(size.toInt())
                         readFully(input, body)
                         if (size % 2 == 1L) skip(input, 1)
+                        read += size + (size and 1L)
                         format = Format.parse(body)
                     }
                     "data" -> {
@@ -153,9 +161,14 @@ object WavReader {
                         val toEnd = size == 0L || size == 0xFFFF_FFFFL
                         val frames = if (toEnd) -1L else size / fmt.blockAlign
                         if (frames > AudioLimits.MAX_SECONDS.toLong() * fmt.rate) throw AudioFailure(AudioFailure.TOO_LONG)
-                        return decodeData(input, fmt, frames, cancelled)
+                        // A data chunk that runs to the end holds what is left of the file.
+                        val estimate = if (frames >= 0 || fileBytes <= read) frames else (fileBytes - read) / fmt.blockAlign
+                        return decodeData(input, fmt, frames, estimate, cancelled)
                     }
-                    else -> skip(input, size + (size and 1L))
+                    else -> {
+                        skip(input, size + (size and 1L))
+                        read += size + (size and 1L)
+                    }
                 }
             }
         } catch (e: EOFException) {
@@ -198,8 +211,9 @@ object WavReader {
         }
     }
 
-    private fun decodeData(input: InputStream, fmt: Format, frames: Long, cancelled: () -> Boolean): DecodedAudio {
-        val sink = MonoTo16k(fmt.rate, fmt.channels, if (frames > 0) frames else fmt.rate.toLong() * 60)
+    /** [frames] of the data chunk, or -1 to the end of the file; [estimate], how many there should be (-1: unknown, a minute is guessed). */
+    private fun decodeData(input: InputStream, fmt: Format, frames: Long, estimate: Long, cancelled: () -> Boolean): DecodedAudio {
+        val sink = MonoTo16k(fmt.rate, fmt.channels, if (estimate > 0) estimate else fmt.rate.toLong() * 60)
         val block = ByteArray(BLOCK_FRAMES * fmt.blockAlign)
         val samples = FloatArray(BLOCK_FRAMES * fmt.channels)
         var left = if (frames < 0) Long.MAX_VALUE else frames

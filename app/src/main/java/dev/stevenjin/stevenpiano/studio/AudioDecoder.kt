@@ -44,7 +44,8 @@ sealed interface AudioSource {
  */
 class AudioDecoder(private val resolver: ContentResolver) : RecordingReader {
     override fun decode(source: AudioSource, cancelled: () -> Boolean): DecodedAudio {
-        if (sizeOf(source) > AudioLimits.MAX_FILE_BYTES) throw AudioFailure(AudioFailure.TOO_LARGE)
+        val size = sizeOf(source)
+        if (size > AudioLimits.MAX_FILE_BYTES) throw AudioFailure(AudioFailure.TOO_LARGE)
         val header = ByteArray(12)
         val wav = try {
             open(source).use { input -> readHeader(input, header) && WavReader.isWav(header) }
@@ -57,7 +58,7 @@ class AudioDecoder(private val resolver: ContentResolver) : RecordingReader {
         if (WavReader.isMidi(header)) throw AudioFailure(AudioFailure.MIDI)
         return if (wav) {
             try {
-                BufferedInputStream(open(source), BUFFER).use { WavReader.decode(it, cancelled) }
+                BufferedInputStream(open(source), BUFFER).use { WavReader.decode(it, cancelled, fileBytes = size) }
             } catch (e: IOException) {
                 throw AudioFailure(AudioFailure.UNREADABLE, e)
             }
