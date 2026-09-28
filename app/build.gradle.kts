@@ -137,6 +137,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.media)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.haze)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

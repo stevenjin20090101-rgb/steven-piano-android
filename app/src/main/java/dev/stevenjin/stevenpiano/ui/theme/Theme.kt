@@ -101,6 +101,7 @@ fun PianoTheme(
     CompositionLocalProvider(
         LocalLive provides (if (darkTheme) LiveRedDark else LiveRedLight),
         LocalNoteSounding provides (if (darkTheme) NoteSoundingDark else NoteSoundingLight),
+        LocalGlassEdge provides (if (darkTheme) GlassEdgeDark else GlassEdgeLight),
         LocalHairline provides (if (darkTheme) InkHairline else PaperHairline),
         LocalDisabledGlyph provides (if (darkTheme) InkDisabledGlyph else PaperDisabledGlyph),
         LocalTertiary provides (if (darkTheme) SilverTertiary else CarbonTertiary),
