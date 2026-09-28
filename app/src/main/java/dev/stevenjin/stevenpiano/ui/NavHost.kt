@@ -11,14 +11,17 @@ package dev.stevenjin.stevenpiano.ui
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -81,11 +84,15 @@ import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.components.GlassEdge
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
+import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
 import dev.stevenjin.stevenpiano.ui.components.LocalOnGlass
 import dev.stevenjin.stevenpiano.ui.components.LocalReducedTransparency
+import dev.stevenjin.stevenpiano.ui.components.MiniPlayer
+import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
+import dev.stevenjin.stevenpiano.ui.components.miniPlayerShown
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.keys.KeysScreen
 import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
@@ -152,7 +159,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                 // Every inset reaches the padding below; the content itself keeps only the top one.
                 // A phone on its side may have its navigation buttons or its camera cutout at either end.
                 contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
-                bottomBar = { if (!frame.rail) BottomBar(current, select) },
+                bottomBar = { if (!frame.rail) BottomBar(current, select, playback, onOpenNowPlaying = { open(Route.NowPlaying) }) },
             ) { padding ->
                 val direction = LocalLayoutDirection.current
                 val top = padding.calculateTopPadding()
@@ -265,14 +272,39 @@ private fun RailFrame(rail: (@Composable () -> Unit)?, modifier: Modifier, conte
 
 private enum class FrameSlot { Rail, Content }
 
-/** Compact widths: the glass along the bottom, holding the tab bar (and, from M16, the mini player above it). */
+/**
+ * Compact widths: the glass along the bottom, holding the tab bar and above it, on phones, the mini
+ * player whenever a piece is loaded or loading (not on Now playing itself, which is the full
+ * player), a hairline between them, or while a piece loads the moving hairline. The mini player
+ * grows in from the bar and gives way into it over 240 ms (a cut when motion is reduced); the
+ * floating padding follows it.
+ */
 @Composable
-private fun BottomBar(current: Route, onSelect: (Route) -> Unit) {
+private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: PlaybackStarter, onOpenNowPlaying: () -> Unit) {
+    val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
+    val frame = LocalAppFrame.current
+    val reduced = rememberReducedMotion()
     GlassSurface(Modifier.fillMaxWidth()) {
         Column {
+            AnimatedVisibility(
+                visible = !frame.twoPane && state.miniPlayerShown && current != Route.NowPlaying,
+                enter = if (reduced) EnterTransition.None else MiniPlayerMotion.enter,
+                exit = if (reduced) ExitTransition.None else MiniPlayerMotion.exit,
+            ) {
+                Column {
+                    MiniPlayer(state, onOpen = onOpenNowPlaying, onPlayPause = playback::togglePlayPause, onNext = playback::next)
+                    if (state.loading) ProgressHairline(null) else HairlineDivider()
+                }
+            }
             TabBar(current, onSelect)
         }
     }
+}
+
+/** The mini player coming and going: its height and its opacity together, 240 ms, standard easing. */
+private object MiniPlayerMotion {
+    val enter = expandVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeIn(tween(Motion.StandardMs, easing = Motion.Standard))
+    val exit = shrinkVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeOut(tween(Motion.StandardMs, easing = Motion.Standard))
 }
 
 /**

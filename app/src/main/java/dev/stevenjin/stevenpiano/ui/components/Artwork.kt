@@ -204,6 +204,16 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
 }
 
 /**
+ * A piece's art where it stands for the piece itself (the mini player, the now-playing panel, as the
+ * piece sheet): its composer's portrait, else its own roll card, which is never mistaken for
+ * another piece's. [composerKey] is the library's ("" when the composer is unknown).
+ */
+@Composable
+fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier) {
+    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier) { RollCardImage(pieceId, it) }
+}
+
+/**
  * A playlist's cover: the person's photo, else the portrait of its first piece's composer, else
  * the monogram of [name].
  */
