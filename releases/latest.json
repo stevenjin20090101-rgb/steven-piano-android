@@ -1,9 +1,9 @@
 {
-  "versionCode": 11,
-  "versionName": "1.6",
-  "notes": "Firmware updates from the app: Piano › Firmware and status shows the piano's firmware version, checks for a signed release, and sends it over Bluetooth — the piano goes quiet, receives the image, verifies the signature, restarts, and rolls back by itself if the new firmware fails to start. Needs firmware 2.0.0 on the piano first (one USB flash).",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.6/steven-piano-1.6.apk",
-  "sha256": "676ec6fcfd0c0946026383ecc7d579d18a2438e6c226892d3f5e9bf262d86c8c",
-  "sizeBytes": 2724616,
+  "versionCode": 12,
+  "versionName": "1.6.1",
+  "notes": "Kiosk mode for the school tablet: with the app as device owner, Piano › Kiosk makes the app the home screen and switches off Home, Recents, the shade and the lock screen; the tablet comes straight back into the app after a reboot. Hold the byline for three seconds and enter the PIN to unlock for a while or turn kiosk off. In kiosk, settings, disconnecting, imports and deletions ask for the PIN; playing, queueing and browsing stay free. Left alone, the tablet rests in display mode.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.6.1/steven-piano-1.6.1.apk",
+  "sha256": "a58211ea08abe87325a89977beed60b5d5ffb8f4f95fe5b29f9fbdf1ffdbf588",
+  "sizeBytes": 2758096,
   "minSdk": 26
 }
