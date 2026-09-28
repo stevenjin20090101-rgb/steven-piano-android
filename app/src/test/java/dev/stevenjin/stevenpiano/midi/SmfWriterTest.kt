@@ -118,4 +118,36 @@ class SmfWriterTest {
         assertEquals("rounded to the nearest tick", 1L, SmfWriter.ticks(600))
         assertEquals(0L, SmfWriter.ticks(-5))
     }
+
+    @Test
+    fun `a tempo of its own round-trips, its beats on the file's beats and bars`() {
+        // 96 bpm (625,000 µs a quarter note): a sixteenth is 156,250 µs, 120 ticks.
+        val tempo = SmfWriter.tempoOf(96)
+        assertEquals(625_000, tempo)
+        val sixteenth = 156_250L
+        val notes = List(64) { i -> SmfWriter.Note(i * sixteenth, i * sixteenth + 2 * sixteenth, 48 + i % 36, 40 + i) }
+        val bytes = SmfWriter.write(notes, title = "Composition", text = "Made in Studio", tempoMicros = tempo)
+        val piece = SmfParser.parse(bytes)
+        assertEquals(emptyList<String>(), piece.warnings)
+        assertEquals(1, piece.tempoMap.size)
+        assertEquals(tempo, piece.tempoMap.tempoAt(0))
+        assertEquals(notes.size, piece.noteCount)
+        val half = tempo.toLong() / SmfWriter.PPQ / 2 + 1   // half a tick at this tempo, and the parser's microsecond
+        for (i in notes.indices) {
+            assertTrue("note $i at ${piece.notes.startMicros[i]}", abs(piece.notes.startMicros[i] - notes[i].onMicros) <= half)
+            assertEquals("note $i on the sixteenth's tick", i * 120L, piece.tempoMap.microsToTicks(piece.notes.startMicros[i]))
+        }
+        assertEquals("four beats a bar at 96 bpm: 2.5 s", 2_500_000L, piece.barStartsMicros[1])
+        assertEquals("the last note ends a sixteenth into a fifth bar", listOf(0L, 2_500_000L, 5_000_000L, 7_500_000L, 10_000_000L), piece.barStartsMicros.toList())
+        // The tempo's own three bytes, then 4/4.
+        val track = bytes.copyOfRange(22, bytes.size)
+        val at = (0 until track.size - 6).first { track[it] == 0xFF.toByte() && track[it + 1] == 0x51.toByte() }
+        assertArrayEquals(byteArrayOf(3, 0x09, 0x89.toByte(), 0x68), track.copyOfRange(at + 2, at + 6))
+        assertEquals("half a second at 96 bpm: 0.8 beats", 384L, SmfWriter.ticks(500_000, tempo))
+        assertEquals("the default is 120 bpm", SmfWriter.ticks(123_456), SmfWriter.ticks(123_456, SmfWriter.TEMPO_MICROS))
+        assertEquals(500_000, SmfWriter.tempoOf(120))
+        assertEquals(1_500_000, SmfWriter.tempoOf(40))
+        assertEquals(300_000, SmfWriter.tempoOf(200))
+        assertEquals(437_956, SmfWriter.tempoOf(137))
+    }
 }

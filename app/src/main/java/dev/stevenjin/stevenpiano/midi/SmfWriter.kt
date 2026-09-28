@@ -10,15 +10,18 @@
 package dev.stevenjin.stevenpiano.midi
 
 import java.io.ByteArrayOutputStream
+import kotlin.math.roundToInt
 
 /**
- * Writes a Standard MIDI File (v1.7 — M23, Studio's transcriptions): format 0, one track, [PPQ] ticks a
- * quarter note at 120 bpm (960 ticks a second, about a millisecond each), 4/4. The track holds the
- * title as its name (FF 03) and an optional text (FF 01), the tempo and time signature, then the notes
- * as Note On / Note Off on channel 1 and the sustain pedal as CC64 127 / 0, then End of Track. Events
- * at one tick go in [SmfParser]'s order (controllers, then note-offs, then note-ons), so what is
- * written is what the parser reads back. Every note lasts at least a tick, velocities are held to
- * 1–127 (a Note On of 0 would be a Note Off), keys to 0–127.
+ * Writes a Standard MIDI File (v1.7 — M23, Studio's pieces): format 0, one track, [PPQ] ticks a quarter
+ * note at one tempo, 120 bpm unless one is given (960 ticks a second, about a millisecond each; a
+ * composition is written at the tempo it was composed at, v1.7 — M24, so its beats fall on the file's
+ * and the score's bars follow them), 4/4. The track holds the title as its name (FF 03) and an optional
+ * text (FF 01), the tempo and time signature, then the notes as Note On / Note Off on channel 1 and the
+ * sustain pedal as CC64 127 / 0, then End of Track. Events at one tick go in [SmfParser]'s order
+ * (controllers, then note-offs, then note-ons), so what is written is what the parser reads back.
+ * Every note lasts at least a tick, velocities are held to 1–127 (a Note On of 0 would be a Note Off),
+ * keys to 0–127.
  */
 object SmfWriter {
     const val PPQ = 480
@@ -31,19 +34,29 @@ object SmfWriter {
     /** The sustain pedal down from [downMicros] to [upMicros]. */
     data class Pedal(val downMicros: Long, val upMicros: Long)
 
-    /** The file's bytes. [title] names the track; [text] is a text event beside it. */
-    fun write(notes: List<Note>, pedals: List<Pedal> = emptyList(), title: String? = null, text: String? = null): ByteArray {
+    /**
+     * The file's bytes. [title] names the track; [text] is a text event beside it; [tempoMicros] is the
+     * file's one tempo, microseconds a quarter note ([tempoOf] a bpm), 120 bpm by default.
+     */
+    fun write(
+        notes: List<Note>,
+        pedals: List<Pedal> = emptyList(),
+        title: String? = null,
+        text: String? = null,
+        tempoMicros: Int = TEMPO_MICROS,
+    ): ByteArray {
+        require(tempoMicros in 1..MAX_TEMPO_MICROS) { "tempo $tempoMicros" }
         val events = ArrayList<Event>(notes.size * 2 + pedals.size * 2)
         for (note in notes) {
-            val on = ticks(note.onMicros)
-            val off = maxOf(ticks(note.offMicros), on + 1)
+            val on = ticks(note.onMicros, tempoMicros)
+            val off = maxOf(ticks(note.offMicros, tempoMicros), on + 1)
             val key = note.key.coerceIn(0, 127)
             events += Event(on, RANK_NOTE_ON, byteArrayOf(0x90.toByte(), key.toByte(), note.velocity.coerceIn(1, 127).toByte()))
             events += Event(off, RANK_NOTE_OFF, byteArrayOf(0x80.toByte(), key.toByte(), 64))
         }
         for (pedal in pedals) {
-            val down = ticks(pedal.downMicros)
-            val up = maxOf(ticks(pedal.upMicros), down + 1)
+            val down = ticks(pedal.downMicros, tempoMicros)
+            val up = maxOf(ticks(pedal.upMicros, tempoMicros), down + 1)
             events += Event(down, RANK_CONTROL, byteArrayOf(0xB0.toByte(), SUSTAIN.toByte(), 127))
             events += Event(up, RANK_CONTROL, byteArrayOf(0xB0.toByte(), SUSTAIN.toByte(), 0))
         }
@@ -52,7 +65,7 @@ object SmfWriter {
         val track = ByteArrayOutputStream()
         title?.takeIf { it.isNotEmpty() }?.let { meta(track, 0x03, it.toByteArray(Charsets.UTF_8)) }
         text?.takeIf { it.isNotEmpty() }?.let { meta(track, 0x01, it.toByteArray(Charsets.UTF_8)) }
-        meta(track, 0x51, byteArrayOf((TEMPO_MICROS shr 16).toByte(), (TEMPO_MICROS shr 8).toByte(), TEMPO_MICROS.toByte()))
+        meta(track, 0x51, byteArrayOf((tempoMicros shr 16).toByte(), (tempoMicros shr 8).toByte(), tempoMicros.toByte()))
         meta(track, 0x58, byteArrayOf(4, 2, 24, 8))
         var last = 0L
         for (event in events) {
@@ -74,8 +87,18 @@ object SmfWriter {
         return out.toByteArray()
     }
 
-    /** Microseconds as ticks at 120 bpm, rounded to the nearest; never before 0. */
-    fun ticks(micros: Long): Long = ((micros.coerceAtLeast(0) * PPQ * 2 + 500_000) / 1_000_000)
+    /** Microseconds as ticks at [tempoMicros] a quarter note (120 bpm by default), rounded to the nearest; never before 0. */
+    fun ticks(micros: Long, tempoMicros: Int = TEMPO_MICROS): Long =
+        (micros.coerceAtLeast(0) * PPQ * 2 + tempoMicros) / (2L * tempoMicros)
+
+    /** A tempo of [bpm] quarter notes a minute as MIDI keeps it: whole microseconds a quarter note. */
+    fun tempoOf(bpm: Int): Int {
+        require(bpm > 0) { "bpm $bpm" }
+        return (60_000_000.0 / bpm).roundToInt().coerceIn(1, MAX_TEMPO_MICROS)
+    }
+
+    /** The slowest tempo a file can hold: three bytes of microseconds a quarter note. */
+    const val MAX_TEMPO_MICROS = 0xFF_FFFF
 
     private class Event(val tick: Long, val rank: Int, val bytes: ByteArray)
 
