@@ -9,6 +9,9 @@
 
 package dev.stevenjin.stevenpiano.studio.compose
 
+import dev.stevenjin.stevenpiano.midi.KeyMap
+import dev.stevenjin.stevenpiano.midi.SmfParser
+import dev.stevenjin.stevenpiano.midi.SmfWriter
 import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
 import org.junit.Assert.assertArrayEquals
@@ -24,7 +27,8 @@ import kotlin.random.Random
  * The real composer (v1.7 — M24): `composer-v1.onnx` through ONNX Runtime 1.28.0 for the JVM, driven the
  * app's way ([OrtComposerModel]: prefill, then a token at a time through the key-value cache). From the
  * Bach seed, greedy decoding under the package's masks must give the INT8 file's own 64 tokens, as the
- * Mac and the emulator did in the spike; and a sampled run must carry on through a slide of the window.
+ * Mac and the emulator did in the spike; a sampled run must carry on through a slide of the window; and a
+ * one-minute Calm piece must come out whole, from the prompt to a MIDI file the app's parser reads.
  * The model is found where `-PstudioModels=<dir>` (or the environment variable `STEVENPIANO_COMPOSER`,
  * `$STUDIO_WORK/exports`, `~/studio-work/exports`) says; without it these are skipped.
  */
@@ -89,6 +93,49 @@ class ComposerTest {
                 current = e.time
             }
             assertTrue("mostly notes", out.events.count { !it.isRest } > 400)
+
+            val piece = Postprocess.compose(out.events, prompt.bpm, prompt.mood, Random(24))
+            assertPlayable(piece)
+        }
+    }
+
+    @Test
+    fun `a one-minute Calm piece in the manner of the Bach, from the prompt to a MIDI file`() {
+        val file = model()
+        OrtComposerModel(file).use { model ->
+            val seed = SeedPiece("Prelude in C major", "Johann Sebastian Bach", ComposerFixtures.bach)
+            val prompt = PromptBuilder.build(seed, ComposeRequest(Mood.Calm, MusicKey(2, false), 96, 1))
+            assertEquals(2, prompt.transpose)
+            val heard = ArrayList<Int>()
+            val started = System.nanoTime()
+            val out = Sampler(model, Random(1_700)).generate(prompt) { made, _ -> heard += made }
+            val ms = (System.nanoTime() - started) / 1e6
+            val piece = Postprocess.compose(out.events, prompt.bpm, prompt.mood, Random(1_700))
+            println(
+                "ComposerTest: a minute of Calm (D major, 96 bpm, scale %.3f): %d tokens in %.0f ms (%.2f ms a token), %d slides, stop %s; %d notes over %.1f s, velocities %d-%d"
+                    .format(
+                        prompt.timeScale, out.tokens.size, ms, ms / out.tokens.size, out.slides, out.stop, piece.notes.size,
+                        piece.durationMicros / 1e6, piece.notes.minOf { it.velocity }, piece.notes.maxOf { it.velocity },
+                    ),
+            )
+            assertTrue(out.tokens.size <= 1_800)
+            assertTrue("never at or past the end", out.events.all { it.time < prompt.endTime })
+            assertTrue(heard.zipWithNext().all { (a, b) -> b > a || b == heard.last() } && heard.last() == out.tokens.size)
+            assertPlayable(piece)
+            assertTrue("about a minute", piece.durationMicros in 20_000_000L..75_000_000L)
+            val bytes = SmfWriter.write(piece.notes, title = "Composition", text = "Made in Studio")
+            val parsed = SmfParser.parse(bytes)
+            assertEquals(piece.notes.size, parsed.noteCount)
+            assertTrue(parsed.events.none { it.command == 0xB0 })
+        }
+    }
+
+    /** What the piano can play: keys 24-107, velocities 20-110, a key struck at most once in 100 ms and let go before its next strike. */
+    private fun assertPlayable(piece: Composition) {
+        assertTrue(piece.notes.isNotEmpty())
+        assertTrue(piece.notes.all { it.key in KeyMap.LOWEST..KeyMap.HIGHEST && it.velocity in 20..110 && it.offMicros > it.onMicros })
+        for ((_, strikes) in piece.notes.groupBy { it.key }) {
+            for ((a, b) in strikes.zipWithNext()) assertTrue(b.onMicros - a.onMicros >= 100_000 && a.offMicros <= b.onMicros)
         }
     }
 }
