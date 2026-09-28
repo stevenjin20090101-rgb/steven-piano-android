@@ -87,7 +87,7 @@ enum class FakeOta(val key: String) {
 
     /**
      * The release the fake server offers: § 10's example, as the scenario changes it, for any app
-     * (the example's minAppVersionCode, 13, would ask builds before 1.6.1 for a newer app) but in
+     * (the example's minAppVersionCode, 11, would ask builds before 1.6 for a newer app) but in
      * [NewerApp].
      */
     fun manifestJson(): String = OtaExample.manifestJson {

@@ -43,7 +43,7 @@ object OtaExample {
         .put("sizeBytes", SIZE)
         .put("sha256", SHA256)
         .put("sig", SIG)
-        .put("minAppVersionCode", 13)
+        .put("minAppVersionCode", 11)
         .put("notes", NOTES)
         .put("usbOnly", false)
         .apply(edit)

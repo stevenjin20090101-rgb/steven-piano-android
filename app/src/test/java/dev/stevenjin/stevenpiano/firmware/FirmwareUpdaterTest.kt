@@ -107,7 +107,7 @@ class FirmwareUpdaterTest {
                 player = player,
                 server = server,
                 publicKey = key,
-                appVersionCode = 13,
+                appVersionCode = 11,
                 platformEd25519 = false,
                 online = online,
                 power = { power },

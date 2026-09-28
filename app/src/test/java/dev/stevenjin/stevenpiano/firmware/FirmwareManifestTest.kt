@@ -37,7 +37,7 @@ class FirmwareManifestTest {
         )
         assertEquals(991_232L, manifest.sizeBytes)
         assertEquals(OtaExample.SHA256, manifest.sha256)
-        assertEquals(13, manifest.minAppVersionCode)
+        assertEquals(11, manifest.minAppVersionCode)
         assertEquals("Softer pianissimo; the pedal lifts on stop.", manifest.notes)
         assertFalse(manifest.usbOnly)
         assertEquals(FirmwareVersion(2, 1, 0), manifest.parsedVersion)
@@ -88,7 +88,10 @@ class FirmwareManifestTest {
         val newer = FirmwareManifest.parse(OtaExample.manifestJson { put("minAppVersionCode", 14) })
         assertTrue("above the app's: it needs a newer app", newer.needsNewerApp(appVersionCode = 13))
         assertFalse(newer.needsNewerApp(appVersionCode = 14))
-        assertFalse(FirmwareManifest.parse(OtaExample.manifestJson()).needsNewerApp(appVersionCode = 13))
+        // § 10's example names 11, as firmware 2.0.0 does (§ 15): 1.6's build takes it, the build before doesn't.
+        val example = FirmwareManifest.parse(OtaExample.manifestJson())
+        assertFalse(example.needsNewerApp(appVersionCode = 11))
+        assertTrue(example.needsNewerApp(appVersionCode = 10))
     }
 
     @Test

@@ -23,7 +23,7 @@ import java.util.Locale
  * {"version": "2.1.0", "build": "a1b2c3d",
  *  "binUrl": "https://github.com/stevenjin20090101-rgb/Steven-Jin-Player-Piano/releases/download/fw-v2.1.0/firmware-2.1.0.bin",
  *  "sizeBytes": 991232, "sha256": "<64 hex digits>", "sig": "<88 base64 characters>",
- *  "minAppVersionCode": 13, "notes": "…", "usbOnly": false}
+ *  "minAppVersionCode": 11, "notes": "…", "usbOnly": false}
  * ```
  *
  * [sig] is Ed25519 over the 32 raw bytes of [sha256], made with the author's key ([verify]); the
