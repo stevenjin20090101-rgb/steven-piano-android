@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.ScrollState
@@ -30,6 +31,8 @@ import dev.stevenjin.stevenpiano.settings.WideLayout
 import dev.stevenjin.stevenpiano.service.UpdateService
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.update.UpdateState
+import dev.stevenjin.stevenpiano.web.PosterPrint
+import dev.stevenjin.stevenpiano.web.WebStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +64,9 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** The updater: a release on offer, its download, its install, or what the last check found. */
     val update: StateFlow<UpdateState> = graph.updater.state
+
+    /** Where the web panel listens (Remote control's address and QR, and the hub's row). */
+    val web: StateFlow<WebStatus> = graph.web.status
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 
@@ -167,6 +173,24 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setDisplayModeAfterMinute(on: Boolean) = edit { setDisplayModeAfterMinute(on) }
 
     fun setStandbyCanvas(canvas: StandbyCanvas) = edit { setStandbyCanvas(canvas) }
+
+    fun setWebEnabled(on: Boolean) = graph.setWebEnabled(on)
+
+    fun setWebGuests(on: Boolean) = edit { setWebGuests(on) }
+
+    fun setWebApproveFirst(on: Boolean) = edit { setWebApproveFirst(on) }
+
+    fun setWebOnWifi(on: Boolean) = edit { setWebOnWifi(on) }
+
+    /** A new panel PIN: hashed and kept in the app's scope, and every session of the panel ends. */
+    fun setWebPin(pin: String) {
+        graph.appScope.launch { graph.web.setPin(pin) }
+    }
+
+    /** Print the request poster: Android's print dialog, over [activity], for the guests' [url]. */
+    fun printPoster(activity: Activity, url: String) {
+        PosterPrint.print(activity, url)
+    }
 
     /** Check now: asks the server whatever the switch says, in the app's scope so leaving the tab does not stop it. */
     fun checkNow() {

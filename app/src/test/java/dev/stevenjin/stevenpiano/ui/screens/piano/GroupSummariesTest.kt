@@ -15,6 +15,7 @@ import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.ui.SettingsPage
+import dev.stevenjin.stevenpiano.web.WebStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -97,10 +98,26 @@ class GroupSummariesTest {
     @Test
     fun `each page's row takes its own value`() {
         val piano = ready("fullpower" to "0", "volume" to "70", "leds" to "0", "pedalon" to "1", facts = mapOf("fw" to "emulator"))
-        val rows = GroupSummaries.from(piano, PianoSettings(defaultTempoPct = 90, noteDisplay = NoteDisplay.FALLING), wide = false)
+        val rows = GroupSummaries.from(
+            piano,
+            PianoSettings(defaultTempoPct = 90, noteDisplay = NoteDisplay.FALLING, webEnabled = true),
+            wide = false,
+            web = WebStatus(running = true, tailnet = "100.101.2.3"),
+        )
         assertEquals(
-            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes"),
+            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "On · 100.101.2.3"),
             SettingsPage.entries.map { rows.of(it) },
         )
+    }
+
+    @Test
+    fun `Remote control reads off, or on with the panel's address`() {
+        val on = PianoSettings(webEnabled = true, webPinSet = true)
+        assertEquals("Off", GroupSummaries.remote(PianoSettings(), WebStatus(running = true, tailnet = "100.101.2.3")))
+        assertEquals("On · 100.101.2.3", GroupSummaries.remote(on, WebStatus(running = true, tailnet = "100.101.2.3", wifi = "192.168.1.20")))
+        assertEquals("guests only on the Wi-Fi: no panel address", "On", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20")))
+        assertEquals("On · 192.168.1.20", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20", panelOnWifi = true)))
+        assertEquals("On", GroupSummaries.remote(on, WebStatus()))
+        assertEquals("the Remote row reads without the piano", "Off", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).remote)
     }
 }

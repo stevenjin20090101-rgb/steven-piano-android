@@ -44,8 +44,8 @@ object HubGroups {
     val all: List<HubGroup> = listOf(
         HubGroup("Piano", pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.Display)),
-        // Remote control (M18), Kiosk (M20) and Studio (M23) come here.
-        HubGroup("Control", emptyList()),
+        // Kiosk (M20) and Studio (M23) join Remote control here.
+        HubGroup("Control", pages(SettingsPage.Remote)),
         HubGroup("App", listOf(HubRow.AutoConnect, HubRow.CheckForUpdates, HubRow.CheckNow, HubRow.ShareDiagnostics)),
     )
 

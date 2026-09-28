@@ -15,6 +15,7 @@ import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
+import dev.stevenjin.stevenpiano.web.WebStatus
 import kotlin.math.roundToInt
 import dev.stevenjin.stevenpiano.piano.PianoSettings as PianoTable
 
@@ -32,6 +33,7 @@ data class GroupSummaries(
     val firmware: String,
     val playback: String,
     val display: String,
+    val remote: String,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -41,21 +43,32 @@ data class GroupSummaries(
         SettingsPage.Firmware -> firmware
         SettingsPage.Playback -> playback
         SettingsPage.Display -> display
+        SettingsPage.Remote -> remote
     }
 
     companion object {
         /** A value not known yet. */
         const val UNKNOWN = "—"
 
-        /** Every row's value; [wide] when the window shows the score beside the notes (Note display then picks the roll's style). */
-        fun from(piano: PianoState, settings: PianoSettings, wide: Boolean): GroupSummaries = GroupSummaries(
+        /**
+         * Every row's value; [wide] when the window shows the score beside the notes (Note display
+         * then picks the roll's style); [web] where the web panel listens.
+         */
+        fun from(piano: PianoState, settings: PianoSettings, wide: Boolean, web: WebStatus = WebStatus()): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
             pedal = pedal(piano),
             firmware = firmware(piano),
             playback = playback(settings),
             display = display(settings, wide),
+            remote = remote(settings, web),
         )
+
+        /** "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"). */
+        fun remote(settings: PianoSettings, web: WebStatus): String {
+            if (!settings.webEnabled) return OFF
+            return web.panelHost?.let { "On · $it" } ?: "On"
+        }
 
         /** "Full power" while full power is on, else "Volume 70%". */
         fun feel(piano: PianoState): String {

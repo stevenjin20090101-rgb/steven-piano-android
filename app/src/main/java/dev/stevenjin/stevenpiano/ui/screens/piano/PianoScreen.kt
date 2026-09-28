@@ -66,8 +66,10 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.update.UpdateState
+import dev.stevenjin.stevenpiano.web.WebStatus
 
 /** The hub's column beside the open page on wide screens. */
 private val HubWidth = 360.dp
@@ -75,7 +77,7 @@ private val HubWidth = 360.dp
 /**
  * The Piano tab's hub (DESIGN.md › v1.5): the header and byline, the connection card with the
  * piano's status line under it, the UPDATE row while a newer release is known, then the groups
- * (PIANO, PLAYING, APP; CONTROL once it has rows), each row a page with its one-line value or one of
+ * (PIANO, PLAYING, CONTROL, APP), each row a page with its one-line value or one of
  * the app's switches and actions, and the About row at the very bottom. Phones show the hub alone
  * and a page row pushes its page over it ([onOpenPage]). Wide screens set the hub in a 360 dp
  * column with the open page beside it, set off by a hairline; the open page's row is filled with
@@ -173,6 +175,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val playing by vm.playing.collectAsStateWithLifecycle()
     val piano by vm.piano.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
+    val web by vm.web.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val context = LocalContext.current
     var canInstall by remember { mutableStateOf(vm.canInstall()) }
@@ -180,7 +183,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide) { GroupSummaries.from(piano, settings, frame.wide) }
+    val summaries = remember(piano, settings, frame.wide, web) { GroupSummaries.from(piano, settings, frame.wide, web) }
 
     Column(modifier) {
         ScreenHeader("Piano", Modifier.readingWidth())
@@ -252,6 +255,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm)
                     SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                     SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
+                    SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
                 }
                 Spacer(Modifier.height(24.dp))
                 Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))
@@ -268,6 +272,13 @@ private fun pianoReport(vm: PianoViewModel): PianoReport {
     val statusText by vm.statusText.collectAsStateWithLifecycle()
     val statusReading by vm.statusReading.collectAsStateWithLifecycle()
     return PianoReport(piano, link is LinkState.Connected, statusText, statusReading)
+}
+
+/** Where the web panel listens, as it changes. */
+@Composable
+private fun webStatus(vm: PianoViewModel): WebStatus {
+    val web by vm.web.collectAsStateWithLifecycle()
+    return web
 }
 
 /** The app's preferences, as they change. */

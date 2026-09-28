@@ -368,6 +368,22 @@ class AppGraph(private val app: Application) {
     }
 
     /**
+     * Web control on or off (Piano › Remote control): the switch is saved first, so the service,
+     * which follows it, sees it on when it starts; off, the service stops and every session ends.
+     */
+    fun setWebEnabled(on: Boolean) {
+        appScope.launch {
+            settingsRepository.setWebEnabled(on)
+            if (on) {
+                if (!WebService.start(app)) web.report(web.status.value.copy(problem = "Android refused to start the web service."))
+            } else {
+                WebService.stop(app)
+                web.turnedOff()
+            }
+        }
+    }
+
+    /**
      * The app came to the foreground (where a foreground service may start): with Web control on and
      * a PIN set, the web service starts, after a restart of the tablet or of the app.
      */

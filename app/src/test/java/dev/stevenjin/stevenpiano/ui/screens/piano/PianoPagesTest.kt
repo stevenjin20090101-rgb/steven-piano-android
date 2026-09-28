@@ -82,18 +82,19 @@ class PianoPagesTest {
     }
 
     @Test
-    fun `the hub's groups run piano, playing, app, and control waits for its rows`() {
+    fun `the hub's groups run piano, playing, control, app, and control has Remote control`() {
         assertEquals(listOf("Piano", "Playing", "Control", "App"), HubGroups.all.map { it.title })
-        assertTrue(HubGroups.all.single { it.title == "Control" }.rows.isEmpty())
-        assertEquals("an empty group shows nothing, not even its eyebrow", listOf("Piano", "Playing", "App"), HubGroups.shown.map { it.title })
+        assertEquals("with its first row the CONTROL eyebrow shows", listOf("Piano", "Playing", "Control", "App"), HubGroups.shown.map { it.title })
         assertEquals(
             listOf(
                 listOf(HubRow.Page(SettingsPage.Feel), HubRow.Page(SettingsPage.Lighting), HubRow.Page(SettingsPage.Pedal), HubRow.Page(SettingsPage.Firmware)),
                 listOf(HubRow.Page(SettingsPage.Playback), HubRow.Page(SettingsPage.Display)),
+                listOf(HubRow.Page(SettingsPage.Remote)),
                 listOf(HubRow.AutoConnect, HubRow.CheckForUpdates, HubRow.CheckNow, HubRow.ShareDiagnostics),
             ),
             HubGroups.shown.map { it.rows },
         )
+        assertTrue("a group without rows still shows nothing", HubGroups.shown.none { it.rows.isEmpty() })
     }
 
     @Test

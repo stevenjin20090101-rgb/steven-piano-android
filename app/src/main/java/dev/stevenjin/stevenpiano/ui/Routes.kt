@@ -36,7 +36,8 @@ enum class Route(val path: String, val label: String, @param:DrawableRes val ico
 /**
  * The Piano tab's pages (DESIGN.md › v1.5), each opened from a row of the hub: `piano/{key}` on
  * phones, beside the hub on wide screens. [piano] is the piano page it shows, for the four whose rows
- * come from the piano's settings table. Later runs add Schedule, Remote control, Kiosk and Studio.
+ * come from the piano's settings table. Remote control (the web panel) came in v1.5.1; later runs
+ * add Schedule, Kiosk and Studio.
  */
 enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?) {
     Feel("feel", "Feel", PianoPage.Feel),
@@ -45,6 +46,7 @@ enum class SettingsPage(val key: String, val title: String, val piano: PianoPage
     Firmware("firmware", "Firmware and status", PianoPage.Firmware),
     Playback("playback", "Playback", null),
     Display("display", "Display", null),
+    Remote("remote", "Remote control", null),
     ;
 
     companion object {
@@ -70,7 +72,7 @@ object PianoRoutes {
     fun isPage(route: String?): Boolean = route == PAGE
 
     /**
-     * A page's key in its route: one of [SettingsPage]'s six and nothing else. Navigation finds a
+     * A page's key in its route: one of [SettingsPage]'s keys and nothing else. Navigation finds a
      * graph's start (and a route to pop to) by the first destination whose pattern matches, so
      * with a plain string `piano/{page}` would also match `piano/hub` and open a page named "hub";
      * a key that is not a page fails to parse here, so it matches nothing.
