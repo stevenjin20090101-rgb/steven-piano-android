@@ -139,20 +139,43 @@ class WebAuthTest {
     }
 
     @Test
-    fun `wrong PINs from many addresses lock everyone, and the right one clears the count`() {
+    fun `one address hammering wrong PINs no longer locks the gate for everyone (audit W1)`() {
+        val now = 0L
+        val guard = LoginGuard(clock = { now })
+        // Five wrong PINs lock the one address that sent them, for thirty seconds...
+        repeat(5) { guard.failed("10.0.0.1") }
+        assertEquals(30_000L, guard.waitMs("10.0.0.1"))
+        // ...but a different address is still free: the old shared lock barred everyone here.
+        assertEquals("a fresh address is not locked by another's failures", 0L, guard.waitMs("10.9.9.9"))
+        // A whole burst from one address still cannot reach the (much higher) global threshold: once
+        // that address is locked its further tries are refused uncounted, so nobody else is affected.
+        repeat(50) { if (guard.waitMs("10.0.0.1") == 0L) guard.failed("10.0.0.1") }
+        assertEquals("one address cannot lock everyone", 0L, guard.waitMs("10.9.9.9"))
+    }
+
+    @Test
+    fun `the global gate still bounds a distributed brute force, but gently and capped at a minute`() {
         var now = 0L
         val guard = LoginGuard(clock = { now })
-        (1..4).forEach { guard.failed("10.0.0.$it") }
-        assertEquals(0L, guard.waitMs("10.0.0.9"))
-        guard.failed("10.0.0.5")
-        assertEquals("the fifth wrong PIN anywhere locks every address", 30_000L, guard.waitMs("10.0.0.9"))
-        now += 30_000
-        guard.succeeded("10.0.0.9")
-        assertEquals(0L, guard.waitMs("10.0.0.1"))
-        repeat(3) { guard.failed("10.0.0.1") }
-        assertEquals("everyone's count started again (this address holds four)", 0L, guard.waitMs("10.0.0.1"))
-        guard.failed("10.0.0.1")
-        assertEquals("its own fifth locks it", 30_000L, guard.waitMs("10.0.0.1"))
+        // One under the global threshold, spread over addresses that each stay below their own
+        // five-in-a-row lock (four each), and a fresh caller is still free.
+        repeat(LoginGuard.GLOBAL_THRESHOLD - 1) { guard.failed("10.1.${it / 4}.${it % 4}") }
+        assertEquals("under the global threshold nobody else is locked", 0L, guard.waitMs("10.9.9.9"))
+        // The threshold'th wrong PIN trips the global gate — for five seconds, not the thirty the old shared lock gave after five.
+        guard.failed("10.1.9.9")
+        assertEquals(LoginGuard.GLOBAL_FIRST_LOCK_MS, guard.waitMs("10.9.9.9"))
+        // However long the flood runs (rotating addresses dodge the per-address lock), the global wait doubles but never past a minute.
+        val waits = mutableListOf<Long>()
+        var fresh = 0
+        repeat(8) {
+            now += guard.waitMs("10.2.2.2")
+            waits += guard.failed("10.3.${fresh / 200}.${fresh % 200}").also { fresh++ }
+        }
+        assertEquals(listOf(10_000L, 20_000L, 40_000L, 60_000L, 60_000L, 60_000L, 60_000L, 60_000L), waits)
+        assertTrue("the global wait is capped at a minute, unlike the per-address ten", waits.all { it <= LoginGuard.GLOBAL_MAX_LOCK_MS })
+        // A right PIN from anyone clears the global count, freeing every address at once.
+        guard.succeeded("10.9.9.9")
+        assertEquals(0L, guard.waitMs("10.9.9.9"))
     }
 
     @Test

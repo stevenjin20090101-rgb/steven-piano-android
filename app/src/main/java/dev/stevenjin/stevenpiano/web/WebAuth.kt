@@ -162,18 +162,33 @@ class Sessions(
 }
 
 /**
- * Slows down guessing a PIN (the panel's now, the kiosk's in M20). Wrong tries are counted per
- * [key] (the web panel's: the client's address) and across all keys together; after [threshold]
- * wrong tries in a row a key (or everyone) must wait [firstLockMs], and every wrong try after that
- * doubles the wait, up to [maxLockMs]. A right PIN clears its key's count and the global one.
- * While a wait runs nothing is weighed: a try then is refused without being counted, so hammering
- * never lengthens it. At most [maxKeys] keys are remembered (the oldest forgotten first). Thread-safe.
+ * Slows down guessing a PIN (the panel's now, the kiosk's in M20). Wrong tries are counted two
+ * ways, on two different schedules:
+ *
+ * - **Per [key]** (the web panel's key is the client's address): after [threshold] wrong tries in a
+ *   row that key must wait [firstLockMs], doubling to [maxLockMs] (30 s → 10 min). This stops one
+ *   address hammering a random PIN.
+ * - **Across every key together**: a far gentler ceiling that bounds a brute force spread over many
+ *   addresses (a per-address lock is escaped by rotating addresses, since at most [maxKeys] are
+ *   remembered). It trips only after [globalThreshold] wrong tries in a row — much higher than
+ *   [threshold] — and its wait is short and shallow-capped ([globalFirstLockMs] → [globalMaxLockMs],
+ *   5 s → 1 min). So one device that can reach the panel can no longer shut the gate for everyone
+ *   for ten minutes at a time (audit 1.5.1, W1): the most it can impose on the owner is a minute,
+ *   ridden out; a random six-digit PIN still takes on the order of a year to grind through at
+ *   ~1,440 tries a day, behind the tailnet.
+ *
+ * A right PIN from a key clears that key's count and the global one. While a wait runs nothing is
+ * weighed: a try then is refused without being counted, so hammering never lengthens it. At most
+ * [maxKeys] keys are remembered (the oldest forgotten first). Thread-safe.
  */
 class LoginGuard(
     private val clock: () -> Long = System::currentTimeMillis,
     private val threshold: Int = THRESHOLD,
     private val firstLockMs: Long = FIRST_LOCK_MS,
     private val maxLockMs: Long = MAX_LOCK_MS,
+    private val globalThreshold: Int = GLOBAL_THRESHOLD,
+    private val globalFirstLockMs: Long = GLOBAL_FIRST_LOCK_MS,
+    private val globalMaxLockMs: Long = GLOBAL_MAX_LOCK_MS,
     private val maxKeys: Int = MAX_KEYS,
 ) {
     private class Record(var failures: Int = 0, var lockMs: Long = 0, var lockedUntil: Long = 0)
@@ -185,7 +200,7 @@ class LoginGuard(
     @Synchronized
     fun waitMs(key: String): Long {
         val now = clock()
-        return maxOf(remaining(records[key], now), remaining(everyone, now))
+        return maxOf(remaining(records[key], now, maxLockMs), remaining(everyone, now, globalMaxLockMs))
     }
 
     /** A wrong PIN from [key]: counted for it and for everyone. Returns the wait now in force (0 when none yet). */
@@ -194,9 +209,9 @@ class LoginGuard(
         val now = clock()
         val record = records.getOrPut(key) { Record() }
         while (records.size > maxKeys) records.remove(records.keys.first())
-        count(record, now)
-        count(everyone, now)
-        return maxOf(remaining(record, now), remaining(everyone, now))
+        count(record, now, threshold, firstLockMs, maxLockMs)
+        count(everyone, now, globalThreshold, globalFirstLockMs, globalMaxLockMs)
+        return maxOf(remaining(record, now, maxLockMs), remaining(everyone, now, globalMaxLockMs))
     }
 
     /** The right PIN from [key]: its count starts again, and so does everyone's. */
@@ -212,19 +227,25 @@ class LoginGuard(
     @Synchronized
     fun keyCount(): Int = records.size
 
-    private fun count(record: Record, now: Long) {
+    private fun count(record: Record, now: Long, threshold: Int, firstLockMs: Long, maxLockMs: Long) {
         record.failures++
         if (record.failures < threshold) return
         record.lockMs = if (record.lockMs == 0L) firstLockMs else minOf(record.lockMs * 2, maxLockMs)
         record.lockedUntil = now + record.lockMs
     }
 
-    private fun remaining(record: Record?, now: Long): Long = if (record == null) 0L else (record.lockedUntil - now).coerceIn(0L, maxLockMs)
+    private fun remaining(record: Record?, now: Long, cap: Long): Long = if (record == null) 0L else (record.lockedUntil - now).coerceIn(0L, cap)
 
     companion object {
         const val THRESHOLD = 5
         const val FIRST_LOCK_MS = 30_000L
         const val MAX_LOCK_MS = 10 * 60_000L
+
+        /** The gate for everyone together: higher, shorter and shallower than the per-address one, so it bounds a distributed brute force without becoming a denial-of-service lever. */
+        const val GLOBAL_THRESHOLD = 20
+        const val GLOBAL_FIRST_LOCK_MS = 5_000L
+        const val GLOBAL_MAX_LOCK_MS = 60_000L
+
         const val MAX_KEYS = 256
     }
 }

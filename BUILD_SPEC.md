@@ -2737,9 +2737,12 @@ the next update".
 - `Sessions`: 32 random bytes as URL-safe base64 (43 characters); only their SHA-256 is kept; at
   most 10 (the least recently used goes); forgotten after 24 h unused; in memory only, so a
   restart of the app signs everyone out, as do a new PIN and turning Web control off.
-- `LoginGuard`: per client address and for everyone together, 5 wrong PINs in a row → 30 s, each
-  wrong PIN after that doubling it up to 10 min; tries during a wait are refused (429) uncounted; a
-  right PIN clears its address and the global count; at most 256 addresses remembered.
+- `LoginGuard`: two schedules (split in audit delta 1, W1, so the global one is not a
+  denial-of-service lever). Per client address: 5 wrong PINs in a row → 30 s, doubling to 10 min.
+  For everyone together (a ceiling on a brute force spread over rotating addresses): a far gentler
+  gate that trips only after 20 wrong in a row and waits 5 s → 60 s, so no single reachable device
+  can shut the panel for anyone but itself. Tries during a wait are refused (429) uncounted; a right
+  PIN clears its address and the global count; at most 256 addresses remembered.
 - Cookies: `sp_session=…; HttpOnly; SameSite=Strict; Path=/` (a browser-session cookie, no
   `Secure`: the panel is plain HTTP); `sp_guest=<16 random bytes>; HttpOnly; SameSite=Strict;
   Path=/; Max-Age=31536000`. At most 32 cookies read from a header, the first of a name winning.
