@@ -44,7 +44,8 @@ class DownloadFailure(val problem: DownloadProblem, cause: Throwable? = null) : 
  * read, and the free space kept beside it. The bytes go to `<name>.part` while their SHA-256 is
  * computed on the way; more than the size or the cap stops at once, and the part is renamed to its
  * name only once size and hash match. Anything else deletes the part and throws [DownloadFailure]; a
- * cancel deletes it too. Nothing is resumed: a new download starts from the first byte. Progress is
+ * cancel deletes it too, and so does any other throw (audit delta 2: a RuntimeException from below used
+ * to leave up to the whole file behind until the app's next start). Nothing is resumed: a new download starts from the first byte. Progress is
  * reported every [Target.progressEveryBytes] (and at the end).
  */
 @SuppressLint("UsableSpace")   // a floor under the file and its margin, not an allocation (as the web panel's uploads ask it)
@@ -116,6 +117,9 @@ class VerifiedDownloader(
         } catch (e: IOException) {
             part.delete()
             throw DownloadFailure(if (count > 0) DownloadProblem.Stopped else DownloadProblem.Unreachable, e)
+        } catch (e: Throwable) {   // anything else (a RuntimeException from the platform's HTTP): the part goes all the same
+            part.delete()
+            throw e
         }
     }
 

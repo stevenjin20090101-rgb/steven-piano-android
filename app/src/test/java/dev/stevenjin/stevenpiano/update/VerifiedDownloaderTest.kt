@@ -138,6 +138,23 @@ class VerifiedDownloaderTest {
         assertTrue(dir.list()!!.isEmpty())
     }
 
+    @Test
+    fun `whatever else is thrown half-way, the part goes with it (audit delta 2)`() = runBlocking {
+        val breaking = object : UpdateServer by server {
+            override suspend fun download(url: String, cap: Long, sink: (ByteArray, Int) -> Unit) {
+                sink(ByteArray(64 * 1024) { 1 }, 64 * 1024)
+                throw IllegalStateException("the platform's HTTP gave up")
+            }
+        }
+        try {
+            VerifiedDownloader(breaking, Dispatchers.Unconfined) { free }.download(target())
+            fail()
+        } catch (e: IllegalStateException) {
+            // as thrown
+        }
+        assertEquals("no part left behind", emptyList<String>(), dir.list()!!.toList())
+    }
+
     private suspend fun failsWith(problem: DownloadProblem, block: suspend () -> Unit) {
         try {
             block()
