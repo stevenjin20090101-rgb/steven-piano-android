@@ -106,6 +106,17 @@ class ArtworkRepository(
     /** The row for [key] as last read, without waiting: a first frame without a flash of fallback art. */
     fun peek(key: String): ArtworkEntity? = rows.value?.get(key)
 
+    /**
+     * The composers (by `composerKey`) whose portrait the app holds, as the table reads now: the web
+     * panel shows those portraits and every other piece's roll card. None when it can't be read.
+     */
+    suspend fun portraitComposers(): Set<String> = readOr(emptySet()) {
+        rows.filterNotNull().first().values.asSequence()
+            .filter { it.status == ArtworkStatus.OK && it.imagePath != null && it.key.startsWith(COMPOSER_PREFIX) }
+            .map { it.key.removePrefix(COMPOSER_PREFIX) }
+            .toSet()
+    }
+
     /** Fetches [key] when it is due: first in line when [priority] (a sheet just opened), otherwise last. */
     fun request(key: ArtKey, priority: Boolean = false, force: Boolean = false) = worker.request(key, priority, force)
 
@@ -235,5 +246,6 @@ class ArtworkRepository(
         const val MOSAIC_PIECES = 4
         const val ROLL_CARD_DIR = "rollcards"
         val PIECE_PREFIX = ArtworkEntity.forPiece(0).removeSuffix("0")
+        val COMPOSER_PREFIX = ArtworkEntity.forComposer("")
     }
 }

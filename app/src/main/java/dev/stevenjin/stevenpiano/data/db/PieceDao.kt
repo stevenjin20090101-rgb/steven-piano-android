@@ -67,6 +67,10 @@ interface PieceDao {
     @Query("SELECT * FROM pieces")
     suspend fun list(): List<PieceEntity>
 
+    /** The pieces among [ids] (at most 500 at a time), whole, in no particular order: the web panel's Up next. */
+    @Query("SELECT * FROM pieces WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<PieceEntity>
+
     /** Which of [ids] (at most 500 at a time) are still in the library. */
     @Query("SELECT id FROM pieces WHERE id IN (:ids)")
     suspend fun existing(ids: List<Long>): List<Long>

@@ -340,6 +340,16 @@ class AppGraph(private val app: Application) {
     }
 
     /**
+     * A file sent from the web panel could not even be opened (a zip that is not one, or holds past
+     * its entry cap): the Library's import bar and the panel's tally count it as one failed file,
+     * unless an import is running, whose progress they keep showing.
+     */
+    fun reportFailedImport() {
+        if (!importState.value.finished) return
+        importState.value = ImportProgress(done = 1, total = 1, failed = 1)
+    }
+
+    /**
      * The app came to the foreground, where a foreground service may start: if the person lets
      * artwork arrive by itself, the device is online, and some composer was never looked up (a
      * library from 1.1, an import made offline) or failed a day ago or more, the fetch starts.

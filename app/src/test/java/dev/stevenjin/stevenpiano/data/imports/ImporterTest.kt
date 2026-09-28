@@ -181,6 +181,33 @@ class ImporterTest {
         assertTrue(again.finished)
     }
 
+    @Test
+    fun `an opened source imports under the same lock and caps, and is closed at the end`() = runTest {
+        var closed = 0
+        val source = OpenedSource(listOf(item("Chopin - Nocturne.mid", midi(62)), item("broken.mid", "no".toByteArray())), release = { closed++ })
+        val result = importer.importOpened(source)
+        assertEquals(ImportProgress(done = 2, total = 2, imported = 1, failed = 1, finished = true), result)
+        assertEquals(result, progress.value)
+        assertEquals("the source is closed once read", 1, closed)
+        assertEquals("Nocturne", store.pieces.single().title)
+        val again = importer.importOpened(OpenedSource(listOf(item("Chopin - Nocturne.mid", midi(62))), release = { closed++ }))
+        assertEquals("the same bytes again are a duplicate", 1, again.duplicates)
+        assertEquals(2, closed)
+    }
+
+    @Test
+    fun `an opened source whose listing throws still finishes, closed, with the rest counted as failed`() = runTest {
+        var closed = false
+        val bad = object : AbstractList<ImportItem>() {
+            override val size: Int get() = 2
+
+            override fun get(index: Int): ImportItem = throw IllegalStateException("a listing that breaks")
+        }
+        val result = importer.importOpened(OpenedSource(bad, release = { closed = true }))
+        assertTrue(result.finished)
+        assertTrue(closed)
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()

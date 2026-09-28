@@ -116,6 +116,13 @@ class LibraryRepository(
         return found
     }
 
+    /** The pieces among [ids] still in the library, whole, by id; asked [SQL_CHUNK] at a time. */
+    suspend fun pieces(ids: Collection<Long>): Map<Long, PieceEntity> {
+        val found = HashMap<Long, PieceEntity>(ids.size)
+        for (chunk in ids.distinct().chunked(SQL_CHUNK)) pieces.byIds(chunk).forEach { found[it.id] = it }
+        return found
+    }
+
     /** Removes the piece, its playlist links and its file. Irreversible. */
     suspend fun delete(id: Long) {
         val piece = pieces.byId(id) ?: return

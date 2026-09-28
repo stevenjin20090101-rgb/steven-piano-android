@@ -76,17 +76,32 @@ class Importer(
                 log("Couldn't open the import: $TOO_LARGE")
                 return@withContext ImportProgress(done = 1, total = 1, failed = 1).also { progress.value = it }
             }
-            try {
-                opened.use { run(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: RuntimeException) {   // not a file's fault (each is caught on its own): the rest count as failed
-                log("The import stopped" + detail(e))
-                val last = progress.value
-                last.copy(done = last.total, failed = last.failed + (last.total - last.done), current = null, finished = true)
-                    .also { progress.value = it }
-            }
+            runOpened(opened)
         }
+    }
+
+    /**
+     * Imports a source already opened (the web panel's upload: one MIDI file in memory, or a zip
+     * saved in the cache), as [import] does once it has opened its own: one import at a time, the
+     * same caps, [progress] kept, and [source] closed at the end whatever happens.
+     */
+    suspend fun importOpened(source: OpenedSource): ImportProgress = running.withLock {
+        withContext(io) {
+            progress.value = ImportProgress(finished = false)
+            runOpened(source)
+        }
+    }
+
+    /** [run] over [opened], then closes it; a failure that is no file's fault counts the rest as failed. */
+    private suspend fun runOpened(opened: OpenedSource): ImportProgress = try {
+        opened.use { run(it) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: RuntimeException) {   // not a file's fault (each is caught on its own): the rest count as failed
+        log("The import stopped" + detail(e))
+        val last = progress.value
+        last.copy(done = last.total, failed = last.failed + (last.total - last.done), current = null, finished = true)
+            .also { progress.value = it }
     }
 
     /** Imports everything [source] lists and returns the final tally. */
