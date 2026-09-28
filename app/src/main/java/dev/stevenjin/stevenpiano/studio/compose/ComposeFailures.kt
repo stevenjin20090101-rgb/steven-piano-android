@@ -15,6 +15,9 @@ package dev.stevenjin.stevenpiano.studio.compose
  */
 object ComposeFailures {
     const val NO_SEED = "That piece has no notes to start from. Choose another."
+    const val SEED_GONE = "That piece is no longer in the library. Choose another."
+    const val EMPTY_LIBRARY = "A composition starts from a piece in the library. Add one first."
     const val RAN_OUT = "The tablet ran short of memory, so composing stopped. Close other apps and try again."
     const val NO_MUSIC = "The model didn't write any notes this time. Try again."
+    const val FAILED = "The composition didn't finish."
 }

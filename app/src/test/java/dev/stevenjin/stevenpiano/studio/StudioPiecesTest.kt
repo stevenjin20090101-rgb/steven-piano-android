@@ -17,7 +17,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.time.ZoneId
+import dev.stevenjin.stevenpiano.midi.SmfWriter
+import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
+import dev.stevenjin.stevenpiano.studio.compose.Composition
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.abs
 
@@ -82,6 +87,28 @@ class StudioPiecesTest {
         }
         assertEquals(listOf(127, 0), midi.events.filter { it.command == 0xB0 && it.data1 == 64 }.map { it.data2 })
         assertEquals(ComposerNames.STUDIO, "Made in Studio")
+    }
+
+    @Test
+    fun `a composition becomes a piece named for when it was made, at its own tempo, described by its seed`() = runBlocking {
+        val notes = listOf(SmfWriter.Note(0, 600_000, 62, 44), SmfWriter.Note(625_000, 1_250_000, 66, 50), SmfWriter.Note(1_250_000, 2_500_000, 69, 38))
+        val piece = pieces.addComposition(Composition(notes, 96, 2_500_000), "Clair de lune (Claude Debussy)", at)
+        val title = "Composition · Sep 28, 2026 " + DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Locale.US).format(at)
+        assertEquals(StudioPiece(41, title), piece)
+        assertTrue(title, title.startsWith("Composition · Sep 28, 2026 2:03"))
+        val (fileName, bytes, names) = library.added.single()
+        assertEquals("$title.mid", fileName)
+        assertEquals(title to "Made in Studio", names)
+        assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", library.described[41])
+        val midi = SmfParser.parse(bytes)
+        assertEquals(title, midi.sequenceName)
+        assertEquals(listOf("Made in Studio, 2026-09-28 14:03:05"), midi.texts)
+        assertEquals("96 bpm", 625_000, midi.tempoMap.tempoAt(0))
+        assertEquals(listOf(0L, 480L, 960L), (0 until 3).map { midi.tempoMap.microsToTicks(midi.notes.startMicros[it]) })
+        assertEquals(listOf(62, 66, 69), (0 until 3).map { midi.notes.note(it) })
+        assertEquals(listOf(44, 50, 38), (0 until 3).map { midi.notes.velocity(it) })
+        assertTrue("no pedal", midi.events.none { it.command == 0xB0 })
+        failsWith(ComposeFailures.NO_MUSIC) { pieces.addComposition(Composition(emptyList(), 96, 0), "X", at) }
     }
 
     @Test

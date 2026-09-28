@@ -10,10 +10,13 @@
 package dev.stevenjin.stevenpiano.studio
 
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.data.LibraryRepository
+import dev.stevenjin.stevenpiano.data.PieceUnavailableException
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.imports.ImportItem
 import dev.stevenjin.stevenpiano.data.imports.IndexCsv
 import dev.stevenjin.stevenpiano.data.imports.OpenedSource
+import dev.stevenjin.stevenpiano.studio.compose.SeedPiece
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,4 +54,19 @@ class AppStudioLibrary(private val graph: AppGraph) : StudioLibrary {
     /** One CSV field, quoted when it holds a comma, a quote or a line break (RFC 4180). */
     private fun csv(field: String): String =
         if (field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + field.replace("\"", "\"\"") + "\"" else field
+}
+
+/**
+ * [SeedSource] over the library (v1.7 — M24): a seed is a piece of the library, read and parsed as the
+ * player reads it; nothing from anywhere else, and no text of anyone's, reaches the composing model.
+ */
+class LibrarySeeds(private val library: LibraryRepository) : SeedSource {
+    override suspend fun seed(pieceId: Long): SeedPiece? = try {
+        val piece = library.load(pieceId)
+        SeedPiece(piece.title, piece.composer.takeIf { it.isNotBlank() }, piece.midi)
+    } catch (e: PieceUnavailableException) {
+        null
+    }
+
+    override suspend fun defaultPieceId(): Long? = library.seedPiece()?.id
 }

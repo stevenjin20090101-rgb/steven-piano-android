@@ -54,7 +54,7 @@ object ModelCatalogue {
         use = "Turns a piano recording into a piece.",
     )
 
-    /** The Anticipatory Music Transformer (Thickstun et al., Stanford CRFM), INT8 ONNX: composing, from the next update. */
+    /** The Anticipatory Music Transformer (Thickstun et al., Stanford CRFM), INT8 ONNX: new pieces in the manner of the library's (v1.7 — M24). */
     val composer = ModelEntry(
         name = "composer",
         version = 1,
@@ -66,7 +66,7 @@ object ModelCatalogue {
         attribution = "Anticipatory Music Transformer — Thickstun et al., Stanford CRFM, Apache 2.0, Hugging Face stanford-crfm/music-small-800k",
         title = "Composing",
         licenceLabel = "Apache 2.0",
-        use = "For composing, which comes in the next update.",
+        use = "Writes a new piano piece in the manner of one in the library.",
     )
 
     /** In the Studio page's order. */

@@ -16,15 +16,17 @@ import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.studio.StudioFailures
 import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.studio.StudioJobs
+import dev.stevenjin.stevenpiano.studio.StudioPieces
 import dev.stevenjin.stevenpiano.studio.StudioSupport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Locale
 
-/** What Studio says (v1.7 — M23): the hub's value, the models' lines, each job's line, the notification. */
+/** What Studio says (v1.7 — M23, M24): the hub's value, the models' lines, each job's line, the notification. */
 class StudioCopyTest {
     private val transcribing = StudioJob(1, JobKind.Transcribe, "Clair de lune.m4a", JobState.Running, JobStep.Transcribing, 0.42f)
+    private val composing = StudioJob(3, JobKind.Compose, "Clair de lune", JobState.Running, JobStep.Composing, 0.42f)
     private val downloading = StudioJob(2, JobKind.Download, "Transcription model", JobState.Running, JobStep.Downloading, 0.34f, bytes = 42_300_000, total = 124_511_036)
 
     @Test
@@ -81,6 +83,45 @@ class StudioCopyTest {
         assertEquals("Adding Clair de lune.m4a to the library…", StudioCopy.libraryLine(transcribing.copy(step = JobStep.Saving)))
         assertEquals("Downloading the transcription model · 42 of 125 MB", StudioCopy.libraryLine(downloading, Locale.US))
         assertEquals("Downloading the transcription model", StudioCopy.libraryLine(downloading.copy(step = JobStep.Waiting)))
+    }
+
+    @Test
+    fun `a composition reads as composing in the manner of its seed, then as the piece it made`() {
+        assertEquals("Composing 42%", StudioCopy.hub(2, listOf(composing)))
+        assertEquals("Composing", StudioCopy.hub(2, listOf(composing.copy(step = JobStep.Waiting, progress = null))))
+        assertEquals("Composing · 42%", StudioCopy.jobLine(composing))
+        assertEquals("Adding it to the library…", StudioCopy.jobLine(composing.copy(step = JobStep.Saving, progress = null)))
+        assertEquals("Composing in the manner of Clair de lune", StudioCopy.notificationTitle(composing))
+        assertEquals("Composing in the manner of Clair de lune · 42%", StudioCopy.libraryLine(composing))
+        assertEquals("Adding the composition to the library…", StudioCopy.libraryLine(composing.copy(step = JobStep.Saving)))
+        assertEquals("In the manner of Clair de lune", StudioCopy.jobName(composing))
+        assertEquals("In the manner of Clair de lune", StudioCopy.jobTitle(composing))
+        assertEquals("Clair de lune.m4a", StudioCopy.jobTitle(transcribing))
+        val made = composing.copy(state = JobState.Done, step = JobStep.Waiting, pieceId = 12, title = "Composition · Sep 28, 2026 2:05 PM")
+        assertEquals("Composition · Sep 28, 2026 2:05 PM", StudioCopy.jobTitle(made))
+        assertEquals("Ready: listen, then keep it or discard it", StudioCopy.jobLine(made, undecided = setOf(12L)))
+        assertEquals("Composition · Sep 28, 2026 2:05 PM is in the library", StudioCopy.ended(made))
+        assertEquals("The composition didn't finish", StudioCopy.ended(composing.copy(state = JobState.Failed)))
+        assertEquals("Compose a piece…", StudioCopy.COMPOSE)
+        assertEquals("Runs on this tablet. About a minute for a two-minute piece.", StudioCopy.COMPOSE_NOTE)
+        assertEquals("Downloads the composing model (173 MB) first.", StudioCopy.downloadsFirst(ModelCatalogue.composer))
+        assertEquals(StudioCopy.COMPOSE_NOTE, StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, setOf("composer")))
+        assertEquals(
+            "Runs on this tablet. About a minute for a two-minute piece. Downloads the composing model (173 MB) first.",
+            StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, setOf("transcription")),
+        )
+        assertEquals("Writes a new piano piece in the manner of one in the library.", ModelCatalogue.composer.use)
+    }
+
+    @Test
+    fun `Keep or Discard says what a composition is in the manner of, and a transcription what it was`() {
+        val description = StudioPieces.compositionDescription("Clair de lune (Claude Debussy)")
+        assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", description)
+        assertEquals("Composed in Studio in the manner of Clair de lune (Claude Debussy). Discard deletes it.", StudioCopy.reviewLine(description))
+        assertEquals(StudioCopy.REVIEW_LINE, StudioCopy.reviewLine("Made in Studio · Sep 28, 2026"))
+        assertEquals(StudioCopy.REVIEW_LINE, StudioCopy.reviewLine(null))
+        assertEquals(StudioCopy.REVIEW_LINE, StudioCopy.reviewLine("Made in Studio · in the manner of "))
+        assertEquals("Für Elise", StudioPieces.mannerOf(StudioPieces.compositionDescription("Für Elise")))
     }
 
     @Test

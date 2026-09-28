@@ -13,6 +13,8 @@ import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics
 import dev.stevenjin.stevenpiano.midi.SmfWriter
+import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
+import dev.stevenjin.stevenpiano.studio.compose.Composition
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -61,6 +63,31 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
         return StudioPiece(id, title)
     }
 
+    /**
+     * A composition into a piece of the library (v1.7 — M24): "Composition · Sep 28, 2026 2:05 PM" by
+     * [ComposerNames.STUDIO], its notes written at the tempo it was composed at ([Composition.bpm]) with
+     * "Made in Studio, <time>" as its text, then described "Made in Studio · in the manner of [mannerOf]"
+     * ([compositionDescription]). One without a note is refused ([ComposeFailures.NO_MUSIC]); one the
+     * library couldn't take is [StudioFailures.NOT_SAVED].
+     */
+    suspend fun addComposition(composition: Composition, mannerOf: String, at: ZonedDateTime): StudioPiece {
+        if (composition.notes.isEmpty()) throw StudioFailure(ComposeFailures.NO_MUSIC)
+        val title = compositionTitle(at)
+        val bytes = SmfWriter.write(
+            notes = composition.notes,
+            title = title,
+            text = "${ComposerNames.STUDIO}, ${STAMP.format(at)}",
+            tempoMicros = SmfWriter.tempoOf(composition.bpm),
+        )
+        val fileName = title.replace('/', '-').replace('\\', '-') + ".mid"
+        val id = library.add(fileName, bytes, title, ComposerNames.STUDIO) ?: throw StudioFailure(StudioFailures.NOT_SAVED)
+        library.describe(id, compositionDescription(mannerOf))
+        return StudioPiece(id, title)
+    }
+
+    /** "Composition · Sep 28, 2026 2:05 PM": the date and the time in the device's own style. */
+    fun compositionTitle(at: ZonedDateTime): String = "Composition · ${date(at)} ${TIME.withLocale(locale).format(at)}"
+
     /** The piece's title: the recording's name without its extension, or "Recording · <date>". */
     fun title(recordingName: String?, at: ZonedDateTime): String {
         val base = recordingName?.substringAfterLast('/')?.let { name -> if ('.' in name.drop(1)) name.substringBeforeLast('.') else name }
@@ -75,6 +102,15 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
 
     companion object {
         private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
+        private val TIME = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+        private const val MANNER = "${ComposerNames.STUDIO} · in the manner of "
+
+        /** A composition's line on its sheet: "Made in Studio · in the manner of Clair de lune (Claude Debussy)". */
+        fun compositionDescription(mannerOf: String): String = MANNER + mannerOf
+
+        /** What a sheet's [description] says the piece is in the manner of, when a composition's: "Clair de lune (Claude Debussy)". */
+        fun mannerOf(description: String?): String? =
+            description?.takeIf { it.startsWith(MANNER) }?.removePrefix(MANNER)?.trim()?.takeIf { it.isNotEmpty() }
 
         /** The notes and pedal as a MIDI file: onset and offset to the microsecond, velocities held to 1–127. */
         fun midi(transcription: Transcription, title: String, text: String): ByteArray = SmfWriter.write(

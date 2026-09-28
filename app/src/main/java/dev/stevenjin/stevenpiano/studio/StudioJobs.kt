@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.concurrent.atomic.AtomicLong
 
-/** What a Studio job does: bring a model onto the tablet, or turn a recording into a piece. */
-enum class JobKind { Download, Transcribe }
+/** What a Studio job does: bring a model onto the tablet, turn a recording into a piece, or compose one (v1.7 — M24). */
+enum class JobKind { Download, Transcribe, Compose }
 
 /** Where a job is. */
 enum class JobState {
@@ -31,14 +31,14 @@ enum class JobState {
 }
 
 /** What a running job is doing now. */
-enum class JobStep { Waiting, Downloading, Reading, Transcribing, Saving }
+enum class JobStep { Waiting, Downloading, Reading, Transcribing, Composing, Saving }
 
 /**
  * One of Studio's jobs, as the Studio page, its notification and the web panel show it (v1.7 — M23).
- * [name] is the model's title ("Transcription") or the recording's name; [progress] is 0–1 while its
- * [step] has a measure (null otherwise); [error] is the failure's line. A download names its [model]
- * and counts its [bytes] of [total]; a finished transcription names the piece it made ([pieceId],
- * [title]).
+ * [name] is the model's title ("Transcription"), the recording's name, or the title of the piece a
+ * composition is in the manner of (v1.7 — M24); [progress] is 0–1 while its [step] has a measure (null
+ * otherwise); [error] is the failure's line. A download names its [model] and counts its [bytes] of
+ * [total]; a finished transcription or composition names the piece it made ([pieceId], [title]).
  */
 data class StudioJob(
     val id: Long,

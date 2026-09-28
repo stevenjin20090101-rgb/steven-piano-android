@@ -252,12 +252,21 @@ class SamplerTest {
 
     @Test
     fun `the budget, the end time, progress every 100 tokens, a cancel and the memory guard`() {
-        val heard = ArrayList<Pair<Int, Int>>()
-        val partial = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 250) { made, budget -> heard += made to budget }
+        val heard = ArrayList<Pair<Int, Float>>()
+        val partial = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 250) { made, fraction -> heard += made to fraction }
         assertEquals(250, partial.tokens.size)
         assertEquals("a last partial event isn't one", 83, partial.events.size)
-        assertEquals(listOf(100 to 250, 200 to 250, 250 to 250), heard)
+        assertEquals("the budget's share, then done", listOf(100 to 0.4f, 200 to 0.8f, 250 to 1f), heard)
         assertEquals(Stop.Budget, partial.stop)
+
+        // With an end time, the music's share written counts when it is the larger: 25 ticks an event from 360 to 5,360.
+        val far = ArrayList<Pair<Int, Float>>()
+        val timed = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 3_000, endTime = 5_360) { made, fraction -> far += made to fraction }
+        assertEquals(Stop.EndTime, timed.stop)
+        assertEquals(listOf(100, 200, 300, 400, 500, 597), far.map { it.first })
+        // At token 300 the 100th event's note is being written: the 99th event's time is the latest (2,835).
+        val expected = listOf(0.165f, 0.33f, 0.495f, 0.665f, 0.83f, 1f)
+        for ((got, want) in far.map { it.second }.zip(expected)) assertEquals(want, got, 1e-6f)
 
         val ended = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 3_000, endTime = 1_000)
         assertEquals(Stop.EndTime, ended.stop)

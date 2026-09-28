@@ -31,6 +31,8 @@ object StudioFailures {
     const val NO_ROOM = "There isn't enough free space for the model."
     const val NO_MODEL = "The transcription model isn't on this tablet. Download it first."
     const val MODEL_DAMAGED = "The transcription model was damaged and has been removed. Download it again."
+    const val NO_COMPOSER = "The composing model isn't on this tablet. Download it first."
+    const val COMPOSER_DAMAGED = "The composing model was damaged and has been removed. Download it again."
     const val UNAVAILABLE = "Studio isn't available on this device."
     const val TOO_LITTLE_MEMORY = "This tablet doesn't have enough memory for Studio."
     const val BUSY = "Close other apps and try again."

@@ -35,6 +35,13 @@ interface PieceDao {
     @Query("SELECT * FROM pieces WHERE composerKey = :composerKey ORDER BY titleKey")
     fun byComposer(composerKey: String): Flow<List<PieceEntity>>
 
+    /**
+     * Studio's default seed (v1.7 — M24): the piece played last whose composer isn't [except] (Studio's
+     * own pieces), else the first such by title; null when there is none.
+     */
+    @Query("SELECT * FROM pieces WHERE composer != :except ORDER BY lastPlayedAt IS NULL, lastPlayedAt DESC, titleKey, id LIMIT 1")
+    suspend fun seedPiece(except: String): PieceEntity?
+
     /** A playlist's pieces in its order: position, then title. */
     @Query(
         "SELECT p.* FROM pieces p JOIN collection_pieces cp ON cp.pieceId = p.id " +

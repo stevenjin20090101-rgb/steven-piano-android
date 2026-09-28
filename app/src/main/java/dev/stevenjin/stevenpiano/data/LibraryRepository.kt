@@ -75,6 +75,12 @@ class LibraryRepository(
     /** The last 100 played, or added when never played. */
     fun recent(): Flow<List<PieceEntity>> = pieces.recent()
 
+    /**
+     * Where a composition starts when no piece is chosen (Studio, v1.7 — M24): the piece played last,
+     * else the first by title, never one Studio made; null for a library without such a piece.
+     */
+    suspend fun seedPiece(): PieceEntity? = pieces.seedPiece(ComposerNames.STUDIO)
+
     fun composers(): Flow<List<ComposerGroup>> = pieces.composers()
 
     fun byComposer(composerKey: String): Flow<List<PieceEntity>> = pieces.byComposer(composerKey)

@@ -40,8 +40,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Studio's jobs in the foreground (v1.7 — M23): a `dataSync` service, started whenever a job is queued
- * (a model's download, a recording's transcription), that keeps the process going with the screen off
+ * Studio's jobs in the foreground (v1.7 — M23, M24): a `dataSync` service, started whenever a job is
+ * queued (a model's download, a recording's transcription, a composition), that keeps the process going with the screen off
  * or the app in the background, and shows the job running in a low-importance notification (channel
  * "studio"): what it is, its line and its progress, and Cancel. The jobs themselves run in the app
  * ([dev.stevenjin.stevenpiano.studio.Studio], one at a time, on their own background-priority thread,
@@ -155,11 +155,11 @@ class StudioService : Service() {
         .setContentText(
             when {
                 job.state == JobState.Failed -> job.error
-                job.kind == JobKind.Transcribe -> StudioCopy.LISTEN
+                job.kind != JobKind.Download -> StudioCopy.LISTEN
                 else -> null
             },
         )
-        .setContentIntent(open(if (job.kind == JobKind.Transcribe && job.state == JobState.Done) Route.Library else Route.Piano))
+        .setContentIntent(open(if (job.kind != JobKind.Download && job.state == JobState.Done) Route.Library else Route.Piano))
         .setAutoCancel(true)
         .setSilent(true)
         .build()
@@ -198,7 +198,7 @@ class StudioService : Service() {
         fun createChannel(context: Context) {
             val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
                 .setName("Studio")
-                .setDescription("Progress while a model downloads or a recording is transcribed, and how it ended.")
+                .setDescription("Progress while a model downloads, a recording is transcribed or a piece is composed, and how it ended.")
                 .setShowBadge(false)
                 .build()
             NotificationManagerCompat.from(context).createNotificationChannel(channel)

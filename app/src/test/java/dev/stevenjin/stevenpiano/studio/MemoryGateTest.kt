@@ -40,6 +40,17 @@ class MemoryGateTest {
     }
 
     @Test
+    fun `a composition starts only with 700 MiB free above Android's threshold, and never while memory is low`() {
+        assertEquals(700 * mib, MemoryGate.COMPOSING_FREE_BYTES)
+        assertEquals(734_003_200L, MemoryGate.COMPOSING_FREE_BYTES)
+        val threshold = 216 * mib
+        assertTrue(MemoryGate.canStartComposing(MemorySnapshot(4 * gib, threshold + 700 * mib, threshold, lowMemory = false)))
+        assertFalse(MemoryGate.canStartComposing(MemorySnapshot(4 * gib, threshold + 700 * mib - 1, threshold, lowMemory = false)))
+        assertFalse(MemoryGate.canStartComposing(MemorySnapshot(4 * gib, 3 * gib, threshold, lowMemory = true)))
+        assertFalse("700 MiB is not enough to transcribe", MemoryGate.canStart(MemorySnapshot(4 * gib, threshold + 700 * mib, threshold, lowMemory = false)))
+    }
+
+    @Test
     fun `a transcription under way stops only when the memory is nearly gone`() {
         val threshold = 216 * mib
         assertTrue(MemoryGate.canContinue(MemorySnapshot(4 * gib, threshold + 128 * mib, threshold, lowMemory = false)))

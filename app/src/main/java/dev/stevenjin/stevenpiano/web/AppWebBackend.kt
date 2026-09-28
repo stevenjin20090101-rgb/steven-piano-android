@@ -438,7 +438,7 @@ class AppWebBackend(
                 WebStudioJob(
                     id = job.id,
                     kind = job.kind.name.lowercase(Locale.ROOT),
-                    name = job.name,
+                    name = StudioCopy.jobName(job),
                     state = job.state.name.lowercase(Locale.ROOT),
                     line = StudioCopy.jobLine(job, undecided, discarded),
                     progress = job.progress.takeIf { job.state == JobState.Running },

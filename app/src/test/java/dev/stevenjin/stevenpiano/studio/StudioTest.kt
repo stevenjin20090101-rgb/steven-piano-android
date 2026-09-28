@@ -9,7 +9,17 @@
 
 package dev.stevenjin.stevenpiano.studio
 
+import dev.stevenjin.stevenpiano.midi.SmfBuilder
+import dev.stevenjin.stevenpiano.midi.SmfParser
 import dev.stevenjin.stevenpiano.player.PlayerState
+import dev.stevenjin.stevenpiano.studio.compose.Amt
+import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
+import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.ComposerFixtures
+import dev.stevenjin.stevenpiano.studio.compose.ComposerModel
+import dev.stevenjin.stevenpiano.studio.compose.Mood
+import dev.stevenjin.stevenpiano.studio.compose.MusicKey
+import dev.stevenjin.stevenpiano.studio.compose.SeedPiece
 import dev.stevenjin.stevenpiano.update.FakeUpdateServer
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
@@ -43,8 +53,9 @@ import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 /**
- * Studio's jobs (v1.7 — M23): one at a time on their own thread, a transcription after its model's
- * download, the memory gates, cancelling, every failure a job's line, and the recording given back.
+ * Studio's jobs (v1.7 — M23, M24): one at a time on their own thread, a transcription or a composition
+ * after its model's download, the memory gates, cancelling, every failure a job's line, the recording
+ * given back, and a composition that holds only the new music, at its own tempo.
  */
 class StudioTest {
     @get:Rule
@@ -67,15 +78,27 @@ class StudioTest {
         "tiny", 1, "tiny-v1.onnx", modelUrl, modelBytes.size.toLong(),
         VerifiedDownloader.hex(MessageDigest.getInstance("SHA-256").digest(modelBytes)), "CC0-1.0", "tiny", "Tiny", "CC0", "",
     )
+    private val composerBytes = Random(2).nextBytes(40_000)
+    private val composerUrl = "https://github.com/${UpdateSource.REPOSITORY}/releases/download/models/tunes-v1.onnx"
+    private val tunes = ModelEntry(
+        "tunes", 1, "tunes-v1.onnx", composerUrl, composerBytes.size.toLong(),
+        VerifiedDownloader.hex(MessageDigest.getInstance("SHA-256").digest(composerBytes)), "CC0-1.0", "tunes", "Composing", "CC0", "",
+    )
     private val server = FakeUpdateServer(
         JSONObject().put(
             "models",
             JSONArray().put(
                 JSONObject().put("name", "tiny").put("version", 1).put("file", "tiny-v1.onnx").put("url", modelUrl)
                     .put("sizeBytes", modelBytes.size).put("sha256", tiny.sha256).put("licence", "CC0-1.0").put("attribution", "Tiny"),
+            ).put(
+                JSONObject().put("name", "tunes").put("version", 1).put("file", "tunes-v1.onnx").put("url", composerUrl)
+                    .put("sizeBytes", composerBytes.size).put("sha256", tunes.sha256).put("licence", "CC0-1.0").put("attribution", "Tunes"),
             ),
         ).toString(),
-    ).also { it.files[modelUrl] = modelBytes }
+    ).also {
+        it.files[modelUrl] = modelBytes
+        it.files[composerUrl] = composerBytes
+    }
 
     private var memory = MemorySnapshot(4L shl 30, 3L shl 30, 200L shl 20, lowMemory = false)
     private var online = true
@@ -123,21 +146,89 @@ class StudioTest {
 
     private var silentModel = false
 
+    /** What the library was given: each piece's bytes, composer and file name, and each piece's line. */
+    private val addedFiles = mutableListOf<Triple<String, String, ByteArray>>()
+    private val described = mutableMapOf<Long, String>()
+
     private val library = object : StudioLibrary {
         override suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long {
             added += title
+            addedFiles += Triple(fileName, composer, bytes)
             return 100L + added.size
         }
 
-        override suspend fun describe(pieceId: Long, description: String) = Unit
+        override suspend fun describe(pieceId: Long, description: String) {
+            described[pieceId] = description
+        }
 
         override suspend fun discard(pieceId: Long) = Unit
 
         override suspend fun exists(pieceId: Long) = true
     }
 
+    /**
+     * A composing model that writes key 90 (or 91, a little less likely: the guard allows no more than
+     * four of one note in a row) every 25 ticks, 20 long; [composerGate] holds each token; [composerThreads]
+     * hears where it ran.
+     */
+    private inner class Composer : ComposerModel {
+        private var read = 0
+        private var lastTime = 0
+
+        override fun prefill(tokens: IntArray): FloatArray {
+            read = 0
+            lastTime = 0
+            tokens.forEach(::take)
+            composerThreads += Thread.currentThread().name
+            return next()
+        }
+
+        override fun step(token: Int): FloatArray {
+            take(token)
+            composerGate?.await(5, TimeUnit.SECONDS)
+            return next()
+        }
+
+        private fun take(token: Int) {
+            if (read > 0 && (read - 1) % 3 == 0) lastTime = token
+            read++
+        }
+
+        private fun next(): FloatArray = FloatArray(Amt.VOCAB_SIZE) { Float.NEGATIVE_INFINITY }.also { l ->
+            when ((read - 1) % 3) {
+                0 -> l[lastTime + 25] = 0f
+                1 -> l[Amt.DUR_OFFSET + 20] = 0f
+                else -> {
+                    l[Amt.NOTE_OFFSET + 90] = 1f
+                    l[Amt.NOTE_OFFSET + 91] = 0f
+                }
+            }
+        }
+
+        override fun reset() {
+            read = 0
+        }
+
+        override fun close() = Unit
+    }
+
+    private var composerGate: CountDownLatch? = null
+    private val composerThreads: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    /** The library's seeds: piece 5 is the Bach fixture, 6 has no notes; [defaultSeed] when none is chosen. */
+    private var defaultSeed: Long? = 5L
+    private val seeds = object : SeedSource {
+        override suspend fun seed(pieceId: Long): SeedPiece? = when (pieceId) {
+            5L -> SeedPiece("Prelude in C major", "Johann Sebastian Bach", ComposerFixtures.bach)
+            6L -> SeedPiece("Silence", null, SmfParser.parse(SmfBuilder(format = 0).track { tempo(0, 500_000) }.build()))
+            else -> null
+        }
+
+        override suspend fun defaultPieceId(): Long? = defaultSeed
+    }
+
     private fun studio(): Studio {
-        val models = ModelStore(File(tmp.root, "models"), listOf(tiny))
+        val models = ModelStore(File(tmp.root, "models"), listOf(tiny, tunes))
         val availability = StudioAvailability({ memory }, { runtimeLoads }, { null }, scope, work)
         val reviewPlayer = object : ReviewPlayer {
             override val state = MutableStateFlow(PlayerState())
@@ -169,6 +260,10 @@ class StudioTest {
             clock = { ZonedDateTime.of(2026, 9, 28, 12, 0, 0, 0, ZoneId.of("UTC")) },
             trail = { trailed += it },
             transcriptionModel = tiny,
+            seeds = seeds,
+            openComposer = { Composer() },
+            composerModel = tunes,
+            random = { 24L },
         ).also { it.start() }
     }
 
@@ -286,5 +381,126 @@ class StudioTest {
         assertEquals("installed: nothing to download", null, studio.download(tiny))
         assertTrue(studio.remove(tiny))
         assertEquals(emptySet<String>(), withTimeout(2_000) { studio.models.installed.first { it.isEmpty() } })
+    }
+
+    private fun order(pieceId: Long? = 5L, minutes: Int = 1, mood: Mood = Mood.Calm, key: MusicKey? = null, bpm: Int? = null) =
+        ComposeOrder(pieceId, ComposeRequest(mood, key, bpm, minutes))
+
+    @Test
+    fun `a composition asked for without its model downloads it first, then writes only new music at its tempo, and waits for Keep or Discard`() = runBlocking {
+        val studio = studio()
+        val job = studio.compose(order(key = MusicKey(2, false), bpm = 96), name = "Prelude in C major")
+        assertEquals("In the manner of Prelude in C major", dev.stevenjin.stevenpiano.ui.StudioCopy.jobTitle(studio.jobs.get(job.id)!!))
+        val done = studio.settled()
+        assertEquals(listOf(JobKind.Download, JobKind.Compose), done.map { it.kind })
+        assertEquals(listOf(JobState.Done, JobState.Done), done.map { it.state })
+        assertEquals(setOf("tunes"), studio.models.installed.value)
+        val made = done.single { it.id == job.id }
+        val at = ZonedDateTime.of(2026, 9, 28, 12, 0, 0, 0, ZoneId.of("UTC"))
+        val title = StudioPieces(library, Locale.US).compositionTitle(at)
+        assertTrue(title, title.startsWith("Composition · Sep 28, 2026 12:00"))
+        assertEquals(title, made.title)
+        assertEquals(101L, made.pieceId)
+        assertEquals(1f, made.progress)
+        assertEquals("the seed's title names the job", "Prelude in C major", made.name)
+        assertEquals(listOf(title), added)
+        val (fileName, composer, bytes) = addedFiles.single()
+        assertEquals("$title.mid", fileName)
+        assertEquals("Made in Studio", composer)
+        assertEquals("Made in Studio · in the manner of Prelude in C major (Johann Sebastian Bach)", described[101L])
+        assertEquals(setOf(101L), studio.review.undecided.value)
+
+        // The file: at the chosen tempo (96 bpm), only what the model wrote (keys 90 and 91; the seed's keys are 60-84, moved up 2 for D major), from its start.
+        val piece = SmfParser.parse(bytes)
+        assertEquals(625_000, piece.tempoMap.tempoAt(0))
+        assertEquals(title, piece.sequenceName)
+        assertTrue("only the new music: ${(0 until piece.noteCount).map { piece.notes.note(it) }.toSet()}", (0 until piece.noteCount).all { piece.notes.note(it) in 90..91 })
+        assertTrue(piece.noteCount > 150)
+        assertTrue("it starts on its first beat", piece.notes.startMicros[0] < 625_000)
+        assertTrue("about a minute", piece.durationMicros in 50_000_000L..61_000_000L)
+        assertTrue("composed on the job thread: ${composerThreads.toSet()}", composerThreads.isNotEmpty() && composerThreads.all { it.startsWith("studio-test-worker") })
+        val figures = trailed.single()
+        assertTrue("the figures on the trail, no title: $figures", figures.startsWith("Studio: composed ") && "Prelude" !in figures && "seed 24" in figures && "96 bpm" in figures)
+    }
+
+    @Test
+    fun `a composition's gate and seeds refuse in words`() = runBlocking {
+        val studio = studio()
+        studio.download(tunes)
+        studio.settled()
+        memory = memory.copy(availMem = memory.threshold + (699L shl 20))
+        val busy = studio.compose(order())
+        assertEquals(StudioFailures.BUSY, studio.settled().single { it.id == busy.id }.error)
+        memory = memory.copy(availMem = memory.threshold + (700L shl 20))
+        val gone = studio.compose(order(pieceId = 99L))
+        assertEquals(ComposeFailures.SEED_GONE, studio.settled().single { it.id == gone.id }.error)
+        val silent = studio.compose(order(pieceId = 6L))
+        assertEquals(ComposeFailures.NO_SEED, studio.settled().single { it.id == silent.id }.error)
+        defaultSeed = null
+        val empty = studio.compose(order(pieceId = null))
+        assertEquals(ComposeFailures.EMPTY_LIBRARY, studio.settled().single { it.id == empty.id }.error)
+        assertTrue(added.isEmpty())
+        defaultSeed = 5L
+        val fallback = studio.compose(order(pieceId = null))
+        val ended = studio.settled().single { it.id == fallback.id }
+        assertEquals("no piece chosen: the default seed", JobState.Done, ended.state)
+        assertEquals("Prelude in C major", ended.name)
+    }
+
+    @Test
+    fun `cancel stops a composition between tokens, and memory running short stops another`() = runBlocking {
+        val studio = studio()
+        studio.download(tunes)
+        studio.settled()
+        composerGate = CountDownLatch(1)
+        val running = studio.compose(order())
+        withTimeout(5_000) { studio.jobs.jobs.first { list -> list.any { it.id == running.id && it.step == JobStep.Composing } } }
+        assertFalse("the model in use can't be removed", studio.remove(tunes))
+        studio.cancel(running.id)
+        composerGate!!.countDown()
+        assertEquals(JobState.Cancelled, studio.settled().single { it.id == running.id }.state)
+        assertTrue(added.isEmpty())
+
+        composerGate = CountDownLatch(1)
+        val short = studio.compose(order())
+        withTimeout(5_000) { studio.jobs.jobs.first { list -> list.any { it.id == short.id && it.step == JobStep.Composing } } }
+        memory = memory.copy(lowMemory = true)
+        composerGate!!.countDown()
+        assertEquals(ComposeFailures.RAN_OUT, studio.settled().single { it.id == short.id }.error)
+        assertTrue(added.isEmpty())
+    }
+
+    @Test
+    fun `composing reports how far along it is, and the hub and the page say so`() = runBlocking {
+        val studio = studio()
+        studio.download(tunes)
+        studio.settled()
+        composerGate = CountDownLatch(1)
+        val job = studio.compose(order(minutes = 1))
+        withTimeout(5_000) { studio.jobs.jobs.first { list -> list.any { it.id == job.id && it.step == JobStep.Composing } } }
+        assertEquals("Composing 0%", dev.stevenjin.stevenpiano.ui.StudioCopy.hub(1, studio.jobs.jobs.value))
+        composerGate!!.countDown()
+        val seen = mutableListOf<Float>()
+        withTimeout(10_000) {
+            studio.jobs.jobs.first { list ->
+                list.single { it.id == job.id }.let { j -> if (j.step == JobStep.Composing) j.progress?.let(seen::add); j.state.finished }
+            }
+        }
+        assertTrue("progress only grows: $seen", seen.zipWithNext().all { (a, b) -> b >= a })
+        assertEquals(JobState.Done, studio.jobs.get(job.id)!!.state)
+    }
+
+    @Test
+    fun `the seed choice is the piece with its key and tempo, the default one when none is chosen`() = runBlocking {
+        val studio = studio()
+        val bach = studio.seedChoice(null)!!
+        assertEquals(5L, bach.pieceId)
+        assertEquals("Prelude in C major", bach.title)
+        assertEquals("Johann Sebastian Bach", bach.composer)
+        assertEquals(MusicKey.C, bach.facts.key)
+        assertEquals(120, bach.facts.bpm)
+        assertEquals(null, studio.seedChoice(99L))
+        defaultSeed = null
+        assertEquals(null, studio.seedChoice(null))
     }
 }

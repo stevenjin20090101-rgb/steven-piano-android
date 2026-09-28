@@ -46,7 +46,8 @@ class Generation(val events: List<AmtEvent>, val tokens: IntArray, val slides: I
  *   prefilled the same way, its last 340 events at most, so the first event fits.
  * - **Hooks.** [cancelled] is asked before every token (a CancellationException); [memoryHolds] every
  *   [PROGRESS_EVERY] tokens and before a slide ([ComposeFailures.RAN_OUT]); [generate]'s progress hears
- *   every [PROGRESS_EVERY] tokens and the end.
+ *   every [PROGRESS_EVERY] tokens the tokens made and how far along it is (the larger of the budget's
+ *   share spent and the music's share written, from the seed's time to the end time), then 1 at the end.
  * - **Stops** at the budget (a hard stop, even mid-event), at the end time (an event at or past it is
  *   not written, as the package's `generate()`), or at SEPARATOR when allowed.
  *
@@ -71,19 +72,19 @@ class Sampler(
     private val order = LongArray(Amt.MAX_TIME + 1)
 
     /** Continues [prompt]'s seed with its sampling, budget and end time. */
-    fun generate(prompt: Prompt, progress: (made: Int, budget: Int) -> Unit = { _, _ -> }): Generation =
+    fun generate(prompt: Prompt, progress: (made: Int, fraction: Float) -> Unit = { _, _ -> }): Generation =
         generate(prompt.events, prompt.sampling, prompt.budget, prompt.endTime, progress)
 
     /**
      * Continues [seed] (events in time order, times from 0) with [settings]: at most [budget] tokens,
-     * no event at or after [endTime] ticks. [progress] hears (tokens made, budget).
+     * no event at or after [endTime] ticks. [progress] hears (tokens made, how far along: 0–1).
      */
     fun generate(
         seed: List<AmtEvent>,
         settings: SamplingSettings,
         budget: Int,
         endTime: Int = Int.MAX_VALUE,
-        progress: (made: Int, budget: Int) -> Unit = { _, _ -> },
+        progress: (made: Int, fraction: Float) -> Unit = { _, _ -> },
     ): Generation {
         require(budget >= 0) { "budget $budget" }
         val history = ArrayList<AmtEvent>(seed.size + budget / Amt.EVENT_TOKENS + 1)
@@ -94,6 +95,7 @@ class Sampler(
         var origin = 0
         var positions = 0
         var current = AmtTokenizer.maxTime(seed)
+        val start = current
         var runNote = -1
         var runLength = 0
         for (e in seed) {
@@ -127,11 +129,18 @@ class Sampler(
             if (!memoryHolds()) throw StudioFailure(ComposeFailures.RAN_OUT)
         }
 
+        /** The larger of the budget's share spent and the music's share written. */
+        fun fraction(): Float {
+            val spent = if (budget == 0) 1.0 else made.toDouble() / budget
+            val written = if (endTime == Int.MAX_VALUE || endTime <= start) 0.0 else (current - start).toDouble() / (endTime - start)
+            return maxOf(spent, written).coerceIn(0.0, 1.0).toFloat()
+        }
+
         fun emit(token: Int) {
             tokens[made++] = token
             if (made % PROGRESS_EVERY == 0) {
                 checkMemory()
-                progress(made, budget)
+                progress(made, fraction())
             }
         }
 
@@ -193,7 +202,7 @@ class Sampler(
                 positions++
             }
         }
-        progress(made, budget)
+        progress(made, 1f)
         return Generation(history.subList(seed.size, history.size).toList(), tokens.copyOf(made), slides, stop)
     }
 

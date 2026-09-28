@@ -69,6 +69,7 @@ import dev.stevenjin.stevenpiano.settings.settingsDataStore
 import dev.stevenjin.stevenpiano.studio.AppStudioLibrary
 import dev.stevenjin.stevenpiano.studio.AudioDecoder
 import dev.stevenjin.stevenpiano.studio.AudioSource
+import dev.stevenjin.stevenpiano.studio.LibrarySeeds
 import dev.stevenjin.stevenpiano.studio.ModelInstaller
 import dev.stevenjin.stevenpiano.studio.ModelStore
 import dev.stevenjin.stevenpiano.studio.ReviewPlayer
@@ -374,6 +375,7 @@ class AppGraph(private val app: Application) {
             peakKb = ::peakResidentKb,
             log = { Log.i(STUDIO_TAG, it) },
             trail = LinkLog.shared::add,
+            seeds = LibrarySeeds(this.library),
         )
     }
 

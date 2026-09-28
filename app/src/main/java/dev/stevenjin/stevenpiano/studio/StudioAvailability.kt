@@ -51,6 +51,10 @@ data class MemorySnapshot(val totalMem: Long, val availMem: Long, val threshold:
  *   (900 MiB: the worst job measured, 576 MiB above the app's own resident set, and half as much again).
  *   Checked again before every window ([Transcriber]), so a transcription stops rather than pushes the
  *   player out of memory when something else takes it meanwhile.
+ * - **Starting a composition** (v1.7 — M24): not `lowMemory`, and `availMem − threshold` ≥
+ *   [COMPOSING_FREE_BYTES] (700 MiB: the worst measured, 442 MiB above the app's own resident set, and
+ *   half as much again). While it runs, [canContinue] every 100 tokens and before each slide of its
+ *   window ([dev.stevenjin.stevenpiano.studio.compose.Sampler]).
  */
 object MemoryGate {
     /** 2.5 GiB. */
@@ -58,6 +62,9 @@ object MemoryGate {
 
     /** 900 MiB. */
     const val TRANSCRIPTION_FREE_BYTES = 943_718_400L
+
+    /** 700 MiB. */
+    const val COMPOSING_FREE_BYTES = 734_003_200L
 
     /**
      * While a transcription runs, the most of its free room it may have used before it stops: a
@@ -73,7 +80,11 @@ object MemoryGate {
     fun canStart(memory: MemorySnapshot): Boolean =
         !memory.lowMemory && memory.availMem - memory.threshold >= TRANSCRIPTION_FREE_BYTES
 
-    /** Whether a transcription under way may go on to its next window. */
+    /** Whether a composition may start now. */
+    fun canStartComposing(memory: MemorySnapshot): Boolean =
+        !memory.lowMemory && memory.availMem - memory.threshold >= COMPOSING_FREE_BYTES
+
+    /** Whether a job under way may go on: a transcription to its next window, a composition past its next hundred tokens. */
     fun canContinue(memory: MemorySnapshot): Boolean =
         !memory.lowMemory && memory.availMem - memory.threshold >= RUNNING_FREE_BYTES
 
@@ -92,7 +103,7 @@ object MemoryGate {
     const val OVERRIDE_NO_RUNTIME = "noruntime"
     const val OVERRIDE_LOW_MEMORY = "lowmem"
 
-    /** The emulator's stand-in for a busy tablet: every transcription finds too little memory free. */
+    /** The emulator's stand-in for a busy tablet: every job finds too little memory free. */
     const val OVERRIDE_BUSY = "busy"
 }
 
