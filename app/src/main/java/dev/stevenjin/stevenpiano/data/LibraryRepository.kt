@@ -152,7 +152,7 @@ class LibraryRepository(
         } catch (e: OutOfMemoryError) {
             throw PieceUnavailableException(TOO_LARGE)
         }
-        return PlayablePiece(piece.id, piece.title, piece.composer, midi)
+        return PlayablePiece(piece.id, piece.title, piece.composer, midi, piece.composerKey)
     }
 
     override suspend fun markPlayed(pieceId: Long) = pieces.markPlayed(pieceId, clock())

@@ -286,6 +286,7 @@ class PlayerTest {
         )
         onMain { player.play(1) }
         val loaded = withTimeout(5_000) { player.state.first { it.piece?.pieceId == 1L } }.piece!!
+        assertEquals("composer1", loaded.composerKey)   // the library's key, for the composer's art
         assertEquals(4, loaded.hands.size)
         fun rightHand(p: NowPlaying) = (0 until 4).filter { p.notes.note(it) >= 60 }.map { p.fingers[it].toInt() }
         assertEquals(listOf(1, 2, 3), rightHand(loaded))
@@ -309,7 +310,7 @@ class PlayerTest {
             loads += pieceId
             delay(loadDelayMs)
             val midi = pieces[pieceId] ?: throw SmfException("This isn't a MIDI file, or it is damaged.")
-            return PlayablePiece(pieceId, "Piece $pieceId", "Composer", midi)
+            return PlayablePiece(pieceId, "Piece $pieceId", "Composer", midi, composerKey = "composer$pieceId")
         }
 
         override suspend fun markPlayed(pieceId: Long) {

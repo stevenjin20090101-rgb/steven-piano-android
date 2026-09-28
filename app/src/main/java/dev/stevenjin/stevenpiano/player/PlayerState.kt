@@ -28,7 +28,9 @@ object PlaybackLimits {
 }
 
 /**
- * The piece in the player: what Now playing shows. [notes] feed the note canvas; the score also
+ * The piece in the player: what Now playing shows. [composerKey] (the library's, "" when the composer
+ * is unknown) finds the composer's portrait for the mini player and the now-playing panel. [notes]
+ * feed the note canvas; the score also
  * reads the file's [tempoMap], [barStartsMicros] and signatures. [hands] (`score.Hands`, one per
  * note; empty until known) are worked out once per piece, off the main thread, before it is shown;
  * the suggested [fingers] (`score.Fingering`) with them, on the keys the piano plays at
@@ -41,6 +43,7 @@ data class NowPlaying(
     val composer: String,
     val durationMicros: Long,
     val notes: NoteList,
+    val composerKey: String = "",
     val tempoMap: TempoMap = TempoMap.constant(DEFAULT_PPQ),
     val barStartsMicros: LongArray = longArrayOf(0L),
     val keySignatures: List<KeySignature> = emptyList(),

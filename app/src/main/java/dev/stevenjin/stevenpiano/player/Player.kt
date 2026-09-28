@@ -44,7 +44,8 @@ interface PieceSource {
     suspend fun markPlayed(pieceId: Long)
 }
 
-class PlayablePiece(val id: Long, val title: String, val composer: String, val midi: MidiPiece)
+/** A piece read for playing; [composerKey] (`PieceEntity.composerKey`, "" when unknown) finds the composer's art. */
+class PlayablePiece(val id: Long, val title: String, val composer: String, val midi: MidiPiece, val composerKey: String = "")
 
 /**
  * Playback for the whole app: a process singleton in AppGraph. Call it on [scope]'s thread
@@ -341,6 +342,7 @@ class Player(
                         pieceId = playable.id,
                         title = playable.title,
                         composer = playable.composer,
+                        composerKey = playable.composerKey,
                         durationMicros = midi.durationMicros,
                         notes = midi.notes,
                         tempoMap = midi.tempoMap,
