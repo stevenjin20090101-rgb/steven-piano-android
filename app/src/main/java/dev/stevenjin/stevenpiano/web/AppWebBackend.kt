@@ -367,6 +367,8 @@ class AppWebBackend(
         player.state.value.queue.uids.filter { it !in before }
     }
 
+    override suspend fun pinHash(): PinHash? = graph.settingsRepository.webPin()?.let { PinHash.restore(it.salt, it.hash) }
+
     /** In the app's scope, so an import outlives the request that sent it; the built-in lists and artwork follow, as after the app's own imports. */
     private fun importInBackground(source: OpenedSource) {
         graph.appScope.launch {

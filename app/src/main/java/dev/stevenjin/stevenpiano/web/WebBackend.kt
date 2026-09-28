@@ -19,7 +19,7 @@ import java.io.File
 /**
  * Everything the web panel reads and does, and nothing else (DESIGN.md › v1.5.1 — M18): the
  * player's state and commands, the library's lists and art, the channels, the piano's settings,
- * the app's playback preferences, the guests' catalogue and queue, and imports.
+ * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, and imports.
  * The server ([WebServer]) sees the app only through this; the app's own ([AppWebBackend]) runs
  * every player command on the main thread, where `Player` lives, and the tests' fake records what
  * it is asked. Every call is made from one of the server's request threads.
@@ -113,6 +113,9 @@ interface WebBackend {
 
     /** Adds piece [pieceId] at the end of Up next for a guest; returns the queue entries added (their uids). */
     suspend fun queueRequested(pieceId: Long): List<Long>
+
+    /** The panel's PIN as it is kept (salted and hashed); null while none is set. */
+    suspend fun pinHash(): PinHash?
 }
 
 /** The Library's lists besides search: all pieces by title, the favourites, the last hundred played or added. */

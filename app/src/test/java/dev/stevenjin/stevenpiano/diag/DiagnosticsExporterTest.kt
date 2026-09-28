@@ -33,7 +33,7 @@ class DiagnosticsExporterTest {
     private val facts = DiagnosticsText.Facts("1.4", 8, "release", "Google", "Pixel Tablet", "14", 34)
     private val linkLog = LinkLog(clock = { now }, zone = ZoneOffset.UTC)
     private val crashes by lazy { CrashReports(File(tmp.root, "files/diagnostics"), { DiagnosticsText.header(facts) }, { linkLog.tail(50) }, { now }, ZoneOffset.UTC) }
-    private val settings = PianoSettings(lastDeviceAddress = "C8:2E:18:00:11:22", lastDeviceName = "Steven Piano", transpose = -2)
+    private val settings = PianoSettings(lastDeviceAddress = "C8:2E:18:00:11:22", lastDeviceName = "Steven Piano", transpose = -2, webEnabled = true, webPinSet = true)
 
     private fun exporter() = DiagnosticsExporter(
         File(tmp.root, "cache/diagnostics"),
@@ -74,7 +74,9 @@ class DiagnosticsExporterTest {
         assertTrue("preRollMs = 2000\n" in prefs)
         assertTrue("channelVolumes = {}\n" in prefs)
         assertTrue("appearance = SYSTEM\ndisplayModeAfterMinute = false\nstandbyCanvas = BLACK\n" in prefs)
-        assertEquals(24, prefs.lines().count { it.isNotEmpty() })
+        assertTrue("webEnabled = true\nwebGuests = false\nwebApproveFirst = true\nwebOnWifi = false\nwebHostName = (none)\nwebPinSet = true\n" in prefs)
+        assertFalse("the PIN's hash and salt never travel", "Pin" in prefs.replace("webPinSet", ""))
+        assertEquals(30, prefs.lines().count { it.isNotEmpty() })
 
         assertTrue(entries.getValue("link.log").endsWith("with its console\n"))
         assertTrue("IllegalStateException: second" in entries.getValue("crash-${now}.txt"))

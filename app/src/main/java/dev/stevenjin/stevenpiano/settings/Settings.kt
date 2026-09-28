@@ -77,7 +77,9 @@ enum class StandbyCanvas { BLACK, INK }
  * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
  * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
  * its own updates, the pause before each piece, the channels' volumes, the app's appearance and
- * display mode.
+ * display mode, and the web panel (Piano › Remote control). Of the panel's PIN only [webPinSet]
+ * is here: its salt and hash are read on their own ([SettingsRepository.webPin]), so nothing that
+ * passes these settings around (the screens, Share diagnostics) ever holds them.
  */
 data class PianoSettings(
     val autoConnect: Boolean = true,
@@ -118,6 +120,18 @@ data class PianoSettings(
     val appearance: Appearance = Appearance.SYSTEM,
     /** Display mode's canvas: black, or the app's own (Piano › Display › STANDBY). */
     val standbyCanvas: StandbyCanvas = StandbyCanvas.BLACK,
+    /** The web panel is on (Piano › Remote control › Web control); it can be only once a PIN is set. */
+    val webEnabled: Boolean = false,
+    /** Guests may ask for pieces from the request page (Guests can request). */
+    val webGuests: Boolean = false,
+    /** A guest's request waits for the person's Approve (Approve requests first); off, it joins Up next at once. */
+    val webApproveFirst: Boolean = true,
+    /** The whole panel on the Wi-Fi address too, not only the request page (Panel on Wi-Fi too): the PIN then travels unencrypted. */
+    val webOnWifi: Boolean = false,
+    /** A name the panel also answers to (a tailnet name such as "piano-tablet"), besides its address; null: none. */
+    val webHostName: String? = null,
+    /** Whether a panel PIN is set. */
+    val webPinSet: Boolean = false,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -131,6 +145,14 @@ data class PianoSettings(
         /** Two seconds of silence before every piece (Steven's choice, DESIGN.md › v1.5 — M16). */
         const val DEFAULT_PRE_ROLL_MS = 2_000
     }
+}
+
+/**
+ * The panel's PIN as the settings keep it (salt and PBKDF2 hash, base64; see `web.PinHash`). Never
+ * the PIN; [toString] prints neither part.
+ */
+class StoredPin(val salt: String, val hash: String) {
+    override fun toString(): String = "StoredPin(kept)"
 }
 
 val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -189,6 +211,34 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setStandbyCanvas(canvas: StandbyCanvas) = edit { it[STANDBY_CANVAS] = canvas.name }
 
+    suspend fun setWebEnabled(on: Boolean) = edit { it[WEB_ENABLED] = on }
+
+    suspend fun setWebGuests(on: Boolean) = edit { it[WEB_GUESTS] = on }
+
+    suspend fun setWebApproveFirst(on: Boolean) = edit { it[WEB_APPROVE_FIRST] = on }
+
+    suspend fun setWebOnWifi(on: Boolean) = edit { it[WEB_ON_WIFI] = on }
+
+    /** A name the panel answers to besides its address, lower-cased; blank or null forgets it. The web panel checks its form first. */
+    suspend fun setWebHostName(name: String?) = edit {
+        val kept = name?.trim()?.lowercase()?.take(MAX_HOST_NAME)
+        if (kept.isNullOrEmpty()) it.remove(WEB_HOST_NAME) else it[WEB_HOST_NAME] = kept
+    }
+
+    /** The panel's PIN as kept (salt and hash), or null while none is set. Read on its own, never with [settings]. */
+    suspend fun webPin(): StoredPin? {
+        val prefs = store.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.first()
+        val salt = prefs[WEB_PIN_SALT] ?: return null
+        val hash = prefs[WEB_PIN_HASH] ?: return null
+        return StoredPin(salt, hash)
+    }
+
+    /** A new panel PIN (its salt and hash, both at once). */
+    suspend fun setWebPin(pin: StoredPin) = edit {
+        it[WEB_PIN_SALT] = pin.salt
+        it[WEB_PIN_HASH] = pin.hash
+    }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -243,6 +293,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             displayModeAfterMinute = this[DISPLAY_MODE_AFTER_MINUTE] ?: defaults.displayModeAfterMinute,
             appearance = Appearance.entries.firstOrNull { it.name == this[APPEARANCE] } ?: defaults.appearance,
             standbyCanvas = StandbyCanvas.entries.firstOrNull { it.name == this[STANDBY_CANVAS] } ?: defaults.standbyCanvas,
+            webEnabled = this[WEB_ENABLED] ?: defaults.webEnabled,
+            webGuests = this[WEB_GUESTS] ?: defaults.webGuests,
+            webApproveFirst = this[WEB_APPROVE_FIRST] ?: defaults.webApproveFirst,
+            webOnWifi = this[WEB_ON_WIFI] ?: defaults.webOnWifi,
+            webHostName = this[WEB_HOST_NAME],
+            webPinSet = this[WEB_PIN_SALT] != null && this[WEB_PIN_HASH] != null,
         )
     }
 
@@ -271,6 +327,14 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val DISPLAY_MODE_AFTER_MINUTE = booleanPreferencesKey("displayModeAfterMinute")
         val APPEARANCE = stringPreferencesKey("appearance")
         val STANDBY_CANVAS = stringPreferencesKey("standbyCanvas")
+        val WEB_ENABLED = booleanPreferencesKey("webEnabled")
+        val WEB_GUESTS = booleanPreferencesKey("webGuests")
+        val WEB_APPROVE_FIRST = booleanPreferencesKey("webApproveFirst")
+        val WEB_ON_WIFI = booleanPreferencesKey("webOnWifi")
+        val WEB_HOST_NAME = stringPreferencesKey("webHostName")
+        val WEB_PIN_SALT = stringPreferencesKey("webPinSalt")
+        val WEB_PIN_HASH = stringPreferencesKey("webPinHash")
+        const val MAX_HOST_NAME = 253
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
     }

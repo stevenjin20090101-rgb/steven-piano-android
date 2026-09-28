@@ -235,4 +235,42 @@ class SettingsRepositoryTest {
         assertEquals(StandbyCanvas.BLACK, read.standbyCanvas)
         scope.cancel()
     }
+
+    @Test
+    fun `the web panel starts off with guests closed and approval first, and every switch is remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "web.preferences_pb") }
+        val repository = SettingsRepository(store)
+        val first = repository.settings.first()
+        assertEquals(listOf(false, false, true, false), listOf(first.webEnabled, first.webGuests, first.webApproveFirst, first.webOnWifi))
+        assertEquals(null, first.webHostName)
+        assertEquals(false, first.webPinSet)
+        repository.setWebEnabled(true)
+        repository.setWebGuests(true)
+        repository.setWebApproveFirst(false)
+        repository.setWebOnWifi(true)
+        repository.setWebHostName("  Piano-Tablet ")
+        val read = repository.settings.first()
+        assertEquals(listOf(true, true, false, true), listOf(read.webEnabled, read.webGuests, read.webApproveFirst, read.webOnWifi))
+        assertEquals("piano-tablet", read.webHostName)
+        repository.setWebHostName(" ")
+        assertEquals(null, repository.settings.first().webHostName)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the PIN is kept apart from the settings, which only say whether one is set`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "pin.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(null, repository.webPin())
+        repository.setWebPin(StoredPin("c2FsdA==", "aGFzaA=="))
+        assertEquals("c2FsdA==", repository.webPin()!!.salt)
+        assertEquals("aGFzaA==", repository.webPin()!!.hash)
+        assertEquals(true, repository.settings.first().webPinSet)
+        assertEquals("the stored PIN prints neither part", false, "c2FsdA" in repository.webPin().toString())
+        val fields = PianoSettings::class.java.declaredFields.map { it.name.lowercase() }
+        assertEquals("nothing that carries the settings can carry the PIN's hash or salt", emptyList<String>(), fields.filter { "hash" in it || "salt" in it })
+        scope.cancel()
+    }
 }

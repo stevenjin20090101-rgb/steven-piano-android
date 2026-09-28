@@ -37,6 +37,7 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     var piano = WebPiano(WebPianoState("ready", mapOf("volume" to "70", "leds" to "1")), statusText = null, statusReading = false)
     var guests = GuestSettings(open = true, approveFirst = false)
     var catalogueHeld = listOf(CatalogueList("popular", "Popular", pieces.take(2)))
+    var pin: PinHash? = null
     val imported = Collections.synchronizedList(mutableListOf<String>())
     private var nextUid = 100L
 
@@ -163,4 +164,6 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         record("requested $pieceId")
         return listOf(nextUid++)
     }
+
+    override suspend fun pinHash(): PinHash? = pin
 }
