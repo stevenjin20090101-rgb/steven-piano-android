@@ -811,6 +811,33 @@ button, input, select { font: inherit; color: inherit; }
 
 .band .eyebrow { display: flex; align-items: center; gap: 6px; color: var(--primary); }
 
+/* ---- Schedule (v1.5.2) -------------------------------------------------------------------------- */
+
+.schedule-next { padding-top: 16px; }
+
+.schedule-row .switch { margin-left: 4px; }
+
+.row .title.off { color: var(--secondary); }
+
+/* The editor opens over the list, in the page's own rows: the tablet's sheet, laid flat. */
+.schedule-editor { border-bottom: 1px solid var(--hairline); }
+
+.schedule-editor > .eyebrow:first-child { padding-top: 16px; padding-bottom: 0; }
+
+.editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 500; }
+
+.schedule-editor .actions { flex-direction: column; }
+
+.schedule-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-bottom: 0; }
+
+.setting .label .meta { display: block; }
+
+.time-field { width: auto; min-width: 120px; min-height: 40px; font-variant-numeric: tabular-nums; }
+
+.choice .glyph { color: var(--primary); }
+
+.choice.off { color: var(--secondary); cursor: default; }
+
 /* ---- Piano ------------------------------------------------------------------------------------ */
 
 .disclosure { border-bottom: 1px solid var(--hairline); }

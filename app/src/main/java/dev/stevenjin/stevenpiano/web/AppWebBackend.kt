@@ -19,6 +19,7 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportItem
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.OpenedSource
@@ -27,6 +28,8 @@ import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.schedule.SaveResult
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.service.PlaybackService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +108,7 @@ class AppWebBackend(
             web = addresses(),
             guests = guests(),
             monochrome = settings.artworkMonochrome,
+            schedule = WebScheduleState(graph.schedules.nextNow()?.line, graph.schedules.revision),
         )
     }
 
@@ -375,6 +379,26 @@ class AppWebBackend(
     }
 
     override suspend fun pinHash(): PinHash? = graph.settingsRepository.webPin()?.let { PinHash.restore(it.salt, it.hash) }
+
+    override suspend fun schedules(): WebSchedules {
+        val schedules = graph.schedules
+        return WebSchedules(
+            schedules = schedules.rowsNow().map { WebSchedule(it.entry, it.name, it.whenLine, it.whatLine) },
+            next = schedules.nextNow()?.line,
+            last = schedules.lastNow(),
+            exactAlarms = schedules.exactAllowed.value,
+        )
+    }
+
+    override suspend fun scheduleTarget(kind: ScheduleKind, target: String): String? = graph.schedules.nameOf(kind, target)
+
+    override suspend fun saveSchedule(draft: ScheduleDraft): SaveResult = graph.schedules.save(draft)
+
+    override suspend fun deleteSchedule(id: Long): Boolean {
+        if (graph.schedules.repository.get(id) == null) return false
+        graph.schedules.delete(id)
+        return true
+    }
 
     /** In the app's scope, so an import outlives the request that sent it; the built-in lists and artwork follow, as after the app's own imports. */
     private fun importInBackground(source: OpenedSource) {

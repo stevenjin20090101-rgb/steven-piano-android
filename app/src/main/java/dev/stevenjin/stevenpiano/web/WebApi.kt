@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.web
 
 import dev.stevenjin.stevenpiano.data.TextLimits
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.piano.PianoPage
 import dev.stevenjin.stevenpiano.piano.PianoSetting
@@ -18,6 +19,7 @@ import dev.stevenjin.stevenpiano.piano.SettingKind
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -235,6 +237,36 @@ object WebApi {
     }
 
     /**
+     * `POST /api/schedules` and `PUT /api/schedules/{id}`: a schedule's fields, `{days, startMinute,
+     * kind, target, endMinute?, volumePct?, enabled?}`, read strictly and checked as the app's editor
+     * checks them ([ScheduleRules]): days a bitmask from 1 to 127 (Monday 1 … Sunday 64), minutes after
+     * midnight, kind playlist · channel · piece, the target a channel's key or an id written as text,
+     * endMinute null (or absent) to play until the end, volumePct null (or absent) for none, enabled
+     * true unless it says false. [id] is the schedule edited, 0 for a new one.
+     */
+    fun scheduleDraft(json: JSONObject, id: Long = 0): ScheduleDraft {
+        onlyKeys(json, SCHEDULE_KEYS)
+        val kind = ScheduleKind.entries.firstOrNull { it.name.lowercase() == string(json, "kind", 16) }
+            ?: throw ApiError(400, "field", "kind must be playlist, channel or piece.")
+        // Whole numbers here; whether they make a schedule is the rules' to say, in the editor's words.
+        val draft = ScheduleDraft(
+            id = id,
+            days = ruled(whole(json, "days")),
+            startMinute = ruled(whole(json, "startMinute")),
+            kind = kind,
+            target = string(json, "target", MAX_TARGET).trim(),
+            endMinute = wholeOrNull(json, "endMinute")?.let(::ruled),
+            volumePct = wholeOrNull(json, "volumePct")?.let(::ruled),
+            enabled = boolOrNull(json, "enabled") ?: true,
+        )
+        draft.problem?.let { throw ApiError(400, "schedule", it) }
+        return draft
+    }
+
+    /** A whole number as an Int for the rules, which refuse anything outside their ranges; past an Int's own, the nearest end. */
+    private fun ruled(value: Long): Int = value.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+
+    /**
      * Setting [setting]'s new value from the panel as the piano takes it (the wire form the app's own
      * rows send), or an [ApiError]: read-only settings are never written (the key-force pair), and a
      * value outside the table's range is refused, never clamped.
@@ -367,7 +399,32 @@ object WebApi {
             .put("requests", JSONObject().put("pending", pending).put("guests", s.guests.open).put("approveFirst", s.guests.approveFirst))
             .put("web", JSONObject().put("address", s.web.panel ?: JSONObject.NULL).put("guestAddress", s.web.guest ?: JSONObject.NULL).put("guests", s.guests.open))
             .put("monochrome", s.monochrome)
+            .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
     }
+
+    /** A schedule: its fields as `POST` takes them, and (read-only) what its target is called and the tablet's two lines, `when` and `what`. */
+    fun schedule(s: WebSchedule): JSONObject {
+        val e = s.entry
+        return JSONObject()
+            .put("id", e.id)
+            .put("days", e.days)
+            .put("startMinute", e.startMinute)
+            .put("kind", e.kind.name.lowercase())
+            .put("target", e.target)
+            .put("endMinute", e.endMinute ?: JSONObject.NULL)
+            .put("volumePct", e.volumePct ?: JSONObject.NULL)
+            .put("enabled", e.enabled)
+            .put("name", s.name)
+            .put("when", s.whenLine)
+            .put("what", s.whatLine)
+    }
+
+    /** `GET /api/schedules`: the schedules by start time, the next start's line, the last one's outcome, and whether exact alarms are allowed. */
+    fun schedules(s: WebSchedules): JSONObject = JSONObject()
+        .put("schedules", JSONArray().apply { s.schedules.forEach { put(schedule(it)) } })
+        .put("next", s.next ?: JSONObject.NULL)
+        .put("last", s.last ?: JSONObject.NULL)
+        .put("exactAlarms", s.exactAlarms)
 
     /** The socket's once-a-second message while a piece plays: where it is, and when that was (the page carries on from there at the tempo). */
     fun progress(positionMs: Long, at: Long): JSONObject = JSONObject().put("type", "progress").put("positionMs", positionMs).put("at", at)
@@ -426,6 +483,11 @@ object WebApi {
 
     /** The piano's pages the panel offers: its settings (Firmware and status stays on the tablet, but Read status, All keys off and Save now). */
     private val PANEL_PAGES = listOf(PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal)
+
+    private val SCHEDULE_KEYS = setOf("days", "startMinute", "kind", "target", "endMinute", "volumePct", "enabled")
+
+    /** A schedule's target as it may come in: a channel's key or an id, never longer (the rules then check its form). */
+    private const val MAX_TARGET = 64
 
     private val SETTINGS_KEYS = setOf(
         "preRollMs", "defaultTempoPct", "transpose", "velocityPct", "foldOutOfRange", "skipDrumChannel",

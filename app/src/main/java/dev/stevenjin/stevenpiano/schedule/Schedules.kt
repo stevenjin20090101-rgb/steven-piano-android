@@ -193,8 +193,14 @@ class Schedules(private val app: Application, private val graph: AppGraph, dao: 
     /** Every schedule with its target's name now (the web panel's list). */
     suspend fun rowsNow(): List<ScheduleRow> = rowsOf(repository.list())
 
-    /** The next start now (the web panel's "Next:" line). */
-    suspend fun nextNow(): NextSchedule? = nextOf(repository.list(), ZonedDateTime.now())
+    /** The next start now (the web panel's "Next:" line), from the schedules as last read. */
+    suspend fun nextNow(): NextSchedule? = nextOf(entries.value ?: repository.list(), ZonedDateTime.now())
+
+    /** What the last schedule did, as kept on the device (the web panel's page). */
+    suspend fun lastNow(): String? = outcomes.last.first()
+
+    /** A number that changes whenever the schedules do (the web panel reads its Schedule page again). */
+    val revision: Int get() = entries.value?.hashCode() ?: 0
 
     private suspend fun rowsOf(list: List<ScheduleEntity>): List<ScheduleRow> {
         val playlists = if (list.any { it.kind == ScheduleKind.PLAYLIST }) graph.library.playlists().first().associate { it.id to it.name } else emptyMap()

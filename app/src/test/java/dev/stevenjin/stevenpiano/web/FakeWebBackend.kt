@@ -9,8 +9,14 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.schedule.SaveResult
+import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
+import dev.stevenjin.stevenpiano.schedule.ScheduleRules
 import java.io.File
 import java.util.Collections
 
@@ -166,4 +172,43 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     }
 
     override suspend fun pinHash(): PinHash? = pin
+
+    /** The schedules, by id; [exactAlarms] and [lastOutcome] as the app would report them. */
+    val schedulesHeld = sortedMapOf<Long, ScheduleEntity>()
+    var exactAlarms = true
+    var lastOutcome: String? = null
+    private var nextScheduleId = 1L
+
+    override suspend fun schedules(): WebSchedules = WebSchedules(
+        schedulesHeld.values.sortedWith(compareBy({ it.startMinute }, { it.id })).map { e ->
+            val name = scheduleTarget(e.kind, e.target) ?: "Gone"
+            WebSchedule(e, name, ScheduleCopy.whenLine(e.days, e.startMinute), ScheduleCopy.whatLine(e.kind, name, e.endMinute, e.volumePct))
+        },
+        next = if (schedulesHeld.values.any { it.enabled }) "Next: Wednesday 12:30, Calm" else null,
+        last = lastOutcome,
+        exactAlarms = exactAlarms,
+    )
+
+    override suspend fun scheduleTarget(kind: ScheduleKind, target: String): String? = when (kind) {
+        ScheduleKind.CHANNEL -> channelsHeld.firstOrNull { it.key == target }?.name
+        ScheduleKind.PLAYLIST -> playlistsHeld.firstOrNull { it.id.toString() == target }?.name
+        ScheduleKind.PIECE -> pieces.firstOrNull { it.id.toString() == target }?.title
+    }
+
+    override suspend fun saveSchedule(draft: ScheduleDraft): SaveResult {
+        record("schedule save ${draft.id} ${draft.days} ${draft.startMinute} ${draft.kind} ${draft.target} ${draft.endMinute} ${draft.volumePct} ${draft.enabled}")
+        if (draft.isNew) {
+            if (schedulesHeld.size >= ScheduleRules.MAX_SCHEDULES) return SaveResult.TooMany
+            val entity = draft.toEntity(createdAt = 0).copy(id = nextScheduleId++)
+            schedulesHeld[entity.id] = entity
+            return SaveResult.Saved(entity)
+        }
+        if (draft.id !in schedulesHeld) return SaveResult.Gone
+        return SaveResult.Saved(draft.toEntity(createdAt = 0).also { schedulesHeld[it.id] = it })
+    }
+
+    override suspend fun deleteSchedule(id: Long): Boolean {
+        record("schedule delete $id")
+        return schedulesHeld.remove(id) != null
+    }
 }
