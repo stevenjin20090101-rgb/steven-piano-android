@@ -3096,7 +3096,8 @@ A fresh AVD of this run's own (never `steven_piano` or `steven_piano_tablet`), a
   time; left alone it closed and the tablet rested.
 - Dark and font scale 2.0: the Kiosk page and both sheets wrap without clipping (the exit sheet's
   buttons go to two lines).
-- `./gradlew lint`: 0 errors, 28 warnings, none in a file this run added (the manifest's
+- `./gradlew lint`: 0 errors and 29 warnings (28 on an earlier run: the newer-version notices vary
+  with what the check finds online), none in code this run wrote (the manifest's
   `DataExtractionRules` warning predates it). `assembleRelease` builds (2,708,324 bytes, the alias
   disabled and exported in its manifest, the provenance string in `classes.dex`); not staged.
 

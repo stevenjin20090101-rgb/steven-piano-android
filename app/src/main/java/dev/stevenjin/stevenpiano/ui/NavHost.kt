@@ -154,6 +154,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val onTouch = remember(idle) { { idle.touch() } }
     var kioskSheet by rememberSaveable { mutableStateOf(false) }
     val openKioskSheet = remember { { kioskSheet = true } }
+    LaunchedEffect(kiosk) { if (!kiosk) kioskSheet = false }   // kiosk mode ended some other way: no sheet left to come back
 
     LaunchedEffect(requestedTab) {
         val tab = requestedTab ?: return@LaunchedEffect
