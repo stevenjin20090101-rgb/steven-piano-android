@@ -123,3 +123,15 @@ object DisplayModeTimeout {
         if (seconds != null && seconds > 0) seconds * 1_000L else DEFAULT_MS
     }
 }
+
+/**
+ * When display mode comes: the idle clock runs while Display mode after a minute is on, or kiosk mode
+ * is (DESIGN.md › v1.6 — M20: there it is always on); once idle it shows while a piece is loaded, or
+ * in kiosk mode with nothing loaded too, its resting state (the byline and, with guests on, the
+ * request code).
+ */
+object DisplayRule {
+    fun watched(afterMinute: Boolean, kiosk: Boolean): Boolean = afterMinute || kiosk
+
+    fun shows(pieceLoaded: Boolean, kiosk: Boolean): Boolean = pieceLoaded || kiosk
+}

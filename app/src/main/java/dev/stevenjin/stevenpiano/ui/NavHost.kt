@@ -54,7 +54,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -127,6 +130,9 @@ import kotlin.math.min
  * its hub); [onImport] brings files into the library. Every touch anywhere is watched ([watchTouches]):
  * with Display mode after a minute on, a minute without one while a piece is loaded brings display
  * mode over the whole window ([DisplayScreen], DESIGN.md › v1.5 — M17), and the next touch leaves it.
+ * In kiosk mode (DESIGN.md › v1.6 — M20) display mode is always on and is the resting state, with a
+ * piece or without; the byline on every tab is the hidden way out ([LocalBylineHold]), and its PIN
+ * sheet opens over whatever tab is showing.
  */
 @Composable
 fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -142,8 +148,12 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val content = rememberHazeState()
     val floatingPlay = remember { FloatingPlaySlot() }
     // Display mode (DESIGN.md › v1.5 — M17): every touch anywhere keeps it away, a minute without one brings it.
-    val idle = rememberIdle(enabled = settings.displayModeAfterMinute, timeoutMs = DisplayModeTimeout.ms)
+    // In kiosk mode it is always on (v1.6 — M20), and the byline's hold opens the kiosk's PIN sheet.
+    val kiosk = settings.kioskEnabled
+    val idle = rememberIdle(enabled = DisplayRule.watched(settings.displayModeAfterMinute, kiosk), timeoutMs = DisplayModeTimeout.ms)
     val onTouch = remember(idle) { { idle.touch() } }
+    var kioskSheet by rememberSaveable { mutableStateOf(false) }
+    val openKioskSheet = remember { { kioskSheet = true } }
 
     LaunchedEffect(requestedTab) {
         val tab = requestedTab ?: return@LaunchedEffect
@@ -159,6 +169,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         LocalReducedTransparency provides reducedTransparency,
         LocalHazeState provides content,
         LocalFloatingPlaySlot provides floatingPlay,
+        LocalBylineHold provides if (kiosk) openKioskSheet else null,
     ) {
         Box(
             Modifier
@@ -266,21 +277,26 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                 }
             }
             // Composed last, a sibling after the frame: above the glass bar, the mini player and the rail.
-            DisplayOverlay(idle, onLeave = onTouch)
+            DisplayOverlay(idle, kiosk, onLeave = onTouch)
         }
+        if (kioskSheet && kiosk) KioskExitSheet(onDismiss = { kioskSheet = false })
     }
 }
 
 /**
- * Display mode over the whole window while the app is idle and a piece is loaded; not a route,
- * so the tabs beneath keep their state. It reads the player here, apart from the frame, so a piece
- * changing never recomposes the frame.
+ * Display mode over the whole window while the app is idle and a piece is loaded, or in kiosk mode
+ * with nothing loaded too (its resting state); not a route, so the tabs beneath keep their state. It
+ * reads the player here, apart from the frame, so a piece changing never recomposes the frame. In
+ * kiosk mode, coming to rest ends an "Unlock for now": a tablet left alone locks itself again.
  */
 @Composable
-private fun DisplayOverlay(idle: IdleState, onLeave: () -> Unit) {
+private fun DisplayOverlay(idle: IdleState, kiosk: Boolean, onLeave: () -> Unit) {
     if (!idle.idle) return
-    val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
-    if (state.piece != null) DisplayScreen(onLeave)
+    val graph = LocalContext.current.graph
+    val state by graph.player.state.collectAsStateWithLifecycle()
+    if (!DisplayRule.shows(state.piece != null, kiosk)) return
+    if (kiosk) LaunchedEffect(Unit) { graph.kiosk.relock() }
+    DisplayScreen(onLeave)
 }
 
 /**

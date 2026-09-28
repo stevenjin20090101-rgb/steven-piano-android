@@ -24,11 +24,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.Provenance
+import dev.stevenjin.stevenpiano.ui.HeldByline
+import dev.stevenjin.stevenpiano.ui.LocalBylineHold
 
 /**
  * A tab's title in the Title style with the [byline] under it in the eyebrow style (PLAYER
  * PIANO · BY STEVEN JIN on every tab, DESIGN.md › v1.2 › Byline), and the tab's actions at the
- * end. The byline is simply there: no divider, no animation.
+ * end. The byline is simply there: no divider, no animation. In kiosk mode it is also the hidden
+ * way out: a three-second hold opens the kiosk PIN ([LocalBylineHold], DESIGN.md › v1.6 — M20).
  */
 @Composable
 fun ScreenHeader(
@@ -51,7 +54,8 @@ fun ScreenHeader(
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Eyebrow(byline)
+            val hold = LocalBylineHold.current
+            if (hold == null) Eyebrow(byline) else HeldByline(byline, hold)
         }
         actions()
     }

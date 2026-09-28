@@ -63,6 +63,7 @@ import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.DisplayPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FeelPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KioskPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
@@ -256,6 +257,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                     SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
                     SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
+                    SettingsPage.Kiosk -> KioskPage(appSettings(vm))
                 }
                 Spacer(Modifier.height(24.dp))
                 Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))

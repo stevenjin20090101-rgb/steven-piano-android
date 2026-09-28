@@ -34,6 +34,7 @@ data class GroupSummaries(
     val playback: String,
     val display: String,
     val remote: String,
+    val kiosk: String,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -44,6 +45,7 @@ data class GroupSummaries(
         SettingsPage.Playback -> playback
         SettingsPage.Display -> display
         SettingsPage.Remote -> remote
+        SettingsPage.Kiosk -> kiosk
     }
 
     companion object {
@@ -62,6 +64,7 @@ data class GroupSummaries(
             playback = playback(settings),
             display = display(settings, wide),
             remote = remote(settings, web),
+            kiosk = kiosk(settings),
         )
 
         /** "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"). */
@@ -69,6 +72,9 @@ data class GroupSummaries(
             if (!settings.webEnabled) return OFF
             return web.panelHost?.let { "On · $it" } ?: "On"
         }
+
+        /** Kiosk mode: "On" or "Off" ("On" while unlocked for now too: it locks again). */
+        fun kiosk(settings: PianoSettings): String = if (settings.kioskEnabled) "On" else OFF
 
         /** "Full power" while full power is on, else "Volume 70%". */
         fun feel(piano: PianoState): String {
