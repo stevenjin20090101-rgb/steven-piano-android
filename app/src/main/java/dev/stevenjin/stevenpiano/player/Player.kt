@@ -72,6 +72,9 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * (null) when a piece is played from a list ([play]), a list is played without a channel, the person
  * skips to an entry the channel did not deal, or playback stops ([stop], [stopAndFlush],
  * [leaveChannel]: the notification's dismiss).
+ * While the piano's firmware is updated (v1.6.1 — M21) the player is [lock]ed: nothing starts,
+ * resumes, seeks or sounds from the Keys screen until [unlock], and the reason shows as the
+ * [PlayerState.problem]; [stopQuietly] stops and waits for the stop sequence to be written first.
  */
 class Player(
     private val link: PianoLink,
@@ -110,6 +113,13 @@ class Player(
     /** The queue entries the playing channel dealt (its first pieces and its top-ups); empty without a channel. */
     private var channelUids: Set<Long> = emptySet()
 
+    /** Why nothing may play now ([lock]), or null. */
+    @Volatile
+    private var lockedFor: String? = null
+
+    /** Whether the player is [lock]ed. */
+    val locked: Boolean get() = lockedFor != null
+
     // Owned by the scheduler thread: what was last published.
     private var shownStatus = PlaybackStatus.Stopped
     private var shownTempo = 100
@@ -133,6 +143,7 @@ class Player(
 
     /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue] (shuffled when shuffle is on). A channel ends. */
     fun play(pieceId: Long, queue: List<Long> = listOf(pieceId)) {
+        if (locked) return
         setQueue(Queue.startingAt(pieceId, queue, this.queue, random), channel = null)
         startCurrent()
     }
@@ -143,7 +154,7 @@ class Player(
      * something else takes over.
      */
     override fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String?) {
-        if (pieceIds.isEmpty()) return
+        if (pieceIds.isEmpty() || locked) return
         val all = Queue.all(pieceIds, shuffle, queue, random)
         channelUids = if (channel == null) emptySet() else all.entries.mapTo(HashSet()) { it.uid }
         // The queue and its channel in one update: a watcher never sees the new queue without its channel.
@@ -179,6 +190,7 @@ class Player(
 
     /** Plays queue entry [uid] now; the entries skipped stay behind it. An entry the playing channel did not deal ends the channel. */
     fun skipToQueueEntry(uid: Long) {
+        if (locked) return
         val skipped = queue.skipTo(uid)
         if (skipped === queue) return
         setQueue(skipped, channel = if (uid in channelUids) _state.value.channel else null)
@@ -194,7 +206,10 @@ class Player(
         if (state.value.status == PlaybackStatus.Playing) pause() else resume()
     }
 
-    fun resume() = command { engine.play(it) }
+    fun resume() {
+        if (locked) return
+        command { engine.play(it) }
+    }
 
     fun pause() = command { engine.pause(it) }
 
@@ -204,16 +219,20 @@ class Player(
         command { engine.stop(it) }
     }
 
-    fun seek(micros: Long) = command { engine.seek(micros, it) }
+    fun seek(micros: Long) {
+        if (locked) return
+        command { engine.seek(micros, it) }
+    }
 
     fun next() {
-        if (!queue.hasNext) return
+        if (!queue.hasNext || locked) return
         setQueue(queue.next())
         startCurrent()
     }
 
     /** Restarts the piece when more than 3 s in (or first in the queue), else plays the one before. */
     fun previous() {
+        if (locked) return
         if (queue.previousRestarts(positionMicrosNow())) {
             seek(0L)
         } else {
@@ -223,13 +242,19 @@ class Player(
     }
 
     /** A key pressed on the Keys screen ([key] 24-107): sent at once, with the velocity percentage applied. */
-    fun liveNoteOn(key: Int, velocity: Int) = scheduler.submit { engine.liveNoteOn(key, velocity, it) }
+    fun liveNoteOn(key: Int, velocity: Int) {
+        if (locked) return
+        scheduler.submit { engine.liveNoteOn(key, velocity, it) }
+    }
 
     /** A key let go on the Keys screen. */
     fun liveNoteOff(key: Int) = scheduler.submit { engine.liveNoteOff(key) }
 
     /** The Keys screen's latching sustain: CC64 127 or 0. */
-    fun liveSustain(down: Boolean) = scheduler.submit { engine.liveSustain(down) }
+    fun liveSustain(down: Boolean) {
+        if (down && locked) return
+        scheduler.submit { engine.liveSustain(down) }
+    }
 
     /** Lets go of every key the Keys screen holds, and its sustain; a playing piece keeps its keys. */
     fun silenceLive() = scheduler.submit { engine.silenceLive() }
@@ -264,6 +289,35 @@ class Player(
         advanceJob?.cancel()
         loadJob?.cancel()
         return settle(timeoutMs) { engine.stop(it) }
+    }
+
+    /**
+     * Nothing plays from now until [unlock] (a firmware update, v1.6.1 — M21): pieces, resume,
+     * seek, Next and Previous, channels, the web panel and the Keys screen's keys are turned away,
+     * and [reason] shows as the state's problem, where Now playing shows playback's problems. It
+     * does not stop what plays: [stopQuietly] does.
+     */
+    fun lock(reason: String) {
+        lockedFor = reason
+        _state.update { it.copy(problem = reason) }
+    }
+
+    /** The lock is over; its problem line goes (a later problem stays). */
+    fun unlock() {
+        val reason = lockedFor ?: return
+        lockedFor = null
+        _state.update { if (it.problem == reason) it.copy(problem = null) else it }
+    }
+
+    /**
+     * Stops (a channel ends, the Keys screen's keys let go), then waits off the main thread until
+     * the stop sequence has been written to the piano, [timeoutMs] at most: before a firmware update.
+     */
+    suspend fun stopQuietly(timeoutMs: Long): Boolean {
+        setChannel(null)
+        advanceJob?.cancel()
+        loadJob?.cancel()
+        return withContext(io) { settle(timeoutMs) { engine.stop(it) } }
     }
 
     /** Pauses, then waits (off the main thread) until the stop sequence has been written: before a user disconnect. */
@@ -321,6 +375,7 @@ class Player(
     private fun enqueue(pieceIds: List<Long>, change: (Queue) -> Queue): Boolean {
         if (pieceIds.isEmpty()) return false
         if (queue.current == null) {
+            if (locked) return false
             play(pieceIds.first(), pieceIds)
             return true
         }
@@ -343,6 +398,7 @@ class Player(
     }
 
     private fun startCurrent() {
+        if (locked) return
         advanceJob?.cancel()
         val superseding = loadJob?.isActive == true
         loadJob?.cancel()
@@ -472,6 +528,7 @@ class Player(
 
     /** The piece that just ended plays again from its start, after the pause before each piece: the engine still has it. */
     private fun restartCurrent(pieceId: Long) {
+        if (locked) return
         val preRoll = preRollMs * NANOS_PER_MS
         scheduler.submit { now ->
             engine.seek(0L, now)

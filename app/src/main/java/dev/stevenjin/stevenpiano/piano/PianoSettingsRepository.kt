@@ -139,6 +139,15 @@ class PianoSettingsRepository(
         session?.action(action, key)
     }
 
+    /**
+     * Asks the piano for fact [name] again (`get !name`; v1.6.1 — M21 reads `!ota` while a new
+     * firmware confirms itself): the answer updates [state]'s facts. Nothing before the piano has
+     * answered its dump, or for a name that is not a fact's.
+     */
+    fun readFact(name: String) {
+        session?.readFact(name)
+    }
+
     /** The screen has shown the last error; it goes until the next one. */
     fun dismissError() {
         session?.dismissError()
@@ -248,6 +257,12 @@ class PianoSettingsRepository(
                 PianoAction.LedTest, PianoAction.TestMin, PianoAction.TestMax ->
                     send("${action.command} ${key.coerceIn(PianoSettings.testKeys)}")
             }
+        }
+
+        fun readFact(name: String) {
+            if (!ready || !FACT_NAME.matches(name)) return
+            awaiting += Awaited("!$name", null)
+            send("get !$name")
         }
 
         fun dismissError() {
@@ -428,6 +443,9 @@ class PianoSettingsRepository(
 
         /** One plain number, whole or with decimals: nothing else is ever sent as a value. */
         val WIRE_VALUE = Regex("""^-?[0-9]+(\.[0-9]+)?$""")
+
+        /** A fact's name as `dump` prints it, without its "!". */
+        val FACT_NAME = Regex("""^[a-z][a-z0-9_]{0,31}$""")
 
         val ERROR_WORDS = listOf("out of range", "usage:", "unknown", "refused")
 

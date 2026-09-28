@@ -35,6 +35,8 @@ class OtaPiano(private val mtu: Int = DEFAULT_MTU, private val script: Script = 
         val errorAfterAcks: Pair<Int, Int>? = null,
         /** ERR 5 after END whatever arrived (the image changed on the way). */
         val hashMismatch: Boolean = false,
+        /** The link drops right after END, before VERIFYING: the piano verifies and restarts without the app. */
+        val dropAfterEnd: Boolean = false,
         val restartInMs: Int = 1_500,
     )
 
@@ -139,7 +141,9 @@ class OtaPiano(private val mtu: Int = DEFAULT_MTU, private val script: Script = 
         if (received != size) return error(4)
         state = State.Verifying
         val verifying = notify(OtaFrames.VERIFYING)
-        if (script.hashMismatch || !digest.digest().contentEquals(expected)) return listOf(verifying) + error(5)
+        val good = !script.hashMismatch && digest.digest().contentEquals(expected)
+        if (script.dropAfterEnd) return if (good) listOf(Out.Drop, Out.Restart(script.restartInMs)) else listOf(Out.Drop)
+        if (!good) return listOf(verifying) + error(5)
         val ms = script.restartInMs
         return listOf(verifying, notify(OtaFrames.OK, byteArrayOf((ms and 0xFF).toByte(), (ms ushr 8).toByte())), Out.Restart(ms))
     }

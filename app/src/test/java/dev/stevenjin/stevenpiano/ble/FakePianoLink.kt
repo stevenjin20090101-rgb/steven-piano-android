@@ -12,8 +12,11 @@ package dev.stevenjin.stevenpiano.ble
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.hex
 import dev.stevenjin.stevenpiano.player.NanoClock
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -125,15 +128,18 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
 
 /**
  * The piano's update service for tests: every frame the app writes is recorded ([control], [data],
- * with [beginAt] from [now]), and an [OtaPiano] with [script] answers at once, as BLE_OTA.md says
- * the firmware does. Its [OtaPiano.Out.Drop] drops [link]; after OK, [onRestart] runs (the test
- * decides how the piano comes back). Not thread-safe: tests call it from one thread.
+ * with [beginAt] from [now]), and an [OtaPiano] with [script] answers as BLE_OTA.md says the
+ * firmware does: at once, or with [answerScope], each answer [answerDelayMs] later (so a test can
+ * step in between windows). Its [OtaPiano.Out.Drop] drops [link]; after OK, [onRestart] runs (the
+ * test decides how the piano comes back). Not thread-safe: tests call it from one thread.
  */
 class FakeOtaChannel(
     private val link: FakePianoLink,
     var script: OtaPiano.Script = OtaPiano.Script(),
     override val maxChunk: Int = OtaFrames.MAX_CHUNK,
     private val now: () -> Long = { 0L },
+    private val answerScope: CoroutineScope? = null,
+    private val answerDelayMs: Long = 0L,
 ) : OtaChannel {
     override val window: Int = OtaFrames.WINDOW
 
@@ -153,6 +159,9 @@ class FakeOtaChannel(
 
     /** After OK: how the piano restarts. Nothing by default. */
     var onRestart: (inMs: Int) -> Unit = {}
+
+    /** As BEGIN is written (a test looks at the player then). */
+    var onBegin: () -> Unit = {}
 
     private var piano = OtaPiano(maxChunk + OtaFrames.ATT_HEADER + OtaFrames.DATA_HEADER, script)
     private var out: SendChannel<OtaEvent>? = null
@@ -176,6 +185,7 @@ class FakeOtaChannel(
         ended = false
         sessions++
         beginAt = now()
+        onBegin()
         val frame = OtaFrames.begin(header)
         control += frame
         deliver(piano.control(frame))
@@ -191,7 +201,7 @@ class FakeOtaChannel(
     }
 
     override fun write(seq: Int, payload: ByteArray): Boolean {
-        if (out == null || ended || payload.isEmpty() || payload.size > maxChunk) return false
+        if (out?.isClosedForSend != false || ended || payload.isEmpty() || payload.size > maxChunk) return false
         val frame = OtaFrames.data(seq, payload)
         data += frame
         deliver(piano.data(frame))
@@ -199,14 +209,14 @@ class FakeOtaChannel(
     }
 
     override fun end() {
-        if (out == null || ended) return
+        if (out?.isClosedForSend != false || ended) return
         ended = true
         control += OtaFrames.end()
         deliver(piano.control(OtaFrames.end()))
     }
 
     override fun abort() {
-        if (out == null || ended) return
+        if (out?.isClosedForSend != false || ended) return
         control += OtaFrames.abort()
         deliver(piano.control(OtaFrames.abort()))
     }
@@ -215,19 +225,33 @@ class FakeOtaChannel(
     fun image(): ByteArray = data.fold(ByteArray(0)) { acc, frame -> acc + frame.copyOfRange(OtaFrames.DATA_HEADER, frame.size) }
 
     private fun deliver(outs: List<OtaPiano.Out>) {
+        val session = out ?: return
+        val scope = answerScope
+        if (scope == null) {
+            deliverNow(session, outs)
+        } else {
+            scope.launch {
+                delay(answerDelayMs)
+                deliverNow(session, outs)
+            }
+        }
+    }
+
+    private fun deliverNow(session: SendChannel<OtaEvent>, outs: List<OtaPiano.Out>) {
         for (o in outs) {
-            val session = out ?: return
             when (o) {
-                is OtaPiano.Out.Notify -> OtaFrames.parse(o.bytes)?.let { event ->
-                    session.trySend(event)
-                    if (event.ends) session.close()
+                is OtaPiano.Out.Notify -> if (!session.isClosedForSend) {
+                    OtaFrames.parse(o.bytes)?.let { event ->
+                        session.trySend(event)
+                        if (event.ends) session.close()
+                    }
                 }
                 OtaPiano.Out.Drop -> {
                     session.trySend(OtaEvent.Lost("the connection to the piano ended"))
                     session.close()
                     link.drop()
                 }
-                is OtaPiano.Out.Restart -> onRestart(o.inMs)
+                is OtaPiano.Out.Restart -> onRestart(o.inMs)   // the piano restarts whether or not anyone listens
             }
         }
     }
