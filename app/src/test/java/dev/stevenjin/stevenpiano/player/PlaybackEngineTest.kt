@@ -70,13 +70,14 @@ class PlaybackEngineTest {
         engine.advance(507 * ms)   // the two events at 500 ms, 7 ms late
         engine.setTempo(50, 507 * ms)
         engine.advance(1_496 * ms)   // at half speed the last event (1000 ms of music) was due at 1493 ms: 3 ms late
-        assertEquals(PlaybackTiming.Run(events = 4, latestMicros = 7_000), engine.timing.take())
+        assertEquals(PlaybackTiming.Run(events = 4, latestMicros = 7_000, latestAtMicros = 500_000), engine.timing.take())
         assertEquals("taken once", null, engine.timing.take())
         engine.setTempo(100, now)
         engine.play(now)
         engine.stop(now)
         assertEquals("a run that sent nothing has no figures", null, engine.timing.take())
-        assertEquals("Timing: 4 events, the latest 7 ms after its time", Player.timingLine(PlaybackTiming.Run(4, 7_900)))
+        assertEquals("Timing: 4 events, the latest 7 ms after its time, at 0:00.5", Player.timingLine(PlaybackTiming.Run(4, 7_900, 500_000)))
+        assertEquals("Timing: 3059 events, the latest 101 ms after its time, at 12:03.4", Player.timingLine(PlaybackTiming.Run(3059, 101_200, 723_456_789)))
     }
 
     @Test

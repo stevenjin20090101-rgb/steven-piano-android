@@ -44,7 +44,7 @@ data class UpdateManifest(
         /** A manifest is a few hundred bytes; anything past this is not one. */
         const val MAX_MANIFEST_BYTES = 64 * 1024
 
-        /** The largest file the updater downloads (the app is about 2.4 MB). */
+        /** The largest file the updater downloads (the app is about 13.4 MB since ONNX Runtime came with Studio, v1.7). */
         const val MAX_APK_BYTES = 50L * 1024 * 1024
         const val MAX_NOTES = 1_000
         private const val MAX_VERSION_NAME = 32

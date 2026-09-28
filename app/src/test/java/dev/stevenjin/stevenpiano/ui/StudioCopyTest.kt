@@ -47,6 +47,10 @@ class StudioCopyTest {
         assertEquals("This tablet doesn't have enough memory for Studio", StudioCopy.unsupported(StudioSupport.TooLittleMemory))
         assertNull(StudioCopy.unsupported(StudioSupport.Available))
         assertNull(StudioCopy.unsupported(StudioSupport.Checking))
+        assertEquals(
+            "Studio models: ByteDance piano transcription (CC BY 4.0) · Anticipatory Music Transformer (Apache-2.0)",
+            StudioCopy.MODELS_CREDIT,
+        )
     }
 
     @Test
@@ -68,6 +72,15 @@ class StudioCopyTest {
         assertEquals("Clair de lune is in the library", StudioCopy.ended(made))
         assertEquals("The transcription model is installed", StudioCopy.ended(downloading.copy(state = JobState.Done)))
         assertEquals("The transcription didn't finish", StudioCopy.ended(transcribing.copy(state = JobState.Failed)))
+    }
+
+    @Test
+    fun `the Library's line names the job running and how far it is`() {
+        assertEquals("Transcribing Clair de lune.m4a · 42%", StudioCopy.libraryLine(transcribing))
+        assertEquals("Reading Clair de lune.m4a…", StudioCopy.libraryLine(transcribing.copy(step = JobStep.Reading)))
+        assertEquals("Adding Clair de lune.m4a to the library…", StudioCopy.libraryLine(transcribing.copy(step = JobStep.Saving)))
+        assertEquals("Downloading the transcription model · 42 of 125 MB", StudioCopy.libraryLine(downloading, Locale.US))
+        assertEquals("Downloading the transcription model", StudioCopy.libraryLine(downloading.copy(step = JobStep.Waiting)))
     }
 
     @Test

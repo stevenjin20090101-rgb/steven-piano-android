@@ -37,20 +37,24 @@ sealed interface AudioSource {
  * WAV files through [WavReader] (the path the JVM tests cover), everything else (m4a, mp3, flac, ogg,
  * opus…) through Android's [MediaExtractor] and [MediaCodec], its PCM (16-bit or float) made mono and
  * resampled as it comes ([MonoTo16k]). Refused before decoding: files over [AudioLimits.MAX_FILE_BYTES],
- * and recordings whose container says they last over [AudioLimits.MAX_SECONDS]; what decodes past that
+ * MIDI files ([AudioFailure.MIDI]: the picker offers them as audio), and recordings whose container says
+ * they last over [AudioLimits.MAX_SECONDS]; what decodes past that
  * is cut off with the same refusal. Anything that can't be read is [AudioFailure.UNREADABLE]. Blocking,
  * on the job's own thread; [cancelled] is asked between buffers.
  */
 class AudioDecoder(private val resolver: ContentResolver) : RecordingReader {
     override fun decode(source: AudioSource, cancelled: () -> Boolean): DecodedAudio {
         if (sizeOf(source) > AudioLimits.MAX_FILE_BYTES) throw AudioFailure(AudioFailure.TOO_LARGE)
+        val header = ByteArray(12)
         val wav = try {
-            open(source).use { input -> ByteArray(12).let { header -> readHeader(input, header) && WavReader.isWav(header) } }
+            open(source).use { input -> readHeader(input, header) && WavReader.isWav(header) }
         } catch (e: IOException) {
             throw AudioFailure(AudioFailure.UNREADABLE, e)
         } catch (e: SecurityException) {   // the picker's grant is gone
             throw AudioFailure(AudioFailure.UNREADABLE, e)
         }
+        // The picker lists MIDI files among audio (Android would even render one through its own synthesizer): not a recording.
+        if (WavReader.isMidi(header)) throw AudioFailure(AudioFailure.MIDI)
         return if (wav) {
             try {
                 BufferedInputStream(open(source), BUFFER).use { WavReader.decode(it, cancelled) }

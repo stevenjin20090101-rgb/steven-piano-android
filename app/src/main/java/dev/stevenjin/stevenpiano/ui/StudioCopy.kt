@@ -88,6 +88,20 @@ object StudioCopy {
     fun notificationTitle(job: StudioJob): String =
         if (job.kind == JobKind.Download) "Downloading the ${job.name.lowercase(Locale.ROOT)}" else "Transcribing ${job.name}"
 
+    /**
+     * The Library's line while a job runs (under its import bar), so a transcription started from the
+     * + sheet shows where it was started: "Transcribing Clair de lune.m4a · 42%", "Downloading the
+     * transcription model · 42 of 125 MB", or what the step is doing.
+     */
+    fun libraryLine(job: StudioJob, locale: Locale = Locale.getDefault()): String = when {
+        job.kind == JobKind.Download && job.step == JobStep.Downloading -> "${notificationTitle(job)} · ${megabytes(job.bytes, job.total, locale)}"
+        job.kind == JobKind.Download -> notificationTitle(job)
+        job.step == JobStep.Transcribing -> "${notificationTitle(job)} · ${Format.percent(percentOf(job.progress ?: 0f))}"
+        job.step == JobStep.Reading -> "Reading ${job.name}…"
+        job.step == JobStep.Saving -> "Adding ${job.name} to the library…"
+        else -> notificationTitle(job)
+    }
+
     /** The notification left when the last job has ended: how it went. */
     fun ended(job: StudioJob): String = when {
         job.state == JobState.Done && job.kind == JobKind.Download -> "The ${job.name.lowercase(Locale.ROOT)} is installed"
@@ -99,6 +113,9 @@ object StudioCopy {
 
     /** Under a finished piece's notification: what to do next. */
     const val LISTEN = "Listen, then keep it or discard it."
+
+    /** About's credit for the models Studio downloads (their licences in AUTHORS and third_party/). */
+    const val MODELS_CREDIT = "Studio models: ByteDance piano transcription (CC BY 4.0) · Anticipatory Music Transformer (Apache-2.0)"
 
     /** Now playing's banner. */
     const val REVIEW_TITLE = "Keep this piece?"

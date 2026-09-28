@@ -33,6 +33,9 @@ class AudioFailure(message: String, cause: Throwable? = null) : Exception(messag
         const val TOO_LONG = "A recording can be 20 minutes long at most."
         const val TOO_LARGE = "A recording can be 200 MB at most."
         const val EMPTY = "The recording is empty."
+
+        /** The system's audio picker offers MIDI files too (they are audio/midi): they need no transcribing. */
+        const val MIDI = "That's a MIDI file already. Add it with Add files."
     }
 }
 
@@ -117,6 +120,13 @@ object WavReader {
     /** Whether [header] (the file's first 12 bytes) starts a WAV file. */
     fun isWav(header: ByteArray): Boolean =
         header.size >= 12 && String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "WAVE"
+
+    /** Whether [header] (the file's first 12 bytes) starts a MIDI file: a standard one ("MThd") or RIFF's RMID. */
+    fun isMidi(header: ByteArray): Boolean =
+        header.size >= 12 && (
+            String(header, 0, 4, Charsets.US_ASCII) == "MThd" ||
+                (String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "RMID")
+            )
 
     /** Decodes the WAV file [input] (its first byte next); [cancelled] is asked between blocks. Blocking. */
     fun decode(input: InputStream, cancelled: () -> Boolean = { false }): DecodedAudio {

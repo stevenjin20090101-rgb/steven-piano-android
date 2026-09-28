@@ -20,7 +20,8 @@ import java.util.Locale
  * memory only: `link.log` in the diagnostics zip, and the tail of a crash report. The link writes
  * through [warn], the same call that puts each line in Android's log (Log.w, tag PianoLink, kept
  * in release builds). The lines hold what that log holds: Bluetooth addresses, the names devices
- * advertise, GATT status codes; never a file name, title or setting. A line is cut at [MAX_LINE]
+ * advertise, GATT status codes, and each playback run's timing (v1.7: "Timing: 3059 events, the latest
+ * 6 ms after its time, at 1:15.5"); never a file name, title or setting. A line is cut at [MAX_LINE]
  * characters and kept on one line. Safe from any thread.
  */
 class LinkLog(

@@ -116,6 +116,16 @@ class AudioDecoderTest {
     }
 
     @Test
+    fun `a MIDI file is known by its first bytes, a recording is not`() {
+        val midi = StudioFixtures.file("bach_bwv846.mid").readBytes().copyOf(12)
+        assertTrue(WavReader.isMidi(midi))
+        assertTrue(WavReader.isMidi("RIFF\u0000\u0000\u0000\u0000RMID".toByteArray(Charsets.US_ASCII)))
+        assertEquals(false, WavReader.isMidi(wav(16_000, 1, 100) { _, _ -> 0.1 }.copyOf(12)))
+        assertEquals(false, WavReader.isMidi("MThd".toByteArray()))
+        assertEquals(false, WavReader.isMidi(byteArrayOf(0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0, 0, 0)))
+    }
+
+    @Test
     fun `reading stops when the job is cancelled`() {
         var asked = 0
         val big = wav(16_000, 1, 100_000) { _, _ -> 0.1 }

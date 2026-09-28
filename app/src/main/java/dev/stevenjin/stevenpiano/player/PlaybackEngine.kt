@@ -194,7 +194,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
             cursor++
         }
         // The batch's first event was due earliest: how late it goes is how late the batch is (in real time).
-        if (cursor > first) timing.record(cursor - first, (position - events.atMicros(first)) * 100 / tempoPct)
+        if (cursor > first) timing.record(cursor - first, (position - events.atMicros(first)) * 100 / tempoPct, events.atMicros(first))
         if (cursor < events.size) {
             send(dropPending = false)
             return minOf(wakeTimeFor(events.atMicros(cursor)), pedalWakeTime())
@@ -261,23 +261,28 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
  * Owned by the scheduler thread, as the engine is.
  */
 class PlaybackTiming {
-    /** One run: [events] sent, the latest [latestMicros] after its time. */
-    data class Run(val events: Int, val latestMicros: Long)
+    /** One run: [events] sent, the latest [latestMicros] after its time, that batch due at [latestAtMicros] of the piece. */
+    data class Run(val events: Int, val latestMicros: Long, val latestAtMicros: Long = 0L)
 
     private var events = 0
     private var latest = 0L
+    private var latestAt = 0L
     private var finished: Run? = null
 
-    fun record(count: Int, lateMicros: Long) {
+    fun record(count: Int, lateMicros: Long, atMicros: Long = 0L) {
         events += count
-        if (lateMicros > latest) latest = lateMicros
+        if (lateMicros > latest) {
+            latest = lateMicros
+            latestAt = atMicros
+        }
     }
 
     /** The run is over: its figures are kept for [take] (none when it sent nothing). */
     fun close() {
-        if (events > 0) finished = Run(events, latest)
+        if (events > 0) finished = Run(events, latest, latestAt)
         events = 0
         latest = 0L
+        latestAt = 0L
     }
 
     /** The last run's figures, once. */

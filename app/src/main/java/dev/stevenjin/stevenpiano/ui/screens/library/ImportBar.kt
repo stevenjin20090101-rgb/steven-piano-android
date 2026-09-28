@@ -22,8 +22,12 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.art.ArtworkProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.studio.JobState
+import dev.stevenjin.stevenpiano.studio.JobStep
+import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.ImportCopy
+import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
@@ -57,6 +61,17 @@ fun ImportBar(progress: ImportProgress, dismissed: ImportProgress?, onDismiss: (
 fun ArtworkBar(progress: ArtworkProgress) {
     if (progress.idle || progress.total == 0) return
     ProgressRow(ArtworkCopy.running(progress), progress.done.toFloat() / progress.total)
+}
+
+/**
+ * Studio's job running (v1.7 — M23): "Transcribing Clair de lune.m4a · 42%" over the same hairline
+ * progress line, measured while it downloads or transcribes. Nothing while no job runs.
+ */
+@Composable
+fun StudioBar(jobs: List<StudioJob>) {
+    val job = jobs.firstOrNull { it.state == JobState.Running } ?: return
+    val measured = job.step == JobStep.Downloading || job.step == JobStep.Transcribing
+    ProgressRow(StudioCopy.libraryLine(job), if (measured) job.progress ?: 0f else null)
 }
 
 /** A line of progress copy over a hairline progress line; [progress] null is indeterminate. */

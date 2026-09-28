@@ -39,8 +39,9 @@ data class StudioPiece(val id: Long, val title: String)
 
 /**
  * A transcription into a piece of the library (v1.7 — M23): the notes and pedal written as a MIDI file
- * ([SmfWriter]: the title as its track name, "Made in Studio" and the time as its text, so no two are
- * the same file), imported through the importer with the title the recording's file name gives
+ * ([SmfWriter]: the title as its track name, "Made in Studio, <time>" as its text, so no two are the
+ * same file; the text in plain ASCII, as other programs read it), imported through the importer with
+ * the title the recording's file name gives
  * (without its extension; "Recording · Sep 28, 2026" when it has none) and the composer
  * [ComposerNames.STUDIO], then described "Made in Studio · Sep 28, 2026" on its sheet (the date in
  * the device's own style). A transcription without a note is refused ([StudioFailures.NO_NOTES]); one
@@ -50,7 +51,7 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
     suspend fun add(transcription: Transcription, recordingName: String?, at: ZonedDateTime): StudioPiece {
         if (transcription.notes.isEmpty()) throw StudioFailure(StudioFailures.NO_NOTES)
         val title = title(recordingName, at)
-        val bytes = midi(transcription, title, "${ComposerNames.STUDIO} · ${STAMP.format(at)}")
+        val bytes = midi(transcription, title, "${ComposerNames.STUDIO}, ${STAMP.format(at)}")
         val fileName = title.replace('/', '-').replace('\\', '-') + ".mid"
         val id = library.add(fileName, bytes, title, ComposerNames.STUDIO) ?: throw StudioFailure(StudioFailures.NOT_SAVED)
         library.describe(id, description(at))

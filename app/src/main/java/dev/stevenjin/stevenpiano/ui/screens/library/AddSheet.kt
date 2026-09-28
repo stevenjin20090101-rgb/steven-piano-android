@@ -25,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -79,7 +80,12 @@ class TranscribeEntry(val detail: String, val onClick: () -> Unit)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit, transcribe: TranscribeEntry? = null) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // Open all the way: with Studio's entry the sheet is taller than half a phone's screen, where it would open half up and cut its last row.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
         Text(
             "Add MIDI files",
             modifier = Modifier

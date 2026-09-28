@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
@@ -85,7 +86,7 @@ class Player(
     prepareThread: () -> Unit = Scheduler.UrgentAudio,
     private val random: Random = Random.Default,
     private val compute: CoroutineDispatcher = Dispatchers.Default,
-    /** The link's trail (LinkLog), where each run's timing goes: "Timing: 1204 events, the latest 3 ms after its time". */
+    /** The link's trail (LinkLog), where each run's timing goes: "Timing: 1204 events, the latest 3 ms after its time, at 1:23.4". */
     private val trail: (String) -> Unit = {},
 ) : ChannelDeck {
     private val engine = PlaybackEngine(link)
@@ -634,8 +635,16 @@ class Player(
     }
 
     companion object {
-        /** A run's timing for the link's trail: how many events went out, and the latest after its time. No title, no name. */
-        fun timingLine(run: PlaybackTiming.Run): String = "Timing: ${run.events} events, the latest ${run.latestMicros / 1_000} ms after its time"
+        /**
+         * A run's timing for the link's trail: how many events went out, the latest after its time, and
+         * where in the piece that was ("at 1:23.4", so it can be set beside the log's other lines). No
+         * title, no name.
+         */
+        fun timingLine(run: PlaybackTiming.Run): String {
+            val tenths = run.latestAtMicros.coerceAtLeast(0) / 100_000
+            val at = String.format(Locale.ROOT, "%d:%02d.%d", tenths / 600, tenths / 10 % 60, tenths % 10)
+            return "Timing: ${run.events} events, the latest ${run.latestMicros / 1_000} ms after its time, at $at"
+        }
 
         private const val AUTO_ADVANCE_DELAY_MS = 1_500L
         private const val NANOS_PER_MS = 1_000_000L

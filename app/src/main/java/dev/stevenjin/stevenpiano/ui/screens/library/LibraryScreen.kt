@@ -157,6 +157,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val state by vm.state.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
+    val studioJobs by graph.studio.jobs.jobs.collectAsStateWithLifecycle()
     val crashed by graph.crashNotice.collectAsStateWithLifecycle()
     val requests by graph.web.requests.pending.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -216,6 +217,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                 HairlineDivider()
                 ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
                 ArtworkBar(artworkProgress)
+                StudioBar(studioJobs)
                 if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
                 RequestsBanner(requests, onApprove = graph.web::approve, onDismiss = graph.web::dismiss, modifier = Modifier.padding(16.dp))
             }

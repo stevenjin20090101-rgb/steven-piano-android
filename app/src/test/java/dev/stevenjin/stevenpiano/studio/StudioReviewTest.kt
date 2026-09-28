@@ -100,6 +100,7 @@ class StudioReviewTest {
         val review = review(player = player, library = library)
         review.made(8)
         player.load(8, 60_000_000)
+        advanceTimeBy(300)
         player.position = 20_000_000
         advanceTimeBy(300)
         assertEquals(8L, review.asking.value)
@@ -120,7 +121,9 @@ class StudioReviewTest {
         player.position = 5_000_000
         advanceTimeBy(1_000)
         assertNull("paused: not listening", review.asking.value)
+        player.position = -2_000_000   // the pause before a piece
         player.load(9, 5_000_000)
+        advanceTimeBy(300)
         player.position = 4_960_000
         advanceTimeBy(300)
         assertEquals(9L, review.asking.value)
@@ -139,8 +142,28 @@ class StudioReviewTest {
         val review = review(Store(setOf(3L, 4L)), player)
         assertEquals(setOf(3L, 4L), review.undecided.value)
         player.load(4, 30_000_000)
+        advanceTimeBy(300)
         player.position = 16_000_000
         advanceTimeBy(300)
         assertEquals(4L, review.asking.value)
+    }
+
+    @Test
+    fun `the last piece's position doesn't count for the next one`() = runTest {
+        val player = Player()
+        val review = review(player = player)
+        review.made(11)
+        player.load(5, 180_000_000)
+        player.position = 50_000_000   // another piece, 50 s in
+        runCurrent()
+        player.load(11, 10_000_000)   // the new piece loaded, its clock not yet moved off the last one
+        advanceTimeBy(1_000)
+        assertNull("50 s of the last piece is not 10 s of this one", review.asking.value)
+        player.position = -2_000_000   // its own clock: the pause before it
+        advanceTimeBy(300)
+        assertNull(review.asking.value)
+        player.position = 9_960_000   // its end
+        advanceTimeBy(300)
+        assertEquals(11L, review.asking.value)
     }
 }

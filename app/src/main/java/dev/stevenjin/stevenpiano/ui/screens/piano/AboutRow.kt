@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.Provenance
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
+import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 
 private const val LIBRARY_SOURCES =
@@ -25,10 +26,10 @@ private const val LIBRARY_SOURCES =
         "Mutopia Project (public domain)"
 
 /**
- * The very bottom of the Piano tab: who made the app, the sources' credit, what the app sends to
- * the internet (nothing about the person) and the credit for Wikipedia's text and Wikimedia
- * Commons' portraits, in the eyebrow style. The provenance line keeps its own case so the
- * fingerprint reads exactly as it is published.
+ * The very bottom of the Piano tab: who made the app, the sources' credit, Studio's models and their
+ * licences (v1.7 — M23), what the app sends to the internet (nothing about the person) and the credit
+ * for Wikipedia's text and Wikimedia Commons' portraits, in the eyebrow style. The provenance line
+ * keeps its own case so the fingerprint reads exactly as it is published.
  */
 @Composable
 fun AboutRow(modifier: Modifier = Modifier) {
@@ -36,6 +37,8 @@ fun AboutRow(modifier: Modifier = Modifier) {
         Eyebrow(Provenance.text, uppercase = false)
         Spacer(Modifier.height(8.dp))
         Eyebrow(LIBRARY_SOURCES, uppercase = false)
+        Spacer(Modifier.height(8.dp))
+        Eyebrow(StudioCopy.MODELS_CREDIT, uppercase = false)
         Spacer(Modifier.height(8.dp))
         Eyebrow(ArtworkCopy.TRANSPARENCY, uppercase = false)
         Eyebrow(ArtworkCopy.ATTRIBUTION, uppercase = false)

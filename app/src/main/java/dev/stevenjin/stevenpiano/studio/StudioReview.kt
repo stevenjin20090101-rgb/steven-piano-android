@@ -111,10 +111,18 @@ class StudioReview(
         }
     }
 
+    /**
+     * Polls the position until [enough] of [pieceId] has played. A position counts only once one under
+     * [enough] has been read: the player's state names a new piece a moment before its clock leaves the
+     * last one, whose position must not count for it (seen on the emulator: the question came as the
+     * next piece loaded).
+     */
     private suspend fun listen(pieceId: Long, durationMicros: Long) {
         val enough = minOf(HEARD_MICROS, (durationMicros - END_SLACK_MICROS).coerceAtLeast(0L))
+        var fromItsStart = false
         while (pieceId !in heardNow.value) {
-            if (player.positionMicrosNow() >= enough) heardNow.update { it + pieceId }
+            val at = player.positionMicrosNow()
+            if (at < enough) fromItsStart = true else if (fromItsStart) heardNow.update { it + pieceId }
             delay(POLL_MS)
         }
     }

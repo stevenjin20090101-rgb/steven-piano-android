@@ -70,7 +70,7 @@ class StudioPiecesTest {
         assertEquals("Made in Studio · Sep 28, 2026", library.described[41])
         val midi = SmfParser.parse(bytes)
         assertEquals("Clair de lune (live)", midi.sequenceName)
-        assertEquals(listOf("Made in Studio · 2026-09-28 14:03:05"), midi.texts)
+        assertEquals(listOf("Made in Studio, 2026-09-28 14:03:05"), midi.texts)
         assertEquals(3, midi.noteCount)
         val notes = (0 until 3).map { i -> midi.notes.run { listOf(startMicros[i], endMicros[i], note(i).toLong(), velocity(i).toLong()) } }
         for ((want, got) in listOf(listOf(500_000L, 1_250_000L, 60L, 64L), listOf(500_000L, 2_000_000L, 64L, 127L), listOf(3_010_100L, 3_020_000L, 108L, 1L))
