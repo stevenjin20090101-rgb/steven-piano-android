@@ -9,7 +9,6 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,12 +19,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,9 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -51,15 +46,15 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
  * A playlist's page head: back and the playlist menu (Rename, Change photo, Delete), the [cover]
- * at 96 dp, the name in Title over "12 pieces · 41:20", then a filled 56 dp Play circle and an
- * outlined Shuffle button side by side (not shown for an empty playlist).
+ * at 96 dp, the name in Title over "12 pieces · 41:20", then the outlined Shuffle button (not shown
+ * for an empty playlist). Play is not here: it floats as a glass circle at the list's bottom end
+ * (DESIGN.md › v1.5 — M16), where a thumb finds it wherever the list is scrolled.
  */
 @Composable
 fun PlaylistHeader(
     summary: PlaylistSummary,
     cover: @Composable (Modifier) -> Unit,
     onBack: () -> Unit,
-    onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onRename: () -> Unit,
     onChangePhoto: () -> Unit,
@@ -99,7 +94,6 @@ fun PlaylistHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                PlayCircle(onPlay)
                 OutlinedButton(onClick = onShuffle, border = BorderStroke(Hairline, LocalTertiary.current)) {
                     Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -110,28 +104,6 @@ fun PlaylistHeader(
             Spacer(Modifier.size(16.dp))
         }
         HairlineDivider()
-    }
-}
-
-/** Play, as the transport draws it: a filled circle in the content colour with a surface glyph, and the play tick. */
-@Composable
-private fun PlayCircle(onClick: () -> Unit) {
-    val view = LocalView.current
-    Surface(
-        onClick = {
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            onClick()
-        },
-        modifier = Modifier
-            .size(56.dp)
-            .semantics { contentDescription = "Play" },
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.onSurface,
-        contentColor = MaterialTheme.colorScheme.surface,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(painterResource(R.drawable.ic_play), contentDescription = null, modifier = Modifier.size(28.dp))
-        }
     }
 }
 

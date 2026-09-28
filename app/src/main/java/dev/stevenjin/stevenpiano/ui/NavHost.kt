@@ -23,6 +23,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -82,10 +83,13 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.ui.components.FloatingPlayLayer
+import dev.stevenjin.stevenpiano.ui.components.FloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.GlassEdge
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
+import dev.stevenjin.stevenpiano.ui.components.LocalFloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
 import dev.stevenjin.stevenpiano.ui.components.LocalOnGlass
 import dev.stevenjin.stevenpiano.ui.components.LocalReducedTransparency
@@ -133,6 +137,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val settings by LocalContext.current.graph.settings.collectAsStateWithLifecycle()
     val reducedTransparency = rememberReducedTransparency()
     val content = rememberHazeState()
+    val floatingPlay = remember { FloatingPlaySlot() }
 
     LaunchedEffect(requestedTab) {
         val tab = requestedTab ?: return@LaunchedEffect
@@ -147,6 +152,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         LocalHandColours provides settings.handColours,
         LocalReducedTransparency provides reducedTransparency,
         LocalHazeState provides content,
+        LocalFloatingPlaySlot provides floatingPlay,
     ) {
         RailFrame(
             rail = if (frame.rail) ({ TabRail(current, select) }) else null,
@@ -169,77 +175,81 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                     bottom = padding.calculateBottomPadding(),
                 )
                 CompositionLocalProvider(LocalFloatingPadding provides floating) {
-                    NavHost(
-                        navController = nav,
-                        startDestination = Route.Library.path,
-                        modifier = Modifier
-                            .padding(top = top)
-                            .consumeWindowInsets(PaddingValues(top = top))
-                            .hazeSource(content),
-                        enterTransition = {
-                            when {
-                                reduced -> EnterTransition.None
-                                !withinPianoTab() -> FadeThrough.enter
-                                pushesPage(frame) -> PagePush.enter(this)
-                                else -> EnterTransition.None
+                    Box(Modifier.fillMaxSize()) {
+                        NavHost(
+                            navController = nav,
+                            startDestination = Route.Library.path,
+                            modifier = Modifier
+                                .padding(top = top)
+                                .consumeWindowInsets(PaddingValues(top = top))
+                                .hazeSource(content),
+                            enterTransition = {
+                                when {
+                                    reduced -> EnterTransition.None
+                                    !withinPianoTab() -> FadeThrough.enter
+                                    pushesPage(frame) -> PagePush.enter(this)
+                                    else -> EnterTransition.None
+                                }
+                            },
+                            exitTransition = {
+                                when {
+                                    reduced -> ExitTransition.None
+                                    !withinPianoTab() -> FadeThrough.exit
+                                    pushesPage(frame) -> PagePush.exitUnder(this)
+                                    else -> ExitTransition.None
+                                }
+                            },
+                            popEnterTransition = {
+                                when {
+                                    reduced -> EnterTransition.None
+                                    !withinPianoTab() -> FadeThrough.enter
+                                    popsPage(frame) -> PagePush.popEnterUnder(this)
+                                    else -> EnterTransition.None
+                                }
+                            },
+                            popExitTransition = {
+                                when {
+                                    reduced -> ExitTransition.None
+                                    !withinPianoTab() -> FadeThrough.exit
+                                    popsPage(frame) -> PagePush.popExit(this)
+                                    else -> ExitTransition.None
+                                }
+                            },
+                        ) {
+                            composable(Route.Library.path) {
+                                LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onImport = onImport)
                             }
-                        },
-                        exitTransition = {
-                            when {
-                                reduced -> ExitTransition.None
-                                !withinPianoTab() -> FadeThrough.exit
-                                pushesPage(frame) -> PagePush.exitUnder(this)
-                                else -> ExitTransition.None
+                            composable(Route.NowPlaying.path) {
+                                NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })
                             }
-                        },
-                        popEnterTransition = {
-                            when {
-                                reduced -> EnterTransition.None
-                                !withinPianoTab() -> FadeThrough.enter
-                                popsPage(frame) -> PagePush.popEnterUnder(this)
-                                else -> EnterTransition.None
+                            composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }) }
+                            navigation(startDestination = PianoRoutes.HUB, route = Route.Piano.path) {
+                                composable(PianoRoutes.HUB) { hub ->
+                                    val tab = remember(hub) { nav.getBackStackEntry(Route.Piano.path) }
+                                    PianoScreen(
+                                        tab,
+                                        onOpenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page)) },
+                                        onReopenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page, cut = true)) },
+                                    )
+                                }
+                                composable(
+                                    PianoRoutes.PAGE,
+                                    arguments = listOf(
+                                        navArgument(PianoRoutes.PAGE_KEY) { type = PianoRoutes.PageType },
+                                        navArgument(PianoRoutes.CUT) {
+                                            type = NavType.BoolType
+                                            defaultValue = false
+                                        },
+                                    ),
+                                ) { page ->
+                                    val tab = remember(page) { nav.getBackStackEntry(Route.Piano.path) }
+                                    val shown = page.arguments?.let { PianoRoutes.PageType[it, PianoRoutes.PAGE_KEY] } ?: SettingsPage.Feel
+                                    PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() })
+                                }
                             }
-                        },
-                        popExitTransition = {
-                            when {
-                                reduced -> ExitTransition.None
-                                !withinPianoTab() -> FadeThrough.exit
-                                popsPage(frame) -> PagePush.popExit(this)
-                                else -> ExitTransition.None
-                            }
-                        },
-                    ) {
-                        composable(Route.Library.path) {
-                            LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onImport = onImport)
                         }
-                        composable(Route.NowPlaying.path) {
-                            NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })
-                        }
-                        composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }) }
-                        navigation(startDestination = PianoRoutes.HUB, route = Route.Piano.path) {
-                            composable(PianoRoutes.HUB) { hub ->
-                                val tab = remember(hub) { nav.getBackStackEntry(Route.Piano.path) }
-                                PianoScreen(
-                                    tab,
-                                    onOpenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page)) },
-                                    onReopenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page, cut = true)) },
-                                )
-                            }
-                            composable(
-                                PianoRoutes.PAGE,
-                                arguments = listOf(
-                                    navArgument(PianoRoutes.PAGE_KEY) { type = PianoRoutes.PageType },
-                                    navArgument(PianoRoutes.CUT) {
-                                        type = NavType.BoolType
-                                        defaultValue = false
-                                    },
-                                ),
-                            ) { page ->
-                                val tab = remember(page) { nav.getBackStackEntry(Route.Piano.path) }
-                                val shown = page.arguments?.let { PianoRoutes.PageType[it, PianoRoutes.PAGE_KEY] } ?: SettingsPage.Feel
-                                PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() })
-                            }
-                        }
+                        // Over the content and beside its source, never inside it: a playlist's floating Play.
+                        FloatingPlayLayer(floatingPlay, shown = current == Route.Library)
                     }
                 }
             }

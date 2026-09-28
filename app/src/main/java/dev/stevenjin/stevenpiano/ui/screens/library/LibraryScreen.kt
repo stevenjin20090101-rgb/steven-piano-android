@@ -58,6 +58,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -82,6 +86,8 @@ import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.Sentences
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
+import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
+import dev.stevenjin.stevenpiano.ui.components.FloatingPlayRequest
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -110,7 +116,8 @@ import kotlinx.coroutines.launch
  * fetched in the background shows its progress under the import bar. On the launch after a crash,
  * an outlined banner offers to share diagnostics. On wide screens the content stays a 720 dp
  * column in the middle; the list still scrolls from anywhere across the screen, and under the tab
- * bar's glass, its last row able to rise above it ([LocalFloatingPadding]).
+ * bar's glass, its last row able to rise above it ([LocalFloatingPadding]). An open playlist's Play
+ * floats as a glass circle at the bottom end of its column ([FloatingPlayRequest]).
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -177,8 +184,24 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
                 OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
             }
             state.empty -> EmptyLibrary(onAdd = { adding = true })
-            else -> BoxWithConstraints(Modifier.fillMaxSize()) {
-                LibraryItems(state, vm, listState, readingPadding(maxWidth, bottom = listBottom), actions, play, changePhoto) { dialog = it }
+            else -> {
+                var listBounds by remember { mutableStateOf<Rect?>(null) }
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { listBounds = it.boundsInRoot() },
+                ) {
+                    val padding = readingPadding(maxWidth, bottom = listBottom)
+                    // The reading column's bottom end, above the floating controls: where a playlist's Play floats.
+                    val density = LocalDensity.current
+                    val anchor = listBounds?.let { box ->
+                        with(density) {
+                            val side = padding.calculateStartPadding(direction).toPx()
+                            Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
+                        }
+                    }
+                    LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto) { dialog = it }
+                }
             }
         }
     }
@@ -216,6 +239,7 @@ private fun LibraryItems(
     vm: LibraryViewModel,
     listState: LazyListState,
     padding: PaddingValues,
+    playAnchor: Rect?,
     actions: PieceActions,
     play: LibraryPlay,
     onChangePhoto: (Long) -> Unit,
@@ -255,7 +279,20 @@ private fun LibraryItems(
         }
     }
 
-    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = padding) {
+    // An open playlist's Play floats at the list's bottom end; its last row can rise clear of it.
+    val floatingPlay = playlistId != null && shown.isNotEmpty()
+    FloatingPlayRequest(floatingPlay, playAnchor) { play.all(shown.map { it.id }, shuffle = false) }
+    val direction = LocalLayoutDirection.current
+    val listPadding = if (!floatingPlay) {
+        padding
+    } else {
+        PaddingValues(
+            start = padding.calculateStartPadding(direction),
+            end = padding.calculateEndPadding(direction),
+            bottom = padding.calculateBottomPadding() + FloatingPlayClearance,
+        )
+    }
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = listPadding) {
         item(key = "search") { SearchField(vm.query, vm::search) }
         item(key = "categories") { CategoryChips(state.category, vm::selectCategory) }
         when (group) {
@@ -266,7 +303,6 @@ private fun LibraryItems(
                     summary,
                     cover = { PlaylistCover(summary.id, summary.name, ArtSize.Tile, it) },
                     onBack = vm::closeGroup,
-                    onPlay = { play.all(shown.map { it.id }, shuffle = false) },
                     onShuffle = { play.all(shown.map { it.id }, shuffle = true) },
                     onRename = { onDialog(LibraryDialog.RenamePlaylist(summary)) },
                     onChangePhoto = { onChangePhoto(summary.id) },
