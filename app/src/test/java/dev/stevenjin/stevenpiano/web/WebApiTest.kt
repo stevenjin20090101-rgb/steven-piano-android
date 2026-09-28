@@ -9,6 +9,12 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.studio.ComposeOrder
+import dev.stevenjin.stevenpiano.studio.SeedChoice
+import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.Mood
+import dev.stevenjin.stevenpiano.studio.compose.MusicKey
+import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -171,5 +177,42 @@ class WebApiTest {
         assertEquals("state", WebApi.state(state, 0, type = "state").getString("type"))
         assertTrue("no piece: null, not missing", WebApi.state(WebState(), 0).getJSONObject("player").isNull("piece"))
         assertFalse(WebApi.progress(1, 2).has("player"))
+    }
+
+    @Test
+    fun `a composition's choices are read strictly, and nothing but choices is taken`() {
+        val full = WebApi.composeOrder(JSONObject("""{"pieceId":12,"mood":"wild","key":{"tonic":9,"minor":true},"bpm":132,"minutes":1}"""))
+        assertEquals(ComposeOrder(12L, ComposeRequest(Mood.Wild, MusicKey(9, true), 132, 1)), full)
+        val plain = WebApi.composeOrder(JSONObject("""{"mood":"calm","key":null,"bpm":null,"minutes":2}"""))
+        assertEquals("no piece, key or tempo: the defaults", ComposeOrder(null, ComposeRequest(Mood.Calm, null, null, 2)), plain)
+        for (mood in listOf("calm", "bright", "wild", "melancholy")) WebApi.composeOrder(JSONObject().put("mood", mood).put("minutes", 3))
+        val refusedBodies = listOf(
+            """{"mood":"calm","minutes":2,"prompt":"play like Chopin"}""", // no text for the model, ever
+            """{"mood":"Calm ","minutes":2}""",
+            """{"mood":"happy","minutes":2}""",
+            """{"mood":"calm"}""",
+            """{"mood":"calm","minutes":0}""",
+            """{"mood":"calm","minutes":6}""",
+            """{"mood":"calm","minutes":2,"bpm":39}""",
+            """{"mood":"calm","minutes":2,"bpm":201}""",
+            """{"mood":"calm","minutes":2,"bpm":120.5}""",
+            """{"mood":"calm","minutes":2,"key":{"tonic":12,"minor":false}}""",
+            """{"mood":"calm","minutes":2,"key":{"tonic":0}}""",
+            """{"mood":"calm","minutes":2,"key":{"tonic":0,"minor":false,"name":"C"}}""",
+            """{"mood":"calm","minutes":2,"key":"C major"}""",
+            """{"mood":"calm","minutes":2,"pieceId":0}""",
+            """{"mood":"calm","minutes":2,"pieceId":"12"}""",
+            """{"mood":7,"minutes":2}""",
+        )
+        for (body in refusedBodies) refused(400) { WebApi.composeOrder(JSONObject(body)) }
+
+        val seed = WebApi.seed(SeedChoice(12, "Clair de lune", null, SeedFacts(MusicKey(1, false), 66, 66.3)))
+        assertEquals(12L, seed.getLong("pieceId"))
+        assertEquals("Clair de lune", seed.getString("title"))
+        assertTrue(seed.isNull("composer"))
+        assertEquals(1, seed.getJSONObject("key").getInt("tonic"))
+        assertFalse(seed.getJSONObject("key").getBoolean("minor"))
+        assertEquals("D♭ major", seed.getJSONObject("key").getString("label"))
+        assertEquals(66, seed.getInt("bpm"))
     }
 }

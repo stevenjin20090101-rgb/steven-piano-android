@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.studio.ComposeOrder
+import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
@@ -145,6 +147,15 @@ interface WebBackend {
 
     /** Stops Studio's job [id]; false when there is none left to stop. */
     suspend fun cancelStudioJob(id: Long): Boolean
+
+    /**
+     * Composing (v1.7 — M24): the seed piece [pieceId] (the default one, the piece played last, when null)
+     * with its key and tempo, for the panel's form; null when there is no such piece.
+     */
+    suspend fun composeSeed(pieceId: Long?): SeedChoice?
+
+    /** Composes a piece from [order] (its seed a piece of the library): queued, refused when Studio can't run here, or no such piece. */
+    suspend fun compose(order: ComposeOrder): StudioCompose
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
@@ -155,6 +166,15 @@ data class WebStudioJob(val id: Long, val kind: String, val name: String, val st
 
 /** Studio on the panel: [available] (else [reason]), the models, the jobs newest first. */
 data class WebStudio(val available: Boolean = false, val reason: String? = null, val models: List<WebModel> = emptyList(), val jobs: List<WebStudioJob> = emptyList())
+
+/** How a composition the panel asked for went: queued as job [jobId], refused for [reason] (Studio can't run here), or its piece isn't in the library. */
+sealed interface StudioCompose {
+    data class Queued(val jobId: Long) : StudioCompose
+
+    data class Refused(val reason: String) : StudioCompose
+
+    data object NoSuchPiece : StudioCompose
+}
 
 /** How a recording the panel sent went: queued as job [jobId], or refused for [reason] (Studio can't run here). */
 sealed interface StudioUpload {

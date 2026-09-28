@@ -10,9 +10,11 @@
 package dev.stevenjin.stevenpiano.web
 
 import dev.stevenjin.stevenpiano.studio.AudioSource
+import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.JobKind
 import dev.stevenjin.stevenpiano.studio.JobState
 import dev.stevenjin.stevenpiano.studio.ModelCatalogue
+import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.studio.StudioFailures
 import dev.stevenjin.stevenpiano.studio.StudioSupport
 import dev.stevenjin.stevenpiano.ui.StudioCopy
@@ -458,6 +460,21 @@ class AppWebBackend(
         }
         val job = withContext(Dispatchers.Main) { studio.transcribe(AudioSource.Local(file), name) }
         return StudioUpload.Queued(job.id)
+    }
+
+    override suspend fun composeSeed(pieceId: Long?): SeedChoice? = graph.studio.seedChoice(pieceId)
+
+    override suspend fun compose(order: ComposeOrder): StudioCompose {
+        val studio = graph.studio
+        studio.availability.check()
+        val support = studio.availability.support.first { it != StudioSupport.Checking }
+        if (support != StudioSupport.Available) {
+            return StudioCompose.Refused(StudioCopy.unsupported(support)?.let { "$it." } ?: StudioFailures.UNAVAILABLE)
+        }
+        val chosen = order.pieceId
+        val piece = (if (chosen != null) graph.library.piece(chosen) else graph.library.seedPiece()) ?: return StudioCompose.NoSuchPiece
+        val job = withContext(Dispatchers.Main) { studio.compose(order.copy(pieceId = piece.id), piece.title) }
+        return StudioCompose.Queued(job.id)
     }
 
     override suspend fun cancelStudioJob(id: Long): Boolean = withContext(Dispatchers.Main) {

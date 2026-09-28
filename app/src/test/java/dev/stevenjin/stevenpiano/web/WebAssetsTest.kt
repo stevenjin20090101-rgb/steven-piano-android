@@ -107,7 +107,11 @@ class WebAssetsTest {
         assertTrue(text("request.js").contains("'Request'") || text("request.js").contains("text: 'Request'"))
         val index = text("index.html")
         for (section in listOf("Now playing", "Up next", "Library", "Channels", "Schedule", "Requests", "Add", "Studio", "Piano")) assertTrue(section, index.contains(">$section"))
-        for (copy in listOf("Drop a piano recording here", "About a minute per three minutes of audio.", "/api/studio/audio", "/api/studio/jobs/")) {
+        for (copy in listOf(
+            "Drop a piano recording here", "About a minute per three minutes of audio.", "/api/studio/audio", "/api/studio/jobs/",
+            "Compose a piece…", "Runs on this tablet. About a minute for a two-minute piece.", "/api/studio/compose", "/api/studio/seed",
+            "In the manner of", "'Melancholy'",
+        )) {
             assertTrue("Studio (1.7): $copy", text("app.js").contains(copy))
         }
         assertTrue("the Schedule page is real (1.6.2)", index.contains(">Add schedule<") && !text("app.js").contains("Coming in the next update."))

@@ -9,6 +9,12 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.studio.ComposeOrder
+import dev.stevenjin.stevenpiano.studio.SeedChoice
+import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.Mood
+import dev.stevenjin.stevenpiano.studio.compose.MusicKey
+import dev.stevenjin.stevenpiano.studio.compose.PromptBuilder
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
@@ -429,6 +435,41 @@ object WebApi {
                 }
             },
         )
+
+    /**
+     * A composition asked for from the panel (v1.7 — M24): `{pieceId, mood, key, bpm, minutes}`, each
+     * field checked and nothing else taken. `pieceId` names a piece of the library (absent or null: the
+     * default seed), `mood` is calm, bright, wild or melancholy, `key` is `{tonic: 0–11, minor}` (null:
+     * the piece's own), `bpm` 40–200 (null: the piece's own), `minutes` 1–5. No text reaches the model.
+     */
+    fun composeOrder(json: JSONObject): ComposeOrder {
+        onlyKeys(json, COMPOSE_KEYS)
+        val pieceId = wholeOrNull(json, "pieceId")?.also { if (it <= 0) throw ApiError(400, "field", "pieceId must be above 0.") }
+        val moodName = string(json, "mood", 16)
+        val mood = Mood.entries.firstOrNull { it.name.lowercase() == moodName }
+            ?: throw ApiError(400, "field", "mood must be calm, bright, wild or melancholy.")
+        val key = if (!json.has("key") || json.isNull("key")) {
+            null
+        } else {
+            val pair = json.get("key") as? JSONObject ?: throw ApiError(400, "field", "key must be {tonic, minor}.")
+            onlyKeys(pair, KEY_KEYS)
+            MusicKey(int(pair, "tonic", 0..11), bool(pair, "minor"))
+        }
+        val bpm = if (wholeOrNull(json, "bpm") == null) null else int(json, "bpm", PromptBuilder.MIN_BPM..PromptBuilder.MAX_BPM)
+        val minutes = int(json, "minutes", PromptBuilder.MIN_MINUTES..PromptBuilder.MAX_MINUTES)
+        return ComposeOrder(pieceId, ComposeRequest(mood, key, bpm, minutes))
+    }
+
+    /** A seed for the panel's compose form: `{pieceId, title, composer, key: {tonic, minor, label}, bpm}`. */
+    fun seed(s: SeedChoice): JSONObject = JSONObject()
+        .put("pieceId", s.pieceId)
+        .put("title", s.title)
+        .put("composer", s.composer ?: JSONObject.NULL)
+        .put("key", JSONObject().put("tonic", s.facts.key.tonic).put("minor", s.facts.key.minor).put("label", s.facts.key.label))
+        .put("bpm", s.facts.bpm)
+
+    private val COMPOSE_KEYS = setOf("pieceId", "mood", "key", "bpm", "minutes")
+    private val KEY_KEYS = setOf("tonic", "minor")
 
     /** A schedule: its fields as `POST` takes them, and (read-only) what its target is called and the tablet's two lines, `when` and `what`. */
     fun schedule(s: WebSchedule): JSONObject {

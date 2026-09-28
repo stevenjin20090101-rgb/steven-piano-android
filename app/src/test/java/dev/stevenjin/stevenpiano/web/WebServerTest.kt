@@ -9,6 +9,10 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.studio.ComposeOrder
+import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.Mood
+import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.schedule.ScheduleRules
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
@@ -97,7 +101,7 @@ class WebServerTest {
         val token = login(http)
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
-        assertEquals("the table's twenty-four routes that change something (the schedules' three from 1.6.2, Studio's two from 1.7)", 24, writes.size)
+        assertEquals("the table's twenty-five routes that change something (the schedules' three from 1.6.2, Studio's three from 1.7)", 25, writes.size)
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
@@ -457,6 +461,44 @@ class WebServerTest {
         assertEquals(204, http.api("POST", "/api/studio/jobs/7/cancel", session = token).status)
         assertEquals("gone once cancelled", 404, http.api("POST", "/api/studio/jobs/7/cancel", session = token).status)
         assertEquals(404, http.api("POST", "/api/studio/jobs/0/cancel", session = token).status)
+    }
+
+    @Test
+    fun `Studio composes from a piece of the library with checked choices, and its seed comes with its key and tempo`() {
+        val (_, http) = start()
+        val token = login(http)
+        val auth = mapOf("Cookie" to "sp_session=$token")
+
+        val seed = http.get("/api/studio/seed", auth)
+        assertEquals(200, seed.status)
+        assertEquals("the default seed: the piece played last", 12L, seed.json().getLong("pieceId"))
+        assertEquals("Clair de lune", seed.json().getString("title"))
+        assertEquals("D♭ major", seed.json().getJSONObject("key").getString("label"))
+        assertEquals(66, seed.json().getInt("bpm"))
+        assertEquals(13L, http.get("/api/studio/seed?piece=13", auth).json().getLong("pieceId"))
+        assertEquals(404, http.get("/api/studio/seed?piece=99", auth).status)
+        assertEquals(400, http.get("/api/studio/seed?piece=x", auth).status)
+        assertEquals(400, http.get("/api/studio/seed?piece=-3", auth).status)
+        backend.defaultSeed = null
+        assertEquals("an empty library has no seed", 404, http.get("/api/studio/seed", auth).status)
+        backend.defaultSeed = 12L
+
+        val sent = http.api("POST", "/api/studio/compose", """{"pieceId":13,"mood":"wild","key":{"tonic":9,"minor":true},"bpm":132,"minutes":1}""", session = token)
+        assertEquals(sent.toString(), 202, sent.status)
+        assertEquals(40L, sent.json().getLong("job"))
+        assertEquals(ComposeOrder(13L, ComposeRequest(Mood.Wild, MusicKey(9, true), 132, 1)), backend.composed.single())
+        assertEquals(202, http.api("POST", "/api/studio/compose", """{"mood":"calm","minutes":2}""", session = token).status)
+        assertEquals("no piece chosen: the tablet's default", null, backend.composed.last().pieceId)
+
+        assertEquals(400, http.api("POST", "/api/studio/compose", """{"mood":"calm","minutes":2,"prompt":"like Chopin"}""", session = token).status)
+        assertEquals(400, http.api("POST", "/api/studio/compose", """{"mood":"calm","minutes":9}""", session = token).status)
+        assertEquals(400, http.api("POST", "/api/studio/compose", """{"mood":"sad","minutes":2}""", session = token).status)
+        assertEquals("a piece no longer there", 404, http.api("POST", "/api/studio/compose", """{"pieceId":77,"mood":"calm","minutes":2}""", session = token).status)
+        backend.studioHeld = WebStudio(available = false, reason = "Studio isn't available on this device.")
+        val unavailable = http.api("POST", "/api/studio/compose", """{"mood":"calm","minutes":2}""", session = token)
+        assertEquals(409, unavailable.status)
+        assertEquals("Studio isn't available on this device.", unavailable.json().getString("message"))
+        assertEquals("nothing more was queued", 2, backend.composed.size)
     }
 
     @Test

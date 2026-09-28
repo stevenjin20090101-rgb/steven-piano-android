@@ -826,16 +826,19 @@ button, input, select { font: inherit; color: inherit; }
 
 .row .title.off { color: var(--secondary); }
 
-/* The editor opens over the list, in the page's own rows: the tablet's sheet, laid flat. */
-.schedule-editor { border-bottom: 1px solid var(--hairline); }
+/* The editor opens over the list, in the page's own rows: the tablet's sheet, laid flat (the schedule's; composing's, v1.7 — M24). */
+.schedule-editor, .compose-editor { border-bottom: 1px solid var(--hairline); }
 
-.schedule-editor > .eyebrow:first-child { padding-top: 16px; padding-bottom: 0; }
+.schedule-editor > .eyebrow:first-child, .compose-editor > .eyebrow:first-child { padding-top: 16px; padding-bottom: 0; }
 
 .editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 500; }
 
-.schedule-editor .actions { flex-direction: column; }
+.schedule-editor .actions, .compose-editor .actions { flex-direction: column; }
 
-.schedule-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-bottom: 0; }
+.schedule-editor .editor-actions, .compose-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-bottom: 0; }
+
+/* Studio's COMPOSE, closed: the button, its note under it, as the tablet's action row. */
+.actions.compose-start { flex-direction: column; align-items: flex-start; gap: 4px; }
 
 .setting .label .meta { display: block; }
 

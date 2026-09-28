@@ -298,6 +298,7 @@ class WebServer(
         Route(Method.GET, Regex("/api/requests"), Access.READ, "/api/requests") { json(WebApi.requests(requests.pending.value, backend.guestSettings())) },
         Route(Method.GET, Regex("/api/piano"), Access.READ, "/api/piano") { json(WebApi.piano(backend.piano())) },
         Route(Method.GET, Regex("/api/schedules"), Access.READ, "/api/schedules") { json(WebApi.schedules(backend.schedules())) },
+        Route(Method.GET, Regex("/api/studio/seed"), Access.READ, "/api/studio/seed") { call -> studioSeed(call) },
 
         // The panel acts.
         Route(Method.POST, Regex("/api/play"), Access.WRITE, "/api/play") { call ->
@@ -417,6 +418,8 @@ class WebServer(
         Route(Method.POST, Regex("/api/studio/jobs/([1-9]\\d{0,17})/cancel"), Access.WRITE, "/api/studio/jobs/1/cancel") { call ->
             if (backend.cancelStudioJob(call.groups[0].toLong())) noContent() else notFound()
         },
+        // Composing (v1.7 — M24): a composition from a piece of the library, with the form's choices.
+        Route(Method.POST, Regex("/api/studio/compose"), Access.WRITE, "/api/studio/compose") { call -> studioCompose(call) },
         Route(Method.POST, Regex("/api/logout"), Access.WRITE, "/api/logout") { call ->
             sessions.close(call.token)
             noContent().also { it.addHeader("Set-Cookie", WebCookies.endSession()) }
@@ -557,6 +560,29 @@ class WebServer(
      * streamed to `cacheDir/web/studio-….<ext>` with the free-space margin kept (507), and the job is
      * queued: 202 `{name, job}`.
      */
+    /** `GET /api/studio/seed?piece=<id>` (v1.7 — M24): the seed and its key and tempo for the compose form (no `piece`: the default one); 404 when there is none. */
+    private suspend fun studioSeed(call: Call): Response {
+        val piece = call.param("piece")?.let { it.toLongOrNull()?.takeIf { id -> id > 0 } ?: throw ApiError(400, "field", "piece must be a piece's id.") }
+        val seed = backend.composeSeed(piece) ?: return notFound()
+        return json(WebApi.seed(seed))
+    }
+
+    /**
+     * `POST /api/studio/compose` (v1.7 — M24): the form's choices, every field checked
+     * ([WebApi.composeOrder]); Studio able to run (409 "unavailable"); the piece in the library (404);
+     * then the job is queued: 202 `{job}`.
+     */
+    private suspend fun studioCompose(call: Call): Response {
+        val order = WebApi.composeOrder(call.body())
+        val studio = backend.studio()
+        if (!studio.available) return refuse(409, "unavailable", studio.reason ?: "Studio isn't available on this device.")
+        return when (val outcome = backend.compose(order)) {
+            is StudioCompose.Queued -> json(JSONObject().put("job", outcome.jobId), Response.Status.ACCEPTED)
+            is StudioCompose.Refused -> refuse(409, "unavailable", outcome.reason)
+            StudioCompose.NoSuchPiece -> notFound()
+        }
+    }
+
     private suspend fun studioUpload(call: Call): Response {
         val name = uploadName(call.param("name")) ?: throw ApiError(400, "name", "The file needs a name.")
         val extension = AUDIO_EXTENSIONS.firstOrNull { name.lowercase(Locale.ROOT).endsWith(".$it") }

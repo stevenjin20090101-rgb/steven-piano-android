@@ -9,6 +9,10 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.studio.ComposeOrder
+import dev.stevenjin.stevenpiano.studio.SeedChoice
+import dev.stevenjin.stevenpiano.studio.compose.MusicKey
+import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.piano.PianoAction
@@ -225,6 +229,27 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         record("studio transcribe $name ${file.length()}")
         file.delete()
         return StudioUpload.Queued(nextJob++)
+    }
+
+    /** Composing (v1.7 — M24): the pieces a seed may be (id to title), the default one, and the orders taken. */
+    val seedPieces = mutableMapOf(12L to "Clair de lune", 13L to "Für Elise")
+    var defaultSeed: Long? = 12L
+    val composed: MutableList<ComposeOrder> = Collections.synchronizedList(mutableListOf())
+    var composeRefusal: String? = null
+
+    override suspend fun composeSeed(pieceId: Long?): SeedChoice? {
+        val id = pieceId ?: defaultSeed ?: return null
+        val title = seedPieces[id] ?: return null
+        return SeedChoice(id, title, if (id == 12L) "Claude Debussy" else "Ludwig van Beethoven", SeedFacts(MusicKey(if (id == 12L) 1 else 9, id == 13L), 66, 66.2))
+    }
+
+    override suspend fun compose(order: ComposeOrder): StudioCompose {
+        record("studio compose ${order.pieceId} ${order.request.mood} ${order.request.key} ${order.request.bpm} ${order.request.minutes}")
+        composeRefusal?.let { return StudioCompose.Refused(it) }
+        val id = order.pieceId ?: defaultSeed
+        if (id == null || id !in seedPieces) return StudioCompose.NoSuchPiece
+        composed += order
+        return StudioCompose.Queued(nextJob++)
     }
 
     override suspend fun cancelStudioJob(id: Long): Boolean {
