@@ -87,6 +87,10 @@ android {
                 val dir = corpus.get().ifBlank { rootProject.file("../midi").path }
                 test.systemProperty("stevenpiano.corpus", dir)
             }
+            // `-PstudioModels=<dir>` (a folder holding transcription-v1.onnx; by default $STUDIO_WORK/exports or
+            // ~/studio-work/exports) lets TranscriberTest run the real model on the JVM. Without it, skipped.
+            val studioModels = providers.gradleProperty("studioModels")
+            if (studioModels.isPresent) test.systemProperty("stevenpiano.studio.models", studioModels.get())
         }
     }
 

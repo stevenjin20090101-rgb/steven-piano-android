@@ -70,9 +70,17 @@ object ComposerNames {
      */
     fun canonical(key: String): String? = CANONICAL[VARIANTS[key] ?: key]
 
+    /**
+     * The composer of a piece made in the app's Studio (v1.7 — M23): not a person, so it keeps its
+     * whole name everywhere, rows included ("Made in Studio · 3:05", not "Studio · 3:05").
+     */
+    const val STUDIO = "Made in Studio"
+    private val STUDIO_KEY = TextKeys.fold(STUDIO)
+
     fun normalize(raw: String): Name {
         val text = TitleHeuristics.cleanText(raw)
         if (text.isEmpty()) return Name.Unknown
+        if (TextKeys.fold(text) == STUDIO_KEY) return Name(STUDIO, STUDIO, STUDIO_KEY)
         val parsed = parse(text)
         val surnameKey = keyOf(parsed.surname)
         val key = VARIANTS[surnameKey] ?: surnameKey

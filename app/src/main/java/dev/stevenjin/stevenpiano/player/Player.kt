@@ -182,6 +182,26 @@ class Player(
     /** Takes an up-next entry out of the queue. */
     fun removeFromQueue(uid: Long) = setQueue(queue.remove(uid))
 
+    /**
+     * [pieceId] is leaving the library (Studio's Discard, v1.7 — M23): its entries leave the queue, and
+     * when it is the piece loaded the piano is silenced and the player empties, as before anything was
+     * played (the queue goes with it, its modes kept).
+     */
+    fun forget(pieceId: Long) {
+        val current = queue.current
+        var kept = queue
+        for (entry in queue.entries) if (entry.pieceId == pieceId && entry.uid != current?.uid) kept = kept.remove(entry.uid)
+        if (current?.pieceId != pieceId) {
+            setQueue(kept)
+            return
+        }
+        advanceJob?.cancel()
+        loadJob?.cancel()
+        setQueue(Queue(repeat = kept.repeat, nextUid = kept.nextUid), channel = null)
+        scheduler.submit { engine.eject() }
+        _state.update { it.copy(piece = null, loading = false) }
+    }
+
     /** Up next's drag: entry [uid] to place [toIndex] among the pieces up next. */
     fun moveInQueue(uid: Long, toIndex: Int) = setQueue(queue.move(uid, toIndex))
 

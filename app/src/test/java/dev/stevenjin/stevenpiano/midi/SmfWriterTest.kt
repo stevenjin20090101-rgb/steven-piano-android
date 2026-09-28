@@ -1,0 +1,121 @@
+// ============================================================================
+//  Steven Piano - Android player for the self-playing acoustic piano
+//  Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+//  Original author & creator: Steven Jin.
+//  Licensed under the MIT License (see LICENSE). This copyright and attribution
+//  notice MUST be preserved in all copies or substantial portions of the work.
+//  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+// ============================================================================
+
+package dev.stevenjin.stevenpiano.midi
+
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import kotlin.math.abs
+import kotlin.random.Random
+
+/**
+ * The MIDI writer (v1.7 — M23, Studio's transcriptions): what it writes, the app's own parser reads back
+ * as the same notes, pedal, title and text, to within half a tick (about half a millisecond).
+ */
+class SmfWriterTest {
+    /** Half a tick at 960 ticks a second, and a microsecond of the parser's rounding. */
+    private val tolerance = 1_000_000L / 960 / 2 + 1
+
+    @Test
+    fun `notes, pedal, title and text round-trip through the app's parser`() {
+        val notes = listOf(
+            SmfWriter.Note(50_000, 900_000, 60, 64),
+            SmfWriter.Note(1_000_000, 1_500_000, 64, 90),
+            SmfWriter.Note(1_000_000, 1_250_000, 67, 30),
+            SmfWriter.Note(2_345_678, 4_000_000, 21, 127),
+            SmfWriter.Note(3_000_000, 3_010_000, 108, 1),
+        )
+        val pedals = listOf(SmfWriter.Pedal(40_000, 950_000), SmfWriter.Pedal(2_000_000, 3_900_000))
+        val bytes = SmfWriter.write(notes, pedals, title = "Clair de lune — étude", text = "Made in Studio · 28 Sept 2026")
+        val piece = SmfParser.parse(bytes)
+        assertEquals(0, piece.format)
+        assertEquals(SmfWriter.PPQ, piece.ppq)
+        assertEquals("Clair de lune — étude", piece.sequenceName)
+        assertEquals(listOf("Made in Studio · 28 Sept 2026"), piece.texts)
+        assertEquals(emptyList<String>(), piece.warnings)
+        assertEquals(notes.size, piece.noteCount)
+        val sorted = notes.sortedWith(compareBy({ it.onMicros }, { it.key }))
+        val got = (0 until piece.noteCount).map { i -> piece.notes.run { SmfWriter.Note(startMicros[i], endMicros[i], note(i), velocity(i)) } }
+            .sortedWith(compareBy({ it.onMicros }, { it.key }))
+        for ((want, have) in sorted.zip(got)) {
+            assertTrue("$want vs $have", abs(want.onMicros - have.onMicros) <= tolerance && abs(want.offMicros - have.offMicros) <= tolerance)
+            assertEquals(want.key, have.key)
+            assertEquals(want.velocity, have.velocity)
+        }
+        val sustain = piece.events.filter { it.command == 0xB0 && it.data1 == 64 }
+        assertEquals(listOf(127, 0, 127, 0), sustain.map { it.data2 })
+        val times = listOf(40_000L, 950_000L, 2_000_000L, 3_900_000L)
+        for ((want, have) in times.zip(sustain.map { it.atMicros })) assertTrue("pedal at $have, not $want", abs(want - have) <= tolerance)
+        assertTrue(abs(piece.durationMicros - 4_000_000) <= tolerance)
+    }
+
+    @Test
+    fun `a note lasts at least a tick, velocities stay 1 to 127, and a key struck again as it ends is let go first`() {
+        val bytes = SmfWriter.write(
+            listOf(
+                SmfWriter.Note(1_000_000, 1_000_000, 60, 0),      // no length, velocity 0: a tick long, velocity 1
+                SmfWriter.Note(2_000_000, 1_900_000, 62, 128),    // ends before it starts: a tick long, velocity 127
+                SmfWriter.Note(3_000_000, 3_500_000, 64, 50),
+                SmfWriter.Note(3_500_000, 4_000_000, 64, 70),     // the same key again at the tick the first ends
+            ),
+        )
+        val piece = SmfParser.parse(bytes)
+        assertEquals(4, piece.noteCount)
+        val n = piece.notes
+        assertEquals(listOf(60, 62, 64, 64), (0 until 4).map { n.note(it) })
+        assertEquals(listOf(1, 127, 50, 70), (0 until 4).map { n.velocity(it) })
+        for (i in 0 until 2) assertTrue("note $i lasts ${n.endMicros[i] - n.startMicros[i]} µs", n.endMicros[i] - n.startMicros[i] in 1_000L..1_100L)
+        assertTrue(abs(n.endMicros[2] - 3_500_000) <= tolerance)
+        assertTrue("the second strike of the key is its own note", abs(n.startMicros[3] - 3_500_000) <= tolerance)
+        val at = piece.events.filter { abs(it.atMicros - 3_500_000) <= tolerance }.map { it.command }
+        assertEquals("off before on at one tick", listOf(0x80, 0x90), at)
+    }
+
+    @Test
+    fun `long silences, many notes and an empty piece are written as the parser expects`() {
+        val random = Random(9)
+        val many = List(3_000) {
+            val on = random.nextLong(0, 20L * 60 * 1_000_000)
+            SmfWriter.Note(on, on + random.nextLong(10_000, 3_000_000), random.nextInt(21, 109), random.nextInt(1, 128))
+        }
+        val piece = SmfParser.parse(SmfWriter.write(many, title = "Twenty minutes"))
+        assertEquals(3_000, piece.noteCount)
+        assertEquals(emptyList<String>(), piece.warnings)
+        val gap = SmfParser.parse(SmfWriter.write(listOf(SmfWriter.Note(19L * 60 * 1_000_000, 19L * 60 * 1_000_000 + 500_000, 60, 80))))
+        assertTrue(abs(gap.notes.startMicros[0] - 19L * 60 * 1_000_000) <= tolerance)
+        val empty = SmfParser.parse(SmfWriter.write(emptyList()))
+        assertEquals(0, empty.noteCount)
+        assertEquals(0L, empty.durationMicros)
+    }
+
+    @Test
+    fun `the header and track are laid out byte for byte`() {
+        val bytes = SmfWriter.write(listOf(SmfWriter.Note(0, 500_000, 60, 100)))
+        // MThd, a header of 6, format 0, one track, 480 ticks a quarter note.
+        assertArrayEquals(byteArrayOf(0x4D, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xE0.toByte()), bytes.copyOfRange(0, 14))
+        assertEquals("MTrk", String(bytes, 14, 4, Charsets.US_ASCII))
+        // Tempo 500,000 µs a beat, then 4/4, then the note: on at 0, off 480 ticks later (0x83 0x60), then End of Track.
+        val track = bytes.copyOfRange(22, bytes.size)
+        assertArrayEquals(
+            byteArrayOf(
+                0, 0xFF.toByte(), 0x51, 3, 0x07, 0xA1.toByte(), 0x20,
+                0, 0xFF.toByte(), 0x58, 4, 4, 2, 24, 8,
+                0, 0x90.toByte(), 60, 100,
+                0x83.toByte(), 0x60, 0x80.toByte(), 60, 64,
+                0, 0xFF.toByte(), 0x2F, 0,
+            ),
+            track,
+        )
+        assertEquals(480L, SmfWriter.ticks(500_000))
+        assertEquals("rounded to the nearest tick", 1L, SmfWriter.ticks(600))
+        assertEquals(0L, SmfWriter.ticks(-5))
+    }
+}

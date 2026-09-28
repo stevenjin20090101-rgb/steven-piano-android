@@ -116,8 +116,8 @@ class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) 
         /** A longer wait is not waited out: the key is left for a later run. */
         const val MAX_WAIT_MS = 60_000L
 
-        /** Composer names that are not a person with a page. */
-        private val NOT_PEOPLE = setOf("traditional", "anonymous", "anon", "unknown", "unknown composer", "various")
+        /** Composer names that are not a person with a page; "Made in Studio" is the app's own (v1.7 — M23). */
+        private val NOT_PEOPLE = setOf("traditional", "anonymous", "anon", "unknown", "unknown composer", "various", "made in studio")
 
         private val MUSIC_WORDS = listOf(
             "compos", "music", "pianist", "songwriter", "conductor", "organist", "harpsichord", "violinist", "cellist", "singer",

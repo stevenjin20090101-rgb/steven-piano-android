@@ -168,6 +168,17 @@ class ArtworkRepository(
     }
 
     /**
+     * The piece's own notes are [description], from the app and not from Wikipedia (v1.7 — M23: a piece
+     * made in Studio reads "Made in Studio · 28 Sept 2026"): a found row with no source, so the piece
+     * sheet shows the line without "From Wikipedia" or Wikipedia's credit, and nothing is ever fetched
+     * for it. False when it could not be written.
+     */
+    suspend fun describe(pieceId: Long, description: String): Boolean = readOr(false) {
+        dao.upsert(ArtworkEntity(ArtworkEntity.forPiece(pieceId), description = description, fetchedAt = System.currentTimeMillis(), status = ArtworkStatus.OK))
+        true
+    }
+
+    /**
      * The piece's roll card: its first 20 seconds as perforations ([RollCard]), an alpha-only
      * bitmap the caller tints with the theme's colours. From memory, else from disk, else drawn
      * (one at a time, then kept on disk). Null when the piece cannot be read, or is too large to

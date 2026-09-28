@@ -80,6 +80,27 @@ class PlayerTest {
     }
 
     @Test
+    fun `a piece that leaves the library leaves the queue, and the one playing empties the player with the piano silenced`() = runBlocking {
+        source.pieces[1] = piece(60, 5_000)
+        source.pieces[2] = piece(62, 5_000)
+        onMain { player.play(1, listOf(1, 2, 1, 2)) }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing && it.piece?.pieceId == 1L } }
+        onMain { player.forget(2) }
+        assertEquals("the other piece's entries are gone", listOf(1L, 1L), player.state.value.queue.ids)
+        assertEquals(PlaybackStatus.Playing, player.state.value.status)
+        link.clear()
+        onMain { player.forget(1) }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Stopped } }
+        assertNull(player.state.value.piece)
+        assertEquals(emptyList<Long>(), player.state.value.queue.ids)
+        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        assertEquals("silenced first", listOf("B0 40 00", "B0 7B 00"), link.messages.take(2))
+        onMain { player.play(2) }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing && it.piece?.pieceId == 2L } }
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
     fun `a dropped link pauses, and only Play resumes`() = runBlocking {
         source.pieces[1] = piece(60, 5_000)
         onMain { player.play(1) }

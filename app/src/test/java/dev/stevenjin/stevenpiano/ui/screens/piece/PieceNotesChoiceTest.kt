@@ -18,7 +18,9 @@ import org.junit.Test
 class PieceNotesChoiceTest {
     private val bach = "https://en.wikipedia.org/wiki/Johann_Sebastian_Bach"
     private val composer = ArtworkEntity("composer:bach", description = "Johann Sebastian Bach was a German composer.", sourceUrl = bach, fetchedAt = 1, status = ArtworkStatus.OK)
-    private val piece = ArtworkEntity("piece:7", description = "The Air is a movement.", sourceUrl = null, fetchedAt = 1, status = ArtworkStatus.OK)
+    // A row the Wikipedia fetch wrote always names its page (sourceTitle), even when it keeps no link.
+    private val piece = ArtworkEntity("piece:7", description = "The Air is a movement.", sourceUrl = null, sourceTitle = "Orchestral Suite No. 3", fetchedAt = 1, status = ArtworkStatus.OK)
+    private val studio = ArtworkEntity("piece:8", description = "Made in Studio · 28 Sept 2026", fetchedAt = 1, status = ArtworkStatus.OK)
 
     @Test
     fun `with fetching on, the sheet waits for the piece, then falls back to the composer`() {
@@ -37,5 +39,13 @@ class PieceNotesChoiceTest {
         assertEquals(PieceNotesChoice.Offline, PieceNotesChoice.of(null, null, online = false, waiting = true, fetching = false))
         // Notes kept from before are shown, fetching or not.
         assertEquals(PieceNotesChoice.Text(piece.description!!, null), PieceNotesChoice.of(piece, null, online = true, waiting = true, fetching = false))
+    }
+
+    @Test
+    fun `a piece made in Studio shows its own line, not as Wikipedia's text, and never waits for a fetch`() {
+        val choice = PieceNotesChoice.of(studio, composer, online = true, waiting = true)
+        assertEquals(PieceNotesChoice.Text("Made in Studio · 28 Sept 2026", null, fromWikipedia = false), choice)
+        assertEquals(choice, PieceNotesChoice.of(studio, null, online = false, waiting = false, fetching = false))
+        assertEquals(true, (PieceNotesChoice.of(piece, null, online = true, waiting = true) as PieceNotesChoice.Text).fromWikipedia)
     }
 }

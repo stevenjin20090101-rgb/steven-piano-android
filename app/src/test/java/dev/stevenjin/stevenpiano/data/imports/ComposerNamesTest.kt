@@ -25,6 +25,14 @@ class ComposerNamesTest {
     }
 
     @Test
+    fun `a piece made in Studio keeps its composer whole, rows included`() {
+        for (raw in listOf("Made in Studio", "made in studio", "  Made  in Studio ")) {
+            assertEquals(raw, Name("Made in Studio", "Made in Studio", "made in studio"), n(raw))
+        }
+        assertEquals("a person called Studio is still a surname", "Studio", n("Anna Studio").short)
+    }
+
+    @Test
     fun `the 26 lowercase piano-midi de folder names`() {
         val expected = mapOf(
             "albeniz" to "Isaac Albéniz", "bach" to "Johann Sebastian Bach", "balakirew" to "Mily Balakirev",

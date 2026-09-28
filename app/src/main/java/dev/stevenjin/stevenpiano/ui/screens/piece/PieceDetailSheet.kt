@@ -160,10 +160,11 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState, fetching: Boo
     }
 }
 
-/** Wikipedia's text, where it came from, and its attribution. */
+/** Wikipedia's text, where it came from, and its attribution; the app's own line (a piece made in Studio) alone. */
 @Composable
 private fun NotesText(notes: PieceNotesChoice.Text) {
     Text(notes.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+    if (!notes.fromWikipedia) return
     // Shifted by the button's own padding so its label lines up with the text.
     WikipediaLink(notes.sourceUrl, Modifier.padding(top = 4.dp).offset(x = (-12).dp))
     Eyebrow(ArtworkCopy.ATTRIBUTION, Modifier.padding(top = 4.dp), uppercase = false)
@@ -176,8 +177,12 @@ private fun Message(text: String) {
 
 /** What the sheet says, from the piece's and the composer's artwork rows and whether the device is online. */
 sealed interface PieceNotesChoice {
-    /** The piece's own extract when it has a page, else the composer's, with where it came from. */
-    data class Text(val text: String, val sourceUrl: String?) : PieceNotesChoice
+    /**
+     * The piece's own extract when it has a page, else the composer's, with where it came from.
+     * [fromWikipedia] is false for the app's own line (a piece made in Studio, v1.7 — M23: a row with
+     * no source), which shows without "From Wikipedia" and Wikipedia's credit.
+     */
+    data class Text(val text: String, val sourceUrl: String?, val fromWikipedia: Boolean = true) : PieceNotesChoice
 
     /** Online, and the piece has not been looked up yet: the fetch is under way. */
     data object Waiting : PieceNotesChoice
@@ -208,7 +213,7 @@ sealed interface PieceNotesChoice {
         private fun ArtworkEntity?.textOrNull(): Text? {
             val row = this?.takeIf { it.status == ArtworkStatus.OK } ?: return null
             val text = row.description?.takeIf { it.isNotBlank() } ?: return null
-            return Text(text, row.sourceUrl)
+            return Text(text, row.sourceUrl, fromWikipedia = row.sourceUrl != null || row.sourceTitle != null)
         }
     }
 }
