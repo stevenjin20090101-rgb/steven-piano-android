@@ -40,7 +40,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
-import androidx.compose.material3.TimePickerDialog
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -65,6 +66,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -295,7 +297,11 @@ private fun KindChips(kind: ScheduleKind, onSelect: (ScheduleKind) -> Unit) {
     HairlineDivider(startInset = 16.dp)
 }
 
-/** The app's chip: the chosen one carries a check (as the Piano tab's chip rows). */
+/**
+ * The app's chip: the chosen one carries a check (as the Piano tab's chip rows). On the sheet, which
+ * is the elevated tone the chips are chosen in elsewhere, the chosen one takes the surface's tone
+ * inside a tertiary hairline, as the web panel's chips do.
+ */
 @Composable
 private fun ToggleChip(label: String, chosen: Boolean, description: String = label, onClick: () -> Unit) {
     FilterChip(
@@ -309,10 +315,17 @@ private fun ToggleChip(label: String, chosen: Boolean, description: String = lab
             null
         },
         colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.surface,
             disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             disabledLeadingIconColor = LocalDisabledGlyph.current,
         ),
-        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = chosen, disabledBorderColor = LocalHairline.current),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = chosen,
+            selectedBorderColor = LocalTertiary.current,
+            selectedBorderWidth = 1.dp,
+            disabledBorderColor = LocalHairline.current,
+        ),
     )
 }
 
@@ -475,7 +488,11 @@ private fun Waiting(text: String) {
     )
 }
 
-/** The time picker, on the 24-hour clock, in the app's ink: no colour but the content's. */
+/**
+ * The time picker, on the 24-hour clock, in the app's ink: no colour but the content's, on the
+ * elevated tone as the app's other dialogs. Its own dialog surface: Material's TimePickerDialog lays
+ * the paper tinted by the ink's elevation overlay, a grey that is none of the app's tokens.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
@@ -488,31 +505,40 @@ private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDism
     val paper = MaterialTheme.colorScheme.surface
     val elevated = MaterialTheme.colorScheme.surfaceVariant
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    TimePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = { onPick(state.hour * Occurrences.MINUTES_PER_HOUR + state.minute) }) { Text("Done") } },
-        title = { Eyebrow(title) },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        containerColor = elevated,
-    ) {
-        TimePicker(
-            state = state,
-            colors = TimePickerDefaults.colors(
-                clockDialColor = paper,
-                clockDialSelectedContentColor = paper,
-                clockDialUnselectedContentColor = ink,
-                selectorColor = ink,
-                containerColor = elevated,
-                periodSelectorBorderColor = LocalTertiary.current,
-                periodSelectorSelectedContainerColor = ink,
-                periodSelectorUnselectedContainerColor = elevated,
-                periodSelectorSelectedContentColor = paper,
-                periodSelectorUnselectedContentColor = secondary,
-                timeSelectorSelectedContainerColor = ink,
-                timeSelectorUnselectedContainerColor = paper,
-                timeSelectorSelectedContentColor = paper,
-                timeSelectorUnselectedContentColor = ink,
-            ),
-        )
+    BasicAlertDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = elevated, tonalElevation = 0.dp) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Eyebrow(
+                    title,
+                    Modifier
+                        .align(Alignment.Start)
+                        .padding(bottom = 20.dp)
+                        .semantics { heading() },
+                )
+                TimePicker(
+                    state = state,
+                    colors = TimePickerDefaults.colors(
+                        clockDialColor = paper,
+                        clockDialSelectedContentColor = paper,
+                        clockDialUnselectedContentColor = ink,
+                        selectorColor = ink,
+                        containerColor = elevated,
+                        periodSelectorBorderColor = LocalTertiary.current,
+                        periodSelectorSelectedContainerColor = ink,
+                        periodSelectorUnselectedContainerColor = elevated,
+                        periodSelectorSelectedContentColor = paper,
+                        periodSelectorUnselectedContentColor = secondary,
+                        timeSelectorSelectedContainerColor = ink,
+                        timeSelectorUnselectedContainerColor = paper,
+                        timeSelectorSelectedContentColor = paper,
+                        timeSelectorUnselectedContentColor = ink,
+                    ),
+                )
+                Row(Modifier.align(Alignment.End)) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = { onPick(state.hour * Occurrences.MINUTES_PER_HOUR + state.minute) }) { Text("Done") }
+                }
+            }
+        }
     }
 }
