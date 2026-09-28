@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -67,6 +68,13 @@ val LocalHazeState = staticCompositionLocalOf { LibraryHazeState(initialBlurEnab
  */
 val LocalReducedTransparency = staticCompositionLocalOf { false }
 
+/**
+ * True inside a [GlassSurface] that is blurring (false on its solid fallback): what sits on glass
+ * takes the content colour for text and never the tertiary grey (GlassTokensTest), while the solid
+ * surface keeps today's colours.
+ */
+val LocalOnGlass = staticCompositionLocalOf { false }
+
 /** Where a surface's hairline and specular line run: the edge that faces the content. */
 enum class GlassEdge {
     /** Bars at the bottom (the tab bar, the transport): their top edge. */
@@ -85,8 +93,8 @@ enum class GlassEdge {
  * no tint, no noise; a 1 dp edge in the hairline token and a 1 dp specular line inside it
  * ([edge]). Where the glass cannot blur (below API 31), while transparency is reduced
  * ([LocalReducedTransparency]), or before its source has drawn anything, it is the solid surface
- * with the hairline edge: today's look. Text on it is the content colour (primary), which clears
- * 7:1 over the worst backdrop (GlassTokensTest).
+ * with the hairline edge: today's look. [LocalOnGlass] tells [content] which: text on glass is the
+ * content colour (primary), which clears 7:1 over the worst backdrop (GlassTokensTest).
  */
 @Composable
 fun GlassSurface(
@@ -114,8 +122,9 @@ fun GlassSurface(
             .clip(shape)
             .glassEdge(shape, edge, hairline, if (glass) specular else null)
             .then(if (glass) Modifier.hazeEffect(source, style) else Modifier.background(surface)),
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalOnGlass provides glass) { content() }
+    }
 }
 
 /**

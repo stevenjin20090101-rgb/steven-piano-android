@@ -28,7 +28,8 @@ fun Modifier.readingWidth(): Modifier = fillMaxWidth()
 
 /**
  * Side padding that centres a [ReadingWidth] column in [available] width, for lists that must
- * still scroll from anywhere across the screen.
+ * still scroll from anywhere across the screen, and [bottom] under the last row (what the floating
+ * controls cover, so it can rise above them).
  */
-fun readingPadding(available: Dp): PaddingValues =
-    PaddingValues(horizontal = ((available - ReadingWidth) / 2).coerceAtLeast(0.dp))
+fun readingPadding(available: Dp, bottom: Dp = 0.dp): PaddingValues =
+    ((available - ReadingWidth) / 2).coerceAtLeast(0.dp).let { side -> PaddingValues(start = side, end = side, bottom = bottom) }

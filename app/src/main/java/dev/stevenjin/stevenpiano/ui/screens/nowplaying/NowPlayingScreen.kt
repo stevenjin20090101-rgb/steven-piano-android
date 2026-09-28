@@ -69,6 +69,7 @@ import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
+import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
@@ -127,7 +128,11 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val plan = frame.notesPlan(settings.noteDisplay, settings.wideLayout)
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .padding(LocalFloatingPadding.current),
+    ) {
         // Too short for the note views to share the height (landscape, a small phone at a large
         // font): the screen scrolls and the views keep fixed heights instead of collapsing.
         val short = piece != null && maxHeight < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW

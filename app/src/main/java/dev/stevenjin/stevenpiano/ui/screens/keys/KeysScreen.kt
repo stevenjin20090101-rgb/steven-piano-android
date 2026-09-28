@@ -54,6 +54,7 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
+import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
@@ -72,6 +73,8 @@ import kotlinx.coroutines.launch
  * and the pedal let go when the screen stops (another tab, the app in the background) and when
  * the link drops. While a key is held the screen keeps its orientation ([HoldOrientationWhileHeld]):
  * a rotation would end every touch; it turns once the keys are let go, from the same first key.
+ * The keyboard is never under glass: the whole screen stops above the tab bar and beside the rail
+ * ([LocalFloatingPadding]).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -95,7 +98,11 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     DisposableEffect(vm) { onDispose { vm.letGo() } }
     HoldOrientationWhileHeld(touches, pressed)
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .padding(LocalFloatingPadding.current),
+    ) {
         val keysHeight = keysHeightCap(maxHeight)
         Column(Modifier.fillMaxSize()) {
             ScreenHeader("Keys")

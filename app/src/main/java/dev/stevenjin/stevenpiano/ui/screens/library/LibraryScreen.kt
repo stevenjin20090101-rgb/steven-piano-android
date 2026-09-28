@@ -22,9 +22,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selectableGroup
 import androidx.compose.ui.semantics.semantics
@@ -71,6 +77,7 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
+import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.Sentences
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
@@ -102,7 +109,8 @@ import kotlinx.coroutines.launch
  * picker. A composer opens with their portrait and blurb. [onImport] brings files in; artwork
  * fetched in the background shows its progress under the import bar. On the launch after a crash,
  * an outlined banner offers to share diagnostics. On wide screens the content stays a 720 dp
- * column in the middle; the list still scrolls from anywhere across the screen.
+ * column in the middle; the list still scrolls from anywhere across the screen, and under the tab
+ * bar's glass, its last row able to rise above it ([LocalFloatingPadding]).
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -142,10 +150,15 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
     val play = LibraryPlay(playback, onPlaying)
 
     BackHandler(enabled = state.group != null, onBack = vm::closeGroup)
+    val floating = LocalFloatingPadding.current
+    val direction = LocalLayoutDirection.current
+    // The list rises above the tab bar; with the keyboard up (which hides the bar) it ends at the keyboard.
+    val listBottom = (floating.calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding()).coerceAtLeast(0.dp)
 
     Column(
         Modifier
             .fillMaxSize()
+            .padding(start = floating.calculateStartPadding(direction), end = floating.calculateEndPadding(direction))
             .imePadding(),
     ) {
         Column(Modifier.readingWidth()) {
@@ -165,7 +178,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
             }
             state.empty -> EmptyLibrary(onAdd = { adding = true })
             else -> BoxWithConstraints(Modifier.fillMaxSize()) {
-                LibraryItems(state, vm, listState, readingPadding(maxWidth), actions, play, changePhoto) { dialog = it }
+                LibraryItems(state, vm, listState, readingPadding(maxWidth, bottom = listBottom), actions, play, changePhoto) { dialog = it }
             }
         }
     }

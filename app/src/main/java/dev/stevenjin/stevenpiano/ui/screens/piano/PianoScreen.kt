@@ -12,8 +12,11 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -31,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -43,6 +47,7 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
+import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
@@ -78,7 +83,8 @@ private val HubWidth = 360.dp
  * turned upright with a page open beside the hub puts that page back over it ([onReopenPage]).
  * [tab] is the tab's graph entry: the hub and its pages share one [PianoViewModel] through it, and
  * the piano saves its settings when the tab itself stops (another tab, the app in the background),
- * never when a page closes.
+ * never when a page closes. The tab draws under the glass of the bar and the rail: it keeps clear of
+ * the rail at its side, and each scrolling column ends with room for the bar ([LocalFloatingPadding]).
  */
 @Composable
 fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onReopenPage: (SettingsPage) -> Unit) {
@@ -93,7 +99,8 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
         Row(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                .padding(floatingSides()),
         ) {
             PianoHub(vm, hubScroll, selected, vm::pick, Modifier.width(HubWidth).fillMaxHeight())
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
@@ -110,9 +117,18 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
             },
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                .padding(floatingSides()),
         )
     }
+}
+
+/** What keeps the tab clear of the rail (and the system bars at the sides); its background still reaches under them. */
+@Composable
+private fun floatingSides(): PaddingValues {
+    val floating = LocalFloatingPadding.current
+    val direction = LocalLayoutDirection.current
+    return PaddingValues(start = floating.calculateStartPadding(direction), end = floating.calculateEndPadding(direction))
 }
 
 /**
@@ -136,7 +152,8 @@ fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Un
         onBack,
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .padding(floatingSides()),
     )
 }
 
@@ -187,6 +204,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
                     for (row in group.rows) HubRowView(row, summaries, settings, update, vm, selected, onPage)
                 }
                 AboutRow(Modifier.padding(16.dp))
+                Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))
             }
         }
     }
@@ -236,6 +254,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
                 }
                 Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))
             }
         }
     }

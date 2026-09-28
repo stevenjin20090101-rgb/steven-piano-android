@@ -22,12 +22,16 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
@@ -41,24 +45,27 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -72,25 +79,34 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
-import dev.stevenjin.stevenpiano.ui.components.Hairline
-import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.GlassEdge
+import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
+import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
+import dev.stevenjin.stevenpiano.ui.components.LocalOnGlass
+import dev.stevenjin.stevenpiano.ui.components.LocalReducedTransparency
+import dev.stevenjin.stevenpiano.ui.components.hazeSource
+import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.keys.KeysScreen
 import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoPageScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoScreen
-import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedTransparency
 import kotlinx.coroutines.flow.first
 import kotlin.math.min
 
 /**
  * The app's frame: four destinations (Library, Now playing, Keys, Piano) in a bottom navigation
  * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
- * with a 240 ms fade-through between them, or a cut when motion is reduced. The Piano tab is a
+ * with a 240 ms fade-through between them, or a cut when motion is reduced. The bar and the rail
+ * are glass (DESIGN.md › v1.5 — M16): the content keeps only the top inset and draws beneath them,
+ * recorded as the glass's source ([hazeSource]), and each screen keeps clear of them through
+ * [LocalFloatingPadding] (lists scroll under the bar, fixed layouts stop above it). The rail is a
+ * sibling of the content, laid over its start edge, never inside its own source. The Piano tab is a
  * graph of its own: its hub, and on phones its pages (`piano/{page}`), pushed over the hub with the
  * bar still there and popped by back; a tab keeps its place when another is chosen, and choosing
  * Piano again goes back to its hub. Artwork everywhere follows the Display page's black-and-white
@@ -108,6 +124,8 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val open: (Route) -> Unit = remember(nav) { { route -> nav.openTab(route) } }
     val select: (Route) -> Unit = remember(nav) { { route -> nav.selectTab(route) } }
     val settings by LocalContext.current.graph.settings.collectAsStateWithLifecycle()
+    val reducedTransparency = rememberReducedTransparency()
+    val content = rememberHazeState()
 
     LaunchedEffect(requestedTab) {
         val tab = requestedTab ?: return@LaunchedEffect
@@ -120,93 +138,100 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         LocalAppFrame provides frame,
         LocalArtworkMonochrome provides settings.artworkMonochrome,
         LocalHandColours provides settings.handColours,
+        LocalReducedTransparency provides reducedTransparency,
+        LocalHazeState provides content,
     ) {
-        Row(
-            Modifier
+        RailFrame(
+            rail = if (frame.rail) ({ TabRail(current, select) }) else null,
+            modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-        ) {
-            if (frame.rail) TabRail(current, select)
+        ) { railWidth ->
             Scaffold(
-                modifier = Modifier.weight(1f),
                 containerColor = MaterialTheme.colorScheme.background,
-                // The rail pads for the start edge; the content keeps the others. A phone on its
-                // side may have its navigation buttons or its camera cutout at either end.
-                contentWindowInsets = if (frame.rail) {
-                    WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
-                } else {
-                    ScaffoldDefaults.contentWindowInsets
-                },
-                bottomBar = { if (!frame.rail) TabBar(current, select) },
+                // Every inset reaches the padding below; the content itself keeps only the top one.
+                // A phone on its side may have its navigation buttons or its camera cutout at either end.
+                contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
+                bottomBar = { if (!frame.rail) BottomBar(current, select) },
             ) { padding ->
-                NavHost(
-                    navController = nav,
-                    startDestination = Route.Library.path,
-                    modifier = Modifier
-                        .padding(padding)
-                        .consumeWindowInsets(padding),
-                    enterTransition = {
-                        when {
-                            reduced -> EnterTransition.None
-                            !withinPianoTab() -> FadeThrough.enter
-                            pushesPage(frame) -> PagePush.enter(this)
-                            else -> EnterTransition.None
+                val direction = LocalLayoutDirection.current
+                val top = padding.calculateTopPadding()
+                val floating = PaddingValues(
+                    start = max(padding.calculateStartPadding(direction), railWidth),
+                    end = padding.calculateEndPadding(direction),
+                    bottom = padding.calculateBottomPadding(),
+                )
+                CompositionLocalProvider(LocalFloatingPadding provides floating) {
+                    NavHost(
+                        navController = nav,
+                        startDestination = Route.Library.path,
+                        modifier = Modifier
+                            .padding(top = top)
+                            .consumeWindowInsets(PaddingValues(top = top))
+                            .hazeSource(content),
+                        enterTransition = {
+                            when {
+                                reduced -> EnterTransition.None
+                                !withinPianoTab() -> FadeThrough.enter
+                                pushesPage(frame) -> PagePush.enter(this)
+                                else -> EnterTransition.None
+                            }
+                        },
+                        exitTransition = {
+                            when {
+                                reduced -> ExitTransition.None
+                                !withinPianoTab() -> FadeThrough.exit
+                                pushesPage(frame) -> PagePush.exitUnder(this)
+                                else -> ExitTransition.None
+                            }
+                        },
+                        popEnterTransition = {
+                            when {
+                                reduced -> EnterTransition.None
+                                !withinPianoTab() -> FadeThrough.enter
+                                popsPage(frame) -> PagePush.popEnterUnder(this)
+                                else -> EnterTransition.None
+                            }
+                        },
+                        popExitTransition = {
+                            when {
+                                reduced -> ExitTransition.None
+                                !withinPianoTab() -> FadeThrough.exit
+                                popsPage(frame) -> PagePush.popExit(this)
+                                else -> ExitTransition.None
+                            }
+                        },
+                    ) {
+                        composable(Route.Library.path) {
+                            LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onImport = onImport)
                         }
-                    },
-                    exitTransition = {
-                        when {
-                            reduced -> ExitTransition.None
-                            !withinPianoTab() -> FadeThrough.exit
-                            pushesPage(frame) -> PagePush.exitUnder(this)
-                            else -> ExitTransition.None
+                        composable(Route.NowPlaying.path) {
+                            NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })
                         }
-                    },
-                    popEnterTransition = {
-                        when {
-                            reduced -> EnterTransition.None
-                            !withinPianoTab() -> FadeThrough.enter
-                            popsPage(frame) -> PagePush.popEnterUnder(this)
-                            else -> EnterTransition.None
-                        }
-                    },
-                    popExitTransition = {
-                        when {
-                            reduced -> ExitTransition.None
-                            !withinPianoTab() -> FadeThrough.exit
-                            popsPage(frame) -> PagePush.popExit(this)
-                            else -> ExitTransition.None
-                        }
-                    },
-                ) {
-                    composable(Route.Library.path) {
-                        LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onImport = onImport)
-                    }
-                    composable(Route.NowPlaying.path) {
-                        NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })
-                    }
-                    composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }) }
-                    navigation(startDestination = PianoRoutes.HUB, route = Route.Piano.path) {
-                        composable(PianoRoutes.HUB) { hub ->
-                            val tab = remember(hub) { nav.getBackStackEntry(Route.Piano.path) }
-                            PianoScreen(
-                                tab,
-                                onOpenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page)) },
-                                onReopenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page, cut = true)) },
-                            )
-                        }
-                        composable(
-                            PianoRoutes.PAGE,
-                            arguments = listOf(
-                                navArgument(PianoRoutes.PAGE_KEY) { type = PianoRoutes.PageType },
-                                navArgument(PianoRoutes.CUT) {
-                                    type = NavType.BoolType
-                                    defaultValue = false
-                                },
-                            ),
-                        ) { page ->
-                            val tab = remember(page) { nav.getBackStackEntry(Route.Piano.path) }
-                            val shown = page.arguments?.let { PianoRoutes.PageType[it, PianoRoutes.PAGE_KEY] } ?: SettingsPage.Feel
-                            PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() })
+                        composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }) }
+                        navigation(startDestination = PianoRoutes.HUB, route = Route.Piano.path) {
+                            composable(PianoRoutes.HUB) { hub ->
+                                val tab = remember(hub) { nav.getBackStackEntry(Route.Piano.path) }
+                                PianoScreen(
+                                    tab,
+                                    onOpenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page)) },
+                                    onReopenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page, cut = true)) },
+                                )
+                            }
+                            composable(
+                                PianoRoutes.PAGE,
+                                arguments = listOf(
+                                    navArgument(PianoRoutes.PAGE_KEY) { type = PianoRoutes.PageType },
+                                    navArgument(PianoRoutes.CUT) {
+                                        type = NavType.BoolType
+                                        defaultValue = false
+                                    },
+                                ),
+                            ) { page ->
+                                val tab = remember(page) { nav.getBackStackEntry(Route.Piano.path) }
+                                val shown = page.arguments?.let { PianoRoutes.PageType[it, PianoRoutes.PAGE_KEY] } ?: SettingsPage.Feel
+                                PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() })
+                            }
                         }
                     }
                 }
@@ -216,37 +241,70 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
 }
 
 /**
+ * Wide frames: the content fills the window and [rail] floats over its start edge, placed after it
+ * so it draws on top, a sibling and never a descendant of the content's glass source; [content]
+ * learns the rail's measured width (0 without one) before it is laid out, so nothing jumps.
+ */
+@Composable
+private fun RailFrame(rail: (@Composable () -> Unit)?, modifier: Modifier, content: @Composable (railWidth: Dp) -> Unit) {
+    SubcomposeLayout(modifier) { constraints ->
+        val railPlaceables = if (rail == null) {
+            emptyList()
+        } else {
+            val tall = Constraints(maxWidth = constraints.maxWidth, minHeight = constraints.maxHeight, maxHeight = constraints.maxHeight)
+            subcompose(FrameSlot.Rail, rail).map { it.measure(tall) }
+        }
+        val railWidth = railPlaceables.maxOfOrNull { it.width } ?: 0
+        val contentPlaceables = subcompose(FrameSlot.Content) { content(railWidth.toDp()) }.map { it.measure(constraints) }
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            contentPlaceables.forEach { it.placeRelative(0, 0) }
+            railPlaceables.forEach { it.placeRelative(0, 0) }
+        }
+    }
+}
+
+private enum class FrameSlot { Rail, Content }
+
+/** Compact widths: the glass along the bottom, holding the tab bar (and, from M16, the mini player above it). */
+@Composable
+private fun BottomBar(current: Route, onSelect: (Route) -> Unit) {
+    GlassSurface(Modifier.fillMaxWidth()) {
+        Column {
+            TabBar(current, onSelect)
+        }
+    }
+}
+
+/**
  * Compact widths: the four destinations along the bottom, short labels, the selected one on a
- * surfaceElevated pill, never a tint. Labels scale with the system font only as far as the widest
- * one ("Now playing") still fits its quarter of the bar on one line, and never past 1.5x, so the
- * four icons stay level.
+ * surfaceElevated pill, never a tint. The bar is transparent: the glass under it ([BottomBar]) is
+ * its container. Labels scale with the system font only as far as the widest one ("Now playing")
+ * still fits its quarter of the bar on one line, and never past 1.5x, so the four icons stay level.
  */
 @Composable
 private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
+    val tones = tabTones()
     val colors = NavigationBarItemDefaults.colors(
-        selectedIconColor = MaterialTheme.colorScheme.onSurface,
-        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+        selectedIconColor = tones.selected,
+        selectedTextColor = tones.selected,
         indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedIconColor = tones.unselectedIcon,
+        unselectedTextColor = tones.unselectedText,
     )
     val density = LocalDensity.current
-    Column {
-        HairlineDivider()
-        BoxWithConstraints {
-            val itemWidth = (maxWidth - BAR_ITEM_GAP * (Route.entries.size - 1)) / Route.entries.size
-            val cap = labelScaleThatFits(itemWidth)
-            CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, cap))) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
-                    Route.entries.forEach { route ->
-                        NavigationBarItem(
-                            selected = route == current,
-                            onClick = { onSelect(route) },
-                            icon = { Icon(painterResource(route.icon), contentDescription = null) },
-                            label = { Text(route.label, maxLines = 1) },
-                            colors = colors,
-                        )
-                    }
+    BoxWithConstraints {
+        val itemWidth = (maxWidth - BAR_ITEM_GAP * (Route.entries.size - 1)) / Route.entries.size
+        val cap = labelScaleThatFits(itemWidth)
+        CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, cap))) {
+            NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
+                Route.entries.forEach { route ->
+                    NavigationBarItem(
+                        selected = route == current,
+                        onClick = { onSelect(route) },
+                        icon = { Icon(painterResource(route.icon), contentDescription = null) },
+                        label = { Text(route.label, maxLines = 1) },
+                        colors = colors,
+                    )
                 }
             }
         }
@@ -255,22 +313,24 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
 
 /**
  * Medium and expanded widths: the same four glyphs and labels in a rail on the left, labels
- * always shown, set off from the content by a hairline. Labels scale up to 1.5x.
+ * always shown, on glass whose end edge (a hairline and the specular line) sets it off from the
+ * content beneath and beside it. Labels scale up to 1.5x.
  */
 @Composable
 private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
-    val colors = NavigationRailItemDefaults.colors(
-        selectedIconColor = MaterialTheme.colorScheme.onSurface,
-        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-        indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    val density = LocalDensity.current
-    Row {
+    GlassSurface(Modifier.fillMaxHeight(), edge = GlassEdge.End) {
+        val tones = tabTones()
+        val colors = NavigationRailItemDefaults.colors(
+            selectedIconColor = tones.selected,
+            selectedTextColor = tones.selected,
+            indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+            unselectedIconColor = tones.unselectedIcon,
+            unselectedTextColor = tones.unselectedText,
+        )
+        val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, MAX_LABEL_SCALE))) {
             NavigationRail(
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = Color.Transparent,
                 windowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Vertical + WindowInsetsSides.Start),
             ) {
                 Route.entries.forEach { route ->
@@ -285,8 +345,22 @@ private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
                 }
             }
         }
-        VerticalDivider(thickness = Hairline, color = LocalHairline.current)
     }
+}
+
+/** The bar's and the rail's colours: the chosen tab in the content colour on its pill, the others secondary. */
+private class TabTones(val selected: Color, val unselectedIcon: Color, val unselectedText: Color)
+
+/**
+ * On glass the labels are all the content colour (text on glass is primary: GlassTokensTest), and
+ * the chosen tab is told by its pill and its brighter glyph; on the solid surface, today's
+ * secondary labels.
+ */
+@Composable
+private fun tabTones(): TabTones {
+    val primary = MaterialTheme.colorScheme.onSurface
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    return TabTones(primary, secondary, if (LocalOnGlass.current) primary else secondary)
 }
 
 /** The font scale, between 1x and [MAX_LABEL_SCALE], at which the widest destination label fills [itemWidth]. */
