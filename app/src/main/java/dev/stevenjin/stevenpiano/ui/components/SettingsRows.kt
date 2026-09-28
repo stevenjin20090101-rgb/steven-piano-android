@@ -413,8 +413,10 @@ private fun Modifier.clearOfRules(): Modifier = layout { measurable, constraints
 
 /**
  * The app's action control: an outlined button, a hairline border in the tertiary colour (the
- * hairline's own when unavailable), its label in the content colour. [description] when the words
- * need context TalkBack lacks ("Save now": "Save the settings on the piano now").
+ * hairline's own when unavailable), its label in the content colour, the secondary colour when
+ * unavailable (Material 3's outlined label is the secondary ink, `onSurfaceVariant`, so both are
+ * set here). [description] when the words need context TalkBack lacks ("Save now": "Save the
+ * settings on the piano now").
  */
 @Composable
 fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, description: String? = null) {
@@ -423,7 +425,10 @@ fun ActionButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifi
         modifier = if (description != null) modifier.semantics { contentDescription = description } else modifier,
         enabled = enabled,
         border = BorderStroke(Hairline, if (enabled) LocalTertiary.current else LocalHairline.current),
-        colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
     ) {
         Text(label)
     }
