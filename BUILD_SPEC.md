@@ -2631,8 +2631,20 @@ What NanoHTTPD 2.3.1 does by itself, and what the server does about it:
 - **It never skips a body the handler did not read**, so a kept-alive connection would read the
   rest of a refused upload as the next request. Every response closes its connection
   (`closeConnection(true)`), but a socket's handshake; before closing, the client handler sends the
-  answer's end, then reads and drops up to 256 KB for up to 500 ms, so a browser sees a 413 as a
-  413 and not as "connection reset".
+  answer's end, then reads and drops up to 256 KB, for up to 500 ms **in all** (audit W3: it was
+  500 ms per read, so a byte-a-second peer kept the thread draining without end), so a browser sees a
+  413 as a 413 and not as "connection reset".
+- **It bounds a request's arrival only by a per-read timeout** (10 s), so a peer sending a header byte
+  every few seconds held a request thread until its head reached 8 KB — hours — and four held a
+  listener (audit W3). The client handler now reads the head itself first, under a whole-request
+  deadline (`DeadlineInput`, `REQUEST_DEADLINE_MS` 10 s) on top of the per-read timeout, and checks it
+  (`RequestHead`, below); an upload's body and a socket's life `lift()` the deadline.
+- **It answers a request it cannot parse itself, before `serve()`** — a malformed request line, an
+  unknown verb, a broken `%zz` escape, an over-8 KB head, another HTTP version — without the security
+  headers below, keeping the connection alive, and echoing the method into a `text/plain` body (audit
+  W3). `RequestHead.check` now refuses each first (400/501/505/431/408, a second `Host` 400), written
+  with the panel's headers, JSON, `Connection: close`, nothing of the request echoed; a head that
+  passes goes to NanoHTTPD with every byte already read.
 - **It asks DNS for every peer's name** (`InetAddress.getHostName`), seconds on a school network,
   per request: `createClientHandler` gives the session an address named by its own digits.
 - **NanoWSD upgrades any path** that asks for a WebSocket: `serve` answers the upgrade only for
@@ -2648,12 +2660,11 @@ What NanoHTTPD 2.3.1 does by itself, and what the server does about it:
   success, and closes itself after 20 in a row, which ends the loop; the service's next look
   starts the listener again.
 - **One value per header name**: no response sets two cookies.
-- Its own answers to a request it cannot parse (a malformed request line, for one) come from
-  inside NanoHTTPD, without the security headers below (no body of ours, no data).
 
 Threads: `BoundedRunner`, 4 threads and a queue of 32 (a connection past that is closed at once);
 each socket holds one thread while open, hence two sockets at most. A socket read waits at most
-10 s. NanoHTTPD's temporary files (none: no route reads a multipart form) go to `cacheDir/web`.
+10 s, and a whole request at most 10 s (`DeadlineInput`; an upload's body and a socket exempt once
+checked). NanoHTTPD's temporary files (none: no route reads a multipart form) go to `cacheDir/web`.
 
 **Every response** carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'self'; img-src 'self' data:;
@@ -2907,3 +2918,26 @@ and caps and is closed; a listing that throws still finishes; a saved zip import
 `GroupSummariesTest` (+1: Remote control's value); `ImportLimitsTest` (`cacheDir/web` swept),
 `DiagnosticsExporterTest` (30 lines), `PianoPagesTest` and `RoutesTest` changed. 763 tests
 before, 832 after (7 skipped, as before: the corpus tests, `-Pcorpus`).
+
+## Audit (delta 1) — 2026-09-28
+
+`docs/SECURITY_AUDIT.md › 1.5.1 — web panel: audit (delta 1)` records it in full; three
+denial-of-service / hardening findings at the network edge, all fixed, none a break of the PIN or the
+piano boundary:
+
+- **W1** (`62672f8`): the global login lock shared the per-address schedule, so any reachable device
+  could keep the login shut for everyone up to 10 min. `LoginGuard`'s global gate now trips only after
+  20 wrong in a row and waits 5 s → 60 s; per-address is unchanged.
+- **W2** (`8453092`): `login()` read the wait, derived the PIN, then counted, so tries sent at once all
+  passed the wait before any was counted (eight of ten weighed for a threshold of five, several PBKDF2
+  at once). `LoginGuard.attempt` now checks, weighs and counts as one step, one at a time.
+- **W3** (`635d43b`): a byte-a-time request head held a thread until 8 KB (four held a listener); a
+  post-answer trickle held one draining; and NanoHTTPD's own answers to a request it could not parse
+  went out without the security headers, kept alive, echoing the method. The client handler now reads
+  the head itself under a whole-request deadline (`DeadlineInput`) and refuses what NanoHTTPD would
+  mishandle with the panel's headers (`RequestHead`); `linger` drains for 500 ms in all.
+
+`WebAuthTest` 10 → 12, `WebServerTest` 20 → 23, `WebSocketHubTest` 7 → 8; 832 tests before the audit,
+**840 after** (7 skipped, as before). Provenance re-signed each step. `WebAddress.choose`,
+`WebSocketHub`/`FrameGuard`, `SteadyServerSocket` and the `Host`/`Origin`/no-CORS stack were
+re-checked and hold.

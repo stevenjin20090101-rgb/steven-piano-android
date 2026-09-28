@@ -652,3 +652,203 @@ did (`76b2c8c`).
 connected on the tablet (Always-on VPN), set the PIN, and leave Panel on Wi-Fi too off unless the
 Wi-Fi is his own. Print the poster from the Remote page once guests are wanted, and test at the
 school whether its Wi-Fi lets phones reach the tablet (client isolation would stop guests).
+
+
+## 1.5.1 — web panel: audit (delta 1) — 2026-09-28
+
+A delta audit read the web panel at `736f735` (M18: NanoHTTPD 2.3.1 + NanoWSD on 8737, a six-digit
+PIN, a public guest request page and QR poster, uploads) against the fifteen-point checklist in the
+pre-audit notes above, adversarially, on the `steven_piano` emulator and in JVM tests. Read closely:
+`web/`, `service/WebService.kt`, `data/imports/Importer.kt`, `assets/web/`, the manifest, and
+NanoHTTPD 2.3.1's own `HTTPSession.execute`, `decodeHeader` and NanoWSD handshake (sources kept with
+the run).
+
+**The panel is soundly built.** No unauthenticated route reaches the app's state or the piano; the
+custom-header + `SameSite=Strict` + `Origin` + no-CORS stack blocks CSRF and cross-site WebSocket
+hijacking; DNS rebinding is refused by the `Host` check; uploads and JSON are capped before a byte is
+read; the piano's routes reach only the settings table's names within range (never `keyforce_*`,
+never the bench commands — `off`/`save`/`status` are the only actions, so the panel can never fire a
+solenoid or an LED test); the listeners bind only the two addresses `WebAddress` chose. The three
+findings are all denial-of-service or hardening at the network edge, not a break of the
+authentication or the piano boundary; all three are fixed. Tests went from 832 to 840. Fixes:
+`62672f8` (W1), `8453092` (W2), `635d43b` (W3), and this one (docs, BUILD_SPEC, provenance).
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| W1 | Medium | The shared global login lock let any reachable device shut the login for everyone, up to 10 min at a time | Fixed |
+| W2 | Medium | Login attempts sent at once were weighed before any was counted, slipping past the lock and running many PBKDF2 derivations at once | Fixed |
+| W3 | Medium | At NanoHTTPD's edge: a byte-at-a-time request head held a thread indefinitely (4 held a listener); a post-answer trickle held one draining; and NanoHTTPD's own answers to a request it could not parse went out without the panel's headers, kept alive, echoing the method | Fixed |
+
+### W1: the global login lock was a denial-of-service lever (Medium): fixed
+
+`web/WebAuth.kt`, `LoginGuard`. Wrong PINs were counted per client address **and** globally, on the
+*same* schedule (five in a row → 30 s, doubling to 10 min). The global count is there because a
+per-address lock is escaped by rotating source addresses (at most 256 are remembered, then the
+oldest — and its lock — is forgotten), so a distributed brute force needs a global ceiling. But
+giving it the per-address schedule made that ceiling a weapon: any device that can reach the panel (on
+the tailnet, or on the Wi-Fi with Panel on Wi-Fi too) could send five wrong PINs and lock the owner
+out, then keep the gate shut for up to ten minutes at a time, indefinitely, by trickling wrong PINs.
+Existing sessions kept working, but no one could sign in.
+
+- **Fix** (`web/WebAuth.kt:184`): the per-address gate is unchanged (5 → 30 s → 10 min). The global
+  gate now has its own, far gentler schedule — it trips only after `GLOBAL_THRESHOLD` = 20 wrong in a
+  row, and its wait is short and shallow-capped (`GLOBAL_FIRST_LOCK_MS` 5 s → `GLOBAL_MAX_LOCK_MS`
+  60 s). So one caller can no longer lock the panel for anyone but itself; the most a sustained flood
+  can impose on the owner is a minute, ridden out, and a right PIN from anyone clears it at once.
+- **Trade-off, chosen deliberately:** the global brute-force ceiling loosens from ~144 tries a day
+  (the old ten-minute lock) to ~1,440 at the one-minute cap — a random six-digit PIN still takes on
+  the order of a year to grind through, and the panel is behind Tailscale (WireGuard), not the open
+  internet, with the per-address gate still stopping a single hammering address in five tries. The
+  owner's ability to sign in is worth more than squeezing an already-slow space further.
+- **Test:** `WebAuthTest` › *one address hammering wrong PINs no longer locks the gate for everyone
+  (audit W1)* and › *the global gate still bounds a distributed brute force, but gently and capped at
+  a minute* (the escalation 5 s → 10 → 20 → 40 → 60 → 60, and a right PIN clearing it); the
+  per-address ceiling is still pinned by › *five wrong PINs lock the address for 30 s, then each
+  doubles to ten minutes*. Transcript `…/audit1/guard-probe.txt` (two client addresses on the running
+  build: A's five wrong PINs lock A; B still gets 401).
+
+### W2: login attempts sent at once slipped past the lock (Medium): fixed
+
+`web/WebServer.kt`, `login()`. The handler read the guard's wait, derived the PIN (PBKDF2, ~0.3 s),
+then counted a wrong answer — three separate steps. Requests sent together all passed the wait check
+before any of them was counted, so the lock never caught them: ten wrong PINs sent at once were
+weighed eight times against a threshold of five, each running its own PBKDF2 derivation in parallel (a
+CPU amplification on the tablet that drives the piano, and a straight multiplier on any brute force).
+
+- **Fix** (`web/WebAuth.kt:199` `LoginGuard.attempt`, called from `web/WebServer.kt:412`): the wait
+  check, the PIN derivation and the count are one step, taken **one at a time** across every listener
+  and request thread, and the wait is re-read once the lock is held. So concurrent tries queue and are
+  weighed in turn — at most the five before the lock — and at most one derivation runs at a time,
+  whatever the number of connections. A locked key is refused *before* it queues, so a flood cannot
+  even make legitimate callers wait behind derivations.
+- **Test:** `WebAuthTest` › *tries sent at once are weighed one at a time, and only until the lock
+  (audit W2)* (twelve threads: exactly five weighed, never two derivations at once); `WebServerTest` ›
+  *wrong PINs sent at once are weighed one at a time…* (ten concurrent HTTP logins → five 401, five
+  429; it failed with eight 401 before the fix).
+
+### W3: the request edge NanoHTTPD 2.3.1 left open (Medium): fixed
+
+`web/WebServer.kt`, the client handler. Three holes, all reachable without a PIN (the guest-only Wi-Fi
+listener included), because NanoHTTPD parses and answers the request line and headers itself, before
+`serve()`:
+
+1. **Slowloris.** NanoHTTPD's only bound on time is a *per-read* socket timeout (10 s). A peer sending
+   one header byte every few seconds never trips it, so it held a request thread until its head
+   reached the 8 KB buffer — effectively forever. Four such peers held all four request threads: on
+   `steven_piano`, a plain `GET /` then got no answer within 20 s (`…/audit1/slowloris-before.txt`).
+2. **The drain.** `linger()` (which reads and discards an unread body so a pre-body refusal isn't seen
+   as a reset) used a *per-read* 500 ms timeout too, so a peer trickling a byte every few hundred
+   milliseconds after any answer kept a thread draining without end.
+3. **Unheadered errors.** A request NanoHTTPD could not parse — a malformed request line, an unknown
+   verb, a broken `%zz` escape, an over-8 KB head, another HTTP version — it answered (or dropped)
+   itself, *without* the panel's security headers, `Connection: keep-alive`, and echoing the method
+   into a `text/plain` body (`…/audit1/nano-error-probe.txt`). Not browser-exploitable (a browser
+   cannot set an arbitrary method, and the answer is cross-site opaque), but a hardening gap.
+
+- **Fix** (`web/WebServer.kt`: `LiteralClientHandler`, `DeadlineInput`, `RequestHead`): the handler
+  reads the head itself first (at most 8 KB, NanoHTTPD's own buffer) through `DeadlineInput`, a
+  deadline for the **whole request** (`REQUEST_DEADLINE_MS` 10 s) on top of the per-read timeout, and
+  checks it (`RequestHead`): not `METHOD /target HTTP/1.x` → 400, an unknown method → 501, another
+  version → 505, a broken escape → 400, over 8 KB → 431, a second `Host` → 400, too slow → 408 — each
+  written with the panel's headers, JSON, `Connection: close`, and nothing of the request echoed. A
+  head that passes is handed to NanoHTTPD with every byte already read (`SequenceInputStream`), one
+  request per connection. An upload's body (checked and signed in) and a socket's life `lift()` the
+  deadline — their reads keep the per-read timeout, so a 64 MB upload over slow Wi-Fi and a quiet
+  socket are unaffected. `linger()` now drains for 500 ms **in all**, not per read.
+- **After:** the head-trickle is cut at the deadline and the listener answers meanwhile
+  (`…/audit1/slowloris-after.txt`); the malformed requests carry the headers and echo nothing
+  (`…/audit1/nano-error-after.txt`).
+- **Test:** `WebServerTest` › *a request NanoHTTPD could not parse is refused with the panel's own
+  headers, echoing nothing (audit W3)* (ten malformed requests; a bare-LF head still passes), › *a
+  head trickled a byte at a time is cut off at the request's deadline, and the listener answers
+  meanwhile*, › *a peer that keeps trickling after its answer is let go within half a second*, › *a
+  signed-in upload's body may take longer than a request's deadline*; `WebSocketHubTest` › *a socket
+  outlives a request's deadline…*. The two `lift` tests fail with the lifts removed (checked).
+
+### Confirmed correct (the checklist, verified adversarially)
+
+Each point was checked; the coder's `…/m18-shots/api-checks.txt` transcript (M18 build) and this run's
+`…/audit1/regression-probe.txt` (fixed build) back the network ones, JVM tests the rest.
+
+1. **Every mutating route** answers 401 without a session, 403 without `X-Steven-Piano: 1` or with a
+   foreign `Host` or `Origin`, and nothing reaches the backend (`WebServerTest` › *every route that
+   changes anything refuses…* over all nineteen; api-checks §1). Reads need the session too (§2).
+2. **`/ws`** rejects a missing/invalid cookie (401), a foreign origin (403), another path (404), a
+   full house (503) and, on the guest-only listener, everything (404) — before NanoWSD's handshake
+   (`WebServerTest`, `WebSocketHubTest`, §3).
+3. **PIN:** PBKDF2WithHmacSHA256, 100 000 rounds, a 16-byte per-PIN salt, 32-byte key, constant-time
+   compare, chars cleared; the hash/salt are never in `settings.txt`, any screen or any `Log` in
+   `web/` (grep clean); a new PIN and Web-control-off end every session; sessions are ≤10, expire in
+   24 h, tokens are 32 random bytes kept only as SHA-256; the cookie is `HttpOnly; SameSite=Strict;
+   Path=/`, no `Domain` (`WebAuthTest`, `SettingsRepositoryTest`, `DiagnosticsExporterTest`). W1/W2
+   strengthen the `LoginGuard`.
+4. **Uploads:** `Content-Length` required and honoured, extension allow-list, 8 MB MIDI / 64 MB zip
+   refused before a byte is read, one at a time, temp files only under `cacheDir/web` and swept at
+   start; a zip bomb is caught by `ImportLimits`; a `.mid` that is a zip in disguise is routed to the
+   MIDI path, fails to parse and is counted failed — never unzipped; a name with `..`, slashes, NUL or
+   10 000 chars becomes a bare display name (`WebServerTest`, `ImporterTest`, `ImportLimitsTest`, §6).
+5. **JSON:** ≤64 KB and length-declared before reading, depth ≤4 outside strings (plus a caught
+   `StackOverflowError`), strict UTF-8, one object, unknown fields refused, numbers range-checked not
+   clamped, ids whole > 0 that fit a Long, id lists ≤5 000 (`WebApiTest`, `WebServerTest`, §5).
+6. **Paths:** static files come from the two allow-list maps by exact request path; the path is never
+   resolved, joined or re-decoded into a file name; `..`, `%2e%2e`, `//`, `/web/…`, `.git` all 404
+   (`WebServerTest`, `WebAssetsTest`, §7, regression-probe).
+7. **No CORS, ever:** grep clean; a preflight is 405; no `Access-Control-*` on any answer
+   (`WebServerTest`, §8, regression-probe).
+8. **Security headers** (`nosniff`, `DENY`, `no-referrer`, the CSP with no `unsafe-inline`, CORP
+   same-origin; `no-store` on APIs) on every response the server builds — and now, with W3, on
+   NanoHTTPD's former unheadered error answers too (`WebServerTest`, `WebAssetsTest`, §9).
+9. **Binding:** only `WebAddress.choose`'s picks — the first 100.64/10 on a `tun*`/`tailscale*`
+   interface (a carrier's 100.64 on Wi-Fi/cell is excluded, verified `WebAddressTest`), the first RFC
+   1918 on `wlan*`; never the any-address (grep clean), IPv6, loopback (but the debug emulator),
+   link-local or mobile; a Wi-Fi listener serves guests only unless Panel on Wi-Fi too; a destroyed
+   socket closes and is restarted, not spun (`WebAddressTest`, `WebServerTest`, §§10–11/14–15,
+   regression-probe listener sections).
+10. **Guests:** catalogue ids only, one request per `sp_guest` and per address every 5 min, no free
+    text (a form post is 415, a foreign origin 403), pending and queued both bounded to 50; off by
+    default, Approve-first on (`GuestRequestsTest`, `WebServerTest`, §12).
+11. **The service:** `exported="false"`, `specialUse|connectedDevice` with the justifying property,
+    started only by the app; its notification's PendingIntent is immutable and opens the Piano tab —
+    it reaches nothing unauthenticated (manifest, `WebService.kt`).
+12. **Denial of service:** the pool is 4 threads + a 32 queue (past that a connection is closed), a
+    socket read waits ≤10 s and a whole request ≤10 s (W3), WebSocket frames are `FrameGuard`-bounded
+    and ≤2 sockets exist, headers are bounded to 8 KB by NanoHTTPD's buffer. The player runs on its
+    own `URGENT_AUDIO` thread and the BLE link on its own `HandlerThread`, both untouched by the web
+    pool, so the piano keeps playing through a flood (W3 tests; slowloris transcripts).
+13. **Network security config** unchanged: release builds still refuse all outgoing cleartext; the
+    incoming server is not governed by it (documented residual); the poster's print WebView loads only
+    the app's own assets with JavaScript, file and content access off and every navigation refused
+    (`PosterPrint.kt`).
+14. **Residuals stated** (below).
+15. **Tests:** 832 → 840. New: `WebAuthTest` +2 (W1, W2), `WebServerTest` +3 (W2, W3×2 — one splits
+    the pre-existing header test's intent), `WebSocketHubTest` +1 (W3). `web/` is 71 tests. All green;
+    `lint` unaffected.
+
+### Residuals (unchanged risk, stated honestly)
+
+- **Plain HTTP.** Over Tailscale the traffic is WireGuard-encrypted end to end. With Panel on Wi-Fi
+  too (off by default, warned), the PIN, cookie and everything the panel shows cross the Wi-Fi in the
+  clear; the session cookie has no `Secure` flag (there is no HTTPS to hold it to). The guest pages
+  carry nothing secret.
+- **NanoHTTPD 2.3.1** (2016, no maintained successor) is pinned and was read for this run. W3 moved the
+  request edge in front of it, so its own error answers no longer escape unheadered; the library still
+  parses the head a second time after our check, which is belt-and-braces, not a risk. A future move to
+  a maintained server (or Ktor) would retire the workarounds.
+- **Sessions live in memory:** a restart of the app signs everyone out; nothing is written.
+- **Unauthenticated work on the public routes.** `/api/public/catalogue` and `/poster` do a little
+  library/DB work without a PIN; it is bounded by the 4-thread pool and the 10 s call timeout, and the
+  player thread is separate, so the piano keeps playing. A crowd on the school Wi-Fi can make the guest
+  page slow; it cannot reach the panel or the piano's settings.
+- **Doze with the screen off is untested on hardware.** The web service holds a partial wake lock while
+  playing and runs as a foreground service, but whether Android lets the BLE writes flow under Doze on
+  the school tablet, screen off, was not verified on a device — only in the emulator. The firmware's
+  release-on-disconnect and hold watchdog remain the physical backstop.
+- **CSRF** rests on the custom header, `SameSite=Strict`, the `Origin` check and the absence of CORS,
+  not on a token — sound for this threat model, but a token would be defence in depth.
+- **`webHostName`**, when set (only via an authenticated `PUT /api/settings`, validated to a DNS name),
+  is honoured as a `Host`; it should name the tablet (a MagicDNS name).
+
+The M18 pre-audit residuals were re-checked and hold: the tailnet address comes only from a
+`tun*`/`tailscale*` interface (`WebAddress.choose`); the reverse-DNS lookup is bypassed
+(`LiteralClientHandler`); every response closes its connection (`secure`); frames are `FrameGuard`-bounded
+with ≤2 sockets.
