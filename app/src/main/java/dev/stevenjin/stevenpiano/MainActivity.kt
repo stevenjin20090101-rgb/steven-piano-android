@@ -130,10 +130,11 @@ class MainActivity : ComponentActivity() {
         if (pendingShare.isNotEmpty()) outState.putParcelableArrayList(STATE_SHARED, ArrayList(pendingShare))
     }
 
-    /** In the foreground a foreground service may start: composers never looked up are fetched now. */
+    /** In the foreground a foreground service may start: composers never looked up are fetched now, and the web panel, if on, listens. */
     override fun onStart() {
         super.onStart()
         graph.fetchArtworkIfDue()
+        graph.startWebIfOn(this)
     }
 
     /**

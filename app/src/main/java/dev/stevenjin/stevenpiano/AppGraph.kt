@@ -46,6 +46,7 @@ import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.service.ArtworkService
+import dev.stevenjin.stevenpiano.service.WebService
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
@@ -363,6 +364,18 @@ class AppGraph(private val app: Application) {
         appScope.launch {
             if (!settingsRepository.settings.first().fetchArtworkAutomatically || !network.isOnline()) return@launch
             if (artwork.composersDue()) ArtworkService.start(app, force = false)
+        }
+    }
+
+    /**
+     * The app came to the foreground (where a foreground service may start): with Web control on and
+     * a PIN set, the web service starts, after a restart of the tablet or of the app.
+     */
+    fun startWebIfOn(context: Context) {
+        val appContext = context.applicationContext
+        appScope.launch {
+            val s = settingsRepository.settings.first()
+            if (s.webEnabled && s.webPinSet && !web.status.value.running) WebService.start(appContext)
         }
     }
 

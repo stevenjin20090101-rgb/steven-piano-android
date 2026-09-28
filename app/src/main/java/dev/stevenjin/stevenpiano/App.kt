@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.service.PlaybackNotification
 import dev.stevenjin.stevenpiano.service.UpdateService
+import dev.stevenjin.stevenpiano.service.WebService
 
 /**
  * Builds the [AppGraph] once per process, and the notification channels. First of all it puts
@@ -40,6 +41,7 @@ class App : Application() {
         ImportService.createChannel(this)
         ArtworkService.createChannel(this)
         UpdateService.createChannel(this)
+        WebService.createChannel(this)
         graph = AppGraph(this).also { it.start() }
     }
 }

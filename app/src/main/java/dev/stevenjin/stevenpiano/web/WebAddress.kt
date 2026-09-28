@@ -27,9 +27,26 @@ data class WebChoice(val tailnet: Inet4Address?, val wifi: Inet4Address?) {
     val isEmpty: Boolean get() = tailnet == null && wifi == null
 }
 
+/** One listener the web service starts: the [address] it binds, whether it serves [guestOnly], and other [names] it answers to. */
+data class ListenerPlan(val address: String, val guestOnly: Boolean, val names: List<String> = emptyList())
+
 /** Chooses the addresses the panel listens on. Pure but for [list]. */
 object WebAddress {
     const val PORT = 8737
+
+    /** The emulator's loopback, for `adb forward` (debug builds on an emulator only). */
+    const val LOOPBACK = "127.0.0.1"
+
+    /**
+     * The listeners for [choice]: the tailnet address with the whole panel; the Wi-Fi address with
+     * guests only unless [panelOnWifi]; and with [loopback] (a debug build on an emulator) the
+     * loopback address, answering to "localhost" too. Never the any-address.
+     */
+    fun plan(choice: WebChoice, panelOnWifi: Boolean, loopback: Boolean): List<ListenerPlan> = listOfNotNull(
+        choice.tailnet?.let { ListenerPlan(it.hostAddress!!, guestOnly = false) },
+        choice.wifi?.let { ListenerPlan(it.hostAddress!!, guestOnly = !panelOnWifi) },
+        if (loopback) ListenerPlan(LOOPBACK, guestOnly = false, names = listOf("localhost")) else null,
+    )
 
     /**
      * The tailnet address: the first IPv4 in Tailscale's 100.64.0.0/10 on an interface that is up

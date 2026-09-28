@@ -44,6 +44,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- The web panel (v1.5.1): a local control panel is none of Android's named foreground types, so
+         special use (its reason is the service's property below); connected device only as the fallback
+         a device that refuses special use gets. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -154,6 +159,19 @@
             android:name=".service.UpdateService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- The web panel's server (Piano › Remote control › Web control): it listens on the tablet's tailnet
+             address (the panel) and its Wi-Fi address (guests only, unless Panel on Wi-Fi too), never on all
+             addresses, only while the switch is on and a PIN is set. Not exported: only the app starts it. -->
+        <service
+            android:name=".service.WebService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|connectedDevice"
+            tools:targetApi="34">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local web control panel for the piano, on the person's own network" />
+        </service>
 
         <!-- Where a silent install (device owner) reports; only the app's own explicit PendingIntent reaches it. -->
         <receiver

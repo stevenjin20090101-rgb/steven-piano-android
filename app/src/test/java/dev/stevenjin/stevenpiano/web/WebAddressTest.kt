@@ -67,6 +67,23 @@ class WebAddressTest {
     }
 
     @Test
+    fun `the listeners are the tailnet's with the panel, the Wi-Fi's for guests unless Panel on Wi-Fi too, loopback only on the emulator`() {
+        val both = WebChoice(v4("100.101.2.3"), v4("192.168.1.20"))
+        assertEquals(
+            listOf(ListenerPlan("100.101.2.3", guestOnly = false), ListenerPlan("192.168.1.20", guestOnly = true)),
+            WebAddress.plan(both, panelOnWifi = false, loopback = false),
+        )
+        assertEquals(ListenerPlan("192.168.1.20", guestOnly = false), WebAddress.plan(both, panelOnWifi = true, loopback = false)[1])
+        assertEquals(
+            ListenerPlan("127.0.0.1", guestOnly = false, names = listOf("localhost")),
+            WebAddress.plan(WebChoice(null, null), panelOnWifi = false, loopback = true).single(),
+        )
+        assertEquals("no network, no listener", emptyList<ListenerPlan>(), WebAddress.plan(WebChoice(null, null), panelOnWifi = true, loopback = false))
+        val every = WebAddress.plan(both, panelOnWifi = true, loopback = true).map { it.address }
+        assertFalse("never the any-address", "0.0.0.0" in every)
+    }
+
+    @Test
     fun `a tailnet address on wlan is the tailnet's, and a Wi-Fi alone still serves guests`() {
         val tailnetOnWifi = WebAddress.choose(listOf(NetInterface("wlan0", listOf(ip("100.101.2.3"), ip("192.168.1.20")))))
         assertEquals(v4("100.101.2.3"), tailnetOnWifi.tailnet)
