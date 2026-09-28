@@ -8,6 +8,8 @@
 // ============================================================================
 
 import com.android.build.api.artifact.SingleArtifact
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
 import java.util.Properties
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -131,21 +133,44 @@ room {
 }
 
 /**
+ * The ONNX Runtime the app may ship, and only this one (BUILD_SPEC.md › v1.7 — M23). Changing it is a decision
+ * made here first: bumping `onnxruntime` in gradle/libs.versions.toml alone fails [OnnxTelemetryCheck].
+ */
+val onnxRuntimePinned = "1.28.0"
+
+/**
  * ONNX Runtime 1.29.0 and newer merge a telemetry provider into the app (`ai.onnxruntime.TelemetryInitializer`,
  * a ContentProvider that starts Microsoft's 1DS uploader at every process start). The app stays on 1.28.0,
  * which has none; this check fails the build if a merged manifest ever carries that provider, or any other
- * provider from `ai.onnxruntime` (BUILD_SPEC.md › v1.7 — M23). `check` runs it for every variant.
+ * provider from `ai.onnxruntime`, or if the variant's runtime classpath resolves any `com.microsoft.onnxruntime`
+ * module at another version than [onnxRuntimePinned] (audit delta 2: a newer runtime with its provider removed by
+ * `tools:node="remove"` passed the manifest check alone) (BUILD_SPEC.md › v1.7 — M23). `check` runs it for every
+ * variant.
  */
 abstract class OnnxTelemetryCheck : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val manifest: RegularFileProperty
 
+    /** Every `com.microsoft.onnxruntime` module the variant's runtime classpath resolves, as `name:version`. */
+    @get:Input
+    abstract val runtimeModules: ListProperty<String>
+
+    @get:Input
+    abstract val pinned: Property<String>
+
     @get:OutputFile
     abstract val report: RegularFileProperty
 
     @TaskAction
     fun verify() {
+        val other = runtimeModules.get().filterNot { it.substringAfterLast(':') == pinned.get() }
+        if (other.isNotEmpty()) {
+            throw GradleException(
+                "ONNX Runtime is pinned at ${pinned.get()}, but the build resolves ${other.joinToString()}: 1.29.0 and newer carry " +
+                    "Microsoft's telemetry. A newer runtime needs the pin in app/build.gradle.kts changed first (BUILD_SPEC.md › v1.7 — M23).",
+            )
+        }
         val file = manifest.get().asFile
         val text = file.readText()
         val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
@@ -161,8 +186,22 @@ abstract class OnnxTelemetryCheck : DefaultTask() {
                     "keep com.microsoft.onnxruntime at 1.28.0 (BUILD_SPEC.md › v1.7 — M23).",
             )
         }
-        report.get().asFile.writeText("No ONNX Runtime provider or telemetry in ${file.name}.\n")
+        report.get().asFile.writeText("No ONNX Runtime provider or telemetry in ${file.name}; runtime ${runtimeModules.get().joinToString()}.\n")
     }
+}
+
+/** The `com.microsoft.onnxruntime` modules in a resolved graph, as `name:version`, sorted. */
+fun onnxRuntimeModules(root: ResolvedComponentResult): List<String> {
+    val seen = HashSet<Any>()
+    val found = sortedSetOf<String>()
+    val waiting = ArrayDeque(listOf(root))
+    while (waiting.isNotEmpty()) {
+        val component = waiting.removeLast()
+        if (!seen.add(component.id)) continue
+        component.moduleVersion?.takeIf { it.group == "com.microsoft.onnxruntime" }?.let { found += "${it.name}:${it.version}" }
+        for (dependency in component.dependencies) if (dependency is ResolvedDependencyResult) waiting += dependency.selected
+    }
+    return found.toList()
 }
 
 val checkOnnxTelemetry = tasks.register("checkOnnxTelemetry") {
@@ -176,6 +215,8 @@ androidComponents {
         val perVariant = tasks.register<OnnxTelemetryCheck>("check${variant.name.replaceFirstChar { it.uppercase() }}OnnxTelemetry") {
             group = "verification"
             manifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+            runtimeModules.set(variant.runtimeConfiguration.incoming.resolutionResult.rootComponent.map(::onnxRuntimeModules))
+            pinned.set(onnxRuntimePinned)
             report.set(layout.buildDirectory.file("reports/onnx-telemetry/${variant.name}.txt"))
         }
         checkOnnxTelemetry.configure { dependsOn(perVariant) }

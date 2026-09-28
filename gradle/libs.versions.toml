@@ -37,7 +37,9 @@ eddsa = "0.3.0"
 # Studio (v1.7 — M23): ONNX Runtime (MIT) runs the downloaded models on the tablet. Pinned at 1.28.0 and
 # never 1.29.0 or newer: those add Microsoft's telemetry (a startup provider, ai.onnxruntime.TelemetryInitializer,
 # that reports to v10.events.data.microsoft.com at every process start; docs/STUDIO_SPIKE.md). The build's
-# checkOnnxTelemetry task (run by `check`) fails if a merged manifest ever carries it (BUILD_SPEC › v1.7 — M23).
+# checkOnnxTelemetry task (run by `check`) fails if a merged manifest ever carries it, or if the runtime resolves
+# at any version but the pin in app/build.gradle.kts (onnxRuntimePinned): changing this line alone fails the build
+# (BUILD_SPEC › v1.7 — M23; audit delta 2).
 onnxruntime = "1.28.0"
 
 [libraries]
