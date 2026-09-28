@@ -31,15 +31,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
  * Keeps playback going with the screen off. A mediaPlayback foreground service, started from
- * the app's play controls (it must be started from the foreground), that holds the media
- * notification and session and a partial wake lock while playing. Pausing detaches the
- * notification; a stop ends the service. Swiping the app away, or the service ending while the
- * piano is sounding, silences the piano first (pedal up, then all notes off).
+ * the app's play controls (it must be started from the foreground), or by a schedule's alarm
+ * (DESIGN.md › v1.5.2 — M19: an exact alarm lets the app start it from the background), that holds
+ * the media notification and session and a partial wake lock while playing, and while a schedule
+ * waits for the piano. Pausing detaches the notification; a stop ends the service. Swiping the app
+ * away, or the service ending while the piano is sounding, silences the piano first (pedal up, then
+ * all notes off).
  */
 class PlaybackService : Service() {
     private val scope = MainScope()
@@ -59,6 +62,8 @@ class PlaybackService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             .apply { setReferenceCounted(false) }
         scope.launch { player.state.collect(::render) }
+        // A schedule waiting for the piano keeps the service in the foreground, and the tablet awake, until it plays or is missed.
+        scope.launch { graph.schedules.runner.starting.drop(1).collect { render(player.state.value) } }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -101,12 +106,13 @@ class PlaybackService : Service() {
         // the next piece, the top again (Repeat all) or the same piece (Repeat one).
         val advancing = state.status == PlaybackStatus.Stopped && state.piece != null && state.problem == null &&
             state.queue.advancesAtEnd
+        val scheduled = graph.schedules.runner.starting.value
         when {
-            playing || state.loading || advancing -> {
-                if (!advancing) cancelStop()
+            playing || state.loading || advancing || scheduled -> {
+                if (!advancing || scheduled) cancelStop()
                 goForeground(state)
                 keepAwake(true)
-                if (advancing) stopAfter(ADVANCE_GRACE_MS)
+                if (advancing && !scheduled) stopAfter(ADVANCE_GRACE_MS)
             }
             state.status == PlaybackStatus.Paused -> {
                 cancelStop()

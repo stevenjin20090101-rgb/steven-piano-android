@@ -9,7 +9,6 @@
 
 package dev.stevenjin.stevenpiano.channels
 
-import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlayerState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
@@ -60,24 +59,27 @@ interface PianoVolume {
  * straight back. [stop] is the player's stop; the channel ends whenever [PlayerState.channel] stops
  * being its key.
  *
- * The channel's volume ([volumeOf], 70 % unless the person set it) goes to the piano's own volume
- * when the piano offers one ([piano]), else to the app's velocity (50 + volume / 2 %); when the
- * channel ends, what it replaced comes back (the piano's volume and Full power together; the
- * velocity only if the person has not changed it meanwhile), and the piano is never asked to save
- * either. A channel that follows another keeps the
- * first one's "what to put back". A pool of fewer than [ChannelSummary.MIN_POOL] pieces does not play.
- * Call on [scope]'s thread (the main thread), after [start].
+ * The channel's volume ([volumeOf], 70 % unless the person set it; a schedule may give its own)
+ * goes to the piano's own volume when the piano offers one ([piano]), else to the app's velocity
+ * (50 + volume / 2 %); when the channel ends, what it replaced comes back (the piano's volume and
+ * Full power together; the velocity only if the person has not changed it meanwhile), and the
+ * piano is never asked to save either. That is [loudness], which a schedule's playlist or piece
+ * shares (DESIGN.md › v1.5.2 — M19): a channel that follows another, or follows a schedule's
+ * volume, keeps the first one's "what to put back". A pool of fewer than
+ * [ChannelSummary.MIN_POOL] pieces does not play. Call on [scope]'s thread (the main thread),
+ * after [start].
  */
 class ChannelPlayer(
     private val deck: ChannelDeck,
     private val pools: (String) -> List<Long>?,
     private val volumeOf: (String) -> Int,
-    private val piano: PianoVolume,
+    piano: PianoVolume,
     private val scope: CoroutineScope,
     private val random: Random = Random.Default,
+    /** The loudness a channel holds while it plays, shared with the schedules. */
+    val loudness: LoudnessHold = LoudnessHold(piano, deck),
 ) {
     private var session: Session? = null
-    private var restore: Restore? = null
     private var started = false
 
     /** A channel is being handed to the player: what the player says meanwhile is not about it yet. */
@@ -90,14 +92,17 @@ class ChannelPlayer(
         scope.launch { deck.state.collect(::onState) }
     }
 
-    /** Plays channel [key] from a fresh shuffle of its pool. False (and nothing changes) when its pool is unknown or too small. */
-    fun play(key: String): Boolean {
+    /**
+     * Plays channel [key] from a fresh shuffle of its pool, at [volumePct] (a schedule's) or the
+     * channel's own volume. False (and nothing changes) when its pool is unknown or too small.
+     */
+    fun play(key: String, volumePct: Int? = null): Boolean {
         val pool = pools(key)?.distinct() ?: return false
         if (pool.size < ChannelSummary.MIN_POOL) return false
         val next = Session(key, pool)
         starting = true
         try {
-            applyVolume(volumeOf(key))
+            loudness.hold(next, volumePct ?: volumeOf(key))
             session = next
             deck.playAll(next.deal(FIRST), shuffle = false, channel = key)
         } finally {
@@ -118,7 +123,8 @@ class ChannelPlayer(
      * is the one playing. The setting itself is saved by the caller.
      */
     fun volumeChanged(key: String, pct: Int) {
-        if (session?.key == key) applyVolume(pct)
+        val current = session ?: return
+        if (current.key == key) loudness.hold(current, pct)
     }
 
     private fun onState(state: PlayerState) {
@@ -126,40 +132,10 @@ class ChannelPlayer(
         val current = session ?: return
         if (state.channel != current.key) {
             session = null
-            if (state.channel == null) restoreVolume()   // another channel took over: its session keeps the first "put back"
+            if (state.channel == null) loudness.release(current)   // another channel took over: its session keeps the first "put back"
             return
         }
         if (state.queue.upNextIds.size < TOP_UP_BELOW) deck.addToQueue(current.deal(TOP_UP), channel = current.key)
-    }
-
-    private fun applyVolume(pct: Int) {
-        val volume = pct.coerceIn(0, MAX_VOLUME)
-        val pianoNow = piano.current()
-        if (pianoNow != null) {
-            if (restore == null) restore = Restore.Piano(pianoNow)
-            piano.hold(volume)
-        } else {
-            val velocity = velocityFor(volume)
-            if (restore == null) restore = Restore.Velocity(deck.state.value.velocityPct, velocity)
-            (restore as? Restore.Velocity)?.applied = velocity
-            deck.setVelocity(velocity)
-        }
-    }
-
-    private fun restoreVolume() {
-        when (val put = restore) {
-            is Restore.Piano -> piano.release(put.loudness)
-            is Restore.Velocity -> if (deck.state.value.velocityPct == put.applied) deck.setVelocity(put.pct)
-            null -> Unit
-        }
-        restore = null
-    }
-
-    /** What a channel replaced, to put back when it ends. */
-    private sealed interface Restore {
-        class Piano(val loudness: PianoLoudness) : Restore
-
-        class Velocity(val pct: Int, var applied: Int) : Restore
     }
 
     /** One channel's run: its pool, the shuffled deck still to deal, and the pieces dealt last. */
@@ -198,9 +174,9 @@ class ChannelPlayer(
         /** A channel's volume unless the person sets it. */
         const val DEFAULT_VOLUME = 70
 
-        const val MAX_VOLUME = 100
+        const val MAX_VOLUME = LoudnessHold.MAX_VOLUME
 
         /** The app's velocity for a channel volume, where the piano has no volume of its own: 50 % to 100 %. */
-        fun velocityFor(volume: Int): Int = (50 + volume.coerceIn(0, MAX_VOLUME) / 2).coerceIn(PlaybackLimits.VelocityPct)
+        fun velocityFor(volume: Int): Int = LoudnessHold.velocityFor(volume)
     }
 }
