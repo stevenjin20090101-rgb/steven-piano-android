@@ -1,0 +1,103 @@
+{
+  "about": "Steven Piano's channels (DESIGN.md > v1.5 - M17), in their order on screen. A pool is every piece whose composerKey is in composers or whose folded title matches one of titles (regular expressions), and, with maxNotesPerSecond, that plays no more notes a second than that (noteCount / duration); builtIn takes a built-in playlist's pieces; all takes the whole library.",
+  "channels": [
+    {
+      "key": "calm",
+      "name": "Calm",
+      "composers": [
+        "satie",
+        "debussy",
+        "field"
+      ],
+      "titles": [
+        "nocturne",
+        "berceuse",
+        "gymnop",
+        "gnossienne",
+        "clair de lune",
+        "adagio",
+        "lullaby",
+        "reverie",
+        "traumerei",
+        "consolation",
+        "arabesque",
+        "andante"
+      ],
+      "maxNotesPerSecond": 6
+    },
+    {
+      "key": "epic",
+      "name": "Epic",
+      "builtIn": "epic"
+    },
+    {
+      "key": "baroque",
+      "name": "Baroque",
+      "composers": [
+        "bach",
+        "handel",
+        "scarlatti",
+        "couperin",
+        "rameau",
+        "purcell",
+        "telemann",
+        "bach cpe"
+      ]
+    },
+    {
+      "key": "romantic",
+      "name": "Romantic",
+      "composers": [
+        "chopin",
+        "schumann",
+        "liszt",
+        "brahms",
+        "mendelssohn",
+        "schubert",
+        "grieg",
+        "tchaikovsky",
+        "rachmaninoff",
+        "dvorak",
+        "smetana",
+        "mussorgsky"
+      ]
+    },
+    {
+      "key": "impressionist",
+      "name": "Impressionist",
+      "composers": [
+        "debussy",
+        "ravel",
+        "satie",
+        "faure",
+        "albeniz",
+        "granados",
+        "falla",
+        "scriabin"
+      ]
+    },
+    {
+      "key": "nocturnes",
+      "name": "Nocturnes",
+      "titles": [
+        "nocturne",
+        "notturno",
+        "nachtst"
+      ]
+    },
+    {
+      "key": "etudes",
+      "name": "Études",
+      "titles": [
+        "etude",
+        "etued",
+        "\\bstud(?:y|ies|ie)\\b"
+      ]
+    },
+    {
+      "key": "everything",
+      "name": "Everything",
+      "all": true
+    }
+  ]
+}

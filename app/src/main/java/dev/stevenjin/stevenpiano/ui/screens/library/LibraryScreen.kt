@@ -280,8 +280,10 @@ private fun LibraryItems(
     val group = state.group
     val playlistId = (group as? Group.Playlist)?.id
     val pieces = (listing as? Listing.Pieces)?.pieces.orEmpty()
+    // A built-in playlist's order and pieces are the app's: no handles, no Move or Remove in its rows.
+    val builtIn = (listing as? Listing.Pieces)?.playlist?.builtIn == true
     // Reordering needs the whole playlist on screen: not while a search narrows it.
-    val reorderable = playlistId != null && vm.query.isBlank()
+    val reorderable = playlistId != null && !builtIn && vm.query.isBlank()
     // The order on screen while a drag is under way and until the playlist has caught up with it.
     var dragged by remember(playlistId) { mutableStateOf<List<Long>?>(null) }
     val shown = dragged?.let { order -> reorderedBy(pieces, order) { it.id } } ?: pieces
@@ -298,8 +300,8 @@ private fun LibraryItems(
     LaunchedEffect(pieces, drag.draggingKey) {
         if (drag.draggingKey == null && dragged == pieces.map { it.id }) dragged = null
     }
-    val rowActions = remember(actions, playlistId) {
-        if (playlistId == null) {
+    val rowActions = remember(actions, playlistId, builtIn) {
+        if (playlistId == null || builtIn) {
             actions
         } else {
             actions.forPlaylist(
@@ -475,6 +477,7 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
 private fun EmptyListing(state: LibraryState, query: String) {
     val (title, body) = when {
         query.isNotEmpty() -> "Nothing matches “$query”." to "Try part of a title or a composer's name."
+        (state.listing as? Listing.Pieces)?.playlist?.builtIn == true -> "This playlist is empty." to "It fills itself from the library's pieces."
         state.group is Group.Playlist -> "This playlist is empty." to "Long-press a piece to add it here."
         state.category == Category.Favorites -> "No favorites yet." to "Long-press a piece to make it a favorite."
         state.category == Category.Playlists -> "No playlists yet." to "Long-press a piece to add it to a playlist."

@@ -45,8 +45,9 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
- * A playlist's page head: back and the playlist menu (Rename, Change photo, Delete), the [cover]
- * at 96 dp, the name in Title over "12 pieces · 41:20", then the outlined Shuffle button (not shown
+ * A playlist's page head: back and the playlist menu (Rename, Change photo, Delete; for a built-in
+ * playlist Change photo only), the [cover] at 96 dp, the name in Title over "12 pieces · 41:20"
+ * ("Built in · 12 pieces · 41:20" for a built-in one), then the outlined Shuffle button (not shown
  * for an empty playlist). Play is not here: it floats as a glass circle at the list's bottom end
  * (DESIGN.md › v1.5 — M16), where a thumb finds it wherever the list is scrolled.
  */
@@ -68,10 +69,14 @@ fun PlaylistHeader(
             Box {
                 GlyphButton(R.drawable.ic_more, "Playlist options") { menu = true }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    MenuItem("Rename", { menu = false }, onRename)
-                    MenuItem("Change photo", { menu = false }, onChangePhoto)
-                    HairlineDivider()
-                    MenuItem("Delete", { menu = false }, onDelete)
+                    if (summary.builtIn) {
+                        MenuItem("Change photo", { menu = false }, onChangePhoto)
+                    } else {
+                        MenuItem("Rename", { menu = false }, onRename)
+                        MenuItem("Change photo", { menu = false }, onChangePhoto)
+                        HairlineDivider()
+                        MenuItem("Delete", { menu = false }, onDelete)
+                    }
                 }
             }
         }
@@ -85,7 +90,8 @@ fun PlaylistHeader(
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Eyebrow(Format.piecesAndLength(summary.pieceCount, summary.durationMs))
+                val length = Format.piecesAndLength(summary.pieceCount, summary.durationMs)
+                Eyebrow(if (summary.builtIn) "$BUILT_IN · $length" else length)
             }
         }
         if (summary.pieceCount > 0) {

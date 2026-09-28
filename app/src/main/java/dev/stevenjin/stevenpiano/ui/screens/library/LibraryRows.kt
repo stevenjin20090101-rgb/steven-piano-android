@@ -77,7 +77,8 @@ fun PieceRow(
 
 /**
  * A playlist's tile: its cover (the person's photo, else its first composer's portrait, else a
- * monogram), name and size. Tap opens it; long-press offers Rename, Change photo and Delete.
+ * monogram), name and size. Tap opens it; long-press offers Rename, Change photo and Delete, or
+ * for a built-in playlist (its eyebrow "BUILT IN · 12 PIECES") Change photo only.
  */
 @Composable
 fun PlaylistTile(
@@ -90,20 +91,33 @@ fun PlaylistTile(
     var menu by remember { mutableStateOf(false) }
     Tile(
         name = playlist.name,
-        meta = Format.count(playlist.pieceCount, "piece", "pieces"),
+        meta = playlistMeta(playlist),
         art = { PlaylistCover(playlist.id, playlist.name, ArtSize.Tile, it) },
         onOpen = onOpen,
         onLongPress = { menu = true },
         modifier = modifier,
     ) {
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            MenuItem("Rename", { menu = false }) { onDialog(LibraryDialog.RenamePlaylist(playlist)) }
-            MenuItem("Change photo", { menu = false }, onChangePhoto)
-            HairlineDivider()
-            MenuItem("Delete", { menu = false }) { onDialog(LibraryDialog.DeletePlaylist(playlist)) }
+            if (playlist.builtIn) {
+                MenuItem("Change photo", { menu = false }, onChangePhoto)
+            } else {
+                MenuItem("Rename", { menu = false }) { onDialog(LibraryDialog.RenamePlaylist(playlist)) }
+                MenuItem("Change photo", { menu = false }, onChangePhoto)
+                HairlineDivider()
+                MenuItem("Delete", { menu = false }) { onDialog(LibraryDialog.DeletePlaylist(playlist)) }
+            }
         }
     }
 }
+
+/** A playlist tile's eyebrow: "12 pieces", or for a built-in one "Built in · 12 pieces" (set in capitals). */
+fun playlistMeta(playlist: PlaylistSummary): String {
+    val count = Format.count(playlist.pieceCount, "piece", "pieces")
+    return if (playlist.builtIn) "$BUILT_IN · $count" else count
+}
+
+/** What marks a built-in playlist in its eyebrows. */
+const val BUILT_IN = "Built in"
 
 /**
  * A composer's tile, by full name: their portrait, else the mosaic of their pieces' roll cards.

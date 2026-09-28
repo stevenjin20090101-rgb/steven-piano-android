@@ -153,8 +153,8 @@ class LibraryViewModel(
             listing = ::listing,
         ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), LibraryState())
 
-    /** Every playlist, for the dialogs; none when the library can't be read. */
-    val playlists: Flow<List<PlaylistSummary>> get() = library.playlists().orNone()
+    /** Every playlist of the person's (never a built-in one: the app sets those), for the dialogs; none when the library can't be read. */
+    val playlists: Flow<List<PlaylistSummary>> get() = library.playlists().map { all -> all.filterNot { it.builtIn } }.orNone()
 
     fun membershipOf(pieceId: Long): Flow<List<Long>> = library.playlistIdsOf(pieceId).orNone()
 
@@ -240,7 +240,7 @@ class LibraryViewModel(
                 Category.All -> (if (key.isEmpty()) library.all() else library.search(query)).map { Listing.Pieces(it) }
                 Category.Favorites -> library.favorites().map { Listing.Pieces(it.matching(key)) }
                 Category.Recent -> library.recent().map { Listing.Pieces(it.matching(key)) }
-                Category.Playlists -> library.playlists().map { all -> Listing.Playlists(all.filter { key in TextKeys.fold(it.name) }) }
+                Category.Playlists -> library.playlists().map { all -> Listing.Playlists(PlaylistShelf.shown(all).filter { key in TextKeys.fold(it.name) }) }
                 Category.Composers -> library.composers().map { all -> Listing.Composers(all.filter { key in TextKeys.fold(it.name) }) }
             }
         }
@@ -270,5 +270,17 @@ class LibraryViewModel(
     private companion object {
         const val TAG = "Library"
         const val STOP_TIMEOUT_MS = 5_000L
+    }
+}
+
+/**
+ * The Playlists grid's order: the built-in playlists first, in the order they were made (the
+ * catalogue's), then the rest by name as the library lists them. A built-in playlist with nothing
+ * in it is not shown at all: the library holds none of its pieces yet.
+ */
+internal object PlaylistShelf {
+    fun shown(all: List<PlaylistSummary>): List<PlaylistSummary> {
+        val (builtIn, others) = all.partition { it.builtIn }
+        return builtIn.filter { it.pieceCount > 0 }.sortedBy { it.id } + others
     }
 }

@@ -50,7 +50,8 @@ import kotlinx.coroutines.launch
  * and handed back after. Imports queue one after another; the service ends with the last. An
  * import that brought pieces in starts the artwork service before this one stops, when the person
  * lets artwork arrive by itself. When Android's time for data sync runs out ([onTimeout]) the
- * imports stop where they are (what was saved stays) and the service ends at once.
+ * imports stop where they are (what was saved stays) and the service ends at once. An import that
+ * brought pieces in refreshes the built-in playlists before the artwork service starts.
  */
 class ImportService : Service() {
     private val scope = MainScope()
@@ -83,10 +84,12 @@ class ImportService : Service() {
                     stopped(e)
                     null
                 }
-                // Started now, while this service still holds the foreground: Android 12+ refuses
-                // a foreground service started from the background.
-                if (result != null && result.imported > 0 && graph.settingsRepository.settings.first().fetchArtworkAutomatically) {
-                    ArtworkService.start(this@ImportService, force = false)
+                if (result != null && result.imported > 0) {
+                    // The built-in playlists take in what arrived (while the foreground holds the process).
+                    graph.refreshBuiltIns()
+                    // Started now, while this service still holds the foreground: Android 12+ refuses
+                    // a foreground service started from the background.
+                    if (graph.settingsRepository.settings.first().fetchArtworkAutomatically) ArtworkService.start(this@ImportService, force = false)
                 }
             } finally {
                 if (request.persisted) request.uris.forEach { uri -> runCatching { contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }

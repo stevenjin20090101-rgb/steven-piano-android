@@ -33,6 +33,13 @@ interface PlaylistDao {
     @Query("SELECT * FROM collections WHERE name = :name COLLATE NOCASE")
     suspend fun byName(name: String): PlaylistEntity?
 
+    @Query("SELECT * FROM collections WHERE id = :id")
+    suspend fun byId(id: Long): PlaylistEntity?
+
+    /** The built-in playlist [key] ("popular", "recognisable", "epic"), or null while there is none. */
+    @Query("SELECT * FROM collections WHERE builtInKey = :key")
+    suspend fun byBuiltInKey(key: String): PlaylistEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(playlist: PlaylistEntity): Long
 

@@ -63,6 +63,14 @@ interface PieceDao {
     @Query("SELECT COUNT(*) FROM pieces")
     fun count(): Flow<Int>
 
+    /** Every piece, once, in no particular order: what the built-in playlists and the channels are made from. */
+    @Query("SELECT * FROM pieces")
+    suspend fun list(): List<PieceEntity>
+
+    /** Which of [ids] (at most 500 at a time) are still in the library. */
+    @Query("SELECT id FROM pieces WHERE id IN (:ids)")
+    suspend fun existing(ids: List<Long>): List<Long>
+
     @Query("SELECT * FROM pieces WHERE id = :id")
     suspend fun byId(id: Long): PieceEntity?
 

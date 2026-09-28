@@ -22,6 +22,8 @@ import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.art.ArtFiles
 import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
+import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
+import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.TextRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
@@ -47,14 +49,17 @@ import dev.stevenjin.stevenpiano.update.UpdateInstaller
 import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -91,6 +96,20 @@ class AppGraph(private val app: Application) {
     }
     private val pieceFiles = PieceFiles(app.filesDir)
     val library: LibraryRepository by lazy { LibraryRepository(database, pieceFiles) }
+
+    /** The built-in playlists (Popular, Recognisable, Epic on piano), read from the app's assets the first time, off the main thread. */
+    val builtIns: BuiltInPlaylists by lazy { BuiltInCatalogue.load(app) }
+
+    /** Sets the built-in playlists' pieces from the library as it is now. A failure is logged and changes nothing: the next refresh tries again. */
+    suspend fun refreshBuiltIns() = withContext(Dispatchers.IO) {
+        try {
+            builtIns.refresh(library)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "The built-in playlists couldn't be refreshed", e)
+        }
+    }
 
     private val importState = MutableStateFlow(ImportProgress.Idle)
     val importProgress: StateFlow<ImportProgress> = importState.asStateFlow()
@@ -211,6 +230,7 @@ class AppGraph(private val app: Application) {
      * they were left and are remembered whenever they change; the piano is reached if the person
      * allows it; files a crashed import left behind are swept away.
      */
+    @OptIn(FlowPreview::class)
     fun start() {
         val startedAt = System.currentTimeMillis()
         appScope.launch(Dispatchers.IO) {
@@ -219,6 +239,10 @@ class AppGraph(private val app: Application) {
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
             runCatching { DeviceOwnerRelease.releaseIfAsked(app) }
         }
+        // The built-in playlists follow the library: now (the first query opens the database), and
+        // two seconds after a run of renames ends (imports refresh them from ImportService).
+        appScope.launch { refreshBuiltIns() }
+        appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         pianoSettings.start()
         appScope.launch {
             val saved = settingsRepository.settings.first()
@@ -286,6 +310,9 @@ class AppGraph(private val app: Application) {
         const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L
         const val INSTALL_FLUSH_MS = 300L
+
+        /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
+        const val BUILT_INS_SETTLE_MS = 2_000L
 
         /** Debug builds log each request and check under [tag]; release builds log no address. */
         fun debugLog(tag: String): ((String) -> Unit)? = if (BuildConfig.DEBUG) { line -> Log.d(tag, line) } else null

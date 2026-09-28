@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,8 +70,9 @@ fun LibraryDialogs(dialog: LibraryDialog, vm: LibraryViewModel, onClose: () -> U
             confirm = "Delete piece",
             onClose = onClose,
         ) { vm.delete(dialog.piece) }
-        is LibraryDialog.RenamePlaylist -> RenamePlaylistDialog(dialog.playlist, vm, onClose)
-        is LibraryDialog.DeletePlaylist -> ConfirmDialog(
+        // A built-in playlist is the app's: it is never renamed or deleted (its menus do not offer it either).
+        is LibraryDialog.RenamePlaylist -> if (dialog.playlist.builtIn) NeverFor(onClose) else RenamePlaylistDialog(dialog.playlist, vm, onClose)
+        is LibraryDialog.DeletePlaylist -> if (dialog.playlist.builtIn) NeverFor(onClose) else ConfirmDialog(
             title = "Delete “${dialog.playlist.name}”?",
             text = "Only the playlist goes. Its pieces stay in the library.",
             confirm = "Delete playlist",
@@ -196,6 +198,12 @@ private fun ConfirmDialog(title: String, text: String, confirm: String, onClose:
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
+}
+
+/** A dialog a built-in playlist never gets: it closes as it opens. */
+@Composable
+private fun NeverFor(onClose: () -> Unit) {
+    LaunchedEffect(Unit) { onClose() }
 }
 
 @Composable

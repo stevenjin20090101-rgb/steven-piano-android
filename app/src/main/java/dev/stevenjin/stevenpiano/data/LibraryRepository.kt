@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.data
 
 import androidx.room.withTransaction
+import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
+import dev.stevenjin.stevenpiano.data.builtin.BuiltInStore
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -26,7 +28,11 @@ import dev.stevenjin.stevenpiano.player.PieceSource
 import dev.stevenjin.stevenpiano.player.PlayablePiece
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
@@ -36,16 +42,27 @@ class PieceUnavailableException(message: String) : Exception(message)
 /**
  * The library: what the Library tab lists (all, search, playlists, composers, favorites,
  * recent), what its menus change, where the player reads pieces from, and where imports land.
- * A playlist keeps its pieces in an order; every change to that order is one transaction.
+ * A playlist keeps its pieces in an order; every change to that order is one transaction. The
+ * built-in playlists (DESIGN.md › v1.5 — M17) are the app's: their pieces are set by
+ * [BuiltInPlaylists.refresh] through [setPlaylistPieces], and renaming, deleting, reordering or
+ * adding to or taking from one does nothing. A playlist the person names like a built-in one
+ * takes the name, and the built-in one moves beside it ("Popular · built in").
  */
 class LibraryRepository(
     private val db: PianoDatabase,
     private val files: PieceFiles,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
-) : PieceSource, ImportStore {
+) : PieceSource, ImportStore, BuiltInStore {
     private val pieces = db.pieces()
     private val playlists = db.playlists()
+    private val renamed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * A piece or a playlist was renamed, or a playlist deleted: what the built-in lists match may
+     * have changed. AppGraph refreshes them two seconds after the last of a run of these.
+     */
+    val namesChanged: SharedFlow<Unit> = renamed.asSharedFlow()
 
     /** Every piece, by title (accents ignored). */
     fun all(): Flow<List<PieceEntity>> = pieces.all()
@@ -86,6 +103,7 @@ class LibraryRepository(
     suspend fun rename(id: Long, title: String, composer: String) {
         val piece = pieces.byId(id) ?: return
         pieces.update(piece.named(title.trim().ifEmpty { piece.title }, ComposerNames.normalize(TextLimits.clip(composer, TextLimits.COMPOSER))))
+        renamed.tryEmit(Unit)
     }
 
     /**
@@ -106,38 +124,95 @@ class LibraryRepository(
     }
 
     /** The playlist called [name] (cut to [TextLimits.COLLECTION]), made if needed. Returns its id. */
-    suspend fun createPlaylist(name: String): Long = playlistId(playlistName(name), imported = false)
+    suspend fun createPlaylist(name: String): Long = db.withTransaction { playlistId(playlistName(name), imported = false) }
 
-    suspend fun renamePlaylist(id: Long, name: String) = playlists.rename(id, playlistName(name))
-
-    /** Only the playlist goes; its pieces stay in the library. */
-    suspend fun deletePlaylist(id: Long) = playlists.delete(id)
-
-    /** Puts the piece at the end of the playlist (nothing changes when it is there already). */
-    suspend fun addToPlaylist(playlistId: Long, pieceId: Long) {
-        db.withTransaction { link(playlistId, pieceId) }
+    /** A built-in playlist keeps its name (the app gives it). */
+    suspend fun renamePlaylist(id: Long, name: String) {
+        if (isBuiltIn(id)) return
+        playlists.rename(id, playlistName(name))
+        renamed.tryEmit(Unit)
     }
 
-    suspend fun removeFromPlaylist(playlistId: Long, pieceId: Long) = playlists.removePiece(playlistId, pieceId)
+    /** Only the playlist goes; its pieces stay in the library. A built-in playlist is never deleted. */
+    suspend fun deletePlaylist(id: Long) {
+        if (isBuiltIn(id)) return
+        playlists.delete(id)
+        renamed.tryEmit(Unit)   // a built-in list that stood aside for this one's name takes it back
+    }
+
+    /** Puts the piece at the end of the playlist (nothing changes when it is there already, or the playlist is built in). */
+    suspend fun addToPlaylist(playlistId: Long, pieceId: Long) {
+        db.withTransaction {
+            if (isBuiltIn(playlistId)) return@withTransaction
+            link(playlistId, pieceId)
+        }
+    }
+
+    suspend fun removeFromPlaylist(playlistId: Long, pieceId: Long) {
+        if (isBuiltIn(playlistId)) return
+        playlists.removePiece(playlistId, pieceId)
+    }
 
     /**
      * The pieces in [orderedIds] were dragged into that order (the list shown may be a search's
-     * subset; see [PlaylistOrder.reordered]). Only positions that change are written.
+     * subset; see [PlaylistOrder.reordered]). Only positions that change are written. A built-in
+     * playlist keeps the order the app gives it.
      */
     suspend fun reorderPlaylist(playlistId: Long, orderedIds: List<Long>) {
         db.withTransaction {
+            if (isBuiltIn(playlistId)) return@withTransaction
             val current = playlists.positions(playlistId)
             writeOrder(playlistId, current, PlaylistOrder.reordered(current.map { it.pieceId }, orderedIds))
         }
     }
 
-    /** Move up ([delta] -1) or down (+1) from the row menu, stopping at either end. */
+    /** Move up ([delta] -1) or down (+1) from the row menu, stopping at either end. Not in a built-in playlist. */
     suspend fun movePiece(playlistId: Long, pieceId: Long, delta: Int) {
         db.withTransaction {
+            if (isBuiltIn(playlistId)) return@withTransaction
             val current = playlists.positions(playlistId)
             writeOrder(playlistId, current, PlaylistOrder.move(current.map { it.pieceId }, pieceId, delta))
         }
     }
+
+    override suspend fun allPieces(): List<PieceEntity> = pieces.list()
+
+    override suspend fun builtInId(key: String): Long? = playlists.byBuiltInKey(key)?.id
+
+    /**
+     * The built-in playlist [key] (get or create by its key, never by name), called [name], or
+     * beside it when the person has a playlist of that name ("Popular · built in"); it takes its
+     * own name back once that is free. Returns its id.
+     */
+    override suspend fun ensureBuiltIn(key: String, name: String): Long = db.withTransaction {
+        val existing = playlists.byBuiltInKey(key)
+        val wanted = BuiltInPlaylists.builtInName(playlistName(name)) { candidate ->
+            playlists.byName(candidate)?.let { it.id != existing?.id } == true
+        }
+        when {
+            existing == null -> playlists.insert(PlaylistEntity(name = wanted, createdAt = clock(), imported = false, builtIn = true, builtInKey = key))
+            existing.name != wanted -> existing.id.also { playlists.rename(it, wanted) }
+            else -> existing.id
+        }
+    }
+
+    /**
+     * Playlist [id] holds exactly the pieces [orderedIds] that are still in the library, in that
+     * order, in one transaction; links that are already right are left alone.
+     */
+    override suspend fun setPlaylistPieces(id: Long, orderedIds: List<Long>) {
+        db.withTransaction {
+            val present = HashSet<Long>(orderedIds.size)
+            for (chunk in orderedIds.distinct().chunked(SQL_CHUNK)) present += pieces.existing(chunk)
+            val current = playlists.positions(id).associate { it.pieceId to it.position }
+            val changes = BuiltInPlaylists.linkChanges(id, current, orderedIds.filter { it in present }, clock())
+            changes.removed.forEach { playlists.removePiece(id, it) }
+            changes.moved.forEach { (pieceId, position) -> playlists.setPosition(id, pieceId, position) }
+            changes.added.forEach { playlists.addPiece(it) }
+        }
+    }
+
+    private suspend fun isBuiltIn(playlistId: Long): Boolean = playlists.byId(playlistId)?.builtIn == true
 
     /** Reads and parses the piece. A file too large for the memory left says so instead of taking the app down. */
     override suspend fun load(pieceId: Long): PlayablePiece {
@@ -173,8 +248,22 @@ class LibraryRepository(
         inserted
     }
 
-    private suspend fun playlistId(name: String, imported: Boolean): Long =
-        playlists.byName(name)?.id ?: playlists.insert(PlaylistEntity(name = name, createdAt = clock(), imported = imported))
+    /**
+     * Inside a transaction: the person's (or an INDEX.csv's) playlist [name], made if needed. When
+     * a built-in list has that name, the built-in one moves beside it ("Popular · built in") and
+     * this one takes it.
+     */
+    private suspend fun playlistId(name: String, imported: Boolean): Long {
+        val existing = playlists.byName(name)
+        if (existing != null && !existing.builtIn) return existing.id
+        if (existing != null) {
+            val aside = BuiltInPlaylists.builtInName(existing.name) { candidate ->
+                candidate.equals(name, ignoreCase = true) || playlists.byName(candidate)?.let { it.id != existing.id } == true
+            }
+            playlists.rename(existing.id, aside)
+        }
+        return playlists.insert(PlaylistEntity(name = name, createdAt = clock(), imported = imported))
+    }
 
     /** Inside a transaction: the piece goes after the playlist's last one. */
     private suspend fun link(playlistId: Long, pieceId: Long) {
