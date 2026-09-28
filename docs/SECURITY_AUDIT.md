@@ -853,6 +853,69 @@ The M18 pre-audit residuals were re-checked and hold: the tailnet address comes 
 (`LiteralClientHandler`); every response closes its connection (`secure`); frames are `FrameGuard`-bounded
 with ≤2 sockets.
 
+## 1.6 — firmware updates (notes)
+
+2026-09-28, notes written at the 1.6.2 merge, not an audit (the firmware run could not edit this
+file). 1.6 (M21) sends the piano's own firmware over the Bluetooth link (README › Updating the
+piano's firmware; BUILD_SPEC.md › v1.6 — M21; the contract is `firmware/docs/BLE_OTA.md`). The app
+can now change what runs on the machine that drives the solenoids, so what may reach it is held
+at five places:
+
+- **Where a release may come from** (`update/UpdateSource.kt`). The manifest from one address
+  only, `https://raw.githubusercontent.com/stevenjin20090101-rgb/Steven-Jin-Player-Piano/main/releases/latest.json`
+  (HTTPS on 443, the path exactly, no user info, query, fragment or backslash:
+  `allowsFirmwareManifest`); what a manifest may name, a `.bin` release asset of that repository
+  on `github.com` (`allowsFirmwareFile`); every hop of the download, redirects included, a release
+  asset of that repository on `github.com` or one of GitHub's two asset hosts
+  (`allowsFirmwareBinary`). The app's own releases and the firmware's never reach each other's
+  addresses (`UpdateSourceTest`). Cleartext stays refused; the fake release server exists only in
+  debug builds on an emulator.
+- **Caps.** The manifest is read to 64 KB and every field checked before anything uses it
+  (`FirmwareManifest.parse`: the version, the build, the file's address, `sizeBytes` 1 byte to
+  4 MB, a 64-digit SHA-256, an 88-character signature, `minAppVersionCode`, notes to 1,000
+  characters, `usbOnly`); the image is streamed to at most the manifest's size and 4 MB
+  (`MAX_FIRMWARE_BYTES`), and a longer one is refused.
+- **The signature, checked by the app.** The manifest's `sig` is Ed25519 over the 32 raw bytes of
+  its SHA-256, checked against the author's key compiled into the app (`FirmwareKeys.author`); a
+  manifest that fails is not offered ("The piano update isn't signed by Steven Jin, so it isn't
+  offered."). After the download, the image's size and SHA-256 must equal the manifest's and the
+  signature is checked again over the digest of those very bytes, before anything is sent. The
+  platform's Ed25519 answers where Android has one (Android 14 has none, measured), else
+  EdDSA-Java 0.3.0 (pinned, verification only), with S required below the group order (RFC 8032 ›
+  5.1.7), which EdDSA-Java alone does not check (`Ed25519Test`). `PinnedKeyTest` pins the key: its
+  fingerprint is `eab16a502f679465`, `Provenance`'s, and it is `provenance/author_ed25519_public.pem`'s
+  32 bytes. Release builds trust that key alone; RFC 8032's test key is trusted only by the debug
+  build's emulator scenarios.
+- **The piano's own checks** (BLE_OTA.md › 6–9). The piano checks BEGIN's signature over the
+  announced SHA-256 with its own copy of the key before it stops anything; waits for every coil to
+  be verified off; refuses energizing commands for the whole session; hashes the image as it
+  arrives; and after END checks the digest and the signature again before `Update.end` switches the
+  boot slot (ERR 5, 6, 8). The new image boots unconfirmed and confirms itself only after a 30 s
+  self-test; a reset before that boots the old one (rollback). With secure boot off, the signature
+  is the only check of who built an image.
+- **Nothing plays during a transfer.** From the transfer's start to its end, whatever the outcome,
+  the player is locked: pieces, channels, the web panel's commands, the Keys screen's notes and,
+  from 1.6.2, schedules (a start that falls in an update is missed and says so) are turned away;
+  the stop sequence is written and 600 ms of quiet kept before BEGIN (the piano asks for 500 ms).
+  An update starts only from the person's Update or Retry (in kiosk mode, behind the PIN), in the
+  foreground, and is never retried by itself; Cancel sends ABORT until END.
+
+Residuals:
+
+- **Nothing is verified on hardware yet.** Every step ran against the emulator's stand-in piano
+  (`FakeOta`'s scenarios); the real piano needs firmware 2.0.0 flashed over USB first, and README's
+  "Needs the real piano" checklist has not been run.
+- **The piano's copy of the key is not cross-checked yet.** `PinnedKeyTest`'s case comparing the
+  app's key with the firmware's `include/ota_pubkey.h` is skipped until the firmware ships that
+  header (with 2.0.0); until then only the fingerprint and the PEM are checked.
+- **No anti-rollback.** An older genuinely signed release installs if it is sent (the app offers
+  only newer ones; BLE_OTA.md › 8). The link has no bonding or encryption, as BLE-MIDI never had:
+  anyone in range can connect, and a replayed BEGIN can stop the music once.
+- **The signing key is the authorship key** (`~/piano-authorship-PRIVATE-DO-NOT-SHARE.pem`, outside
+  the repository): whoever holds it can sign firmware the piano runs. Back it up offline and never
+  share it. Whoever controls the firmware repository can withhold updates or re-offer an older
+  signed release, but cannot make the piano run unsigned code.
+
 ## 1.6.1 — kiosk
 
 2026-09-28, a note from the merge, not an audit (the kiosk run could not edit this file). 1.6.1 adds
