@@ -2389,8 +2389,9 @@ the main thread, distinct), so a refresh never re-lays the row.
   every change of each gesture and calls `onLeave` (semantics: "Display mode: <title>", click
   "Leave display mode"); `PieceArt(pieceId, composerKey, ArtSize.Full, fillMaxSize, framed = false)`
   at alpha 0.25; a vertical gradient from transparent to the canvas at 0.72; then, inside the
-  system bars' and cutout's insets and 24/16 dp: the title (`displayMedium`, two lines), the Eyebrow
-  (composer and channel), `NoteCanvas(PAPER_ROLL, blackKeyLanes = false)` with `RollClock` and
+  system bars' and cutout's insets and 24/16 dp: the title (`displayMedium`, two lines; since the
+  1.5 review `displayLarge`, 45 sp, on `frame.twoPane`), the Eyebrow (composer and channel; on
+  `frame.twoPane` `EyebrowLarge`, 16 sp, 8 dp under the title), `NoteCanvas(PAPER_ROLL, blackKeyLanes = false)` with `RollClock` and
   `rememberFrameNanos`, a hairline, `KeyboardStrip`, and a `FlowRow` of `LiveDot` with "Sent to
   piano" / "Not connected" and `Eyebrow(Provenance.byline)`. `NoteCanvas` gains `blackKeyLanes:
   Boolean = true`.

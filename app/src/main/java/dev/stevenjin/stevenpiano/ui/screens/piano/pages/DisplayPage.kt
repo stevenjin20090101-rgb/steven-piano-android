@@ -26,7 +26,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall and the keyboard strip"
 
 /** Under Display mode after a minute: what it is, and for whom. */
-private const val DISPLAY_MODE_NOTE = "A black screen with the portrait and the roll, for passers-by"
+private const val DISPLAY_MODE_NOTE = "The portrait, the title and the roll fill the screen for passers-by"
 
 /**
  * Display: how the app and Now playing look. APPEARANCE (Follow system, Light, Dark: the app's

@@ -65,6 +65,7 @@ import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.ui.ChannelCopy
+import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
@@ -75,6 +76,7 @@ import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.RollClock
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.rememberFrameNanos
 import dev.stevenjin.stevenpiano.ui.theme.DisplayTheme
+import dev.stevenjin.stevenpiano.ui.theme.EyebrowLarge
 
 /** The portrait behind display mode: this faint. */
 private const val BACKDROP_ALPHA = 0.25f
@@ -89,7 +91,8 @@ private const val BACKDROP_FADED = 0.72f
  * either appearance (the only pure black in the app, through [DisplayTheme]), or with Standby
  * canvas "Same as the app" the app's own surface, ink or paper as the app appears. On it: the
  * piece's art as a faint backdrop fading into the canvas (the composer's portrait, else the
- * piece's roll card; black and white when the person chose that), the title in Display, the
+ * piece's roll card; black and white when the person chose that), the title in Display (Display
+ * Large on wide screens, a tablet on the piano, with its eyebrow at 16 sp to match), the
  * composer and, while one plays, the channel as an eyebrow, the paper roll and its keyboard strip
  * across the whole width, the live dot with "Sent to piano", and the byline at the foot. No
  * controls: any touch, or back, leaves ([onLeave]); the touch goes no further. The screen stays
@@ -172,6 +175,8 @@ private fun DisplayContent(piece: NowPlaying, state: PlayerState, connected: Boo
     val playing = state.status == PlaybackStatus.Playing
     val roll = remember(player) { RollClock(player) }
     val frame = rememberFrameNanos(playing, piece.pieceId, settle = 0, roll = roll)
+    // Wide screens (a tablet on the piano, read from a step away) take the larger title, and its eyebrow to match.
+    val wide = LocalAppFrame.current.twoPane
     Column(
         Modifier
             .fillMaxSize()
@@ -180,13 +185,20 @@ private fun DisplayContent(piece: NowPlaying, state: PlayerState, connected: Boo
     ) {
         Text(
             piece.title,
-            style = MaterialTheme.typography.displayMedium,
+            style = if (wide) MaterialTheme.typography.displayLarge else MaterialTheme.typography.displayMedium,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
         val eyebrow = ChannelCopy.eyebrow(piece.composer, channel)
-        if (eyebrow.isNotEmpty()) Eyebrow(eyebrow, Modifier.padding(top = 4.dp), maxLines = 1)
+        if (eyebrow.isNotEmpty()) {
+            Eyebrow(
+                eyebrow,
+                Modifier.padding(top = if (wide) 8.dp else 4.dp),
+                maxLines = 1,
+                style = if (wide) EyebrowLarge else MaterialTheme.typography.labelSmall,
+            )
+        }
         Spacer(Modifier.height(24.dp))
         NoteCanvas(
             piece.notes,

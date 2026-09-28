@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
@@ -21,6 +22,7 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 /**
  * The engraved-camera-label style: 12 sp Medium, tracked +1.4 sp, tertiary, uppercase, with
  * tabular figures. Row meta lines use it in sentence case ([uppercase] false) and secondary.
+ * Display mode on wide screens passes the larger cut ([style] `EyebrowLarge`, 16 sp).
  */
 @Composable
 fun Eyebrow(
@@ -29,12 +31,13 @@ fun Eyebrow(
     color: Color = LocalTertiary.current,
     uppercase: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
+    style: TextStyle = MaterialTheme.typography.labelSmall,
 ) {
     Text(
         text = if (uppercase) text.uppercase() else text,
         modifier = modifier,
         color = color,
-        style = MaterialTheme.typography.labelSmall.merge(Tabular),
+        style = style.merge(Tabular),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )

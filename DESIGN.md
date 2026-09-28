@@ -976,14 +976,17 @@ section says otherwise. This is release 1.5, with M15 and M16.
 
 ## Display mode
 
-- **When.** Piano › Display › STANDBY › **Display mode after a minute** (off at first; "A black
-  screen with the portrait and the roll, for passers-by"). With it on, a minute without a touch
+- **When.** Piano › Display › STANDBY › **Display mode after a minute** (off at first; "The
+  portrait, the title and the roll fill the screen for passers-by": no "black", since the canvas
+  is a choice). With it on, a minute without a touch
   anywhere, while a piece is loaded, brings the display over everything: the tab bar, the rail
   and the mini player included. Any touch, or Back, leaves it, and that touch does nothing else;
   the app is as it was, its tab, page and scroll.
 - **What it shows.** The composer's portrait fills the screen at a quarter of its strength (in
   black and white when Artwork in black and white is on), fading into the canvas towards the foot;
-  over it the title in Display, the composer and the channel in Eyebrow; the paper roll across the
+  over it the title in Display, the composer and the channel in Eyebrow (on wide screens, a tablet
+  on the piano read from a step away, the title in **Display Large**, 45 sp Medium, tracking −0.5,
+  and the eyebrow a third larger to match, 16 sp); the paper roll across the
   whole width over its keyboard strip, without the black-key lanes (over a portrait they read as a
   barcode); and at the foot the live dot with "Sent to piano" (or "Not connected") and the byline.
   No controls. The screen stays on, and the status and navigation bars step aside while it shows
