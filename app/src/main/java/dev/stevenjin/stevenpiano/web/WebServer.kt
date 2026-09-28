@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import android.annotation.SuppressLint
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.piano.PianoAction
@@ -483,7 +484,13 @@ class WebServer(
         return json(JSONObject().put("name", name), Response.Status.ACCEPTED)
     }
 
-    /** The zip's bytes into `cacheDir/web/upload-….zip`, all [length] of them, with the cache's free-space margin kept; deleted on any failure. */
+    /**
+     * The zip's bytes into `cacheDir/web/upload-….zip`, all [length] of them, with the cache's
+     * free-space margin kept; deleted on any failure. The margin is a floor under a file of at
+     * most 64 MB, as the importer's own zip copy keeps it, not an allocation: `usableSpace` is the
+     * question to ask.
+     */
+    @SuppressLint("UsableSpace")
     private fun saveZip(input: InputStream, length: Long): File {
         val dir = backend.uploadDir
         if (!dir.isDirectory) dir.mkdirs()
