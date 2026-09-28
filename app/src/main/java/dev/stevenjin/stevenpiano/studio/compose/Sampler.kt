@@ -20,8 +20,9 @@ enum class Stop { Budget, EndTime, Separator }
 
 /**
  * What the sampler wrote: the new [events] (whole ones; rests included, the seed's not; times from the
- * prompt's origin), every token it sampled in order ([tokens]: times likewise, a last partial event
- * included), how often the window [slides], and why it [stop]ped.
+ * prompt's origin), every token it sampled in order ([tokens], a last partial event included; each time
+ * as ticks from the prompt's origin, so past 100 s of music they are no longer the model's own time
+ * tokens), how often the window [slides], and why it [stop]ped.
  */
 class Generation(val events: List<AmtEvent>, val tokens: IntArray, val slides: Int, val stop: Stop)
 
@@ -50,7 +51,8 @@ class Generation(val events: List<AmtEvent>, val tokens: IntArray, val slides: I
  *   not written, as the package's `generate()`), or at SEPARATOR when allowed.
  *
  * Greedy settings take the first most likely token (numpy's `argmax`): from the Bach seed the INT8
- * model gives the fixture's 64 tokens. Blocking: run it on the job's own thread.
+ * model gives the fixture's 64 tokens. Blocking: run it on the job's own thread, one run at a time
+ * (its work arrays are its own).
  */
 class Sampler(
     private val model: ComposerModel,
