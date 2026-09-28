@@ -177,7 +177,7 @@ private fun ColumnScope.NowPlayingContent(
                 .padding(32.dp),
             contentAlignment = Alignment.Center,
         ) {
-            // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.5.2 — M19).
+            // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.6.2 — M19).
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
                 Text(

@@ -72,7 +72,7 @@ const val TABLET_NOTE = "The tablet starts them: keep it on, charged and near th
 const val NO_SCHEDULES = "No schedules yet. The piano can play by itself at set times: a channel, a playlist or a piece."
 
 /**
- * Schedule (DESIGN.md › v1.5.2 — M19), in the PLAYING group: at the top NEXT: WEDNESDAY 12:30, CALM
+ * Schedule (DESIGN.md › v1.6.2 — M19), in the PLAYING group: at the top NEXT: WEDNESDAY 12:30, CALM
  * and under it what the last one did ("Missed: Wednesday 12:30 (piano not connected)"); Allow exact
  * alarms when Android refuses them; then a row a schedule, "Weekdays 12:30" over "Calm channel ·
  * until 13:15 · 70%", with its switch (a tap edits it, a long press offers Edit and Delete); then

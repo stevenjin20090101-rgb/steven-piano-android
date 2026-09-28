@@ -3598,12 +3598,13 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, its notes;
 
 ---
 
-# v1.5.2 — M19: schedules
+# v1.6.2 — M19: schedules; release 1.6.2 (versionCode 13)
 
-Read `DESIGN.md › v1.5.2 — M19` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+Read `DESIGN.md › v1.6.2 — M19` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
 › M19 (binding). Built on its own branch (`m19-schedules`) beside M20 and M21: the version stays
-`versionCode` 10, `versionName` "1.5.1" and `Provenance.text` as they were; the bump to 1.5.2
-(`versionCode` 11), the provenance manifest and the APKs are made when the branch is merged. The
+`versionCode` 10, `versionName` "1.5.1" and `Provenance.text` as they were; the bump (it became
+1.6.2, `versionCode` 13, after M21's 1.6 and M20's 1.6.1: see *The merge* at the end of this
+section), the provenance manifest and the APKs are made when the branch is merged. The
 M18 review's Up next fix came first, as its own commit (`4edb505`).
 
 ## Files
@@ -3768,7 +3769,7 @@ internal); `ui/screens/piano/GroupSummaries.kt`, `HubGroups.kt`, `PianoScreen.kt
   as two `<select>`s each (00–23, 00–59), choices from `/api/channels`, `/api/playlists`,
   `/api/library`; Now playing's eyebrow shows `state.schedule.next` with nothing loaded.
 
-## Greps (v1.5.2 — M19)
+## Greps (v1.6.2 — M19)
 
 As in M18: no `Color(0x` outside `ui/theme`; no `0.0.0.0` or `Access-Control` in `app/src/main`;
 `DisplayBlack` in `Color.kt` and `Theme.kt`; `LocalNoteSounding` in `Theme.kt` and `ScorePages.kt`;
@@ -3885,3 +3886,56 @@ schedule taking the loudness over; what can't play; no volume), `LoudnessHoldTes
 fifteen refusals in the app's words, the fifty-first, exact alarms off and the last line; the
 write matrix at 22 routes); `WebApiTest` (the state's schedule), `WebAssetsTest` (the page's
 copy), `RoutesTest` and `PianoPagesTest` (the new page) changed. 840 tests before, 879 after.
+
+## The merge: release 1.6.2 (versionCode 13)
+
+Merged into `main` after 1.6.1 (`7a1197d`: M21's 1.6 and M20's 1.6.1 before it) as `dd7e953`, and
+released as **1.6.2**: `versionCode` 13, `versionName` "1.6.2", `Provenance.text` "Made by Steven
+Jin · v1.6.2 · eab16a502f679465", the entry drafted at the end of `releases/history.json`
+(`"draft": true`, its notes; no hash or size until `tools/publish-release.sh` builds it);
+`latest.json` still names 1.6.1.
+
+- **Conflicts**: `SettingsPage` (the enum merged by itself in the hub's order, Schedule after Display
+  and Kiosk last; its note), `HubGroups` (PLAYING Playback · Display · Schedule, CONTROL Remote
+  control · Kiosk), `GroupSummaries` (kiosk and schedule, `from`'s firmware and next-schedule
+  parameters), `PianoViewModel`, `PianoScreen` (the summaries, the page switch), `LibraryScreen`
+  (the kiosk gate and the channel card's Schedule: scheduling a channel asks for the kiosk PIN, as
+  its volume does), `AppGraph` (kiosk and schedules; `firmwareUpdater.start()` and
+  `schedules.start()`), the manifest (`FirmwareService` and `ScheduleReceiver`), `RoutesTest`,
+  `GroupSummariesTest`, `PianoPagesTest`, and DESIGN.md and this file (main's text with this
+  section after M20's; git had interleaved the two "Files" lists). `NowPlayingPanel`,
+  `LoggingPianoLink`, `SettingsRows` and README merged by themselves; `WebServerTest`'s matrix
+  stays at 22 changing routes (M20 and M21 added none).
+- **A schedule during a firmware update** (`adb9471`): this run was built before the player had
+  M21's lock, and `Player.play`/`playAll` refuse quietly while locked, so a start in an update would
+  have recorded "Last: …", held a volume on the piano and asked the link to connect while the
+  updater waited for the piano's restart (BLE_OTA.md › 11: no schedule runs during a transfer).
+  `ScheduleDeck.locked` (the app's deck reads `Player.locked`); `fire` turns the start away before
+  asking for the piano and again after waiting for it: "Missed: Wednesday 12:30 (the piano was
+  updating)" (`ScheduleCopy.UPDATING`) in the link's trail and on the page, nothing played, no
+  volume held. `ScheduleRunnerTest` +2.
+- **Outlined buttons** (`e4f181d`): the connection card's Disconnect and Cancel, the playlist's
+  Shuffle and the empty library's Add MIDI files take `ActionButton`'s label colours
+  (`ActionLabels`/`actionButtonColors()` in `SettingsRows`: `onSurface`, `onSurfaceVariant`
+  unavailable); the theme's schemes are `internal` for `ActionLabelsTest` (2).
+- **Kiosk and a firmware update** (`6ddc3c0`): with the settings locked, Firmware and status keeps
+  the update's block in view (its line, percentage and hairline, Cancel through the kiosk gate, how
+  it ended; never the offer or Retry) above the locked page's line, and opens from the hub without
+  the PIN while an update runs (its chevron back); the idle relock locks the settings, never the
+  progress. `LockedFirmware` in `ui/KioskLock.kt`, `LockedFirmwareUpdate` in `FirmwarePage`;
+  `LockedFirmwareTest` (2). DESIGN.md › v1.6.1 — M20 › Settings locked in kiosk says so.
+- **`docs/SECURITY_AUDIT.md › 1.6 — firmware updates (notes)`** (`26210bf`), before the 1.6.1 kiosk
+  note: the allow-list, the caps, the app's and the piano's Ed25519 checks, `PinnedKeyTest`, the
+  player lock, and the residuals.
+- **1.6.2, not 1.5.2**: this section's title and DESIGN's, and every comment, stylesheet note and
+  test message that pointed at them. README: *Schedules* stands after *Kiosk* (it followed
+  Authorship), its checklist no longer says "add to"; the introduction, *What it does* (the
+  channels' Schedule, PLAYING's Schedule, a Schedules entry) and *Kiosk* (the Schedule page and a
+  channel's Schedule behind the PIN; the firmware update kept in view) say what M19 and the fixes
+  added.
+- Tests: 998 (1.6.1's 953, this run's 39, the merge's 6), 8 skipped (the corpus tests without
+  `-Pcorpus`, and `PinnedKeyTest`'s check against the firmware's `include/ota_pubkey.h`). `lint`: 0
+  errors, 29 warnings. No compiler warnings in the app's sources. The greps above, M20's and
+  M21's: as stated. The release APK is 2,837,804 bytes (versionCode 13, "1.6.2", signed
+  `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,285,479; staged as
+  `../apk/steven-piano-1.6.2.apk` and `-debug.apk`.

@@ -35,7 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * powered piano does. [consoleMode] is asked on each connection: `adb shell setprop
  * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
  * to one whose console never answers; anything else, the full console. `debug.stevenpiano.piano
- * away` is a piano switched off: the scan ends unfound after the real one's 12 s (v1.5.2, for a
+ * away` is a piano switched off: the scan ends unfound after the real one's 12 s (v1.6.2, for a
  * schedule's missed start). Its connections (not the
  * MIDI it logs) also go to [LinkLog], so the diagnostics share has a link log on the emulator too.
  * The firmware (v1.6 — M21): with `debug.stevenpiano.fakeota` naming a [FakeOta] scenario, the

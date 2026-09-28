@@ -1346,12 +1346,12 @@ the kiosk PIN first.
 
 ---
 
-# v1.5.2 — M19: schedules
+# v1.6.2 — M19: schedules
 
 Steven asked for timed play, Disklavier's Timer Play in the app's language: a playlist, a channel
 or a piece on chosen days at a start time, until an end time or its end, at a volume. The tablet
 plays them itself, from one exact alarm, with its screen off and dozing; the web panel lists and
-edits them too. Everything above still holds. This is 1.5.2.
+edits them too. Everything above still holds. This is 1.6.2.
 
 ## The Schedule page (Piano tab)
 

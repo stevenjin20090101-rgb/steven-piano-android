@@ -64,7 +64,7 @@ interface PianoVolume {
  * (50 + volume / 2 %); when the channel ends, what it replaced comes back (the piano's volume and
  * Full power together; the velocity only if the person has not changed it meanwhile), and the
  * piano is never asked to save either. That is [loudness], which a schedule's playlist or piece
- * shares (DESIGN.md › v1.5.2 — M19): a channel that follows another, or follows a schedule's
+ * shares (DESIGN.md › v1.6.2 — M19): a channel that follows another, or follows a schedule's
  * volume, keeps the first one's "what to put back". A pool of fewer than
  * [ChannelSummary.MIN_POOL] pieces does not play. Call on [scope]'s thread (the main thread),
  * after [start].

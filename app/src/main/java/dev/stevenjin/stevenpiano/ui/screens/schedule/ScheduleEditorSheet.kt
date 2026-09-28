@@ -109,7 +109,7 @@ private const val PIECES_SHOWN = 30
 private enum class TimeField { START, END }
 
 /**
- * A schedule made or edited (DESIGN.md › v1.5.2 — M19), in a sheet with its drag handle: SCHEDULE
+ * A schedule made or edited (DESIGN.md › v1.6.2 — M19), in a sheet with its drag handle: SCHEDULE
  * over "Add schedule" or "Edit schedule"; DAYS, a chip a day, Monday first, with Weekdays and Every
  * day; TIME, Starts and Ends each with the time on an outlined button that opens the time picker (in
  * the app's ink), and Until the end; PLAYS, chips Channels · Playlists · Pieces over the choices (a

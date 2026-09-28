@@ -17,7 +17,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * What the schedules say (DESIGN.md › v1.5.2 — M19), on the tablet and in the web panel alike, so
+ * What the schedules say (DESIGN.md › v1.6.2 — M19), on the tablet and in the web panel alike, so
  * both read the same: "Weekdays 12:30" over "Calm channel · until 13:15 · 70%", "Next: Wednesday
  * 12:30, Calm", the hub's "Next Wed 12:30", and what the last one did ("Missed: Wednesday 12:30
  * (piano not connected)"). Times are the tablet's, on the 24-hour clock with two-digit hours, as the

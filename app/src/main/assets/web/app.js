@@ -463,7 +463,7 @@
     $('now-title').textContent = piece ? piece.title : 'Choose a piece from the library.';
     $('now-eyebrow').textContent = piece
       ? [piece.composer, player.channel && player.channel.name, player.channel && 'Channel'].filter(Boolean).join(' · ')
-      : state.schedule.next || '';   // with nothing loaded, the next schedule (DESIGN.md › v1.5.2 — M19)
+      : state.schedule.next || '';   // with nothing loaded, the next schedule (DESIGN.md › v1.6.2 — M19)
     const play = $('now-play');
     play.disabled = !piece && !player.loading;
     play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
@@ -924,7 +924,7 @@
 
   // ---- Schedule ------------------------------------------------------------------------------------
 
-  // The tablet's Piano › Schedule (DESIGN.md › v1.5.2 — M19): the next start and what the last one did,
+  // The tablet's Piano › Schedule (DESIGN.md › v1.6.2 — M19): the next start and what the last one did,
   // a row a schedule with its switch, and an editor with the tablet's fields. The tablet checks every
   // save again (the same rules) and keeps the one alarm; its words come back when it refuses one.
 

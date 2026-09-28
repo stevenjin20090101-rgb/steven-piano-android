@@ -811,7 +811,7 @@ button, input, select { font: inherit; color: inherit; }
 
 .band .eyebrow { display: flex; align-items: center; gap: 6px; color: var(--primary); }
 
-/* ---- Schedule (v1.5.2) -------------------------------------------------------------------------- */
+/* ---- Schedule (v1.6.2) -------------------------------------------------------------------------- */
 
 .schedule-next { padding-top: 16px; }
 

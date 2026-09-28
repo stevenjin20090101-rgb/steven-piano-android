@@ -20,8 +20,9 @@ Wikipedia (see *Artwork and notes* below), for the app's own updates from its
 GitHub repository (see *Updates*) and for the piano's firmware releases from the
 firmware's (see *Updating the piano's firmware*). With **Web control** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
-page to guests on the tablet's Wi-Fi (see *Web control*). On the school tablet it can
-be locked to the app as a kiosk (see *Kiosk*). Made by Steven Jin. Version 1.6.1.
+page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself at set
+times (see *Schedules*), and on the school tablet it can be locked to the app as a kiosk
+(see *Kiosk*). Made by Steven Jin. Version 1.6.2.
 
 ## What it does
 
@@ -53,7 +54,8 @@ be locked to the app as a kiosk (see *Kiosk*). Made by Steven Jin. Version 1.6.1
   "CLAUDE DEBUSSY · CALM · CHANNEL", and the card "● PLAYING". A long press sets
   the channel's **volume** (70 % at first): the piano's own volume while the
   channel plays, when its firmware offers it (else the app's velocity), put back
-  as it was when the channel ends; *Schedule* comes in the next update. Playing
+  as it was when the channel ends; **Schedule** plays it at set times (see
+  *Schedules*). Playing
   anything else, or Stop, ends the channel. A channel of fewer than three pieces
   reads "Add more pieces" and does not play.
 - **Up next, shuffle and repeat**: the queue glyph on Now playing opens *Up
@@ -203,7 +205,8 @@ be locked to the app as a kiosk (see *Kiosk*). Made by Steven Jin. Version 1.6.1
   transpose, velocity, folding, drum channel; **Display**: appearance (follow
   the system, light or dark), note display, wide layout, fingering, chord names,
   hand colours, artwork in black and white, fetching artwork automatically, and
-  standby: display mode after a minute and its canvas), **CONTROL** (**Remote
+  standby: display mode after a minute and its canvas; **Schedule**: timed play,
+  see *Schedules*), **CONTROL** (**Remote
   control**: the web panel, its PIN, guests and the poster; **Kiosk**: kiosk
   mode and its PIN) and
   **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
@@ -222,6 +225,9 @@ be locked to the app as a kiosk (see *Kiosk*). Made by Steven Jin. Version 1.6.1
   and the Piano tab offers it under **UPDATE**: one tap downloads it, checks it
   and hands it to Android's installer. On the school tablet it installs without
   a tap (see *Updates* and *School tablet*).
+- **Schedules**: the piano plays a channel, a playlist or a piece by itself on
+  chosen days at a set time, until an end time or its end, at its own volume; the
+  tablet wakes for it with its screen off (see *Schedules*).
 - **The piano's firmware**: Piano › Firmware and status shows the version the
   piano runs, looks for a new signed release and sends it over Bluetooth; the
   piano checks the signature, restarts on it, and rolls back by itself if it
@@ -329,7 +335,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.6.1.apk`.
+   `adb install ../apk/steven-piano-1.6.2.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -389,7 +395,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=13`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=14`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -744,16 +750,65 @@ to use kiosk mode again. A factory reset also ends everything.
 
 **Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab,
 but anything that changes the piano or the library asks for the kiosk PIN first: every page
-of the Piano tab (Feel, Lighting, Pedal, Firmware and status, Playback, Display, Remote
-control, Kiosk), its two APP switches and Check now, Disconnect, and in the Library the **+**
-(adding music), deleting, renaming, playlists' edits, Change photo and a channel's volume. A
+of the Piano tab (Feel, Lighting, Pedal, Firmware and status, Playback, Display, Schedule,
+Remote control, Kiosk), its two APP switches and Check now, Disconnect, and in the Library the
+**+** (adding music), deleting, renaming, playlists' edits, Change photo, and a channel's volume
+and Schedule. A
 small padlock marks them. The right PIN opens them for five minutes, or until the tablet
 rests in display mode, whichever comes first; while unlocked for now they are open too.
 
 Things to know: an update from the app's own updater reopens the app, which locks again; one
 installed over adb leaves Android's launcher up until Home is pressed. An update of the piano's
-firmware carries on if the tablet rests meanwhile; Firmware and status then asks for the PIN
-again before it shows how far it has got.
+firmware carries on if the tablet rests meanwhile, and Firmware and status keeps it in view
+while the settings are locked: how far it has got, and how it ended; only its Cancel asks for
+the PIN (and while it runs, its row opens without it).
+
+## Schedules
+
+The piano can play by itself at set times, as a Disklavier's timer does: a channel, a playlist
+or a piece, on chosen days, at a start time, until an end time or its end, at a volume.
+**Piano › Schedule** (the hub's row reads when the next one starts, "Next Wed 12:30"):
+
+1. **Add schedule**: choose the days (Weekdays and Every day are one tap), the start time, and
+   an end time or **Until the end** (a playlist or a piece plays out; a channel plays until
+   someone stops it). An end before the start is past midnight: "The next day".
+2. Under PLAYS, choose a channel, a playlist or a piece (search by title or composer).
+3. **Set the volume** (70% at first): the piano's own volume while it plays, or how hard its
+   keys are struck where the piano has none; what was there comes back when it ends, and the
+   piano never saves it. Off, the piano plays as it is set, and a channel at its own volume.
+4. **Save.** The row reads "Weekdays 12:30 · Calm channel · until 13:15 · 70%"; its switch
+   turns it off and on; a tap edits it; a long press offers Edit and Delete.
+
+A channel's card has **Schedule** in its long-press menu too, with that channel chosen. With
+nothing loaded, Now playing (and the tablet's panel) shows the next one: "Next: Wednesday 12:30,
+Calm". The web panel's **Schedule** page lists, adds, edits and deletes them the same way.
+
+**The tablet must be on**, charged and near the piano, with Bluetooth on: it is the tablet
+that starts each schedule, at the minute, with its screen off and asleep (an exact alarm wakes
+it). If the piano isn't connected, the tablet reaches for it and waits 20 seconds; if the piano
+doesn't come (switched off, out of range, another device holding it), nothing plays and the
+page says so: "Missed: Wednesday 12:30 (piano not connected)", also in Share diagnostics'
+connection log. While the piano's firmware is being updated nothing plays, and a start that
+falls then is missed the same way: "Missed: Wednesday 12:30 (the piano was updating)". In
+kiosk mode the Schedule page and a channel's Schedule ask for the kiosk PIN. A schedule
+replaces whatever was playing; at its end time the tablet stops what
+the schedule started, but never something someone chose meanwhile. A tablet switched off misses
+what falls while it is off; after it restarts, the next schedule is set again by itself (the app
+need not be opened). Set the app's battery use to *Unrestricted* (see *Keep playing with the
+screen off*).
+
+Android 13 and newer let the app start at an exact time by itself. On Android 12 the person may
+take that away (Settings › Apps › Special app access › Alarms & reminders): the page then shows
+**Allow exact alarms**, which opens that setting, and no schedule starts until it is allowed.
+
+**On the piano:**
+
+- [ ] A schedule two minutes ahead with the tablet's screen off and the piano not connected: at
+      the minute the tablet connects and plays at the schedule's volume; at the end time the
+      piano stops and its volume comes back.
+- [ ] The piano switched off: 20 seconds after the minute the page reads "Missed: … (piano not
+      connected)".
+- [ ] Restart the tablet with a schedule ahead and don't open the app: it still plays.
 
 ## Test it on the piano
 
@@ -944,47 +999,3 @@ The full audit, every finding and what was done about it, is in
 MIT licensed with attribution preserved: see `LICENSE` and `AUTHORS`. Every
 source file is covered by an Ed25519-signed manifest; `python3
 provenance/verify.py` checks it (see `PROVENANCE.md`).
-
-## Schedules
-
-The piano can play by itself at set times, as a Disklavier's timer does: a channel, a playlist
-or a piece, on chosen days, at a start time, until an end time or its end, at a volume.
-**Piano › Schedule** (the hub's row reads when the next one starts, "Next Wed 12:30"):
-
-1. **Add schedule**: choose the days (Weekdays and Every day are one tap), the start time, and
-   an end time or **Until the end** (a playlist or a piece plays out; a channel plays until
-   someone stops it). An end before the start is past midnight: "The next day".
-2. Under PLAYS, choose a channel, a playlist or a piece (search by title or composer).
-3. **Set the volume** (70% at first): the piano's own volume while it plays, or how hard its
-   keys are struck where the piano has none; what was there comes back when it ends, and the
-   piano never saves it. Off, the piano plays as it is set, and a channel at its own volume.
-4. **Save.** The row reads "Weekdays 12:30 · Calm channel · until 13:15 · 70%"; its switch
-   turns it off and on; a tap edits it; a long press offers Edit and Delete.
-
-A channel's card has **Schedule** in its long-press menu too, with that channel chosen. With
-nothing loaded, Now playing (and the tablet's panel) shows the next one: "Next: Wednesday 12:30,
-Calm". The web panel's **Schedule** page lists, adds, edits and deletes them the same way.
-
-**The tablet must be on**, charged and near the piano, with Bluetooth on: it is the tablet
-that starts each schedule, at the minute, with its screen off and asleep (an exact alarm wakes
-it). If the piano isn't connected, the tablet reaches for it and waits 20 seconds; if the piano
-doesn't come (switched off, out of range, another device holding it), nothing plays and the
-page says so: "Missed: Wednesday 12:30 (piano not connected)", also in Share diagnostics'
-connection log. A schedule replaces whatever was playing; at its end time the tablet stops what
-the schedule started, but never something someone chose meanwhile. A tablet switched off misses
-what falls while it is off; after it restarts, the next schedule is set again by itself (the app
-need not be opened). Set the app's battery use to *Unrestricted* (see *Keep playing with the
-screen off*).
-
-Android 13 and newer let the app start at an exact time by itself. On Android 12 the person may
-take that away (Settings › Apps › Special app access › Alarms & reminders): the page then shows
-**Allow exact alarms**, which opens that setting, and no schedule starts until it is allowed.
-
-**On the piano** (add to *Test it on the piano*):
-
-- [ ] A schedule two minutes ahead with the tablet's screen off and the piano not connected: at
-      the minute the tablet connects and plays at the schedule's volume; at the end time the
-      piano stops and its volume comes back.
-- [ ] The piano switched off: 20 seconds after the minute the page reads "Missed: … (piano not
-      connected)".
-- [ ] Restart the tablet with a schedule ahead and don't open the app: it still plays.

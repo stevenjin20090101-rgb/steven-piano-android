@@ -14,7 +14,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
-/** The schedules table ([ScheduleEntity]); created in schema v3, used from M19 (app 1.5.2). */
+/** The schedules table ([ScheduleEntity]); created in schema v3, used from M19 (app 1.6.2). */
 @Dao
 interface ScheduleDao {
     /** Every schedule, by the time it starts. */

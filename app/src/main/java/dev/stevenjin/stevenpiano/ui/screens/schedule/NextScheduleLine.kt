@@ -23,7 +23,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import androidx.compose.material3.MaterialTheme
 
 /**
- * "NEXT: WEDNESDAY 12:30, CALM", in the eyebrow style (DESIGN.md › v1.5.2 — M19): atop the Schedule
+ * "NEXT: WEDNESDAY 12:30, CALM", in the eyebrow style (DESIGN.md › v1.6.2 — M19): atop the Schedule
  * page, and where nothing plays, over "Choose a piece from the library." on Now playing and in the
  * tablet's now-playing panel. Nothing at all when no schedule is ahead.
  */

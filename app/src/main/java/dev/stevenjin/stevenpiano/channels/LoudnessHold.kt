@@ -13,7 +13,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackLimits
 
 /**
  * How loud the piano plays while something with a volume of its own plays (a channel, a schedule;
- * DESIGN.md › v1.5 — M17 and v1.5.2 — M19), and what comes back after. [hold] sets the loudness
+ * DESIGN.md › v1.5 — M17 and v1.6.2 — M19), and what comes back after. [hold] sets the loudness
  * for its owner: the piano's own volume when the piano offers one ([PianoVolume.hold], never saved
  * on the piano), else the app's velocity (50 + volume / 2 %). The first hold remembers what was
  * there; a later hold, by the same owner or another, takes over and keeps that memory, so what

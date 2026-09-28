@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 /**
  * Keeps playback going with the screen off. A mediaPlayback foreground service, started from
  * the app's play controls (it must be started from the foreground), or by a schedule's alarm
- * (DESIGN.md › v1.5.2 — M19: an exact alarm lets the app start it from the background), that holds
+ * (DESIGN.md › v1.6.2 — M19: an exact alarm lets the app start it from the background), that holds
  * the media notification and session and a partial wake lock while playing, and while a schedule
  * waits for the piano. Pausing detaches the notification; a stop ends the service. Swiping the app
  * away, or the service ending while the piano is sounding, silences the piano first (pedal up, then

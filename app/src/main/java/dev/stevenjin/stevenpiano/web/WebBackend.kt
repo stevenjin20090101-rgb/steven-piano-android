@@ -24,7 +24,7 @@ import java.io.File
  * Everything the web panel reads and does, and nothing else (DESIGN.md › v1.5.1 — M18): the
  * player's state and commands, the library's lists and art, the channels, the piano's settings,
  * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, imports, and
- * (v1.5.2 — M19) the schedules.
+ * (v1.6.2 — M19) the schedules.
  * The server ([WebServer]) sees the app only through this; the app's own ([AppWebBackend]) runs
  * every player command on the main thread, where `Player` lives, and the tests' fake records what
  * it is asked. Every call is made from one of the server's request threads.

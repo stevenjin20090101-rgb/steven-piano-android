@@ -30,7 +30,7 @@ enum class ScheduleKind {
  * Monday 1, Tuesday 2 … Sunday 64) at [startMinute] (minutes after local midnight), [kind] and
  * [target] say what plays, until [endMinute] or the end of it (null), at [volumePct] or as the
  * piano is (null), while [enabled]. Created in schema v3 (app 1.5) so that 1.6 needs no second
- * migration; read and written from M19 (app 1.5.2) by `schedule.ScheduleRepository`.
+ * migration; read and written from M19 (app 1.6.2) by `schedule.ScheduleRepository`.
  */
 @Entity(tableName = "schedules")
 data class ScheduleEntity(

@@ -54,7 +54,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Schedules (v1.5.2): the piano plays by itself at set times, so the app keeps one exact alarm
+    <!-- Schedules (v1.6.2): the piano plays by itself at set times, so the app keeps one exact alarm
          (timer play is what exact alarms exist for). Android 13 and newer grant USE_EXACT_ALARM with the
          app; Android 12 asks for SCHEDULE_EXACT_ALARM, which the person may take away (the Schedule page
          then asks for it back). A restart of the tablet clears the alarm: the app sets it again. -->

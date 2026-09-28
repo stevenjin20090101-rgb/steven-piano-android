@@ -55,7 +55,7 @@ data class NextSchedule(val occurrence: Occurrence, val name: String) {
 }
 
 /**
- * Timed play (DESIGN.md › v1.5.2 — M19), one per process ([AppGraph.schedules]): the schedules
+ * Timed play (DESIGN.md › v1.6.2 — M19), one per process ([AppGraph.schedules]): the schedules
  * ([repository]), the one exact alarm that keeps the next of them ([planner]), what an alarm does
  * when it goes off ([onAlarm], through the [runner]), and what the Schedule page, the hub, Now
  * playing and the web panel show of them ([rows], [next], [last]). Everything runs in the app's

@@ -64,7 +64,7 @@ interface ScheduleOutcomes {
 }
 
 /**
- * Plays a schedule when its alarm goes off (DESIGN.md › v1.5.2 — M19). The alarm's receiver calls
+ * Plays a schedule when its alarm goes off (DESIGN.md › v1.6.2 — M19). The alarm's receiver calls
  * [prepare] first: the playback service comes up at once, while Android still allows a start from
  * the background (for a few seconds after an exact alarm), and stays in the foreground while
  * [starting] is true, holding the tablet awake. Then [fire]:

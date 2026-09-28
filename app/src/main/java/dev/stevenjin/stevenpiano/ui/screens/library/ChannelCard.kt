@@ -69,7 +69,7 @@ private val BandHeight = 56.dp
  * "12 PIECES", "ADD MORE PIECES" for a pool too small to play, or while it plays the live dot and
  * "PLAYING". On the band everything is the content colour, as on glass. Tap plays the channel
  * ([onPlay]); long-press offers Set volume ([onSetVolume]) and Schedule ([onSchedule], the schedule
- * editor with the channel chosen; v1.5.2). [connected] lights the dot red; otherwise it is the
+ * editor with the channel chosen; v1.6.2). [connected] lights the dot red; otherwise it is the
  * hollow ring, as everywhere.
  */
 @Composable

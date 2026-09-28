@@ -28,7 +28,7 @@ data class Occurrence(val scheduleId: Long, val edge: Edge, val at: ZonedDateTim
 }
 
 /**
- * When schedules start and end (DESIGN.md › v1.5.2 — M19). Pure: every answer comes from the
+ * When schedules start and end (DESIGN.md › v1.6.2 — M19). Pure: every answer comes from the
  * schedules and a time given, in that time's zone, so the tests set the clock and the zone.
  *
  * - A schedule starts at [ScheduleEntity.startMinute] on each day its [ScheduleEntity.days] bit

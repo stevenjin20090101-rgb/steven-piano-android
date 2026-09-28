@@ -97,7 +97,7 @@ class WebServerTest {
         val token = login(http)
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
-        assertEquals("the table's twenty-two routes that change something (the schedules' three from 1.5.2)", 22, writes.size)
+        assertEquals("the table's twenty-two routes that change something (the schedules' three from 1.6.2)", 22, writes.size)
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
