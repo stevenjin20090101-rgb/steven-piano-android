@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,7 +104,9 @@ import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
 import dev.stevenjin.stevenpiano.ui.components.rememberDragReorderState
 import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
+import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingPanel
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import kotlinx.coroutines.launch
 
@@ -117,7 +121,10 @@ import kotlinx.coroutines.launch
  * an outlined banner offers to share diagnostics. On wide screens the content stays a 720 dp
  * column in the middle; the list still scrolls from anywhere across the screen, and under the tab
  * bar's glass, its last row able to rise above it ([LocalFloatingPadding]). An open playlist's Play
- * floats as a glass circle at the bottom end of its column ([FloatingPlayRequest]).
+ * floats as a glass circle at the bottom end of its column ([FloatingPlayRequest]). On wide frames
+ * (AppFrame.twoPane) the Library is two panes: the list in 55 % of the width and the now-playing
+ * panel ([NowPlayingPanel]) beside it; playing a piece then stays on the Library, and the Now
+ * playing tab remains for the full score.
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -154,56 +161,76 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
             delete = { dialog = LibraryDialog.Delete(it) },
         )
     }
-    val play = LibraryPlay(playback, onPlaying)
+    val frame = LocalAppFrame.current
+    // On wide frames the piece shows in the panel beside the list: Now playing is not opened.
+    val play = LibraryPlay(playback, onPlaying = { if (!frame.twoPane) onPlaying() })
 
     BackHandler(enabled = state.group != null, onBack = vm::closeGroup)
     val floating = LocalFloatingPadding.current
     val direction = LocalLayoutDirection.current
     // The list rises above the tab bar; with the keyboard up (which hides the bar) it ends at the keyboard.
     val listBottom = (floating.calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding()).coerceAtLeast(0.dp)
+    val sides = Modifier.padding(start = floating.calculateStartPadding(direction), end = floating.calculateEndPadding(direction))
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(start = floating.calculateStartPadding(direction), end = floating.calculateEndPadding(direction))
-            .imePadding(),
-    ) {
-        Column(Modifier.readingWidth()) {
-            ScreenHeader("Library") {
-                GlyphButton(R.drawable.ic_add, "Add MIDI files") { adding = true }
+    val library: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier.imePadding()) {
+            Column(Modifier.readingWidth()) {
+                ScreenHeader("Library") {
+                    GlyphButton(R.drawable.ic_add, "Add MIDI files") { adding = true }
+                }
+                HairlineDivider()
+                ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
+                ArtworkBar(artworkProgress)
+                if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
             }
-            HairlineDivider()
-            ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
-            ArtworkBar(artworkProgress)
-            if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
-        }
-        when {
-            !state.loaded -> Unit
-            state.unreadable -> Column(Modifier.readingWidth()) {
-                CategoryChips(state.category, vm::selectCategory)
-                OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
-            }
-            state.empty -> EmptyLibrary(onAdd = { adding = true })
-            else -> {
-                var listBounds by remember { mutableStateOf<Rect?>(null) }
-                BoxWithConstraints(
-                    Modifier
-                        .fillMaxSize()
-                        .onGloballyPositioned { listBounds = it.boundsInRoot() },
-                ) {
-                    val padding = readingPadding(maxWidth, bottom = listBottom)
-                    // The reading column's bottom end, above the floating controls: where a playlist's Play floats.
-                    val density = LocalDensity.current
-                    val anchor = listBounds?.let { box ->
-                        with(density) {
-                            val side = padding.calculateStartPadding(direction).toPx()
-                            Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
+            when {
+                !state.loaded -> Unit
+                state.unreadable -> Column(Modifier.readingWidth()) {
+                    CategoryChips(state.category, vm::selectCategory)
+                    OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
+                }
+                state.empty -> EmptyLibrary(onAdd = { adding = true })
+                else -> {
+                    var listBounds by remember { mutableStateOf<Rect?>(null) }
+                    BoxWithConstraints(
+                        Modifier
+                            .fillMaxSize()
+                            .onGloballyPositioned { listBounds = it.boundsInRoot() },
+                    ) {
+                        val padding = readingPadding(maxWidth, bottom = listBottom)
+                        // The reading column's bottom end, above the floating controls: where a playlist's Play floats.
+                        val density = LocalDensity.current
+                        val anchor = listBounds?.let { box ->
+                            with(density) {
+                                val side = padding.calculateStartPadding(direction).toPx()
+                                Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
+                            }
                         }
+                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto) { dialog = it }
                     }
-                    LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto) { dialog = it }
                 }
             }
         }
+    }
+    if (frame.twoPane) {
+        // The list (55 %, its 720 dp reading width inside it) and the now-playing panel (45 %), a hairline between.
+        Row(
+            Modifier
+                .fillMaxSize()
+                .then(sides),
+        ) {
+            library(Modifier.weight(LIST_SHARE).fillMaxHeight())
+            VerticalDivider(thickness = Hairline, color = LocalHairline.current)
+            NowPlayingPanel(
+                playback,
+                Modifier
+                    .weight(1f - LIST_SHARE)
+                    .fillMaxHeight()
+                    .padding(bottom = floating.calculateBottomPadding()),
+            )
+        }
+    } else {
+        library(Modifier.fillMaxSize().then(sides))
     }
     val context = LocalContext.current
     if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }) { adding = false }
@@ -211,7 +238,10 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onImport: (I
     about?.let { PieceDetailSheet(it) { about = null } }
 }
 
-/** Playing from the library: the playback service starts, and Now playing is shown. */
+/** The list's share of a wide frame; the now-playing panel has the rest. */
+private const val LIST_SHARE = 0.55f
+
+/** Playing from the library: the playback service starts, and Now playing is shown ([onPlaying]; not on wide frames, whose panel shows the piece). */
 private class LibraryPlay(private val playback: PlaybackStarter, private val onPlaying: () -> Unit) {
     fun piece(pieceId: Long, queue: List<Long>) {
         playback.play(pieceId, queue)

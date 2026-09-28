@@ -100,8 +100,6 @@ private val SHORT_BELOW_STACKED = 780.dp
 private val SHORT_ROLL = 240.dp
 private val SHORT_SCORE = 200.dp
 
-/** After a change while paused (a seek), frames keep coming this long so the picture catches up. */
-private const val SETTLE_NANOS = 400_000_000L
 
 /**
  * The signature screen: the title, the composer, the note views, the scrubber, the transport,
@@ -225,28 +223,7 @@ private fun ColumnScope.PieceView(
         if (!playing) settle++
     }
     val controls: @Composable ColumnScope.() -> Unit = {
-        Scrubber(
-            piece.durationMicros,
-            frame,
-            roll,
-            onSeek = seek,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-        )
-        TransportBar(
-            playing = playing,
-            hasNext = state.queue.hasNext,
-            shuffle = state.queue.shuffle,
-            repeat = state.queue.repeat,
-            onShuffle = { player.setShuffle(!state.queue.shuffle) },
-            onRepeat = { player.setRepeat(state.queue.repeat.cycled()) },
-            onPrevious = {
-                playback.previous()
-                if (!playing) settle++
-            },
-            onPlayPause = playback::togglePlayPause,
-            onNext = playback::next,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        TransportControls(piece, state, frame, roll, player, playback, onSeek = seek, onMoved = { if (!playing) settle++ })
     }
     if (short) {
         NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, null, Modifier.height(shortHeight(plan.layout)).fillMaxWidth().padding(horizontal = 16.dp))
@@ -374,37 +351,6 @@ private fun NoteViews(
             notes(Modifier.weight(1f).fillMaxHeight())
         }
     }
-}
-
-/**
- * The frame time the canvases, keyboard and scrubber draw at: every frame while playing (the
- * first one starts the roll's ease-in), and a short burst after anything that moves a paused
- * piece ([settle]), so the picture catches up with the scheduler thread.
- */
-@Composable
-private fun rememberFrameNanos(playing: Boolean, pieceId: Long, settle: Int, roll: RollClock): LongState {
-    val frame = remember { mutableLongStateOf(System.nanoTime()) }
-    val reduced = rememberReducedMotion()
-    LaunchedEffect(playing, pieceId, settle, reduced) {
-        if (playing) {
-            var first = true
-            while (true) {
-                withFrameNanos { t ->
-                    if (first && !reduced) roll.easeIn(t)
-                    first = false
-                    frame.longValue = t
-                }
-            }
-        } else {
-            roll.cut()
-            val until = System.nanoTime() + SETTLE_NANOS
-            do {
-                val t = withFrameNanos { it }
-                frame.longValue = t
-            } while (t < until)
-        }
-    }
-    return frame
 }
 
 private const val TEMPO_STEP = 5

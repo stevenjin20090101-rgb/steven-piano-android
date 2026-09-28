@@ -155,7 +155,8 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  *
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
- * allocated per note or per frame.
+ * allocated per note or per frame. Notes travel [dpPerSecond] (the now-playing panel's strip runs
+ * slower than Now playing's roll, so its short window still shows what is coming).
  */
 @Composable
 fun NoteCanvas(
@@ -169,6 +170,7 @@ fun NoteCanvas(
     hands: ByteArray? = null,
     fingers: ByteArray? = null,
     chords: ChordTrack? = null,
+    dpPerSecond: Float = NOTES_DP_PER_SECOND,
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -201,7 +203,7 @@ fun NoteCanvas(
                     fold = fold,
                     paper = display == NoteDisplay.PAPER_ROLL,
                     height = size.height,
-                    pxPerMicro = NOTES_DP_PER_SECOND.dp.toPx() / 1_000_000f,
+                    pxPerMicro = dpPerSecond.dp.toPx() / 1_000_000f,
                     inset = 1.dp.toPx(),
                     minHeight = 2.dp.toPx(),
                     flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L,

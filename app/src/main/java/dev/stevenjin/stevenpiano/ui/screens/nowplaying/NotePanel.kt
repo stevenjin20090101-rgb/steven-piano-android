@@ -18,19 +18,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LongState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.stevenjin.stevenpiano.player.NowPlaying
+import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
+import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
+import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.TRACKER_FROM_BOTTOM
+import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 
@@ -105,3 +113,44 @@ internal fun transportFloats(plan: NotesPlan, height: Dp): Boolean {
 
 /** Between two note views (the score and the roll), stacked or side by side. */
 internal val PANEL_GAP = 8.dp
+
+/**
+ * The scrubber over the transport, as Now playing and the now-playing panel show them, on glass or
+ * solid: through [playback] (which keeps the playback service running), Shuffle and Repeat on the
+ * player. [onSeek] is the scrubber's seek; [onMoved] follows anything else that moves a paused
+ * piece (Previous), so the picture catches up.
+ */
+@Composable
+internal fun ColumnScope.TransportControls(
+    piece: NowPlaying,
+    state: PlayerState,
+    frame: LongState,
+    roll: RollClock,
+    player: Player,
+    playback: PlaybackStarter,
+    onSeek: (Long) -> Unit,
+    onMoved: () -> Unit,
+) {
+    Scrubber(
+        piece.durationMicros,
+        frame,
+        roll,
+        onSeek = onSeek,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+    TransportBar(
+        playing = state.status == PlaybackStatus.Playing,
+        hasNext = state.queue.hasNext,
+        shuffle = state.queue.shuffle,
+        repeat = state.queue.repeat,
+        onShuffle = { player.setShuffle(!state.queue.shuffle) },
+        onRepeat = { player.setRepeat(state.queue.repeat.cycled()) },
+        onPrevious = {
+            playback.previous()
+            onMoved()
+        },
+        onPlayPause = playback::togglePlayPause,
+        onNext = playback::next,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
