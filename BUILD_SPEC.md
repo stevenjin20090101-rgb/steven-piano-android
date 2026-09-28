@@ -2907,3 +2907,280 @@ and caps and is closed; a listing that throws still finishes; a saved zip import
 `GroupSummariesTest` (+1: Remote control's value); `ImportLimitsTest` (`cacheDir/web` swept),
 `DiagnosticsExporterTest` (30 lines), `PianoPagesTest` and `RoutesTest` changed. 763 tests
 before, 832 after (7 skipped, as before: the corpus tests, `-Pcorpus`).
+
+---
+
+# v1.6.1 — M21: firmware updates from the app
+
+Read `DESIGN.md › v1.6.1 — M21` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M21 with its amendments (binding); the contract is `firmware/docs/BLE_OTA.md` (frames, error codes,
+the safety order, the app's obligations in § 11, feature detection § 12, the manifest in § 10, the
+decisions in § 15). Built on its own branch (`m21-firmware`) beside M19 and M20. Not a release in this
+run: `versionCode`, `versionName` and `Provenance.text` stay as they are and nothing is staged or
+signed; the merge makes it 1.6.1 (`versionCode` 13, firmware 2.0.0's `minAppVersionCode`).
+
+## Dependencies
+
+- `net.i2p.crypto:eddsa:0.3.0` (EdDSA-Java, CC0 1.0; the notice in AUTHORS, the legal code in
+  `third_party/eddsa/LICENSE.txt`), pinned in `gradle/libs.versions.toml`, resolved from Maven Central.
+  Only `firmware/Ed25519.kt` names it. It references the JDK's `sun.security.x509.X509Key` in a branch
+  the app never takes: `proguard-rules.pro` has `-dontwarn` for that class alone (R8 stopped the
+  release build without it). No reflection in the library. The fallback the brief named,
+  `org.bouncycastle:bcprov-jdk18on`, was not needed.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`):
+
+- `M/firmware/Ed25519.kt` (the wrapper: the platform's provider asked first from API 33, EdDSA-Java
+  otherwise; S below the group order on both), `FirmwareKeys.kt` (the author's key as 32 raw bytes and
+  RFC 8032 TEST 1's; `fingerprint`), `FirmwareVersion.kt` ("2.0.0+a1b2c3d" as release and build,
+  semver order), `FirmwareManifest.kt` (§ 10's fields, `verify`, `check`), `OtaExample.kt` (§ 5's image,
+  digest and signature, § 10's manifest), `FirmwareState.kt` (the states, `FirmwarePiano`,
+  `PowerState`, `FirmwarePlayer`, `FirmwareFailures`), `FirmwareUpdater.kt`, `FakeOta.kt` (the emulator's
+  scenarios and `FakeFirmwareServer`), `Battery.kt`.
+- `M/ble/Ota.kt` (`PianoOta`, `OtaBegin`, `OtaEvent`, `OtaFrames`, `OtaChannel`), `OtaPiano.kt` (the
+  piano's side as a model), `EmulatedOta.kt` (the emulated piano's update service).
+- `M/service/FirmwareService.kt`, `M/ui/FirmwareCopy.kt`.
+- `third_party/eddsa/LICENSE.txt`.
+- Tests: `update/UpdateSourceTest.kt`, `firmware/Ed25519Test.kt`, `FirmwareManifestTest.kt`,
+  `FirmwareVersionTest.kt`, `PinnedKeyTest.kt`, `FirmwareUpdaterTest.kt`, `FakeOtaTest.kt`,
+  `ble/GattOtaTest.kt`, `OtaFramingTest.kt`, `OtaPianoTest.kt`, `ui/FirmwareCopyTest.kt`.
+
+Changed: `update/UpdateSource.kt` (the firmware's allow-list); `ble/PianoLink.kt` (`firmwareVersion`,
+`ota`, `expectRestart`, with defaults), `BleRadio.kt` (`GattConnection` and `GattEvents` for Device
+Information and the update service, with defaults), `AndroidBleRadio.kt`, `GattPianoLink.kt`,
+`LoggingPianoLink.kt`, `EmulatedConsole.kt` (`setFact`); `player/Player.kt` (`lock`, `unlock`,
+`locked`, `stopQuietly`); `piano/PianoSettingsRepository.kt` (`readFact`);
+`ui/screens/piano/pages/FirmwarePage.kt`, `PianoSettingRows.kt` (`PianoPageContent`'s
+`firmwareSection`), `GroupSummaries.kt`, `PianoViewModel.kt`, `PianoScreen.kt`; `AppGraph.kt`
+(`firmwareUpdater`, the schedule), `App.kt` (the channel), `AndroidManifest.xml` (the service);
+`app/build.gradle.kts`, `gradle/libs.versions.toml`, `app/proguard-rules.pro`; AUTHORS, README,
+DESIGN.md, this file. Tests changed: `ble/FakePianoLink.kt` (the firmware, `FakeOtaChannel`),
+`FakeRadio.kt` (`FakeGatt`'s update service), `PlayerTest`, `PianoSettingsRepositoryTest`,
+`GroupSummariesTest`.
+
+## The allow-list (`update/UpdateSource.kt`)
+
+The firmware repository is `stevenjin20090101-rgb/Steven-Jin-Player-Piano` (its name since the
+rename; § 15): `allowsFirmwareManifest(url)` is
+`https://raw.githubusercontent.com/stevenjin20090101-rgb/Steven-Jin-Player-Piano/main/releases/latest.json`
+exactly (HTTPS on 443, the host's case aside, no query or fragment, no user info, no backslash);
+`allowsFirmwareBinary(url)`, every hop of a download, a release asset of that repository on
+`github.com` (`/…/releases/download/<tag>/<file>`, plain names) or one of GitHub's two asset hosts;
+`allowsFirmwareFile(url)`, what a manifest may name, a `.bin` release asset on `github.com` only.
+`UpdateSource.firmware` is the HTTP client's source (it names no APK); the app's own source never
+reaches the firmware's addresses. `MAX_FIRMWARE_BYTES` = 4 MB, apart from the APK's 50 MB.
+
+## The manifest (`firmware/FirmwareManifest.kt`)
+
+§ 10's JSON, read with `org.json`: `version` `MAJOR.MINOR.PATCH` (a `-pre` allowed), at most 16
+bytes; `build` 7–40 lower-case hex digits; `binUrl` `allowsFirmwareFile`; `sizeBytes` 1..4 MB;
+`sha256` 64 hex digits (kept lower-case); `sig` 88 base64 characters of 64 bytes;
+`minAppVersionCode` 1..2,100,000,000; `notes` optional, plain text, at most 1,000; `usbOnly` a JSON
+boolean, required. Unknown fields are ignored; anything else throws `InvalidFirmwareManifest(field)`.
+`verify(publicKey)` is Ed25519 over the 32 raw bytes of `sha256`. The key (`FirmwareKeys.author`) is
+the 32 bytes § 8 prints; `PinnedKeyTest` checks its fingerprint (`eab16a502f679465`, `Provenance`'s),
+that it is `provenance/author_ed25519_public.pem`'s, and, once the firmware carries
+`include/ota_pubkey.h`, the piano's.
+
+**Ed25519 on Android.** The plan expected the platform's Ed25519 from API 33. Measured on the emulator
+(API 34) with a probe dex: Conscrypt offers X25519 (XDH) only, no Ed25519 `KeyFactory` or `Signature`.
+`Ed25519.check` asks the platform first from API 33 and falls through to EdDSA-Java only when the
+platform can't check Ed25519 at all (never a second opinion on a refused signature); every Android the
+app supports today therefore uses EdDSA-Java, and the log says which answered ("signature checked with
+EdDSA-Java"). EdDSA-Java does not refuse a non-canonical S: the wrapper does, as RFC 8032 › 5.1.7 asks.
+
+## The link (`ble/`)
+
+- **Discovery.** On firmware 2.0.0 and later, Device Information's Firmware Revision String
+  (`0x180A`/`0x2A26`) is read after discovery and before Connected (3 s at most; NULs and control
+  characters dropped, 64 characters kept): `PianoLink.firmwareVersion`. The update service
+  `7D0A0001-…` with Control (`…0002`, and its CCCD) and Data (`…0003`) is `PianoLink.ota`. Older
+  firmware has neither, and the link connects as before; both go with the connection.
+- **A session** (`OtaChannel.begin(header): Flow<OtaEvent>`): switches Control's notifications on
+  (once a connection), re-asks high connection priority, writes BEGIN with response, and gives the
+  piano's notifications parsed (`OtaFrames.parse`: READY, ACK, VERIFYING, OK, ABORTED, ERR; a known
+  opcode of the wrong length is `Malformed`, an unknown one ignored) until OK, ABORTED, an ERR, or
+  `Lost` (the connection ended, a Control write failed, or the stack refused the frames for about
+  2 s). `write(seq, payload)` queues a Data frame (1..`maxChunk` bytes; 64 at most waiting),
+  `end()` END, `abort()` ABORT ahead of the frames still waiting (which are dropped; nothing after
+  END). Leaving a session before END sends ABORT. One session at a time.
+- **The queue.** Every frame goes through the link's one-operation queue: MIDI first, then the
+  update's frames in order, then console lines. A Data frame is never dropped for a busy stack (a gap
+  would cost the whole transfer): it is retried as a MIDI release is, and a stack that keeps refusing
+  ends the session. Frames of a session that has ended never go out.
+- **MTU.** `maxChunk` = min(MTU − 5, 250) from the MTU the connection negotiated (never assumed); a
+  frame never carries more than READY's figure or the link's. The link asks for MTU 255, as it always
+  has (NimBLE's own preference; Android 14 asks 517 whatever the app says).
+- **Priority.** The link holds `CONNECTION_PRIORITY_HIGH` for MIDI from the moment it connects
+  (BUILD_SPEC › Bluetooth); a session asks for it again at BEGIN, and nothing asks for BALANCED after
+  (see *Deviations*).
+- **The restart.** `expectRestart(withinMs)` (60 s after OK): a drop in that window is reconnected
+  whatever Auto-connect says, in the background at once and with the first scan after 3 s instead of
+  20 s; the piano back, the link's rules are as before. With Auto-connect off, a piano that doesn't
+  come back within the window is let go.
+
+## The updater (`firmware/FirmwareUpdater.kt`)
+
+- **States** (`FirmwareState`): `Idle`, `Checking`, `UpToDate(version)`, `Available(manifest)`,
+  `UsbOnly(manifest)`, `NeedsNewerApp(manifest)`, `Downloading(bytes, total)`, `Verifying`,
+  `Sending(bytes, total, ratePerSec)`, `PianoVerifying`, `Restarting`, `Done(version, confirming)`,
+  `Failed(message, retryable, manifest?, check, hint, rolledBack)`. `busy` from Downloading to
+  Restarting; `cancellable` until END; `offered` while a newer release is known and not installed.
+- **Checks**: the manifest from `UpdateSource.firmware` (64 KB at most), refused unless its
+  signature checks out against the embedded key ("The piano update isn't signed by Steven Jin, so it
+  isn't offered."), then its version against the piano's: newer is Available (UsbOnly when `usbOnly`,
+  NeedsNewerApp when `minAppVersionCode` is above `BuildConfig.VERSION_CODE`), the same or older
+  UpToDate. A check failing keeps a release already on offer. Checks run once a day while a piano that
+  can be updated is connected, the device is online and *Check for updates automatically* is on (with
+  the app's own, from `MainActivity` while it is started); when the Firmware page opens (at most every
+  ten minutes); and on its button. A due check that can't ask waits a minute rather than asking again
+  at once. A piano connecting with another version has the release weighed again.
+- **An update** (`update()`, the page's Update or Retry): preconditions first (connected, the update
+  service there, the tablet at 20 % or charging), then the download (4 MB and the manifest's size at
+  most; "Downloading · 0.9 MB"), then its size, SHA-256 and the signature over the digest of those very
+  bytes, off the main thread; the preconditions again; then the player is locked ("Updating the
+  piano"), stopped, and the updater waits until the stop sequence (CC64 = 0, CC123) has been written
+  and 600 ms more have passed (the piano's 500 ms, § 7 and 11, with 100 ms for the air), and sends:
+  BEGIN (window 16), READY (its window is used; frames of its chunk at most), then the image a window
+  at a time, each window's ACK awaited (15 s) and checked against the bytes sent, then END, VERIFYING
+  and OK (30 s each). The verified image is kept for Retry.
+- **Cancel** (the page, the notification): before END, ABORT once and the piano's ABORTED (3 s at
+  most); the release is back on offer. After END nothing stops it.
+- **After OK**: `expectRestart(60 s)`, then the piano must be back within the minute (a new
+  connection: a drop seen, or a new epoch). Its version decides: the release's is `Done`, with
+  `confirming` while the new dump's `!ota` says `pending`, read again (`get !ota`) every 30 s for five
+  minutes until it says otherwise; any other version is a rollback, also when the piano resets during
+  the confirmation and comes back old. Not back within the minute: "The piano hasn't come back…", and
+  its next connection (ten minutes) still says how it went. A session lost after END is judged the
+  same way, by what the piano runs once back ("didn't finish" if the old one).
+- **Failures**: any ERR, a lost link, a silence or an ACK that doesn't add up is "The update didn't
+  finish. The piano kept its old firmware."; ERR 2, 6 and 8 are not retryable (6 and 8 with "The piano
+  refused this release."), ERR 10 says to switch the piano off and on. Nothing is retried by itself.
+  Every outcome is a line of the link's log (`LinkLog.warn`): the check and which Ed25519 answered,
+  the sending, each ERR by name, cancels, the restart, the version after it, `!ota`, rollbacks.
+- **The player** (`FirmwarePlayer`, `Player`'s `lock`, `unlock`, `stopQuietly`): while locked,
+  `play`, `playAll` (channels), `resume`, `seek`, `next`, `previous`, `skipToQueueEntry`, starting from
+  an empty queue, Repeat one and the Keys screen's note-ons and sustain are turned away; releases
+  still go. The reason is `PlayerState.problem`, which Now playing, the panel and the web panel show.
+  Schedules (M19, another branch) play through the same player and are turned away the same way.
+
+## The service (`service/FirmwareService.kt`)
+
+Foreground type `connectedDevice` (declared since M18; the manifest adds the service, not exported),
+started by the page's Update or Retry while the app is in the foreground. It follows the updater's
+state: a low-importance, silent notification (channel "firmware", "Piano firmware") "Updating the
+piano" with the page's line, a progress bar (indeterminate while checking and restarting) and Cancel
+while `cancellable`; at most a few updates a second. A partial wake lock of at most 10 minutes. When
+the state leaves `busy` it stops, leaving one auto-cancelling line of how it ended. `onTimeout` (both
+forms) cancels the update (ABORT before END). A refused start leaves the transfer running in the
+app's process, without the notification.
+
+## The page and the hub
+
+`FirmwarePage` draws FIRMWARE itself (`PianoPageContent`'s `firmwareSection` replaces the table's
+FIRMWARE section, under the status line, even without the console): the version row, the check's
+action row with `FirmwareCopy.checkLine` under it, and the update block by state, as DESIGN says.
+`GroupSummaries.firmware(piano, update, reported)`: "Update available" while `offered`, "Updating…"
+while `busy`, else the reported release ("2.0.0", Device Information's first, the dump's `!fw`
+otherwise), else the one-argument form's value. `PianoViewModel` implements `FirmwareActions`.
+
+## The emulator (`firmware/FakeOta.kt`, `ble/EmulatedOta.kt`)
+
+Debug builds on an emulator only (`LoggingPianoLink.isWanted()`): `adb shell setprop
+debug.stevenpiano.fakeota <scenario>`, then start the app. Scenarios: `happy`, `err1` (ERR 1 at
+BEGIN), `disconnect` (the link drops after 40 windows, back 3 s later on the old firmware),
+`rollback` (back on 2.0.0), `hash` (ERR 5 after END), `signature` (the piano holds the author's key:
+ERR 6), `usbonly`, `newerapp`, `uptodate`, `nocomeback`, `old` (no version, no update service). The
+emulated piano reports `2.0.0+a1b2c3d` and has the update service; `EmulatedOta` answers through
+`OtaPiano` with a real piano's pauses (READY 1.2 s, an ACK 300 ms after each window: about 75 s for
+the worked example; OK 2.8 s after END); after OK it drops, is back 4 s later pending and confirms
+25 s after that. `FakeFirmwareServer` serves the scenario's release (§ 10's example, for any app but
+`newerapp`) and § 5's image at 160 KB/s; the updater then trusts RFC 8032's test key. Release builds
+have none of it, and trust the author's key alone.
+
+## Greps (v1.6.1 — M21)
+
+- `grep -rn "esp32-player-piano" app/src`: nothing (the renamed repository only).
+- `grep -rn "Color(0x" app/src/main --include='*.kt' | grep -v ui/theme`: nothing.
+- `grep -rnF -e "0.0.0.0" -e "Access-Control" app/src/main`: nothing.
+- `LocalLive`, `LocalNoteSounding`, `hazeSource`/`HazeState`, `Modifier.blur`, `DisplayBlack`: as in M18.
+
+## Measured (September 2026, `steven_piano_m21`, API 34, debug build, the emulated piano)
+
+- Tests: 920, none failing (8 skipped: the corpus tests without `-Pcorpus`, and `PinnedKeyTest`'s
+  check against the firmware's `include/ota_pubkey.h`, which firmware 2.0.0 adds). `lint`: 0 errors,
+  29 warnings, M18's. `assembleDebug`, `assembleRelease` clean. The release APK is 2,724,616 bytes
+  (1.5.1: 2,675,444): EdDSA-Java and this run's code.
+- `happy` end to end: the hub's row "Update available"; Update; "Downloading · 0.4 MB"; "Sending ·
+  38% · less than a minute left" with Cancel, and the same in the notification; Now playing's banner
+  "Updating the piano"; the hub's row "Updating…"; "The piano is checking the update…"; "Restarting
+  the piano…"; "Updated to 2.1.0 · confirming…" 5.6 s after OK; "Updated to 2.1.0" 30 s later; the
+  hub's row "2.1.0". The link's log: "sending 2.1.0, 991232 bytes", 79 s later "the piano verified
+  2.1.0 and restarts", "the piano runs 2.1.0+a1b2c3d, !ota pending", "2.1.0 confirmed (!ota
+  confirmed)".
+- Cancel on the page 7 s into sending, and from the notification's Cancel at 79 %: "cancelled while it
+  was sent" in the link's log each time, the release back on offer, the hub back to "Update available".
+- `err1`: the failure 0.2 s after sending began, with Retry. `disconnect`: after 164,000 bytes. `hash`:
+  after END. `signature`: "The piano refused this release.", no Retry. `rollback`: "The piano restarted
+  but reports 2.0.0 — it rolled back." `nocomeback`: "The piano hasn't come back after restarting…" a
+  minute after OK. `usbonly`, `newerapp`, `uptodate` and no property at all (firmware without a
+  version: "Unknown — this firmware has no version. Flash 2.0.0 over USB once.", Check greyed), each as
+  DESIGN says. Light and dark. "Checking the download…" lasts a few milliseconds on the emulator and
+  was never caught on screen; `FirmwareUpdaterTest` sees it published.
+- The platform's Ed25519 on API 34: none (above).
+
+## Deviations from the plan, and why
+
+- **Ed25519 below and above API 33 alike.** Android 14 has no Ed25519 in Conscrypt (measured), so the
+  plan's "the platform's from API 33" holds nowhere the app runs today: the platform is asked first
+  and EdDSA-Java answers. Kept the order the brief asked for, so a later Android that has Ed25519 uses
+  its own.
+- **No BALANCED after a transfer.** The brief asked for HIGH during a transfer and balanced after.
+  The link has held HIGH since it connects (the piano plays MIDI on arrival, so the short interval is
+  its timing); switching to BALANCED after a failed or cancelled update would slow every piece played
+  afterwards. The session asks for HIGH again at BEGIN and leaves it there.
+- **MTU 255 asked, not 517.** § 11 says the app requests 517; it has always asked 255, NimBLE's own
+  preference, which yields the same 255 (and Android 14 asks 517 whatever the app says). The chunk
+  comes from the negotiated value either way.
+- **600 ms of quiet**, not 500: the 500 ms rule counts from the piano's last energize, and the stop
+  sequence still has to cross the air after the write is confirmed.
+- **States the plan didn't list**: `UsbOnly` and `NeedsNewerApp` (the brief's two lines), `Done`'s
+  `confirming` (the amendment's "confirming…"), `Failed`'s `check`, `hint` and `rolledBack`. The hub
+  also reads "Updating…" during a transfer ("Update available" there would be wrong).
+- **The version on the hub** is the release alone ("2.0.0"); the page shows the build too.
+- **The daily check** shares *Check for updates automatically* and the app's schedule (no new
+  setting); it runs while the app is in the foreground, as the app's own does.
+- **A lost link after END** waits for the piano and reads its version, rather than failing: from END
+  the piano finishes and restarts without the app (§ 6).
+- **The service follows, the app's scope transfers**: the transfer lives in `FirmwareUpdater` (in
+  `AppGraph.appScope`), so a refused service start leaves it running; the service holds the
+  foreground, the wake lock and the notification.
+- **The fake scenarios' release takes any app**: § 10's example names `minAppVersionCode` 13, which
+  this build (10 until the merge) is below; `newerapp` keeps a higher one.
+- **Emulator AVD** `steven_piano_m21` (this run's, removed at the end), not `steven_piano`, as the
+  run's instructions said.
+
+## Tests added in M21
+
+`UpdateSourceTest` (6: the manifest at one address; binaries and asset hosts; what a manifest may
+name; the firmware source's hops; the app's source never reaching them; the cap), `Ed25519Test` (5:
+RFC 8032's vectors through both engines; a bit, a message or a key changed; S + L refused;
+lengths; which engine answers), `FirmwareManifestTest` (9: § 10's example; the test key and never
+the author's; a generated key pair with a tampered sha256 and signature refused; `usbOnly` and
+`minAppVersionCode`; unknown fields; each missing field; wrong shapes; binaries elsewhere; notes),
+`FirmwareVersionTest` (3), `PinnedKeyTest` (4: the fingerprint; the PEM; the firmware's header, skipped
+until 2.0.0; copies), `OtaFramingTest` (7: § 5's BEGIN byte for byte, and against BLE_OTA.md's own dump;
+END, ABORT, Data 0, 1 and 3964; 3,965 frames; every answer; malformed and unknown; BEGIN's checks),
+`OtaPianoTest` (3), `GattOtaTest` (14: the version before Connected; older firmware; the version's
+timeout and the MTU's chunk; a session's frames in order; MIDI first and console last; abort; leaving;
+a drop; one session at a time; sizes; a busy stack waited out, then the session ended; the restart
+reconnected whatever Auto-connect says, and let go when it doesn't come back), `FirmwareUpdaterTest`
+(19: offered; unsigned; up to date; the happy path with windows, ACKs, the ≥ 500 ms rule, the lock,
+the restart, pending then confirmed; ERR 1 with Retry and no retry loop; a disconnect mid-transfer;
+Cancel; a rollback; a reset while confirming; USB only and newer app never sent; a tampered download;
+preconditions; ERR 6; ERR 5 after END; a link lost after END; not back within the minute; the daily
+schedule; the page's check; offline), `FakeOtaTest` (3), `FirmwareCopyTest` (4), and cases in
+`PlayerTest` (+1: locked, nothing reaches the piano), `PianoSettingsRepositoryTest` (+1: `readFact`),
+`GroupSummariesTest` (+1: "Update available", "Updating…", the release). 840 tests before, 920 after.

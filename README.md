@@ -794,3 +794,59 @@ The full audit, every finding and what was done about it, is in
 MIT licensed with attribution preserved: see `LICENSE` and `AUTHORS`. Every
 source file is covered by an Ed25519-signed manifest; `python3
 provenance/verify.py` checks it (see `PROVENANCE.md`).
+
+## Updating the piano's firmware
+
+From version 1.6.1 the app can update the piano's own firmware (the ESP32 program that strikes the
+keys, runs the lights and the pedal) over the same Bluetooth link it plays through. Nothing unsigned
+ever runs: the app, and then the piano itself, check that each release was signed with Steven's
+authorship key before anything is installed.
+
+**Once, over USB: firmware 2.0.0.** The piano's current firmware can't receive updates, so the first
+one that can, 2.0.0, goes on from the Mac over the USB-C port (the firmware's README: `pio run -t
+upload` with the board's BOOT and RST dance). After that flash, **Piano › Firmware and status** shows
+"Piano firmware 2.0.0 · a1b2c3d". Before it, the page says "Unknown — this firmware has no version.
+Flash 2.0.0 over USB once." The same 2.0.0 also brings the piano's settings over Bluetooth: Feel,
+Lighting and Pedal come alive on the tablet.
+
+**From then on, from the tablet.** The app looks for a new release once a day while the piano is
+connected (with *Check for updates automatically* on), and whenever the Firmware and status page
+opens; **Check for piano updates** asks at once. When there is one, the hub's row reads **Update
+available** and the page shows the release's notes and **Update the piano to 2.1.0**. Tap it with the
+tablet near the piano and at least 20 % charged (or plugged in):
+
+1. The app downloads the release from GitHub (about 1 MB) and checks its fingerprint and signature.
+2. It stops whatever is playing, and the piano goes quiet: its keys and pedal are released and
+   checked off, its LED strip goes dark, and its screen reads "Updating • 38 %". Nothing plays from
+   the tablet, the web panel or the Keys screen meanwhile; Now playing says "Updating the piano".
+3. The new firmware goes over in about two minutes ("Sending · 38% · about 1 min left", also in a
+   notification with Cancel, so the screen can go off). Cancel stops it cleanly until the very end.
+4. The piano checks the whole image and its signature, restarts on it (Bluetooth drops for a few
+   seconds; the app waits for it), and the page reads "Updated to 2.1.0 · confirming…", then
+   "Updated to 2.1.0" once the piano has confirmed itself, about 30 seconds after it starts.
+
+**If something goes wrong,** the piano keeps its old firmware: an update that doesn't finish (the
+tablet walks out of range, the piano is switched off, Cancel) leaves the running firmware untouched,
+and the page says "The update didn't finish. The piano kept its old firmware." with **Retry**. A new
+firmware that fails to start properly is rolled back by the piano itself at its next restart: the
+page then says "The piano restarted but reports 2.0.0 — it rolled back." Your settings stay on the
+piano either way. A release that changes the flash layout reads "This update needs a USB flash" and
+is never sent over Bluetooth; one that needs a newer Steven Piano reads "Needs a newer app".
+
+**Publishing a firmware release** is the firmware repository's `tools/publish-firmware.sh "<notes>"`
+(see its header and `firmware/docs/BLE_OTA.md` › 10): it builds, signs with the authorship key,
+creates the GitHub release `fw-v<version>` on `stevenjin20090101-rgb/Steven-Jin-Player-Piano` and
+writes the manifest the app reads. The repository must stay public.
+
+**Needs the real piano** (the emulator runs every step against a stand-in; see BUILD_SPEC.md ›
+v1.6.1 — M21):
+
+- [ ] Flash firmware 2.0.0 over USB once; Firmware and status reads "Piano firmware 2.0.0 · …" and
+      Check for piano updates says the firmware is up to date.
+- [ ] With 2.0.1 (or later) published: Update the piano, keep the tablet at the piano, watch the
+      piano's screen count up and the page follow; the piano restarts and the page reads "Updated to
+      2.0.1", then (about 30 s later) without "confirming…". Play a piece: it plays.
+- [ ] Cancel halfway: the piano plays again at once, on its old version.
+- [ ] Walk the tablet out of range halfway: "The update didn't finish…"; back in range, Retry
+      finishes it.
+- [ ] While updating, tap a piece, a channel and the Keys screen: nothing sounds.
