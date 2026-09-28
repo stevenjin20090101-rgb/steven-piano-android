@@ -1008,3 +1008,140 @@ The Display page opens with **APPEARANCE**: **Appearance**, chips **Follow syste
 the system bars' icons, display mode on "Same as the app", and the web panel when it comes
 (M18). The hub's Display row still reads the note display. The Display page is now APPEARANCE ·
 NOTES · ARTWORK · STANDBY.
+
+---
+
+# v1.5.1 — M18: the web panel, guests' requests, the poster
+
+Steven asked for the piano to be run from a phone or a laptop as well as from the tablet on it,
+and for passers-by to be able to ask it for a piece. The app itself serves a small web panel: on
+the tablet's Tailscale address the whole panel, behind a six-digit PIN; on its Wi-Fi address only
+the request page and the poster, unless the person chooses otherwise. Everything above still
+holds; the panel speaks the app's own language. This is release 1.5.1.
+
+## Remote control (Piano tab)
+
+- **The row.** The hub's **CONTROL** group appears now that it has a row: **Remote control**,
+  reading "On · 100.101.2.3" (the panel's address; "On" while it has none) or "Off". Kiosk (M20)
+  and Studio (M23) join it later.
+- **PANEL.** **Web control**, a switch, off at first and greyed with "Set a PIN first" until a
+  PIN exists. While it is on, the panel's address in Body with tabular figures,
+  "http://100.101.2.3:8737", over "Scan it with your phone, or tap it to show it large" (an
+  eyebrow's size and tracking, not its capitals), with its QR code at 96 dp beside it: always the
+  paper's ink on the paper's elevated tone, whatever the appearance (cameras read dark on light
+  best), in a tile with a hairline. A tap shows the code large in a sheet (at most 480 dp), the
+  address under it in Title and "Scan to open the panel". Without an address it says why in a
+  note: "Starting…", "Waiting for a network", Android's refusal, or, with Wi-Fi but no Tailscale,
+  "No Tailscale address yet: the panel waits for one (or for Panel on Wi-Fi too). Guests can use
+  http://…/request". Then **Set a
+  PIN** (or **Change PIN**) with "Six digits, asked for when the panel opens in a browser", and
+  **Panel on Wi-Fi too** with what it costs: "Over Wi-Fi the PIN travels unencrypted".
+- **The PIN sheet.** The WEB CONTROL eyebrow, the title (Set a PIN / Change PIN), one field of six
+  digits, masked, entered twice: "Enter six digits." → Next → "Enter them again." → Save; a
+  mismatch starts again with "The two didn't match. Enter six digits." Cancel leaves the old PIN.
+  A new PIN signs every browser out.
+- **GUESTS.** **Guests can request** (off at first), **Approve requests first** (on at first,
+  greyed while guests can't request), and **Print the request poster**, which opens Android's own
+  print dialog on the poster (A4), with "The poster's code opens http://192.168.1.20:8737/request"
+  under it, or "Turn on Web control to print the poster".
+- **The notification.** While Web control is on, a silent, low-importance notification: "Web
+  control on" over the panel's address (or "Guests: …" when only guests are served, or "Waiting
+  for a network"); a tap opens the Piano tab. Turning the switch off ends it with every session.
+- **Requests on the tablet.** With Approve requests first on, the Library shows an outlined
+  banner while any wait: "1 request waiting" (or "2 requests waiting"), the oldest's title and
+  composer, **Approve** and **Dismiss**, as the panel's Requests page does.
+
+## The panel: its language
+
+- **The app's tokens, value for value.** `style.css` holds `ui/theme/Color.kt`'s two palettes as
+  CSS variables (a test compares them): the paper roll when the system is light, the camera body
+  when it is dark. No surface is pure black or pure white; the only pure black in the product is
+  still display mode's canvas. Red is the live dot's alone.
+- **Appearance.** The panel's own control at the foot of the section list (at the foot of the page
+  on a phone): APPEARANCE, chips **Follow system** (the default) · **Light** · **Dark**, as the
+  app's Display page; the choice is kept in the browser.
+- **Type.** The system's sans-serif, tabular figures everywhere; titles 22 px, the display line 28
+  px (Medium, tracking −0.3), Body 17/24, notes 15/21, meta 13/18, and the eyebrow: 11 px Medium,
+  letter-spaced 1.3 px, in capitals, in the tertiary ink.
+- **Shapes.** Hairline rules, 56 px rows, 16 px insets, 8 px corners on controls and 12 px on
+  cards; outlined buttons as the app's; switches, chips, steppers and sliders drawn in the ink,
+  never in colour. The app's own glyphs (play, pause, next, previous, shuffle, repeat, repeat
+  one, the queue's arrows…) are inlined as SVG symbols in the content colour.
+- **Art.** Portraits and roll cards come from the app (`/api/art/…`), 40 px on rows with an 8 px
+  corner and a hairline, 160 px on Now playing; in black and white when the app's Artwork in black
+  and white is on.
+
+## The panel: its layout
+
+- **Wide (900 px and more).** A 200 px section list at the left: the piano's name, the live dot
+  with "Connected · 100.101.2.3:8737" (a hollow dot and "Reconnecting…" while the socket is
+  away), then the eight sections, **Now playing · Up next · Library · Channels · Schedule ·
+  Requests · Add · Piano**, the chosen one on the elevated surface, Requests with the number
+  waiting in a small outlined pill; the Appearance chips and the byline "Player piano · by Steven
+  Jin" at its foot. The page at the right, in a reading column of 720 px.
+- **Narrower.** The name and the connection line over the sections as a strip of tabs that
+  scrolls sideways, the chosen one underlined; the Appearance chips and the byline at the foot of
+  each page. Every page works at 390 px without scrolling sideways.
+- **Now playing.** The art at 160 px, the title in the display line, the eyebrow "CLAUDE DEBUSSY
+  · CALM · CHANNEL" (the composer alone without a channel), STARTING during the pause before a
+  piece, the scrubber with its two times (drag to seek), the transport (shuffle, previous, the
+  play/pause **lens**: a 56 px circle on the elevated surface inside a hairline ring, next,
+  repeat), the tempo stepper, the channel's volume while a channel plays, and the piano's link
+  ("● Sent to piano" or "Not connected"). The time runs in the browser at the piece's tempo
+  between the tablet's once-a-second reports. From 1100 px Up next sits beside it at 360 px.
+- **Up next.** "UP NEXT · 12 PIECES" and **Clear**; the playing row "Playing · Debussy", then the
+  rows, each with its handle and ▲ ▼ ✕ (and dragged where the browser drags), a guest's piece
+  tagged **Requested**. Beside Now playing the list is compact: no handles.
+- **Library.** A search field ("Search titles and composers"), chips **All · Playlists ·
+  Composers · Favorites · Recent**, rows with their art and a ⋮ menu (**Play**, **Play next**,
+  **Add to queue**); a playlist or a composer opens as a list under a crumb (back, its name,
+  **Play**, **Shuffle**); 50 rows at a time with **Show more**.
+- **Channels.** The app's tiles: the two-by-two mosaic of the pool's composers, the band along the
+  foot (the surface at 72 % with a hairline: a static scrim) with the name and "49 PIECES", "ADD
+  MORE PIECES" or "● PLAYING". A tap plays; **Stop the channel** in the page's head while one plays.
+- **Schedule.** Reads `/api/schedules`; until M19 serves it, SCHEDULE and "Coming in the next
+  update."
+- **Requests.** The requests waiting (title; composer and the time it came) with **Approve** and
+  **Dismiss**, or "No requests waiting."; then GUESTS: the two switches, as on the tablet, and the
+  guests' address.
+- **Add.** A drop zone, dashed at the tertiary ink and solid while a file is over it: "Drop MIDI
+  files or a zip here", ".mid and .midi up to 8 MB, .zip up to 64 MB", **Choose files**. One row a
+  file: its name, "545.9 KB · Sending 45%" over a 2 px bar, then "Sent to the tablet", or why it
+  was not added ("Not added: a MIDI file can be 8 MB at most"); files go one at a time. Under them
+  the tablet's import: "Importing 2 of 3 · Etude 2", then "Imported 3 pieces · 1 already there".
+- **Piano.** The link ("● Connected to Steven Piano" or "Not connected"), then the piano's settings
+  as three disclosures, **Feel** (open at first) · **Lighting** · **Pedal**, with the app's rows and
+  controls: switches, steppers, sliders with their values and units, chips, the presets; then
+  ACTIONS: **Read status**, **All keys off**, **Save now**, and the piano's status report. Firmware
+  and the bench commands stay on the tablet and the USB console.
+- **Toasts.** A short line at the foot of the window for what just happened ("Playing on the
+  piano.", "Added to Up next.") or what went wrong, on the elevated surface, outlined in the ink.
+
+## The PIN gate
+
+Centred on the surface: STEVEN PIANO, **Enter the PIN** in the display line, "The six digits set
+on the tablet, in Piano › Remote control.", one 240 × 56 px field of six masked digits (spaced
+wide) and **Open**. A wrong PIN reads "That PIN isn't right."; after five, "That PIN isn't right.
+Try again in 30 s.", counting down, the field and Open disabled until it ends. Before a PIN
+exists: "Set a PIN on the tablet first: Piano › Remote control." A session lasts until a day
+unused, the PIN changes, or Web control turns off; then the gate comes back by itself.
+
+## The request page
+
+For a phone in a passer-by's hand, 640 px wide at most: STEVEN PIANO, **Ask the piano**, "Pick a
+piece. It joins the queue.", ONE REQUEST EVERY FIVE MINUTES; then Popular, Recognisable and Epic
+on piano (the built-in lists as they stand, each piece once) as eyebrowed lists of rows, title
+over composer, each with an outlined **Request**. A request turns the page into "Thanks — it's in
+the queue." (or "Thanks — it joins the queue once it's approved."), the piece and composer under
+it. A second within five minutes: "One request every five minutes. Try again in 4 min." Guests
+off: "Requests are closed right now." Nothing to type, nothing but the list's pieces to ask for.
+It follows the system's light or dark.
+
+## The poster
+
+An A4 sheet, always on the paper palette whatever the screen's appearance: STEVEN PIANO, **Ask the
+piano** (56 px Medium, tracking −0.5), "Scan to pick a piece for the piano", the request page's
+QR code 120 mm wide in the ink with a quiet zone of four modules, the address in plain text
+under it, and the byline. Printed, it is one page with the paper left as it is (no tint), centred
+on the sheet; Android's print dialog prints it from the tablet itself (a WebView of the app's own
+page: no browser, so it works in kiosk mode too).

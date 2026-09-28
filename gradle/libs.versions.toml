@@ -25,7 +25,7 @@ orgJson = "20250517"
 # Unit tests only: a real SQLite on the JVM, so the schema migrations run on a real database.
 sqliteJdbc = "3.41.2.2"
 # Unit tests only: a QR reader, so PosterTest proves the poster's code scans back to its address.
-zxing = "3.5.3"
+zxing = "3.5.4"
 # Haze 1.7.2, the newest release built on this app's Compose (UI 1.10) and Kotlin (2.3): 2.0.0 and
 # 1.7.3 need Compose UI 1.12, which requires compileSdk 37 and AGP 9.1 (BUILD_SPEC › v1.5 — M16).
 haze = "1.7.2"

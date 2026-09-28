@@ -26,7 +26,8 @@ PRIV = os.path.expanduser("~/piano-authorship-PRIVATE-DO-NOT-SHARE.pem")
 
 EXCLUDE_DIRS = {".git", ".gradle", ".kotlin", ".idea", "build", ".claude"}
 EXCLUDE_FILES = {"MANIFEST.txt", "MANIFEST.sig", ".DS_Store"}
-INCLUDE_EXT = {".kt", ".kts", ".toml", ".xml", ".md", ".py", ".pro", ".pem", ".sh"}
+INCLUDE_EXT = {".kt", ".kts", ".toml", ".xml", ".md", ".py", ".pro", ".pem", ".sh",
+               ".html", ".js", ".css"}   # the web panel's pages (M18)
 INCLUDE_NAMES = {"LICENSE", "AUTHORS", ".gitignore", "gradlew", "gradle.properties",
                  "gradle-wrapper.properties"}
 

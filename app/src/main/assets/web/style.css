@@ -9,7 +9,7 @@
 
 /* The web panel, the request page and the poster (DESIGN.md › v1.5.1 — M18): the app's own
    monochrome language. The two palettes below are ui/theme/Color.kt's tokens, value for value
-   (WebStyleTokensTest checks them): the paper roll in light, the camera body in dark, as the
+   (WebAssetsTest checks them): the paper roll in light, the camera body in dark, as the
    system says unless the panel's Appearance control says otherwise (data-theme on <html>). No
    surface is pure black or pure white. Red means one thing: live, and only the dot uses it. */
 

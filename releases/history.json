@@ -20,5 +20,14 @@
     "minSdk": 26,
     "tag": "v1.5",
     "publishedAt": "2026-09-28"
+  },
+  {
+    "versionCode": 10,
+    "versionName": "1.5.1",
+    "notes": "Steven Piano can now be run from a browser. On the Piano tab, Remote control: set a six-digit PIN, turn on Web control, and open the address it shows (or scan its code) on a phone or laptop on your Tailscale network: Now playing, Up next, the library, channels, requests, adding MIDI files and the piano's settings, all live. Guests can ask for a piece too: print the request poster, and anyone on the tablet's Wi-Fi who scans it can pick one from Popular, Recognisable and Epic on piano, once every five minutes, straight into the queue or waiting for your approval. On a tablet, display mode's title is larger.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.5.1/steven-piano-1.5.1.apk",
+    "minSdk": 26,
+    "tag": "v1.5.1",
+    "draft": true
   }
 ]

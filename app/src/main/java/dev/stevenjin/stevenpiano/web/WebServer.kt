@@ -132,7 +132,7 @@ class WebServer(
         val host = session.headers[HOST]?.trim()?.lowercase()
         val allowed = host != null && host in allowedHosts()
         val response = try {
-            if (!allowed) refuse(403, "host", "This address isn't the panel's.") else dispatch(session, host!!)
+            if (!allowed) refuse(403, "host", "This address isn't the panel's.") else dispatch(session, host)
         } catch (e: ApiError) {
             error(e)
         } catch (e: TimeoutCancellationException) {
@@ -142,7 +142,7 @@ class WebServer(
         } catch (e: OutOfMemoryError) {
             refuse(503, "memory", "The tablet is short of memory.")
         }
-        return secure(response, if (allowed) host!! else "${config.host}:$listeningPort")
+        return secure(response, if (allowed) host else "${config.host}:$listeningPort")
     }
 
     private fun dispatch(session: IHTTPSession, host: String): Response {

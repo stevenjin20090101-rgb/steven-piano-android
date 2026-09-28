@@ -498,3 +498,157 @@ Tests went from 605 to 661.
   tablet), which needs a factory-fresh tablet with no Google account on it.
 - Back up the release key more carefully than ever: without it no update can reach any installed
   copy, and a device-owner tablet cannot even uninstall the app without first giving the role back.
+
+## 1.5.1 — web panel (pre-audit notes)
+
+2026-09-28, written by the coding run (M18) for the auditor, who verifies it; not an audit. 1.5.1
+adds the app's first **incoming** network surface: an HTTP and WebSocket server (NanoHTTPD 2.3.1)
+on port 8737 that serves a control panel behind a six-digit PIN on the tablet's Tailscale address,
+and a public request page and poster on its Wi-Fi address (README › Web control; BUILD_SPEC.md ›
+v1.5.1 — M18 has the route table and every cap). Off until a PIN is set and Web control is
+switched on. Nothing above is weakened: no new outgoing host, no new permission beyond the
+foreground service's two, the network security config unchanged. The plan's fifteen points, each
+with where it is built and what shows it (tests are JVM unit tests; `api-checks.txt` is the curl
+transcript against `steven_piano`, kept with the run's evidence):
+
+1. **Every changing route: 401 without a session, 403 without the header or with a foreign
+   Host.** `WebServer.dispatch`: `Access.WRITE` needs a valid `sp_session` (401) and
+   `X-Steven-Piano: 1` (403), and an `Origin`, when sent, of `http://<Host>` (403); `serve` refuses
+   a `Host` other than the listener's `address:8737` or the person's `webHostName` (403) before
+   anything else, so DNS rebinding gets nowhere. All nineteen changing routes, upload and logout
+   among them: `WebServerTest` › *every route that changes anything refuses…* (the fake backend
+   records that nothing reached it), `api-checks.txt` § 1. Reads need the session too (§ 2).
+2. **`/ws` 401 without a session.** `WebServer.socket`, before NanoWSD's handshake: only `GET /ws`
+   (another path asking to upgrade is 404), only on a listener that serves the panel (404 on the
+   guest-only one), a valid session (401), `Origin` exactly `http://<Host>` (403), at most two
+   sockets (503). A socket whose session ends (logout, a new PIN, Web control off, a day unused) is
+   closed at its next ping, within 4 s. `WebServerTest` › *the socket opens only for a session…*,
+   `WebSocketHubTest` › *a socket whose session ends…*, `api-checks.txt` § 3.
+3. **The PIN.** `PinHash`: PBKDF2WithHmacSHA256, 100,000 iterations, a 16-byte `SecureRandom`
+   salt per PIN, a 32-byte key; `ConstantTime.equals` over every byte; the PIN's chars cleared
+   after derivation; six ASCII digits only. Stored as `webPinSalt`/`webPinHash` (base64) in the
+   app's private DataStore, read only by `SettingsRepository.webPin()`; `PianoSettings` carries only
+   `webPinSet`, so Share diagnostics' `settings.txt` (and every screen) has the flag and never the
+   salt or hash; `PinHash` and `StoredPin` print as "(kept)". No `Log` call in `web/` or
+   `WebService` carries a PIN, a hash, a token, a cookie or a request's content (the listening
+   address is logged in debug builds only). `LoginGuard`: per address and for everyone, five wrong
+   PINs in a row → 30 s, doubling to 10 min; a try during a wait is refused 429 uncounted; a
+   malformed PIN counts as wrong. At the ten-minute ceiling that is about 144 tries a day from all
+   addresses together, so a random six-digit PIN takes years on average. `WebAuthTest` (10),
+   `SettingsRepositoryTest` › *the PIN is kept apart…*, `DiagnosticsExporterTest`,
+   `api-checks.txt` § 13. Login measured 0.28–0.35 s on the emulator.
+4. **Uploads.** `PUT /api/upload?name=` with a raw body only (no multipart): the name's extension
+   `.mid`/`.midi`/`.zip` (415), a `Content-Length` and no `Transfer-Encoding` (411), a MIDI file ≤ 8
+   MB and a zip ≤ 64 MB (413), all before a byte is read (answered in 4–5 ms with nothing sent,
+   § 6); an empty file 400; one upload at a time (409). A MIDI file goes through
+   `ImportLimits.readCapped` into memory; a zip streams to `cacheDir/web/upload-*.zip` with the
+   free-space margin (507) and is deleted when short or once read (`ZipSource(deleteWhenClosed)`).
+   `ImportLimits` is unchanged (the zip's entry cap, the parser's caps and the text limits apply as
+   to any import); `cacheDir/web` is swept at start. The name reaches the importer only as a display
+   name (last path part, control characters removed, cut to length), never as a path.
+   `WebServerTest` › *uploads need a length…*, *one upload at a time*, `ImporterTest` (+3),
+   `ImportLimitsTest`.
+5. **JSON limits.** `WebApi.readObject`: a declared length ≤ 64 KB (411/413 before reading),
+   `application/json` with no charset or UTF-8 (415), strict UTF-8 (400), one object, nesting ≤ 4
+   counted outside strings before the parser runs (and a `StackOverflowError` caught besides),
+   known fields only, ids whole numbers above 0 that fit a Long, lists of ids ≤ 5,000, strings cut
+   by `TextLimits`, every number range-checked (refused, not clamped). `WebApiTest` (7),
+   `WebServerTest` › *JSON bodies are capped…*, § 5.
+6. **No filesystem from URLs.** Static files come from `WebAssets`' two maps keyed by the exact
+   request path (`/`, `/app.js`; `/style.css`, `/request`, `/request.js`) plus the poster's
+   template, read from the APK's assets by name; the request path is never resolved, joined or
+   decoded into a file name: no listing, no `..`, no `/index.html`, no percent tricks.
+   `WebServerTest` › *files come from the allow-list by name…*, `WebAssetsTest`, § 7.
+7. **No CORS.** No response carries any `Access-Control-*` header (`grep -rnF "Access-Control"
+   app/src/main` is empty); a preflight gets 405 with `Allow`. So another site's page can neither
+   send the custom header nor read an answer. `WebServerTest` › *every response carries the
+   security headers…*, § 8.
+8. **The security headers**, on every response the server builds (errors included):
+   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+   `Content-Security-Policy: default-src 'self'; img-src 'self' data:; connect-src 'self'
+   ws://<Host>; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+   `Cross-Origin-Resource-Policy: same-origin`; `Cache-Control: no-store` on the API. The pages hold
+   no inline script, style or handler, so the CSP needs no `unsafe-inline` (`WebAssetsTest`), and
+   they build the DOM with `textContent`, never `innerHTML`. Same test, § 9.
+9. **Listeners.** Only the addresses `WebAddress.choose` picks: the first 100.64/10 IPv4 on a VPN
+   interface (`tun…`/`tailscale…`) for the whole panel, the first RFC 1918 IPv4 on `wlan…` for
+   guests (the whole panel there only with Panel on Wi-Fi too); never the any-address
+   (`grep -rnF "0.0.0.0" app/src/main` is empty), IPv6, loopback (but the debug build on an
+   emulator), link-local or a mobile network, and never a 100.64/10 address on Wi-Fi or a mobile
+   network (carriers use the block too: fixed during the run, `5cbe271`). Started again when the
+   addresses change (a network callback that sees VPNs, and a look every 30 s); a listener whose
+   socket Android destroyed with its address closes itself and is started again at the next look
+   (fixed during the run, `99bf381`: it used to spin a core); everything closes when Web control
+   turns off or the PIN goes. `WebAddressTest` (5), `WebServerTest` › *a Wi-Fi listener without
+   Panel on Wi-Fi too serves guests only*, `api-checks.txt` §§ 10, 11, 14, 15 (`ss -ltn` inside
+   the emulator).
+10. **Guests.** `/api/public/catalogue` lists the three built-in lists' current pieces (id, title,
+    composer: no art, no lengths, nothing else); `POST /api/public/request {pieceId}` accepts only
+    an id on that list (400), and no other field (400: no names, no messages); one request per
+    `sp_guest` cookie and per client address every five minutes (429 with `Retry-After`; a new
+    cookie from the same address is still 429); at most 50 waiting for approval, or 50 guests'
+    pieces in Up next (503). A public POST that carries a foreign `Origin` is 403, and a
+    cross-site form cannot send `application/json`. Off by default (Guests can request), and
+    Approve requests first on by default. `GuestRequestsTest` (5), `WebServerTest` › *a guest may
+    ask once…*, § 12.
+11. **The service.** `WebService`, `exported="false"`, `foregroundServiceType="specialUse|
+    connectedDevice"` with `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` "Local web control panel for the
+    piano, on the person's own network": a local control panel fits none of Android's named types
+    (`dataSync` would also end after six hours a day from Android 15); `connectedDevice` is the
+    fallback should a device refuse `specialUse`. Permissions added: `FOREGROUND_SERVICE_SPECIAL_USE`
+    and `FOREGROUND_SERVICE_CONNECTED_DEVICE` only. Started only by the app itself (the switch, or
+    the app's start with the switch on); `dumpsys` shows it foreground with type `specialUse`.
+12. **Network security config unchanged.** Release builds still refuse all outgoing cleartext;
+    the debug-only config (10.0.2.2 for the updater's emulator test) is untouched. The panel is an
+    incoming server, which the config does not govern; the print WebView loads only the app's own
+    assets, with JavaScript, file and content access off and every navigation refused.
+13. **The piano's routes.** `PUT /api/piano/{name}` accepts only a name in `PianoSettings`'
+    table (404 otherwise), refuses a read-only setting (403: the `keyforce_*` pair stays at the USB
+    console), and checks the value against the table's kind and range (400, never clamped) before
+    sending the wire form the app's own rows send. Presets only by their command; actions only
+    `off`, `save`, `status` (no strike tests, no LED test, no reset from afar). `WebServerTest` ›
+    *the piano's routes write only the table's names…*, `WebApiTest` › *the piano's values go
+    out…*.
+14. **Residuals.**
+    - **Plain HTTP.** Over Tailscale the traffic is WireGuard-encrypted end to end. With Panel on
+      Wi-Fi too, the PIN, the session cookie and everything the panel shows cross the Wi-Fi in
+      the clear: anyone on it who records traffic can take over the panel until the session ends.
+      The switch says so ("Over Wi-Fi the PIN travels unencrypted") and is off by default. The
+      guest pages on Wi-Fi carry nothing secret. The session cookie has no `Secure` flag (there is
+      no HTTPS to hold it to).
+    - **NanoHTTPD 2.3.1** (2016, no maintained successor) is pinned and was read for this run;
+      six of its behaviours are worked around (BUILD_SPEC.md › The server). Its own answers to a
+      request it cannot parse (a malformed request line) leave without our security headers;
+      they carry no data of ours. Worth the auditor's own reading: `HTTPSession.execute` and
+      `decodeHeader` (header parsing, an 8 KB header buffer), and NanoWSD's handshake.
+    - **Sessions live in memory:** a restart of the app signs everyone out; nothing is written.
+    - **The global login lock is a lever for denial of service:** anyone who can reach the panel
+      (a device on the tailnet, or on the Wi-Fi with Panel on Wi-Fi too) can keep the gate shut for
+      everyone, up to ten minutes at a time, by sending wrong PINs. Existing sessions keep working.
+    - **Guests can fill the queue:** 50 requests need 50 phones (or addresses) within five
+      minutes; Approve requests first (on by default) keeps them out of Up next.
+    - **CSRF** rests on the custom header, `SameSite=Strict`, the `Origin` check and the absence
+      of CORS, not on a token.
+    - **`webHostName`**, when set (only through `PUT /api/settings`, with a session), is accepted
+      as a `Host` on every listener; it should name the tablet (a MagicDNS name).
+    - **The debug build on an emulator** also listens on `127.0.0.1` for `adb forward`; release
+      builds never do (`BuildConfig.DEBUG`, removed by R8), and a debug build on a real device
+      only on `goldfish`/`ranchu` hardware or a `generic` fingerprint.
+    - **Two sockets at most**, and four request threads: a peer that opens connections and sends
+      nothing holds a thread for up to 10 s (the socket read timeout); 32 more wait, the rest are
+      closed. A crowd on the Wi-Fi can make the request page slow; it cannot reach the panel.
+15. **Tests.** 763 before, 832 after: `WebAuthTest` 10, `WebServerTest` 20, `WebApiTest` 7,
+    `WebAddressTest` 5, `GuestRequestsTest` 5, `WebSocketHubTest` 7, `PosterTest` 5,
+    `WebAssetsTest` 4 (63 in `web/`), `ImporterTest` +3, `SettingsRepositoryTest` +2,
+    `GroupSummariesTest` +1; `ImportLimitsTest`, `DiagnosticsExporterTest`, `PianoPagesTest`,
+    `RoutesTest` changed. All green; `lint` 0 errors.
+
+**Found and fixed during the run, before this note:** the tailnet address taken from any
+interface (`5cbe271`, point 9); the accept loop spinning after Android destroyed its socket
+(`99bf381`, point 9); `POST /api/play`'s queue now keeps only the library's pieces, as Play all
+did (`76b2c8c`).
+
+**What the owner must do:** install Tailscale on the tablet and the phone (same account), keep it
+connected on the tablet (Always-on VPN), set the PIN, and leave Panel on Wi-Fi too off unless the
+Wi-Fi is his own. Print the poster from the Remote page once guests are wanted, and test at the
+school whether its Wi-Fi lets phones reach the tablet (client isolation would stop guests).

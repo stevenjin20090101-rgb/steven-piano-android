@@ -17,7 +17,9 @@ while the piano plays it, play the piano yourself on **Keys**, and on the
 playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
 analytics, and the network only for composers' portraits and short notes from
 Wikipedia (see *Artwork and notes* below) and for the app's own updates from its
-GitHub repository (see *Updates*). Made by Steven Jin. Version 1.5.
+GitHub repository (see *Updates*). With **Web control** on, it also serves its own
+control panel to your phone or laptop over Tailscale, and a request page to guests
+on the tablet's Wi-Fi (see *Web control*). Made by Steven Jin. Version 1.5.1.
 
 ## What it does
 
@@ -199,11 +201,20 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.5.
   transpose, velocity, folding, drum channel; **Display**: appearance (follow
   the system, light or dark), note display, wide layout, fingering, chord names,
   hand colours, artwork in black and white, fetching artwork automatically, and
-  standby: display mode after a minute and its canvas) and
+  standby: display mode after a minute and its canvas), **CONTROL** (**Remote
+  control**: the web panel, its PIN, guests and the poster) and
   **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
   then the About line. Each row says in a few words what its page holds
   ("Volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
   (back returns), on a tablet or a phone on its side the page opens beside it.
+- **Web control**: the piano from any browser on your phone or laptop, over
+  Tailscale and behind a six-digit PIN: Now playing, Up next, the library,
+  channels, requests, adding MIDI files and zips, and the piano's settings, all
+  live (see *Web control*).
+- **Guests' requests**: a printed poster's QR code opens a request page on the
+  tablet's Wi-Fi, where anyone can ask the piano for a piece from Popular,
+  Recognisable or Epic on piano, one every five minutes; it joins Up next, or
+  waits for your Approve.
 - **Updates**: the app looks for a newer release when it opens and once a day,
   and the Piano tab offers it under **UPDATE**: one tap downloads it, checks it
   and hands it to Android's installer. On the school tablet it installs without
@@ -305,7 +316,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.5.apk`.
+   `adb install ../apk/steven-piano-1.5.1.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -365,7 +376,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=10`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=11`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -549,6 +560,67 @@ background apps: set **Settings › Apps › Steven Piano › Battery** to
 **Unrestricted** (or *Don't optimise*). Allow notifications when the app asks on
 the first play, so the lock screen shows play and pause.
 
+## Web control
+
+Run the piano from a phone or a laptop, and let guests ask it for a piece. The
+tablet on the piano serves a small web panel itself; nothing goes through the
+internet or any server of ours.
+
+**Once, to set it up:**
+
+1. Install **Tailscale** (tailscale.com; free for personal use) on the tablet and on
+   your phone or laptop, and sign in to the same account on both. The tablet gets an
+   address such as `100.101.2.3` that only your own devices can reach, from anywhere,
+   and everything between them is encrypted. Keep Tailscale connected on the tablet
+   (Android's *Always-on VPN* for Tailscale is the steadiest).
+2. On the tablet: **Piano › Remote control › Set a PIN**: six digits, twice.
+3. Turn on **Web control**. The page shows the panel's address,
+   `http://100.101.2.3:8737`, with its QR code beside it (tap it to show it large).
+   Scan it with your phone, or type the address into a browser on a device with
+   Tailscale, and enter the PIN.
+
+**The panel** has what the app has: Now playing (the time running, the transport,
+tempo, a channel's volume), Up next (reorder, remove, clear), the Library (search,
+playlists, composers; Play, Play next, Add to queue), Channels, Schedule (coming in
+the next update), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
+to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
+tally) and **Piano** (the piano's Feel, Lighting and Pedal settings, Read status, All
+keys off, Save now). It updates as things change on the tablet, and it follows the
+browser's light or dark, or its own **Appearance** chips. A session lasts until it has
+gone a day unused; a new PIN, turning Web control off or restarting the app signs every
+browser out. Five wrong PINs close the gate for 30 seconds, then longer each time, up
+to ten minutes.
+
+While Web control is on, a quiet notification reads "Web control on" with the address.
+The panel runs as a foreground service, as playback does: set the app's battery use to
+*Unrestricted* (see *Keep playing with the screen off*) so Android leaves it running
+while the screen is off. After the tablet restarts, it comes back when the app is
+opened.
+
+**Guests** (Piano › Remote control › GUESTS):
+
+- **Guests can request** (off at first) opens the request page, served on the tablet's
+  Wi-Fi address, such as `http://192.168.1.20:8737/request`: a phone on the same Wi-Fi,
+  with no Tailscale and no PIN, sees Popular, Recognisable and Epic on piano and taps
+  **Request**. One request a phone every five minutes; nothing to type, nothing but
+  those lists. While it is off the page says requests are closed.
+- **Approve requests first** (on at first): a request waits for **Approve** or
+  **Dismiss**, on the panel's Requests page or on the tablet, where the Library shows
+  "1 request waiting". Off, it goes straight into Up next (and plays at once if nothing
+  is playing).
+- **Print the request poster** opens Android's print dialog for an A4 poster: "Ask the
+  piano", the request page's QR code and its address. If the tablet's Wi-Fi address
+  changes, print it again (a reservation for the tablet on the Wi-Fi's router keeps the
+  address).
+
+The Wi-Fi address serves only the request page and the poster. **Panel on Wi-Fi too**
+serves the whole panel there as well, for a Wi-Fi without Tailscale, but read its note:
+**over Wi-Fi the PIN travels unencrypted**, as does everything the panel shows, so
+anyone on that network who records its traffic can read the PIN and use the panel.
+Leave it off on any Wi-Fi that is not your own; Tailscale encrypts everything. Some
+school networks keep devices from reaching each other (client isolation): guests'
+phones then cannot reach the request page, and only Tailscale works.
+
 ## Test it on the piano
 
 - [ ] Sideload `app-release.apk` (uninstall a debug build first). The app launches
@@ -668,6 +740,14 @@ The full audit, every finding and what was done about it, is in
   library stays where it was imported). Release builds log no file names or URLs; the
   Bluetooth link logs its steps, with Bluetooth addresses and device names only (*Send
   a log*).
+- **What comes in (Web control, off at first):** the app listens on port 8737 only on
+  the tablet's Tailscale address (the whole panel, behind the PIN) and its Wi-Fi address
+  (the request page and the poster only, unless *Panel on Wi-Fi too*), never on every
+  address. The panel's PIN is kept only as a salted PBKDF2 hash; every change needs the
+  session and a header no other site can send; no other site's page can use the panel;
+  uploads and requests are capped before they are read. The panel is plain HTTP: over
+  Tailscale that is encrypted by Tailscale, over Wi-Fi it is not. The details, and what
+  is left, are in the audit's 1.5.1 section.
 - **Updates** install only a file whose SHA-256 matches the manifest and that Android
   accepts as signed with the release key (see *Updates*); on the school tablet the
   device owner role is used for silent updates and nothing else (see *School tablet*).
@@ -702,6 +782,9 @@ The full audit, every finding and what was done about it, is in
   descriptions; no code or data is copied.
 - The glass is drawn with **Haze** by Chris Banes and the Haze contributors
   (Apache License 2.0), linked unmodified from Maven Central (notice in `AUTHORS`).
+- The web panel runs on **NanoHTTPD** (BSD 3-Clause), and its QR codes are encoded
+  with **qrcode-kotlin** by Rafael Lins (MIT), both linked unmodified from Maven
+  Central (notices in `AUTHORS`, licences in `third_party/`).
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
   domain); those files are not part of this repository.

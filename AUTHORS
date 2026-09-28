@@ -37,6 +37,23 @@ controls:
   (https://www.apache.org/licenses/LICENSE-2.0). The library keeps its own
   licence; the MIT licence of this project does not apply to it.
 
+NanoHTTPD (org.nanohttpd:nanohttpd and nanohttpd-websocket 2.3.1, linked
+unmodified from Maven Central), the small HTTP and WebSocket server the web
+panel runs on:
+  Copyright (c) 2012 - 2016, nanohttpd.
+  Licensed under the BSD 3-Clause License; the full licence, with its
+  disclaimer, is in third_party/nanohttpd/LICENSE.txt. The names of
+  nanohttpd and its contributors do not endorse this project. The library
+  keeps its own licence; the MIT licence of this project does not apply to
+  it.
+
+qrcode-kotlin (io.github.g0dkar:qrcode-kotlin 4.5.0, its Android variant
+qrcode-kotlin-android, linked unmodified from Maven Central), whose encoder
+makes the QR codes of the panel's address and the request poster:
+  Copyright (c) 2021 Rafael Lins.
+  Licensed under the MIT License; the full licence is in
+  third_party/qrcode-kotlin/LICENSE.txt. The library keeps its own licence.
+
 Wikipedia text (fetched while the app runs, never bundled): composers'
 blurbs and pieces' notes are text from Wikipedia, the free encyclopedia,
 by its contributors:

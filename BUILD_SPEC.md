@@ -2532,3 +2532,374 @@ appearance and standby), `ColorTokensTest` (+2: the display's black and the came
 it, 18.8 · 8.3 · 6.1:1; the card's band keeps the glass's contrast), `ReleaseManifestTest` (+1: the
 drafted release); `DiagnosticsExporterTest` (24 lines) and `SchemaV2Test` (the shared reader)
 changed. 701 tests before, 763 after.
+
+---
+
+# v1.5.1 — M18: the web panel, guests' requests, the poster; release 1.5.1 (versionCode 10)
+
+Read `DESIGN.md › v1.5.1 — M18` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M18 (binding), whose fifteen-point audit checklist `docs/SECURITY_AUDIT.md › 1.5.1 — web panel
+(pre-audit notes)` answers point by point. This run releases 1.5.1: `versionCode` 10, `versionName`
+"1.5.1", `Provenance.text` "Made by Steven Jin · v1.5.1 · eab16a502f679465", the entry drafted at the
+end of `releases/history.json` (`"draft": true`); `latest.json` still names 1.5 until
+`tools/publish-release.sh` runs, after the security audit and Fable's review. The 1.5 review's two
+fixes came first, as their own commit (`4dacf52`: display mode's title in Display Large with a
+16 sp eyebrow on wide frames; the standby note without "black").
+
+## Dependencies
+
+Pinned in `gradle/libs.versions.toml`, from Maven Central:
+
+- `org.nanohttpd:nanohttpd:2.3.1` and `org.nanohttpd:nanohttpd-websocket:2.3.1` (BSD-3-Clause; the
+  notice is in AUTHORS and `third_party/nanohttpd/LICENSE.txt`). Small, readable, and it runs as a
+  real server in JVM tests. Its last release is from 2016: the server works around six of its
+  behaviours (*The server*, below).
+- `io.github.g0dkar:qrcode-kotlin:4.5.0` (MIT; AUTHORS and `third_party/qrcode-kotlin/LICENSE.txt`).
+  It is a Kotlin Multiplatform library: Gradle resolves the coordinate to its Android variant,
+  `qrcode-kotlin-android` 4.5.0. Only its encoder is used (`QRCodeProcessor(text,
+  ErrorCorrectionLevel.MEDIUM).encode()` → `QrMatrix`); the drawing is the app's own (SVG for the
+  poster, a Compose `Canvas` on the tablet).
+- `com.google.zxing:core:3.5.4` (Apache-2.0), **tests only**: `PosterTest` decodes the code back.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`):
+
+- `M/web/WebBackend.kt` (the panel's one view of the app, and its data: `WebPiece`, `WebState`,
+  `WebPlayer`, `WebQueueItem`, `WebChannel`, `WebPiano`, `CatalogueList`, `GuestSettings`,
+  `SettingsChange`, `QueueCommand`, `Transport`, `ChannelStart`, `WebLimits`), `M/web/AppWebBackend.kt`
+  (its Android side over `AppGraph`), `M/web/WebAuth.kt` (`PinHash`, `ConstantTime`, `Sessions`,
+  `LoginGuard`), `M/web/WebApi.kt` (JSON in and out), `M/web/WebServer.kt` (the routes, `WebCookies`,
+  `securityHeaders`, the thread pool, the client handler), `M/web/WebAssets.kt` (the allow-list,
+  `AssetSource`, `AndroidAssets`), `M/web/WebAddress.kt` (`NetInterface`, `WebChoice`, `ListenerPlan`,
+  `choose`, `plan`), `M/web/GuestRequests.kt`, `M/web/WebSocketHub.kt` (+ `FrameGuard`),
+  `M/web/Poster.kt` (`QrMatrix`, `Poster.qr/svg/page/escape`), `M/web/PosterPrint.kt`,
+  `M/web/WebPanel.kt` (`WebStatus`; the process's one set of sessions, guard, requests and backend).
+- `M/service/WebService.kt`.
+- `M/ui/screens/piano/pages/RemotePage.kt`, `M/ui/components/PinSheet.kt`, `M/ui/components/QrCode.kt`
+  (`QrTile`, `QrSheet`), `M/ui/screens/library/RequestsBanner.kt`.
+- `app/src/main/assets/web/`: `index.html`, `app.js`, `style.css`, `request.html`, `request.js`,
+  `poster.html` (each with the 8-line notice as a comment; no build step, no framework).
+- `third_party/nanohttpd/LICENSE.txt`, `third_party/qrcode-kotlin/LICENSE.txt`.
+- Tests: `web/WebAuthTest.kt`, `WebServerTest.kt`, `WebApiTest.kt`, `WebAddressTest.kt`,
+  `GuestRequestsTest.kt`, `WebSocketHubTest.kt`, `PosterTest.kt`, `WebAssetsTest.kt`; helpers
+  `FakeWebBackend.kt`, `RawHttp.kt` (raw sockets, for what `HttpURLConnection` hides).
+
+Changed: `AndroidManifest.xml` (the service; `FOREGROUND_SERVICE_SPECIAL_USE`,
+`FOREGROUND_SERVICE_CONNECTED_DEVICE`); `App.kt` (the notification channel); `AppGraph.kt` (`web`,
+`setWebEnabled`, `startWebIfOn`, `reportFailedImport`); `MainActivity.kt` (starts the service on
+`onStart` when Web control is on); `settings/Settings.kt` (the web keys, `StoredPin`, `webPin`,
+`setWebPin`); `diag/DiagnosticsExporter.kt`; `data/imports/Importer.kt` (`importOpened`,
+`runOpened`), `ImportLimits.kt` (`WEB_DIR`, swept at start); `data/db/PieceDao.kt` (`byIds`);
+`data/LibraryRepository.kt` (`pieces(ids)`); `data/art/ArtworkRepository.kt`
+(`portraitComposers`); `ui/Routes.kt` (`SettingsPage.Remote`); `ui/screens/piano/HubGroups.kt`,
+`GroupSummaries.kt`, `PianoScreen.kt`, `PianoViewModel.kt`; `ui/screens/library/LibraryScreen.kt`;
+the review fixes' `ui/theme/Type.kt`, `ui/components/Eyebrow.kt`, `ui/screens/display/DisplayScreen.kt`,
+`ui/screens/piano/pages/DisplayPage.kt`; `Provenance.kt`; `app/build.gradle.kts`,
+`gradle/libs.versions.toml`; `releases/history.json`; `provenance/sign.py` (the web pages
+signed too); AUTHORS, README, DESIGN.md, this file, `docs/SECURITY_AUDIT.md`; tests `ImporterTest`,
+`ImportLimitsTest`, `SettingsRepositoryTest`, `DiagnosticsExporterTest`, `GroupSummariesTest`,
+`PianoPagesTest`, `RoutesTest`.
+
+## Settings
+
+DataStore keys `webEnabled` (false), `webGuests` (false), `webApproveFirst` (true), `webOnWifi`
+(false), `webHostName` (none), `webPinSalt`, `webPinHash`. `PianoSettings` carries `webPinSet`, never
+the salt or hash: those are read on their own (`SettingsRepository.webPin()` → `StoredPin`, whose
+`toString` prints neither), so nothing that passes the settings around holds them. Web control
+cannot turn on without a PIN (`AppGraph.setWebEnabled`), and the service stops if the PIN goes.
+`settings.txt` in Share diagnostics lists the five switches and names, and `webPinSet`.
+
+## The server (`web/WebServer.kt`)
+
+One `WebServer` (a `NanoWSD`) per address the service listens on, port **8737**, never the
+any-address. Checks, in order, for every request:
+
+1. **Host** must be this listener's `address:8737`, or `webHostName:8737` (or `localhost:8737` on
+   the emulator's loopback listener), lower-cased; otherwise **403** before anything else (DNS
+   rebinding).
+2. A **guest-only** listener (the Wi-Fi's, without Panel on Wi-Fi too) knows only the public routes
+   and files; everything else is **404**, the socket included.
+3. The route's access (table below): **401** without a valid session; **403** without
+   `X-Steven-Piano: 1` or with an `Origin` other than `http://<Host>`; login needs the header but no
+   session; a public POST that carries an `Origin` must carry its own.
+4. Bodies: `WebApi.readObject` (below); the handler then runs under a 10 s timeout (**503**
+   "The app is busy" past it; uploads are not timed).
+
+What NanoHTTPD 2.3.1 does by itself, and what the server does about it:
+
+- **It never skips a body the handler did not read**, so a kept-alive connection would read the
+  rest of a refused upload as the next request. Every response closes its connection
+  (`closeConnection(true)`), but a socket's handshake; before closing, the client handler sends the
+  answer's end, then reads and drops up to 256 KB for up to 500 ms, so a browser sees a 413 as a
+  413 and not as "connection reset".
+- **It asks DNS for every peer's name** (`InetAddress.getHostName`), seconds on a school network,
+  per request: `createClientHandler` gives the session an address named by its own digits.
+- **NanoWSD upgrades any path** that asks for a WebSocket: `serve` answers the upgrade only for
+  `GET /ws` on a panel listener with a valid session, an `Origin` of `http://<Host>` and room for a
+  socket (**404**, **401**, **403**, **503**), before NanoWSD's own handshake.
+- **NanoWSD allocates whatever length a frame announces** (up to 2 GB) and joins fragments without
+  end: every frame passes `FrameGuard` first (masked, payload ≤ 4 KB, ≤ 16 fragments; otherwise the
+  socket closes before the payload is read).
+- **Its accept loop retries at once after any failure, until its socket is closed.** Android
+  destroys the sockets bound to an address that goes away (the Wi-Fi dropping), and the loop then
+  spun a core at 100 % (seen on the emulator). `SteadyServerSocket`, the server's socket factory,
+  pauses 20 ms more after each failure in a row (at most 500 ms), starts the count again after a
+  success, and closes itself after 20 in a row, which ends the loop; the service's next look
+  starts the listener again.
+- **One value per header name**: no response sets two cookies.
+- Its own answers to a request it cannot parse (a malformed request line, for one) come from
+  inside NanoHTTPD, without the security headers below (no body of ours, no data).
+
+Threads: `BoundedRunner`, 4 threads and a queue of 32 (a connection past that is closed at once);
+each socket holds one thread while open, hence two sockets at most. A socket read waits at most
+10 s. NanoHTTPD's temporary files (none: no route reads a multipart form) go to `cacheDir/web`.
+
+**Every response** carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'self'; img-src 'self' data:;
+connect-src 'self' ws://<Host>; frame-ancestors 'none'; base-uri 'none'; form-action 'none'` and
+`Cross-Origin-Resource-Policy: same-origin`; JSON answers add `Cache-Control: no-store`, the pages
+`no-cache`, the art `private, max-age=3600`. **No CORS header, ever**: a preflight is answered 405
+with `Allow`, so a browser never sends another site's request with the custom header.
+
+## Routes
+
+Access: **public** (no session; every listener), **login** (the header, no session), **read** (the
+`sp_session` cookie), **write** (the cookie and the header). Every route also passes the Host and
+`Origin` checks above. Errors are `{"error": code, "message": text}`, with `retryAfter` (seconds)
+on a 401 from login and on every 429.
+
+| Method | Path | Access | Body | Answer |
+|---|---|---|---|---|
+| GET | `/`, `/app.js` | panel listeners | — | the panel's page and script |
+| GET | `/style.css`, `/request`, `/request.js` | public | — | `/request` sets `sp_guest` when missing |
+| GET | `/poster` | public | — | the poster, its QR and the guests' address filled in (the Wi-Fi's, else the tailnet's); 503 without either |
+| GET | `/ws` | read, own Origin | — | 101; 401 · 403 · 404 · 503 (two open) |
+| GET | `/api/state` | read | — | the state (below) |
+| GET | `/api/library?q&category&offset&limit` | read | — | `{total, offset, pieces}`; `category` all · favorites · recent; `limit` ≤ 200 (50) |
+| GET | `/api/playlists`, `/api/playlists/{id}` | read | — | `{playlists}`; `{playlist, pieces}` or 404 |
+| GET | `/api/composers`, `/api/composers/{key}` | read | — | `{composers}`; `{composer, pieces}` or 404 |
+| GET | `/api/art/composer/{key}?size=row\|tile`, `/api/art/piece/{id}` | read | — | PNG, JPEG, WebP or GIF only; 404 |
+| GET | `/api/channels` | read | — | `{playing, channels: [{key, name, size, playable, playing, volume, composers}]}` |
+| GET | `/api/requests` | read | — | `{guests, approveFirst, pending: [{id, pieceId, title, composer, at}]}` |
+| GET | `/api/piano` | read | — | the piano's state, `statusText`, `presets`, and the Feel · Lighting · Pedal table |
+| POST | `/api/play` | write | `{pieceId, queue?}` | 204; 404 (queue: the library's pieces only) |
+| POST | `/api/play-all` | write | `{ids \| playlistId, shuffle?}` | 204; 404 |
+| POST | `/api/transport` | write | `{action}`: toggle · pause · resume · next · previous · stop | 204 |
+| POST | `/api/seek` | write | `{ms}` ≥ 0 | 204 |
+| POST | `/api/tempo` | write | `{pct}` in the app's tempo range | 204 |
+| POST | `/api/shuffle` | write | `{on}` | 204 |
+| POST | `/api/repeat` | write | `{mode}`: off · all · one | 204 |
+| POST | `/api/queue` | write | `{action, ids?, uid?, toIndex?}`: playNext · add · remove · move · clear · skip | 204; 404 |
+| POST | `/api/channels/{key}/play` | write | — | 204; 409 too small; 404 |
+| POST | `/api/channels/stop` | write | — | 204 |
+| PUT | `/api/channels/{key}/volume` | write | `{pct}` 0–100 | 204; 404 |
+| POST | `/api/requests/{id}/approve`, `/api/requests/{id}/dismiss` | write | — | 204; 404 |
+| PUT | `/api/piano/{name}` | write | `{value}` | 204; 404 (not in the table); 403 (read-only: `keyforce_*`); 400 (out of range, never clamped) |
+| POST | `/api/piano/preset` | write | `{name}` (a preset's command) | 204; 400 |
+| POST | `/api/piano/action` | write | `{name}`: off · save · status | 204; 400 |
+| PUT | `/api/settings` | write | any of `preRollMs`, `defaultTempoPct`, `transpose`, `velocityPct`, `foldOutOfRange`, `skipDrumChannel`, `webGuests`, `webApproveFirst`, `webHostName` | 204; 400 |
+| PUT | `/api/upload?name=` | write | the file | 202 `{name}`; 400 · 409 · 411 · 413 · 415 · 507 |
+| POST | `/api/logout` | write | — | 204, the cookie expired |
+| POST | `/api/login` | login | `{pin}` | 204 + `Set-Cookie`; 401 `{retryAfter}`; 429 + `Retry-After`; 403 no PIN yet |
+| GET | `/api/public/catalogue` | public | — | `{open, lists: [{key, name, pieces: [{id, title, composer}]}]}` |
+| POST | `/api/public/request` | public | `{pieceId}` | 202 `{status: queued \| pending}`; 400 not on the list; 403 closed; 429; 503 full |
+
+Anything else is 404, and the route table's own methods answer others 405 with `Allow`. The
+schedules' routes come with M19; until then the panel's Schedule page reads the 404 as "Coming in
+the next update".
+
+## JSON
+
+- **In** (`WebApi.readObject`): a `Content-Length` (411 without, or chunked), at most 64 KB (413,
+  answered before reading), `application/json` with no charset or UTF-8 (415), strict UTF-8 (400),
+  one object nested at most four deep, counted outside strings before parsing (400), known fields
+  only (400 names the first unknown one). Ids are whole numbers above 0 that fit a Long (1.5, "1",
+  2⁶³, 0, -3, true and null are 400); lists of ids at most 5,000; strings cut as the library cuts
+  them (`TextLimits`); ranges checked, never clamped silently (`pct` 300 is 400).
+- **The state** (`GET /api/state`, and the socket's `{"type": "state", …}`): `{player: {status,
+  loading, piece: {id, title, composer, composerShort, composerKey, durationMs, favorite, art:
+  "portrait" | "roll"} | null, positionMs (below zero during the pause before a piece), tempoPct,
+  transpose, velocityPct, preRollMs, channel: {key, name, volume} | null, queue: {ids, uids, index,
+  shuffle, repeat, items: [piece + uid + requested] (the current piece and up to 100 after it)},
+  problem}, link: {state, name}, piano: {state, values, facts, lastError, errorAbout}, import:
+  {running, done, total, imported, duplicates, failed, current}, artwork: {running, done, total},
+  requests: {pending, guests, approveFirst}, web: {address, guestAddress, guests}, monochrome}`.
+- **Progress** (the socket, once a second while playing): `{"type": "progress", positionMs, at}`;
+  the page runs its clock on from there at `tempoPct`.
+
+## Sign-in (`web/WebAuth.kt`)
+
+- `PinHash`: six ASCII digits only; PBKDF2WithHmacSHA256, 100,000 iterations, a 16-byte
+  `SecureRandom` salt, a 32-byte key; compared with `ConstantTime.equals` (every byte, whatever the
+  first difference); the PIN's chars cleared after use; `toString` blank. A malformed PIN costs no
+  derivation but counts as a wrong one.
+- `Sessions`: 32 random bytes as URL-safe base64 (43 characters); only their SHA-256 is kept; at
+  most 10 (the least recently used goes); forgotten after 24 h unused; in memory only, so a
+  restart of the app signs everyone out, as do a new PIN and turning Web control off.
+- `LoginGuard`: per client address and for everyone together, 5 wrong PINs in a row → 30 s, each
+  wrong PIN after that doubling it up to 10 min; tries during a wait are refused (429) uncounted; a
+  right PIN clears its address and the global count; at most 256 addresses remembered.
+- Cookies: `sp_session=…; HttpOnly; SameSite=Strict; Path=/` (a browser-session cookie, no
+  `Secure`: the panel is plain HTTP); `sp_guest=<16 random bytes>; HttpOnly; SameSite=Strict;
+  Path=/; Max-Age=31536000`. At most 32 cookies read from a header, the first of a name winning.
+
+## The socket (`web/WebSocketHub.kt`)
+
+At most 2 open. The whole state as it opens, then on every change of the player, the link, the
+piano's settings, the import, the artwork, the settings, the requests or the panel's addresses,
+coalesced to one message every 100 ms at most; progress once a second while playing; a ping every
+4 s, at which a socket whose session has ended is closed. What the page sends is read through
+`FrameGuard` and dropped.
+
+## Uploads
+
+`PUT /api/upload?name=<file>` with the file as the body (no multipart). The name's last path
+part, control characters removed, cut to a display name's length; `.mid`/`.midi` or `.zip` (415);
+a `Content-Length` and no `Transfer-Encoding` (411); a MIDI file at most 8 MB, a zip at most 64 MB
+(413); an empty file 400; one upload at a time (409 while another is read). All of that before a
+byte is read (measured: answered in 4–5 ms with nothing sent). A MIDI file is read through
+`ImportLimits.readCapped` (the importer's own cap); a zip is streamed to `cacheDir/web/upload-….zip`
+with the cache's free-space margin kept (507 without it) and deleted if the body ends short, then
+opened as `ZipSource(deleteWhenClosed = true)` (its entry cap and the importer's caps unchanged).
+Then `Importer.importOpened` in the app's scope under the importer's lock, the built-in playlists
+refreshed and composers' artwork requested as after the app's own imports, and 202; the progress
+and the tally come over the socket. `cacheDir/web` is swept at start with the other stale import
+files.
+
+## Guests (`web/GuestRequests.kt`)
+
+In memory. `POST /api/public/request {pieceId}`: 403 while Guests can request is off; the id must
+be in the catalogue (Popular, Recognisable, Epic on piano as they stand, each piece once), else
+400; each of the guest's keys (`sp_guest` and the client address) may ask once every 5 minutes
+(429 with `Retry-After`); at most 50 wait for approval, or 50 guests' pieces sit in Up next (503
+"full"). With Approve requests first the request waits for Approve or Dismiss (the panel's
+Requests page, or the Library's banner on the tablet); without it the piece joins Up next at once
+(starting it when nothing plays). Queue entries guests asked for are remembered while they stay in
+Up next, so the panel tags them **Requested**. Nothing else comes in: no names, no text.
+
+## Binding (`web/WebAddress.kt`) and the service (`service/WebService.kt`)
+
+- **Where**: the tailnet address is the first IPv4 in 100.64.0.0/10 on a VPN interface that is up
+  (`tun…`, as Android names Tailscale's, or `tailscale…`), and serves the whole panel. The Wi-Fi
+  address is the first RFC 1918 IPv4 on an interface named `wlan…` that is up, and serves guests
+  only unless Panel on Wi-Fi too is on. A 100.64/10 address on Wi-Fi or a mobile network (carriers
+  use the block too) is never taken for the tailnet. Never the any-address, IPv6, loopback,
+  link-local or a mobile network. Debug builds on an emulator (`goldfish`/`ranchu` or a `generic`
+  fingerprint) add `127.0.0.1` answering to `localhost`, for `adb forward tcp:8737 tcp:8737`;
+  release builds never listen there.
+- **The service**: foreground, type `specialUse` (subtype "Local web control panel for the piano,
+  on the person's own network") with `connectedDevice` as the fallback; not exported;
+  `START_STICKY`; a low-importance silent notification "Web control on" + the address. It starts
+  with the switch (and with the app when the switch is on), follows the settings, a network
+  callback that sees VPNs, and a look every 30 s, and starts the listeners again whenever the
+  addresses change (one that failed to bind, or whose socket closed itself, is started again at
+  the next look). It stops, closing
+  the listeners, the sockets and every session, when the switch turns off, the PIN goes, or Android
+  times it out. While a piece plays it holds a partial wake lock (10 minutes a hold, renewed every
+  30 s while the playing goes on).
+
+## The page (`assets/web/`)
+
+No framework and no build step. The CSP allows no inline script, style or handler, and none is
+there (`WebAssetsTest` reads every file): the pages are built with DOM calls (`textContent`, never
+`innerHTML`), dynamic values go through the CSSOM (`style.setProperty`), and the roll cards are CSS
+masks over the app's alpha maps. The tokens are `Color.kt`'s, checked value for value. The page
+talks to the server with `fetch` (`credentials: 'same-origin'`, the custom header on every change)
+and one WebSocket; on a 401 it shows the gate again. Uploads use `XMLHttpRequest` for its upload
+progress, one file at a time.
+
+## Greps (v1.5.1 — M18)
+
+- `grep -rn "Color(0x" app/src/main --include='*.kt' | grep -v ui/theme`: nothing.
+- `grep -rnF -e "0.0.0.0" -e "Access-Control" app/src/main`: nothing. (Unescaped, the brief's
+  `"0.0.0.0\|Access-Control"` also matches numbers such as `1_000_000` in files M18 did not touch;
+  no file M18 touched matches either form.)
+- `grep -rn "DisplayBlack" app/src/main`: `ui/theme/Color.kt`, `ui/theme/Theme.kt`, as before.
+- `LocalNoteSounding`, `dev.chrisbanes`, `hazeSource`/`HazeState`, `Modifier.blur`: as in M17.
+- In `assets/web`: no `#000`, `#fff`, `black` or `white` but the stylesheet's comment saying so.
+
+## Measured (September 2026, `steven_piano`, debug build, the emulated piano)
+
+- Tests: 832, none failing (7 skipped without `-Pcorpus`, as in M17). `lint`: 0 errors, 29
+  warnings, M17's 29 (ZXing moved to 3.5.4 so the catalog raises no new notice). `assembleDebug`,
+  `assembleRelease` clean, no compiler warnings. The release APK is 2,675,240 bytes (1.5:
+  2,548,714): NanoHTTPD, qrcode-kotlin and the pages (97 KB before compression).
+- A Tailscale and a Wi-Fi address stood in by dummy interfaces (`tun9` 100.101.2.3, `wlan9`
+  192.168.77.20; the emulator has neither): `ss -ltn` shows 8737 on those two and `127.0.0.1`,
+  nothing else. On `wlan9` `/` and `/api/state` are 404, `/request`, `/poster` and the catalogue
+  200; on `tun9` `/` is 200 and `/api/state` 401.
+- Through `adb forward`: login 0.28–0.35 s (100,000 PBKDF2 rounds on the emulator), `/api/state`
+  1.5 KB in 8 ms, a library page of 50 10 KB in 46 ms, `/api/piano` 8 KB in 13 ms, `/` 11 KB in
+  4 ms. The 401/403 matrix over all nineteen changing routes, the JSON and upload caps, Host,
+  CORS and headers: `api-checks.txt` (in the run's evidence).
+- Headless Chrome 153 at 1280 × 800 and 390 × 844, light and dark: the gate; a wrong PIN, then
+  "That PIN isn't right. Try again in 30 s." counting down; Now playing's clock moving between
+  two screenshots a second apart; a reorder in Up next; a `.mid` and a 546 KB zip uploaded at a
+  throttled 60 KB/s ("Sending 12%" … "90%", then "Imported 3 pieces") and the new pieces in the
+  Library; the Piano page's three groups; the request page, "Thanks — it's in the queue.", and
+  the 429 line; the Library's banner "1 request waiting" on the tablet, Approve, and the piece
+  tagged Requested on the panel. The poster at 1280, 390 and A4 print; its QR, the Remote page's
+  and Android's print preview all decode (ZXing) to the addresses shown.
+- Android's print dialog: one A4 page (it was two before the print rule was fixed: a sheet exactly
+  297 mm tall spilled a blank page); two quick taps give two dialogs, each closing cleanly.
+- The Wi-Fi listener's address removed and put back (`ip addr del/add` on `wlan9`): its socket
+  destroyed with it, the app at 0 % CPU (100 % before `SteadyServerSocket`), the listener back
+  21 s after the address. Web control off: nothing listens on 8737 and the notification is gone;
+  on again: the three listeners and the notification.
+
+## Deviations from the plan, and why
+
+- **Paths.** The Remote page is `ui/screens/piano/pages/RemotePage.kt` (the brief's name, M15's
+  structure), not `RemoteSection.kt`; diagnostics changed in `DiagnosticsExporter.kt`.
+- **The state carries more** than the plan's shape: Up next's rows with titles and the Requested
+  mark, `composerShort`/`favorite`/`art` on a piece, `player.loading`, the channel as an object,
+  `web.guestAddress`, `monochrome`. The page needs each; none is secret.
+- **Two sockets at most** (the plan set no number): each holds one of the four threads while open.
+- **Origin is checked** on changing routes, login and public POSTs as well as the custom header;
+  the CSP adds `base-uri 'none'` and `form-action 'none'`, and every answer
+  `Cross-Origin-Resource-Policy: same-origin`.
+- **Every response closes its connection**, and refused uploads linger briefly (NanoHTTPD never
+  skips an unread body); a custom client handler skips NanoHTTPD's reverse DNS; `FrameGuard` bounds
+  NanoWSD's frames; `SteadyServerSocket` keeps a destroyed socket from spinning. None of these was
+  in the plan; each answers a behaviour of NanoHTTPD 2.3.1.
+- **Uploads**: 409 while another is read (the plan's "one at a time"), 507 without the room, 400
+  for an empty file.
+- **Defaults**: guests off and Approve requests first on (the plan set none; the safer pair).
+- **The tailnet address comes from a VPN interface only.** The first version took any 100.64/10
+  address, which a carrier's network or a Wi-Fi addressed from that block would have given the
+  whole panel; fixed before the audit (`5cbe271`).
+- **A debug-only loopback listener** on emulators, for the evidence through `adb forward`.
+- **`webHostName`** (the plan's Host allow-list entry) has no control in 1.5.1: `PUT /api/settings`
+  sets it. The panel's own Appearance chips are kept in the browser, as the brief said.
+- **The printed poster** leaves off the paper tint and is centred a little short of the page:
+  Android's WebView prints backgrounds, and a sheet of exactly 297 mm spilled a blank second page.
+- **Test-only ZXing** to read the codes back.
+
+## Tests added in M18
+
+`WebAuthTest` (10: six digits only; PBKDF2 with 100,000 rounds over a 16-byte salt; a salt each
+time; a kept hash restored only whole; constant-time comparison; sessions random, ten at most, a
+day's life; logout ends one and closeAll every one; five wrong PINs → 30 s doubling to ten minutes;
+many addresses lock everyone and a right PIN clears; a bounded memory), `WebServerTest` (20:
+nineteen against a real server on 127.0.0.1 with an ephemeral port and `FakeWebBackend`, for the
+401/403 matrix over every changing route with nothing reaching the backend; reads needing a
+session, stale or forged ones refused; login, its guard and its cookie; the headers on every
+answer and no CORS; Host; JSON caps; upload caps before a byte is read; one upload at a time; the
+allow-list and paths that never resolve; the public routes; the guests' limit; approval; the
+poster; the guest-only listener; the socket's checks; the piano's table and ranges; the settings
+subset; the reads; the commands; and one for `SteadyServerSocket` alone, pausing a little longer
+after each failure, then closing itself), `WebApiTest`
+(7), `WebAddressTest` (5, among them the carrier block never taken for the tailnet),
+`GuestRequestsTest` (5), `WebSocketHubTest` (7: the state as a socket opens and coalesced after;
+progress; two sockets; a session's end at the next ping; a frame too large ends the socket before
+its payload is read; stopping; the guard's rules), `PosterTest` (5: the code scans back with ZXing;
+the smallest version with its finder squares; the SVG's modules and quiet zone; the page's address
+escaped; the template), `WebAssetsTest` (4: the palettes as `Color.kt`'s; no pure black or white and
+red for the dot alone; every file exists with its notice and no inline script, style or handler;
+the pages say what the design says); `ImporterTest` (+3: an opened source imports under the lock
+and caps and is closed; a listing that throws still finishes; a saved zip imports and is deleted),
+`SettingsRepositoryTest` (+2: the web switches' defaults and memory; the PIN kept apart),
+`GroupSummariesTest` (+1: Remote control's value); `ImportLimitsTest` (`cacheDir/web` swept),
+`DiagnosticsExporterTest` (30 lines), `PianoPagesTest` and `RoutesTest` changed. 763 tests
+before, 832 after (7 skipped, as before: the corpus tests, `-Pcorpus`).
