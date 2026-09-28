@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
+import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -68,5 +69,17 @@ class LibraryStatesTest {
         collecting.cancel()
         assertEquals(listOf(true, false), seen.map { it.unreadable })
         assertEquals(Category.Playlists, seen.last().category)
+    }
+
+    @Test
+    fun `the built-in playlists come first, in the order they were made, and an empty one is not shown`() {
+        val all = listOf(
+            PlaylistSummary(5, "Road trip", false, 3, 1_000),
+            PlaylistSummary(9, "Recognisable", false, 12, 1_000, builtIn = true, builtInKey = "recognisable"),
+            PlaylistSummary(2, "Bach", true, 40, 1_000),
+            PlaylistSummary(8, "Popular", false, 17, 1_000, builtIn = true, builtInKey = "popular"),
+            PlaylistSummary(11, "Epic on piano", false, 0, 0, builtIn = true, builtInKey = "epic"),
+        )
+        assertEquals(listOf(8L, 9L, 5L, 2L), PlaylistShelf.shown(all).map { it.id })
     }
 }

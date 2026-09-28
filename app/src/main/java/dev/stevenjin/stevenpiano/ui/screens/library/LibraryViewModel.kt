@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.stevenjin.stevenpiano.channels.ChannelSummary
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.TextKeys
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -49,13 +51,17 @@ enum class Category(val label: String) {
     Recent("Recent"),
 }
 
-/** A second-level list: one playlist's pieces, or one composer's. */
+/** A second-level list: one playlist's pieces, one composer's, or every channel (the Playlists' See all). */
 sealed interface Group {
     val name: String
 
     data class Playlist(val id: Long, override val name: String) : Group
 
     data class Composer(val key: String, override val name: String) : Group
+
+    data object Channels : Group {
+        override val name: String get() = "Channels"
+    }
 }
 
 /** What the list shows under the chips. */
@@ -67,8 +73,14 @@ sealed interface Listing {
         override val isEmpty: Boolean get() = pieces.isEmpty()
     }
 
-    data class Playlists(val playlists: List<PlaylistSummary>) : Listing {
+    /** The playlists' grid, under the channels' row ([channels]; none while a search narrows the list). */
+    data class Playlists(val playlists: List<PlaylistSummary>, val channels: List<ChannelSummary> = emptyList()) : Listing {
         override val isEmpty: Boolean get() = playlists.isEmpty()
+    }
+
+    /** Every channel, as cards in a grid. */
+    data class Channels(val channels: List<ChannelSummary>) : Listing {
+        override val isEmpty: Boolean get() = channels.isEmpty()
     }
 
     data class Composers(val composers: List<ComposerGroup>) : Listing {
@@ -134,6 +146,7 @@ class LibraryViewModel(
     val importProgress: StateFlow<ImportProgress>,
     private val writes: CoroutineScope,
     private val forgetArtwork: (String) -> Unit = {},
+    private val channels: Flow<List<ChannelSummary>?> = flowOf(null),
 ) : ViewModel() {
     private val selection = MutableStateFlow(Selection(Category.All, null))
 
@@ -236,11 +249,15 @@ class LibraryViewModel(
                 Listing.Pieces(pieces.matching(key), all.firstOrNull { it.id == group.id })
             }
             is Group.Composer -> library.byComposer(group.key).map { Listing.Pieces(it.matching(key)) }
+            Group.Channels -> channels.map { all -> Listing.Channels(all.orEmpty().filter { key in TextKeys.fold(it.name) }) }
             null -> when (sel.category) {
                 Category.All -> (if (key.isEmpty()) library.all() else library.search(query)).map { Listing.Pieces(it) }
                 Category.Favorites -> library.favorites().map { Listing.Pieces(it.matching(key)) }
                 Category.Recent -> library.recent().map { Listing.Pieces(it.matching(key)) }
-                Category.Playlists -> library.playlists().map { all -> Listing.Playlists(PlaylistShelf.shown(all).filter { key in TextKeys.fold(it.name) }) }
+                // The channels' row stands above the playlists; a search narrows the playlists alone.
+                Category.Playlists -> combine(library.playlists(), channels) { all, cards ->
+                    Listing.Playlists(PlaylistShelf.shown(all).filter { key in TextKeys.fold(it.name) }, if (key.isEmpty()) cards.orEmpty() else emptyList())
+                }
                 Category.Composers -> library.composers().map { all -> Listing.Composers(all.filter { key in TextKeys.fold(it.name) }) }
             }
         }

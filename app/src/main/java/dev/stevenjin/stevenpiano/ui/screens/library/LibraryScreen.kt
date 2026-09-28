@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
@@ -86,6 +87,7 @@ import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.Sentences
+import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
@@ -129,7 +131,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit) {
     val graph = LocalContext.current.graph
-    val vm = viewModel { LibraryViewModel(graph.library, graph.importProgress, graph.appScope, graph.artwork::forget) }
+    val vm = viewModel { LibraryViewModel(graph.library, graph.importProgress, graph.appScope, graph.artwork::forget, graph.channelPools.summaries) }
     val state by vm.state.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
@@ -139,6 +141,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     var photoFor by rememberSaveable { mutableStateOf<Long?>(null) }
+    var volumeFor by rememberSaveable { mutableStateOf<String?>(null) }
     val pickers = rememberImportPickers(onImport)
     // The picker's grant ends with this screen: the photo is copied at once, in the app's scope.
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -206,7 +209,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                                 Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
                             }
                         }
-                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto) { dialog = it }
+                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { volumeFor = it }) { dialog = it }
                     }
                 }
             }
@@ -237,6 +240,10 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }) { adding = false }
     dialog?.let { LibraryDialogs(it, vm) { dialog = null } }
     about?.let { PieceDetailSheet(it) { about = null } }
+    volumeFor?.let { key ->
+        val name = rememberChannelName(key) ?: key
+        ChannelVolumeSheet(key, name) { volumeFor = null }
+    }
 }
 
 /** The list's share of a wide frame; the now-playing panel has the rest. */
@@ -253,6 +260,11 @@ private class LibraryPlay(private val playback: PlaybackStarter, private val onP
         if (pieceIds.isEmpty()) return
         playback.playAll(pieceIds, shuffle)
         onPlaying()
+    }
+
+    /** A channel's card: endless play from its pool (nothing when the pool is too small). */
+    fun channel(key: String) {
+        if (playback.playChannel(key)) onPlaying()
     }
 }
 
@@ -274,9 +286,14 @@ private fun LibraryItems(
     actions: PieceActions,
     play: LibraryPlay,
     onChangePhoto: (Long) -> Unit,
+    onSetVolume: (String) -> Unit,
     onDialog: (LibraryDialog) -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
+    val graph = LocalContext.current.graph
+    // Which channel plays, for its card, and whether the piano is there to hear it (the dot's colour).
+    val playingChannel = graph.player.state.collectAsStateWithLifecycle().value.channel
+    val connected = graph.pianoLink.state.collectAsStateWithLifecycle().value is LinkState.Connected
     val listing = state.listing
     val group = state.group
     val playlistId = (group as? Group.Playlist)?.id
@@ -342,6 +359,9 @@ private fun LibraryItems(
                     onDelete = { onDialog(LibraryDialog.DeletePlaylist(summary)) },
                 )
             }
+            Group.Channels -> item(key = "header") {
+                ChannelsHeader((listing as? Listing.Channels)?.channels?.size ?: 0, onBack = vm::closeGroup)
+            }
             is Group.Composer -> item(key = "group") {
                 val artwork = rememberArtworkRow(ArtworkEntity.forComposer(group.key))
                 ComposerHeader(
@@ -380,6 +400,18 @@ private fun LibraryItems(
                 )
             }
             is Listing.Playlists -> {
+                if (listing.channels.isNotEmpty()) {
+                    item(key = "channels") {
+                        ChannelRow(
+                            listing.channels,
+                            playing = playingChannel,
+                            connected = connected,
+                            onPlay = play::channel,
+                            onSetVolume = onSetVolume,
+                            onSeeAll = { vm.openGroup(Group.Channels) },
+                        )
+                    }
+                }
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 items(listing.playlists.chunked(columns), key = { row -> "tiles-pl-${row.first().id}" }) { row ->
                     TileRow(columns, row.size) {
@@ -395,6 +427,7 @@ private fun LibraryItems(
                     }
                 }
             }
+            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume)
             is Listing.Composers -> {
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 items(listing.composers.chunked(columns), key = { row -> "tiles-k-${row.first().composerKey}" }) { row ->

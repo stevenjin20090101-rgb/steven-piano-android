@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
@@ -70,13 +71,16 @@ val LocalArtworkMonochrome = staticCompositionLocalOf { false }
 /** Portraits are cropped to the square a little above centre, where faces are. */
 private val PortraitAlignment = BiasAlignment(0f, -0.4f)
 
-/** An art surface: square, the elevated surface, a 1 dp hairline outline drawn over the picture, the card corners. */
+/**
+ * An art surface: square (or [aspect] wide for its height: a channel's card is 1.4), the elevated
+ * surface, a 1 dp hairline outline drawn over the picture, the card corners.
+ */
 @Composable
-fun ArtFrame(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+fun ArtFrame(modifier: Modifier = Modifier, aspect: Float = 1f, content: @Composable BoxScope.() -> Unit = {}) {
     val shape = MaterialTheme.shapes.medium
     Box(
         modifier
-            .aspectRatio(1f)
+            .aspectRatio(aspect)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(Hairline, LocalHairline.current, shape)
@@ -87,13 +91,27 @@ fun ArtFrame(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> 
 }
 
 /**
+ * Where a picture is drawn: its own [ArtFrame] ([framed]), or, inside a frame something else
+ * draws (a cell of a channel's mosaic, display mode's backdrop), just [modifier]'s box, cropped to
+ * it, with nothing of its own around it.
+ */
+@Composable
+private fun ArtSurface(modifier: Modifier, framed: Boolean, content: @Composable BoxScope.() -> Unit) {
+    if (framed) {
+        ArtFrame(modifier, content = content)
+    } else {
+        Box(modifier.clipToBounds().clearAndSetSemantics { }, contentAlignment = Alignment.Center, content = content)
+    }
+}
+
+/**
  * Art for a playlist or a composer that has none: the initial of [name] in the Display style on
  * the elevated surface. The letter is art, not text: it keeps its size at any font scale.
  */
 @Composable
-fun MonogramTile(name: String, modifier: Modifier = Modifier) {
+fun MonogramTile(name: String, modifier: Modifier = Modifier, framed: Boolean = true) {
     val density = LocalDensity.current
-    ArtFrame(modifier) {
+    ArtSurface(modifier, framed) {
         CompositionLocalProvider(LocalDensity provides Density(density.density, 1f)) {
             Text(
                 Format.initial(name),
@@ -125,17 +143,17 @@ fun rememberArtwork(key: String, size: ArtSize): ImageBitmap? {
 }
 
 /**
- * The picture for [key] in an [ArtFrame], or [fallback] while there is none. Black and white
- * when the person chose that.
+ * The picture for [key] in an [ArtFrame] (or unframed, [framed] false), or [fallback] while there
+ * is none. Black and white when the person chose that.
  */
 @Composable
-fun ArtworkImage(key: String, size: ArtSize, modifier: Modifier = Modifier, fallback: @Composable (Modifier) -> Unit) {
+fun ArtworkImage(key: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, fallback: @Composable (Modifier) -> Unit) {
     val image = rememberArtwork(key, size)
     if (image == null) {
         fallback(modifier)
         return
     }
-    ArtFrame(modifier) {
+    ArtSurface(modifier, framed) {
         Image(
             image,
             contentDescription = null,
@@ -147,10 +165,10 @@ fun ArtworkImage(key: String, size: ArtSize, modifier: Modifier = Modifier, fall
     }
 }
 
-/** A piece's roll card in an [ArtFrame]: its first 20 seconds as perforations. */
+/** A piece's roll card in an [ArtFrame] (or unframed): its first 20 seconds as perforations. */
 @Composable
-fun RollCardImage(pieceId: Long, modifier: Modifier = Modifier) {
-    ArtFrame(modifier) { RollCard(pieceId, Modifier.fillMaxSize()) }
+fun RollCardImage(pieceId: Long, modifier: Modifier = Modifier, framed: Boolean = true) {
+    ArtSurface(modifier, framed) { RollCard(pieceId, Modifier.fillMaxSize()) }
 }
 
 /**
@@ -160,57 +178,70 @@ fun RollCardImage(pieceId: Long, modifier: Modifier = Modifier) {
  * whole rather than four times.
  */
 @Composable
-fun MosaicTile(pieceIds: List<Long>, modifier: Modifier = Modifier) {
-    ArtFrame(modifier) {
-        if (pieceIds.isEmpty()) return@ArtFrame
-        if (pieceIds.size == 1) {
-            RollCard(pieceIds.single(), Modifier.fillMaxSize())
-            return@ArtFrame
-        }
-        val hairline = LocalHairline.current
-        Column(Modifier.fillMaxSize()) {
-            for (row in 0 until 2) {
-                if (row == 1) Spacer(Modifier.fillMaxWidth().height(Hairline).background(hairline))
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    for (column in 0 until 2) {
-                        if (column == 1) Spacer(Modifier.width(Hairline).fillMaxHeight().background(hairline))
-                        RollCard(pieceIds[mosaicIndex(row, column, pieceIds.size)], Modifier.weight(1f).fillMaxSize())
-                    }
+fun MosaicTile(pieceIds: List<Long>, modifier: Modifier = Modifier, framed: Boolean = true) {
+    ArtSurface(modifier, framed) {
+        if (pieceIds.isEmpty()) return@ArtSurface
+        Mosaic(pieceIds.size, Modifier.fillMaxSize()) { i, cell -> RollCard(pieceIds[i], cell) }
+    }
+}
+
+/**
+ * [count] pictures two by two, hairlines between them: one fills the whole; two stand as a
+ * checkerboard, so no row simply repeats the other; three or four fill the cells in turn. [cell]
+ * draws picture i in its cell's modifier. Shared by a composer's roll cards and a channel's card.
+ */
+@Composable
+fun Mosaic(count: Int, modifier: Modifier = Modifier, cell: @Composable (index: Int, modifier: Modifier) -> Unit) {
+    if (count <= 0) return
+    if (count == 1) {
+        cell(0, modifier)
+        return
+    }
+    val hairline = LocalHairline.current
+    Column(modifier) {
+        for (row in 0 until 2) {
+            if (row == 1) Spacer(Modifier.fillMaxWidth().height(Hairline).background(hairline))
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                for (column in 0 until 2) {
+                    if (column == 1) Spacer(Modifier.width(Hairline).fillMaxHeight().background(hairline))
+                    cell(mosaicIndex(row, column, count), Modifier.weight(1f).fillMaxSize())
                 }
             }
         }
     }
 }
 
-/** Which of [count] pieces fills the mosaic's cell at [row], [column]. */
+/** Which of [count] pictures fills the mosaic's cell at [row], [column]. */
 private fun mosaicIndex(row: Int, column: Int, count: Int): Int =
     if (count == 2) (row + column) % 2 else (row * 2 + column) % count
 
 /**
  * A composer's art: their portrait, else the mosaic of their pieces' roll cards, else (no pieces
- * to draw) the monogram of [name].
+ * to draw) the monogram of [name]. Unframed ([framed] false) it fills a cell of something else's
+ * frame, as on a channel's card.
  */
 @Composable
-fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modifier = Modifier) {
-    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier) { frame ->
+fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true) {
+    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { frame ->
         val artwork = LocalContext.current.graph.artwork
         val ids by produceState(artwork.peekMosaic(composerKey), composerKey) { value = artwork.mosaicPieces(composerKey) }
         when {
-            ids == null -> ArtFrame(frame)
-            ids!!.isEmpty() -> MonogramTile(name, frame)
-            else -> MosaicTile(ids!!, frame)
+            ids == null -> ArtSurface(frame, framed) { }
+            ids!!.isEmpty() -> MonogramTile(name, frame, framed)
+            else -> MosaicTile(ids!!, frame, framed)
         }
     }
 }
 
 /**
- * A piece's art where it stands for the piece itself (the mini player, the now-playing panel, as the
- * piece sheet): its composer's portrait, else its own roll card, which is never mistaken for
- * another piece's. [composerKey] is the library's ("" when the composer is unknown).
+ * A piece's art where it stands for the piece itself (the mini player, the now-playing panel,
+ * display mode's backdrop, as the piece sheet): its composer's portrait, else its own roll card,
+ * which is never mistaken for another piece's. [composerKey] is the library's ("" when the composer
+ * is unknown). Unframed ([framed] false) it fills [modifier]'s box, cropped.
  */
 @Composable
-fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier) {
-    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier) { RollCardImage(pieceId, it) }
+fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true) {
+    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { RollCardImage(pieceId, it, framed) }
 }
 
 /**
