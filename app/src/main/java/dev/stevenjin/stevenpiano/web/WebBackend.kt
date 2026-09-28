@@ -227,8 +227,9 @@ data class WebChannelPlaying(val key: String, val name: String, val volume: Int)
 data class WebQueueItem(val uid: Long, val piece: WebPiece, val requested: Boolean = false)
 
 /**
- * The player as the panel shows it: [positionMs] as sampled for this message; [items] the current
- * piece and up to [WebLimits.QUEUE_ITEMS] pieces after it, with their titles.
+ * The player as the panel shows it: [positionMs] as sampled for this message (below zero during the
+ * pause before a piece, as the app's own clock runs); [items] the current piece and up to
+ * [WebLimits.QUEUE_ITEMS] pieces after it, with their titles.
  */
 data class WebPlayer(
     val status: PlaybackStatus = PlaybackStatus.Stopped,

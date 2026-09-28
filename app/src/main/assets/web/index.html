@@ -1,0 +1,176 @@
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Steven Piano</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<!-- The app's own glyphs (res/drawable), drawn in the content colour. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8,5L19,12L8,19Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7,5h3.5v14H7z M13.5,5H17v14h-3.5z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6,6l8.5,6L6,18z M16,6h2v12h-2z"/></symbol>
+  <symbol id="i-previous" viewBox="0 0 24 24"><path d="M6,6h2v12H6z M18,6v12l-8.5,-6z"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path class="glyph-stroke" d="M3,17h4.5l9,-10H18 M3,7h4.5l3,3.33 M13.5,13.67l3,3.33H18"/><path d="M17,3.5L21.5,7L17,10.5z M17,13.5L21.5,17L17,20.5z"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4,12.5V9a2,2 0,0 1,2 -2h11 M20,11.5V15a2,2 0,0 1,-2 2H7"/><path d="M16,3.5L20.5,7L16,10.5z M8,13.5L3.5,17L8,20.5z"/></symbol>
+  <symbol id="i-repeat-one" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4,12.5V9a2,2 0,0 1,2 -2h11 M20,11.5V15a2,2 0,0 1,-2 2H7"/><path d="M16,3.5L20.5,7L16,10.5z M8,13.5L3.5,17L8,20.5z M11.2,10.1L13.2,9.2h0.9v5.6h-1.6v-3.5l-1.3,0.5z"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M11,5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
+  <symbol id="i-remove" viewBox="0 0 24 24"><path d="M5,11h14v2H5z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19,11H8.4l5.3,-5.3L12.3,4.3L4.6,12l7.7,7.7l1.4,-1.4L8.4,13H19z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9.5,16.2L5.3,12L3.9,13.4L9.5,19L20.1,8.4L18.7,7Z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M8.59,16.59L10,18l6,-6 -6,-6 -1.41,1.41L13.17,12z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.4,5L12,10.6L17.6,5L19,6.4L13.4,12L19,17.6L17.6,19L12,13.4L6.4,19L5,17.6L10.6,12L5,6.4Z"/></symbol>
+  <symbol id="i-handle" viewBox="0 0 24 24"><path d="M5,9h14v2H5z M5,13h14v2H5z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M10,5a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z M10,12a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z M10,19a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M7.41,15.41L12,10.83l4.59,4.58L18,14l-6,-6 -6,6z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6z"/></symbol>
+</svg>
+
+<main id="gate" class="gate" hidden>
+  <p class="eyebrow">Steven Piano</p>
+  <h1 class="display">Enter the PIN</h1>
+  <p class="note">The six digits set on the tablet, in Piano › Remote control.</p>
+  <form id="gate-form" class="gate-form" novalidate>
+    <input id="pin" class="pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN" aria-describedby="gate-note">
+    <button class="outlined" type="submit" id="gate-open">Open</button>
+  </form>
+  <p id="gate-note" class="note" role="status" aria-live="polite"></p>
+</main>
+
+<div id="panel" class="panel" hidden>
+  <nav class="sections" aria-label="Sections">
+    <div class="identity">
+      <p class="piano-name">Steven Piano</p>
+      <p class="connection"><span class="dot" id="conn-dot"></span><span id="conn-text">Connecting…</span></p>
+    </div>
+    <ul class="section-list" role="tablist" aria-label="Sections">
+      <li><button class="section-tab" role="tab" type="button" data-section="now">Now playing</button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="queue">Up next</button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="library">Library</button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="channels">Channels</button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="schedule">Schedule</button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="requests">Requests <span class="count" id="requests-count" hidden>0</span></button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="add">Add</button></li>
+      <li><button class="section-tab" role="tab" type="button" data-section="piano">Piano</button></li>
+    </ul>
+    <div class="frame-foot">
+      <div class="appearance" data-appearance></div>
+      <p class="eyebrow">Player piano · by Steven Jin</p>
+    </div>
+  </nav>
+
+  <main class="page" id="page">
+    <!-- Now playing (on wide screens with Up next and the drop zone beside it) -->
+    <section id="section-now" data-page="now" class="now" hidden>
+      <div class="now-main">
+        <div class="art now-art" id="now-art"></div>
+        <h1 class="display now-title" id="now-title">Choose a piece from the library.</h1>
+        <p class="eyebrow" id="now-eyebrow"></p>
+        <p class="eyebrow starting" id="now-starting" aria-live="polite"></p>
+        <div class="scrubber">
+          <span class="time" id="now-position">0:00</span>
+          <input class="range" id="now-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position">
+          <span class="time" id="now-duration">0:00</span>
+        </div>
+        <div class="transport">
+          <button class="icon-button mode" id="now-shuffle" type="button" aria-pressed="false" aria-label="Shuffle"><svg class="glyph"><use href="#i-shuffle"/></svg></button>
+          <button class="icon-button" id="now-previous" type="button" aria-label="Previous"><svg class="glyph"><use href="#i-previous"/></svg></button>
+          <button class="lens" id="now-play" type="button" aria-label="Play"><svg class="glyph"><use href="#i-play" id="now-play-glyph"/></svg></button>
+          <button class="icon-button" id="now-next" type="button" aria-label="Next"><svg class="glyph"><use href="#i-next"/></svg></button>
+          <button class="icon-button mode" id="now-repeat" type="button" aria-pressed="false" aria-label="Repeat off"><svg class="glyph"><use href="#i-repeat" id="now-repeat-glyph"/></svg></button>
+        </div>
+        <div class="now-controls">
+          <div class="setting">
+            <div class="label">Tempo</div>
+            <div class="stepper">
+              <button class="icon-button" id="tempo-down" type="button" aria-label="Slower"><svg class="glyph"><use href="#i-remove"/></svg></button>
+              <span class="value" id="tempo-value">100%</span>
+              <button class="icon-button" id="tempo-up" type="button" aria-label="Faster"><svg class="glyph"><use href="#i-add"/></svg></button>
+            </div>
+          </div>
+          <div class="setting stacked" id="channel-volume" hidden>
+            <div class="label"><span id="channel-volume-label">Channel volume</span><span class="eyebrow">%</span></div>
+            <div class="with-value">
+              <input class="range" id="channel-volume-range" type="range" min="0" max="100" step="1" aria-label="Channel volume">
+              <span class="value" id="channel-volume-value">70%</span>
+            </div>
+          </div>
+          <p class="link-line"><span class="dot" id="link-dot"></span><span id="link-text">Not connected</span></p>
+        </div>
+      </div>
+      <aside class="now-side" id="now-side" aria-label="Up next"></aside>
+    </section>
+
+    <section id="section-queue" data-page="queue" hidden>
+      <div class="page-head"><h1>Up next</h1></div>
+      <div id="queue-full"></div>
+    </section>
+
+    <section id="section-library" data-page="library" hidden>
+      <div class="page-head"><h1>Library</h1></div>
+      <div class="lib-tools content">
+        <input class="field" id="lib-search" type="search" placeholder="Search titles and composers" aria-label="Search the library" autocomplete="off" maxlength="200">
+        <div class="chips" id="lib-chips" role="group" aria-label="Show"></div>
+      </div>
+      <div class="content">
+        <div class="crumb" id="lib-crumb" hidden></div>
+        <ul class="rows" id="lib-rows"></ul>
+        <p class="empty" id="lib-empty" hidden></p>
+        <div class="more-button" id="lib-more" hidden><button class="outlined" type="button">Show more</button></div>
+      </div>
+    </section>
+
+    <section id="section-channels" data-page="channels" hidden>
+      <div class="page-head"><h1>Channels</h1><button class="outlined" id="channel-stop" type="button" hidden>Stop the channel</button></div>
+      <div class="tiles" id="channel-tiles"></div>
+      <p class="empty" id="channels-empty" hidden>The channels are being worked out from the library.</p>
+    </section>
+
+    <section id="section-schedule" data-page="schedule" hidden>
+      <div class="page-head"><h1>Schedule</h1></div>
+      <div class="content" id="schedule-body"></div>
+    </section>
+
+    <section id="section-requests" data-page="requests" hidden>
+      <div class="page-head"><h1>Requests</h1></div>
+      <div class="content">
+        <ul class="rows" id="requests-rows"></ul>
+        <p class="empty" id="requests-empty">No requests waiting.</p>
+        <h2 class="section-head eyebrow">Guests</h2>
+        <div class="setting"><div class="label">Guests can request</div><button class="switch" role="switch" type="button" id="guests-open" aria-checked="false" aria-label="Guests can request"></button></div>
+        <div class="setting"><div class="label">Approve requests first</div><button class="switch" role="switch" type="button" id="guests-approve" aria-checked="false" aria-label="Approve requests first"></button></div>
+        <p class="note inset" id="guests-address"></p>
+      </div>
+    </section>
+
+    <section id="section-add" data-page="add" hidden>
+      <div class="page-head"><h1>Add</h1></div>
+      <div class="content" id="add-body"></div>
+    </section>
+
+    <section id="section-piano" data-page="piano" hidden>
+      <div class="page-head"><h1>Piano</h1></div>
+      <div class="content" id="piano-body"></div>
+    </section>
+
+    <footer class="page-foot">
+      <div class="appearance" data-appearance></div>
+      <p class="eyebrow">Player piano · by Steven Jin</p>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

@@ -87,7 +87,8 @@ class AppWebBackend(
                 status = player.status,
                 loading = player.loading,
                 piece = shown,
-                positionMs = if (piece == null) 0L else (graph.player.positionMicrosNow() / MICROS_PER_MS).coerceAtLeast(0L),
+                // Below zero during the pause before a piece: the page shows 0:00 and "Starting" until it ends.
+                positionMs = if (piece == null) 0L else graph.player.positionMicrosNow() / MICROS_PER_MS,
                 tempoPct = player.tempoPct,
                 transpose = player.transpose,
                 velocityPct = player.velocityPct,

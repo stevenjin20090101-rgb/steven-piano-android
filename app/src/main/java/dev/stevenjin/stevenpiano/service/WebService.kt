@@ -223,7 +223,7 @@ class WebService : Service() {
                 if (player.state.value.status != PlaybackStatus.Playing) {
                     null
                 } else {
-                    WebApi.progress((player.positionMicrosNow() / 1_000).coerceAtLeast(0), System.currentTimeMillis()).toString()
+                    WebApi.progress(player.positionMicrosNow() / 1_000, System.currentTimeMillis()).toString()
                 }
             },
             sessionValid = panel.sessions::isValid,
