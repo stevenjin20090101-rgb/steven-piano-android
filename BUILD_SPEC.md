@@ -3985,7 +3985,8 @@ stay; 1.7 is released after M24 (composing).
   passing with 1.28.0. A newer runtime needs this rule changed first, by a decision, never by
   removing the provider quietly.
 - `defaultConfig.ndk.abiFilters += "arm64-v8a"` (the only ABI the app ships, for every native
-  library); `packaging.jniLibs.useLegacyPackaging = true` (the 28.6 MB `libonnxruntime.so` travels
+  library; **replaced in M24** by excluding ONNX Runtime's other ABIs alone: v1.7 — M24 › The
+  build); `packaging.jniLibs.useLegacyPackaging = true` (the 28.6 MB `libonnxruntime.so` travels
   deflated, 10.6 MB, and is extracted at install); R8 `-keep class ai.onnxruntime.** { *; }` (the
   JNI calls the Java API by name). `app/lint.xml` (new): `NewerVersionAvailable` ignored for
   `com.microsoft.onnxruntime` (the pin is deliberate), `ChromeOsAbiSupport` ignored (arm64 only is
@@ -4304,7 +4305,7 @@ connects (revoked after).
   The plan's "on x86_64 Studio hides" holds only on such devices (as on x86_64 emulator images,
   which translate). Keeping the app on every ABI while shipping ONNX Runtime for arm64 alone would
   be `packaging.jniLibs.excludes` for ORT's other ABIs instead of `abiFilters`; not done, as the
-  brief binds the filter. Steven's tablet is arm64.
+  brief binds the filter. Steven's tablet is arm64. (M24 made that change: v1.7 — M24 › The build.)
 - **One service**, `StudioService`, for downloads and transcriptions (the plan offered a
   `ModelDownloadService`; the brief preferred one).
 - **Timing lines** (`PlaybackTiming`): the link's trail had no measure of lateness, so the brief's
@@ -4369,3 +4370,31 @@ network, and a model in use can't be removed; the figures on the trail), `Studio
 `PieceNotesChoiceTest` (+1), `GroupSummariesTest` (+1), `WebServerTest` (+1: the upload's refusals
 and its 202, cancel; the write matrix at 24 routes); `WebApiTest`, `WebAssetsTest`, `RoutesTest`,
 `PianoPagesTest` changed. 998 tests before, 1,085 after.
+
+# v1.7 — M24: Studio, part 2 — composing on the tablet (not released)
+
+Read `DESIGN.md › v1.7 — M24` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› item 13 and "M24 — Studio composing"; the contract is `docs/STUDIO_SPIKE.md` › The contract for M23
+and M24. The engine was built on the branch `m24-composer` and merged at `3591813`; the rest on `main`,
+a commit a step. **No version bump**: 1.7 is released after the security audit's second delta.
+
+## The build: ONNX Runtime alone is arm64
+
+M23's `defaultConfig.ndk.abiFilters += "arm64-v8a"` made arm64 the whole app's only ABI, so
+androidx's two small native libraries, shipped for four ABIs until 1.6.2, went with it and the APK no
+longer installed on 32-bit ARM or x86 devices. Now the filter is gone and `packaging.jniLibs` leaves
+out ONNX Runtime's libraries for the other three ABIs alone (`**/armeabi-v7a/libonnxruntime*.so`,
+`**/x86/libonnxruntime*.so`, `**/x86_64/libonnxruntime*.so`: `libonnxruntime.so` and its JNI,
+`libonnxruntime4j_jni.so`); `useLegacyPackaging` stays (the libraries travel deflated). Where the
+runtime isn't there, `OrtEnvironment` fails to load and Studio hides itself, as on any device it
+can't run on (`StudioAvailability`). `app/lint.xml` no longer ignores `ChromeOsAbiSupport` (nothing
+reports it now). `unzip -l` of the release APK (13,441,796 bytes; 13,417,624 with arm64 alone):
+
+| Entry | Bytes |
+|---|---|
+| `lib/arm64-v8a/libonnxruntime.so` | 28,637,280 |
+| `lib/arm64-v8a/libonnxruntime4j_jni.so` | 111,648 |
+| `lib/{arm64-v8a,armeabi-v7a,x86,x86_64}/libandroidx.graphics.path.so` | 10,096 · 7,252 · 9,284 · 10,760 |
+| `lib/{arm64-v8a,armeabi-v7a,x86,x86_64}/libdatastore_shared_counter.so` | 10,360 · 8,432 · 7,976 · 9,424 |
+
+No `libonnxruntime*` outside `arm64-v8a`. `lint`: 0 errors, 28 warnings; `checkOnnxTelemetry` passes.

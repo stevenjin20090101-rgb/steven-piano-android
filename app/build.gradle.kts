@@ -39,10 +39,6 @@ android {
         // updater's emulator test (README > Updates); every real build takes the number below.
         versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 13
         versionName = "1.6.2"
-
-        // Studio's ONNX Runtime (v1.7 — M23) is native code: arm64-v8a only, the tablets and phones of the last
-        // several years. Elsewhere the runtime can't load and Studio hides itself (studio/StudioAvailability.kt).
-        ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
@@ -102,6 +98,11 @@ android {
         // the download grows by about 11 MB rather than 29 MB (docs/STUDIO_SPIKE.md › APK size).
         jniLibs {
             useLegacyPackaging = true
+            // Studio's runtime (v1.7) ships for arm64-v8a alone, the tablets and phones of the last several years:
+            // its libraries for the other three ABIs (libonnxruntime.so and its JNI, libonnxruntime4j_jni.so) are left
+            // out, and every other native library keeps all four, so the app still installs everywhere 1.6.2 did.
+            // Where the runtime can't load, Studio hides itself (studio/StudioAvailability.kt).
+            excludes += listOf("**/armeabi-v7a/libonnxruntime*.so", "**/x86/libonnxruntime*.so", "**/x86_64/libonnxruntime*.so")
         }
     }
 }
