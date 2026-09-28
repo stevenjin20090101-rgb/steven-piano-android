@@ -164,8 +164,13 @@ class AppWebBackend(
 
     override suspend fun play(pieceId: Long, queue: List<Long>?): Boolean {
         library { graph.library.piece(pieceId) } ?: return false
+        // A queue sent with it keeps only the pieces the library holds, as Play all does.
+        val kept = queue?.let { ids ->
+            val held = library { graph.library.summaries(ids) }.orEmpty()
+            ids.filter { it in held }
+        }
         onMain {
-            graph.player.play(pieceId, queue ?: listOf(pieceId))
+            graph.player.play(pieceId, kept ?: listOf(pieceId))
             startPlayback()
         }
         return true

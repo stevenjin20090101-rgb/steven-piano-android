@@ -25,10 +25,11 @@ import android.webkit.WebViewClient
  * Prints the request poster from the tablet (Piano › Remote control › Print the request poster):
  * the poster page rendered by a WebView the app makes for it alone, from its assets (no network,
  * no script, nothing that navigates), handed to Android's print dialog on A4. Never a browser, so
- * it works in kiosk mode too (M20). The WebView is held until the print job is done with it.
+ * it works in kiosk mode too (M20). Each print job holds its own WebView until it is done with it,
+ * so a second tap never takes the first job's view from under it.
  */
 object PosterPrint {
-    private var held: WebView? = null
+    private val held = mutableSetOf<WebView>()
 
     /** Opens the print dialog for the poster of [url]; false when the poster cannot be made. */
     fun print(activity: Activity, url: String): Boolean {
@@ -41,23 +42,23 @@ object PosterPrint {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
 
             override fun onPageFinished(view: WebView, url: String?) {
-                val manager = activity.getSystemService(PrintManager::class.java) ?: return release()
+                val manager = activity.getSystemService(PrintManager::class.java) ?: return release(view)
                 val job = JOB_NAME
-                manager.print(job, Releasing(view.createPrintDocumentAdapter(job)), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build())
+                manager.print(job, Releasing(view, view.createPrintDocumentAdapter(job)), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build())
             }
         }
-        held = view
+        held += view
         view.loadDataWithBaseURL(BASE_URL, page.toString(Charsets.UTF_8), "text/html", "utf-8", null)
         return true
     }
 
-    private fun release() {
-        held?.destroy()
-        held = null
+    private fun release(view: WebView) {
+        held -= view
+        view.destroy()
     }
 
-    /** The WebView's own adapter, which lets the WebView go once the print job has finished with it. */
-    private class Releasing(private val inner: PrintDocumentAdapter) : PrintDocumentAdapter() {
+    /** The WebView's own adapter, which lets its WebView go once the print job has finished with it. */
+    private class Releasing(private val view: WebView, private val inner: PrintDocumentAdapter) : PrintDocumentAdapter() {
         override fun onStart() = inner.onStart()
 
         override fun onLayout(oldAttributes: PrintAttributes?, newAttributes: PrintAttributes, cancellationSignal: CancellationSignal?, callback: LayoutResultCallback, extras: Bundle?) =
@@ -68,7 +69,7 @@ object PosterPrint {
 
         override fun onFinish() {
             inner.onFinish()
-            release()
+            release(view)
         }
     }
 

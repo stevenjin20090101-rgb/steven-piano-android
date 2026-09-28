@@ -81,9 +81,10 @@ import java.io.IOException
  * sessions, login guard, guests' requests and socket hub ([dev.stevenjin.stevenpiano.web.WebPanel]).
  * The listeners start again whenever the networks change (a callback that sees VPNs too, and a
  * look every 30 s besides), and all stop when the switch turns off, the PIN goes, or Android asks
- * ([onTimeout]). While the player plays it holds a partial wake lock, so a piece started from the
- * panel with the tablet's screen off keeps its time even when Android kept the playback service
- * from starting in the background. Debug builds on an emulator also listen on 127.0.0.1, so
+ * ([onTimeout]). While the player plays it holds a partial wake lock (ten minutes at a time,
+ * renewed at every look while the playing goes on), so a piece started from the panel with the
+ * tablet's screen off keeps its time even when Android kept the playback service from starting in
+ * the background. Debug builds on an emulator also listen on 127.0.0.1, so
  * `adb forward tcp:8737 tcp:8737` reaches the panel from the Mac.
  */
 class WebService : Service() {
@@ -142,6 +143,7 @@ class WebService : Service() {
             while (isActive) {
                 delay(LOOK_AGAIN_MS)
                 networkChanged.value++
+                if (wakeLock.isHeld) wakeLock.acquire(WAKE_LOCK_MS)   // still playing: renewed, so a channel's hours keep it
             }
         }
         combine(graph.settingsRepository.settings, networkChanged) { settings, _ -> settings }.collect { settings ->
@@ -153,11 +155,14 @@ class WebService : Service() {
         }
     }
 
-    /** Listens where the networks allow now ([WebAddress.plan]), unless that is where it listens already. */
+    /**
+     * Listens where the networks allow now ([WebAddress.plan]), unless it listens there already on
+     * every address (one that could not be bound is tried again at the next look).
+     */
     private suspend fun listen(settings: PianoSettings) {
         val choice = withContext(Dispatchers.IO) { WebAddress.choose(WebAddress.list()) }
         val wanted = WebAddress.plan(choice, settings.webOnWifi, loopback = LoggingPianoLink.isWanted())
-        if (wanted == listening && servers.isNotEmpty()) return
+        if (wanted == listening && servers.isNotEmpty() && servers.size == wanted.size) return
         stopListening()
         val started = withContext(Dispatchers.IO) { wanted.mapNotNull(::server) }
         servers = started
