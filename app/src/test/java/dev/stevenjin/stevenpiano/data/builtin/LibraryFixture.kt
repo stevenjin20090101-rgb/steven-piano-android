@@ -25,6 +25,9 @@ import java.io.File
  *   importer's rules (piano-midi.de's file stubs give way to their Track 0 names), and each
  *   file's note count and length. `LibraryFixtureTest` checks it against the files with
  *   `-Pcorpus`.
+ * - [allSongs]: `library_titles_all_songs.csv`, the same library imported from `ALL-SONGS.zip`
+ *   instead (README › Bring in the music): 1,726 files, named from their file names ("Composer -
+ *   Title"; piano-midi.de's under their official names), with no playlists.
  * - [epicZip]: `epic_on_piano_index.csv`, the INDEX.csv of `Epic on piano.zip` (45 pieces), as a
  *   library made by importing that zip alone.
  */
@@ -58,6 +61,12 @@ object LibraryFixture {
     val corpus: List<PieceEntity> by lazy {
         rows("library_titles.csv").mapIndexed { i, r ->
             piece(i + 1L, r["title"]!!, r["composer"]!!, r["collection"]!!.ifEmpty { null }, r["notes"]!!.toInt(), r["durationMs"]!!.toLong())
+        }
+    }
+
+    val allSongs: List<PieceEntity> by lazy {
+        rows("library_titles_all_songs.csv").mapIndexed { i, r ->
+            piece(30_001L + i, r["title"]!!, r["composer"]!!, r["collection"]!!.ifEmpty { null }, r["notes"]!!.toInt(), r["durationMs"]!!.toLong())
         }
     }
 

@@ -81,8 +81,11 @@ class ChannelsTest {
 
     @Test
     fun `in Steven's library every channel has a pool to play`() {
+        val fromZip = Channels.summaries(channels, LibraryFixture.allSongs)
+        println("Channel pools in Steven's library from ALL-SONGS.zip: " + fromZip.joinToString { "${it.key} ${it.size}" })
+        assertTrue(fromZip.all { it.playable })
         val summaries = Channels.summaries(channels, LibraryFixture.corpus)
-        println("Channel pools in the corpus fixture: " + summaries.joinToString { "${it.key} ${it.size}" })
+        println("Channel pools in Steven's library from the midi folder: " + summaries.joinToString { "${it.key} ${it.size}" })
         assertTrue(summaries.all { it.playable })
         assertEquals(1_727, summaries.last().size)
         assertEquals(listOf("chopin", "debussy", "schumann"), summaries.first { it.key == "calm" }.composers.take(3).map { it.key })

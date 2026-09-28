@@ -1,5 +1,5 @@
 {
-  "about": "Steven Piano's built-in playlists (DESIGN.md > v1.5 - M17). Lists in their order; each piece is a matcher: composer = the library's composerKey (the folded surname ComposerNames gives; a list allows arrangers, and \"\" is an unknown composer), title = a case-insensitive regular expression found in the folded title (TextKeys.fold), collection = the INDEX.csv collection, exactly, when given. A matcher adds at most four pieces, by folded title; a piece appears once. Popular and Recognisable skip MAESTRO's numbered repeats (\"... [2]\"). Only what the library holds is ever listed: public-domain and openly licensed files.",
+  "about": "Steven Piano's built-in playlists (DESIGN.md > v1.5 - M17). Lists in their order; each piece is a matcher: composer = the library's composerKey (the folded surname ComposerNames gives; a list allows arrangers, and \"\" is an unknown composer), title = a case-insensitive regular expression found in the folded title (TextKeys.fold), collection = the INDEX.csv collection, exactly, when given. A matcher adds at most four pieces, by folded title; a piece appears once. Popular and Recognisable skip MAESTRO's numbered repeats (\"... [2]\"). Epic on piano matches each piece of the Epic zip under the three names the same file can have: the zip's, a folder import's (INDEX.csv) and ALL-SONGS.zip's. Only what the library holds is ever listed: public-domain and openly licensed files.",
   "lists": [
     {
       "key": "popular",
@@ -7,11 +7,11 @@
       "pieces": [
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:\\bfur elise\\b|bagatelle.*(?:woo ?59|in a minor))"
+          "title": "^(?!.*\\[\\d).*(?:\\bf[uo]r elise\\b|bagatelle.*(?:woo ?59|in a minor))"
         },
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:(?:moonlight|mondschein|op(?:us)?\\.? ?27[ ,/]*(?:(?:no|nr)\\.? ?)?2\\b|sonata (?:no|nr)\\.? ?14\\b).*(?:1st|first|\\b1\\. (?:satz|movement)|\\bi\\. |adagio sostenuto))"
+          "title": "^(?!.*\\[\\d).*(?:(?:moonlight|mondschein|op(?:us)?\\.? ?27[ ,/]*(?:(?:no|nr)\\.? ?)?2\\b|sonata (?:no|nr)\\.? ?14\\b).*(?:(?:1st|first|\\b1\\. (?:satz|movement))|\\bi\\. |adagio sostenuto))"
         },
         {
           "composer": "debussy",
@@ -19,19 +19,19 @@
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:nocturne.*op(?:us)?\\.? ?9,? (?:no|nr)\\.? ?2\\b|nocturne in e-?flat major,? op(?:us)?\\.? ?9\\b)"
+          "title": "^(?!.*\\[\\d).*(?:nocturne.*op(?:us)?\\.? ?9,? (?:no|nr)\\.? ?2\\b|nocturne in e-?flat major,? op(?:us)?\\.? ?9\\b|nocturnes?,? op(?:us)?\\.? ?9\\b.*\\bno\\.? ?2\\b)"
         },
         {
           "composer": "satie",
-          "title": "^(?!.*\\[\\d).*(?:gymnopedie,? (?:(?:no|nr)\\.? ?)?1\\b)"
+          "title": "^(?!.*\\[\\d).*(?:gymnopedie,? (?:(?:no|nr)\\.? ?)?1\\b|gymnopedies\\b.*\\bno\\.? ?1\\b)"
         },
         {
           "composer": "mozart",
-          "title": "^(?!.*\\[\\d).*(?:alla turca|turkish march|rondo a la turk|(?:k|kv)\\.? ?331\\b.*(?:3rd|third|\\b3\\. satz|\\biii\\b))"
+          "title": "^(?!.*\\[\\d).*(?:(?:k|kv)\\.? ?331\\b.*(?:(?:3rd|third|\\b3\\. (?:satz|movement))|\\biii\\b)|alla turca(?!.*\\b(?:k|kv)\\.? ?331\\b)|turkish march)"
         },
         {
           "composer": "bach",
-          "title": "^(?!.*\\[\\d).*(?:bwv ?846\\b)"
+          "title": "^(?!.*\\[\\d).*(?:bwv ?846(?![-\\d]))"
         },
         {
           "composer": "chopin",
@@ -39,11 +39,11 @@
         },
         {
           "composer": "liszt",
-          "title": "^(?!.*\\[\\d).*(?:liebestra[ue]m.*\\b3\\b|liebestraum$)"
+          "title": "^(?!.*\\[\\d).*(?:liebestra[ue]m.*\\b3\\b|liebestraum$|love dreams?\\b.*\\bno\\.? ?3\\b)"
         },
         {
           "composer": "debussy",
-          "title": "^(?!.*\\[\\d).*(?:arabesque,? (?:(?:no|nr)\\.? ?)?1\\b|premiere arabesque)"
+          "title": "^(?!.*\\[\\d).*(?:arabesque,? (?:(?:no|nr)\\.? ?)?1\\b|premiere arabesque|arabesques\\b.*\\bno\\.? ?1\\b)"
         },
         {
           "composer": "debussy",
@@ -51,11 +51,11 @@
         },
         {
           "composer": "schumann",
-          "title": "^(?!.*\\[\\d).*(?:traumerei)"
+          "title": "^(?!.*\\[\\d).*(?:traumerei|(?:scenes from childhood|kinderszenen).*\\breverie\\b)"
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:minute waltz|valse du petit chien|op(?:us)?\\.? ?64,? (?:no|nr)\\.? ?1\\b)"
+          "title": "^(?!.*\\[\\d).*(?:minute waltz|valse du petit chien|op(?:us)?\\.? ?64,? (?:no|nr)\\.? ?1\\b|(?:waltzes|valses),? op(?:us)?\\.? ?64\\b.*\\bno\\.? ?1\\b)"
         },
         {
           "composer": "chopin",
@@ -63,27 +63,27 @@
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:prelude,? (?:(?:no|nr)\\.? ?)?4,? op(?:us)?\\.? ?28\\b|op(?:us)?\\.? ?28,? (?:no|nr)\\.? ?4\\b)"
+          "title": "^(?!.*\\[\\d).*(?:prelude,? (?:(?:no|nr)\\.? ?)?4,? op(?:us)?\\.? ?28\\b|op(?:us)?\\.? ?28,? (?:no|nr)\\.? ?4\\b|preludes?,? op(?:us)?\\.? ?28\\b.*\\bno\\.? ?4\\b)"
         },
         {
           "composer": "mozart",
-          "title": "^(?!.*\\[\\d).*(?:(?:k|kv)\\.? ?545\\b.*(?:1st|first|\\b1\\. satz|\\bi\\. |allegro))"
+          "title": "^(?!.*\\[\\d).*(?:(?:k|kv)\\.? ?545\\b.*(?:(?:1st|first|\\b1\\. (?:satz|movement))|\\bi\\. |allegro))"
         },
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:(?:pathetique|op(?:us)?\\.? ?13\\b|sonata (?:no|nr)\\.? ?8\\b).*(?:2nd|second|\\b2\\. (?:satz|movement)|\\bii\\. |adagio cantabile))"
+          "title": "^(?!.*\\[\\d).*(?:(?:pathetique|op(?:us)?\\.? ?13\\b|sonata (?:no|nr)\\.? ?8\\b).*(?:(?:2nd|second|\\b2\\. (?:satz|movement))|\\bii\\. |adagio cantabile))"
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:(?:waltz|valse).*op(?:us)?\\.? ?69,? (?:no|nr)\\.? ?2\\b|op(?:us)?\\.? ?69,? (?:no|nr)\\.? ?2\\b.*(?:waltz|valse))"
+          "title": "^(?!.*\\[\\d).*(?:(?:waltz|valse).*op(?:us)?\\.? ?69,? (?:no|nr)\\.? ?2\\b|op(?:us)?\\.? ?69,? (?:no|nr)\\.? ?2\\b.*(?:waltz|valse)|(?:waltzes|valses),? op(?:us)?\\.? ?69\\b.*\\bno\\.? ?2\\b)"
         },
         {
           "composer": "satie",
-          "title": "^(?!.*\\[\\d).*(?:gnossienne,? (?:(?:no|nr)\\.? ?)?1\\b)"
+          "title": "^(?!.*\\[\\d).*(?:gnossienne,? (?:(?:no|nr)\\.? ?)?1\\b|gnossiennes\\b.*\\bno\\.? ?1\\b)"
         },
         {
           "composer": "liszt",
-          "title": "^(?!.*\\[\\d).*(?:consolation,? (?:(?:no|nr)\\.? ?)?3\\b)"
+          "title": "^(?!.*\\[\\d).*(?:consolation,? (?:(?:no|nr)\\.? ?)?3\\b|consolations\\b.*\\bno\\.? ?3\\b)"
         },
         {
           "composer": [
@@ -109,11 +109,11 @@
         },
         {
           "composer": "mendelssohn",
-          "title": "^(?!.*\\[\\d).*(?:spring song|fruhlingslied|op(?:us)?\\.? ?62,? (?:no|nr)\\.? ?6\\b)"
+          "title": "^(?!.*\\[\\d).*(?:spring song|fruhlingslied|op(?:us)?\\.? ?62,? (?:no|nr)\\.? ?6\\b|(?:songs without words|lieder ohne worte).*op(?:us)?\\.? ?62\\b.*\\bno\\.? ?6\\b)"
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:nocturne.*op(?:us)?\\.? ?9,? (?:no|nr)\\.? ?1\\b|nocturne in b-?flat minor,? op(?:us)?\\.? ?9\\b)"
+          "title": "^(?!.*\\[\\d).*(?:nocturne.*op(?:us)?\\.? ?9,? (?:no|nr)\\.? ?1\\b|nocturne in b-?flat minor,? op(?:us)?\\.? ?9\\b|nocturnes?,? op(?:us)?\\.? ?9\\b.*\\bno\\.? ?1\\b)"
         },
         {
           "composer": "bach",
@@ -138,7 +138,7 @@
       "pieces": [
         {
           "composer": "liszt",
-          "title": "^(?!.*\\[\\d).*(?:(?:hungarian|ungarische) rhapsod(?:y|ie),? (?:no|nr)\\.? ?2\\b)"
+          "title": "^(?!.*\\[\\d).*(?:(?:hungarian|ungarische) rhapsod(?:y|ie),? (?:no|nr)\\.? ?2\\b|hungarian rhapsodies\\b.*\\bno\\.? ?2\\b)"
         },
         {
           "composer": "chopin",
@@ -146,7 +146,7 @@
         },
         {
           "composer": "rachmaninoff",
-          "title": "^(?!.*\\[\\d).*(?:prelude.*op(?:us)?\\.? ?3,? (?:no|nr)\\.? ?2\\b|prelude in c-?sharp minor)"
+          "title": "^(?!.*\\[\\d).*(?:prelude.*op(?:us)?\\.? ?3,? (?:no|nr)\\.? ?2\\b|prelude in c-?sharp minor|prelude c# minor|prelude.*op(?:us)?\\.? ?3 2\\b)"
         },
         {
           "composer": "chopin",
@@ -154,7 +154,7 @@
         },
         {
           "composer": "mussorgsky",
-          "title": "^(?!.*\\[\\d).*(?:(?:pictures at an exhibition|bilder einer ausstellung)\\W+promenade\\W+gnomus|promenade and gnomus)"
+          "title": "^(?!.*\\[\\d).*(?:(?:pictures at an exhibition|bilder einer ausstellung).*promenade\\W+gnomus|promenade and gnomus)"
         },
         {
           "composer": "mussorgsky",
@@ -169,15 +169,15 @@
         },
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:(?:moonlight|mondschein|op(?:us)?\\.? ?27[ ,/]*(?:(?:no|nr)\\.? ?)?2\\b|sonata (?:no|nr)\\.? ?14\\b).*(?:3rd|third|\\b3\\. (?:satz|movement)|\\biii\\. |presto agitato))"
+          "title": "^(?!.*\\[\\d).*(?:(?:moonlight|mondschein|op(?:us)?\\.? ?27[ ,/]*(?:(?:no|nr)\\.? ?)?2\\b|sonata (?:no|nr)\\.? ?14\\b).*(?:(?:3rd|third|\\b3\\. (?:satz|movement))|\\biii\\. |presto agitato))"
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:tristesse|etude.*op(?:us)?\\.? ?10,? (?:no|nr)\\.? ?3\\b|op(?:us)?\\.? ?10,? (?:no|nr)\\.? ?3\\b.*etude)"
+          "title": "^(?!.*\\[\\d).*(?:tristesse|etude.*op(?:us)?\\.? ?10,? (?:no|nr)\\.? ?3\\b|op(?:us)?\\.? ?10,? (?:no|nr)\\.? ?3\\b.*etude|etudes,? op(?:us)?\\.? ?10\\b.*\\bno\\.? ?3\\b)"
         },
         {
           "composer": "rachmaninoff",
-          "title": "^(?!.*\\[\\d).*(?:prelude.*op(?:us)?\\.? ?23,? (?:no|nr)\\.? ?5\\b|prelude (?:no|nr)\\.? ?5\\b.*op(?:us)?\\.? ?23\\b|prelude in g minor)"
+          "title": "^(?!.*\\[\\d).*(?:prelude.*op(?:us)?\\.? ?23,? (?:no|nr)\\.? ?5\\b|prelude (?:no|nr)\\.? ?5\\b.*op(?:us)?\\.? ?23\\b|prelude in g minor|preludes,? op(?:us)?\\.? ?23\\b.*\\bno\\.? ?5\\b)"
         },
         {
           "composer": "liszt",
@@ -185,7 +185,7 @@
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:funeral march|marche funebre|trauermarsch|(?:sonata|sonate).*op(?:us)?\\.? ?35\\b.*(?:3rd|third|\\b3\\. satz|\\biii\\b))"
+          "title": "^(?!.*\\[\\d).*(?:funeral march|marche funebre|trauermarsch|(?:sonata|sonate).*op(?:us)?\\.? ?35\\b.*(?:(?:3rd|third|\\b3\\. (?:satz|movement))|\\biii\\b))"
         },
         {
           "composer": "chopin",
@@ -193,19 +193,19 @@
         },
         {
           "composer": "chopin",
-          "title": "^(?!.*\\[\\d).*(?:military|polonaise.*op(?:us)?\\.? ?40,? (?:no|nr)\\.? ?1\\b)"
+          "title": "^(?!.*\\[\\d).*(?:military|polonaise.*op(?:us)?\\.? ?40,? (?:no|nr)\\.? ?1\\b|polonaises,? op(?:us)?\\.? ?40\\b.*\\bno\\.? ?1\\b)"
         },
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:(?:pathetique|op(?:us)?\\.? ?13\\b|sonata (?:no|nr)\\.? ?8\\b).*(?:1st|first|\\b1\\. (?:satz|movement)|\\bi\\. |grave))"
+          "title": "^(?!.*\\[\\d).*(?:(?:pathetique|op(?:us)?\\.? ?13\\b|sonata (?:no|nr)\\.? ?8\\b).*(?:(?:1st|first|\\b1\\. (?:satz|movement))|\\bi\\. |grave))"
         },
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:(?:appassionata|op(?:us)?\\.? ?57\\b|sonata (?:no|nr)\\.? ?23\\b).*(?:3rd|third|\\b3\\. (?:satz|movement)|\\biii\\. |allegro ma non troppo))"
+          "title": "^(?!.*\\[\\d).*(?:(?:appassionata|op(?:us)?\\.? ?57\\b|sonata (?:no|nr)\\.? ?23\\b).*(?:(?:3rd|third|\\b3\\. (?:satz|movement))|\\biii\\. |allegro ma non troppo))"
         },
         {
           "composer": "beethoven",
-          "title": "^(?!.*\\[\\d).*(?:(?:waldstein|op(?:us)?\\.? ?53\\b|sonata (?:no|nr)\\.? ?21\\b).*(?:1st|first|\\b1\\. (?:satz|movement)|\\bi\\. |allegro con brio))"
+          "title": "^(?!.*\\[\\d).*(?:(?:waldstein|op(?:us)?\\.? ?53\\b|sonata (?:no|nr)\\.? ?21\\b).*(?:(?:1st|first|\\b1\\. (?:satz|movement))|\\bi\\. |allegro con brio))"
         },
         {
           "composer": [
@@ -257,15 +257,15 @@
       "pieces": [
         {
           "composer": "chopin",
-          "title": "heroic|^chopin polonaise in ab major opus 53$"
+          "title": "heroic|^chopin polonaise in ab major opus 53$|^polonaise ab major, opus 53 \\(1842\\)"
         },
         {
           "composer": "chopin",
-          "title": "^ballade no\\. 1 in g minor, op\\. 23$|^chopin ballade in g minor opus 32$"
+          "title": "^ballade no\\. 1 in g minor, op\\. 23$|^chopin ballade in g minor opus 32$|^ballade g minor, opus 23 \\(1835\\)"
         },
         {
           "composer": "chopin",
-          "title": "^fantaisie-impromptu, op\\. 66$|^chopin fantasie-impromptu in c# minor opus 66$"
+          "title": "^fantaisie-impromptu, op(?:us)?\\.? 66\\b|^chopin fantasie-impromptu in c# minor opus 66$"
         },
         {
           "composer": "chopin",
@@ -277,15 +277,15 @@
         },
         {
           "composer": "chopin",
-          "title": "\\\"ocean\\\"|^chopin etude no\\. 12, opus 25$"
+          "title": "\\\"ocean\\\"|^chopin etude no\\. 12, opus 25$|^etudes, opus 25 \\(1836\\) — no\\. 12$"
         },
         {
           "composer": "chopin",
-          "title": "^scherzo no\\. 2 in b-flat minor, op\\. 31$|^scherzo in b-moll opus 31$"
+          "title": "^scherzo no\\. 2 in b-flat minor, op\\. 31$|^scherzo in b-moll opus 31$|^scherzo bb minor, opus 31 \\(1837\\)"
         },
         {
           "composer": "chopin",
-          "title": "^funeral march \\(sonata no\\. 2, op\\. 35\\)$|^sonate opus 35, 3\\. satz — trauermarsch$"
+          "title": "^funeral march \\(sonata no\\. 2, op\\. 35\\)$|^sonate opus 35, 3\\. satz — trauermarsch$|^piano sonata no\\. 2 bb minor, opus 35 \\(1839\\) — 3\\. movement$"
         },
         {
           "composer": "chopin",
@@ -293,111 +293,111 @@
         },
         {
           "composer": "chopin",
-          "title": "^prelude op\\. 28 no\\. 24 in d minor$|^chopin prelude no\\. 24, opus 28$"
+          "title": "^prelude op\\. 28 no\\. 24 in d minor$|^chopin prelude no\\. 24, opus 28$|^preludes, opus 28 \\(1838\\) — no\\. 24$"
         },
         {
           "composer": "beethoven",
-          "title": "^moonlight sonata, 1st movement$|op\\. 27/2 - 1\\. satz — mondscheinsonate"
+          "title": "^moonlight sonata, 1st movement$|op\\. 27/2 - 1\\. satz — mondscheinsonate|\\(moonlight\\) , opus 27 2 \\(1801\\) — 1\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^moonlight sonata, 3rd movement$|op\\. 27/2 - 3\\. satz — mondscheinsonate"
+          "title": "^moonlight sonata, 3rd movement$|op\\. 27/2 - 3\\. satz — mondscheinsonate|\\(moonlight\\) , opus 27 2 \\(1801\\) — 3\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^pathetique sonata, 1st movement$|\\\"pathetique\\\" — 1\\. movement$"
+          "title": "^pathetique sonata, 1st movement$|\\\"pathetique\\\" — 1\\. movement$|\\(pathetique\\) , opus 13 \\(1799\\) — 1\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^pathetique sonata, 2nd movement$|\\\"pathetique\\\" — 2\\. movement$"
+          "title": "^pathetique sonata, 2nd movement$|\\\"pathetique\\\" — 2\\. movement$|\\(pathetique\\) , opus 13 \\(1799\\) — 2\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^appassionata, 3rd movement$"
+          "title": "^appassionata, 3rd movement$|\\(appassionata\\) , opus 57 \\(1804\\) — 3\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^waldstein sonata, 1st movement$|^beethoven sonata no\\. 21 in c major — 1\\. movement$"
+          "title": "^waldstein sonata, 1st movement$|^beethoven sonata no\\. 21 in c major — 1\\. movement$|\\(waldstein\\) , opus 53 \\(1804\\) — 1\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^hammerklavier sonata, 1st movement$|^hammerklaviersonate 1\\. satz$"
+          "title": "^hammerklavier sonata, 1st movement$|^hammerklaviersonate 1\\. satz$|\\(hammerklavier\\) , opus 106 \\(1818\\) — 1\\. movement$"
         },
         {
           "composer": "beethoven",
-          "title": "^fur elise$"
+          "title": "^f[uo]r elise\\b"
         },
         {
           "composer": "liszt",
-          "title": "^hungarian rhapsody no\\. 2$|^ungarische rhapsodie nr\\. 2$"
+          "title": "^hungarian rhapsody no\\. 2$|^ungarische rhapsodie nr\\. 2$|^19 hungarian rhapsodies \\(1885\\) — no\\. 2$"
         },
         {
           "composer": "liszt",
-          "title": "^liebestraum n[or]\\. 3$"
+          "title": "^liebestraum n[or]\\. 3$|^love dreams \\(1850\\) — no\\. 3$"
         },
         {
           "composer": "liszt",
-          "title": "^la campanella$|^etude no\\. 3 aus grandes etudes de paganini — la campanella$"
+          "title": "^la campanella$|^etude no\\. 3 aus grandes etudes de paganini — la campanella$|^grandes etudes de paganini \\(1851\\) — no\\. 3 - la campanella$"
         },
         {
           "composer": "liszt",
-          "title": "\\\"mazeppa\\\"|^etudes d'execution transcendante — mazeppa$"
+          "title": "\\\"mazeppa\\\"|^etudes d'execution transcendante(?: \\(1851\\))? — (?:no\\. 4 - )?mazeppa$"
         },
         {
           "composer": "liszt",
-          "title": "\\\"feux follets\\\"|transcendante no\\. 5 — feux follets"
+          "title": "\\\"feux follets\\\"|transcendante no\\. 5 — feux follets|transcendante \\(1851\\) — no\\. 5 - feux follets$"
         },
         {
           "composer": "liszt",
-          "title": "\\\"wilde jagd\\\"|transcendante no\\. 8 — wilde jagd"
+          "title": "\\\"wilde jagd\\\"|transcendante no\\. 8 — wilde jagd|transcendante \\(1851\\) — no\\. 8 - wild hunt$"
         },
         {
           "composer": "liszt",
-          "title": "^reminiscences de don juan$|^reminiscnenes do don juan$"
+          "title": "^reminiscences de don juan\\b|^reminiscnenes do don juan$"
         },
         {
           "composer": "rachmaninoff",
-          "title": "^prelude in c-sharp minor, op\\. 3 no\\. 2$|^prelude opus 3 no\\.2$"
+          "title": "^prelude in c-sharp minor, op\\. 3 no\\. 2$|^prelude opus 3 no\\.2$|^prelude c# minor, opus 3 2 \\(1892\\)"
         },
         {
           "composer": "rachmaninoff",
-          "title": "^prelude in g minor, op\\. 23 no\\. 5$|^prelude no\\.5 in es-dur, op\\. 23$"
+          "title": "^prelude in g minor, op\\. 23 no\\. 5$|^prelude no\\.5 in es-dur, op\\. 23$|^10 preludes, opus 23 \\(1903\\) — no\\. 5$"
         },
         {
           "composer": "rachmaninoff",
-          "title": "^prelude in b-flat major, op\\. 23 no\\. 2$|^prelude no\\. 2 op\\. 23$"
+          "title": "^prelude in b-flat major, op\\. 23 no\\. 2$|^prelude no\\. 2 op\\. 23$|^10 preludes, opus 23 \\(1903\\) — no\\. 2$"
         },
         {
           "composer": "rachmaninoff",
-          "title": "^prelude in d-flat major, op\\. 32 no\\. 13$|^prelude opus 32 no\\. 13$"
+          "title": "^prelude in d-flat major, op\\. 32 no\\. 13$|^prelude opus 32 no\\. 13$|^13 preludes, opus 32 \\(1910\\) — no\\. 13$"
         },
         {
           "composer": "rachmaninoff",
-          "title": "^etude-tableau op\\. 33 no\\. 8$|etudes-tableux opus 33, nr\\. 8"
+          "title": "^etude-tableau op\\. 33 no\\. 8$|etudes-tableux opus 33, nr\\. 8|^8 etudes-tableaux, opus 33 \\(1914\\) — no\\. 8$"
         },
         {
           "composer": "mussorgsky",
-          "title": "^pictures at an exhibition: promenade and gnomus$|^bilder einer ausstellung — promenade - gnomus \\(1\\)$"
+          "title": "^pictures at an exhibition: promenade and gnomus$|^bilder einer ausstellung — promenade - gnomus \\(1\\)$|^pictures at an exhibition \\(1874\\) — promenade - gnomus$"
         },
         {
           "composer": "mussorgsky",
-          "title": "^pictures at an exhibition: baba yaga and the great gate of kiev$|^bilder einer ausstellung — baba-yaga - das grosse tor von kiew$"
+          "title": "^pictures at an exhibition: baba yaga and the great gate of kiev$|^bilder einer ausstellung — baba-yaga - das grosse tor von kiew$|\\(baba-yaga\\) - the great gate of kiev$"
         },
         {
           "composer": "debussy",
-          "title": "^clair de lune$|^suite bergamasque — clair de lune$"
+          "title": "^clair de lune$|^suite bergamasque(?: \\(1905\\))? — clair de lune$"
         },
         {
           "composer": "grieg",
-          "title": "^march of the trolls, op\\. 54 no\\. 3$|^zug der zwerge op 54, no\\. 3$"
+          "title": "^march of the trolls, op\\. 54 no\\. 3$|^zug der zwerge op 54, no\\. 3$|opus 54 \\(1891\\) — no\\. 3 - march of the dwarfs$"
         },
         {
           "composer": "grieg",
-          "title": "^wedding day at troldhaugen$|^hochzeitstag auf troldhaugen op 65, no\\. 6$"
+          "title": "^wedding day at troldhaugen$|^hochzeitstag auf troldhaugen op 65, no\\. 6$|— no\\. 6 - wedding-day at troldhaugen$"
         },
         {
           "composer": "albeniz",
-          "title": "^asturias \\(leyenda\\)$|^suite espagnole — asturias$"
+          "title": "asturias"
         },
         {
           "composer": "brahms",
@@ -405,19 +405,19 @@
         },
         {
           "composer": "schubert",
-          "title": "^impromptu op\\. 90 no\\. 4 in a-flat major$|impromptus opus 90 - d 899 — impromptu nr\\. 4"
+          "title": "^impromptu op\\. 90 no\\. 4 in a-flat major$|impromptus opus 90 - d 899 — impromptu nr\\. 4|^4 impromptus, d 899, opus 90 \\(1827\\) — no\\. 4$"
         },
         {
           "composer": "schubert",
-          "title": "^wanderer fantasy, 1st movement$|^wandererfantasie d760, 1\\. satz$"
+          "title": "^wanderer fantasy, 1st movement$|^wandererfantasie d760, 1\\. satz$|\\(wanderer\\) , d 760, opus 15 \\(1822\\) — 1\\. movement$"
         },
         {
           "composer": "ravel",
-          "title": "^scarbo \\(gaspard de la nuit\\)$|^gaspard de la nuit — scarbo$"
+          "title": "^scarbo \\(gaspard de la nuit\\)$|^gaspard de la nuit(?: \\(1908\\))? — scarbo$"
         },
         {
           "composer": "ravel",
-          "title": "^jeux d'eau$"
+          "title": "^jeux d'eau(?: \\(1901\\) — jeux d'eau)?$"
         },
         {
           "composer": "liszt",

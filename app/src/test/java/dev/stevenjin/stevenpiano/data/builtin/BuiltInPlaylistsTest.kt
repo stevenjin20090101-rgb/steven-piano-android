@@ -151,24 +151,26 @@ class BuiltInPlaylistsTest {
     }
 
     @Test
-    fun `in Steven's library Popular and Recognisable find at least 15 pieces each, Epic at least 30`() {
-        val library = LibraryFixture.corpus
-        assertEquals(1_727, library.size)
-        val found = catalogue.associate { it.key to it.matches(library) }
-        println("Built-in lists in the corpus fixture: " + found.entries.joinToString { (key, ids) -> "$key ${ids.size}" })
-        for (list in catalogue) {
-            val silent = list.matchers.count { m -> library.none(m::accepts) }
-            println("  ${list.key}: ${list.matchers.size} matchers, $silent find nothing in this library")
+    fun `in Steven's library, imported either way, Popular and Recognisable find at least 15 pieces each, Epic at least 30`() {
+        assertEquals(1_727, LibraryFixture.corpus.size)
+        assertEquals(1_726, LibraryFixture.allSongs.size)
+        for ((name, library) in listOf("the midi folder" to LibraryFixture.corpus, "ALL-SONGS.zip" to LibraryFixture.allSongs)) {
+            val found = catalogue.associate { it.key to it.matches(library) }
+            println("Built-in lists in Steven's library from $name: " + found.entries.joinToString { (key, ids) -> "$key ${ids.size}" })
+            for (list in catalogue) {
+                val silent = list.matchers.count { m -> library.none(m::accepts) }
+                println("  ${list.key}: ${list.matchers.size} matchers, $silent find nothing in this library")
+            }
+            assertTrue("Popular ${found["popular"]?.size} ($name)", found.getValue("popular").size >= 15)
+            assertTrue("Recognisable ${found["recognisable"]?.size} ($name)", found.getValue("recognisable").size >= 15)
+            assertTrue("Epic ${found["epic"]?.size} ($name)", found.getValue("epic").size >= 30)
+            found.values.forEach { ids -> assertEquals(ids.size, ids.toSet().size) }
         }
-        assertTrue("Popular ${found["popular"]?.size}", found.getValue("popular").size >= 15)
-        assertTrue("Recognisable ${found["recognisable"]?.size}", found.getValue("recognisable").size >= 15)
-        assertTrue("Epic ${found["epic"]?.size}", found.getValue("epic").size >= 30)
-        found.values.forEach { ids -> assertEquals(ids.size, ids.toSet().size) }
     }
 
     @Test
     fun `no matcher adds more than four pieces`() {
-        for (library in listOf(LibraryFixture.corpus, LibraryFixture.epicZip, LibraryFixture.corpus + LibraryFixture.epicZip)) {
+        for (library in listOf(LibraryFixture.corpus, LibraryFixture.allSongs, LibraryFixture.epicZip, LibraryFixture.corpus + LibraryFixture.epicZip)) {
             for (list in catalogue) {
                 for (matcher in list.matchers) {
                     val added = BuiltInList(list.key, list.name, listOf(matcher)).matches(library)
