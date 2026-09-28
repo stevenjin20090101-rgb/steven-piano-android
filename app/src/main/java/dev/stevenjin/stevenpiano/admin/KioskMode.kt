@@ -79,6 +79,7 @@ class KioskMode(
     private val clock: () -> Long = System::currentTimeMillis,
     private val hashing: CoroutineContext = Dispatchers.Default,
     private val letGoMs: Long = LET_GO_MS,
+    private val policy: CoroutineContext = Dispatchers.IO,
 ) {
     private val _status = MutableStateFlow(KioskStatus())
     val status: StateFlow<KioskStatus> = _status.asStateFlow()
@@ -148,11 +149,14 @@ class KioskMode(
     /** Whether Android lets the app lock the screen to itself now. */
     fun lockTaskPermitted(): Boolean = controller.lockTaskPermitted()
 
-    /** Kiosk mode on (the Kiosk page's switch): needs a PIN and the device owner; true when it came on. The activity then locks the screen. */
+    /**
+     * Kiosk mode on (the Kiosk page's switch): needs a PIN and the device owner; true when it came on.
+     * The device policy is written off the main thread ([policy]); the activity then locks the screen.
+     */
     suspend fun turnOn(): Boolean {
         if (settings.kioskPin() == null) return false
         val keptBefore = settings.kioskStayOnBefore()
-        return when (val result = controller.enable()) {
+        return when (val result = withContext(policy) { controller.enable() }) {
             is KioskResult.On -> {
                 if (keptBefore == null) settings.setKioskStayOnBefore(result.stayOnBefore)
                 settings.setKioskEnabled(true)
@@ -180,7 +184,8 @@ class KioskMode(
         _status.update { it.copy(unlockedForNow = true) }
         settings.setKioskEnabled(false)
         withTimeoutOrNull(letGoMs) { while (controller.isLocked()) delay(POLL_MS) }
-        controller.disable(settings.kioskStayOnBefore() ?: 0)
+        val stayOnBefore = settings.kioskStayOnBefore() ?: 0
+        withContext(policy) { controller.disable(stayOnBefore) }
         settings.setKioskStayOnBefore(null)
         leftWhileUnlocked = false
         _status.update { it.copy(unlockedForNow = false, keyguardKept = false, problem = null) }

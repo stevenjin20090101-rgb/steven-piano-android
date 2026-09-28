@@ -164,14 +164,17 @@ fun PinCheckSheet(
     val waiting = left > 0
     val ready = entry.length == PIN_DIGITS && !checking && !waiting
 
-    // The wait, counted down from the guard itself (a try in another sheet, or before a restart, may have started it).
+    // The wait, counted down from the guard itself (a try in another sheet, or before a restart, may have started it);
+    // when one ends, or after a try, the field takes the focus again for the next.
     LaunchedEffect(tries) {
+        var waited = false
         while (true) {
             left = latestWait()
             if (left <= 0) break
+            waited = true
             delay(COUNTDOWN_TICK_MS)
         }
-        if (tries > 0) focus.requestFocus()
+        if (tries > 0 || waited) focus.requestFocus()
     }
 
     fun weigh(action: Int) {

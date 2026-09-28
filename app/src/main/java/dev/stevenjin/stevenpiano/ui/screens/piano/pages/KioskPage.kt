@@ -72,11 +72,11 @@ object KioskPageCopy {
 /**
  * Kiosk (DESIGN.md › v1.6 — M20): the school tablet shows the app and nothing else. Kiosk mode, a
  * switch, needs the app to be the device owner and a PIN (it says which is missing), with what it
- * does and the way out under it before it comes on; turning it off asks for the PIN. While it is on: Unlock for now (the PIN, then Home and the other apps until the
- * app is opened again), or Lock again while unlocked. Set a PIN / Change PIN (six digits, twice;
- * while kiosk mode is on, the old PIN first). The page ends with "Display mode is always on in
- * kiosk". Everything it starts runs in the app's scope, so leaving the page never cuts it short.
- * The hub's row reads "On" or "Off".
+ * does and the way out under it before it comes on; turning it off asks for the PIN. While it is
+ * on: Unlock for now (the PIN, then Home and the other apps until the app is opened again), or Lock
+ * again while unlocked. Set a PIN / Change PIN (six digits, twice; while kiosk mode is on, the old
+ * PIN first). The page ends with "Display mode is always on in kiosk". Everything it starts runs in
+ * the app's scope, so leaving the page never cuts it short. The hub's row reads "On" or "Off".
  */
 @Composable
 fun KioskPage(settings: PianoSettings) {
