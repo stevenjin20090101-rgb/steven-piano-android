@@ -10,16 +10,19 @@
 package dev.stevenjin.stevenpiano.studio
 
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.midi.KeyMap
+import dev.stevenjin.stevenpiano.midi.MidiBatch
+import dev.stevenjin.stevenpiano.midi.NoteRouter
 import dev.stevenjin.stevenpiano.midi.SmfParser
+import dev.stevenjin.stevenpiano.midi.SmfWriter
+import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
+import dev.stevenjin.stevenpiano.studio.compose.Composition
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.time.ZoneId
-import dev.stevenjin.stevenpiano.midi.SmfWriter
-import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
-import dev.stevenjin.stevenpiano.studio.compose.Composition
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -136,6 +139,44 @@ class StudioPiecesTest {
             fail("no failure; expected \"$message\"")
         } catch (e: StudioFailure) {
             assertEquals(message, e.message)
+        }
+    }
+
+    @Test
+    fun `a transcription's file keeps what was heard, and the player's router gives the piano only its keys, 100 ms apart (audit delta 2)`() {
+        // What the model can hear: A0 and C8 (21 and 108, off the piano's 24-107), a key struck again 40 ms and 90 ms
+        // later (ghost re-attacks: the densest synthetic audio made 770 such gaps under 100 ms in 20 s), velocities 0 and 128.
+        val heard = Transcription(
+            notes = listOf(
+                TranscribedNote(0.10f, 0.14f, 60, 70),
+                TranscribedNote(0.14f, 0.50f, 60, 0),
+                TranscribedNote(0.20f, 0.60f, 21, 128),
+                TranscribedNote(0.30f, 0.70f, 108, 64),
+                TranscribedNote(1.00f, 1.20f, 62, 80),
+                TranscribedNote(1.09f, 1.30f, 62, 80),
+            ),
+            pedals = emptyList(),
+        )
+        val file = SmfParser.parse(StudioPieces.midi(heard, "Heard", "Made in Studio"))
+        // The file is the recording's, as any imported MIDI file is its author's: every note, the keys and gaps as heard,
+        // velocities held to 1-127 (a Note On of 0 would be a Note Off).
+        assertEquals(6, file.noteCount)
+        assertEquals(listOf(60, 60, 21, 108, 62, 62), (0 until file.noteCount).map { file.notes.note(it) })
+        assertEquals(listOf(70, 1, 127, 64, 80, 80), (0 until file.noteCount).map { file.notes.velocity(it) })
+        // What reaches the piano goes through the player's router (fold on, as by default): 21 and 108 fold onto it,
+        // and a key struck again under 100 ms after its last strike is thinned.
+        val router = NoteRouter()
+        val out = MidiBatch()
+        val strikes = mutableListOf<Pair<Long, Int>>()
+        for (i in 0 until file.events.size) {
+            out.clear()
+            router.route(file.events.status(i), file.events.data1(i), file.events.data2(i), file.events.atMicros(i), out)
+            for (j in 0 until out.size) if (out.status(j) == 0x90 && out.data2(j) > 0) strikes += file.events.atMicros(i) to out.data1(j)
+        }
+        assertEquals(listOf(60, 33, 96, 62), strikes.map { it.second })
+        assertTrue(strikes.all { it.second in KeyMap.LOWEST..KeyMap.HIGHEST })
+        for ((key, times) in strikes.groupBy({ it.second }, { it.first })) {
+            for ((a, b) in times.zipWithNext()) assertTrue("key $key struck again ${b - a} µs later", b - a >= NoteRouter.MIN_ONSET_GAP_MICROS)
         }
     }
 }
