@@ -13,10 +13,12 @@
   {
     "versionCode": 9,
     "versionName": "1.5",
-    "notes": "Channels play the library without end: Calm, Epic, Baroque, Romantic, Impressionist, Nocturnes, Études and Everything, each at its own volume. Popular, Recognisable and Epic on piano now fill themselves from your pieces. Left alone for a minute, the tablet can become a display for passers-by: the portrait, the title and the roll on black. Every piece begins after a short pause, the score lights the notes it plays in yellow, a mini player (on a tablet, a now-playing panel beside the library) keeps the piece in sight, the Piano tab's settings are grouped into pages, and the app can follow the system's appearance or stay light or dark.",
+    "notes": "Channels play your library without end: Calm, Epic, Baroque, Romantic, Impressionist, Nocturnes, Études and Everything, each at its own volume. Popular, Recognisable and Epic on piano fill themselves from your pieces. Left alone for a minute, the tablet becomes a display for passers-by. Every piece starts after a short pause, the score lights the notes it plays in yellow, a mini player (a now-playing panel on tablets) keeps the piece in sight, the controls float on frosted glass, the Piano tab's settings are grouped into pages, and Appearance can follow the system or stay light or dark.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.5/steven-piano-1.5.apk",
+    "sha256": "9cc211f9ce5e81b6b497b91afa44f54fd29569c631aa9b48744440d9d0d048c6",
+    "sizeBytes": 2548714,
     "minSdk": 26,
     "tag": "v1.5",
-    "draft": true
+    "publishedAt": "2026-09-28"
   }
 ]
