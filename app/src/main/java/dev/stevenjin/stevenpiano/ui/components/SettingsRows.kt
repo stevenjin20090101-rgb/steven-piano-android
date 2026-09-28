@@ -504,7 +504,7 @@ private fun labelColor(enabled: Boolean): Color =
 
 /** Monochrome switches: an outlined track when off, the content colour when on, disabled-glyph grey when unavailable. */
 @Composable
-private fun switchColors() = SwitchDefaults.colors(
+internal fun switchColors() = SwitchDefaults.colors(
     uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
     uncheckedBorderColor = LocalTertiary.current,
     uncheckedTrackColor = MaterialTheme.colorScheme.surface,

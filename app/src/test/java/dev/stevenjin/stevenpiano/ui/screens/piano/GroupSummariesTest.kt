@@ -18,6 +18,9 @@ import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.web.WebStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /** The hub's one-line values: from what the app holds, never a read from the piano. */
 class GroupSummariesTest {
@@ -105,9 +108,19 @@ class GroupSummariesTest {
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "On · 100.101.2.3"),
+            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3"),
             SettingsPage.entries.map { rows.of(it) },
         )
+    }
+
+    @Test
+    fun `Schedule reads when the next one starts, or None`() {
+        val wednesday = ZonedDateTime.of(LocalDateTime.parse("2026-09-30T12:30"), ZoneId.of("America/New_York"))
+        assertEquals("None", GroupSummaries.schedule(null))
+        assertEquals("Next Wed 12:30", GroupSummaries.schedule(wednesday))
+        assertEquals("Next Sun 07:05", GroupSummaries.schedule(wednesday.plusDays(4).withHour(7).withMinute(5)))
+        assertEquals("the Schedule row reads without the piano", "Next Wed 12:30", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false, nextSchedule = wednesday).schedule)
+        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).of(SettingsPage.Schedule))
     }
 
     @Test

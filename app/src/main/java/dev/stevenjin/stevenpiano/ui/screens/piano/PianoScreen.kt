@@ -67,6 +67,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SchedulePage
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.WebStatus
@@ -176,6 +177,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val piano by vm.piano.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     val web by vm.web.collectAsStateWithLifecycle()
+    val nextSchedule by vm.nextSchedule.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val context = LocalContext.current
     var canInstall by remember { mutableStateOf(vm.canInstall()) }
@@ -183,7 +185,9 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web) { GroupSummaries.from(piano, settings, frame.wide, web) }
+    val summaries = remember(piano, settings, frame.wide, web, nextSchedule) {
+        GroupSummaries.from(piano, settings, frame.wide, web, nextSchedule?.occurrence?.at)
+    }
 
     Column(modifier) {
         ScreenHeader("Piano", Modifier.readingWidth())
@@ -256,6 +260,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                     SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
                     SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
+                    SettingsPage.Schedule -> SchedulePage()
                 }
                 Spacer(Modifier.height(24.dp))
                 Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))

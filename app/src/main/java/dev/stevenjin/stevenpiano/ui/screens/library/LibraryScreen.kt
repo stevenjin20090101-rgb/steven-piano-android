@@ -79,8 +79,10 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
@@ -108,9 +110,12 @@ import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingPanel
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleDraftSaver
+import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleEditorSheet
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import kotlinx.coroutines.launch
+import java.time.LocalTime
 
 /**
  * The Library tab: search, the category chips, then text rows, or grids of tiles for Playlists
@@ -144,6 +149,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     var photoFor by rememberSaveable { mutableStateOf<Long?>(null) }
     var volumeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var scheduling by rememberSaveable(stateSaver = ScheduleDraftSaver) { mutableStateOf<ScheduleDraft?>(null) }
     val pickers = rememberImportPickers(onImport)
     // The picker's grant ends with this screen: the photo is copied at once, in the app's scope.
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -212,7 +218,10 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                                 Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
                             }
                         }
-                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { volumeFor = it }) { dialog = it }
+                        val schedule: (String) -> Unit = { key ->
+                            scheduling = ScheduleDraft.fresh(LocalTime.now(), ScheduleKind.CHANNEL, key, graph.settings.value.channelVolume(key))
+                        }
+                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { volumeFor = it }, schedule) { dialog = it }
                     }
                 }
             }
@@ -247,6 +256,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         val name = rememberChannelName(key) ?: key
         ChannelVolumeSheet(key, name) { volumeFor = null }
     }
+    scheduling?.let { draft -> ScheduleEditorSheet(draft) { scheduling = null } }
 }
 
 /** The list's share of a wide frame; the now-playing panel has the rest. */
@@ -290,6 +300,7 @@ private fun LibraryItems(
     play: LibraryPlay,
     onChangePhoto: (Long) -> Unit,
     onSetVolume: (String) -> Unit,
+    onSchedule: (String) -> Unit,
     onDialog: (LibraryDialog) -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
@@ -411,6 +422,7 @@ private fun LibraryItems(
                             connected = connected,
                             onPlay = play::channel,
                             onSetVolume = onSetVolume,
+                            onSchedule = onSchedule,
                             onSeeAll = { vm.openGroup(Group.Channels) },
                         )
                     }
@@ -430,7 +442,7 @@ private fun LibraryItems(
                     }
                 }
             }
-            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume)
+            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, onSchedule)
             is Listing.Composers -> {
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 items(listing.composers.chunked(columns), key = { row -> "tiles-k-${row.first().composerKey}" }) { row ->

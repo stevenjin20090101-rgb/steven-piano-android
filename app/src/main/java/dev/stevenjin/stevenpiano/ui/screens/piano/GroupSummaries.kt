@@ -11,11 +11,13 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.web.WebStatus
+import java.time.ZonedDateTime
 import kotlin.math.roundToInt
 import dev.stevenjin.stevenpiano.piano.PianoSettings as PianoTable
 
@@ -34,6 +36,7 @@ data class GroupSummaries(
     val playback: String,
     val display: String,
     val remote: String,
+    val schedule: String = ScheduleCopy.NONE,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -44,6 +47,7 @@ data class GroupSummaries(
         SettingsPage.Playback -> playback
         SettingsPage.Display -> display
         SettingsPage.Remote -> remote
+        SettingsPage.Schedule -> schedule
     }
 
     companion object {
@@ -52,9 +56,16 @@ data class GroupSummaries(
 
         /**
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
-         * then picks the roll's style); [web] where the web panel listens.
+         * then picks the roll's style); [web] where the web panel listens; [nextSchedule] when the
+         * next schedule starts.
          */
-        fun from(piano: PianoState, settings: PianoSettings, wide: Boolean, web: WebStatus = WebStatus()): GroupSummaries = GroupSummaries(
+        fun from(
+            piano: PianoState,
+            settings: PianoSettings,
+            wide: Boolean,
+            web: WebStatus = WebStatus(),
+            nextSchedule: ZonedDateTime? = null,
+        ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
             pedal = pedal(piano),
@@ -62,7 +73,11 @@ data class GroupSummaries(
             playback = playback(settings),
             display = display(settings, wide),
             remote = remote(settings, web),
+            schedule = schedule(nextSchedule),
         )
+
+        /** When the next schedule starts, "Next Wed 12:30", or "None". */
+        fun schedule(next: ZonedDateTime?): String = ScheduleCopy.hub(next)
 
         /** "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"). */
         fun remote(settings: PianoSettings, web: WebStatus): String {

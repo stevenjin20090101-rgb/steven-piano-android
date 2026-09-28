@@ -70,6 +70,7 @@ import dev.stevenjin.stevenpiano.ui.components.RollStripHeight
 import dev.stevenjin.stevenpiano.ui.components.glassAvailable
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
 
 /** The connection line's row at the panel's foot (declared before PANEL_FIXED, which counts it). */
 private val CONNECTION_ROW = 40.dp
@@ -132,12 +133,16 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
                     .padding(32.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    "Choose a piece from the library.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
+                // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.5.2 — M19).
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
+                    Text(
+                        "Choose a piece from the library.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }

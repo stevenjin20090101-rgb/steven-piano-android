@@ -22,6 +22,7 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.schedule.NextSchedule
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
@@ -67,6 +68,9 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** Where the web panel listens (Remote control's address and QR, and the hub's row). */
     val web: StateFlow<WebStatus> = graph.web.status
+
+    /** The next schedule's start (the hub's Schedule row). */
+    val nextSchedule: StateFlow<NextSchedule?> = graph.schedules.next
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 

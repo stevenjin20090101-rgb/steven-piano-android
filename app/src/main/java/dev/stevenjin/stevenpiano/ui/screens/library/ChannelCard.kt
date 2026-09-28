@@ -23,9 +23,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,8 +68,9 @@ private val BandHeight = 56.dp
  * hairline top edge (a scrim, not glass: nothing behind it moves), holding the name in Title and
  * "12 PIECES", "ADD MORE PIECES" for a pool too small to play, or while it plays the live dot and
  * "PLAYING". On the band everything is the content colour, as on glass. Tap plays the channel
- * ([onPlay]); long-press offers Set volume ([onSetVolume]) and Schedule, which comes with the next
- * update. [connected] lights the dot red; otherwise it is the hollow ring, as everywhere.
+ * ([onPlay]); long-press offers Set volume ([onSetVolume]) and Schedule ([onSchedule], the schedule
+ * editor with the channel chosen; v1.5.2). [connected] lights the dot red; otherwise it is the
+ * hollow ring, as everywhere.
  */
 @Composable
 fun ChannelCard(
@@ -80,6 +79,7 @@ fun ChannelCard(
     connected: Boolean,
     onPlay: () -> Unit,
     onSetVolume: () -> Unit,
+    onSchedule: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -114,18 +114,7 @@ fun ChannelCard(
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Set volume", { menu = false }, onSetVolume)
-            DropdownMenuItem(
-                text = {
-                    Column {
-                        Text("Schedule")
-                        Eyebrow(ChannelCopy.SCHEDULE_LATER, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
-                    }
-                },
-                onClick = {},
-                enabled = false,
-                // Disabled, but readable: the secondary grey, never the faded default.
-                colors = MenuDefaults.itemColors(disabledTextColor = MaterialTheme.colorScheme.onSurfaceVariant),
-            )
+            MenuItem("Schedule", { menu = false }, onSchedule)
         }
     }
 }

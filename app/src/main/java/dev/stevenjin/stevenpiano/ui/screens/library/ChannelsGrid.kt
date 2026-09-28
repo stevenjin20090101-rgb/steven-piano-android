@@ -66,6 +66,7 @@ fun LazyListScope.channelsGrid(
     connected: Boolean,
     onPlay: (String) -> Unit,
     onSetVolume: (String) -> Unit,
+    onSchedule: (String) -> Unit,
 ) {
     items(channels.chunked(columns), key = { row -> "channels-${row.first().key}" }) { row ->
         TileRow(columns, row.size) {
@@ -76,6 +77,7 @@ fun LazyListScope.channelsGrid(
                     connected = connected,
                     onPlay = { onPlay(channel.key) },
                     onSetVolume = { onSetVolume(channel.key) },
+                    onSchedule = { onSchedule(channel.key) },
                     modifier = Modifier.weight(1f),
                 )
             }

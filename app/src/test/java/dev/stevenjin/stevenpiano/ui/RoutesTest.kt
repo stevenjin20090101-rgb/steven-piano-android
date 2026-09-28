@@ -40,10 +40,13 @@ class RoutesTest {
 
     @Test
     fun `every page has its own route under the Piano tab`() {
-        assertEquals(listOf("feel", "lighting", "pedal", "firmware", "playback", "display", "remote"), SettingsPage.entries.map { it.key })
+        assertEquals(listOf("feel", "lighting", "pedal", "firmware", "playback", "display", "schedule", "remote"), SettingsPage.entries.map { it.key })
         assertEquals("piano/remote", PianoRoutes.page(SettingsPage.Remote))
         assertEquals("Remote control", SettingsPage.Remote.title)
         assertNull(SettingsPage.Remote.piano)
+        assertEquals("piano/schedule", PianoRoutes.page(SettingsPage.Schedule))
+        assertEquals("Schedule", SettingsPage.Schedule.title)
+        assertNull(SettingsPage.Schedule.piano)
         assertEquals("piano/feel", PianoRoutes.page(SettingsPage.Feel))
         assertEquals("piano/firmware", PianoRoutes.page(SettingsPage.Firmware))
         assertEquals("a page put back as the window narrows appears without the push", "piano/display?cut=true", PianoRoutes.page(SettingsPage.Display, cut = true))
@@ -64,18 +67,18 @@ class RoutesTest {
     @Test
     fun `a page's route takes only a page's key, so the hub's route can't open a page called hub`() {
         for (page in SettingsPage.entries) assertEquals(page, PianoRoutes.PageType.parseValue(page.key))
-        for (notAPage in listOf("hub", "Feel ", "", "schedule")) {
+        for (notAPage in listOf("hub", "Feel ", "", "Schedule")) {
             assertThrows(IllegalArgumentException::class.java) { PianoRoutes.PageType.parseValue(notAPage) }
         }
         assertEquals("feel", PianoRoutes.PageType.serializeAsValue(SettingsPage.Feel))
     }
 
     @Test
-    fun `four pages are the piano's, three are the app's`() {
+    fun `four pages are the piano's, four are the app's`() {
         assertEquals(
-            listOf(PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware, null, null, null),
+            listOf(PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware, null, null, null, null),
             SettingsPage.entries.map { it.piano },
         )
-        assertEquals(listOf("Feel", "Lighting", "Pedal", "Firmware and status", "Playback", "Display", "Remote control"), SettingsPage.entries.map { it.title })
+        assertEquals(listOf("Feel", "Lighting", "Pedal", "Firmware and status", "Playback", "Display", "Schedule", "Remote control"), SettingsPage.entries.map { it.title })
     }
 }
