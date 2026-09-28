@@ -90,6 +90,7 @@ import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.score.Sign
 import dev.stevenjin.stevenpiano.score.TempoMark
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.LocalNoteSounding
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
@@ -186,10 +187,11 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * names on a line of their own above each system, where each chord begins (DESIGN.md › v1.3).
  * Staff lines and bar lines are the tertiary grey; clefs, signatures, notes and their beams, rests,
  * ties, tempo marks and dynamics the secondary colour (DESIGN.md › v1.3 › Score fidelity); bar
- * numbers eyebrows above each system. A 2 dp cursor moves through the current
- * system, and sounding notes (and the heads tied to them, as the cursor reaches each) brighten with
- * the roll's 120 ms flip (a cut when motion is reduced). Pages turn by themselves so the cursor is
- * always in sight ([PageTurn]).
+ * numbers eyebrows above each system. A 2 dp cursor in the content colour moves through the current
+ * system, and sounding notes (and the heads tied to them, as the cursor reaches each) turn the
+ * sounding yellow ([LocalNoteSounding], DESIGN.md › v1.5 — M16) with the roll's 120 ms flip (a cut
+ * when motion is reduced), then settle back to the secondary grey; beams, ties and rests stay grey.
+ * Pages turn by themselves so the cursor is always in sight ([PageTurn]).
  *
  * Agency: a horizontal swipe looks at other pages, and a Follow chip then waits at the top right;
  * tapping it, or the next turn the music makes, follows again. Tapping a bar seeks to it
@@ -256,7 +258,8 @@ fun ScorePages(
     }
     val colors = ScoreColors(
         upcoming = MaterialTheme.colorScheme.onSurfaceVariant,
-        sounding = MaterialTheme.colorScheme.onSurface,
+        sounding = LocalNoteSounding.current,
+        cursor = MaterialTheme.colorScheme.onSurface,
         line = LocalTertiary.current,
         glyph = MaterialTheme.colorScheme.onSurfaceVariant,
         number = LocalTertiary.current,
@@ -433,7 +436,7 @@ private fun ScoreView(
                     val flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L
                     onDrawBehind {
                         val now = clock.positionAt(frameNanos.longValue)
-                        with(painter) { overlay(layout, notes, now, shownNow.value, slotLeft, ramp, flipMicros, colors.sounding) }
+                        with(painter) { overlay(layout, notes, now, shownNow.value, slotLeft, ramp, flipMicros, colors.cursor) }
                     }
                 },
         )
@@ -501,11 +504,15 @@ private class ChordText(val chords: ChordTrack, val names: Array<String>, val st
 /** One system's chord names as placed: each name's layout and its box's top-left corner. */
 private class ChordLabels(val text: List<TextLayoutResult>, val x: FloatArray, val top: FloatArray)
 
-/** The score's colours: staff and bar lines tertiary, glyphs and upcoming notes secondary, sounding ones primary. */
+/**
+ * The score's colours: staff and bar lines tertiary, glyphs and upcoming notes secondary, sounding
+ * notes the sounding yellow (the overlay's ramp only), the cursor the content colour.
+ */
 @Immutable
 private data class ScoreColors(
     val upcoming: Color,
     val sounding: Color,
+    val cursor: Color,
     val line: Color,
     val glyph: Color,
     val number: Color,
@@ -798,9 +805,9 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     }
 
     /**
-     * The cursor in the system sounding at [now], and every note sounding (or easing across its
-     * edges over [flipMicros]) brightened through [ramp]: only where their pages are [shown], at
-     * [slotLeft] for each slot.
+     * The cursor ([cursorColor]) in the system sounding at [now], and every note sounding (or easing
+     * across its edges over [flipMicros]) coloured through [ramp], from the upcoming grey to the
+     * sounding yellow: only where their pages are [shown], at [slotLeft] for each slot.
      */
     fun DrawScope.overlay(
         layout: ScoreLayout,

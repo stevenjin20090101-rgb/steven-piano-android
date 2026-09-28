@@ -37,6 +37,10 @@ val LocalHandTones = staticCompositionLocalOf { HandTones(HandLeftDark, HandRigh
 // Whether the person has turned Hand colours on; the nav host provides it from the settings.
 val LocalHandColours = staticCompositionLocalOf { false }
 
+// The sounding note's yellow on the score (Color.kt), kept out of the scheme like the live colour:
+// the score's overlay (ScorePainter.overlay) is its only reader.
+val LocalNoteSounding = staticCompositionLocalOf { NoteSoundingDark }
+
 // Hairline and disabled-glyph tokens, also kept out of the scheme.
 val LocalHairline = staticCompositionLocalOf { InkHairline }
 val LocalDisabledGlyph = staticCompositionLocalOf { InkDisabledGlyph }
@@ -96,6 +100,7 @@ fun PianoTheme(
 ) {
     CompositionLocalProvider(
         LocalLive provides (if (darkTheme) LiveRedDark else LiveRedLight),
+        LocalNoteSounding provides (if (darkTheme) NoteSoundingDark else NoteSoundingLight),
         LocalHairline provides (if (darkTheme) InkHairline else PaperHairline),
         LocalDisabledGlyph provides (if (darkTheme) InkDisabledGlyph else PaperDisabledGlyph),
         LocalTertiary provides (if (darkTheme) SilverTertiary else CarbonTertiary),

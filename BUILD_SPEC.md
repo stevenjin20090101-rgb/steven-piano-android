@@ -190,7 +190,9 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
   = `colorScheme.onSurface`, contentSecondary = `colorScheme.onSurfaceVariant`,
   contentTertiary = `LocalTertiary.current`, hairline = `LocalHairline.current`,
   surfaceElevated = `colorScheme.surfaceVariant`. No colour literal outside `ui/theme`.
-  Red (`LocalLive.current`) is read by `LiveDot` only.
+  Red (`LocalLive.current`) is read by `LiveDot` only. The sounding yellow
+  (`LocalNoteSounding.current`, v1.5 — M16) is read by `ScorePainter.overlay` only: a grep for it
+  outside `ui/theme` finds `ScorePages.kt` alone.
 - Screens and behaviour exactly as `DESIGN.md`. Bottom `NavigationBar`, four tabs since
   v1.1: Library, Now playing, Keys, Piano (v1.0 had the three without Keys). Single
   activity, Navigation-Compose, fade-through 240 ms between tabs (a cut under reduced
@@ -254,7 +256,9 @@ DataStore keys: `autoConnect: Boolean (true)`, `lastDeviceAddress: String?`,
    piano is silent. Power-cycle the piano: the app reconnects within ~15 s.
 5. Rotate, font scale 2.0, TalkBack: nothing overlaps, everything is labelled.
 6. Unit tests green; no colour literal outside `ui/theme`; `LocalLive` only in
-   `LiveDot.kt`; provenance verifies; the provenance string is in the release DEX.
+   `LiveDot.kt`; `LocalNoteSounding` only in `ScorePages.kt` outside `ui/theme`
+   (`grep -rn "LocalNoteSounding" app/src/main` finds `Theme.kt` and `ScorePages.kt`); provenance
+   verifies; the provenance string is in the release DEX.
 
 ---
 

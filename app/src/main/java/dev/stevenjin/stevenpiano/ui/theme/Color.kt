@@ -49,3 +49,12 @@ val HandLeftDark     = Color(0xFF6AA080)   // 6.4:1 / 5.8:1 on InkSurface / InkE
 val HandRightDark    = Color(0xFF7A97B8)   // 6.4:1 / 5.8:1
 val HandLeftLight    = Color(0xFF3D6C50)   // 5.4:1 / 5.8:1 on PaperSurface / PaperElevated
 val HandRightLight   = Color(0xFF3E6189)   // 5.7:1 / 6.1:1
+
+// ---- The sounding note on the score (DESIGN.md › v1.5 — M16) ------------------
+// Steven's yellow: a note head, its stem, flags, ledger lines and accidental turn this warm yellow
+// while the note sounds, then settle back to the secondary grey. Only the score's overlay reads it
+// (ScorePainter.overlay, through LocalNoteSounding); the roll, the falling notes and the keyboard
+// strip stay monochrome, and red keeps its single meaning. WCAG contrast on surface /
+// surfaceElevated (the score panel) of its own appearance (ColorTokensTest; the floor is 3:1):
+val NoteSoundingDark  = Color(0xFFF2C94C)   // 12.2:1 / 11.0:1 on InkSurface / InkElevated
+val NoteSoundingLight = Color(0xFF9C7A00)   //  3.6:1 /  3.8:1 on PaperSurface / PaperElevated

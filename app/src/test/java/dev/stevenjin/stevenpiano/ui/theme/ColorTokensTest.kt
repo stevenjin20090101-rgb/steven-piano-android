@@ -15,26 +15,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 
 /**
- * The palette's contrast, computed as WCAG 2 defines it (relative luminance of sRGB, then
- * (L1 + 0.05) / (L2 + 0.05)): the hands' colours (DESIGN.md › v1.3 › The waterfall format) clear 3:1,
+ * The palette's contrast, computed as WCAG 2 defines it ([Wcag]): the hands' colours (DESIGN.md ›
+ * v1.3 › The waterfall format) and the score's sounding yellow (DESIGN.md › v1.5 — M16) clear 3:1,
  * the floor for graphics, on both surfaces of their own appearance.
  */
 class ColorTokensTest {
-    private fun channel(c: Float): Double {
-        val v = c.toDouble()
-        return if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
-    }
+    private fun luminance(color: Color): Double = Wcag.luminance(color)
 
-    private fun luminance(color: Color): Double = 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
-
-    private fun contrast(a: Color, b: Color): Double {
-        val la = luminance(a)
-        val lb = luminance(b)
-        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
-    }
+    private fun contrast(a: Color, b: Color): Double = Wcag.contrast(a, b)
 
     @Test
     fun `the WCAG formula gives WCAG's own figures`() {
@@ -72,5 +62,31 @@ class ColorTokensTest {
         // The two hands of one appearance weigh the same (one lightness), so neither outshines the other.
         assertEquals(luminance(HandLeftDark), luminance(HandRightDark), 0.01)
         assertEquals(luminance(HandLeftLight), luminance(HandRightLight), 0.02)
+    }
+
+    @Test
+    fun `the sounding yellow clears 3 to 1 on both surfaces of its appearance, the score panel's among them`() {
+        for (surface in listOf(InkSurface, InkElevated)) {
+            assertTrue("dark on $surface: ${contrast(NoteSoundingDark, surface)}", contrast(NoteSoundingDark, surface) >= 3.0)
+        }
+        for (surface in listOf(PaperSurface, PaperElevated)) {
+            assertTrue("light on $surface: ${contrast(NoteSoundingLight, surface)}", contrast(NoteSoundingLight, surface) >= 3.0)
+        }
+        // The figures Color.kt records (the score panel is surfaceElevated).
+        assertEquals(11.0, contrast(NoteSoundingDark, InkElevated), 0.05)
+        assertEquals(12.2, contrast(NoteSoundingDark, InkSurface), 0.05)
+        assertEquals(3.8, contrast(NoteSoundingLight, PaperElevated), 0.05)
+        assertEquals(3.6, contrast(NoteSoundingLight, PaperSurface), 0.05)
+    }
+
+    @Test
+    fun `the sounding yellow is a yellow, and never reads as the live red`() {
+        for (yellow in listOf(NoteSoundingDark, NoteSoundingLight)) {
+            val hue = Wcag.hue(yellow)
+            assertTrue("$yellow: hue $hue", hue in 40f..55f)
+            assertTrue("$yellow: red - green ${yellow.red - yellow.green}", yellow.red - yellow.green < 0.2f)
+        }
+        // The live reds, for scale: their red runs far past their green.
+        for (red in listOf(LiveRedDark, LiveRedLight)) assertTrue(red.red - red.green > 0.5f)
     }
 }
