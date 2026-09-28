@@ -852,3 +852,44 @@ The M18 pre-audit residuals were re-checked and hold: the tailnet address comes 
 `tun*`/`tailscale*` interface (`WebAddress.choose`); the reverse-DNS lookup is bypassed
 (`LiteralClientHandler`); every response closes its connection (`secure`); frames are `FrameGuard`-bounded
 with ≤2 sockets.
+
+## 1.6.1 — kiosk
+
+2026-09-28, a note from the merge, not an audit (the kiosk run could not edit this file). 1.6.1 adds
+kiosk mode for the school tablet (README › Kiosk; BUILD_SPEC.md › v1.6.1 — M20). It widens what the
+device owner is used for, which the 1.4 section limited to silent updates ("no lock task"): with
+kiosk mode on, the app also sets lock task with no features (no Home, Recents, status bar or power
+menu), turns the keyguard off, sets "stay on while plugged in", and makes its disabled-at-install
+`KioskHome` alias the persistent preferred home. `PianoDeviceAdmin` still declares no policies (these
+are the device owner's own powers) and sets no user restrictions; turning kiosk off undoes each step
+and puts stay-on back as it was.
+
+- **What the PIN protects.** A six-digit kiosk PIN of its own, apart from the web panel's, kept as a
+  salted PBKDF2-HMAC-SHA256 hash (100,000 rounds, 16-byte salt) and never in diagnostics
+  (`settings.txt` says only whether one is set). It guards the way out (the byline's three-second
+  hold, then Unlock for now or Turn kiosk off; on the Kiosk page Unlock for now, the switch and
+  Change PIN), and while kiosk mode is on the settings: every page of the Piano tab, the APP group's
+  two switches and Check now, Disconnect, and the library's changes (adding music, deleting,
+  renaming, playlists' edits, Change photo, a channel's volume). Playing, queueing, browsing and Keys
+  stay free by design. Wrong tries: three free, then 5 s doubling to 5 min, a try during a wait
+  refused uncounted; the count and the wait are kept in DataStore, so restarting the app or the
+  tablet gives nobody the free tries back. At five minutes a try, the million PINs take years.
+- **The five-minute unlock.** The right PIN at a locked setting opens the settings for five minutes
+  (`SETTINGS_UNLOCK_MS`; another right PIN starts it again), or until the tablet rests in display
+  mode, whichever comes first. Unlock for now opens everything until the app is opened again or the
+  tablet rests. Both live in memory: a restart of the app locks again.
+- **The adb escape hatch.** A forgotten PIN is recovered only from a computer:
+  `setprop debug.stevenpiano.releaseowner yes`, then `am start` of the app (Android 14 ignores
+  `am force-stop` for a device owner's app). The app checks the property as it starts and on every
+  activity start and new intent, and only while it is the device owner; it lets go of the screen,
+  turns kiosk mode off, then gives up the device owner (and with it silent updates). A `debug.`
+  property can be set by the adb shell, not by an app, so this needs USB debugging on and a computer
+  adb accepts. It works in release builds by design: it is the way back.
+
+Residuals: the kiosk keeps a passer-by in the app; it is not a tamper-proof enclosure. Someone with
+the tablet's buttons can still reach Android's safe mode or recovery (no `DISALLOW_SAFE_BOOT` or
+`DISALLOW_FACTORY_RESET` is set). USB debugging left on is the escape hatch for anyone with a
+computer adb accepts; turning it off closes that too, and then a forgotten PIN leaves only a factory
+reset. The web panel is not gated by the kiosk PIN (it has its own, on the tailnet). A tablet with
+its own secure lock screen keeps it (Android refuses to disable a secure keyguard); the Kiosk page
+says so.
