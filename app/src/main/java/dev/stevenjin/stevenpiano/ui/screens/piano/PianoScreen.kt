@@ -319,8 +319,10 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                 // or one left open when the five minutes ran out or the tablet rested). Firmware and status
                 // keeps a firmware update in view, its Cancel behind the PIN (LockedFirmware).
                 if (gate.locked) {
-                    if (page == SettingsPage.Firmware) LockedFirmwareUpdate(firmwareReport(vm), onCancel = { gate.run(vm::cancelFirmware) })
-                    LockedPage(gate)
+                    val firmware = if (page == SettingsPage.Firmware) firmwareReport(vm) else null
+                    val update = firmware != null && LockedFirmware.shows(firmware.state)
+                    if (update) LockedFirmwareUpdate(firmware, onCancel = { gate.run(vm::cancelFirmware) })
+                    LockedPage(gate, rule = !update)
                 } else when (page) {
                     SettingsPage.Feel -> FeelPage(pianoReport(vm), vm)
                     SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)

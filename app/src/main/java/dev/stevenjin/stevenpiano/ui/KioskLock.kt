@@ -137,11 +137,12 @@ private val LOCK_GLYPH = 18.dp
 /**
  * A settings page while the settings are locked (the page beside the hub on a tablet, or a page
  * left open when the five minutes ran out or the tablet rested): the page's controls give way to
- * "Settings are locked in kiosk." and Unlock, which asks for the PIN.
+ * "Settings are locked in kiosk." and Unlock, which asks for the PIN. [rule]: the page's top rule,
+ * left out under a block that ends with its own (Firmware and status's update, [LockedFirmware]).
  */
 @Composable
-fun LockedPage(gate: KioskGate) {
-    SectionRule()
+fun LockedPage(gate: KioskGate, rule: Boolean = true) {
+    if (rule) SectionRule()
     NoteLine(KioskLockCopy.PAGE_NOTE)
     ActionRow(note = KioskLockCopy.HINT) {
         ActionButton(KioskLockCopy.UNLOCK, onClick = { gate.run {} })
