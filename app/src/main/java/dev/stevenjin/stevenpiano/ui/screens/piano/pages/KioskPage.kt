@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.admin.KioskStatus
@@ -25,6 +26,7 @@ import dev.stevenjin.stevenpiano.ui.KioskExit
 import dev.stevenjin.stevenpiano.ui.KioskPinSheet
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
+import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.PinSheet
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
@@ -50,20 +52,27 @@ object KioskPageCopy {
     const val PIN_NOTE = "Six digits, asked for to leave kiosk mode"
     const val DISPLAY_NOTE = "Display mode is always on in kiosk"
 
-    /** The line under the switch: why it can't come on, what it does, or what Android kept. */
+    /** The line under the switch, when it can't come on (or Android refused it): what is missing. */
     fun switchNote(on: Boolean, status: KioskStatus, pinSet: Boolean): String? = when {
         status.problem != null -> status.problem
-        on -> if (status.keyguardKept) SCREEN_LOCK_KEPT else null
+        on -> null
         !status.owner -> MAKE_DEVICE_OWNER
         !pinSet -> SET_A_PIN_FIRST
-        else -> WHAT_IT_DOES
+        else -> null
+    }
+
+    /** The paragraph under the switch: what kiosk mode does and the way out, before it comes on; what Android kept, once on. */
+    fun explanation(on: Boolean, status: KioskStatus, pinSet: Boolean): String? = when {
+        on -> if (status.keyguardKept) SCREEN_LOCK_KEPT else null
+        status.owner && pinSet && status.problem == null -> WHAT_IT_DOES
+        else -> null
     }
 }
 
 /**
  * Kiosk (DESIGN.md › v1.6 — M20): the school tablet shows the app and nothing else. Kiosk mode, a
- * switch, needs the app to be the device owner and a PIN (it says which is missing); turning it off
- * asks for the PIN. While it is on: Unlock for now (the PIN, then Home and the other apps until the
+ * switch, needs the app to be the device owner and a PIN (it says which is missing), with what it
+ * does and the way out under it before it comes on; turning it off asks for the PIN. While it is on: Unlock for now (the PIN, then Home and the other apps until the
  * app is opened again), or Lock again while unlocked. Set a PIN / Change PIN (six digits, twice;
  * while kiosk mode is on, the old PIN first). The page ends with "Display mode is always on in
  * kiosk". Everything it starts runs in the app's scope, so leaving the page never cuts it short.
@@ -91,6 +100,10 @@ fun KioskPage(settings: PianoSettings) {
         enabled = on || (status.owner && settings.kioskPinSet),
         note = KioskPageCopy.switchNote(on, status, settings.kioskPinSet),
     )
+    KioskPageCopy.explanation(on, status, settings.kioskPinSet)?.let {
+        NoteLine(it)
+        HairlineDivider(startInset = 16.dp)
+    }
     if (on && status.unlockedForNow) {
         ActionRow(note = KioskPageCopy.LOCK_AGAIN_NOTE) { ActionButton("Lock again", onClick = kiosk::relock) }
     } else if (on) {

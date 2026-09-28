@@ -39,13 +39,19 @@ class KioskExitTest {
     }
 
     @Test
-    fun `the switch says what is missing, what kiosk mode does, or what Android kept`() {
+    fun `the switch says what is missing, and the page what kiosk mode does or what Android kept`() {
         val owner = KioskStatus(checked = true, owner = true)
-        assertEquals(KioskPageCopy.MAKE_DEVICE_OWNER, KioskPageCopy.switchNote(on = false, KioskStatus(checked = true), pinSet = true))
+        val notOwner = KioskStatus(checked = true)
+        assertEquals(KioskPageCopy.MAKE_DEVICE_OWNER, KioskPageCopy.switchNote(on = false, notOwner, pinSet = true))
+        assertNull(KioskPageCopy.explanation(on = false, notOwner, pinSet = true))
         assertEquals(SET_A_PIN_FIRST, KioskPageCopy.switchNote(on = false, owner, pinSet = false))
-        assertEquals("before it comes on, the way out", KioskPageCopy.WHAT_IT_DOES, KioskPageCopy.switchNote(on = false, owner, pinSet = true))
-        assertNull("once on, the page says no more about the way out", KioskPageCopy.switchNote(on = true, owner, pinSet = true))
-        assertEquals(KioskPageCopy.SCREEN_LOCK_KEPT, KioskPageCopy.switchNote(on = true, owner.copy(keyguardKept = true), pinSet = true))
-        assertEquals("Android refused kiosk mode.", KioskPageCopy.switchNote(on = false, owner.copy(problem = "Android refused kiosk mode."), pinSet = true))
+        assertNull(KioskPageCopy.switchNote(on = false, owner, pinSet = true))
+        assertEquals("before it comes on, the way out", KioskPageCopy.WHAT_IT_DOES, KioskPageCopy.explanation(on = false, owner, pinSet = true))
+        assertNull("once on, the page says no more about the way out", KioskPageCopy.explanation(on = true, owner, pinSet = true))
+        assertNull(KioskPageCopy.switchNote(on = true, owner, pinSet = true))
+        assertEquals(KioskPageCopy.SCREEN_LOCK_KEPT, KioskPageCopy.explanation(on = true, owner.copy(keyguardKept = true), pinSet = true))
+        val refused = owner.copy(problem = "Android refused kiosk mode.")
+        assertEquals("Android refused kiosk mode.", KioskPageCopy.switchNote(on = false, refused, pinSet = true))
+        assertNull(KioskPageCopy.explanation(on = false, refused, pinSet = true))
     }
 }
