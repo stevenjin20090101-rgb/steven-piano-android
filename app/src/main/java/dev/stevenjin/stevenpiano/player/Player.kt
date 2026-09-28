@@ -133,8 +133,7 @@ class Player(
 
     /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue] (shuffled when shuffle is on). A channel ends. */
     fun play(pieceId: Long, queue: List<Long> = listOf(pieceId)) {
-        setChannel(null)
-        setQueue(Queue.startingAt(pieceId, queue, this.queue, random))
+        setQueue(Queue.startingAt(pieceId, queue, this.queue, random), channel = null)
         startCurrent()
     }
 
@@ -145,9 +144,10 @@ class Player(
      */
     override fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String?) {
         if (pieceIds.isEmpty()) return
-        setQueue(Queue.all(pieceIds, shuffle, queue, random))
-        channelUids = if (channel == null) emptySet() else queue.entries.mapTo(HashSet()) { it.uid }
-        setChannel(channel)
+        val all = Queue.all(pieceIds, shuffle, queue, random)
+        channelUids = if (channel == null) emptySet() else all.entries.mapTo(HashSet()) { it.uid }
+        // The queue and its channel in one update: a watcher never sees the new queue without its channel.
+        setQueue(all, channel)
         startCurrent()
     }
 
@@ -181,8 +181,7 @@ class Player(
     fun skipToQueueEntry(uid: Long) {
         val skipped = queue.skipTo(uid)
         if (skipped === queue) return
-        if (uid !in channelUids) setChannel(null)
-        setQueue(skipped)
+        setQueue(skipped, channel = if (uid in channelUids) _state.value.channel else null)
         startCurrent()
     }
 
@@ -335,11 +334,12 @@ class Player(
         _state.update { if (it.channel == channel) it else it.copy(channel = channel) }
     }
 
-    /** The queue changed: the UI, the service and the media session see it at once. */
-    private fun setQueue(changed: Queue) {
+    /** The queue changed (and with [channel], the channel with it): the UI, the service and the media session see it at once. */
+    private fun setQueue(changed: Queue, channel: String? = _state.value.channel) {
         queue = changed
+        if (channel == null) channelUids = emptySet()
         val snapshot = changed.snapshot()
-        _state.update { if (it.queue == snapshot) it else it.copy(queue = snapshot) }
+        _state.update { if (it.queue == snapshot && it.channel == channel) it else it.copy(queue = snapshot, channel = channel) }
     }
 
     private fun startCurrent() {

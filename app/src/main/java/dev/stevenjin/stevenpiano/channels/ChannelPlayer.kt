@@ -32,16 +32,23 @@ interface ChannelDeck {
     fun setVelocity(pct: Int)
 }
 
+/**
+ * How loud the piano plays: its [volume] (0-100 %) and whether [fullPower] is on (every note at
+ * full force). The firmware turns Full power off whenever the volume goes below 100, so the two
+ * are put back together.
+ */
+data class PianoLoudness(val volume: Int, val fullPower: Boolean)
+
 /** The piano's own volume, where its firmware offers it (`PianoSettingsRepository`; a fake in tests). */
 interface PianoVolume {
-    /** The piano's volume now, 0-100 %, or null when it has none to offer (not connected, older firmware). */
-    fun current(): Int?
+    /** How loud the piano plays now, or null when it has no volume to offer (not connected, older firmware). */
+    fun current(): PianoLoudness?
 
     /** Sets the piano's volume for now: never saved on the piano. */
     fun hold(pct: Int)
 
-    /** Puts [pct] back after [hold], unless the person has set the volume since; never saved either. */
-    fun release(pct: Int)
+    /** Puts [previous] back after [hold], unless the person has set it since; never saved either. */
+    fun release(previous: PianoLoudness)
 }
 
 /**
@@ -55,8 +62,9 @@ interface PianoVolume {
  *
  * The channel's volume ([volumeOf], 70 % unless the person set it) goes to the piano's own volume
  * when the piano offers one ([piano]), else to the app's velocity (50 + volume / 2 %); when the
- * channel ends, what it replaced comes back (the velocity only if the person has not changed it
- * meanwhile), and the piano is never asked to save either. A channel that follows another keeps the
+ * channel ends, what it replaced comes back (the piano's volume and Full power together; the
+ * velocity only if the person has not changed it meanwhile), and the piano is never asked to save
+ * either. A channel that follows another keeps the
  * first one's "what to put back". A pool of fewer than [ChannelSummary.MIN_POOL] pieces does not play.
  * Call on [scope]'s thread (the main thread), after [start].
  */
@@ -72,6 +80,9 @@ class ChannelPlayer(
     private var restore: Restore? = null
     private var started = false
 
+    /** A channel is being handed to the player: what the player says meanwhile is not about it yet. */
+    private var starting = false
+
     /** Follows the player from now on: tops the queue up, and notices the channel ending. */
     fun start() {
         if (started) return
@@ -84,9 +95,15 @@ class ChannelPlayer(
         val pool = pools(key)?.distinct() ?: return false
         if (pool.size < ChannelSummary.MIN_POOL) return false
         val next = Session(key, pool)
-        applyVolume(volumeOf(key))
-        session = next
-        deck.playAll(next.deal(FIRST), shuffle = false, channel = key)
+        starting = true
+        try {
+            applyVolume(volumeOf(key))
+            session = next
+            deck.playAll(next.deal(FIRST), shuffle = false, channel = key)
+        } finally {
+            starting = false
+        }
+        onState(deck.state.value)
         return true
     }
 
@@ -105,6 +122,7 @@ class ChannelPlayer(
     }
 
     private fun onState(state: PlayerState) {
+        if (starting) return   // the player may speak before it has taken the channel (a watcher on the main thread runs at once)
         val current = session ?: return
         if (state.channel != current.key) {
             session = null
@@ -130,7 +148,7 @@ class ChannelPlayer(
 
     private fun restoreVolume() {
         when (val put = restore) {
-            is Restore.Piano -> piano.release(put.pct)
+            is Restore.Piano -> piano.release(put.loudness)
             is Restore.Velocity -> if (deck.state.value.velocityPct == put.applied) deck.setVelocity(put.pct)
             null -> Unit
         }
@@ -139,7 +157,7 @@ class ChannelPlayer(
 
     /** What a channel replaced, to put back when it ends. */
     private sealed interface Restore {
-        class Piano(val pct: Int) : Restore
+        class Piano(val loudness: PianoLoudness) : Restore
 
         class Velocity(val pct: Int, var applied: Int) : Restore
     }

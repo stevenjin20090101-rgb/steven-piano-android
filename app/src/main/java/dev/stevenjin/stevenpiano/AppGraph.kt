@@ -22,6 +22,7 @@ import dev.stevenjin.stevenpiano.channels.Channel
 import dev.stevenjin.stevenpiano.channels.ChannelPlayer
 import dev.stevenjin.stevenpiano.channels.ChannelPools
 import dev.stevenjin.stevenpiano.channels.Channels
+import dev.stevenjin.stevenpiano.channels.PianoLoudness
 import dev.stevenjin.stevenpiano.channels.PianoVolume
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.PieceFiles
@@ -175,14 +176,23 @@ class AppGraph(private val app: Application) {
         )
     }
 
-    /** The piano's volume for a channel: held while it plays and put back after, never saved on the piano. */
+    /**
+     * The piano's volume for a channel: held while it plays and put back after, with Full power
+     * (which the firmware turns off below 100 %) as it was; never saved on the piano.
+     */
     private val pianoVolume = object : PianoVolume {
-        override fun current(): Int? =
-            (pianoSettings.state.value as? PianoState.Ready)?.values?.get(PIANO_VOLUME)?.toFloatOrNull()?.roundToInt()
+        override fun current(): PianoLoudness? {
+            val values = (pianoSettings.state.value as? PianoState.Ready)?.values ?: return null
+            val volume = values[PIANO_VOLUME]?.toFloatOrNull()?.roundToInt() ?: return null
+            return PianoLoudness(volume, fullPower = values[PIANO_FULL_POWER] == "1")
+        }
 
         override fun hold(pct: Int) = pianoSettings.holdTemporarily(PIANO_VOLUME, pct)
 
-        override fun release(pct: Int) = pianoSettings.releaseTemporary(PIANO_VOLUME, pct)
+        override fun release(previous: PianoLoudness) {
+            pianoSettings.releaseTemporary(PIANO_VOLUME, previous.volume)
+            if (previous.fullPower) pianoSettings.releaseTemporary(PIANO_FULL_POWER, 1)
+        }
     }
 
     /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, the test server [UpdateOverride] names. */
@@ -359,6 +369,9 @@ class AppGraph(private val app: Application) {
 
         /** The piano's own volume setting, which a channel holds while it plays. */
         const val PIANO_VOLUME = "volume"
+
+        /** The piano's Full power, which the firmware turns off when the volume goes below 100. */
+        const val PIANO_FULL_POWER = "fullpower"
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L

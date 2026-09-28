@@ -9,21 +9,31 @@
 
 package dev.stevenjin.stevenpiano.channels
 
+import dev.stevenjin.stevenpiano.ble.FakePianoLink
+import dev.stevenjin.stevenpiano.midi.SmfBuilder
+import dev.stevenjin.stevenpiano.midi.SmfParser
+import dev.stevenjin.stevenpiano.player.PieceSource
+import dev.stevenjin.stevenpiano.player.PlayablePiece
+import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.Executors
 import kotlin.random.Random
 
 /**
@@ -118,6 +128,16 @@ class ChannelPlayerTest {
     }
 
     @Test
+    fun `a piano at full power gets its full power back with its volume`() {
+        piano.volume = 100
+        piano.fullPower = true
+        pools["calm"] = (1L..10L).toList()
+        channels.play("calm")
+        channels.stop()
+        assertEquals(listOf("hold 70", "release 100 full"), piano.calls)
+    }
+
+    @Test
     fun `without a piano volume the channel sets the app's velocity, and puts it back unless the person changed it`() {
         volumes["calm"] = 60
         pools["calm"] = (1L..10L).toList()
@@ -167,6 +187,47 @@ class ChannelPlayerTest {
         assertEquals(100, ChannelPlayer.velocityFor(250))
     }
 
+    @Test
+    fun `on the real player a channel keeps its run from its first moment, with a watcher that runs at once`() = runBlocking {
+        // The app's watcher runs on Dispatchers.Main.immediate: an update made on the main thread
+        // reaches it at once, in the middle of whatever made it. Unconfined does the same here.
+        val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val playerScope = CoroutineScope(SupervisorJob() + main)
+        val player = Player(FakePianoLink(), ShortPieces, playerScope, prepareThread = {})
+        val piano = FakePiano().apply { volume = 100 }
+        val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val channels = ChannelPlayer(player, { (1L..40L).toList() }, { 70 }, piano, watcher, Random(3))
+        try {
+            withContext(main) {
+                channels.start()
+                assertTrue(channels.play("calm"))
+            }
+            assertEquals("calm", channels.playing)
+            assertEquals("calm", player.state.value.channel)
+            assertEquals("held, and not let go straight after", listOf("hold 70"), piano.calls)
+            assertEquals(25, player.state.value.queue.ids.size)
+            withContext(main) { player.stopAndFlush(300) }
+            assertNull(channels.playing)
+            assertEquals(listOf("hold 70", "release 100"), piano.calls)
+        } finally {
+            watcher.cancel()
+            playerScope.cancel()
+            main.close()
+        }
+    }
+
+    /** Every piece a short note, for the real player. */
+    private object ShortPieces : PieceSource {
+        override suspend fun load(pieceId: Long): PlayablePiece = PlayablePiece(
+            pieceId,
+            "Piece $pieceId",
+            "Composer",
+            SmfParser.parse(SmfBuilder(format = 0, division = 1000).track { tempo(0, 1_000_000); noteOn(0, 60); noteOff(5_000, 60) }.build()),
+        )
+
+        override suspend fun markPlayed(pieceId: Long) = Unit
+    }
+
     /** A player whose queue the test moves on by hand. */
     private class FakeDeck : ChannelDeck {
         private val flow = MutableStateFlow(PlayerState())
@@ -200,16 +261,17 @@ class ChannelPlayerTest {
     /** The piano's volume, as the console would see the calls. */
     private class FakePiano : PianoVolume {
         var volume: Int? = null
+        var fullPower = false
         val calls = ArrayList<String>()
 
-        override fun current(): Int? = volume
+        override fun current(): PianoLoudness? = volume?.let { PianoLoudness(it, fullPower) }
 
         override fun hold(pct: Int) {
             calls += "hold $pct"
         }
 
-        override fun release(pct: Int) {
-            calls += "release $pct"
+        override fun release(previous: PianoLoudness) {
+            calls += "release ${previous.volume}" + if (previous.fullPower) " full" else ""
         }
     }
 }
