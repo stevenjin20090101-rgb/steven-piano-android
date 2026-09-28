@@ -116,13 +116,20 @@ object AmtTokenizer {
      * package: a half-way note after a tempo change, or next to a message the parser doesn't keep
      * (a program change or text alone at its tick), can land one tick (10 ms) away; overlapping
      * strikes of one key pair as the piano plays them, not first-in first-out.
+     *
+     * At most [limit] notes are read ([MAX_NOTES] by default; audit delta 2): a crafted file within the
+     * importer's caps can hold a million notes in its first seconds, which read whole (as boxed lists)
+     * took 151 MB for the compose sheet's key and tempo and 377 MB for a prompt. The notes past the
+     * limit are left out as the notes past [seconds] are.
      */
-    fun notes(piece: MidiPiece, seconds: Double = Double.POSITIVE_INFINITY): List<SeedNote> {
+    fun notes(piece: MidiPiece, seconds: Double = Double.POSITIVE_INFINITY, limit: Int = MAX_NOTES): List<SeedNote> {
+        require(limit >= 0) { "limit $limit" }
         val events = piece.events
         val tempo = piece.tempoMap
-        val ons = ArrayList<Double>()
-        val offs = ArrayList<Double>()
-        val keys = ArrayList<Int>()
+        var ons = DoubleArray(INITIAL_NOTES)
+        var offs = DoubleArray(INITIAL_NOTES)
+        var keys = IntArray(INITIAL_NOTES)
+        var count = 0
         val open = IntArray(16 * 128) { -1 }
         var openCount = 0
         var clock = 0.0
@@ -152,23 +159,38 @@ object AmtTokenizer {
             }
             if (command == 0x90) {
                 if (first.isNaN()) first = clock
-                if (clock - first <= seconds) {
-                    open[source] = ons.size
+                if (clock - first <= seconds && count < limit) {
+                    if (count == ons.size) {
+                        val grown = minOf(limit, ons.size * 2)
+                        ons = ons.copyOf(grown)
+                        offs = offs.copyOf(grown)
+                        keys = keys.copyOf(grown)
+                    }
+                    open[source] = count
                     openCount++
-                    ons += clock
-                    offs += Double.NaN
-                    keys += events.data1(i)
+                    ons[count] = clock
+                    offs[count] = Double.NaN
+                    keys[count] = events.data1(i)
+                    count++
                 } else {
                     past = true
                 }
             }
             if (past && openCount == 0) break
         }
-        return List(ons.size) { i ->
+        return List(count) { i ->
             val off = offs[i]
             SeedNote(ons[i], if (off.isNaN()) ons[i] + Amt.UNKNOWN_DURATION.toDouble() / Amt.TICKS_PER_SECOND else off, keys[i])
         }
     }
+
+    /**
+     * The most notes a seed is read to (audit delta 2): a prompt keeps at most 340 events, and fifteen
+     * seconds of any piano music hold far fewer notes than this (a dense étude, some 300).
+     */
+    const val MAX_NOTES = 4_096
+
+    private const val INITIAL_NOTES = 256
 
     /**
      * [notes] as events, the package's `compound_to_events`: the onset (less [origin], times [scale])

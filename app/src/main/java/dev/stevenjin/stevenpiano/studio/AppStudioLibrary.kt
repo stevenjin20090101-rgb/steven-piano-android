@@ -16,6 +16,7 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.imports.ImportItem
 import dev.stevenjin.stevenpiano.data.imports.IndexCsv
 import dev.stevenjin.stevenpiano.data.imports.OpenedSource
+import dev.stevenjin.stevenpiano.midi.SmfException
 import dev.stevenjin.stevenpiano.studio.compose.SeedPiece
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
 import kotlinx.coroutines.Dispatchers
@@ -58,13 +59,17 @@ class AppStudioLibrary(private val graph: AppGraph) : StudioLibrary {
 
 /**
  * [SeedSource] over the library (v1.7 — M24): a seed is a piece of the library, read and parsed as the
- * player reads it; nothing from anywhere else, and no text of anyone's, reaches the composing model.
+ * player reads it; nothing from anywhere else, and no text of anyone's, reaches the composing model. A
+ * piece that is gone, too large, or no longer parses (a file damaged on disk) is no seed (audit delta 2:
+ * the parser's refusal used to escape to the compose sheet).
  */
 class LibrarySeeds(private val library: LibraryRepository) : SeedSource {
     override suspend fun seed(pieceId: Long): SeedPiece? = try {
         val piece = library.load(pieceId)
         SeedPiece(piece.title, piece.composer.takeIf { it.isNotBlank() }, piece.midi)
     } catch (e: PieceUnavailableException) {
+        null
+    } catch (e: SmfException) {
         null
     }
 

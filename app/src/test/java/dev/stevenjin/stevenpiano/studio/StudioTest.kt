@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.studio
 
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
+import dev.stevenjin.stevenpiano.midi.SmfException
 import dev.stevenjin.stevenpiano.midi.SmfParser
 import dev.stevenjin.stevenpiano.player.PlayerState
 import dev.stevenjin.stevenpiano.studio.compose.Amt
@@ -221,6 +222,7 @@ class StudioTest {
         override suspend fun seed(pieceId: Long): SeedPiece? = when (pieceId) {
             5L -> SeedPiece("Prelude in C major", "Johann Sebastian Bach", ComposerFixtures.bach)
             6L -> SeedPiece("Silence", null, SmfParser.parse(SmfBuilder(format = 0).track { tempo(0, 500_000) }.build()))
+            7L -> throw SmfException("This file isn't MIDI.")   // a piece whose file no longer parses
             else -> null
         }
 
@@ -502,5 +504,19 @@ class StudioTest {
         assertEquals(null, studio.seedChoice(99L))
         defaultSeed = null
         assertEquals(null, studio.seedChoice(null))
+    }
+
+    @Test
+    fun `a seed that can't be read is no choice, and the sheet's call never throws (audit delta 2)`() = runBlocking {
+        val studio = studio()
+        // Before the audit the parser's refusal came out of seedChoice, into the compose sheet's produceState.
+        assertEquals(null, studio.seedChoice(7L))
+        defaultSeed = 7L
+        assertEquals(null, studio.seedChoice(null))
+        studio.download(tunes)
+        studio.settled()
+        val job = studio.compose(order(pieceId = 7L))
+        assertEquals("a job fails in words, Studio goes on", JobState.Failed, studio.settled().single { it.id == job.id }.state)
+        assertTrue(added.isEmpty())
     }
 }

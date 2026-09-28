@@ -162,13 +162,22 @@ class Studio(
 
     /**
      * The seed piece [pieceId] (the default one when null) as the compose sheet shows it, with its key
-     * and tempo worked out off the main thread; null when there is none, or it can't be read.
+     * and tempo; null when there is none, or it can't be read. All of it off the main thread (the piece
+     * is parsed there too), and it never throws but for cancellation: the compose sheet and the panel
+     * call it with nothing around it (audit delta 2).
      */
-    suspend fun seedChoice(pieceId: Long?): SeedChoice? {
-        val id = pieceId ?: seeds.defaultPieceId() ?: return null
-        val seed = seeds.seed(id) ?: return null
-        val facts = withContext(Dispatchers.Default) { PromptBuilder.facts(seed.midi) }
-        return SeedChoice(id, seed.title, seed.composer, facts)
+    suspend fun seedChoice(pieceId: Long?): SeedChoice? = withContext(Dispatchers.Default) {
+        try {
+            val id = pieceId ?: seeds.defaultPieceId() ?: return@withContext null
+            val seed = seeds.seed(id) ?: return@withContext null
+            SeedChoice(id, seed.title, seed.composer, PromptBuilder.facts(seed.midi))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } catch (e: OutOfMemoryError) {
+            null
+        }
     }
 
     /** Stops job [id]: the one running between buffers, windows or tokens, one waiting before it starts. */
