@@ -666,6 +666,15 @@ class WebServerTest {
         assertEquals(200, http.get("/api/public/catalogue").status)
         assertEquals(202, http.api("POST", "/api/public/request", """{"pieceId":1}""", panel = false).status)
         assertEquals(404, handshake(http, server.listeningPort, cookie = null).status)
+        // Every route of the panel's is no route here, Studio's among them (audit delta 2: guests reach nothing Studio).
+        val panelRoutes = server.routes.filter { it.access != WebServer.Access.PUBLIC }
+        assertTrue(panelRoutes.map { it.sample }.containsAll(listOf("/api/studio/audio?name=a.wav", "/api/studio/compose", "/api/studio/jobs/1/cancel", "/api/studio/seed")))
+        for (route in panelRoutes) {
+            val (path, body) = sample(route)
+            val answer = if (route.method.name == "GET") http.get(path) else http.api(route.method.name, path, body)
+            assertEquals("${route.method} $path on the guests' listener", 404, answer.status)
+        }
+        assertTrue("nothing reached the app but the guest's request", backend.recordings.isEmpty() && backend.composed.isEmpty())
     }
 
     @Test
