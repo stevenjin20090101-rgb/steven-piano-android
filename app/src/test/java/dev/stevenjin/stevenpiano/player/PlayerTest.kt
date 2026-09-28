@@ -337,6 +337,45 @@ class PlayerTest {
         assertNull(channel())
     }
 
+    @Test
+    fun `locked for a firmware update, nothing plays or sounds until unlocked, and the lock reads as the problem`() = runBlocking {
+        source.pieces[1] = piece(60, 5_000)
+        source.pieces[2] = piece(62, 5_000)
+        onMain { player.play(1, listOf(1, 2)) }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        withTimeout(2_000) { while (link.messages.isEmpty()) delay(5) }
+        onMain { player.lock("Updating the piano") }
+        assertTrue(onMain { player.locked })
+        assertEquals("Updating the piano", player.state.value.problem)
+        assertTrue(withContext(main) { player.stopQuietly(300) })
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
+        assertEquals("the stop sequence went, and was written", listOf("B0 40 00", "B0 7B 00"), link.messages.takeLast(2))
+        link.clear()
+        onMain {
+            player.resume()
+            player.togglePlayPause()
+            player.next()
+            player.previous()
+            player.seek(1_000_000)
+            player.play(2)
+            player.playAll(listOf(1, 2), shuffle = false, channel = "calm")
+            player.addToQueue(listOf(2))
+            player.liveNoteOn(60, 100)
+            player.liveSustain(true)
+        }
+        delay(300)
+        assertEquals("nothing reaches the piano while locked", emptyList<String>(), link.messages)
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
+        assertEquals("the queue is as it was", 1L, player.state.value.queue.ids.first())
+        assertNull(player.state.value.channel)
+
+        onMain { player.unlock() }
+        assertNull(player.state.value.problem)
+        onMain { player.play(2) }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing && it.piece?.pieceId == 2L } }
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
     private class FakeSource : PieceSource {
         val pieces = ConcurrentHashMap<Long, MidiPiece>()
         val played = CopyOnWriteArrayList<Long>()

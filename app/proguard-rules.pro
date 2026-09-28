@@ -17,3 +17,8 @@
     public static int d(...);
     public static int i(...);
 }
+
+# EdDSA-Java (net.i2p.crypto:eddsa 0.3.0, v1.6.1 — M21) also takes a JDK sun.security.x509.X509Key in
+# EdDSAEngine.initVerify, a class Android doesn't have. The app hands it the library's own
+# EdDSAPublicKey (firmware/Ed25519.kt), so that branch never runs. The library uses no reflection.
+-dontwarn sun.security.x509.X509Key

@@ -90,6 +90,27 @@ interface GattConnection {
     /** A piece of a console line to RX, written without response. */
     fun writeConsole(chunk: ByteArray): WriteResult
 
+    /**
+     * After discovery: whether Device Information's Firmware Revision String (0x180A/0x2A26) is
+     * there (firmware 2.0.0 and later, BLE_OTA.md › 2).
+     */
+    fun hasFirmwareVersion(): Boolean = false
+
+    /** Reads the Firmware Revision String, answered by [GattEvents.onFirmwareVersion]; false when the read could not start. */
+    fun readFirmwareVersion(): Boolean = false
+
+    /** After discovery: whether the update service (Control with its CCCD, and Data) is there (BLE_OTA.md › 3). */
+    fun hasOta(): Boolean = false
+
+    /** Switches on Control's notifications: the CCCD write, answered by [GattEvents.onOtaSubscribed]. */
+    fun subscribeOta(): WriteResult = WriteResult.Failed
+
+    /** A frame to Control, written with response: answered by [GattEvents.onWriteDone]. */
+    fun writeOtaControl(frame: ByteArray): WriteResult = WriteResult.Failed
+
+    /** A frame to Data, written without response. */
+    fun writeOtaData(frame: ByteArray): WriteResult = WriteResult.Failed
+
     fun disconnect()
 
     fun close()
@@ -116,6 +137,15 @@ interface GattEvents {
 
     /** The GAP Device Name read is done: [name] as UTF-8 when [status] is 0 (GATT_SUCCESS), else null. */
     fun onDeviceName(connection: GattConnection, name: String?, status: Int)
+
+    /** The Firmware Revision String read is done: its [value] when [status] is 0, else null. */
+    fun onFirmwareVersion(connection: GattConnection, value: ByteArray?, status: Int)
+
+    /** Control's CCCD write is done. */
+    fun onOtaSubscribed(connection: GattConnection, success: Boolean)
+
+    /** A notification from Control; [data] is the caller's own copy. */
+    fun onOtaNotified(connection: GattConnection, data: ByteArray)
 }
 
 /** The link's own thread: runs actions in order, now or after a delay. */

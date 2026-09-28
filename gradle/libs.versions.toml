@@ -32,6 +32,8 @@ haze = "1.7.2"
 # The web panel (v1.5.1 — M18): NanoHTTPD and its WebSocket half (BSD-3-Clause), the QR code (MIT).
 nanohttpd = "2.3.1"
 qrcodeKotlin = "4.5.0"
+# The piano's firmware updates (v1.6.1 — M21): Ed25519 checks below Android 13, whose platform has none (CC0).
+eddsa = "0.3.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -62,6 +64,8 @@ nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
 nanohttpd-websocket = { module = "org.nanohttpd:nanohttpd-websocket", version.ref = "nanohttpd" }
 # The request poster's QR code (MIT): only its encoder is used (web/Poster.kt); Gradle picks the Android artifact, qrcode-kotlin-android.
 qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcodeKotlin" }
+# EdDSA-Java (CC0): checks a firmware release's Ed25519 signature where the platform can't; only firmware/Ed25519.kt names it.
+eddsa = { module = "net.i2p.crypto:eddsa", version.ref = "eddsa" }
 # Unit tests only: the real org.json on the JVM, where android.jar's is a stub (the update manifest is read with it).
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 # Unit tests only: SQLite on the JVM (Apache-2.0), for SchemaV3Test's migration of a 1.4 database with its rows.

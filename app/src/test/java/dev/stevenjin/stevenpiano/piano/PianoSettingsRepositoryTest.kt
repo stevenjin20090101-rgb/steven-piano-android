@@ -75,6 +75,24 @@ class PianoSettingsRepositoryTest {
     }
 
     @Test
+    fun `a fact is read again on request, and nothing else is sent for a name that isn't one`() = runTest {
+        piano.setFact("ota", "pending")
+        val repo = connected()
+        assertEquals("pending", repo.ready().facts["ota"])
+        console.clearSent()
+        piano.setFact("ota", "confirmed")
+        repo.readFact("ota")
+        runCurrent()
+        assertEquals(listOf("get !ota"), console.sent)
+        assertEquals("confirmed", repo.ready().facts["ota"])
+        repo.readFact("ota; save")
+        repo.readFact("")
+        repo.readFact("!ota")
+        runCurrent()
+        assertEquals(listOf("get !ota"), console.sent)
+    }
+
+    @Test
     fun `a piano without the console is Unsupported at once`() = runTest {
         val repo = connected(with = null)
         assertEquals(PianoState.Unsupported, repo.state.value)

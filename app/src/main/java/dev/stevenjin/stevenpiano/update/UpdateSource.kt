@@ -27,16 +27,26 @@ import java.util.Locale
  * [local]: debug builds on an emulator only (see `UpdateOverride`): one origin (scheme, host, port)
  * for the manifest and its file, plain HTTP allowed, so the updater can be exercised against a
  * server on the Mac. Release builds never make one.
+ *
+ * [firmware] (v1.6.1 — M21): the piano's firmware releases, from their own repository
+ * ([FIRMWARE_REPOSITORY], `firmware/docs/BLE_OTA.md` › 10 and 15): the manifest at
+ * [FIRMWARE_MANIFEST_URL] and nothing else on `raw.githubusercontent.com`, binaries only under
+ * [FIRMWARE_DOWNLOAD_PREFIX] on `github.com`, and GitHub's two asset hosts for the redirect. Its own
+ * cap ([MAX_FIRMWARE_BYTES]), apart from the APK's. The two allow-lists never overlap: the app's
+ * source refuses the firmware's addresses and the firmware's refuses the app's.
  */
 class UpdateSource private constructor(
     /** The manifest's address. */
     val manifestUrl: String,
     private val origin: Origin?,
+    /** The piano's firmware releases rather than the app's ([firmware]). */
+    private val forFirmware: Boolean = false,
 ) {
     private data class Origin(val scheme: String, val host: String, val port: Int)
 
     /** Whether a request, or a redirect of one, may go to [url]. */
     fun allowsHop(url: String): Boolean {
+        if (forFirmware) return allowsFirmwareManifest(url) || allowsFirmwareBinary(url)
         val uri = parse(url) ?: return false
         if (origin != null) return originOf(uri) == origin
         if (!secure(uri)) return false
@@ -55,6 +65,7 @@ class UpdateSource private constructor(
      * with no query or fragment; with a [local] source, an `.apk` on its origin.
      */
     fun allowsApk(url: String): Boolean {
+        if (forFirmware) return false
         val uri = parse(url) ?: return false
         if (uri.rawQuery != null || uri.rawFragment != null) return false
         val path = uri.rawPath.orEmpty()
@@ -86,6 +97,62 @@ class UpdateSource private constructor(
 
         /** The app's updates, from its GitHub repository. */
         val production = UpdateSource(MANIFEST_URL, origin = null)
+
+        /**
+         * The piano's firmware repository (renamed on GitHub on 2026-09-27; BLE_OTA.md › 15). Exact
+         * paths only: a redirect from an old name to this one is never followed.
+         */
+        const val FIRMWARE_REPOSITORY = "stevenjin20090101-rgb/Steven-Jin-Player-Piano"
+
+        /** The firmware's release manifest: this address exactly. */
+        const val FIRMWARE_MANIFEST_URL = "https://$MANIFEST_HOST/$FIRMWARE_REPOSITORY/main/releases/latest.json"
+
+        /** The firmware's binaries: release assets of its repository, `/<owner>/<repo>/releases/download/<tag>/<file>`. */
+        const val FIRMWARE_DOWNLOAD_PREFIX = "/$FIRMWARE_REPOSITORY/releases/download/"
+
+        /**
+         * The largest firmware image the app downloads: today's is about 0.97 MB and a slot holds
+         * 6.25 MB (BLE_OTA.md › 1). Its own cap, apart from the APK's [UpdateManifest.MAX_APK_BYTES].
+         */
+        const val MAX_FIRMWARE_BYTES = 4L * 1024 * 1024
+
+        /** The piano's firmware releases: their manifest, their binaries and GitHub's asset hosts, nothing else. */
+        val firmware = UpdateSource(FIRMWARE_MANIFEST_URL, origin = null, forFirmware = true)
+
+        /** Whether [url] is the firmware's release manifest: [FIRMWARE_MANIFEST_URL] exactly (HTTPS, port 443, no query or fragment). */
+        fun allowsFirmwareManifest(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (!secure(uri) || uri.rawQuery != null || uri.rawFragment != null) return false
+            return uri.host.lowercase(Locale.ROOT) == MANIFEST_HOST && uri.rawPath == "/$FIRMWARE_REPOSITORY/main/releases/latest.json"
+        }
+
+        /**
+         * Whether a firmware download, or a redirect of one, may go to [url]: a release asset of the
+         * firmware's repository on `github.com` ([FIRMWARE_DOWNLOAD_PREFIX]`<tag>/<file>`, plain names), or
+         * one of the two hosts GitHub hands a release's file over from ([ASSET_HOSTS], any path: signed,
+         * expiring addresses). HTTPS on port 443 only.
+         */
+        fun allowsFirmwareBinary(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (!secure(uri)) return false
+            return when (uri.host.lowercase(Locale.ROOT)) {
+                DOWNLOAD_HOST -> releaseAsset(uri.rawPath.orEmpty(), FIRMWARE_DOWNLOAD_PREFIX)
+                in ASSET_HOSTS -> true
+                else -> false
+            }
+        }
+
+        /**
+         * Whether a firmware manifest may name [url] as its binary: a `.bin` release asset of the
+         * firmware's repository on `github.com`, with no query or fragment. An asset host is never
+         * named directly (GitHub redirects there by itself).
+         */
+        fun allowsFirmwareFile(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (uri.rawQuery != null || uri.rawFragment != null || !secure(uri)) return false
+            val path = uri.rawPath.orEmpty()
+            return uri.host.lowercase(Locale.ROOT) == DOWNLOAD_HOST && releaseAsset(path, FIRMWARE_DOWNLOAD_PREFIX) && path.endsWith(".bin")
+        }
 
         /**
          * A source at one origin for testing ([manifestUrl] and the files it names on the same
@@ -126,9 +193,9 @@ class UpdateSource private constructor(
             uri.scheme.equals("https", ignoreCase = true) && (uri.port == -1 || uri.port == HTTPS_PORT)
 
         /** `<prefix><tag>/<file>`, each a plain name (letters, digits, dot, dash, underscore; never `.` or `..`). */
-        private fun releaseAsset(path: String): Boolean {
-            if (!path.startsWith(DOWNLOAD_PREFIX)) return false
-            val rest = path.removePrefix(DOWNLOAD_PREFIX).split('/')
+        private fun releaseAsset(path: String, prefix: String = DOWNLOAD_PREFIX): Boolean {
+            if (!path.startsWith(prefix)) return false
+            val rest = path.removePrefix(prefix).split('/')
             return rest.size == 2 && rest.all { SEGMENT.matches(it) && it != "." && it != ".." }
         }
 

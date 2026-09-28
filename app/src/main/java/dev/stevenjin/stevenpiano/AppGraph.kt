@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.ble.BlePermissions
@@ -40,6 +41,12 @@ import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.diag.DiagnosticsExporter
 import dev.stevenjin.stevenpiano.diag.DiagnosticsText
 import dev.stevenjin.stevenpiano.diag.LinkLog
+import dev.stevenjin.stevenpiano.firmware.FakeFirmwareServer
+import dev.stevenjin.stevenpiano.firmware.FakeOta
+import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
+import dev.stevenjin.stevenpiano.firmware.FirmwarePlayer
+import dev.stevenjin.stevenpiano.firmware.FirmwareUpdater
+import dev.stevenjin.stevenpiano.firmware.batteryState
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
@@ -74,6 +81,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -225,9 +233,51 @@ class AppGraph(private val app: Application) {
     /**
      * Automatic update checks, run by the activity while it is started (after its first frame): at
      * once, then daily, while the switch is on and the device online. The switch is read from
-     * DataStore itself, so a check never runs on the default before the saved value is known.
+     * DataStore itself, so a check never runs on the default before the saved value is known. The
+     * piano's firmware is looked for on the same switch (v1.6.1 — M21), while a piano that can be
+     * updated is connected.
      */
-    suspend fun runUpdateSchedule() = updateChecker.runSchedule(settingsRepository.settings.map { it.checkForUpdates }.distinctUntilChanged())
+    suspend fun runUpdateSchedule() = coroutineScope {
+        val switch = settingsRepository.settings.map { it.checkForUpdates }.distinctUntilChanged()
+        launch { firmwareUpdater.runSchedule(switch) }
+        updateChecker.runSchedule(switch)
+    }
+
+    /**
+     * Debug builds on an emulator only: the fake firmware update `debug.stevenpiano.fakeota` names
+     * (its release, its image, RFC 8032's test key); null everywhere else.
+     */
+    private val fakeOta: FakeOta? by lazy { FakeOta.fromProperty() }
+
+    /**
+     * The piano's firmware updates over the Bluetooth link (v1.6.1 — M21): its signed releases from
+     * the firmware repository, checked against the author's key; on the emulator with a fake
+     * scenario, the scenario's release and the test key.
+     */
+    val firmwareUpdater: FirmwareUpdater by lazy {
+        val fake = fakeOta
+        FirmwareUpdater(
+            link = pianoLink,
+            pianoState = pianoSettings.state,
+            readFact = pianoSettings::readFact,
+            player = object : FirmwarePlayer {
+                override fun lock(reason: String) = player.lock(reason)
+
+                override fun unlock() = player.unlock()
+
+                override suspend fun stopForUpdate(timeoutMs: Long): Boolean = player.stopQuietly(timeoutMs)
+            },
+            server = if (fake != null) FakeFirmwareServer(FakeOta::fromProperty) else HttpUpdateServer(UpdateSource.firmware, log = debugLog(FIRMWARE_TAG)),
+            publicKey = if (fake != null) FirmwareKeys.rfc8032Test else FirmwareKeys.author,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            platformEd25519 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,   // asked first where it has Ed25519; Android 14 has none
+            online = network.online,
+            power = { batteryState(app) },
+            scope = appScope,
+            now = SystemClock::elapsedRealtime,
+            log = LinkLog::warn,
+        )
+    }
 
     /** The web panel (Piano › Remote control): its sessions, login guard, guests' requests, and where its service listens. */
     val web: WebPanel by lazy { WebPanel(app, this) }
@@ -326,6 +376,7 @@ class AppGraph(private val app: Application) {
         channelPools.summaries   // the channels' pools are worked out from the start, for the Library's first look
         channelPlayer.start()
         web.start()
+        firmwareUpdater.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
@@ -406,6 +457,7 @@ class AppGraph(private val app: Application) {
     private companion object {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"
+        const val FIRMWARE_TAG = "Firmware"
         const val UPDATES_DIR = "updates"
         const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L

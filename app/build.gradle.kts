@@ -141,6 +141,7 @@ dependencies {
     implementation(libs.nanohttpd)
     implementation(libs.nanohttpd.websocket)
     implementation(libs.qrcode.kotlin)
+    implementation(libs.eddsa)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

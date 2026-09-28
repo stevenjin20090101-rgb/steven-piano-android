@@ -10,8 +10,11 @@
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import androidx.compose.runtime.Immutable
+import dev.stevenjin.stevenpiano.firmware.FirmwareState
+import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.settings.PianoSettings
+import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
@@ -52,13 +55,21 @@ data class GroupSummaries(
 
         /**
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
-         * then picks the roll's style); [web] where the web panel listens.
+         * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
+         * [firmwareVersion] (Device Information's, v1.6.1 — M21) for Firmware and status.
          */
-        fun from(piano: PianoState, settings: PianoSettings, wide: Boolean, web: WebStatus = WebStatus()): GroupSummaries = GroupSummaries(
+        fun from(
+            piano: PianoState,
+            settings: PianoSettings,
+            wide: Boolean,
+            web: WebStatus = WebStatus(),
+            firmwareUpdate: FirmwareState = FirmwareState.Idle,
+            firmwareVersion: String? = null,
+        ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
             pedal = pedal(piano),
-            firmware = firmware(piano),
+            firmware = firmware(piano, firmwareUpdate, firmwareVersion),
             playback = playback(settings),
             display = display(settings, wide),
             remote = remote(settings, web),
@@ -97,6 +108,17 @@ data class GroupSummaries(
         /** The piano's firmware version, as it reports it. */
         fun firmware(piano: PianoState): String =
             (piano as? PianoState.Ready)?.facts?.get("fw")?.trim()?.takeIf { it.isNotEmpty() } ?: UNKNOWN
+
+        /**
+         * Firmware and status with its update (v1.6.1 — M21): "Update available" while a newer release
+         * is known, "Updating…" while one is sent, else the release the piano reports ("2.0.0", from
+         * Device Information, or its dump's `!fw`), else what [firmware] reads.
+         */
+        fun firmware(piano: PianoState, update: FirmwareState, reported: String?): String = when {
+            update.busy -> FirmwareCopy.HUB_UPDATING
+            update.offered -> FirmwareCopy.HUB_AVAILABLE
+            else -> FirmwareVersion.parse(reported ?: (piano as? PianoState.Ready)?.facts?.get("fw"))?.release ?: firmware(piano)
+        }
 
         /** The pause before each piece, then the default tempo: "2 s pause · 100%", or "No pause · 100%". */
         fun playback(settings: PianoSettings): String {

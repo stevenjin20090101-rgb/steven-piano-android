@@ -1146,3 +1146,72 @@ QR code 120 mm wide in the ink with a quiet zone of four modules, the address in
 under it, and the byline. Printed, it is one page with the paper left as it is (no tint), centred
 on the sheet; Android's print dialog prints it from the tablet itself (a WebView of the app's own
 page: no browser, so it works in kiosk mode too).
+
+---
+
+# v1.6.1 — M21: updating the piano's firmware from the app
+
+Steven asked (2026-09-27) for the app to flash the piano's ESP32 itself, so that after the flash the
+Feel, Lighting and Pedal pages work on the real piano. It happens over the Bluetooth link the app
+already holds; the one flash that makes this possible, firmware 2.0.0, goes on over USB once. The
+firmware's side is `firmware/docs/BLE_OTA.md`. Everything above still holds.
+
+## Firmware and status › FIRMWARE
+
+- **The version.** "Piano firmware" and, as the piano's Device Information reports it, "2.0.0 ·
+  a1b2c3d" (the release, then the build it came from). "Unknown" while the piano isn't connected.
+  Connected to firmware older than 2.0.0, which has no version to report and can't take an update
+  over Bluetooth: "Unknown — this firmware has no version. Flash 2.0.0 over USB once." (the value
+  goes under its label, as long values do). The section comes from the link, not the console, so it
+  stands under the page's status line even where the piano offers no settings.
+- **Check for piano updates.** An outlined button in an action row, with what the last check found
+  under it: "Checking for piano updates…", "The piano's firmware is up to date.", "Version 2.1.0 is
+  available.", or why it couldn't ask ("Checking for piano updates needs an internet connection.",
+  "Couldn't reach the update server."). Greyed while no piano that can be updated is connected. The page
+  also checks as it opens (at most every ten minutes), and the app once a day while the piano is
+  connected and **Check for updates automatically** is on (the same switch as the app's own
+  updates).
+- **A release on offer.** "Piano firmware 2.1.0 is available" in Body, its notes in
+  `contentSecondary`, the filled **Update the piano to 2.1.0**, and under it "The piano goes quiet for
+  about two minutes. Keep the tablet near it." (or "Connect to the piano to update it."). Nothing red,
+  no badge: the hub's row says it.
+- **While it goes.** One line in `contentSecondary` with tabular figures over the progress hairline,
+  then an outlined **Cancel** for as long as Cancel still stops it: "Downloading · 0.9 MB",
+  "Checking the download…", "Sending · 38% · about 1 min left" ("less than a minute left" at the end;
+  no time until the first window has gone). From END on nothing stops it, so no Cancel: "The piano is
+  checking the update…", "Restarting the piano…", each over an indeterminate hairline.
+- **How it ended.** In Body: "Updated to 2.1.0", or "Updated to 2.1.0 · confirming…" while the new
+  firmware hasn't passed its self-test yet (the piano confirms it about 30 s after it starts; the app
+  reads again every 30 s). A failure is one line, "The update didn't finish. The piano kept its old
+  firmware.", with the filled **Retry** where trying again can mend it; where it can't (the piano
+  refused the release's signature or image), no Retry and a second line, "The piano refused this
+  release." (after its crash-loop safe mode: "The piano is in its safe mode. Switch it off and on,
+  then try again."). The piano back on its old firmware after the restart: "The piano restarted but
+  reports 2.0.0 — it rolled back.", with Retry. Not back within a minute: "The piano hasn't come back
+  after restarting. Check that it's on; the app will look for it again." (and the page says how it
+  went when it does).
+- **Releases the app can't send.** A release that changes the partition table or the bootloader:
+  the heading and notes, then "This update needs a USB flash", and no button. One that asks for a
+  newer Steven Piano: "Needs a newer app".
+- The rest of the page, STATUS and ACTIONS, is as in v1.5.
+
+## The hub's row
+
+**Firmware and status** reads **Update available** while a newer release is known (also one this
+app can't send, and after a failure Retry can mend), **Updating…** while one is being sent, else the
+release the piano reports, "2.0.0" (the build stays on the page), else "—" as before.
+
+## While the piano updates
+
+- **Nothing plays.** From the moment the transfer starts until it ends, whatever the outcome, the
+  player is locked: pieces, channels, the web panel's commands and the Keys screen's keys are turned
+  away, and Now playing (and the panel) shows the outlined banner **Updating the piano**, where it
+  shows playback's problems. The app stops the piano first and waits half a second of quiet before
+  it sends anything, as the piano asks.
+- **The notification.** While it runs, a silent, low-importance notification (channel "Piano
+  firmware"): **Updating the piano**, the same line as the page, its progress bar, and **Cancel**
+  until END. A tap opens the Piano tab. When it's over, one line says how it ended ("Updated to
+  2.1.0", "The update didn't finish. The piano kept its old firmware.") and goes when tapped. The
+  transfer carries on with the screen off or the app in the background.
+- **The piano's own screen** shows "Updating • 38 %", then "Updated to 2.1.0" for a minute after it
+  confirms itself (BLE_OTA.md › 7, 9): the tablet and the piano say the same thing.
