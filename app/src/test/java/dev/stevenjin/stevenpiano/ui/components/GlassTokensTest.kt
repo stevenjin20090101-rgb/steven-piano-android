@@ -86,4 +86,18 @@ class GlassTokensTest {
         assertEquals(0.10f, GlassEdgeDark.alpha, 0.005f)
         assertEquals(0.70f, GlassEdgeLight.alpha, 0.005f)
     }
+
+    @Test
+    fun `a lens costs no second blur - the veiled lens container composes to the usual one`() {
+        assertEquals(0.30f, GlassTokens.LensVeilAlpha, 0.0001f)
+        // Over any backdrop, channel by channel (in floats: a Color would round each step to 8 bits):
+        // the lens's container, then the veil, is the container itself.
+        fun over(top: Float, alpha: Float, under: Float) = top * alpha + under * (1 - alpha)
+        for (surface in listOf(InkSurface, PaperSurface)) for (backdrop in listOf(Color.White, Color.Black, Color(0xFF7F3F1F))) {
+            for ((s, b) in listOf(surface.red to backdrop.red, surface.green to backdrop.green, surface.blue to backdrop.blue)) {
+                val veiled = over(s, GlassTokens.LensVeilAlpha, over(s, GlassTokens.LensAlpha, b))
+                assertEquals(over(s, GlassTokens.ContainerAlpha, b), veiled, 0.0001f)
+            }
+        }
+    }
 }

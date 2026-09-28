@@ -63,6 +63,7 @@ import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.RollStrip
 import dev.stevenjin.stevenpiano.ui.components.RollStripHeight
+import dev.stevenjin.stevenpiano.ui.components.glassAvailable
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 
 /** The panel's art: at most this, centred, and smaller where the pane is short. */
@@ -184,7 +185,7 @@ private fun ColumnScope.PanelPiece(piece: NowPlaying, state: PlayerState, player
                         .fillMaxWidth()
                         .heightIn(min = RollStripHeight),
                 ) {
-                    if (transportFloats(StripPlan, maxHeight)) {
+                    if (glassAvailable() && transportFloats(StripPlan, maxHeight)) {
                         GlassTransportPanel(Modifier.fillMaxSize(), stripHeight = KeyboardStripHeight + Hairline, panel = strip, controls = controls)
                     } else {
                         Column(Modifier.fillMaxSize()) {

@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,7 +43,9 @@ private val Sine = Easing { x -> (1f - cos(PI.toFloat() * x)) / 2f }
  * The app's only red, and the only reader of [LocalLive]. [live] (the piano is connected) shows
  * a filled dot, faded in over 320 ms; otherwise a hollow ring. While [breathing] (the piano is
  * playing) the dot breathes 100 % to 55 % over 2 s, unless motion is reduced. Always pair it
- * with a word: the dot never carries meaning alone.
+ * with a word: the dot never carries meaning alone. The breath is the dot's own layer's alpha, so
+ * breathing redraws nothing else (drawn in the canvas it re-recorded the whole screen every frame,
+ * and with it re-blurred the glass over the screen).
  */
 @Composable
 fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
@@ -60,10 +63,14 @@ fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
     } else {
         null
     }
-    Canvas(modifier.size(with(LocalDensity.current) { DotSize.toDp() })) {
+    Canvas(
+        modifier
+            .size(with(LocalDensity.current) { DotSize.toDp() })
+            .graphicsLayer { alpha = breath?.value ?: 1f },
+    ) {
         val on = shown.value
         val stroke = 1.dp.toPx()
         if (on < 1f) drawCircle(ring, radius = size.minDimension / 2 - stroke / 2, alpha = 1f - on, style = Stroke(stroke))
-        if (on > 0f) drawCircle(red, alpha = on * (breath?.value ?: 1f))
+        if (on > 0f) drawCircle(red, alpha = on)
     }
 }

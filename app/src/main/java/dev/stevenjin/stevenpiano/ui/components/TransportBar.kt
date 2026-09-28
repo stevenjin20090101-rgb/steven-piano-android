@@ -58,8 +58,9 @@ private val SIDE_ROOM = 16.dp
  * it gives the app's one haptic, a light tick, on play and on pause. Shuffle and Repeat sit at the
  * two ends: the tertiary grey when off, the content colour with a 4 dp dot beneath when on; Repeat
  * cycles off, all, one (a small "1" in its glyph). The gaps shrink to fit a narrow phone. On glass
- * ([LocalOnGlass], DESIGN.md › v1.5 — M16) play/pause is a frosted lens instead, clearer than the
- * glass around it ([GlassTokens.LensAlpha]) inside a hairline ring, its glyph the content colour;
+ * ([LocalOnGlass], DESIGN.md › v1.5 — M16) play/pause is a frosted lens instead ([GlassLens]),
+ * clearer than the glass around it ([GlassTokens.LensAlpha]) inside a hairline ring, its glyph the
+ * content colour;
  * and Shuffle and Repeat when off take the secondary grey (nothing tertiary sits on glass).
  */
 @Composable
@@ -145,8 +146,8 @@ private fun PlayPauseButton(playing: Boolean, onClick: () -> Unit) {
     }
     val description = if (playing) "Pause" else "Play"
     if (LocalOnGlass.current) {
-        // The lens: the glass over the same roll, clearer than the bar's, in a hairline ring.
-        GlassSurface(Modifier.size(PLAY_SIZE), shape = CircleShape, containerAlpha = GlassTokens.LensAlpha) {
+        // The lens: the bar's glass left clearer here, in a hairline ring (no second blur).
+        GlassLens(Modifier.size(PLAY_SIZE)) {
             Box(
                 Modifier
                     .fillMaxSize()

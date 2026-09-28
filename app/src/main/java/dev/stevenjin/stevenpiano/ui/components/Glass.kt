@@ -12,22 +12,34 @@ package dev.stevenjin.stevenpiano.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.LayoutDirection
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeInputScale
@@ -77,6 +89,21 @@ val LocalReducedTransparency = staticCompositionLocalOf { false }
  */
 val LocalOnGlass = staticCompositionLocalOf { false }
 
+/**
+ * Whether glass can be drawn at all here: the device blurs (API 31 and up) and transparency is not
+ * reduced. Where it cannot, controls that would float on glass keep today's solid places instead.
+ */
+@Composable
+fun glassAvailable(): Boolean = GlassCanBlur && !LocalReducedTransparency.current
+
+/** Where a lens ([GlassLens]) sits, in the root's pixels, for the glass surface holding it. */
+@Stable
+internal class GlassLensSlot {
+    var bounds by mutableStateOf<Rect?>(null)
+}
+
+internal val LocalGlassLens = staticCompositionLocalOf<GlassLensSlot?> { null }
+
 /** Where a surface's hairline and specular line run: the edge that faces the content. */
 enum class GlassEdge {
     /** Bars at the bottom (the tab bar, the transport): their top edge. */
@@ -98,11 +125,19 @@ enum class GlassEdge {
  * with the hairline edge: today's look. [LocalOnGlass] tells [content] which: text on glass is the
  * content colour (primary), which clears 7:1 over the worst backdrop (GlassTokensTest).
  *
- * Cost: the blur is drawn only inside the surface (clipped to its shape; it reads the content a
- * blur's reach beyond its edges so rows slide in smoothly) and is worked out on a copy of that
- * content at a third of its resolution ([HazeInputScale.Auto]), a ninth of the pixels, which a
- * 24 dp blur hides. It is redrawn whenever the content beneath changes, every frame while the roll
- * moves beneath the transport.
+ * Cost: the blur is worked out only inside the surface's own bounds, drawn clipped to its shape,
+ * and from a copy of that content at a third of its resolution ([HazeInputScale.Auto]), a ninth of
+ * the pixels, which a 24 dp blur hides. A blurring surface is redrawn whenever anything in its
+ * source changes, every frame while the roll moves anywhere on the screen; so where nothing can pass
+ * beneath a surface ([blur] false: the rail, beside screens that keep clear of it; the tab bar over
+ * the fixed layouts of Now playing and Keys) it draws the glass's look without blurring: the
+ * surface colour, which is exactly what the blur of the bare background under the tint comes to,
+ * with the same edge, and [LocalOnGlass] still true.
+ *
+ * With [lens] the surface holds a clearer circle ([GlassLens], the transport's play control): it is
+ * blurred once under the lens's container ([GlassTokens.LensAlpha]) and veiled with the surface at
+ * [GlassTokens.LensVeilAlpha] everywhere but the lens, which composes to the usual container
+ * outside it, so the lens costs no second blur.
  */
 @OptIn(ExperimentalHazeApi::class)
 @Composable
@@ -112,28 +147,85 @@ fun GlassSurface(
     source: HazeState = LocalHazeState.current,
     edge: GlassEdge = if (shape == RectangleShape) GlassEdge.Top else GlassEdge.Outline,
     containerAlpha: Float = GlassTokens.ContainerAlpha,
+    blur: Boolean = true,
+    lens: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val surface = MaterialTheme.colorScheme.surface
     val hairline = LocalHairline.current
     val specular = LocalGlassEdge.current
-    val glass = GlassCanBlur && !LocalReducedTransparency.current && source.areas.isNotEmpty()
-    val style = remember(surface, containerAlpha) {
+    val available = glassAvailable()
+    // The glass's look (its edge, and what sits on it); blurring only where content can pass beneath.
+    val glass = available && (!blur || source.areas.isNotEmpty())
+    val blurring = available && blur && source.areas.isNotEmpty()
+    val tint = if (lens) GlassTokens.LensAlpha else containerAlpha
+    val style = remember(surface, tint) {
         HazeStyle(
             backgroundColor = surface,
-            tints = listOf(HazeTint(surface.copy(alpha = containerAlpha))),
+            tints = listOf(HazeTint(surface.copy(alpha = tint))),
             blurRadius = GlassTokens.Blur,
             noiseFactor = 0f,
         )
     }
+    val lensSlot = remember { GlassLensSlot() }
+    var origin by remember { mutableStateOf(Offset.Zero) }
     Box(
         modifier
             .clip(shape)
+            .then(if (lens) Modifier.onGloballyPositioned { origin = it.positionInRoot() } else Modifier)
             .glassEdge(shape, edge, hairline, if (glass) specular else null)
-            .then(if (glass) Modifier.hazeEffect(source, style) { inputScale = HazeInputScale.Auto } else Modifier.background(surface)),
+            .then(
+                if (blurring) {
+                    Modifier.hazeEffect(source, style) {
+                        inputScale = HazeInputScale.Auto
+                        expandLayerBounds = false
+                    }
+                } else {
+                    Modifier.background(surface)
+                },
+            ),
     ) {
-        CompositionLocalProvider(LocalOnGlass provides glass) { content() }
+        if (lens && blurring) LensVeil(surface.copy(alpha = GlassTokens.LensVeilAlpha), lensSlot, { origin }, Modifier.matchParentSize())
+        CompositionLocalProvider(LocalOnGlass provides glass, LocalGlassLens provides (if (lens) lensSlot else null)) { content() }
     }
+}
+
+/** The veil over a lens-holding surface: [veil] everywhere but the lens's circle. */
+@Composable
+private fun LensVeil(veil: Color, slot: GlassLensSlot, origin: () -> Offset, modifier: Modifier) {
+    Box(
+        modifier.drawWithCache {
+            val path = Path()
+            onDrawBehind {
+                val hole = slot.bounds?.translate(-origin())
+                path.reset()
+                path.fillType = PathFillType.EvenOdd
+                path.addRect(Rect(Offset.Zero, size))
+                if (hole != null) path.addOval(hole)
+                drawPath(path, veil)
+            }
+        },
+    )
+}
+
+/**
+ * A lens in a glass surface that holds one ([GlassSurface] with `lens`): a circle clearer than the
+ * glass around it, with the hairline ring and the specular line, and no blur of its own. Outside such
+ * a surface it is just the circle and its ring.
+ */
+@Composable
+fun GlassLens(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    val slot = LocalGlassLens.current
+    val hairline = LocalHairline.current
+    val specular = LocalGlassEdge.current
+    DisposableEffect(slot) { onDispose { slot?.bounds = null } }
+    Box(
+        modifier
+            .clip(CircleShape)
+            .then(if (slot != null) Modifier.onGloballyPositioned { slot.bounds = it.boundsInRoot() } else Modifier)
+            .glassEdge(CircleShape, GlassEdge.Outline, hairline, specular),
+        content = content,
+    )
 }
 
 /**

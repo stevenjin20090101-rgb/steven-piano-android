@@ -74,6 +74,7 @@ import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
+import dev.stevenjin.stevenpiano.ui.components.glassAvailable
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.KeyHands
@@ -112,7 +113,8 @@ private val SHORT_SCORE = 200.dp
  * the title opens the piece sheet. [onOpenPiano] shows the Piano tab. The scrubber and the
  * transport float on glass over the paper roll's history, the third below the tracker bar, above
  * the keyboard strip (DESIGN.md › v1.5 — M16), whenever that third can hold them; otherwise (falling
- * notes, the score alone, a phone on its side) they stand below the views on the screen, as before.
+ * notes, the score alone, a phone on its side, and wherever glass is unavailable: below API 31 or
+ * with transparency reduced) they stand below the views on the screen, as before.
  * The screen stops above the tab bar ([dev.stevenjin.stevenpiano.ui.LocalFloatingPadding]).
  */
 @Composable
@@ -235,7 +237,7 @@ private fun ColumnScope.PieceView(
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
-            if (transportFloats(plan, maxHeight)) {
+            if (glassAvailable() && transportFloats(plan, maxHeight)) {
                 NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, controls, Modifier.fillMaxSize().padding(horizontal = 16.dp))
             } else {
                 Column(Modifier.fillMaxSize()) {

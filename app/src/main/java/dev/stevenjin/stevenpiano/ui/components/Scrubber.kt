@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
@@ -104,6 +105,8 @@ fun Scrubber(
                         if (released) seek((fraction * durationMicros).toLong())
                     }
                 }
+                // Its own layer: redrawn every frame while playing, it must not redraw the glass it sits on.
+                .graphicsLayer()
                 .drawBehind {
                     val radius = ThumbSize.toPx() / 2
                     val line = Hairline.toPx()

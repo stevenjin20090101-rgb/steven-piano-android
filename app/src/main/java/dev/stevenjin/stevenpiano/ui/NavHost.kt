@@ -294,7 +294,8 @@ private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: Playb
     val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val reduced = rememberReducedMotion()
-    GlassSurface(Modifier.fillMaxWidth()) {
+    // Lists pass beneath the bar (the Library, the Piano tab); Now playing and Keys stop above it.
+    GlassSurface(Modifier.fillMaxWidth(), blur = current == Route.Library || current == Route.Piano) {
         Column {
             AnimatedVisibility(
                 visible = !frame.twoPane && state.miniPlayerShown && current != Route.NowPlaying,
@@ -356,11 +357,13 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
 /**
  * Medium and expanded widths: the same four glyphs and labels in a rail on the left, labels
  * always shown, on glass whose end edge (a hairline and the specular line) sets it off from the
- * content beneath and beside it. Labels scale up to 1.5x.
+ * content beside it. Every screen keeps clear of the rail, so it has the glass's look without
+ * blurring (see [GlassSurface]). Labels scale up to 1.5x.
  */
 @Composable
 private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
-    GlassSurface(Modifier.fillMaxHeight(), edge = GlassEdge.End) {
+    // Every screen keeps clear of the rail (the floating padding's start), so nothing passes beneath it.
+    GlassSurface(Modifier.fillMaxHeight(), edge = GlassEdge.End, blur = false) {
         val tones = tabTones()
         val colors = NavigationRailItemDefaults.colors(
             selectedIconColor = tones.selected,

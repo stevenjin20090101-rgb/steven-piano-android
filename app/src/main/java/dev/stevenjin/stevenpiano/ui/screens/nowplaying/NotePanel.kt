@@ -87,6 +87,7 @@ internal fun GlassTransportPanel(
                     .padding(bottom = stripHeight)
                     .fillMaxWidth(),
                 source = source,
+                lens = true,
             ) {
                 Column(content = controls)
             }

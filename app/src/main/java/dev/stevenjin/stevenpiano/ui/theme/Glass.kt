@@ -39,6 +39,13 @@ object GlassTokens {
     /** The 72 dp play circle alone is clearer, a lens in the bar: its 32 dp glyph needs 3:1 (GlassTokensTest). */
     const val LensAlpha = 0.60f
 
+    /**
+     * A surface holding a lens is blurred once, under the lens's clearer container, and veiled with
+     * the surface colour at this opacity everywhere but the lens: over any backdrop that composes to
+     * exactly [ContainerAlpha] (0.30 + 0.70 × 0.60 = 0.72), without a second blur for the lens.
+     */
+    const val LensVeilAlpha = 1f - (1f - ContainerAlpha) / (1f - LensAlpha)
+
     /** How far the content beneath is blurred. */
     val Blur = 24.dp
 
