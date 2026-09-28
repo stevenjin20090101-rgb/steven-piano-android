@@ -16,6 +16,7 @@ import android.util.Log
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
 import dev.stevenjin.stevenpiano.admin.KioskMode
+import dev.stevenjin.stevenpiano.admin.OwnerRelease
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
@@ -241,8 +242,29 @@ class AppGraph(private val app: Application) {
             settingsRepository,
             kioskEnabled = settingsRepository.settings.map { it.kioskEnabled },
             scope = appScope,
-            releaseIfAsked = { endKiosk -> DeviceOwnerRelease.releaseIfAsked(app, endKiosk) },
+            ownerRelease = object : OwnerRelease {
+                override fun asked() = DeviceOwnerRelease.asked(app)
+
+                override fun release() = DeviceOwnerRelease.release(app)
+            },
         )
+    }
+
+    /**
+     * The adb way back (`debug.stevenpiano.releaseowner`), asked again whenever the activity starts or
+     * is sent an intent: Android will not force-stop a device owner's app, so `am start` is how adb
+     * reaches a running one. Off the main thread (getprop).
+     */
+    fun releaseOwnerIfAsked() {
+        appScope.launch(Dispatchers.IO) {
+            try {
+                kiosk.releaseIfAsked()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "The device owner couldn't be given back", e)
+            }
+        }
     }
 
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */

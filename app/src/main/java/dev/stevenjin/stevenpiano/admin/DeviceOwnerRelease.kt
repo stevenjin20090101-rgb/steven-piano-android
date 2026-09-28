@@ -21,24 +21,27 @@ import android.util.Log
  *
  * ```
  * adb shell setprop debug.stevenpiano.releaseowner yes
- * adb shell am force-stop dev.stevenjin.stevenpiano
  * adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity
+ * adb shell dpm list-owners        # "no owners"
  * adb shell setprop debug.stevenpiano.releaseowner ""
  * ```
  *
- * Checked once as the app starts, and only while it is the device owner. Only adb (the shell)
- * can set a `debug.` property; no app on the tablet can, so nothing but the person with the cable
- * can take the role away. It is also the way out of kiosk mode when its PIN is forgotten: kiosk mode
- * ends first (`endKiosk`, [KioskMode.start]: the home screen, the lock screen and the lock task list
- * as they were), then the role goes, and with it silent updates. README › School tablet, › Kiosk.
+ * Checked as the app starts and whenever its activity starts or is sent an intent (`am start`), and
+ * only while it is the device owner: Android ignores `am force-stop` for a device owner's package
+ * ("Ignoring request to force stop protected package", measured on API 34), so a restart of the
+ * process cannot be relied on. Only adb (the shell) can set a `debug.` property; no app on the tablet
+ * can, so nothing but the person with the cable can take the role away. It is also the way out of
+ * kiosk mode when its PIN is forgotten: [KioskMode] lets go of the screen and ends kiosk mode
+ * first (the home screen, the lock screen and the lock task list as they were), then [release]
+ * gives the role up, and with it silent updates. README › School tablet, › Kiosk.
  */
 object DeviceOwnerRelease {
     const val PROPERTY = "debug.stevenpiano.releaseowner"
     private const val TAG = "Updates"
     private val ASKED = setOf("1", "yes", "true")
 
-    /** Gives up the device owner when [PROPERTY] asks for it, after [endKiosk]; true when it did. Call off the main thread. */
-    fun releaseIfAsked(context: Context, endKiosk: () -> Unit = {}): Boolean {
+    /** Whether adb asks for the role back: the app is the device owner and [PROPERTY] says yes. Call off the main thread. */
+    fun asked(context: Context): Boolean {
         val policy = context.getSystemService(DevicePolicyManager::class.java) ?: return false
         val owner = try {
             policy.isDeviceOwnerApp(context.packageName)
@@ -49,12 +52,12 @@ object DeviceOwnerRelease {
         val value = runCatching {
             ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim().lowercase() }
         }.getOrDefault("")
-        if (value !in ASKED) return false
-        try {
-            endKiosk()   // before the role goes: without it the kiosk's policy could no longer be undone
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "Kiosk mode couldn't be ended first: ${e.javaClass.simpleName}")
-        }
+        return value in ASKED
+    }
+
+    /** Gives up the device owner; true when it did. Kiosk mode must have ended first ([KioskMode]). */
+    fun release(context: Context): Boolean {
+        val policy = context.getSystemService(DevicePolicyManager::class.java) ?: return false
         return try {
             @Suppress("DEPRECATION")   // deprecated for enterprise use; still the device owner's own way out
             policy.clearDeviceOwnerApp(context.packageName)

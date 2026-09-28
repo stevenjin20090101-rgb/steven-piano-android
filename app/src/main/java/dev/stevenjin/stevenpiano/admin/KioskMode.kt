@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.CoroutineContext
@@ -45,21 +47,35 @@ data class KioskStatus(
 )
 
 /**
+ * The adb way back ([DeviceOwnerRelease]): whether it is asked for now, and giving up the device owner.
+ * A seam, so [KioskMode] is tested on the JVM.
+ */
+interface OwnerRelease {
+    /** The app is the device owner and `debug.stevenpiano.releaseowner` says yes. Blocking (it runs getprop). */
+    fun asked(): Boolean
+
+    /** Gives up the device owner; true when it did. */
+    fun release(): Boolean
+}
+
+/**
  * Kiosk mode for the school tablet (DESIGN.md › v1.6 — M20), one per process in `AppGraph`: turning
  * it on and off through the [controller] (Android's side) with the switch kept in the settings; the
  * kiosk PIN (a [PinHash] like the web panel's, kept apart from the settings) and its wrong tries
  * ([KioskPinGuard], kept across restarts); "Unlock for now", which lets go of the screen until the
  * app is next opened ([appLeft], [appOpened]) or rests in display mode ([relock]); and [lockWanted],
  * which the activity follows while it is in front, locking the screen to the app
- * (`startLockTask`) or letting go. [start] runs the adb way back first (`DeviceOwnerRelease`: the
- * kiosk ends before the device owner goes), then learns whether the app is the device owner.
+ * (`startLockTask`) or letting go. [start] runs the adb way back first ([releaseIfAsked]: the
+ * screen let go and kiosk mode ended before the device owner goes), then learns whether the app is
+ * the device owner; the activity asks for the way back again whenever it starts or is sent an
+ * intent, since Android will not force-stop a device owner's app.
  */
 class KioskMode(
     private val controller: KioskController,
     private val settings: SettingsRepository,
     kioskEnabled: Flow<Boolean>,
     scope: CoroutineScope,
-    private val releaseIfAsked: (endKiosk: () -> Unit) -> Boolean,
+    private val ownerRelease: OwnerRelease,
     private val clock: () -> Long = System::currentTimeMillis,
     private val hashing: CoroutineContext = Dispatchers.Default,
     private val letGoMs: Long = LET_GO_MS,
@@ -75,6 +91,9 @@ class KioskMode(
     @Volatile
     private var guard = KioskPinGuard(clock)
 
+    /** One way back at a time: the app's start and the activity's may ask together. */
+    private val releasing = Mutex()
+
     /** The app went to the background while unlocked for now: opening it again locks again. Main thread. */
     private var leftWhileUnlocked = false
 
@@ -89,11 +108,7 @@ class KioskMode(
         try {
             val (count, lockedUntil) = settings.kioskStrikes()
             guard = KioskPinGuard(clock, KioskPinGuard.Strikes(count, lockedUntil))
-            val stayOnBefore = settings.kioskStayOnBefore() ?: 0
-            if (releaseIfAsked { controller.disable(stayOnBefore) }) {
-                settings.setKioskEnabled(false)
-                settings.setKioskStayOnBefore(null)
-            }
+            releaseIfAsked()
             val on = settings.settings.first().kioskEnabled
             if (!controller.isDeviceOwner()) {
                 controller.tidyWithoutOwner()
@@ -106,6 +121,22 @@ class KioskMode(
             val owner = controller.isDeviceOwner()
             _status.update { it.copy(checked = true, owner = owner, problem = problem) }
         }
+    }
+
+    /**
+     * The adb way back, off the main thread: when [OwnerRelease.asked], the screen is let go (and
+     * waited for, as [turnOff] does), kiosk mode ends, then the device owner goes. True when it went.
+     */
+    suspend fun releaseIfAsked(): Boolean = releasing.withLock {
+        if (!ownerRelease.asked()) return false
+        _status.update { it.copy(unlockedForNow = true) }   // the activity lets go of the screen
+        withTimeoutOrNull(letGoMs) { while (controller.isLocked()) delay(POLL_MS) }
+        controller.disable(settings.kioskStayOnBefore() ?: 0)
+        settings.setKioskEnabled(false)
+        settings.setKioskStayOnBefore(null)
+        val released = ownerRelease.release()
+        _status.update { it.copy(owner = controller.isDeviceOwner(), unlockedForNow = false, keyguardKept = false, problem = null) }
+        released
     }
 
     /** Whether the app is the device owner now (the Kiosk page asks as it opens: `dpm set-device-owner` may have run meanwhile). */

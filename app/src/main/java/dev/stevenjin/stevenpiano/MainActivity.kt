@@ -159,13 +159,15 @@ class MainActivity : ComponentActivity() {
 
     /**
      * In the foreground a foreground service may start: composers never looked up are fetched now, and
-     * the web panel, if on, listens. Opened again after "Unlock for now", the kiosk locks again.
+     * the web panel, if on, listens. Opened again after "Unlock for now", the kiosk locks again; and
+     * the adb way back (`debug.stevenpiano.releaseowner`) is looked for, as on every new intent.
      */
     override fun onStart() {
         super.onStart()
         graph.fetchArtworkIfDue()
         graph.startWebIfOn(this)
         graph.kiosk.appOpened()   // back after "Unlock for now": locked again
+        graph.releaseOwnerIfAsked()   // the adb way back, which `am start` reaches (DeviceOwnerRelease)
     }
 
     /**
@@ -186,6 +188,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         route(intent)
+        graph.releaseOwnerIfAsked()
     }
 
     /**

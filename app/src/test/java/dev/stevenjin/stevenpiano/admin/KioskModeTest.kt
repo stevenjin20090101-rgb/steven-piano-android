@@ -48,17 +48,28 @@ class KioskModeTest {
     private fun settings(): SettingsRepository =
         SettingsRepository(PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "kiosk${files++}.preferences_pb") })
 
+    /** adb's `debug.stevenpiano.releaseowner`, as the fake device sees it. */
+    private class FakeRelease(private val device: FakeKioskDevice, var asked: Boolean = false) : OwnerRelease {
+        override fun asked(): Boolean = asked && device.owner
+
+        override fun release(): Boolean {
+            device.calls += "clearDeviceOwnerApp"
+            device.owner = false
+            return true
+        }
+    }
+
     private fun kiosk(
         device: FakeKioskDevice,
         settings: SettingsRepository,
         letGoMs: Long = KioskMode.LET_GO_MS,
-        releaseIfAsked: (endKiosk: () -> Unit) -> Boolean = { false },
+        release: OwnerRelease = FakeRelease(device),
     ) = KioskMode(
         KioskController(device, PACKAGE),
         settings,
         kioskEnabled = settings.settings.map { it.kioskEnabled },
         scope = scope,
-        releaseIfAsked = releaseIfAsked,
+        ownerRelease = release,
         clock = { now },
         letGoMs = letGoMs,
     )
@@ -187,12 +198,7 @@ class KioskModeTest {
         device.calls.clear()
 
         // The next start, with debug.stevenpiano.releaseowner set over adb.
-        val restarted = kiosk(device, settings) { endKiosk ->
-            endKiosk()
-            device.calls += "clearDeviceOwnerApp"
-            device.owner = false
-            true
-        }
+        val restarted = kiosk(device, settings, release = FakeRelease(device, asked = true))
         restarted.start()
         assertEquals(
             listOf(
@@ -211,6 +217,40 @@ class KioskModeTest {
         assertTrue(restarted.status.value.checked)
         assertFalse(restarted.status.value.owner)
         assertFalse(restarted.lockWanted.value)
+    }
+
+    @Test
+    fun `the way back reached while the screen is locked lets go of it first, so the app never closes`() = runBlocking<Unit> {
+        val device = FakeKioskDevice()
+        val settings = settings()
+        val release = FakeRelease(device)
+        val kiosk = kiosk(device, settings, release = release)
+        kiosk.start()
+        kiosk.setPin("123456")
+        kiosk.turnOn()
+        kiosk.awaitLock(true)
+        device.locked = true
+        val activity = scope.launch {
+            kiosk.lockWanted.collect { wanted ->
+                if (!wanted) {
+                    delay(100)
+                    device.locked = false   // the activity's stopLockTask
+                }
+            }
+        }
+        assertFalse("not asked: nothing happens", kiosk.releaseIfAsked())
+        assertTrue(device.owner)
+        release.asked = true   // adb: setprop, then am start (the activity asks again)
+        assertTrue(kiosk.releaseIfAsked())
+        activity.cancel()
+        assertFalse("the screen was let go before the lock task list emptied", device.taskCleared)
+        assertEquals("clearDeviceOwnerApp", device.calls.last())
+        assertFalse(device.owner)
+        assertFalse(device.homeAlias)
+        assertFalse(settings.settings.first().kioskEnabled)
+        assertFalse(kiosk.status.value.owner)
+        assertFalse(kiosk.lockWanted.value)
+        assertFalse("once given back, a second ask finds no owner", kiosk.releaseIfAsked())
     }
 
     @Test
