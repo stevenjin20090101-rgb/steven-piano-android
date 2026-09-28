@@ -46,6 +46,8 @@ class AppStudioLibrary(private val graph: AppGraph) : StudioLibrary {
         graph.artwork.forget(ArtworkEntity.forPiece(pieceId))
     }
 
+    override suspend fun exists(pieceId: Long): Boolean = graph.library.piece(pieceId) != null
+
     /** One CSV field, quoted when it holds a comma, a quote or a line break (RFC 4180). */
     private fun csv(field: String): String =
         if (field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + field.replace("\"", "\"\"") + "\"" else field

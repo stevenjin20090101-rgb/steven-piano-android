@@ -373,6 +373,7 @@ class AppGraph(private val app: Application) {
             release = ::releaseRecording,
             peakKb = ::peakResidentKb,
             log = { Log.i(STUDIO_TAG, it) },
+            trail = LinkLog.shared::add,
         )
     }
 

@@ -46,6 +46,8 @@ class StudioPiecesTest {
         override suspend fun discard(pieceId: Long) {
             discarded += pieceId
         }
+
+        override suspend fun exists(pieceId: Long) = pieceId !in discarded
     }
 
     private val at = ZonedDateTime.of(2026, 9, 28, 14, 3, 5, 0, ZoneId.of("America/New_York"))

@@ -93,13 +93,16 @@ class StudioReview(
     }.stateIn(scope, SharingStarted.Eagerly, null)
 
     /**
-     * Reads the undecided pieces back, then watches the player: an undecided piece loaded and playing is
-     * listened to until it counts as heard.
+     * Reads the undecided pieces back (less those deleted from the library meanwhile, through its menu),
+     * then watches the player: an undecided piece loaded and playing is listened to until it counts as
+     * heard.
      */
     fun start() {
         scope.launch {
             val stored = store.undecided.first()
-            open.update { it + stored }
+            val gone = stored.filterNot { library.exists(it) }.toSet()
+            open.update { it + (stored - gone) }
+            if (gone.isNotEmpty()) change { it - gone }
         }
         scope.launch {
             combine(player.state, open) { state, waiting ->

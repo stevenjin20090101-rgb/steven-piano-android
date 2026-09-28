@@ -60,6 +60,8 @@ class Studio(
     private val elapsed: () -> Long = System::nanoTime,
     private val peakKb: () -> Long = { -1L },
     private val log: (String) -> Unit = {},
+    /** Where each transcription's figures also go (the link's trail, so Share diagnostics carries them): no name in them. */
+    private val trail: (String) -> Unit = {},
     /** The transcription model (the catalogue's; tests give a small one). */
     private val transcriptionModel: ModelEntry = ModelCatalogue.transcription,
 ) {
@@ -197,14 +199,14 @@ class Studio(
         val piece = pieces.add(result, pending.name, clock())
         review.made(piece.id)
         done = { it.copy(state = JobState.Done, step = JobStep.Waiting, progress = 1f, pieceId = piece.id, title = piece.title) }
-        log(
-            "Studio: transcribed %.1f s of audio in %.1f s (read %.1f s, %d windows, model %.1f s), %d notes, %d pedal; peak VmHWM %d kB"
-                .format(
-                    java.util.Locale.ROOT,
-                    audio.seconds, (transcribedAt - startedAt) / 1e9, (decodedAt - startedAt) / 1e9, windows,
-                    (transcribedAt - decodedAt) / 1e9, result.notes.size, result.pedals.size, peakKb(),
-                ),
-        )
+        val figures = "Studio: transcribed %.1f s of audio in %.1f s (read %.1f s, %d windows, model %.1f s), %d notes, %d pedal; peak VmHWM %d kB"
+            .format(
+                java.util.Locale.ROOT,
+                audio.seconds, (transcribedAt - startedAt) / 1e9, (decodedAt - startedAt) / 1e9, windows,
+                (transcribedAt - decodedAt) / 1e9, result.notes.size, result.pedals.size, peakKb(),
+            )
+        log(figures)
+        trail(figures)
     }
 
     /** How the transcription running now ended, when it did: published after its cleanup. */

@@ -84,6 +84,7 @@ class StudioTest {
     private val released: MutableList<AudioSource> = Collections.synchronizedList(mutableListOf())
     private val threads: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val added = mutableListOf<String>()
+    private val trailed: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private var windowGate: CountDownLatch? = null
 
     /** A recording of [seconds]; "bad" ones can't be read. */
@@ -131,6 +132,8 @@ class StudioTest {
         override suspend fun describe(pieceId: Long, description: String) = Unit
 
         override suspend fun discard(pieceId: Long) = Unit
+
+        override suspend fun exists(pieceId: Long) = true
     }
 
     private fun studio(): Studio {
@@ -164,6 +167,7 @@ class StudioTest {
             release = { released += it },
             openModel = { Model(notes = !silentModel) },
             clock = { ZonedDateTime.of(2026, 9, 28, 12, 0, 0, 0, ZoneId.of("UTC")) },
+            trail = { trailed += it },
             transcriptionModel = tiny,
         ).also { it.start() }
     }
@@ -189,6 +193,8 @@ class StudioTest {
         assertEquals("the piece waits for Keep or Discard", setOf(101L), studio.review.undecided.value)
         assertTrue("read and transcribed on the job thread: ${threads.toSet()}", threads.isNotEmpty() && threads.all { it.startsWith("studio-test-worker") })
         assertEquals(listOf<AudioSource>(recording("30-take.wav")), released)
+        val figures = trailed.single()
+        assertTrue("the figures on the trail, no name: $figures", figures.startsWith("Studio: transcribed 30.0 s of audio in ") && "take" !in figures)
     }
 
     @Test

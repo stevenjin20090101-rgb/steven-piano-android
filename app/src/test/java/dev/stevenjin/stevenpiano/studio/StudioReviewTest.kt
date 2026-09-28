@@ -51,8 +51,10 @@ class StudioReviewTest {
         }
     }
 
-    private class Library : StudioLibrary {
+    private class Library(private val missing: Set<Long> = emptySet()) : StudioLibrary {
         val discarded = mutableListOf<Long>()
+
+        override suspend fun exists(pieceId: Long): Boolean = pieceId !in missing
 
         override suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long? = null
 
@@ -146,6 +148,14 @@ class StudioReviewTest {
         player.position = 16_000_000
         advanceTimeBy(300)
         assertEquals(4L, review.asking.value)
+    }
+
+    @Test
+    fun `pieces deleted from the library meanwhile no longer wait`() = runTest {
+        val store = Store(setOf(3L, 4L))
+        val review = review(store, library = Library(missing = setOf(3L)))
+        assertEquals(setOf(4L), review.undecided.value)
+        assertEquals(setOf(4L), store.saved.value)
     }
 
     @Test

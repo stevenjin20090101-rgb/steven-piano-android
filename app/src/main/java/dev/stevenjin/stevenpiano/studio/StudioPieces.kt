@@ -32,6 +32,9 @@ interface StudioLibrary {
 
     /** The piece leaves the library, the player (silenced first if it plays it) and its artwork. */
     suspend fun discard(pieceId: Long)
+
+    /** Whether the piece is still in the library (it may have been deleted from its menu meanwhile). */
+    suspend fun exists(pieceId: Long): Boolean
 }
 
 /** A piece Studio made: its library [id] and [title]. */
