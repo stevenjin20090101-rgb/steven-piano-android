@@ -1,0 +1,40 @@
+# ============================================================================
+#  Steven Piano - Android player for the self-playing acoustic piano
+#  Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+#  Original author & creator: Steven Jin.
+#  Licensed under the MIT License (see LICENSE). This copyright and attribution
+#  notice MUST be preserved in all copies or substantial portions of the work.
+#  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+# ============================================================================
+#
+# The Studio spike's Python environment (M22), exactly as it ran on the Mac (Apple M3 Max, macOS,
+# Homebrew Python 3.13.13):
+#   python3.13 -m venv ~/.venvs/studio && source ~/.venvs/studio/bin/activate
+#   pip install -r tools/studio/requirements.txt
+#   pip install --no-deps tinysoundfont==0.3.7   # its pyaudio dependency is for live playback only
+#   pip install --no-deps "anticipation @ git+https://github.com/jthickstun/anticipation.git@af37397922665a0fb8d474d7988b0f3755a38d45"
+# The anticipation package pins transformers 4.29 and old mido/numpy it does not need; --no-deps.
+# optimum 2.x moved the ONNX exporter out of optimum[exporters] into optimum-onnx, which pins
+# optimum 2.1 and transformers < 4.58.
+torch==2.14.0
+onnx==1.23.0
+onnxruntime==1.30.0
+onnxscript==0.7.2
+onnxsim==0.7.3
+piano-transcription-inference==0.0.6
+torchlibrosa==0.1.0
+audioread==3.1.0
+transformers==4.57.6
+optimum==2.1.0
+optimum-onnx==0.1.0
+huggingface_hub==0.36.2
+tokenizers==0.22.2
+safetensors==0.8.0
+numpy==2.5.3
+scipy==1.18.1
+librosa==1.0.0
+soundfile==0.14.0
+soxr==1.1.0
+mido==1.3.3
+mir_eval==0.8.2
+protobuf==7.36.2
