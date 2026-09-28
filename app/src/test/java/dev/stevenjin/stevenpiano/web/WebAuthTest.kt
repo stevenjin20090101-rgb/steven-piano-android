@@ -18,8 +18,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
+import kotlin.concurrent.thread
 
 /** The panel's PIN, sessions and login guard (the audit's point 3). */
 class WebAuthTest {
@@ -176,6 +180,36 @@ class WebAuthTest {
         // A right PIN from anyone clears the global count, freeing every address at once.
         guard.succeeded("10.9.9.9")
         assertEquals(0L, guard.waitMs("10.9.9.9"))
+    }
+
+    @Test
+    fun `tries sent at once are weighed one at a time, and only until the lock (audit W2)`() {
+        val guard = LoginGuard(clock = { 0L })
+        val inside = AtomicInteger()
+        val most = AtomicInteger()
+        val weighed = AtomicInteger()
+        val outcomes: MutableList<LoginGuard.Attempt> = Collections.synchronizedList(mutableListOf())
+        val go = CountDownLatch(1)
+        val tries = (1..12).map {
+            thread {
+                go.await()
+                outcomes += guard.attempt("10.0.0.7") {
+                    most.accumulateAndGet(inside.incrementAndGet(), ::maxOf)
+                    weighed.incrementAndGet()
+                    Thread.sleep(20)   // a derivation takes a while: the others arrive meanwhile
+                    inside.decrementAndGet()
+                    false
+                }
+            }
+        }
+        go.countDown()
+        tries.forEach { it.join() }
+        assertEquals("never two derivations at once", 1, most.get())
+        assertEquals("exactly the five before the lock are weighed", LoginGuard.THRESHOLD, weighed.get())
+        assertEquals(LoginGuard.THRESHOLD, outcomes.count { it is LoginGuard.Attempt.Wrong })
+        assertEquals("the rest are refused uncounted", 12 - LoginGuard.THRESHOLD, outcomes.count { it is LoginGuard.Attempt.Wait })
+        assertEquals("a locked key is refused before it waits on anyone's derivation", LoginGuard.Attempt.Wait(30_000L), guard.attempt("10.0.0.7") { error("not weighed") })
+        assertEquals("a right answer from another key clears everyone", LoginGuard.Attempt.Right, guard.attempt("10.0.0.8") { true })
     }
 
     @Test

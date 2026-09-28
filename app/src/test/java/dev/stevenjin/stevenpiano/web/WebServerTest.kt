@@ -162,6 +162,26 @@ class WebServerTest {
     }
 
     @Test
+    fun `wrong PINs sent at once are weighed one at a time, so none slips past the lock (audit W2)`() {
+        val (_, http) = start()
+        backend.pin = PIN
+        val go = java.util.concurrent.CountDownLatch(1)
+        val statuses: MutableList<Int> = Collections.synchronizedList(mutableListOf())
+        val senders = (1..10).map {
+            Thread {
+                go.await()
+                statuses += http.api("POST", "/api/login", """{"pin":"000000"}""").status
+            }.apply { start() }
+        }
+        go.countDown()
+        senders.forEach { it.join() }
+        // Without the weighing lock every try that reached a thread before the fifth was counted passed
+        // the wait unchecked: eight or more were weighed. Now exactly the five before the lock are.
+        assertEquals("weighed: $statuses", 5, statuses.count { it == 401 })
+        assertEquals("refused uncounted: $statuses", 5, statuses.count { it == 429 })
+    }
+
+    @Test
     fun `every response carries the security headers and closes, and none carries CORS`() {
         val (server, http) = start()
         val token = login(http)

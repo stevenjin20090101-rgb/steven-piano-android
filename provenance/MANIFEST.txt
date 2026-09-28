@@ -240,10 +240,10 @@ c0f7283b25d5fd67a3a82fdf47887e3a42c6efebd743a75b2e8a255fc11fe7d9  app/src/main/j
 8aa4731819f9458bf976e2af120c65e5e3fcdc8624b22988138c8ccbd6fc6627  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAddress.kt
 bd002d351ef96a3a3aa6d5da919b4510ea8262417ef0a05e6be16abd34843253  app/src/main/java/dev/stevenjin/stevenpiano/web/WebApi.kt
 f349bee4e2a8cc4c0ab20963a7d17b5a6d709cba30ffcdd6daa9068969d7d55f  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAssets.kt
-5c557d5923b309caeba1bc121b520f98fa0ad685750a28b2ce9834b0c5c5945f  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAuth.kt
+b4a355bc00ea24e647f12a41e44b436db6d1bb1e82fe0f28e73be2783c222227  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAuth.kt
 853c15b864318d563205e7b97fe7fadcb77fd02f5261d3953c563beefbab4b64  app/src/main/java/dev/stevenjin/stevenpiano/web/WebBackend.kt
 abf639fbaed7fdf75084d9ee3f90df2382962f9f580febb152d1aa0696382c8f  app/src/main/java/dev/stevenjin/stevenpiano/web/WebPanel.kt
-b5356b7b9e1819efff747c4f5188bf935101f5d800a7c2557caceef5bfa1598a  app/src/main/java/dev/stevenjin/stevenpiano/web/WebServer.kt
+b66a403e2adc8cc9e0cbeeeb15ec4a8f5d604ceaa21f5b2e58751632ba16286d  app/src/main/java/dev/stevenjin/stevenpiano/web/WebServer.kt
 33287f1f5df09e0cf0250683d9184f42d8f31ffd34684c9c494bbb6bed00c5e3  app/src/main/java/dev/stevenjin/stevenpiano/web/WebSocketHub.kt
 27d57b6415de2560beea555f0e88ade12ef5243fba366dc282a56a61ba90f21e  app/src/main/res/drawable/ic_add.xml
 6101b331a5681e96899cddbc9964530bef8ff78c612c2fab2c5c0a7fe738e717  app/src/main/res/drawable/ic_back.xml
@@ -393,8 +393,8 @@ bf0cab5285832b9620fe9e392b8dd7a6f77aa025cebc4cc33e0f0f328e287a8b  app/src/test/j
 e142d20c897377c5fcd99a483b591cb708c771a04e05d3bdb99ce31f4c50007b  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAddressTest.kt
 824b59e1179caacba8da4ebf0045cd94051e9f711159b4854ca5058c045c46af  app/src/test/java/dev/stevenjin/stevenpiano/web/WebApiTest.kt
 3c5b062232181a9b863a17c054e54cb4b6522903fc817e6061a424778755f4b5  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAssetsTest.kt
-76ec1652a22a9e9782ae68d2350a6fe9731f650213fe4ce5d0ae17f9673bd28e  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAuthTest.kt
-a1eb2eb99d577a0004beff682d683707b98b0fcbeb1053edc0cd4f78d300dee1  app/src/test/java/dev/stevenjin/stevenpiano/web/WebServerTest.kt
+8c37bc06a9d0d40589d4eebd601755af83c96654d980c379fe36a7fc49062df9  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAuthTest.kt
+218302a25295ac59bd28a150c8989cd24027929581a64b1626e112023977f4a3  app/src/test/java/dev/stevenjin/stevenpiano/web/WebServerTest.kt
 b61119ae1c5ba8ef02129454a1a7219e00c7e14997e5c57e913beabd169d3023  app/src/test/java/dev/stevenjin/stevenpiano/web/WebSocketHubTest.kt
 a3d4ec572122f7ea3e9dc860f8f30a7378cd5c31ba326a0bbbe132764f9949a5  build.gradle.kts
 7463aa4ddc0ad3058cc8aa6a62575b052e3b46e34fcb492f1058bbfa2fa9bbda  docs/SECURITY_AUDIT.md

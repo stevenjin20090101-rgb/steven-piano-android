@@ -412,12 +412,13 @@ class WebServer(
         val wait = guard.waitMs(address)
         if (wait > 0) return waitResponse(wait)
         val hash = backend.pinHash() ?: return refuse(403, "no-pin", "Set a PIN on the tablet first.")
-        if (!hash.matches(pin)) {
-            val after = guard.failed(address)
-            return json(WebApi.error("wrong", "That PIN isn't right.").put("retryAfter", seconds(after)), Response.Status.UNAUTHORIZED)
+        // Checked and counted as one step, one try at a time (LoginGuard.attempt): tries sent at once can't all slip past the wait.
+        return when (val attempt = guard.attempt(address) { hash.matches(pin) }) {
+            is LoginGuard.Attempt.Wait -> waitResponse(attempt.ms)
+            is LoginGuard.Attempt.Wrong ->
+                json(WebApi.error("wrong", "That PIN isn't right.").put("retryAfter", seconds(attempt.waitMs)), Response.Status.UNAUTHORIZED)
+            LoginGuard.Attempt.Right -> noContent().also { it.addHeader("Set-Cookie", WebCookies.session(sessions.open())) }
         }
-        guard.succeeded(address)
-        return noContent().also { it.addHeader("Set-Cookie", WebCookies.session(sessions.open())) }
     }
 
     private suspend fun guestRequest(call: Call): Response {

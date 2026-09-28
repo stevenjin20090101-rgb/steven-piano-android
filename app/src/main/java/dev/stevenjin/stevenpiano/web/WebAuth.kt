@@ -193,8 +193,38 @@ class LoginGuard(
 ) {
     private class Record(var failures: Int = 0, var lockMs: Long = 0, var lockedUntil: Long = 0)
 
+    /** How one try went: refused uncounted while a wait runs ([Wait]), weighed and wrong ([Wrong], with the wait now in force), or right. */
+    sealed interface Attempt {
+        data class Wait(val ms: Long) : Attempt
+
+        data class Wrong(val waitMs: Long) : Attempt
+
+        data object Right : Attempt
+    }
+
     private val records = LinkedHashMap<String, Record>(16, 0.75f, true)
     private val everyone = Record()
+
+    /** Held while a try is weighed: one at a time, whichever key sent it. */
+    private val weighing = Any()
+
+    /**
+     * One try from [key], weighed by [check] (the PIN's slow derivation) only when no wait runs,
+     * and **one try at a time** across every key (audit 1.5.1, W2): a try re-reads the wait once it
+     * holds the lock, so tries sent at once cannot all pass the wait before the first of them is
+     * counted (they did: eight of ten, for a threshold of five), and at most one derivation runs
+     * at a time, whatever the number of listeners and request threads. A wrong answer is counted,
+     * a right one clears the key and everyone's count.
+     */
+    fun attempt(key: String, check: () -> Boolean): Attempt {
+        waitMs(key).let { if (it > 0) return Attempt.Wait(it) }   // a locked key never queues behind a derivation
+        synchronized(weighing) {
+            waitMs(key).let { if (it > 0) return Attempt.Wait(it) }
+            if (!check()) return Attempt.Wrong(failed(key))
+            succeeded(key)
+            return Attempt.Right
+        }
+    }
 
     /** How long [key] must still wait before a try is weighed, in milliseconds; 0 when it may try now. */
     @Synchronized
