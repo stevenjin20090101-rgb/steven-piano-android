@@ -162,20 +162,21 @@ fun PinCheckSheet(
     val latestWait by rememberUpdatedState(waitMs)
     val latestRight by rememberUpdatedState(onRight)
     val waiting = left > 0
-    val ready = entry.length == PIN_DIGITS && !checking && !waiting
+    val fieldEnabled = !waiting && !checking
+    val ready = entry.length == PIN_DIGITS && fieldEnabled
 
-    // The wait, counted down from the guard itself (a try in another sheet, or before a restart, may have started it);
-    // when one ends, or after a try, the field takes the focus again for the next.
+    // The wait, counted down from the guard itself (a try in another sheet, or before a restart, may have started it).
     LaunchedEffect(tries) {
-        var waited = false
         while (true) {
             left = latestWait()
             if (left <= 0) break
-            waited = true
             delay(COUNTDOWN_TICK_MS)
         }
-        if (tries > 0 || waited) focus.requestFocus()
     }
+    // Whenever the field can take digits again (the sheet opening, a try weighed, a wait over), it takes the focus:
+    // after the composition that enabled it, since a disabled field cannot be focused. A focus that can't be taken
+    // (the sheet's window not up yet) is no reason to fail: the field can be tapped.
+    LaunchedEffect(fieldEnabled) { if (fieldEnabled) runCatching { focus.requestFocus() } }
 
     fun weigh(action: Int) {
         if (!ready) return
@@ -212,7 +213,7 @@ fun PinCheckSheet(
             description = "PIN",
             imeAction = ImeAction.Done,
             onIme = { if (actions.size == 1) weigh(0) },
-            enabled = !waiting && !checking,
+            enabled = fieldEnabled,
         )
         Spacer(Modifier.height(16.dp))
         FlowRow(
@@ -225,7 +226,6 @@ fun PinCheckSheet(
             actions.forEachIndexed { index, label -> ActionButton(label, onClick = { weigh(index) }, enabled = ready) }
         }
     }
-    LaunchedEffect(Unit) { if (!waiting) focus.requestFocus() }
 }
 
 /** How a PIN's wait reads: seconds under a minute ("5 s", "59 s"), then whole minutes rounded up ("1 min", "5 min"), never less than it is. */
