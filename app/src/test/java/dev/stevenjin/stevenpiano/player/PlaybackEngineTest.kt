@@ -63,6 +63,23 @@ class PlaybackEngineTest {
     }
 
     @Test
+    fun `each run's timing says how many events went out and how late the latest was, in real time`() {
+        engine.load(piece { noteOn(0, 60); noteOff(500, 60); noteOn(500, 62); noteOff(1000, 62) }, now)
+        engine.play(now)
+        engine.advance(0)
+        engine.advance(507 * ms)   // the two events at 500 ms, 7 ms late
+        engine.setTempo(50, 507 * ms)
+        engine.advance(1_496 * ms)   // at half speed the last event (1000 ms of music) was due at 1493 ms: 3 ms late
+        assertEquals(PlaybackTiming.Run(events = 4, latestMicros = 7_000), engine.timing.take())
+        assertEquals("taken once", null, engine.timing.take())
+        engine.setTempo(100, now)
+        engine.play(now)
+        engine.stop(now)
+        assertEquals("a run that sent nothing has no figures", null, engine.timing.take())
+        assertEquals("Timing: 4 events, the latest 7 ms after its time", Player.timingLine(PlaybackTiming.Run(4, 7_900)))
+    }
+
+    @Test
     fun `nothing is sent before it is due`() {
         engine.load(piece { noteOn(500, 60); noteOff(700, 60) }, now)
         engine.play(now)

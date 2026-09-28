@@ -51,7 +51,8 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
         if (transcription.notes.isEmpty()) throw StudioFailure(StudioFailures.NO_NOTES)
         val title = title(recordingName, at)
         val bytes = midi(transcription, title, "${ComposerNames.STUDIO} · ${STAMP.format(at)}")
-        val id = library.add("$title.mid", bytes, title, ComposerNames.STUDIO) ?: throw StudioFailure(StudioFailures.NOT_SAVED)
+        val fileName = title.replace('/', '-').replace('\\', '-') + ".mid"
+        val id = library.add(fileName, bytes, title, ComposerNames.STUDIO) ?: throw StudioFailure(StudioFailures.NOT_SAVED)
         library.describe(id, description(at))
         return StudioPiece(id, title)
     }

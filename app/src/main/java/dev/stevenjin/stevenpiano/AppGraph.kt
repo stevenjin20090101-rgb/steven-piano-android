@@ -11,7 +11,10 @@ package dev.stevenjin.stevenpiano
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
+import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
@@ -57,24 +60,39 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
+import dev.stevenjin.stevenpiano.service.StudioService
 import dev.stevenjin.stevenpiano.service.WebService
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.settingsDataStore
+import dev.stevenjin.stevenpiano.studio.AppStudioLibrary
+import dev.stevenjin.stevenpiano.studio.AudioDecoder
+import dev.stevenjin.stevenpiano.studio.AudioSource
+import dev.stevenjin.stevenpiano.studio.ModelInstaller
+import dev.stevenjin.stevenpiano.studio.ModelStore
+import dev.stevenjin.stevenpiano.studio.ReviewPlayer
+import dev.stevenjin.stevenpiano.studio.StoredReview
+import dev.stevenjin.stevenpiano.studio.Studio
+import dev.stevenjin.stevenpiano.studio.StudioAvailability
+import dev.stevenjin.stevenpiano.studio.StudioPieces
+import dev.stevenjin.stevenpiano.studio.StudioReview
 import dev.stevenjin.stevenpiano.update.HttpUpdateServer
+import dev.stevenjin.stevenpiano.update.ModelsOverride
 import dev.stevenjin.stevenpiano.update.UpdateChecker
 import dev.stevenjin.stevenpiano.update.UpdateDownloader
 import dev.stevenjin.stevenpiano.update.UpdateInstaller
 import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
+import dev.stevenjin.stevenpiano.update.VerifiedDownloader
 import dev.stevenjin.stevenpiano.web.WebPanel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -90,6 +108,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
@@ -168,7 +187,8 @@ class AppGraph(private val app: Application) {
     /** The link if something has made it already, else null: the crash handler's view, which must never make one. */
     fun pianoLinkIfMade(): PianoLink? = if (link.isInitialized()) link.value else null
 
-    val player: Player by lazy { Player(pianoLink, library, appScope) }
+    /** The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23). */
+    val player: Player by lazy { Player(pianoLink, library, appScope, trail = LinkLog::warn) }
 
     /** The piano's own settings over its console, read on every connection. */
     val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
@@ -318,6 +338,78 @@ class AppGraph(private val app: Application) {
         }
     }
 
+    /**
+     * Studio (Piano › Studio, v1.7 — M23): the models (downloaded on demand from the release tagged
+     * `models`, pinned by hash; on the emulator in debug builds, the server [ModelsOverride] names), the
+     * jobs (one at a time on [studioThread], a partial wake lock around each, the foreground service
+     * following them), and what a transcription leaves: a piece that waits for Keep or Discard.
+     */
+    val studio: Studio by lazy {
+        val source = ModelsOverride.source() ?: UpdateSource.models
+        val server = HttpUpdateServer(source, log = debugLog(STUDIO_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
+        val models = ModelStore(File(app.filesDir, MODELS_DIR))
+        val library = AppStudioLibrary(this)
+        Studio(
+            scope = appScope,
+            availability = StudioAvailability.of(app, appScope),
+            models = models,
+            installer = ModelInstaller(source, server, models, VerifiedDownloader(server)),
+            reader = AudioDecoder(app.contentResolver),
+            pieces = StudioPieces(library),
+            review = StudioReview(
+                StoredReview(app),
+                object : ReviewPlayer {
+                    override val state = player.state
+
+                    override fun positionMicrosNow(): Long = player.positionMicrosNow()
+                },
+                library,
+                appScope,
+            ),
+            worker = studioThread,
+            online = network::isOnline,
+            onBusy = { StudioService.start(app) },
+            awake = ::studioAwake,
+            release = ::releaseRecording,
+            peakKb = ::peakResidentKb,
+            log = { Log.i(STUDIO_TAG, it) },
+        )
+    }
+
+    /** Studio's jobs' thread: one, at background priority, so the player's scheduler (urgent audio) keeps its timing. */
+    private val studioThread by lazy {
+        Executors.newSingleThreadExecutor { work ->
+            Thread({
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+                work.run()
+            }, "steven-piano-studio").apply { isDaemon = true }
+        }.asCoroutineDispatcher()
+    }
+
+    private val studioWakeLock by lazy {
+        app.getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "StevenPiano:studio").apply { setReferenceCounted(false) }
+    }
+
+    /** Studio's jobs keep the device awake while one runs (30 minutes at most a job: the longest recording takes about 7). */
+    private fun studioAwake(on: Boolean) {
+        if (on) studioWakeLock.acquire(STUDIO_WAKE_MS) else if (studioWakeLock.isHeld) studioWakeLock.release()
+    }
+
+    /** A transcription is over: a web upload's file goes, a picked document's read grant is given back. */
+    private fun releaseRecording(source: AudioSource) {
+        when (source) {
+            is AudioSource.Local -> source.file.delete()
+            is AudioSource.Document -> runCatching {
+                app.contentResolver.releasePersistableUriPermission(source.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+    }
+
+    /** The process's peak resident set (VmHWM), in kB; -1 when it can't be read. For Studio's log line. */
+    private fun peakResidentKb(): Long = runCatching {
+        File("/proc/self/status").readLines().firstOrNull { it.startsWith("VmHWM:") }?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()
+    }.getOrNull() ?: -1L
+
     /** Timed play (Piano › Schedule): the schedules, the one exact alarm that keeps the next of them, and what runs them. */
     val schedules: Schedules by lazy { Schedules(app, this, database.schedules()) }
 
@@ -426,6 +518,7 @@ class AppGraph(private val app: Application) {
         web.start()
         firmwareUpdater.start()
         schedules.start()
+        studio.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
@@ -507,6 +600,9 @@ class AppGraph(private val app: Application) {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"
         const val FIRMWARE_TAG = "Firmware"
+        const val STUDIO_TAG = "Studio"
+        const val MODELS_DIR = "models"
+        const val STUDIO_WAKE_MS = 30 * 60_000L
         const val UPDATES_DIR = "updates"
         const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L

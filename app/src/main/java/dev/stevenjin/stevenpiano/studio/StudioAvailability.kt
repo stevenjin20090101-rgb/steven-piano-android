@@ -109,6 +109,7 @@ class StudioAvailability(
     private val override: () -> String?,
     private val scope: CoroutineScope,
     private val worker: CoroutineDispatcher = Dispatchers.Default,
+    private val log: (String) -> Unit = {},
 ) {
     private val state = MutableStateFlow(StudioSupport.Checking)
     val support: StateFlow<StudioSupport> = state.asStateFlow()
@@ -119,7 +120,7 @@ class StudioAvailability(
         if (!asked.compareAndSet(false, true)) return
         scope.launch(worker) {
             state.value = MemoryGate.support(memoryReader().totalMem, loadRuntime, override())
-            Log.i(TAG, "Studio: ${state.value}")
+            log("Studio: ${state.value}")
         }
     }
 
@@ -145,6 +146,7 @@ class StudioAvailability(
                 loadRuntime = ::runtimeLoads,
                 override = ::overrideProperty,
                 scope = scope,
+                log = { Log.i(TAG, it) },
             )
         }
 

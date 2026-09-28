@@ -85,6 +85,8 @@ class Player(
     prepareThread: () -> Unit = Scheduler.UrgentAudio,
     private val random: Random = Random.Default,
     private val compute: CoroutineDispatcher = Dispatchers.Default,
+    /** The link's trail (LinkLog), where each run's timing goes: "Timing: 1204 events, the latest 3 ms after its time". */
+    private val trail: (String) -> Unit = {},
 ) : ChannelDeck {
     private val engine = PlaybackEngine(link)
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -601,6 +603,8 @@ class Player(
             shownEnded = engine.ended
             if (shownEnded) scope.launch { autoAdvance() }
         }
+        // Last, after what the UI reads: a run that just ended leaves its timing on the link's trail.
+        engine.timing.take()?.let { run -> trail(timingLine(run)) }
     }
 
     /**
@@ -629,12 +633,15 @@ class Player(
         }
     }
 
-    private companion object {
-        const val AUTO_ADVANCE_DELAY_MS = 1_500L
-        const val NANOS_PER_MS = 1_000_000L
-        const val CANT_PLAY = "This piece can't be played."
+    companion object {
+        /** A run's timing for the link's trail: how many events went out, and the latest after its time. No title, no name. */
+        fun timingLine(run: PlaybackTiming.Run): String = "Timing: ${run.events} events, the latest ${run.latestMicros / 1_000} ms after its time"
+
+        private const val AUTO_ADVANCE_DELAY_MS = 1_500L
+        private const val NANOS_PER_MS = 1_000_000L
+        private const val CANT_PLAY = "This piece can't be played."
 
         /** A start that replaces one still running waits this long first: a burst of taps settles on its last. */
-        const val SETTLE_MS = 150L
+        private const val SETTLE_MS = 150L
     }
 }

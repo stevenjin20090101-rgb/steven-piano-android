@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.FirmwareService
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.service.PlaybackNotification
+import dev.stevenjin.stevenpiano.service.StudioService
 import dev.stevenjin.stevenpiano.service.UpdateService
 import dev.stevenjin.stevenpiano.service.WebService
 
@@ -44,6 +45,7 @@ class App : Application() {
         UpdateService.createChannel(this)
         WebService.createChannel(this)
         FirmwareService.createChannel(this)
+        StudioService.createChannel(this)
         graph = AppGraph(this).also { it.start() }
     }
 }

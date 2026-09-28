@@ -53,6 +53,9 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     private var cursor = 0
     private val batch = MidiBatch()
 
+    /** How late this run's events went out (v1.7 — M23): the player writes each run's figures to the link's trail. */
+    val timing = PlaybackTiming()
+
     /** The song position at [nowNanos]; below zero while the pause before a piece runs. */
     fun positionMicros(nowNanos: Long): Long =
         if (status == PlaybackStatus.Playing) anchorSongMicros + (nowNanos - anchorNanos) * tempoPct / NANOS_PER_MICRO_PCT
@@ -61,6 +64,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     /** Makes [midi] current, stopped at its start. */
     fun load(midi: MidiPiece, nowNanos: Long) {
         if (status != PlaybackStatus.Stopped) silence()
+        timing.close()
         piece = midi
         status = PlaybackStatus.Stopped
         anchorSongMicros = 0L
@@ -72,6 +76,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     /** Forgets the piece, silencing the piano first if it was sounding. */
     fun eject() {
         if (status != PlaybackStatus.Stopped) silence()
+        timing.close()
         piece = null
         status = PlaybackStatus.Stopped
         anchorSongMicros = 0L
@@ -110,6 +115,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
 
     /** Always silences, even when idle: it is also the app's panic button. */
     fun stop(nowNanos: Long) {
+        timing.close()
         status = PlaybackStatus.Stopped
         anchorSongMicros = 0L
         startMicros = 0L
@@ -182,16 +188,20 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         val nowMicros = nowNanos / 1000
         batch.clear()
         router.flushPedal(nowMicros, batch)   // a pedal change the router held back, if its turn has come
+        val first = cursor
         while (cursor < events.size && events.atMicros(cursor) <= position) {
             router.route(events.status(cursor), events.data1(cursor), events.data2(cursor), nowMicros, batch)
             cursor++
         }
+        // The batch's first event was due earliest: how late it goes is how late the batch is (in real time).
+        if (cursor > first) timing.record(cursor - first, (position - events.atMicros(first)) * 100 / tempoPct)
         if (cursor < events.size) {
             send(dropPending = false)
             return minOf(wakeTimeFor(events.atMicros(cursor)), pedalWakeTime())
         }
         router.silence(batch)   // the end: last releases, then the stop sequence
         send(dropPending = false)
+        timing.close()
         anchorSongMicros = midi.durationMicros
         status = PlaybackStatus.Stopped
         ended = true
@@ -242,4 +252,34 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
             return if (anchorNanos > Long.MAX_VALUE - nanos) Long.MAX_VALUE else anchorNanos + nanos
         }
     }
+}
+
+/**
+ * How late a run of playback sent its events against their time (v1.7 — M23, so Studio's work beside
+ * the player can be measured): per batch, the lateness of its earliest event, in real microseconds.
+ * A run ends at the piece's end, a stop, or another piece ([close]); its figures wait in [take].
+ * Owned by the scheduler thread, as the engine is.
+ */
+class PlaybackTiming {
+    /** One run: [events] sent, the latest [latestMicros] after its time. */
+    data class Run(val events: Int, val latestMicros: Long)
+
+    private var events = 0
+    private var latest = 0L
+    private var finished: Run? = null
+
+    fun record(count: Int, lateMicros: Long) {
+        events += count
+        if (lateMicros > latest) latest = lateMicros
+    }
+
+    /** The run is over: its figures are kept for [take] (none when it sent nothing). */
+    fun close() {
+        if (events > 0) finished = Run(events, latest)
+        events = 0
+        latest = 0L
+    }
+
+    /** The last run's figures, once. */
+    fun take(): Run? = finished.also { finished = null }
 }

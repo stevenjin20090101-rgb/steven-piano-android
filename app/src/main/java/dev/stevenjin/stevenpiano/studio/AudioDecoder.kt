@@ -41,8 +41,8 @@ sealed interface AudioSource {
  * is cut off with the same refusal. Anything that can't be read is [AudioFailure.UNREADABLE]. Blocking,
  * on the job's own thread; [cancelled] is asked between buffers.
  */
-class AudioDecoder(private val resolver: ContentResolver) {
-    fun decode(source: AudioSource, cancelled: () -> Boolean): DecodedAudio {
+class AudioDecoder(private val resolver: ContentResolver) : RecordingReader {
+    override fun decode(source: AudioSource, cancelled: () -> Boolean): DecodedAudio {
         if (sizeOf(source) > AudioLimits.MAX_FILE_BYTES) throw AudioFailure(AudioFailure.TOO_LARGE)
         val wav = try {
             open(source).use { input -> ByteArray(12).let { header -> readHeader(input, header) && WavReader.isWav(header) } }
@@ -63,7 +63,7 @@ class AudioDecoder(private val resolver: ContentResolver) {
     }
 
     /** The name the recording goes by (its display name, or the file's), for the piece's title. */
-    fun displayName(source: AudioSource): String? = when (source) {
+    override fun displayName(source: AudioSource): String? = when (source) {
         is AudioSource.Local -> source.file.name
         is AudioSource.Document -> runCatching {
             resolver.query(source.uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->

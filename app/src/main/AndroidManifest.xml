@@ -207,6 +207,14 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Studio (v1.7): a model's download and a recording's transcription, one at a time, with a progress
+             notification and Cancel, so they outlive the screen. Data sync: the jobs move data (a model in, a
+             recording through the model into a piece). Not exported: only the app starts it. -->
+        <service
+            android:name=".service.StudioService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- The schedules' alarm, and what makes it be set again: a restart, the clock or the time zone changed,
              the app updated, exact alarms allowed. Not exported: only the system and the app's own immutable
              PendingIntent (the alarm) reach it. -->
