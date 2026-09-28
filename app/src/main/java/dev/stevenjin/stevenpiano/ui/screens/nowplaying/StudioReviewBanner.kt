@@ -16,9 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
 import dev.stevenjin.stevenpiano.ui.StudioCopy
@@ -27,9 +29,10 @@ import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import kotlinx.coroutines.launch
 
 /**
- * Keep or Discard (DESIGN.md › v1.7 — M23): on Now playing and the tablet's now-playing panel, where
+ * Keep or Discard (DESIGN.md › v1.7 — M23, M24): on Now playing and the tablet's now-playing panel, where
  * playback's problems show, once a piece Studio made has been heard (15 seconds of it, or all of it):
- * "Keep this piece?", what it is, then **Keep** (it stays, and is not asked about again) and
+ * "Keep this piece?", what it is (a composition's line says what it is in the manner of, read from its
+ * sheet's own line; a transcription's that it came from a recording), then **Keep** (it stays, and is not asked about again) and
  * **Discard** (the piano is silenced, the player lets go of it, and it leaves the library). Discard
  * changes the library, so in kiosk mode it waits for the kiosk PIN; Keep never does. Nothing when no
  * piece is waiting.
@@ -42,8 +45,9 @@ fun StudioReviewBanner(modifier: Modifier = Modifier) {
     val asking by review.asking.collectAsStateWithLifecycle()
     val pieceId = asking ?: return
     val gate = rememberKioskGate()
+    val sheet by remember(pieceId) { graph.artwork.artwork(ArtworkEntity.forPiece(pieceId)) }.collectAsStateWithLifecycle(null)
     OutlinedBanner(StudioCopy.REVIEW_TITLE, modifier) {
-        Text(StudioCopy.REVIEW_LINE, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(StudioCopy.reviewLine(sheet?.description), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow {
             TextButton(onClick = { graph.appScope.launch { review.keep(pieceId) } }) { Text("Keep") }
             TextButton(onClick = { gate.run { graph.appScope.launch { review.discard(pieceId) } } }) { Text("Discard") }

@@ -33,7 +33,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
-import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 
@@ -68,18 +67,21 @@ fun rememberImportPickers(onChosen: (ImportSource) -> Unit): ImportPickers {
     return remember(files, folder, zip) { ImportPickers(files, folder, zip) }
 }
 
-/** Studio's entry on the `+` sheet (v1.7 — M23): its line under it, and what a tap does (the system's audio picker). */
-class TranscribeEntry(val detail: String, val onClick: () -> Unit)
+/**
+ * One of Studio's entries on the `+` sheet: [label] ("Transcribe a recording…", v1.7 — M23; "Compose a
+ * piece…", M24), its line under it, and what a tap does (the system's audio picker; the compose sheet).
+ */
+class StudioEntry(val label: String, val detail: String, val onClick: () -> Unit)
 
 /**
  * The `+` sheet: Add files, Add folder, Add zip; then, set apart by a hairline, Fetch artwork and
  * notes for every composer ([onFetchArtwork]), which asks again even for composers not found
- * before; then, below another hairline, Studio's Transcribe a recording… ([transcribe]; not there
- * on a device Studio can't run on).
+ * before; then, below another hairline, Studio's entries ([studio]: Transcribe a recording… and
+ * Compose a piece…; none on a device Studio can't run on).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit, transcribe: TranscribeEntry? = null) {
+fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit, studio: List<StudioEntry> = emptyList()) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         // Open all the way: with Studio's entry the sheet is taller than half a phone's screen, where it would open half up and cut its last row.
@@ -112,11 +114,11 @@ fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -
             onDismiss()
             onFetchArtwork()
         }
-        if (transcribe != null) {
-            HairlineDivider(Modifier.padding(vertical = 8.dp))
-            SheetOption(StudioCopy.TRANSCRIBE, transcribe.detail) {
+        if (studio.isNotEmpty()) HairlineDivider(Modifier.padding(vertical = 8.dp))
+        for (entry in studio) {
+            SheetOption(entry.label, entry.detail) {
                 onDismiss()
-                transcribe.onClick()
+                entry.onClick()
             }
         }
         Spacer(Modifier.height(24.dp))

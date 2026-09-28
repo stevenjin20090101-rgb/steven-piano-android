@@ -23,7 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -38,6 +41,7 @@ import dev.stevenjin.stevenpiano.studio.ModelEntry
 import dev.stevenjin.stevenpiano.studio.StudioFailures
 import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.studio.StudioSupport
+import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
@@ -59,12 +63,13 @@ fun rememberRecordingPicker(onPicked: (Uri) -> Unit): () -> Unit {
 }
 
 /**
- * Studio (DESIGN.md › v1.7 — M23): MODELS, each with its size and licence, and Download, its progress
- * (with Cancel), or Installed with Remove; TRANSCRIBE, "Transcribe a recording…" (the system's audio
- * picker) with what it takes, and the memory line when a gate refused the last try; JOBS, newest first,
- * each with its line, a hairline while it runs, Cancel while it waits or runs, and Listen while its
- * piece waits for Keep or Discard ([onListen] plays it and shows Now playing). On a device Studio can't
- * run on, the page says why and nothing else.
+ * Studio (DESIGN.md › v1.7 — M23, M24): MODELS, each with its size and licence, and Download, its
+ * progress (with Cancel), or Installed with Remove; TRANSCRIBE, "Transcribe a recording…" (the system's
+ * audio picker) with what it takes, and the memory line when a gate refused the last try; COMPOSE,
+ * "Compose a piece…" (the [ComposeSheet]) with what it takes, and its own memory line; JOBS, newest
+ * first, each with its line, a hairline while it runs, Cancel while it waits or runs, and Listen while
+ * its piece waits for Keep or Discard ([onListen] plays it and shows Now playing). On a device Studio
+ * can't run on, the page says why and nothing else. Locked in kiosk mode as every settings page is.
  */
 @Composable
 fun StudioPage(vm: PianoViewModel, onListen: (Long) -> Unit) {
@@ -75,6 +80,7 @@ fun StudioPage(vm: PianoViewModel, onListen: (Long) -> Unit) {
     val discarded by vm.studioDiscarded.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val pick = rememberRecordingPicker { uri -> vm.transcribe(context, uri) }
+    var composing by rememberSaveable { mutableStateOf(false) }
 
     val unsupported = StudioCopy.unsupported(support)
     if (unsupported != null) {
@@ -95,8 +101,14 @@ fun StudioPage(vm: PianoViewModel, onListen: (Long) -> Unit) {
     ActionRow(note = note) {
         ActionButton(StudioCopy.TRANSCRIBE, onClick = pick, enabled = support == StudioSupport.Available)
     }
-    val refused = jobs.lastOrNull { it.kind == JobKind.Transcribe && it.state.finished }?.takeIf { it.state == JobState.Failed && it.error in MemoryLines }
-    if (refused != null) NoteLine(refused.error!!, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    MemoryLine(jobs, JobKind.Transcribe, TranscribeMemoryLines)
+
+    SectionEyebrow("Compose")
+    ActionRow(note = StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, installed)) {
+        ActionButton(StudioCopy.COMPOSE, onClick = { composing = true }, enabled = support == StudioSupport.Available)
+    }
+    MemoryLine(jobs, JobKind.Compose, ComposeMemoryLines)
+    if (composing) ComposeSheet(onDismiss = { composing = false })
 
     if (jobs.isNotEmpty()) {
         SectionEyebrow("Jobs")
@@ -104,8 +116,16 @@ fun StudioPage(vm: PianoViewModel, onListen: (Long) -> Unit) {
     }
 }
 
-/** The lines that say the tablet's memory refused: the page repeats them under Transcribe. */
-private val MemoryLines = setOf(StudioFailures.BUSY, StudioFailures.RAN_OUT, StudioFailures.TOO_LITTLE_MEMORY)
+/** The lines that say the tablet's memory refused: the page repeats them under Transcribe, and composing's under Compose. */
+private val TranscribeMemoryLines = setOf(StudioFailures.BUSY, StudioFailures.RAN_OUT, StudioFailures.TOO_LITTLE_MEMORY)
+private val ComposeMemoryLines = setOf(StudioFailures.BUSY, ComposeFailures.RAN_OUT, StudioFailures.TOO_LITTLE_MEMORY)
+
+/** When the last job of [kind] ended on one of [lines] (the memory refused it), that line, as the section's note. */
+@Composable
+private fun MemoryLine(jobs: List<StudioJob>, kind: JobKind, lines: Set<String>) {
+    val refused = jobs.lastOrNull { it.kind == kind && it.state.finished }?.takeIf { it.state == JobState.Failed && it.error in lines } ?: return
+    NoteLine(refused.error!!, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+}
 
 /** A model: its name, "125 MB · CC BY 4.0" and what it is for; Download, its progress and Cancel, or Installed and Remove. */
 @Composable
@@ -135,12 +155,12 @@ private fun ModelRow(model: ModelEntry, installed: Boolean, download: StudioJob?
 private fun JobRow(job: StudioJob, undecided: Set<Long>, discarded: Set<Long>, onCancel: () -> Unit, onListen: (Long) -> Unit) {
     val piece = job.pieceId?.takeIf { job.state == JobState.Done && it in undecided }
     StudioRow(
-        title = if (job.state == JobState.Done && job.title != null) job.title else job.name,
+        title = StudioCopy.jobTitle(job),
         line = StudioCopy.jobLine(job, undecided, discarded),
         progress = if (job.state == JobState.Running) job.progress ?: -1f else null,
         buttons = if (!job.state.finished || piece != null) {
             {
-                if (!job.state.finished) ActionButton("Cancel", onClick = onCancel, description = "Cancel ${job.name}")
+                if (!job.state.finished) ActionButton("Cancel", onClick = onCancel, description = "Cancel ${StudioCopy.jobName(job)}")
                 if (piece != null) ActionButton("Listen", onClick = { onListen(piece) }, description = "Listen to ${job.title}")
             }
         } else {

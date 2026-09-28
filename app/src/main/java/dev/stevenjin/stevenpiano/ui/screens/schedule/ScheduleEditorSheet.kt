@@ -20,22 +20,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -54,22 +45,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selectableGroup
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.stevenjin.stevenpiano.R
-import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.schedule.Occurrences
@@ -80,17 +63,16 @@ import dev.stevenjin.stevenpiano.schedule.ScheduleRules
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
-import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.PieceSearch
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
+import dev.stevenjin.stevenpiano.ui.components.SheetChoiceRow
+import dev.stevenjin.stevenpiano.ui.components.SheetNote
+import dev.stevenjin.stevenpiano.ui.components.SheetChip
 import dev.stevenjin.stevenpiano.ui.components.SliderRow
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
-import dev.stevenjin.stevenpiano.ui.theme.LocalDisabledGlyph
-import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.DayOfWeek
 
 /** Under "Until the end": what it means for each kind. */
@@ -102,8 +84,6 @@ private const val VOLUME_NOTE = "Off: the piano plays as it is set, and a channe
 /** Under the Volume slider (the channel sheet's words). */
 private const val VOLUME_HELP = "The piano's own volume while it plays, or how hard its keys are struck where the piano has none. What was there comes back when it ends."
 
-/** Pieces shown at once, searched or recent. */
-private const val PIECES_SHOWN = 30
 
 /** Which of the two times a picker is open for. */
 private enum class TimeField { START, END }
@@ -268,12 +248,12 @@ private fun DayChips(days: Int, onChange: (Int) -> Unit) {
         ) {
             for (day in DayOfWeek.entries) {
                 val bit = Occurrences.dayBit(day)
-                ToggleChip(ScheduleCopy.short(day), days and bit != 0, description = ScheduleCopy.full(day)) { onChange(days xor bit) }
+                SheetChip(ScheduleCopy.short(day), days and bit != 0, description = ScheduleCopy.full(day)) { onChange(days xor bit) }
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ToggleChip("Weekdays", days == Occurrences.WEEKDAYS) { onChange(Occurrences.WEEKDAYS) }
-            ToggleChip("Every day", days == Occurrences.ALL_DAYS) { onChange(Occurrences.ALL_DAYS) }
+            SheetChip("Weekdays", days == Occurrences.WEEKDAYS) { onChange(Occurrences.WEEKDAYS) }
+            SheetChip("Every day", days == Occurrences.ALL_DAYS) { onChange(Occurrences.ALL_DAYS) }
         }
     }
     HairlineDivider(startInset = 16.dp)
@@ -290,43 +270,11 @@ private fun KindChips(kind: ScheduleKind, onSelect: (ScheduleKind) -> Unit) {
             .semantics { selectableGroup() },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ToggleChip("Channels", kind == ScheduleKind.CHANNEL) { onSelect(ScheduleKind.CHANNEL) }
-        ToggleChip("Playlists", kind == ScheduleKind.PLAYLIST) { onSelect(ScheduleKind.PLAYLIST) }
-        ToggleChip("Pieces", kind == ScheduleKind.PIECE) { onSelect(ScheduleKind.PIECE) }
+        SheetChip("Channels", kind == ScheduleKind.CHANNEL) { onSelect(ScheduleKind.CHANNEL) }
+        SheetChip("Playlists", kind == ScheduleKind.PLAYLIST) { onSelect(ScheduleKind.PLAYLIST) }
+        SheetChip("Pieces", kind == ScheduleKind.PIECE) { onSelect(ScheduleKind.PIECE) }
     }
     HairlineDivider(startInset = 16.dp)
-}
-
-/**
- * The app's chip: the chosen one carries a check (as the Piano tab's chip rows). On the sheet, which
- * is the elevated tone the chips are chosen in elsewhere, the chosen one takes the surface's tone
- * inside a tertiary hairline, as the web panel's chips do.
- */
-@Composable
-private fun ToggleChip(label: String, chosen: Boolean, description: String = label, onClick: () -> Unit) {
-    FilterChip(
-        selected = chosen,
-        onClick = onClick,
-        label = { Text(label) },
-        modifier = Modifier.semantics { contentDescription = description },
-        leadingIcon = if (chosen) {
-            { Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-        } else {
-            null
-        },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.surface,
-            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            disabledLeadingIconColor = LocalDisabledGlyph.current,
-        ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = chosen,
-            selectedBorderColor = LocalTertiary.current,
-            selectedBorderWidth = 1.dp,
-            disabledBorderColor = LocalHairline.current,
-        ),
-    )
 }
 
 /** A time of day: the label, and the time on the app's outlined button, which opens the picker. */
@@ -358,10 +306,10 @@ private fun TimeRow(label: String, minute: Int, note: String?, onClick: () -> Un
 @Composable
 private fun ChannelChoices(draft: ScheduleDraft, onChoose: (String) -> Unit) {
     val channels by LocalContext.current.graph.channelPools.summaries.collectAsStateWithLifecycle()
-    val list = channels ?: return Waiting("The channels are being worked out from the library.")
+    val list = channels ?: return SheetNote("The channels are being worked out from the library.")
     Column(Modifier.semantics { selectableGroup() }) {
         for (channel in list) {
-            ChoiceRow(
+            SheetChoiceRow(
                 title = channel.name,
                 meta = if (channel.playable) Format.count(channel.size, "piece", "pieces") else "Add more pieces",
                 chosen = draft.kind == ScheduleKind.CHANNEL && draft.target == channel.key,
@@ -379,10 +327,10 @@ private fun PlaylistChoices(draft: ScheduleDraft, onChoose: (Long) -> Unit) {
         library.playlists().collect { value = it }
     }
     val list = playlists ?: return
-    if (list.isEmpty()) return Waiting("No playlists yet.")
+    if (list.isEmpty()) return SheetNote("No playlists yet.")
     Column(Modifier.semantics { selectableGroup() }) {
         for (playlist in list.sortedWith(compareByDescending<dev.stevenjin.stevenpiano.data.db.PlaylistSummary> { it.builtIn })) {
-            ChoiceRow(
+            SheetChoiceRow(
                 title = playlist.name,
                 meta = listOfNotNull(if (playlist.builtIn) "Built in" else null, Format.count(playlist.pieceCount, "piece", "pieces")).joinToString(" · "),
                 chosen = draft.kind == ScheduleKind.PLAYLIST && draft.target == playlist.id.toString(),
@@ -394,98 +342,7 @@ private fun PlaylistChoices(draft: ScheduleDraft, onChoose: (Long) -> Unit) {
 /** A search over the library's titles and composers; before one, the piece chosen and the ones played last. */
 @Composable
 private fun PieceChoices(draft: ScheduleDraft, onChoose: (Long) -> Unit) {
-    val library = LocalContext.current.graph.library
-    var query by rememberSaveable { mutableStateOf("") }
-    val focus = LocalFocusManager.current
-    OutlinedTextField(
-        value = query,
-        onValueChange = { query = it },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        placeholder = { Text("Search titles and composers") },
-        leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
-        trailingIcon = if (query.isEmpty()) null else {
-            { GlyphButton(R.drawable.ic_close, "Clear search") { query = "" } }
-        },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge,
-        shape = MaterialTheme.shapes.small,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.onSurface,
-            unfocusedBorderColor = LocalTertiary.current,
-            cursorColor = MaterialTheme.colorScheme.onSurface,
-        ),
-    )
-    val chosenId = if (draft.kind == ScheduleKind.PIECE) draft.target?.toLongOrNull() else null
-    val chosen by produceState<PieceEntity?>(null, chosenId) {
-        value = chosenId?.let { id -> withContext(Dispatchers.IO) { library.piece(id) } }
-    }
-    val pieces by produceState<List<PieceEntity>?>(null, query) {
-        val flow = if (query.isBlank()) library.recent() else library.search(query)
-        flow.collect { value = it.take(PIECES_SHOWN) }
-    }
-    val shown = pieces ?: return
-    Column(Modifier.semantics { selectableGroup() }) {
-        chosen?.takeIf { piece -> shown.none { it.id == piece.id } }?.let { piece ->
-            ChoiceRow(piece.title, pieceMeta(piece), chosen = true) { onChoose(piece.id) }
-        }
-        if (query.isBlank() && shown.isNotEmpty()) Eyebrow("Played or added last", Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
-        for (piece in shown) {
-            ChoiceRow(piece.title, pieceMeta(piece), chosen = piece.id == chosenId) { onChoose(piece.id) }
-        }
-        if (shown.isEmpty()) Waiting(if (query.isBlank()) "No pieces yet." else "Nothing matches that search.")
-    }
-}
-
-private fun pieceMeta(piece: PieceEntity): String =
-    listOf(piece.composerShort.ifBlank { "Unknown composer" }, Format.clockMillis(piece.durationMs)).joinToString(" · ")
-
-/** One thing that can be played: its name over what it is, a check when it is the one chosen. */
-@Composable
-private fun ChoiceRow(title: String, meta: String?, chosen: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .selectable(chosen, enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp),
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (meta != null) Eyebrow(meta, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false, maxLines = 1)
-        }
-        if (chosen) {
-            Spacer(Modifier.width(16.dp))
-            Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
-        }
-    }
-    HairlineDivider(startInset = 16.dp)
-}
-
-@Composable
-private fun Waiting(text: String) {
-    Text(
-        text,
-        Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    PieceSearch(chosenId = if (draft.kind == ScheduleKind.PIECE) draft.target?.toLongOrNull() else null, onChoose = onChoose)
 }
 
 /**
