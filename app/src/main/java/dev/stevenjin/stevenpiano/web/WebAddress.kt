@@ -49,14 +49,17 @@ object WebAddress {
     )
 
     /**
-     * The tailnet address: the first IPv4 in Tailscale's 100.64.0.0/10 on an interface that is up
-     * (Tailscale's own, `tun0`, first when there are several). The Wi-Fi address: the first
-     * private IPv4 (10/8, 172.16/12, 192.168/16) on an interface that is up and named `wlan…`.
-     * Anything else (IPv6, loopback, link-local, the any-address, a mobile network) is never chosen.
+     * The tailnet address: the first IPv4 in Tailscale's 100.64.0.0/10 on a VPN interface that is
+     * up (`tun…`, as Android names Tailscale's, or `tailscale…`). Only there: carriers and some
+     * networks hand out the same block too, so a 100.64/10 address on Wi-Fi or a mobile network is
+     * never taken for the tailnet (it would put the whole panel on that network). The Wi-Fi
+     * address: the first private IPv4 (10/8, 172.16/12, 192.168/16) on an interface that is up and
+     * named `wlan…`. Anything else (IPv6, loopback, link-local, the any-address, a mobile network)
+     * is never chosen.
      */
     fun choose(interfaces: List<NetInterface>): WebChoice {
         val up = interfaces.filter { it.up }
-        val tailnet = up.sortedBy { if (it.name.startsWith("tun") || it.name.startsWith("tailscale")) 0 else 1 }
+        val tailnet = up.filter { isVpn(it.name) }
             .flatMap { it.addresses }
             .filterIsInstance<Inet4Address>()
             .firstOrNull(::isTailnet)
@@ -66,6 +69,9 @@ object WebAddress {
             .firstOrNull { isPrivate(it) && !isTailnet(it) }
         return WebChoice(tailnet, wifi)
     }
+
+    /** Whether [name] is a VPN's interface as Android names them (`tun0`), or Tailscale's own. */
+    private fun isVpn(name: String): Boolean = name.startsWith("tun") || name.startsWith("tailscale")
 
     /** 100.64.0.0/10: the carrier-grade NAT block Tailscale gives its devices. */
     fun isTailnet(address: Inet4Address): Boolean {

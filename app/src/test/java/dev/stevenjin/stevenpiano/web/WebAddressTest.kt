@@ -84,10 +84,22 @@ class WebAddressTest {
     }
 
     @Test
-    fun `a tailnet address on wlan is the tailnet's, and a Wi-Fi alone still serves guests`() {
-        val tailnetOnWifi = WebAddress.choose(listOf(NetInterface("wlan0", listOf(ip("100.101.2.3"), ip("192.168.1.20")))))
-        assertEquals(v4("100.101.2.3"), tailnetOnWifi.tailnet)
-        assertEquals(v4("192.168.1.20"), tailnetOnWifi.wifi)
+    fun `the carrier block on Wi-Fi or a mobile network is never the tailnet's, and a Wi-Fi alone still serves guests`() {
+        // Carriers and some networks use 100.64/10 too: only a VPN's interface gives the tailnet.
+        val carrier = WebAddress.choose(
+            listOf(
+                NetInterface("rmnet_data0", listOf(ip("100.70.1.2"))),
+                NetInterface("wlan0", listOf(ip("100.101.2.3"), ip("192.168.1.20"))),
+                NetInterface("eth0", listOf(ip("100.90.0.4"))),
+            ),
+        )
+        assertNull(carrier.tailnet)
+        assertEquals(v4("192.168.1.20"), carrier.wifi)
+        val onlyCarrierWifi = WebAddress.choose(listOf(NetInterface("wlan0", listOf(ip("100.101.2.3")))))
+        assertTrue("nothing to listen on", onlyCarrierWifi.isEmpty)
+        val tailscale = WebAddress.choose(listOf(NetInterface("tailscale0", listOf(ip("100.101.2.3"))), NetInterface("wlan0", listOf(ip("100.101.9.9")))))
+        assertEquals(v4("100.101.2.3"), tailscale.tailnet)
+        assertNull(tailscale.wifi)
         val wifiOnly = WebAddress.choose(listOf(NetInterface("wlan0", listOf(ip("10.0.2.16")))))
         assertNull(wifiOnly.tailnet)
         assertEquals(v4("10.0.2.16"), wifiOnly.wifi)
