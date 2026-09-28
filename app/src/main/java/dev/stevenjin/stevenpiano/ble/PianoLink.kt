@@ -11,7 +11,9 @@ package dev.stevenjin.stevenpiano.ble
 
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiSink
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 /** How the piano shows itself over Bluetooth LE (firmware: BLE-MIDI 2.2 on NimBLE). */
@@ -66,7 +68,30 @@ interface PianoLink : MidiSink {
      * out. Nothing else may use it: it bypasses the one-operation-at-a-time rule.
      */
     fun emergencySilence(timeoutMs: Long): Boolean
+
+    /**
+     * The piano's firmware version as its Device Information reports it (0x2A26, "2.0.0+a1b2c3d";
+     * BLE_OTA.md › 2), read on each connection before [state] turns Connected. Null while not
+     * connected, and on firmware older than 2.0.0, which has none.
+     */
+    val firmwareVersion: StateFlow<String?> get() = NoFirmwareVersion
+
+    /**
+     * The piano's update service (BLE_OTA.md › 3), found before [state] turns Connected; null while
+     * not connected, and on firmware that can't be updated over Bluetooth (older than 2.0.0).
+     */
+    val ota: OtaChannel? get() = null
+
+    /**
+     * The piano is about to restart on purpose (an update's OK): for [withinMs] a drop is expected,
+     * so the link reconnects to it whatever auto-connect says, and looks for it sooner, rather than
+     * giving up on it.
+     */
+    fun expectRestart(withinMs: Long) {}
 }
+
+/** [PianoLink.firmwareVersion] for a link that never knows one. */
+private val NoFirmwareVersion: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
 
 sealed interface LinkState {
     data object Disconnected : LinkState

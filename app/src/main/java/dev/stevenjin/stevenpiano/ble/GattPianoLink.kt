@@ -15,15 +15,20 @@ import android.util.Log
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -64,6 +69,16 @@ import kotlin.concurrent.withLock
  * ([LinkError.ConnectFailed], with the last GATT status or the timeout), a scan Android refused
  * ([LinkError.ScanFailed], with its code). After "Bluetooth is off", Bluetooth coming back on clears
  * the error and, with auto-connect on, looks for the piano again.
+ * The firmware (v1.6.1 — M21, BLE_OTA.md): on firmware 2.0.0 and later, discovery also finds Device
+ * Information, whose Firmware Revision String is read before Connected ([firmwareVersion]), and the
+ * update service ([ota]). An update session switches Control's notifications on (once a
+ * connection), writes BEGIN, END and ABORT with response and the image's Data frames without, all
+ * through the same one-operation queue: MIDI first, then the update's frames in order, then console
+ * lines. A Data frame is never dropped for a busy stack (a gap would cost the whole transfer); one
+ * the stack keeps refusing ends the session instead. Any end of the connection ends a session
+ * ([OtaEvent.Lost]), and stale frames never outlive their session. [expectRestart]: after an
+ * update's OK the piano restarts on purpose, so for that window a drop is reconnected whatever
+ * auto-connect says, with the first scan after [RESTART_SCAN_AFTER_MS] rather than 20 s.
  * [log] is the link's trail, kept in release builds (`Log.w`, tag "PianoLink": R8 strips only
  * v, d and i): each scan with its filter, each device a scan sees (once per address per scan: its
  * address, name, RSSI, whether it advertised the MIDI service, and what the link did about it), each
@@ -110,6 +125,36 @@ class GattPianoLink(
     override val console: ConsoleChannel?
         get() = if (consoleReady) consoleChannel else null
 
+    // The firmware: its version (read before Connected) and its update service.
+    private val _firmwareVersion = MutableStateFlow<String?>(null)
+    override val firmwareVersion: StateFlow<String?> = _firmwareVersion.asStateFlow()
+
+    @Volatile
+    private var otaReady = false
+
+    /** The largest Data payload at this connection's MTU, set as it becomes ready. */
+    @Volatile
+    private var otaChunk = 0
+
+    /** The update's frames in order (the subscription, BEGIN, Data, END, ABORT), written from the link's thread. */
+    private val otaQueue = ConcurrentLinkedQueue<Op>()
+    private val otaSession = AtomicReference<OtaSession?>(null)
+    private val otaChannel = object : OtaChannel {
+        override val maxChunk: Int get() = otaChunk
+        override val window: Int get() = OtaFrames.WINDOW
+
+        override fun begin(header: OtaBegin): Flow<OtaEvent> = openSession(header)
+
+        override fun write(seq: Int, payload: ByteArray): Boolean = queueData(seq, payload)
+
+        override fun end() = queueEnd()
+
+        override fun abort() = executor.execute { abortSession() }
+    }
+
+    override val ota: OtaChannel?
+        get() = if (otaReady) otaChannel else null
+
     // Owned by the executor's thread.
     private enum class Phase { None, Connecting, Negotiating, Ready }
 
@@ -137,6 +182,18 @@ class GattPianoLink(
     private var writeRetries = 0
     private var subscribePending = false
     private var consoleOffset = 0   // bytes of the head console line already written
+
+    /** The operation written and not yet answered, so a failed Control write can end its session. */
+    private var inFlightOp: Op? = null
+
+    /** Control's notifications are on for this connection. */
+    private var otaSubscribed = false
+
+    /** The Firmware Revision String is being read (before Ready). */
+    private var readingVersion = false
+
+    /** Until when (by [nowMs]) a drop is an expected restart ([expectRestart]); 0 when none is. */
+    private var restartUntilMs = 0L
     private val assembler = ConsoleLineAssembler()
     private var reconnectStartedMs = 0L
     private var backoffStep = 0
@@ -178,13 +235,15 @@ class GattPianoLink(
     private val retryInBackground = Runnable { connectInBackground() }
     private val mtuTimeout = Runnable { onMtuTimeout() }
     private val discoveryTimeout = Runnable { gatt?.let { onDiscovered(it, success = false, failure = "had no answer within ${DISCOVERY_TIMEOUT_MS / 1000} s") } }
-    private val writeTimeout = Runnable { gatt?.let(::onWritten) }
+    private val writeTimeout = Runnable { gatt?.let { onWritten(it) } }
     private val offerOther = Runnable { onOtherPianoOnly() }
     private val connectCandidate = Runnable { onCandidateWaited() }
     private val nameTimeout = Runnable { gatt?.let { onNameRead(it, null, "no answer within ${NAME_TIMEOUT_MS / 1000} s") } }
+    private val versionTimeout = Runnable { gatt?.let { onVersionRead(it, null, "no answer within ${VERSION_TIMEOUT_MS / 1000} s") } }
+    private val restartWindowEnd = Runnable { onRestartWindowEnded() }
     private val timers = listOf(
         pump, startScan, scanTimeout, connectTimeout, retryConnect, retryInBackground, mtuTimeout, discoveryTimeout, writeTimeout,
-        offerOther, connectCandidate, nameTimeout,
+        offerOther, connectCandidate, nameTimeout, versionTimeout,
     )
 
     private val events = object : GattEvents {
@@ -198,7 +257,7 @@ class GattPianoLink(
             executor.execute { onDiscovered(connection, success) }
 
         override fun onWriteDone(connection: GattConnection, success: Boolean) =
-            executor.execute { onWritten(connection) }
+            executor.execute { onWritten(connection, success) }
 
         override fun onConsoleSubscribed(connection: GattConnection, success: Boolean) = executor.execute {
             if (!success && connection === gatt) log("The piano did not switch on its console replies")
@@ -210,6 +269,13 @@ class GattPianoLink(
 
         override fun onDeviceName(connection: GattConnection, name: String?, status: Int) =
             executor.execute { onNameRead(connection, if (status == 0) name else null, "status ${BleCodes.gattStatus(status)}") }
+
+        override fun onFirmwareVersion(connection: GattConnection, value: ByteArray?, status: Int) =
+            executor.execute { onVersionRead(connection, if (status == 0) PianoOta.version(value) else null, "status ${BleCodes.gattStatus(status)}") }
+
+        override fun onOtaSubscribed(connection: GattConnection, success: Boolean) = executor.execute { onOtaSubscribeDone(connection, success) }
+
+        override fun onOtaNotified(connection: GattConnection, data: ByteArray) = executor.execute { onOtaAnswer(connection, data) }
     }
 
     init {
@@ -219,6 +285,12 @@ class GattPianoLink(
     override fun connect(address: String?) = executor.execute { startConnect(address) }
 
     override fun disconnect() = executor.execute { stop() }
+
+    override fun expectRestart(withinMs: Long) = executor.execute {
+        restartUntilMs = nowMs() + withinMs
+        executor.schedule(withinMs, restartWindowEnd)
+        log("The piano restarts after its update: a drop in the next ${withinMs / 1000} s is reconnected")
+    }
 
     override fun send(batch: MidiBatch, dropPending: Boolean) {
         if (!ready) return
@@ -573,7 +645,7 @@ class GattPianoLink(
         }
         when {
             midi && verifyName -> readName(connection)
-            midi -> becomeReady(connection)
+            midi -> finishSetup(connection)
             !discoveryRetried -> {
                 discoveryRetried = true
                 log("Discovering the services once more")
@@ -616,7 +688,7 @@ class GattPianoLink(
             log("GAP Device Name ${BleCodes.name(name)}: it is the piano")
             verifyName = false
             piano = FoundPiano(found.address, PianoBluetooth.NAME, found.rssi, found.advertisesMidi)
-            becomeReady(connection)
+            finishSetup(connection)
             return
         }
         log(
@@ -637,9 +709,44 @@ class GattPianoLink(
         beginScan()
     }
 
-    private fun becomeReady(connection: GattConnection) {
+    /**
+     * The last step before Ready: on firmware that has Device Information (2.0.0 and later) its
+     * Firmware Revision String is read first ([VERSION_TIMEOUT_MS] at most), so [firmwareVersion] is
+     * known as the link turns Connected. Older firmware goes straight on.
+     */
+    private fun finishSetup(connection: GattConnection) {
+        if (guard { connection.hasFirmwareVersion() } == true && guard { connection.readFirmwareVersion() } == true) {
+            readingVersion = true
+            executor.schedule(VERSION_TIMEOUT_MS, versionTimeout)
+        } else {
+            becomeReady(connection, version = null)
+        }
+    }
+
+    private fun onVersionRead(connection: GattConnection, version: String?, failure: String) {
+        if (connection !== gatt || phase != Phase.Negotiating || !readingVersion) return
+        readingVersion = false
+        executor.cancel(versionTimeout)
+        becomeReady(connection, version, versionFailure = if (version == null) failure else null)
+    }
+
+    private fun becomeReady(connection: GattConnection, version: String?, versionFailure: String? = null) {
         guard { connection.requestHighPriority() }
         val hasConsole = guard { connection.hasConsole() } == true
+        val hasOta = guard { connection.hasOta() } == true
+        if (version != null || versionFailure != null || hasOta) {
+            log(
+                (if (version != null) "Firmware ${BleCodes.name(version)}" else "Firmware version not read: ${versionFailure ?: "no Device Information"}") +
+                    ", update service ${yesNo(hasOta)}",
+            )
+        }
+        otaQueue.clear()
+        otaSubscribed = false
+        otaChunk = OtaFrames.maxChunk(mtu)
+        otaReady = hasOta
+        _firmwareVersion.value = version
+        restartUntilMs = 0L
+        executor.cancel(restartWindowEnd)
         phase = Phase.Ready
         reconnecting = false
         attempt = 0
@@ -695,20 +802,39 @@ class GattPianoLink(
     }
 
     private fun startReconnecting() {
-        if (!shouldReconnect()) {
+        val restarting = restartExpected()
+        if (!shouldReconnect() && !restarting) {
             log("Auto-connect is off: not reconnecting")
             wanted = false
             publish()
             return
         }
-        log("Reconnecting: in the background at once, and with scans from ${RECONNECT_SCAN_AFTER_MS / 1000} s")
+        val scanAfter = if (restarting) RESTART_SCAN_AFTER_MS else RECONNECT_SCAN_AFTER_MS
+        log(
+            (if (restarting) "The piano is restarting: reconnecting" else "Reconnecting") +
+                ": in the background at once, and with scans from ${scanAfter / 1000} s",
+        )
         reconnecting = true
         attempt = 1
         backoffStep = 0
         reconnectStartedMs = nowMs()
         connectInBackground()
-        executor.schedule(RECONNECT_SCAN_AFTER_MS, startScan)
+        executor.schedule(scanAfter, startScan)
         publish()
+    }
+
+    /** Whether a drop now is the restart [expectRestart] announced. */
+    private fun restartExpected(): Boolean = restartUntilMs != 0L && nowMs() < restartUntilMs
+
+    /** The restart's window is over without the piano: with auto-connect off, the link stops looking. */
+    private fun onRestartWindowEnded() {
+        restartUntilMs = 0L
+        if (reconnecting && !shouldReconnect()) {
+            log("The piano did not come back within the restart's window; auto-connect is off: not reconnecting")
+            wanted = false
+            halt()
+            publish()
+        }
     }
 
     /** The next reconnect scan, backing off; after a while only the background connection waits on. */
@@ -795,8 +921,15 @@ class GattPianoLink(
         consoleOffset = 0
         subscribePending = false
         assembler.clear()
+        otaReady = false
+        otaSubscribed = false
+        otaQueue.clear()
+        otaSession.get()?.deliver(OtaEvent.Lost("the connection to the piano ended"))
+        readingVersion = false
+        _firmwareVersion.value = null
         executor.cancel(writeTimeout)
         inFlight = false
+        inFlightOp = null
         retryOp = null
         writeRetries = 0
         setWriting(false)
@@ -813,6 +946,18 @@ class GattPianoLink(
         class Console(val chunk: ByteArray, val endsLine: Boolean) : Op
 
         data object Subscribe : Op
+
+        /** Control's CCCD, once a connection, before a session's first frame. */
+        class OtaSubscribe(val session: OtaSession) : Op
+
+        /** BEGIN, END or ABORT, written with response. */
+        class OtaControl(val frame: ByteArray, val session: OtaSession, val name: String) : Op
+
+        /** One Data frame, written without response. */
+        class OtaData(val frame: ByteArray, val session: OtaSession) : Op
+
+        /** An update frame: never dropped for a busy stack. */
+        fun isOta(): Boolean = this is OtaSubscribe || this is OtaControl || this is OtaData
     }
 
     private fun pumpNow() {
@@ -821,6 +966,7 @@ class GattPianoLink(
         val connection = gatt
         if (phase != Phase.Ready || inFlight || connection == null) return
         val now = executor.nanoTime()
+        if (retryOp?.let(::staleOta) == true) retryOp = null
         val op = retryOp ?: nextOp(now)
         if (op == null) {
             val wait = writer.nanosUntilReady(now)
@@ -833,11 +979,15 @@ class GattPianoLink(
                 is Op.Midi -> connection.write(op.packet)
                 is Op.Console -> connection.writeConsole(op.chunk)
                 Op.Subscribe -> connection.subscribeConsole()
+                is Op.OtaSubscribe -> connection.subscribeOta()
+                is Op.OtaControl -> connection.writeOtaControl(op.frame)
+                is Op.OtaData -> connection.writeOtaData(op.frame)
             }
         } ?: WriteResult.Failed
         when (result) {
             WriteResult.Sent -> {
                 inFlight = true
+                inFlightOp = op
                 retryOp = null
                 writeRetries = 0
                 done(op)
@@ -845,7 +995,20 @@ class GattPianoLink(
             }
             WriteResult.Busy, WriteResult.Failed -> {
                 retryOp = op
+                if (op.isOta() && writeRetries >= MAX_OTA_WRITE_RETRIES) {
+                    // Never dropped (a gap costs the whole transfer): a stack that keeps refusing ends the session.
+                    log("The stack would not take the update's frames: the update session ends")
+                    retryOp = null
+                    writeRetries = 0
+                    otaSession.get()?.deliver(OtaEvent.Lost("Bluetooth would not take the update's frames"))
+                    executor.schedule(WRITE_RETRY_MS, pump)
+                    return
+                }
                 if (++writeRetries > MAX_WRITE_RETRIES) {
+                    if (op.isOta()) {
+                        executor.schedule(WRITE_RETRY_SLOW_MS, pump)
+                        return
+                    }
                     if (op is Op.Midi && op.mustArrive) {
                         // Never given up while connected: the piano would hold a key or the pedal.
                         if (writeRetries == MAX_WRITE_RETRIES + 1) log("A packet that lets keys go waits on a busy stack")
@@ -872,6 +1035,7 @@ class GattPianoLink(
         if (subscribePending) return Op.Subscribe
         writer.nextPacket(now, mtu, now / NANOS_PER_MS)?.let { return Op.Midi(it, BleMidiFramer.mustArrive(it)) }
         if (writer.pending > 0) return null
+        nextOta()?.let { return it }
         val line = consoleQueue.peek() ?: return null
         val end = minOf(line.size, consoleOffset + (mtu - ATT_HEADER).coerceAtLeast(1))
         return Op.Console(line.copyOfRange(consoleOffset, end), endsLine = end == line.size)
@@ -881,6 +1045,7 @@ class GattPianoLink(
     private fun done(op: Op, dropped: Boolean = false) {
         when (op) {
             is Op.Midi -> Unit
+            is Op.OtaSubscribe, is Op.OtaControl, is Op.OtaData -> otaQueue.remove(op)
             Op.Subscribe -> subscribePending = false
             is Op.Console -> if (op.endsLine || dropped) {
                 consoleQueue.poll()
@@ -915,11 +1080,156 @@ class GattPianoLink(
         assembler.feed(data) { consoleLines.tryEmit(it) }
     }
 
-    private fun onWritten(connection: GattConnection) {
+    private fun onWritten(connection: GattConnection, success: Boolean = true) {
         if (connection !== gatt) return
         executor.cancel(writeTimeout)
+        val op = inFlightOp
         inFlight = false
+        inFlightOp = null
+        if (!success && op is Op.OtaControl) {
+            log("The piano did not take the update's ${op.name}")
+            op.session.deliver(OtaEvent.Lost("the piano did not take the ${op.name} frame"))
+        }
         pumpNow()
+    }
+
+    // ---- Firmware updates ----------------------------------------------------------------
+
+    /**
+     * One update session's answers, from BEGIN to OK, ABORTED, an ERR or the end of the connection.
+     * [deliver] runs on the link's thread; [ended] once END is queued (ABORT is pointless after it).
+     */
+    private inner class OtaSession(private val out: SendChannel<OtaEvent>) {
+        @Volatile
+        var ended = false
+
+        @Volatile
+        var finished = false
+            private set
+
+        fun deliver(event: OtaEvent) {
+            if (finished) return
+            out.trySend(event)
+            if (event.ends) finish()
+        }
+
+        fun finish() {
+            if (finished) return
+            finished = true
+            otaSession.compareAndSet(this, null)
+            otaQueue.removeAll { it is Op.OtaData && it.session === this }
+            if ((retryOp as? Op.OtaData)?.session === this) retryOp = null
+            out.close()
+        }
+    }
+
+    private fun openSession(header: OtaBegin): Flow<OtaEvent> = callbackFlow {
+        val session = OtaSession(channel)
+        if (!otaSession.compareAndSet(null, session)) {
+            trySend(OtaEvent.Lost("an update session is already under way"))
+            close()
+        } else {
+            val frame = OtaFrames.begin(header)
+            executor.execute { startSession(session, frame, header) }
+        }
+        awaitClose { executor.execute { leaveSession(session) } }
+    }
+
+    private fun startSession(session: OtaSession, frame: ByteArray, header: OtaBegin) {
+        if (session.finished) return
+        val connection = gatt
+        if (phase != Phase.Ready || !otaReady || connection == null) return session.deliver(OtaEvent.Lost("not connected to the piano"))
+        guard { connection.requestHighPriority() }
+        otaQueue.removeAll { it is Op.OtaData }
+        if (!otaSubscribed) otaQueue.add(Op.OtaSubscribe(session))
+        otaQueue.add(Op.OtaControl(frame, session, "BEGIN"))
+        log("Update: BEGIN for ${BleCodes.name(header.version)}, ${header.size} bytes, window ${header.window}, MTU $mtu")
+        pumpNow()
+    }
+
+    /** The session's collector went away: before END, ABORT goes (the piano discards the slot). */
+    private fun leaveSession(session: OtaSession) {
+        if (!session.finished && !session.ended && otaSession.get() === session && otaReady) {
+            log("Update: ABORT (the session was left)")
+            otaQueue.add(Op.OtaControl(OtaFrames.abort(), session, "ABORT"))
+            pumpNow()
+        }
+        session.finish()
+    }
+
+    /** From any thread: Data frame [seq], queued behind the session's frames before it. */
+    private fun queueData(seq: Int, payload: ByteArray): Boolean {
+        val session = otaSession.get() ?: return false
+        if (session.finished || session.ended || payload.isEmpty() || payload.size > otaChunk) return false
+        if (otaQueue.count { it is Op.OtaData } >= MAX_OTA_FRAMES_WAITING) return false
+        otaQueue.add(Op.OtaData(OtaFrames.data(seq, payload), session))
+        if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
+        return true
+    }
+
+    /** From any thread: END, after every Data frame queued. */
+    private fun queueEnd() {
+        val session = otaSession.get() ?: return
+        if (session.finished || session.ended) return
+        session.ended = true
+        otaQueue.add(Op.OtaControl(OtaFrames.end(), session, "END"))
+        if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
+    }
+
+    /** ABORT, ahead of the Data frames still waiting, which are dropped. Nothing once END is out: the piano no longer hears it. */
+    private fun abortSession() {
+        val session = otaSession.get() ?: return
+        if (session.finished || session.ended) return
+        otaQueue.removeAll { it is Op.OtaData }
+        if (retryOp is Op.OtaData) retryOp = null
+        otaQueue.add(Op.OtaControl(OtaFrames.abort(), session, "ABORT"))
+        log("Update: ABORT")
+        pumpNow()
+    }
+
+    /** The next update frame of the current session; frames of a session that has ended are dropped here. */
+    private fun nextOta(): Op? {
+        while (true) {
+            val op = otaQueue.peek() ?: return null
+            if (staleOta(op) || (op is Op.OtaSubscribe && otaSubscribed)) {
+                otaQueue.remove(op)
+                continue
+            }
+            return op
+        }
+    }
+
+    /** An update frame whose session has ended: never written (but an ABORT, which ends one, still goes). */
+    private fun staleOta(op: Op): Boolean = when (op) {
+        is Op.OtaSubscribe -> op.session.finished
+        is Op.OtaControl -> op.session.finished && op.name != "ABORT"
+        is Op.OtaData -> op.session.finished
+        else -> false
+    }
+
+    private fun onOtaSubscribeDone(connection: GattConnection, success: Boolean) {
+        if (connection !== gatt) return
+        otaSubscribed = success
+        if (!success) {
+            log("The piano did not switch on its update replies")
+            otaSession.get()?.deliver(OtaEvent.Lost("the piano's update replies could not be switched on"))
+        }
+        onWritten(connection)
+    }
+
+    private fun onOtaAnswer(connection: GattConnection, data: ByteArray) {
+        if (connection !== gatt) return
+        val event = OtaFrames.parse(data)
+        if (event == null) {
+            log("Update: an answer this app doesn't know (${OtaFrames.hex(data.copyOf(minOf(data.size, 8)))}) ignored")
+            return
+        }
+        when (event) {
+            is OtaEvent.Ack -> Unit   // one a window: not logged
+            is OtaEvent.Error -> log("Update: ERR ${event.code} (${OtaFrames.errorName(event.code)})")
+            else -> log("Update: $event")
+        }
+        otaSession.get()?.deliver(event)
     }
 
     private fun setWriting(value: Boolean) {
@@ -996,6 +1306,18 @@ class GattPianoLink(
 
         /** How long the candidate's GAP Device Name may take to read. */
         private const val NAME_TIMEOUT_MS = 3_000L
+
+        /** How long the Firmware Revision String may take to read before the link goes on without it. */
+        private const val VERSION_TIMEOUT_MS = 3_000L
+
+        /** After an update's OK the piano is back in a few seconds: the first scan comes this soon. */
+        const val RESTART_SCAN_AFTER_MS = 3_000L
+
+        /** Data frames that may wait at once (a window is at most 32). */
+        private const val MAX_OTA_FRAMES_WAITING = 64
+
+        /** Retries of an update frame on a busy stack (40 quick, then every 20 ms) before the session ends: about 2 s. */
+        private const val MAX_OTA_WRITE_RETRIES = 140
 
         /** Pedal up, then All Notes Off: the stop sequence, as packed messages. */
         private val STOP_SEQUENCE = intArrayOf(MidiBatch.pack(0xB0, 64, 0), MidiBatch.pack(0xB0, 123, 0))

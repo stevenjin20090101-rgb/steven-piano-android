@@ -129,19 +129,31 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) =
             events.onWriteDone(connection, status == BluetoothGatt.GATT_SUCCESS)
 
-        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) =
-            events.onConsoleSubscribed(connection, status == BluetoothGatt.GATT_SUCCESS)
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            val success = status == BluetoothGatt.GATT_SUCCESS
+            if (descriptor.characteristic?.uuid == PianoOta.CONTROL_UUID) {
+                events.onOtaSubscribed(connection, success)
+            } else {
+                events.onConsoleSubscribed(connection, success)
+            }
+        }
 
         // API 33+: the value arrives with the callback. Not calling super keeps the old callback below silent.
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            if (characteristic.uuid == PianoBluetooth.GAP_DEVICE_NAME_UUID) events.onDeviceName(connection, deviceName(value, status), status)
+            when (characteristic.uuid) {
+                PianoBluetooth.GAP_DEVICE_NAME_UUID -> events.onDeviceName(connection, deviceName(value, status), status)
+                PianoOta.FIRMWARE_REVISION_UUID -> events.onFirmwareVersion(connection, if (status == BluetoothGatt.GATT_SUCCESS) value.copyOf() else null, status)
+            }
         }
 
         // API 26-32: the value sits in the characteristic.
         @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            if (characteristic.uuid != PianoBluetooth.GAP_DEVICE_NAME_UUID) return
-            events.onDeviceName(connection, deviceName(characteristic.value, status), status)
+            when (characteristic.uuid) {
+                PianoBluetooth.GAP_DEVICE_NAME_UUID -> events.onDeviceName(connection, deviceName(characteristic.value, status), status)
+                PianoOta.FIRMWARE_REVISION_UUID ->
+                    events.onFirmwareVersion(connection, if (status == BluetoothGatt.GATT_SUCCESS) characteristic.value?.copyOf() else null, status)
+            }
         }
 
         /** The GAP Device Name is UTF-8, sometimes padded with NULs. */
@@ -150,15 +162,20 @@ class AndroidBleRadio(private val context: Context) : BleRadio {
 
         // API 33+: the value arrives with the callback. Not calling super keeps the old callback below silent.
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-            if (characteristic.uuid == PianoConsole.TX_UUID) events.onConsoleData(connection, value.copyOf())
+            when (characteristic.uuid) {
+                PianoConsole.TX_UUID -> events.onConsoleData(connection, value.copyOf())
+                PianoOta.CONTROL_UUID -> events.onOtaNotified(connection, value.copyOf())
+            }
         }
 
         // API 26-32: the value sits in the characteristic until the next notification overwrites it, so copy it now.
         @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            if (characteristic.uuid != PianoConsole.TX_UUID) return
             val value = characteristic.value ?: return
-            events.onConsoleData(connection, value.copyOf())
+            when (characteristic.uuid) {
+                PianoConsole.TX_UUID -> events.onConsoleData(connection, value.copyOf())
+                PianoOta.CONTROL_UUID -> events.onOtaNotified(connection, value.copyOf())
+            }
         }
     }
 }
@@ -169,6 +186,10 @@ private class AndroidGattConnection(override val address: String) : GattConnecti
     private var midi: BluetoothGattCharacteristic? = null
     private var consoleRx: BluetoothGattCharacteristic? = null
     private var consoleCccd: BluetoothGattDescriptor? = null
+    private var firmwareRevision: BluetoothGattCharacteristic? = null
+    private var otaControl: BluetoothGattCharacteristic? = null
+    private var otaCccd: BluetoothGattDescriptor? = null
+    private var otaData: BluetoothGattCharacteristic? = null
 
     override fun requestMtu(mtu: Int): Boolean = gatt.requestMtu(mtu)
 
@@ -197,8 +218,33 @@ private class AndroidGattConnection(override val address: String) : GattConnecti
 
     override fun writeConsole(chunk: ByteArray): WriteResult = writeNoResponse(consoleRx, chunk)
 
-    override fun subscribeConsole(): WriteResult {
-        val cccd = consoleCccd ?: return WriteResult.Failed
+    override fun subscribeConsole(): WriteResult = subscribe(consoleCccd)
+
+    override fun hasFirmwareVersion(): Boolean {
+        firmwareRevision = gatt.getService(PianoOta.DEVICE_INFORMATION_UUID)?.getCharacteristic(PianoOta.FIRMWARE_REVISION_UUID)
+        return firmwareRevision != null
+    }
+
+    override fun readFirmwareVersion(): Boolean = firmwareRevision?.let { gatt.readCharacteristic(it) } ?: false
+
+    override fun hasOta(): Boolean {
+        val service = gatt.getService(PianoOta.SERVICE_UUID)
+        otaControl = service?.getCharacteristic(PianoOta.CONTROL_UUID)
+        otaCccd = otaControl?.getDescriptor(PianoConsole.CCCD_UUID)
+        otaData = service?.getCharacteristic(PianoOta.DATA_UUID)
+        return otaControl != null && otaCccd != null && otaData != null
+    }
+
+    override fun subscribeOta(): WriteResult = subscribe(otaCccd)
+
+    /** BEGIN, END and ABORT go with response: the piano's answer comes as a notification after it. Long frames are Android's long writes. */
+    override fun writeOtaControl(frame: ByteArray): WriteResult = write(otaControl, frame, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+
+    override fun writeOtaData(frame: ByteArray): WriteResult = writeNoResponse(otaData, frame)
+
+    /** Switches on [cccd]'s characteristic's notifications: the local flag, then the CCCD write. */
+    private fun subscribe(cccd: BluetoothGattDescriptor?): WriteResult {
+        if (cccd == null) return WriteResult.Failed
         if (!gatt.setCharacteristicNotification(cccd.characteristic, true)) return WriteResult.Failed
         val enable = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -210,13 +256,15 @@ private class AndroidGattConnection(override val address: String) : GattConnecti
         return if (gatt.writeDescriptor(cccd)) WriteResult.Sent else WriteResult.Busy
     }
 
-    private fun writeNoResponse(characteristic: BluetoothGattCharacteristic?, bytes: ByteArray): WriteResult {
+    private fun writeNoResponse(characteristic: BluetoothGattCharacteristic?, bytes: ByteArray): WriteResult =
+        write(characteristic, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
+
+    private fun write(characteristic: BluetoothGattCharacteristic?, bytes: ByteArray, type: Int): WriteResult {
         if (characteristic == null) return WriteResult.Failed
-        val noResponse = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return statusToResult(gatt.writeCharacteristic(characteristic, bytes, noResponse))
+            return statusToResult(gatt.writeCharacteristic(characteristic, bytes, type))
         }
-        characteristic.writeType = noResponse
+        characteristic.writeType = type
         @Suppress("DEPRECATION")
         characteristic.value = bytes
         @Suppress("DEPRECATION")

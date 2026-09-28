@@ -136,6 +136,17 @@ class FakeGatt(override val address: String, val autoConnect: Boolean, private v
     var notifyChunk = 20
     private val rx = StringBuilder()
 
+    /** Firmware 2.0.0 and later: Device Information with its Firmware Revision String ([versionRead] answers the read). */
+    var hasDeviceInformation = false
+
+    /** Firmware 2.0.0 and later: the update service. */
+    var hasOtaService = false
+    var versionReads = 0
+
+    /** What the link wrote to the update's Control and Data, in order. */
+    val otaControlWrites = mutableListOf<ByteArray>()
+    val otaDataWrites = mutableListOf<ByteArray>()
+
     /** Every line written to the console so far, split on "\n". */
     val consoleLinesWritten: List<String>
         get() = consoleWrites.joinToString("") { String(it, Charsets.UTF_8) }.split('\n').dropLast(1)
@@ -196,6 +207,34 @@ class FakeGatt(override val address: String, val autoConnect: Boolean, private v
         return WriteResult.Sent
     }
 
+    override fun hasFirmwareVersion(): Boolean = hasDeviceInformation
+
+    override fun readFirmwareVersion(): Boolean {
+        versionReads++
+        return true
+    }
+
+    override fun hasOta(): Boolean = hasOtaService
+
+    override fun subscribeOta(): WriteResult {
+        if (nextWrite == WriteResult.Sent) ops += "ota-subscribe"
+        return nextWrite
+    }
+
+    override fun writeOtaControl(frame: ByteArray): WriteResult {
+        if (nextWrite != WriteResult.Sent) return nextWrite
+        otaControlWrites += frame.copyOf()
+        ops += "ota-control"
+        return WriteResult.Sent
+    }
+
+    override fun writeOtaData(frame: ByteArray): WriteResult {
+        if (nextWrite != WriteResult.Sent) return nextWrite
+        otaDataWrites += frame.copyOf()
+        ops += "ota-data"
+        return WriteResult.Sent
+    }
+
     override fun disconnect() {
         disconnected = true
     }
@@ -212,7 +251,16 @@ class FakeGatt(override val address: String, val autoConnect: Boolean, private v
 
     fun discovered(success: Boolean = true) = events.onServicesDiscovered(this, success)
 
-    fun writeDone() = events.onWriteDone(this, success = true)
+    fun writeDone(success: Boolean = true) = events.onWriteDone(this, success)
+
+    /** The piano answers the Firmware Revision String read: [value] as UTF-8, with [status] (0 is GATT_SUCCESS). */
+    fun versionRead(value: String?, status: Int = 0) = events.onFirmwareVersion(this, value?.toByteArray(Charsets.UTF_8), status)
+
+    /** Control's CCCD write is done. */
+    fun otaSubscribeDone(success: Boolean = true) = events.onOtaSubscribed(this, success)
+
+    /** The piano notifies [bytes] on Control. */
+    fun otaNotify(bytes: ByteArray) = events.onOtaNotified(this, bytes)
 
     fun subscribeDone(success: Boolean = true) = events.onConsoleSubscribed(this, success)
 
