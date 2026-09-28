@@ -869,5 +869,8 @@ button, input, select { font: inherit; color: inherit; }
 .poster-foot { margin-top: 8mm; }
 
 @media print {
-  .poster-sheet { min-height: 297mm; height: 297mm; page-break-after: avoid; }
+  /* Printed, the paper is the paper: no tint (Android's print path prints backgrounds, a browser's doesn't).
+     The sheet is centred in the page a little shorter than it, so rounding never spills a blank second page. */
+  .poster { background: none; }
+  .poster-sheet { min-height: 0; height: calc(100vh - 4mm); break-inside: avoid; }
 }
