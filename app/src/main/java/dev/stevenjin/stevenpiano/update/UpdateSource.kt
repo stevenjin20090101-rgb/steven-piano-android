@@ -28,7 +28,7 @@ import java.util.Locale
  * for the manifest and its file, plain HTTP allowed, so the updater can be exercised against a
  * server on the Mac. Release builds never make one.
  *
- * [firmware] (v1.6.1 — M21): the piano's firmware releases, from their own repository
+ * [firmware] (v1.6 — M21): the piano's firmware releases, from their own repository
  * ([FIRMWARE_REPOSITORY], `firmware/docs/BLE_OTA.md` › 10 and 15): the manifest at
  * [FIRMWARE_MANIFEST_URL] and nothing else on `raw.githubusercontent.com`, binaries only under
  * [FIRMWARE_DOWNLOAD_PREFIX] on `github.com`, and GitHub's two asset hosts for the redirect. Its own

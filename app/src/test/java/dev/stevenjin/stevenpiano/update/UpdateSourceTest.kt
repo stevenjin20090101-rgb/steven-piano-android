@@ -16,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The firmware's allow-list (v1.6.1 — M21; BLE_OTA.md › 10 and 15): the manifest at one address
+ * The firmware's allow-list (v1.6 — M21; BLE_OTA.md › 10 and 15): the manifest at one address
  * exactly, binaries only among its repository's release assets (and GitHub's two asset hosts for
  * the redirect), a cap of its own, and no overlap with the app's own updates.
  */

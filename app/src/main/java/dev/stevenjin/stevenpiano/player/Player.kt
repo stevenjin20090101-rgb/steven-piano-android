@@ -72,7 +72,7 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * (null) when a piece is played from a list ([play]), a list is played without a channel, the person
  * skips to an entry the channel did not deal, or playback stops ([stop], [stopAndFlush],
  * [leaveChannel]: the notification's dismiss).
- * While the piano's firmware is updated (v1.6.1 — M21) the player is [lock]ed: nothing starts,
+ * While the piano's firmware is updated (v1.6 — M21) the player is [lock]ed: nothing starts,
  * resumes, seeks or sounds from the Keys screen until [unlock], and the reason shows as the
  * [PlayerState.problem]; [stopQuietly] stops and waits for the stop sequence to be written first.
  */
@@ -292,7 +292,7 @@ class Player(
     }
 
     /**
-     * Nothing plays from now until [unlock] (a firmware update, v1.6.1 — M21): pieces, resume,
+     * Nothing plays from now until [unlock] (a firmware update, v1.6 — M21): pieces, resume,
      * seek, Next and Previous, channels, the web panel and the Keys screen's keys are turned away,
      * and [reason] shows as the state's problem, where Now playing shows playback's problems. It
      * does not stop what plays: [stopQuietly] does.

@@ -13,7 +13,7 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import java.util.Locale
 
-/** What the Firmware page, the hub's row and the update's notification say (DESIGN.md › v1.6.1 — M21). */
+/** What the Firmware page, the hub's row and the update's notification say (DESIGN.md › v1.6 — M21). */
 object FirmwareCopy {
     const val CHECK = "Check for piano updates"
     const val CHECKING = "Checking for piano updates…"

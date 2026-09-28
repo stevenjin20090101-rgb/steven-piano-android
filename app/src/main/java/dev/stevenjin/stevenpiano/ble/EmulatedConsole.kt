@@ -23,7 +23,7 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS) {
     private val facts = LinkedHashMap(facts)
     private val values = LinkedHashMap<String, String>().apply { TUNABLES.forEach { put(it.name, it.default) } }
 
-    /** The piano's fact [name] (without its "!") now reads [value]: a firmware update's `!fw` and `!ota` (v1.6.1 — M21). */
+    /** The piano's fact [name] (without its "!") now reads [value]: a firmware update's `!fw` and `!ota` (v1.6 — M21). */
     fun setFact(name: String, value: String) {
         facts[name] = value
     }

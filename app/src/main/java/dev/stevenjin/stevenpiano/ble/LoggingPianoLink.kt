@@ -36,7 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
  * to one whose console never answers; anything else, the full console. Its connections (not the
  * MIDI it logs) also go to [LinkLog], so the diagnostics share has a link log on the emulator too.
- * The firmware (v1.6.1 — M21): with `debug.stevenpiano.fakeota` naming a [FakeOta] scenario, the
+ * The firmware (v1.6 — M21): with `debug.stevenpiano.fakeota` naming a [FakeOta] scenario, the
  * emulated piano reports its version and has the update service ([EmulatedOta]), and after an
  * update's OK it restarts: it drops for [BOOT_MS] and comes back as the scenario says, pending its
  * self-test and confirmed [CONFIRM_MS] later. Without the property it has neither, as firmware

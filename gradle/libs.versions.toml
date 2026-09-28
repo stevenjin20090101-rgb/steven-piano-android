@@ -32,7 +32,7 @@ haze = "1.7.2"
 # The web panel (v1.5.1 — M18): NanoHTTPD and its WebSocket half (BSD-3-Clause), the QR code (MIT).
 nanohttpd = "2.3.1"
 qrcodeKotlin = "4.5.0"
-# The piano's firmware updates (v1.6.1 — M21): Ed25519 checks below Android 13, whose platform has none (CC0).
+# The piano's firmware updates (v1.6 — M21): Ed25519 checks below Android 13, whose platform has none (CC0).
 eddsa = "0.3.0"
 
 [libraries]

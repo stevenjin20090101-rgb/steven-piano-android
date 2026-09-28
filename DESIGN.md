@@ -1149,7 +1149,7 @@ page: no browser, so it works in kiosk mode too).
 
 ---
 
-# v1.6.1 — M21: updating the piano's firmware from the app
+# v1.6 — M21: updating the piano's firmware from the app
 
 Steven asked (2026-09-27) for the app to flash the piano's ESP32 itself, so that after the flash the
 Feel, Lighting and Pedal pages work on the real piano. It happens over the Bluetooth link the app

@@ -31,5 +31,14 @@
     "minSdk": 26,
     "tag": "v1.5.1",
     "publishedAt": "2026-09-28"
+  },
+  {
+    "versionCode": 11,
+    "versionName": "1.6",
+    "notes": "Firmware updates from the app: Piano › Firmware and status shows the piano's firmware version, checks for a signed release, and sends it over Bluetooth — the piano goes quiet, receives the image, verifies the signature, restarts, and rolls back by itself if the new firmware fails to start. Needs firmware 2.0.0 on the piano first (one USB flash).",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.6/steven-piano-1.6.apk",
+    "minSdk": 26,
+    "tag": "v1.6",
+    "draft": true
   }
 ]

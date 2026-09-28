@@ -140,7 +140,7 @@ class PianoSettingsRepository(
     }
 
     /**
-     * Asks the piano for fact [name] again (`get !name`; v1.6.1 — M21 reads `!ota` while a new
+     * Asks the piano for fact [name] again (`get !name`; v1.6 — M21 reads `!ota` while a new
      * firmware confirms itself): the answer updates [state]'s facts. Nothing before the piano has
      * answered its dump, or for a name that is not a fact's.
      */

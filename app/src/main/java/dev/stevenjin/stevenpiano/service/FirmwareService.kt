@@ -40,7 +40,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * The piano's firmware update, in the foreground (v1.6.1 — M21): a `connectedDevice` service (the
+ * The piano's firmware update, in the foreground (v1.6 — M21): a `connectedDevice` service (the
  * app talks to the piano over Bluetooth throughout), started by the Firmware page's Update or Retry
  * while the app is in the foreground. It keeps the process going with the screen off or the app in
  * the background, holds a partial wake lock for at most [WAKE_LOCK_MS], and shows the transfer in a

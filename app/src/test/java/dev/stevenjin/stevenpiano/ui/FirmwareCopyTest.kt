@@ -18,7 +18,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Locale
 
-/** The Firmware page's words (DESIGN.md › v1.6.1 — M21). */
+/** The Firmware page's words (DESIGN.md › v1.6 — M21). */
 class FirmwareCopyTest {
     private val manifest = FirmwareManifest.parse(OtaExample.manifestJson())
 

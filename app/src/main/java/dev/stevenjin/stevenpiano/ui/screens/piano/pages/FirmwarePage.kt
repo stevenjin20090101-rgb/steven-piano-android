@@ -42,7 +42,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoSettingsActions
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 
 /**
- * Firmware and status: FIRMWARE (the piano's firmware version and its updates, v1.6.1 — M21) ·
+ * Firmware and status: FIRMWARE (the piano's firmware version and its updates, v1.6 — M21) ·
  * STATUS (the seven power boards, I²C errors, the pedal board, uptime, the two key-force lines and
  * where key force is set) · ACTIONS (Read status with the piano's report, All keys off, Save now).
  * The hub's row reads the version, "Update available" while a newer release is known, or "—".
@@ -70,7 +70,7 @@ interface FirmwareActions {
 }
 
 /**
- * FIRMWARE (DESIGN.md › v1.6.1 — M21): "Piano firmware 2.0.0 · a1b2c3d" (from Device Information,
+ * FIRMWARE (DESIGN.md › v1.6 — M21): "Piano firmware 2.0.0 · a1b2c3d" (from Device Information,
  * "Unknown" until connected, and the one USB flash asked for on firmware that has no version); the
  * outlined Check for piano updates with what it found; then the update as it stands: the release on
  * offer with its notes and the filled Update the piano to 2.1.0; the download, the transfer over

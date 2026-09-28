@@ -2944,14 +2944,15 @@ re-checked and hold.
 
 ---
 
-# v1.6.1 — M21: firmware updates from the app
+# v1.6 — M21: firmware updates from the app; release 1.6 (versionCode 11)
 
-Read `DESIGN.md › v1.6.1 — M21` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+Read `DESIGN.md › v1.6 — M21` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
 › M21 with its amendments (binding); the contract is `firmware/docs/BLE_OTA.md` (frames, error codes,
 the safety order, the app's obligations in § 11, feature detection § 12, the manifest in § 10, the
 decisions in § 15). Built on its own branch (`m21-firmware`) beside M19 and M20. Not a release in this
 run: `versionCode`, `versionName` and `Provenance.text` stay as they are and nothing is staged or
-signed; the merge makes it 1.6.1 (`versionCode` 13, firmware 2.0.0's `minAppVersionCode`).
+signed; the merge makes it 1.6 (`versionCode` 11, firmware 2.0.0's `minAppVersionCode`; see *The
+merge* at the end of this section).
 
 ## Dependencies
 
@@ -3134,7 +3135,7 @@ the worked example; OK 2.8 s after END); after OK it drops, is back 4 s later pe
 `newerapp`) and § 5's image at 160 KB/s; the updater then trusts RFC 8032's test key. Release builds
 have none of it, and trust the author's key alone.
 
-## Greps (v1.6.1 — M21)
+## Greps (v1.6 — M21)
 
 - `grep -rn "esp32-player-piano" app/src`: nothing (the renamed repository only).
 - `grep -rn "Color(0x" app/src/main --include='*.kt' | grep -v ui/theme`: nothing.
@@ -3191,8 +3192,8 @@ have none of it, and trust the author's key alone.
 - **The service follows, the app's scope transfers**: the transfer lives in `FirmwareUpdater` (in
   `AppGraph.appScope`), so a refused service start leaves it running; the service holds the
   foreground, the wake lock and the notification.
-- **The fake scenarios' release takes any app**: § 10's example names `minAppVersionCode` 13, which
-  this build (10 until the merge) is below; `newerapp` keeps a higher one.
+- **The fake scenarios' release takes any app**: § 10's example names `minAppVersionCode` 11, 1.6's
+  build, which the branch's build (10) was below; `newerapp` keeps a higher one.
 - **Emulator AVD** `steven_piano_m21` (this run's, removed at the end), not `steven_piano`, as the
   run's instructions said.
 
@@ -3218,3 +3219,32 @@ preconditions; ERR 6; ERR 5 after END; a link lost after END; not back within th
 schedule; the page's check; offline), `FakeOtaTest` (3), `FirmwareCopyTest` (4), and cases in
 `PlayerTest` (+1: locked, nothing reaches the piano), `PianoSettingsRepositoryTest` (+1: `readFact`),
 `GroupSummariesTest` (+1: "Update available", "Updating…", the release). 840 tests before, 920 after.
+
+## The merge: release 1.6 (versionCode 11)
+
+Merged into `main` after 1.5.1 (`56da814`), ahead of M19 and M20 (`18a21ba`), and released as
+**1.6**: `versionCode` 11, `versionName` "1.6", `Provenance.text` "Made by Steven Jin · v1.6 ·
+eab16a502f679465", the entry drafted at the end of `releases/history.json` (`"draft": true`, its
+notes; no hash or size until `tools/publish-release.sh` builds it); `latest.json` still names 1.5.1.
+
+- **One conflict**, in this file: M18's *Audit (delta 1)* and this section met at its end; both kept,
+  the audit first.
+- **`minAppVersionCode` 11** (`966388d`): BLE_OTA.md › 15 was amended when the runs landed in a
+  different order (firmware 2.0.0 names 11, the build of 1.6, and § 10's example says 11 too), so
+  `OtaExample`, `FirmwareManifest`'s KDoc and `FakeOta`'s note follow it, `FirmwareUpdaterTest`'s rig
+  is this build, and `FirmwareManifestTest` checks the boundary (11 takes the example, 10 is asked
+  for a newer app). Nothing a person sees changes.
+- **No compiler warnings** (`1968805`): `EmulatedOta` read `SendChannel.isClosedForSend`, a delicate
+  API in kotlinx.coroutines 1.10, five times (five warnings where 1.5.1's main sources had none); it
+  opts in, with a line on why that is harmless there, and the tests' `FakeOtaChannel` does the same.
+- **1.6, not 1.6.1**: this section's title and DESIGN's, README's section, and every comment that
+  pointed at them.
+- **AUTHORS and README**: EdDSA-Java's notice joins the other third-party notices; README's
+  *Updating the piano's firmware* stands after *Web control*, and the introduction, *What it does*,
+  *Security* (what leaves the device now includes the firmware's manifest and release downloads; the
+  firmware's signature) and *Acknowledgements* say what M21 added.
+- Tests: 920 before the merge's fixes and after (8 skipped: the corpus tests without `-Pcorpus`, and
+  `PinnedKeyTest`'s check against the firmware's `include/ota_pubkey.h`, which isn't there yet).
+  `lint`: 0 errors, 29 warnings. The greps above: as stated. The release APK is 2,724,616 bytes
+  (versionCode 11, "1.6", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,490,995;
+  staged as `../apk/steven-piano-1.6.apk` and `-debug.apk`.

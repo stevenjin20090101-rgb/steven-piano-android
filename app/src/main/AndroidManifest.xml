@@ -47,7 +47,7 @@
     <!-- The web panel (v1.5.1): a local control panel is none of Android's named foreground types, so
          special use (its reason is the service's property below); connected device only as the fallback
          a device that refuses special use gets. Connected device is also the piano's firmware update's
-         type (v1.6.1). -->
+         type (v1.6). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -174,7 +174,7 @@
                 android:value="Local web control panel for the piano, on the person's own network" />
         </service>
 
-        <!-- The piano's firmware update over Bluetooth (v1.6.1): about two minutes of transfer that outlive the
+        <!-- The piano's firmware update over Bluetooth (v1.6): about two minutes of transfer that outlive the
              screen and the app in the background, with a progress notification and Cancel. Connected device:
              the app talks to the piano throughout. Not exported: only the Firmware page starts it. -->
         <service

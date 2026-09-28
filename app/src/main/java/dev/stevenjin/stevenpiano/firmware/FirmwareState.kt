@@ -119,7 +119,7 @@ interface FirmwarePlayer {
     suspend fun stopForUpdate(timeoutMs: Long): Boolean
 }
 
-/** What the updater says, in the app's words (DESIGN.md › v1.6.1 — M21): one line, no red. */
+/** What the updater says, in the app's words (DESIGN.md › v1.6 — M21): one line, no red. */
 object FirmwareFailures {
     /** Any failure once the piano was asked (an ERR, a lost link, a silence): the old slot is untouched. */
     const val DIDNT_FINISH = "The update didn't finish. The piano kept its old firmware."

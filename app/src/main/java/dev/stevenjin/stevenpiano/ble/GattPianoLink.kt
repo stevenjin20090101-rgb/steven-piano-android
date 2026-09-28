@@ -69,7 +69,7 @@ import kotlin.concurrent.withLock
  * ([LinkError.ConnectFailed], with the last GATT status or the timeout), a scan Android refused
  * ([LinkError.ScanFailed], with its code). After "Bluetooth is off", Bluetooth coming back on clears
  * the error and, with auto-connect on, looks for the piano again.
- * The firmware (v1.6.1 — M21, BLE_OTA.md): on firmware 2.0.0 and later, discovery also finds Device
+ * The firmware (v1.6 — M21, BLE_OTA.md): on firmware 2.0.0 and later, discovery also finds Device
  * Information, whose Firmware Revision String is read before Connected ([firmwareVersion]), and the
  * update service ([ota]). An update session switches Control's notifications on (once a
  * connection), writes BEGIN, END and ABORT with response and the image's Data frames without, all

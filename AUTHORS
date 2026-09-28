@@ -54,6 +54,15 @@ makes the QR codes of the panel's address and the request poster:
   Licensed under the MIT License; the full licence is in
   third_party/qrcode-kotlin/LICENSE.txt. The library keeps its own licence.
 
+EdDSA-Java (net.i2p.crypto:eddsa 0.3.0, linked unmodified from Maven
+Central), which checks the Ed25519 signature of the piano's firmware
+releases where Android has no Ed25519 of its own:
+  By str4d and the EdDSA-Java contributors (https://github.com/str4d/ed25519-java).
+  Dedicated to the public domain under Creative Commons CC0 1.0 Universal;
+  the legal code is in third_party/eddsa/LICENSE.txt and at
+  https://creativecommons.org/publicdomain/zero/1.0/. The library keeps its
+  own terms; the MIT licence of this project does not apply to it.
+
 Wikipedia text (fetched while the app runs, never bundled): composers'
 blurbs and pieces' notes are text from Wikipedia, the free encyclopedia,
 by its contributors:
@@ -71,14 +80,3 @@ Authorship verification
 This project carries an Ed25519 cryptographic authorship signature.
 See PROVENANCE.md to verify that Steven Jin authored these exact files.
 Public-key fingerprint: eab16a502f679465
-
-Third-party, added in v1.6.1 (M21)
-----------------------------------
-EdDSA-Java (net.i2p.crypto:eddsa 0.3.0, linked unmodified from Maven
-Central), which checks the Ed25519 signature of the piano's firmware
-releases where Android has no Ed25519 of its own:
-  By str4d and the EdDSA-Java contributors (https://github.com/str4d/ed25519-java).
-  Dedicated to the public domain under Creative Commons CC0 1.0 Universal;
-  the legal code is in third_party/eddsa/LICENSE.txt and at
-  https://creativecommons.org/publicdomain/zero/1.0/. The library keeps its
-  own terms; the MIT licence of this project does not apply to it.

@@ -72,7 +72,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     /** Where the web panel listens (Remote control's address and QR, and the hub's row). */
     val web: StateFlow<WebStatus> = graph.web.status
 
-    /** The piano's firmware update (v1.6.1 — M21): the Firmware page's FIRMWARE section, and the hub's row. */
+    /** The piano's firmware update (v1.6 — M21): the Firmware page's FIRMWARE section, and the hub's row. */
     val firmware: StateFlow<FirmwareState> = graph.firmwareUpdater.state
 
     /** The piano as the firmware updater sees it: its version, and whether it can be updated. */

@@ -106,7 +106,7 @@ fun PianoStatusLine(piano: PianoState, connected: Boolean) {
  * a change the moment it is made; until the piano has answered, everything is disabled under the
  * status line. Firmware without the console gets the one line and nothing else. A refusal shows in
  * an outlined banner right under the control it concerns ("The piano said: …"). No red anywhere:
- * a fault reads in words. [firmwareSection] (v1.6.1 — M21, the Firmware page) is drawn in place of
+ * a fault reads in words. [firmwareSection] (v1.6 — M21, the Firmware page) is drawn in place of
  * the table's FIRMWARE section: the version and the updates come from the link, not the console, so
  * it shows under the status line even for firmware without the console.
  */

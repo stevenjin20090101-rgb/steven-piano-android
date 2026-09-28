@@ -234,7 +234,7 @@ class AppGraph(private val app: Application) {
      * Automatic update checks, run by the activity while it is started (after its first frame): at
      * once, then daily, while the switch is on and the device online. The switch is read from
      * DataStore itself, so a check never runs on the default before the saved value is known. The
-     * piano's firmware is looked for on the same switch (v1.6.1 — M21), while a piano that can be
+     * piano's firmware is looked for on the same switch (v1.6 — M21), while a piano that can be
      * updated is connected.
      */
     suspend fun runUpdateSchedule() = coroutineScope {
@@ -250,7 +250,7 @@ class AppGraph(private val app: Application) {
     private val fakeOta: FakeOta? by lazy { FakeOta.fromProperty() }
 
     /**
-     * The piano's firmware updates over the Bluetooth link (v1.6.1 — M21): its signed releases from
+     * The piano's firmware updates over the Bluetooth link (v1.6 — M21): its signed releases from
      * the firmware repository, checked against the author's key; on the emulator with a fake
      * scenario, the scenario's release and the test key.
      */

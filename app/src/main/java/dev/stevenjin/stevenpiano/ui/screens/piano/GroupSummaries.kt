@@ -56,7 +56,7 @@ data class GroupSummaries(
         /**
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
          * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
-         * [firmwareVersion] (Device Information's, v1.6.1 — M21) for Firmware and status.
+         * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status.
          */
         fun from(
             piano: PianoState,
@@ -110,7 +110,7 @@ data class GroupSummaries(
             (piano as? PianoState.Ready)?.facts?.get("fw")?.trim()?.takeIf { it.isNotEmpty() } ?: UNKNOWN
 
         /**
-         * Firmware and status with its update (v1.6.1 — M21): "Update available" while a newer release
+         * Firmware and status with its update (v1.6 — M21): "Update available" while a newer release
          * is known, "Updating…" while one is sent, else the release the piano reports ("2.0.0", from
          * Device Information, or its dump's `!fw`), else what [firmware] reads.
          */
