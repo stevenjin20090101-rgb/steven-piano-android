@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.os.BundleCompat
 import androidx.lifecycle.Lifecycle
@@ -54,7 +55,8 @@ import kotlin.coroutines.resume
  * resizing are handled here as configuration changes (the manifest's configChanges): the frame
  * recomputes from the new configuration and nothing is recreated, so nothing may rely on
  * recreation to refresh. After the first frame, and for as long as the activity is started, the
- * app looks for its own updates (at once, then daily; see [AppGraph.runUpdateSchedule]).
+ * app looks for its own updates (at once, then daily; see [AppGraph.runUpdateSchedule]). Where the
+ * display offers more than 60 frames a second the window asks for 60 ([capRefreshRate]).
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
@@ -69,6 +71,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
+        capRefreshRate()
         if (savedInstanceState == null) {
             route(intent)
         } else {
@@ -88,6 +91,19 @@ class MainActivity : ComponentActivity() {
             awaitFrame()   // nothing about updates holds up the first frame
             repeatOnLifecycle(Lifecycle.State.STARTED) { graph.runUpdateSchedule() }
         }
+    }
+
+    /**
+     * The glass re-blurs what lies under it with every frame the roll draws (DESIGN.md › v1.5 — M16).
+     * Sixty frames a second are enough for the roll and the score and halve that work on a 90 or
+     * 120 Hz panel, so where the display offers more the window asks for 60 (a preference the system
+     * may weigh against others). Only the drawing slows: the scheduler thread times the piano on its
+     * own clock, whatever the display does.
+     */
+    private fun capRefreshRate() {
+        val display = runCatching { ContextCompat.getDisplayOrDefault(this) }.getOrNull() ?: return
+        if (display.supportedModes.none { it.refreshRate > MAX_REFRESH_RATE + 1f }) return
+        window.attributes = window.attributes.apply { preferredRefreshRate = MAX_REFRESH_RATE }
     }
 
     /** Files still waiting for Add or Cancel survive the activity being recreated (a theme change). */
@@ -191,6 +207,9 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_EMULATOR_CRASH = "dev.stevenjin.stevenpiano.EMULATOR_CRASH"
         private const val TAG = "MainActivity"
         private const val STATE_SHARED = "dev.stevenjin.stevenpiano.state.SHARED"
+
+        /** Frames a second the window asks for where the display offers more. */
+        private const val MAX_REFRESH_RATE = 60f
     }
 }
 

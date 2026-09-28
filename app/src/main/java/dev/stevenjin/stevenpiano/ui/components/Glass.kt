@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.LayoutDirection
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
@@ -95,7 +97,14 @@ enum class GlassEdge {
  * ([LocalReducedTransparency]), or before its source has drawn anything, it is the solid surface
  * with the hairline edge: today's look. [LocalOnGlass] tells [content] which: text on glass is the
  * content colour (primary), which clears 7:1 over the worst backdrop (GlassTokensTest).
+ *
+ * Cost: the blur is drawn only inside the surface (clipped to its shape; it reads the content a
+ * blur's reach beyond its edges so rows slide in smoothly) and is worked out on a copy of that
+ * content at a third of its resolution ([HazeInputScale.Auto]), a ninth of the pixels, which a
+ * 24 dp blur hides. It is redrawn whenever the content beneath changes, every frame while the roll
+ * moves beneath the transport.
  */
+@OptIn(ExperimentalHazeApi::class)
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,
@@ -121,7 +130,7 @@ fun GlassSurface(
         modifier
             .clip(shape)
             .glassEdge(shape, edge, hairline, if (glass) specular else null)
-            .then(if (glass) Modifier.hazeEffect(source, style) else Modifier.background(surface)),
+            .then(if (glass) Modifier.hazeEffect(source, style) { inputScale = HazeInputScale.Auto } else Modifier.background(surface)),
     ) {
         CompositionLocalProvider(LocalOnGlass provides glass) { content() }
     }
