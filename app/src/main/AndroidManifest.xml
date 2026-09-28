@@ -53,6 +53,16 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Schedules (v1.5.2): the piano plays by itself at set times, so the app keeps one exact alarm
+         (timer play is what exact alarms exist for). Android 13 and newer grant USE_EXACT_ALARM with the
+         app; Android 12 asks for SCHEDULE_EXACT_ALARM, which the person may take away (the Schedule page
+         then asks for it back). A restart of the tablet clears the alarm: the app sets it again. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
@@ -172,6 +182,21 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Local web control panel for the piano, on the person's own network" />
         </service>
+
+        <!-- The schedules' alarm, and what makes it be set again: a restart, the clock or the time zone changed,
+             the app updated, exact alarms allowed. Not exported: only the system and the app's own immutable
+             PendingIntent (the alarm) reach it. -->
+        <receiver
+            android:name=".schedule.ScheduleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Where a silent install (device owner) reports; only the app's own explicit PendingIntent reaches it. -->
         <receiver
