@@ -37,8 +37,14 @@ class Generation(val events: List<AmtEvent>, val tokens: IntArray, val slides: I
  *   rest in a time or duration slot would make a malformed event, which the package's `generate()`
  *   takes for the end). [SamplingSettings.allowEnd] opens SEPARATOR where a time goes, and it stops the
  *   piece there. NaN and infinite logits count as masked.
- * - **Repetition guard.** No more than [MAX_REPEATS] identical note tokens in a row (a rest counts):
- *   after four the fifth must differ.
+ * - **Repetition guards.** No more than [MAX_REPEATS] identical notes in a row (after four the fifth
+ *   must differ), and no more than [MAX_RESTS] rest in a row (a rest is a second without a new note:
+ *   left alone the model can fall into long runs of them, measured on Clair de lune's seed, and the
+ *   piano, without pedal, falls silent). And a key struck less than [SAME_KEY_TICKS] (100 ms) ago is
+ *   not offered: the piano can't strike it again that soon ([Postprocess] would merge the two), and
+ *   left alone the model can fall into restriking a few keys at once, spending its budget in seconds of
+ *   music. At most [MAX_CHORD] notes start at one instant (ten fingers; the model otherwise can pile up a
+ *   cluster of dozens): after that the next time must be later. Where no key is left, a rest is.
  * - **Window.** [Amt.CONTEXT] positions: before an event that wouldn't fit, or once the current time is
  *   more than [MAX_REL_TIME] ticks past the window's origin (times are only 0–9,999), it slides: the
  *   last [keepEvents] events (none more than [KEEP_SPAN] ticks before the current time) are kept, their
@@ -61,6 +67,7 @@ class Sampler(
     private val cancelled: () -> Boolean = { false },
     private val memoryHolds: () -> Boolean = { true },
     private val keepEvents: Int = KEEP_EVENTS,
+    private val maxRests: Int = MAX_RESTS,
 ) {
     init {
         require(keepEvents in 1..MAX_PREFILL_EVENTS) { "keep 1 to $MAX_PREFILL_EVENTS events, not $keepEvents" }
@@ -98,7 +105,21 @@ class Sampler(
         val start = current
         var runNote = -1
         var runLength = 0
+        val lastStrike = IntArray(Amt.MAX_PITCH) { NEVER }
+        var chordTime = NEVER
+        var chordSize = 0
+
+        /** The notes starting at the latest instant, counted: a new instant starts a new count (a rest's counts none). */
+        fun count(e: AmtEvent) {
+            if (e.time != chordTime) {
+                chordTime = e.time
+                chordSize = 0
+            }
+            if (!e.isRest) chordSize++
+        }
         for (e in seed) {
+            count(e)
+            if (!e.isRest && e.instrument == 0) lastStrike[e.pitch] = maxOf(lastStrike[e.pitch], e.time)
             if (e.note == runNote) {
                 runLength++
             } else {
@@ -158,7 +179,8 @@ class Sampler(
             }
 
             checkCancelled()
-            val timeToken = pick(logits, candidates, timeCandidates(current - origin, settings.allowEnd), settings)
+            val earliest = if (chordSize >= MAX_CHORD && chordTime == current) current + 1 else current
+            val timeToken = pick(logits, candidates, timeCandidates(earliest - origin, settings.allowEnd), settings)
             if (timeToken == Amt.SEPARATOR) {
                 stop = Stop.Separator
                 break
@@ -181,12 +203,15 @@ class Sampler(
             positions++
 
             checkCancelled()
-            val banned = if (runLength >= MAX_REPEATS) Amt.NOTE_OFFSET + runNote else NONE
-            val noteToken = pick(logits, candidates, noteCandidates(banned), settings)
+            val limit = if (runNote == Amt.REST_NOTE) maxRests else MAX_REPEATS
+            val banned = if (runLength >= limit) Amt.NOTE_OFFSET + runNote else NONE
+            val noteToken = pick(logits, candidates, noteCandidates(banned, time, lastStrike), settings)
             emit(noteToken)
             val event = AmtEvent(time, durationToken - Amt.DUR_OFFSET, noteToken - Amt.NOTE_OFFSET)
             history += event
             current = time
+            count(event)
+            if (!event.isRest) lastStrike[event.pitch] = time
             if (event.note == runNote) {
                 runLength++
             } else {
@@ -225,10 +250,14 @@ class Sampler(
         return Amt.MAX_DUR
     }
 
-    private fun noteCandidates(banned: Int): Int {
+    /** The piano's notes but [banned] and those struck less than [SAME_KEY_TICKS] before [time] ([lastStrike]), and a rest unless it is [banned]. */
+    private fun noteCandidates(banned: Int, time: Int, lastStrike: IntArray): Int {
         var n = 0
-        for (token in Amt.PIANO_FIRST..Amt.PIANO_LAST) if (token != banned) candidates[n++] = token
-        if (banned != Amt.REST) candidates[n++] = Amt.REST
+        for (token in Amt.PIANO_FIRST..Amt.PIANO_LAST) {
+            val struck = lastStrike[token - Amt.PIANO_FIRST]
+            if (token != banned && (struck == NEVER || time - struck >= SAME_KEY_TICKS)) candidates[n++] = token
+        }
+        if (banned != Amt.REST || n == 0) candidates[n++] = Amt.REST
         return n
     }
 
@@ -306,6 +335,15 @@ class Sampler(
         /** At most this many identical note tokens in a row. */
         const val MAX_REPEATS = 4
 
+        /** At most this many rests in a row (each a second without a new note). */
+        const val MAX_RESTS = 1
+
+        /** The piano's re-strike: a key struck again at least this many ticks (100 ms) later. */
+        const val SAME_KEY_TICKS = 10
+
+        /** At most this many notes start at one instant. */
+        const val MAX_CHORD = 10
+
         /** Progress (and the memory check) every this many tokens. */
         const val PROGRESS_EVERY = 100
 
@@ -315,5 +353,6 @@ class Sampler(
         private const val PRUNE = 1e-12
         private const val LOW = 0xFFFF_FFFFL
         private const val NONE = -1
+        private const val NEVER = Int.MIN_VALUE
     }
 }

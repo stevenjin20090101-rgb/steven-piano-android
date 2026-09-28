@@ -22,7 +22,7 @@ import kotlin.random.Random
 /**
  * The composer's sampler (v1.7 — M24) against a scripted model: the package's masks with the note slot
  * held to the piano and REST, top-p and temperature as Hugging Face's rule has them, the repetition
- * guard, the window's slide (the last 170 events, times re-based, never past 1,024 positions or time
+ * guards (a note four times, a rest once, a key within 100 ms, eleven notes at one instant), the window's slide (the last 170 events, times re-based, never past 1,024 positions or time
  * 9,999), the stops, progress, cancellation and the memory guard.
  */
 class SamplerTest {
@@ -108,7 +108,9 @@ class SamplerTest {
         assertTrue("the first time allowed: now", out.events.all { it.time == 360 })
         assertTrue("REST is no duration", out.events.all { it.duration == 0 })
         val rest = Amt.REST_NOTE
-        assertEquals("the piano's 60 beats REST, which beats the rest; a fifth 60 in a row is refused", listOf(60, 60, 60, 60, rest, 60, 60, 60, 60, rest), out.events.map { it.note })
+        // 60, the likeliest piano note; not again at the same instant (100 ms), so REST, the next best; not two rests in a
+        // row, so the first of the other keys (all equally likely), then REST again, and so on.
+        assertEquals(listOf(60, rest, 0, rest, 1, rest, 2, rest, 3, rest), out.events.map { it.note })
     }
 
     @Test
@@ -215,6 +217,47 @@ class SamplerTest {
         val out = Sampler(model).generate(threeSixties, SamplingSettings.Greedy, budget = 36)
         assertEquals(listOf(60, 64, 60, 60, 60, 60, 64, 60, 60, 60, 60, 64), out.events.map { it.pitch })
         assertEquals((1..12).map { 20 + 10 * it }, out.events.map { it.time })
+    }
+
+    @Test
+    fun `a key waits 100 ms before it is struck again, a rest comes once at a time, and ten notes at most start together`() {
+        // A model that wants to stay at the same instant, on the same few keys, and to rest.
+        val model = ScriptedModel { context ->
+            logits().apply {
+                when (ScriptedModel.slot(context)) {
+                    0 -> {
+                        val t = ScriptedModel.lastTime(context)
+                        this[t] = 5f
+                        this[t + 3] = 4f
+                        this[t + 12] = 3f
+                    }
+                    1 -> this[Amt.DUR_OFFSET + 30] = 0f
+                    else -> {
+                        fill(-5f, Amt.PIANO_FIRST, Amt.PIANO_LAST + 1)   // a real model's every note is possible
+                        for (k in 0 until 16) this[11_060 + k] = 5f - k * 0.2f
+                        this[Amt.REST] = 4.5f
+                    }
+                }
+            }
+        }
+        val out = Sampler(model).generate(listOf(AmtEvent(0, 30, 60)), SamplingSettings.Greedy, budget = 900)
+        val events = out.events
+        assertEquals(300, events.size)
+        val struck = HashMap<Int, Int>()
+        for ((e, previous) in events.zip(listOf(AmtEvent(0, 30, 60)) + events)) {
+            if (!e.isRest) {
+                struck[e.pitch]?.let { assertTrue("key ${e.pitch} again after ${e.time - it} ticks", e.time - it >= Sampler.SAME_KEY_TICKS) }
+                struck[e.pitch] = e.time
+            }
+            assertTrue("two rests in a row at ${e.time}", !(e.isRest && previous.isRest))
+        }
+        for ((time, together) in events.filter { !it.isRest }.groupBy { it.time }) {
+            assertTrue("${together.size} notes at $time", together.size <= Sampler.MAX_CHORD)
+        }
+        val notes = events.count { !it.isRest }
+        val instants = events.filter { !it.isRest }.map { it.time }.distinct().size
+        assertTrue("$notes notes over $instants instants: the time moves on once ten have started", instants * Sampler.MAX_CHORD >= notes && instants > 10)
+        assertEquals(Stop.Budget, out.stop)
     }
 
     @Test
