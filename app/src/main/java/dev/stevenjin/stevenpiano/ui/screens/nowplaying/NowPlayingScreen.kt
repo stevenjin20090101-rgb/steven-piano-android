@@ -15,7 +15,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +50,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
@@ -101,7 +99,6 @@ private val SHORT_BELOW = 520.dp
 private val SHORT_BELOW_STACKED = 780.dp
 private val SHORT_ROLL = 240.dp
 private val SHORT_SCORE = 200.dp
-private val PANEL_GAP = 8.dp
 
 /** After a change while paused (a seek), frames keep coming this long so the picture catches up. */
 private const val SETTLE_NANOS = 400_000_000L
@@ -114,7 +111,11 @@ private const val SETTLE_NANOS = 400_000_000L
  * either alone, as Wide layout says. The roll always keeps its keyboard strip beneath it, lane
  * for key. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through [playback], which keeps the playback service running, with
  * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet, and
- * the title opens the piece sheet. [onOpenPiano] shows the Piano tab.
+ * the title opens the piece sheet. [onOpenPiano] shows the Piano tab. The scrubber and the
+ * transport float on glass over the paper roll's history, the third below the tracker bar, above
+ * the keyboard strip (DESIGN.md › v1.5 — M16), whenever that third can hold them; otherwise (falling
+ * notes, the score alone, a phone on its side) they stand below the views on the screen, as before.
+ * The screen stops above the tab bar ([dev.stevenjin.stevenpiano.ui.LocalFloatingPadding]).
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
@@ -223,42 +224,50 @@ private fun ColumnScope.PieceView(
         player.seek(it)
         if (!playing) settle++
     }
-    NoteViews(
-        plan,
-        piece,
-        state,
-        marks,
-        frame,
-        roll,
-        player,
-        short,
-        seek,
-        (if (short) Modifier.height(shortHeight(plan.layout)) else Modifier.weight(1f))
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-    )
-    Scrubber(
-        piece.durationMicros,
-        frame,
-        roll,
-        onSeek = seek,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
-    TransportBar(
-        playing = playing,
-        hasNext = state.queue.hasNext,
-        shuffle = state.queue.shuffle,
-        repeat = state.queue.repeat,
-        onShuffle = { player.setShuffle(!state.queue.shuffle) },
-        onRepeat = { player.setRepeat(state.queue.repeat.cycled()) },
-        onPrevious = {
-            playback.previous()
-            if (!playing) settle++
-        },
-        onPlayPause = playback::togglePlayPause,
-        onNext = playback::next,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    val controls: @Composable ColumnScope.() -> Unit = {
+        Scrubber(
+            piece.durationMicros,
+            frame,
+            roll,
+            onSeek = seek,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        TransportBar(
+            playing = playing,
+            hasNext = state.queue.hasNext,
+            shuffle = state.queue.shuffle,
+            repeat = state.queue.repeat,
+            onShuffle = { player.setShuffle(!state.queue.shuffle) },
+            onRepeat = { player.setRepeat(state.queue.repeat.cycled()) },
+            onPrevious = {
+                playback.previous()
+                if (!playing) settle++
+            },
+            onPlayPause = playback::togglePlayPause,
+            onNext = playback::next,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    if (short) {
+        NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, null, Modifier.height(shortHeight(plan.layout)).fillMaxWidth().padding(horizontal = 16.dp))
+        Column(content = controls)
+    } else {
+        // The controls float on glass over the roll's history when it can hold them; otherwise they stand below.
+        BoxWithConstraints(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            if (transportFloats(plan, maxHeight)) {
+                NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, controls, Modifier.fillMaxSize().padding(horizontal = 16.dp))
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, null, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp))
+                    controls()
+                }
+            }
+        }
+    }
     FlowRow(
         Modifier
             .fillMaxWidth()
@@ -284,7 +293,8 @@ private fun shortHeight(layout: NotesLayout): Dp = when (layout) {
 
 /**
  * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the score,
- * or both, each on the elevated surface with the card corners. [onSeek] is a tap on a bar.
+ * or both, each on the elevated surface with the card corners. [onSeek] is a tap on a bar. With
+ * [controls] the roll's card carries them on glass over its history ([GlassTransportPanel]).
  */
 @Composable
 private fun NoteViews(
@@ -297,6 +307,7 @@ private fun NoteViews(
     player: Player,
     short: Boolean,
     onSeek: (Long) -> Unit,
+    controls: (@Composable ColumnScope.() -> Unit)?,
     modifier: Modifier,
 ) {
     val scoreWidth = LocalAppFrame.current.scoreWidth
@@ -307,14 +318,19 @@ private fun NoteViews(
     val keyHands = remember(piece.notes, hands, state.transpose, state.fold) {
         hands?.let { KeyHands(piece.notes, it, state.transpose, state.fold) }
     }
+    val rollCard: @Composable ColumnScope.() -> Unit = {
+        NoteCanvas(
+            piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(),
+            hands = hands, fingers = fingers, chords = chords,
+        )
+        HairlineDivider()
+        KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
+    }
     val notes: @Composable (Modifier) -> Unit = { panel ->
-        Panel(panel) {
-            NoteCanvas(
-                piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(),
-                hands = hands, fingers = fingers, chords = chords,
-            )
-            HairlineDivider()
-            KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
+        if (controls != null) {
+            GlassTransportPanel(panel, stripHeight = KeyboardStripHeight + Hairline, panel = rollCard, controls = controls)
+        } else {
+            Panel(panel, rollCard)
         }
     }
     val score: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
@@ -358,16 +374,6 @@ private fun NoteViews(
             notes(Modifier.weight(1f).fillMaxHeight())
         }
     }
-}
-
-@Composable
-private fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        content = content,
-    )
 }
 
 /**

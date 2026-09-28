@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
@@ -56,7 +57,10 @@ private val SIDE_ROOM = 16.dp
  * colour with a surface glyph; its glyph crossfades over 320 ms (a cut when motion is reduced) and
  * it gives the app's one haptic, a light tick, on play and on pause. Shuffle and Repeat sit at the
  * two ends: the tertiary grey when off, the content colour with a 4 dp dot beneath when on; Repeat
- * cycles off, all, one (a small "1" in its glyph). The gaps shrink to fit a narrow phone.
+ * cycles off, all, one (a small "1" in its glyph). The gaps shrink to fit a narrow phone. On glass
+ * ([LocalOnGlass], DESIGN.md › v1.5 — M16) play/pause is a frosted lens instead, clearer than the
+ * glass around it ([GlassTokens.LensAlpha]) inside a hairline ring, its glyph the content colour;
+ * and Shuffle and Repeat when off take the secondary grey (nothing tertiary sits on glass).
  */
 @Composable
 fun TransportBar(
@@ -105,6 +109,7 @@ fun TransportBar(
 @Composable
 private fun ModeToggle(@DrawableRes glyph: Int, on: Boolean, description: String, switch: Boolean, onClick: () -> Unit) {
     val ink = MaterialTheme.colorScheme.onSurface
+    val off = if (LocalOnGlass.current) MaterialTheme.colorScheme.onSurfaceVariant else LocalTertiary.current
     val action = if (switch) {
         Modifier.toggleable(value = on, role = Role.Switch, onValueChange = { onClick() })
     } else {
@@ -118,7 +123,7 @@ private fun ModeToggle(@DrawableRes glyph: Int, on: Boolean, description: String
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(glyph), contentDescription = null, tint = if (on) ink else LocalTertiary.current, modifier = Modifier.size(24.dp))
+        Icon(painterResource(glyph), contentDescription = null, tint = if (on) ink else off, modifier = Modifier.size(24.dp))
         if (on) {
             Box(
                 Modifier
@@ -134,31 +139,56 @@ private fun ModeToggle(@DrawableRes glyph: Int, on: Boolean, description: String
 @Composable
 private fun PlayPauseButton(playing: Boolean, onClick: () -> Unit) {
     val view = LocalView.current
-    val reduced = rememberReducedMotion()
-    Surface(
-        onClick = {
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            onClick()
-        },
-        modifier = Modifier
-            .size(72.dp)
-            .semantics { contentDescription = if (playing) "Pause" else "Play" },
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.onSurface,
-        contentColor = MaterialTheme.colorScheme.surface,
-    ) {
-        Crossfade(
-            targetState = playing,
-            animationSpec = if (reduced) snap() else tween(Motion.RollStartMs, easing = Motion.EaseOut),
-            label = "play-pause",
-        ) { showPause ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(
-                    painterResource(if (showPause) R.drawable.ic_pause else R.drawable.ic_play),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                )
+    val press = {
+        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        onClick()
+    }
+    val description = if (playing) "Pause" else "Play"
+    if (LocalOnGlass.current) {
+        // The lens: the glass over the same roll, clearer than the bar's, in a hairline ring.
+        GlassSurface(Modifier.size(PLAY_SIZE), shape = CircleShape, containerAlpha = GlassTokens.LensAlpha) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(role = Role.Button, onClick = press)
+                    .semantics { contentDescription = description },
+            ) {
+                PlayPauseGlyph(playing, MaterialTheme.colorScheme.onSurface)
             }
+        }
+    } else {
+        Surface(
+            onClick = press,
+            modifier = Modifier
+                .size(PLAY_SIZE)
+                .semantics { contentDescription = description },
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.onSurface,
+            contentColor = MaterialTheme.colorScheme.surface,
+        ) {
+            PlayPauseGlyph(playing, MaterialTheme.colorScheme.surface)
         }
     }
 }
+
+/** The play or pause glyph, 32 dp, crossfading over 320 ms as it changes (a cut when motion is reduced). */
+@Composable
+private fun PlayPauseGlyph(playing: Boolean, tint: androidx.compose.ui.graphics.Color) {
+    val reduced = rememberReducedMotion()
+    Crossfade(
+        targetState = playing,
+        animationSpec = if (reduced) snap() else tween(Motion.RollStartMs, easing = Motion.EaseOut),
+        label = "play-pause",
+    ) { showPause ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                painterResource(if (showPause) R.drawable.ic_pause else R.drawable.ic_play),
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+    }
+}
+
+private val PLAY_SIZE = 72.dp

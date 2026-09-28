@@ -40,13 +40,14 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 private val ThumbSize = 12.dp
 private const val NOT_DRAGGING = -1f
 
 /**
  * Where the piece is: elapsed time, a hairline track with a 12 dp round thumb, total time. The
- * times are eyebrows in tabular figures. Dragging scrubs (thumb and time follow the finger);
+ * times are eyebrows in tabular figures (on glass in the content colour, as all text on glass). Dragging scrubs (thumb and time follow the finger);
  * release seeks. The thumb is drawn per frame from [frameNanos] and [clock]; the times
  * change once a second. TalkBack can move it too. During the pause before a piece the clock runs
  * below zero: the thumb stays at the start and the time reads 0:00.
@@ -70,8 +71,9 @@ fun Scrubber(
     val totalSeconds = durationMicros / 1_000_000L
     val ink = MaterialTheme.colorScheme.onSurface
     val track = LocalHairline.current
+    val times = if (LocalOnGlass.current) ink else LocalTertiary.current
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Eyebrow(Format.clock(elapsedSeconds))
+        Eyebrow(Format.clock(elapsedSeconds), color = times)
         Box(
             Modifier
                 .weight(1f)
@@ -114,6 +116,6 @@ fun Scrubber(
                     drawCircle(ink, radius, Offset(x, y))
                 },
         )
-        Eyebrow(Format.clock(totalSeconds))
+        Eyebrow(Format.clock(totalSeconds), color = times)
     }
 }

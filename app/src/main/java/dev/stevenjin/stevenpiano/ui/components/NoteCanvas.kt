@@ -48,8 +48,8 @@ import kotlin.math.min
 /** How fast notes travel, on the roll and on the staff alike: this many dp per second of music (so it slows with the tempo). */
 internal const val NOTES_DP_PER_SECOND = 120f
 
-/** The tracker bar sits this share of the height up from the bottom (paper roll). */
-private const val TRACKER_FROM_BOTTOM = 1f / 3f
+/** The tracker bar sits this share of the height up from the bottom (paper roll): below it, the history. */
+internal const val TRACKER_FROM_BOTTOM = 1f / 3f
 
 /** A bar carries its finger's numeral when it is at least this many numerals tall... */
 internal const val NUMERALS_TALL = 3f
