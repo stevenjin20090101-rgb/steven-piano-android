@@ -85,18 +85,20 @@ enum class FakeOta(val key: String) {
             else -> "2.1.0+a1b2c3d" to "pending"
         }
 
-    /** The release the fake server offers: § 10's example, as the scenario changes it. */
+    /**
+     * The release the fake server offers: § 10's example, as the scenario changes it, for any app
+     * (the example's minAppVersionCode, 13, would ask builds before 1.6.1 for a newer app) but in
+     * [NewerApp].
+     */
     fun manifestJson(): String = OtaExample.manifestJson {
-        when (this@FakeOta) {
-            UsbOnly -> put("usbOnly", true)
-            NewerApp -> put("minAppVersionCode", NEWER_APP)
-            else -> Unit
-        }
+        put("minAppVersionCode", if (this@FakeOta == NewerApp) NEWER_APP else ANY_APP)
+        if (this@FakeOta == UsbOnly) put("usbOnly", true)
     }
 
     companion object {
         const val PROPERTY = "debug.stevenpiano.fakeota"
         private const val NEWER_APP = 99
+        private const val ANY_APP = 1
 
         fun named(value: String?): FakeOta? = entries.firstOrNull { it.key == value?.trim() }
 

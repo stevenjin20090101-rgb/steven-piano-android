@@ -42,6 +42,7 @@ class FakeOtaTest {
         }
         assertTrue(FirmwareManifest.parse(FakeOta.UsbOnly.manifestJson()).usbOnly)
         assertTrue(FirmwareManifest.parse(FakeOta.NewerApp.manifestJson()).needsNewerApp(appVersionCode = 13))
+        assertFalse("any build takes the other scenarios' release", FirmwareManifest.parse(FakeOta.Happy.manifestJson()).needsNewerApp(appVersionCode = 1))
         assertNull("firmware older than 2.0.0 reports no version", FakeOta.Old.running)
         assertEquals("2.1.0+a1b2c3d", FakeOta.UpToDate.running)
         assertEquals(OtaExample.RUNNING to "none", FakeOta.Rollback.afterRestart)
