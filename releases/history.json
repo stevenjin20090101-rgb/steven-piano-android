@@ -59,8 +59,10 @@
     "versionName": "1.6.2",
     "notes": "Schedules: Piano › Schedule plays a channel, a playlist or a piece on chosen days at a set time, until an end time or the end, at its own volume. The tablet wakes for it even with the screen off, connects to the piano and starts; a missed start is shown on the page. The web panel edits the same schedules, and a channel's long-press can schedule it. Also: firmware-update progress stays visible in kiosk, and button labels are consistent.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.6.2/steven-piano-1.6.2.apk",
+    "sha256": "ea5b8e68674a615166cf6cc7f14a19e229cf37b789c2323283e8ac9acc64dad0",
+    "sizeBytes": 2837804,
     "minSdk": 26,
     "tag": "v1.6.2",
-    "draft": true
+    "publishedAt": "2026-09-28"
   }
 ]
