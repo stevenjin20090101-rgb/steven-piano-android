@@ -273,4 +273,36 @@ class SettingsRepositoryTest {
         assertEquals("nothing that carries the settings can carry the PIN's hash or salt", emptyList<String>(), fields.filter { "hash" in it || "salt" in it })
         scope.cancel()
     }
+
+    @Test
+    fun `kiosk mode starts off, its PIN is kept apart like the panel's, and its housekeeping is remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "kiosk.preferences_pb") }
+        val repository = SettingsRepository(store)
+        val first = repository.settings.first()
+        assertEquals(false, first.kioskEnabled)
+        assertEquals(false, first.kioskPinSet)
+        assertEquals(null, repository.kioskPin())
+        assertEquals(0 to 0L, repository.kioskStrikes())
+        assertEquals(null, repository.kioskStayOnBefore())
+
+        repository.setKioskEnabled(true)
+        repository.setKioskStrikes(5, 1_234L)
+        repository.setKioskStayOnBefore(3)
+        assertEquals(true, repository.settings.first().kioskEnabled)
+        assertEquals(5 to 1_234L, repository.kioskStrikes())
+        assertEquals(3, repository.kioskStayOnBefore())
+
+        repository.setKioskPin(StoredPin("a2lvc2s=", "cGlu"))
+        assertEquals("a2lvc2s=", repository.kioskPin()!!.salt)
+        assertEquals(true, repository.settings.first().kioskPinSet)
+        assertEquals("the web panel's PIN is another", null, repository.webPin())
+        assertEquals("a new PIN forgets the wrong tries counted against the old", 0 to 0L, repository.kioskStrikes())
+
+        repository.setKioskStrikes(0, 99L)
+        assertEquals(0 to 0L, repository.kioskStrikes())
+        repository.setKioskStayOnBefore(null)
+        assertEquals(null, repository.kioskStayOnBefore())
+        scope.cancel()
+    }
 }

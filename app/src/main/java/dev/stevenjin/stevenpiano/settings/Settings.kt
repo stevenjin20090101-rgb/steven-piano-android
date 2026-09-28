@@ -77,9 +77,10 @@ enum class StandbyCanvas { BLACK, INK }
  * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
  * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
  * its own updates, the pause before each piece, the channels' volumes, the app's appearance and
- * display mode, and the web panel (Piano › Remote control). Of the panel's PIN only [webPinSet]
- * is here: its salt and hash are read on their own ([SettingsRepository.webPin]), so nothing that
- * passes these settings around (the screens, Share diagnostics) ever holds them.
+ * display mode, the web panel (Piano › Remote control) and kiosk mode (Piano › Kiosk). Of the
+ * panel's PIN only [webPinSet] is here, and of the kiosk's only [kioskPinSet]: their salts and
+ * hashes are read on their own ([SettingsRepository.webPin], [SettingsRepository.kioskPin]), so
+ * nothing that passes these settings around (the screens, Share diagnostics) ever holds them.
  */
 data class PianoSettings(
     val autoConnect: Boolean = true,
@@ -132,6 +133,10 @@ data class PianoSettings(
     val webHostName: String? = null,
     /** Whether a panel PIN is set. */
     val webPinSet: Boolean = false,
+    /** Kiosk mode is on (Piano › Kiosk): the screen locked to the app, which is the home screen; only as device owner, with a PIN. */
+    val kioskEnabled: Boolean = false,
+    /** Whether a kiosk PIN is set. */
+    val kioskPinSet: Boolean = false,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -148,8 +153,8 @@ data class PianoSettings(
 }
 
 /**
- * The panel's PIN as the settings keep it (salt and PBKDF2 hash, base64; see `web.PinHash`). Never
- * the PIN; [toString] prints neither part.
+ * A PIN as the settings keep it, the panel's or the kiosk's (salt and PBKDF2 hash, base64; see
+ * `web.PinHash`). Never the PIN; [toString] prints neither part.
  */
 class StoredPin(val salt: String, val hash: String) {
     override fun toString(): String = "StoredPin(kept)"
@@ -239,6 +244,46 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         it[WEB_PIN_HASH] = pin.hash
     }
 
+    /** Kiosk mode on or off (Piano › Kiosk); the kiosk itself (`admin.Kiosk`) turns it, after Android has. */
+    suspend fun setKioskEnabled(on: Boolean) = edit { it[KIOSK_ENABLED] = on }
+
+    /** The kiosk's PIN as kept (salt and hash), or null while none is set. Read on its own, never with [settings]. */
+    suspend fun kioskPin(): StoredPin? {
+        val prefs = current()
+        val salt = prefs[KIOSK_PIN_SALT] ?: return null
+        val hash = prefs[KIOSK_PIN_HASH] ?: return null
+        return StoredPin(salt, hash)
+    }
+
+    /** A new kiosk PIN (its salt and hash, both at once); the wrong tries counted against the old one go with it. */
+    suspend fun setKioskPin(pin: StoredPin) = edit {
+        it[KIOSK_PIN_SALT] = pin.salt
+        it[KIOSK_PIN_HASH] = pin.hash
+        it.remove(KIOSK_STRIKES)
+        it.remove(KIOSK_LOCKED_UNTIL)
+    }
+
+    /** Wrong kiosk PINs in a row and when the wait they earned ends (epoch ms), so a restart doesn't reset them. Housekeeping. */
+    suspend fun kioskStrikes(): Pair<Int, Long> {
+        val prefs = current()
+        return (prefs[KIOSK_STRIKES] ?: 0).coerceAtLeast(0) to (prefs[KIOSK_LOCKED_UNTIL] ?: 0L)
+    }
+
+    suspend fun setKioskStrikes(count: Int, lockedUntil: Long) = edit {
+        if (count <= 0) {
+            it.remove(KIOSK_STRIKES)
+            it.remove(KIOSK_LOCKED_UNTIL)
+        } else {
+            it[KIOSK_STRIKES] = count
+            it[KIOSK_LOCKED_UNTIL] = lockedUntil
+        }
+    }
+
+    /** Android's "stay on while plugged in" as it was before kiosk mode set it, to put back when kiosk mode ends; null: not kept. Housekeeping. */
+    suspend fun kioskStayOnBefore(): Int? = current()[KIOSK_STAY_ON_BEFORE]
+
+    suspend fun setKioskStayOnBefore(mask: Int?) = edit { if (mask == null) it.remove(KIOSK_STAY_ON_BEFORE) else it[KIOSK_STAY_ON_BEFORE] = mask }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -265,6 +310,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
+
+    private suspend fun current(): Preferences = store.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.first()
 
     private fun Preferences.toSettings(): PianoSettings {
         val defaults = PianoSettings()
@@ -299,6 +346,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             webOnWifi = this[WEB_ON_WIFI] ?: defaults.webOnWifi,
             webHostName = this[WEB_HOST_NAME],
             webPinSet = this[WEB_PIN_SALT] != null && this[WEB_PIN_HASH] != null,
+            kioskEnabled = this[KIOSK_ENABLED] ?: defaults.kioskEnabled,
+            kioskPinSet = this[KIOSK_PIN_SALT] != null && this[KIOSK_PIN_HASH] != null,
         )
     }
 
@@ -334,6 +383,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val WEB_HOST_NAME = stringPreferencesKey("webHostName")
         val WEB_PIN_SALT = stringPreferencesKey("webPinSalt")
         val WEB_PIN_HASH = stringPreferencesKey("webPinHash")
+        val KIOSK_ENABLED = booleanPreferencesKey("kioskEnabled")
+        val KIOSK_PIN_SALT = stringPreferencesKey("kioskPinSalt")
+        val KIOSK_PIN_HASH = stringPreferencesKey("kioskPinHash")
+        val KIOSK_STRIKES = intPreferencesKey("kioskPinStrikes")
+        val KIOSK_LOCKED_UNTIL = longPreferencesKey("kioskPinLockedUntil")
+        val KIOSK_STAY_ON_BEFORE = intPreferencesKey("kioskStayOnBefore")
         const val MAX_HOST_NAME = 253
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")

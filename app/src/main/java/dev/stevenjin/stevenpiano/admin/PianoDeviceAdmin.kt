@@ -14,10 +14,11 @@ import android.app.admin.DeviceAdminReceiver
 /**
  * The school tablet's one-time setup makes the app its device owner (`adb shell dpm
  * set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin`, README › School tablet),
- * for one thing only: its own updates install without a tap (see `UpdateInstaller`). It asks for
- * no policies (`res/xml/device_admin.xml` lists none), locks nothing and hides nothing; the tablet
- * works as before. The way back, over adb, is [DeviceOwnerRelease]. Its name must stay the same in
- * every release, or an update would drop the device owner. Only the system (holding
- * BIND_DEVICE_ADMIN) can reach it.
+ * for two things: its own updates install without a tap (see `UpdateInstaller`), and kiosk mode,
+ * off until it is turned on in Piano › Kiosk (see [KioskController]). It asks for no policies
+ * (`res/xml/device_admin.xml` lists none: lock task, the lock screen and the preferred home are a
+ * device owner's own); until kiosk mode comes on it locks nothing and hides nothing. The way back,
+ * over adb, is [DeviceOwnerRelease]. Its name must stay the same in every release, or an update
+ * would drop the device owner. Only the system (holding BIND_DEVICE_ADMIN) can reach it.
  */
 class PianoDeviceAdmin : DeviceAdminReceiver()

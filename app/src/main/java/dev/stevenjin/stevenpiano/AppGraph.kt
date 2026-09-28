@@ -14,6 +14,8 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
+import dev.stevenjin.stevenpiano.admin.KioskController
+import dev.stevenjin.stevenpiano.admin.KioskMode
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
@@ -232,6 +234,17 @@ class AppGraph(private val app: Application) {
     /** The web panel (Piano › Remote control): its sessions, login guard, guests' requests, and where its service listens. */
     val web: WebPanel by lazy { WebPanel(app, this) }
 
+    /** Kiosk mode (Piano › Kiosk): the screen locked to the app as device owner, the app as the home screen, its PIN. */
+    val kiosk: KioskMode by lazy {
+        KioskMode(
+            KioskController.of(app),
+            settingsRepository,
+            kioskEnabled = settingsRepository.settings.map { it.kioskEnabled },
+            scope = appScope,
+            releaseIfAsked = { endKiosk -> DeviceOwnerRelease.releaseIfAsked(app, endKiosk) },
+        )
+    }
+
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
     val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }
 
@@ -287,11 +300,20 @@ class AppGraph(private val app: Application) {
     @OptIn(FlowPreview::class)
     fun start() {
         val startedAt = System.currentTimeMillis()
+        // First, so a tablet in kiosk mode locks as soon as it can: the adb way back, then the device owner.
+        appScope.launch(Dispatchers.IO) {
+            try {
+                kiosk.start()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Kiosk mode couldn't start", e)
+            }
+        }
         appScope.launch(Dispatchers.IO) {
             runCatching { ImportLimits.sweepStale(app.cacheDir, app.filesDir, before = startedAt) }
             runCatching { updateDownloader.sweep(before = startedAt) }
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
-            runCatching { DeviceOwnerRelease.releaseIfAsked(app) }
         }
         // The built-in playlists follow the library: now (the first query opens the database), and
         // two seconds after a run of renames ends (imports refresh them from ImportService).
