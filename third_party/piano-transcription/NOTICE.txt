@@ -1,0 +1,29 @@
+Piano transcription model (Studio's transcription model, transcription-v1.onnx)
+===============================================================================
+
+Not part of this repository and not bundled in the app: the app downloads it on
+demand, from this project's GitHub release "models", when someone chooses
+Download on the Studio page, and checks its SHA-256 before it is used.
+
+Source:  "High-resolution Piano Transcription with Pedals by Regressing Onsets
+         and Offsets Times", trained model (Note_pedal, CRNN_note_F1=0.9677,
+         pedal_F1=0.9186) by Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan
+         and Yuxuan Wang (ByteDance). https://doi.org/10.5281/zenodo.4034264
+
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+         https://creativecommons.org/licenses/by/4.0/ (the licence's text is
+         at that address; CC BY 4.0 section 3(a)(1)(C) allows the address in
+         place of the text).
+
+Changes: converted from PyTorch to ONNX, and its fully connected layers
+         (the fc5 matrix multiplications and the output heads) quantised to
+         INT8 per channel, for Steven Piano; the convolutions, the GRUs and the
+         spectrogram front end stay float. The conversion is
+         tools/studio/export_transcription.py, documented in
+         docs/STUDIO_SPIKE.md. No weights were retrained.
+
+The model keeps its own licence; the MIT licence of this project does not apply
+to it. The model was trained by its authors on the MAESTRO dataset; the licence
+above is the one its authors published for the weights. The app credits it in
+About ("Studio models: ByteDance piano transcription (CC BY 4.0) ...") and in
+AUTHORS.

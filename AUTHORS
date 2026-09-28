@@ -63,6 +63,37 @@ releases where Android has no Ed25519 of its own:
   https://creativecommons.org/publicdomain/zero/1.0/. The library keeps its
   own terms; the MIT licence of this project does not apply to it.
 
+ONNX Runtime (com.microsoft.onnxruntime:onnxruntime-android 1.28.0, linked
+unmodified from Maven Central), which runs Studio's models on the tablet:
+  Copyright (c) Microsoft Corporation.
+  Licensed under the MIT License; the full licence is in
+  third_party/onnxruntime/LICENSE.txt, and the notices of the third-party
+  code it carries in third_party/onnxruntime/ThirdPartyNotices.txt. The
+  library keeps its own licence.
+
+Piano transcription model (Studio's transcription model; downloaded by the
+app on demand, never bundled): "High-resolution Piano Transcription with
+Pedals by Regressing Onsets and Offsets Times", trained model by Qiuqiang
+Kong, Bochen Li, Xuchen Song, Yuan Wan and Yuxuan Wang (ByteDance),
+https://doi.org/10.5281/zenodo.4034264.
+  Licensed under the Creative Commons Attribution 4.0 International licence
+  (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). Converted to
+  ONNX and partly quantised to INT8 for Steven Piano (tools/studio/; what
+  changed is in third_party/piano-transcription/NOTICE.txt). The model keeps
+  its own licence; the MIT licence of this project does not apply to it.
+
+Composing model (Studio's composing model; downloaded by the app on demand,
+never bundled): the Anticipatory Music Transformer music-small-800k by John
+Thickstun, David Hall, Chris Donahue and Percy Liang (Stanford CRFM),
+https://huggingface.co/stanford-crfm/music-small-800k.
+  Licensed under the Apache License, Version 2.0; the full licence is in
+  third_party/anticipatory-music-transformer/LICENSE.txt and at
+  https://www.apache.org/licenses/LICENSE-2.0. Exported to ONNX with a KV
+  cache and quantised to INT8 for Steven Piano (tools/studio/; what changed
+  is in third_party/anticipatory-music-transformer/NOTICE.txt). The model
+  keeps its own licence; the MIT licence of this project does not apply to
+  it.
+
 Wikipedia text (fetched while the app runs, never bundled): composers'
 blurbs and pieces' notes are text from Wikipedia, the free encyclopedia,
 by its contributors:

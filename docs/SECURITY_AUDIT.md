@@ -956,3 +956,69 @@ computer adb accepts; turning it off closes that too, and then a forgotten PIN l
 reset. The web panel is not gated by the kiosk PIN (it has its own, on the tailnet). A tablet with
 its own secure lock screen keeps it (Android refuses to disable a secure keyguard); the Kiosk page
 says so.
+
+## 1.7 — Studio (notes)
+
+2026-09-28, notes written with M23, not an audit. Studio (BUILD_SPEC.md › v1.7 — M23; the spike's
+contract is `docs/STUDIO_SPIKE.md`) brings two new kinds of input into the app: a model file that
+native code (ONNX Runtime) loads and runs, and recordings from anyone who can pick a file on the
+tablet or use the panel. What may reach each is held at these places:
+
+- **Where a model may come from** (`update/UpdateSource.kt`, `Kind.Models`). The list from one
+  address only, `https://raw.githubusercontent.com/stevenjin20090101-rgb/steven-piano-android/main/releases/models.json`
+  (HTTPS on 443, the path exactly, no query or fragment: `allowsModelManifest`); what the list may
+  name, an `.onnx` asset of this repository's release tagged `models` on `github.com`
+  (`allowsModelFile`: never a version tag, so the app's own releases and the models never reach each
+  other's addresses); every hop of the download, redirects included, such an asset or one of
+  GitHub's two asset hosts (`allowsModelBinary`). `UpdateSourceTest` covers the three. The emulator's
+  local server (`debug.stevenpiano.modelsurl`, HTTP to 10.0.2.2) exists only in debug builds on an
+  emulator, as the updater's does.
+- **Pinned hashes.** Each model's name, version, file, size and SHA-256 are compiled into the app
+  (`ModelCatalogue`); the list only says where a file is. A list whose entry for a known version
+  gives another hash or size is refused whole (`ModelManifest.parse`, `ModelManifestTest`), and the
+  download is checked against the app's own figures, never the list's: the file is hashed as it is
+  written to `models/<file>.part`, must be exactly the pinned size and hash, and only then is moved
+  into place (`VerifiedDownloader`). `ModelStore` hashes it again the first time a process opens it
+  and deletes a file that no longer matches ("The transcription model was damaged and has been
+  removed. Download it again."). A new model, or a new version of one, needs a new app.
+- **Caps.** The list is read to 64 KB, at most 32 entries, each field checked (names, versions,
+  64-digit hashes, sizes, attribution to 300 characters); a model is streamed to at most its pinned
+  size and `MAX_MODEL_BYTES` (1 GiB), apart from the APK's 50 MB and the firmware's 4 MB; a
+  download needs the model's size and 256 MB more free, so a model never fills the tablet.
+- **ONNX Runtime pinned at 1.28.0** (`gradle/libs.versions.toml`). 1.29.0 and later add a startup
+  provider (`ai.onnxruntime.TelemetryInitializer`) that the app would not control. The build's own
+  check (`checkOnnxTelemetry`, run by `check`: `check<Variant>OnnxTelemetry` for each variant) reads
+  the merged manifest and fails the build if any `<provider>` from `ai.onnxruntime`, or the
+  initializer's name anywhere, is in it. The runtime runs on the CPU only (no NNAPI or other
+  execution provider), from Maven Central, arm64 only; R8 keeps its Java API whole (its JNI looks
+  classes up by name).
+- **Recordings stay on the tablet.** A recording is decoded, transcribed and written as a MIDI file
+  on the tablet; nothing about it is sent anywhere, and the models see only 16 kHz samples. Caps: a
+  file over 200 MB is refused before it is read; one whose container says it lasts over 20 minutes
+  before decoding, and one that decodes past 20 minutes as soon as it does (the decoded audio is at
+  most 77 MB of floats). MIDI files are refused unread past their first bytes. The picker grants the
+  app one document, read once by the job; the panel's copy is the app's own cache file, deleted
+  when its job ends.
+- **The panel's upload** (`PUT /api/studio/audio?name=`): under the panel's sign-in like every
+  changing route (the session cookie, `X-Steven-Piano`, the Host and Origin checks; the write
+  matrix in `WebServerTest` now holds 24 routes); the name's extension from a fixed list of audio
+  types (415 otherwise); a declared length, no chunked body (411), at most 200 MB (413), not empty;
+  refused before a byte is read when Studio can't run here (409); one upload at a time (409 "busy");
+  streamed to `cacheDir/web/studio-….<ext>` with the cache's free-space margin kept (507), then
+  queued. Guests (the request page) cannot reach it.
+- **The service** (`StudioService`, `dataSync`) is not exported; the app starts it itself when a
+  job is queued, and its Cancel is an explicit, immutable `PendingIntent` to it. Android's time
+  limit for `dataSync` (`onTimeout`) cancels every job. Each job holds a partial wake lock of at
+  most 30 minutes, released when it ends. The work runs on one thread at background priority,
+  one job at a time, never on the player's thread.
+
+Residuals:
+
+- **The models are not signed**, only pinned: their integrity rests on the hashes in the app (and
+  so on the app's own signature). ONNX Runtime parses the file in native code; only a file with the
+  pinned hash is ever loaded.
+- **Recordings are decoded by Android's own codecs** (`MediaExtractor`, `MediaCodec`) in the app's
+  process and the media service; a malformed file is what those decoders are built to refuse. WAV
+  files are read by the app's own reader, which checks every chunk against the caps above.
+- **The GitHub repository is private for now**: until it is public the models' address answers
+  404 and Download says it couldn't reach the server. Nothing else changes when it becomes public.

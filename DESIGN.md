@@ -1466,3 +1466,116 @@ From 1280 px the Up next column beside Now playing widens with the window (three
 playing's column, never under 360 px; 1100–1279 px keeps the fixed 360); its titles take a second
 line before any ellipsis, there and on the Up next page, while the composer · length line stays
 single.
+
+# v1.7 — M23: Studio, part 1 (transcription)
+
+Steven wants pieces made on the tablet itself: no service, no account, nothing sent anywhere.
+**Studio** is where that happens. Its first job turns a piano recording into a piece: the tablet
+listens to the audio with a transcription model (ByteDance's piano transcription, CC BY 4.0) and
+writes what it hears, notes, velocities and the pedal, as a MIDI file in the library. Composing
+(M24) follows; its model is already listed. The models are large and optional: the app downloads
+them only when someone asks, from the app's own GitHub release, and checks each one against a
+hash built into the app. Everything above still holds. Not released yet: 1.7 comes after M24.
+
+## Where Studio is
+
+- **Piano › CONTROL › Studio**, after Kiosk. Its value: **"No models"**, **"1 model"**, **"2
+  models"**; while a job runs, **"Downloading 34%"** or **"Transcribing 42%"** ("Transcribing"
+  while the recording is read, **"Waiting"** while a job waits its turn).
+- **Library › + › Transcribe a recording…**, below a hairline after Fetch artwork, with "Any
+  piano recording. About a minute per three minutes of audio." (and "Downloads the transcription
+  model (125 MB) first." while it isn't there). It opens the same picker as the page. The sheet
+  now opens all the way up, so its last row is never cut off on a phone.
+- **The web panel's Studio page**, after Add (below).
+- **Where Studio can't run**, the hub's row keeps its place without a chevron, the reason under
+  its name in the eyebrow's size: **"Studio isn't available on this device"** (ONNX Runtime's
+  library doesn't load on it) or **"This tablet doesn't have enough memory for Studio"** (under
+  2.5 GiB); the + sheet has no Studio row, and the panel's page says the same
+  line. Whether Studio runs is asked once per process, the first time one of these is shown,
+  never at start.
+
+## The Studio page
+
+- **MODELS**, a row a model: its name in Body (**Transcription**, **Composing**), then in the
+  eyebrow's size, sentence case: **"125 MB · CC BY 4.0 · Turns a piano recording into a piece."**
+  (the composer's: "For composing, which comes in the next update."), and **Download** (outlined).
+  Downloading: **"Downloading · 42 of 125 MB"** over the hairline progress line, and **Cancel**.
+  Installed: **"Installed · 125 MB · CC BY 4.0"** and **Remove**. A download that failed says why
+  in its line ("Downloading a model needs an internet connection.", "Couldn't reach the download
+  server.", "The download didn't match the model; try again.", "There isn't enough free space for
+  the model.").
+- **TRANSCRIBE**: **Transcribe a recording…** (outlined) and the note under it. When the tablet's
+  memory refused the last try, that line follows as the page's note (Body, secondary, after a
+  hairline): **"Close other apps and try again."**, "The tablet ran short of memory, so the
+  transcription stopped. Close other apps and try again." or "This tablet doesn't have enough
+  memory for Studio.".
+- **JOBS**, newest first, while there are any (the last twenty that ended, and those waiting or
+  running): the recording's file name (the piece's title once made), its line, a hairline while it
+  runs, **Cancel** while it waits or runs, **Listen** while its piece waits for Keep or Discard.
+  The lines: "Waiting", "Reading the recording…", "Transcribing · 42%", "Adding it to the
+  library…", **"Ready: listen, then keep it or discard it"**, **"Kept as Clair de lune"**,
+  "Discarded", "Cancelled", or the failure's own sentence.
+- On a device Studio can't run on, the page is STUDIO and the reason, nothing else.
+- In kiosk mode the page is locked as the other settings pages are.
+
+## A transcription
+
+- **The picker** is Android's document picker for audio (and Ogg, which some apps label as an
+  application): m4a, mp3, wav, flac, ogg, opus and whatever else the tablet decodes. MIDI files
+  appear there too (Android counts them as audio); picking one ends the job at once with
+  **"That's a MIDI file already. Add it with Add files."**
+- **The steps**: when the transcription model isn't there yet, its download is queued first and
+  the transcription waits for it. Then the recording is read (decoded, made mono and 16 kHz), then
+  transcribed ten seconds at a time (the percentage), then written as a piece and added to the
+  library. One job at a time; others wait their turn. Cancel stops a job between two windows.
+- **What it refuses**, in its line: "A recording can be 200 MB at most.", "A recording can be 20
+  minutes long at most.", "This file isn't a recording the tablet can read.", "The recording is
+  empty.", "No piano was heard in this recording.", and the memory lines above.
+- **The piece**: the recording's file name without its extension ("Recording · Sep 28, 2026" when
+  it has none) by **Made in Studio**, a composer that is no one: no portrait and no Wikipedia text
+  is looked for, and the Library draws its roll card. Its sheet reads **"Made in Studio · Sep 28,
+  2026"** (the date in the tablet's own style) and has no "From Wikipedia" line. It plays, queues
+  and joins playlists like any other piece.
+- **Keep or Discard.** A new piece is in the library at once, but undecided. Once it has been
+  heard, fifteen seconds of it or all of it, Now playing (and the tablet's now-playing panel) shows
+  an outlined banner where playback's problems show: **"Keep this piece?"**, "Made in Studio from a
+  recording. Discard deletes it.", **Keep** and **Discard**. Keep ends the question for good.
+  Discard silences the piano, lets the player go of the piece (it leaves Up next too) and deletes
+  it from the library; in kiosk mode it asks for the kiosk PIN first. An undecided piece stays
+  undecided across restarts until one of the two is chosen (or it is deleted from its menu); the
+  job's **Listen** plays it and opens Now playing.
+- **While it runs**, the Library shows it under its import bar, the way imports and artwork do:
+  **"Transcribing Prelude in C.m4a · 42%"** over the hairline progress line ("Reading …", "Adding …
+  to the library…", "Downloading the transcription model · 42 of 125 MB").
+- **The notification** (channel **Studio**, low importance, silent): "Downloading the
+  transcription model" or "Transcribing Prelude in C.m4a", its line, its progress and **Cancel**.
+  When the last job ends it leaves one line: **"Prelude in C is in the library"** with "Listen,
+  then keep it or discard it." (a tap opens the Library), "The transcription model is installed",
+  "The transcription didn't finish" with the reason, or "… didn't download".
+- **The piano plays on.** Studio works on its own thread at background priority and never touches
+  the player's; the piece playing keeps its time (measured on the emulator: no lateness beyond the
+  emulator's own jitter; BUILD_SPEC › v1.7 — M23 › Measured).
+
+## Memory and time
+
+- Studio is offered on devices with at least **2.5 GiB** of memory (Android's `totalMem`; a tablet
+  sold with 3 GB passes). A transcription starts only with **900 MiB** free above Android's low
+  mark and Android not short of memory; between windows it stops if the free memory falls under
+  128 MiB (something else is taking it). The app peaks at about **0.75 GB** while it transcribes.
+- About **a minute per three minutes of audio** on a recent tablet (the spike measured 0.32 × real
+  time; the emulator on the Mac takes 65–69 s for three minutes while a piece plays).
+- The app itself grows by ONNX Runtime's library (about 11 MB to download); the models are separate
+  downloads, 125 MB and 173 MB, kept in the app's own storage until Remove.
+
+## The web panel's Studio page
+
+- **MODELS**: each model's name and line as on the tablet ("Installed · 125 MB · CC BY 4.0",
+  "Downloading · 42 of 125 MB" over a 2 px bar). Models are downloaded on the tablet.
+- **TRANSCRIBE**: a drop zone, "Drop a piano recording here", ".wav, .mp3, .m4a, .flac, .ogg and
+  the like, up to 200 MB. About a minute per three minutes of audio." and **Choose recordings**.
+  Recordings go one at a time, each checked in the page first as the tablet will ("Not sent: only
+  recordings (.wav, .mp3, .m4a, .flac, .ogg…)", "Not sent: a recording can be 200 MB at most"),
+  their rows reading "Sending 52%" over the bar, then **"Sent to the tablet · transcribing there"**.
+- **JOBS**, as on the tablet, with **Cancel** on those waiting or running; the lines are the
+  tablet's own. Keep and Discard stay on the tablet, where the piece is heard.
+- Where Studio can't run, the page is the reason alone.

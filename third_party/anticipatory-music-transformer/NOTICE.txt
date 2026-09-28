@@ -1,0 +1,25 @@
+Composing model (Studio's composing model, composer-v1.onnx)
+============================================================
+
+Not part of this repository and not bundled in the app: the app downloads it on
+demand, from this project's GitHub release "models", when someone chooses
+Download on the Studio page, and checks its SHA-256 before it is used. (The app
+offers it for composing, which comes in a later version.)
+
+Source:  the Anticipatory Music Transformer, music-small-800k, by John
+         Thickstun, David Hall, Chris Donahue and Percy Liang (Stanford CRFM).
+         https://huggingface.co/stanford-crfm/music-small-800k
+         Code: https://github.com/jthickstun/anticipation
+
+Licence: Apache License, Version 2.0; the full text is LICENSE.txt beside this
+         file (as distributed with the Anticipatory Music Transformer's code)
+         and https://www.apache.org/licenses/LICENSE-2.0.
+
+Changes: exported to ONNX with a key/value cache, its logits cut to the
+         last position, and its matrix multiplications with constant weights
+         and its token embedding quantised to INT8 per channel, for Steven
+         Piano. The export is tools/studio/export_composer.py, documented in
+         docs/STUDIO_SPIKE.md. No weights were retrained.
+
+The model keeps its own licence; the MIT licence of this project does not apply
+to it. The model was trained by its authors on the Lakh MIDI Dataset.

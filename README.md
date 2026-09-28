@@ -17,12 +17,14 @@ while the piano plays it, play the piano yourself on **Keys**, and on the
 playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
 analytics, and the network only for composers' portraits and short notes from
 Wikipedia (see *Artwork and notes* below), for the app's own updates from its
-GitHub repository (see *Updates*) and for the piano's firmware releases from the
-firmware's (see *Updating the piano's firmware*). With **Web control** on, it also
+GitHub repository (see *Updates*), for the piano's firmware releases from the
+firmware's (see *Updating the piano's firmware*) and for Studio's models when you
+download them (see *Studio*). With **Web control** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
 page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself at set
-times (see *Schedules*), and on the school tablet it can be locked to the app as a kiosk
-(see *Kiosk*). Made by Steven Jin. Version 1.6.2.
+times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
+(see *Kiosk*), and **Studio** turns a piano recording into a piece on the tablet itself
+(see *Studio*). Made by Steven Jin. Version 1.6.2.
 
 ## What it does
 
@@ -228,6 +230,11 @@ times (see *Schedules*), and on the school tablet it can be locked to the app as
 - **Schedules**: the piano plays a channel, a playlist or a piece by itself on
   chosen days at a set time, until an end time or its end, at its own volume; the
   tablet wakes for it with its screen off (see *Schedules*).
+- **Studio**: turns a piano recording (m4a, mp3, wav, flac, ogg…) into a piece on
+  the tablet itself, with how hard each note was played and the pedal: from the
+  Library's **+**, **Piano › Studio** or the web panel's Studio page. Listen, then
+  keep it or discard it. The transcription model (125 MB) downloads once, when
+  you ask; nothing you record leaves the tablet (see *Studio*).
 - **The piano's firmware**: Piano › Firmware and status shows the version the
   piano runs, looks for a new signed release and sends it over Bluetooth; the
   piano checks the signature, restarts on it, and rolls back by itself if it
@@ -561,7 +568,10 @@ holds:
 - `settings.txt`: the app's preferences (the remembered piano's Bluetooth address
   among them);
 - `link.log`: the last 500 lines of the piano link's log, with their times (Bluetooth
-  addresses, device names and status codes, as in *Send a log*);
+  addresses, device names and status codes, as in *Send a log*), for each piece played how
+  many notes went out and how late the latest was ("Timing: 3059 events, the latest 6 ms after
+  its time, at 1:15.5"), and for each Studio transcription how long it took and the memory it
+  used ("Studio: transcribed 180.0 s of audio in 66.1 s …"), no titles or file names;
 - the app's last five crash reports, if any: the time, version, device, thread and
   stack trace, with any file address or web address in a message taken out.
 
@@ -810,6 +820,66 @@ take that away (Settings › Apps › Special app access › Alarms & reminders)
       connected)".
 - [ ] Restart the tablet with a schedule ahead and don't open the app: it still plays.
 
+## Studio
+
+Studio makes pieces on the tablet itself: no service, no account, nothing sent anywhere. Its
+first job **turns a piano recording into a piece**: the tablet listens to the recording with a
+transcription model and writes down what it hears, every note with how hard it was played, and
+the pedal, as a MIDI file in the library that the piano then plays. (Studio comes with 1.7; the
+composing model it also lists is for the next part.)
+
+1. **Piano › Studio › Transcription › Download**, once: 125 MB from this repository's GitHub
+   release `models`, checked against the SHA-256 the app carries before it is used. **Remove**
+   frees the space again.
+2. **Library › + › Transcribe a recording…** (or the button on the Studio page) and pick a
+   recording: m4a, mp3, wav, flac, ogg, opus, whatever the tablet plays, up to 20 minutes and
+   200 MB. From a computer or a phone, drop recordings on the web panel's **Studio** page instead;
+   they go to the tablet one at a time. Without the model, the job downloads it first.
+3. It runs in the background, with its progress in the notification (and Cancel), on the Studio
+   page and in the Library: "Transcribing Clair de lune.m4a · 42%". About **a minute per three
+   minutes of audio**; the piano can go on playing meanwhile, and keeps its time.
+4. The piece appears in the library titled after the file, by **Made in Studio** (a roll card,
+   and "Made in Studio · Sep 28, 2026" on its sheet). Play it: once it has played 15 seconds (or
+   to its end), Now playing asks **Keep this piece?** **Keep** keeps it; **Discard** deletes it
+   (in kiosk mode, behind the PIN). The job's **Listen** plays it straight away.
+
+**What it hears well**: a clear recording of a solo piano. The model was trained on real pianos
+(the MAESTRO recordings; its authors measured a 96.8 % note F1 there); audio from a synthesizer gets
+extra notes (held notes struck again), and voices or other instruments turn into notes of their
+own. A MIDI file picked by mistake is refused: "That's a MIDI file already. Add it with Add
+files."
+
+**The models**, downloaded only when asked, never bundled, each keeping its own licence (AUTHORS,
+`third_party/`; About credits them):
+
+| Model | Size | Licence | From |
+|---|---|---|---|
+| Transcription | 125 MB | CC BY 4.0 | ByteDance's high-resolution piano transcription (Kong et al., Zenodo 4034264), converted to ONNX |
+| Composing (next part) | 173 MB | Apache 2.0 | The Anticipatory Music Transformer, music-small-800k (Thickstun et al., Stanford CRFM), converted to ONNX |
+
+**Memory and devices.** Studio needs an arm64 tablet or phone with at least 2.5 GiB of memory
+(most sold with 3 GB or more); elsewhere the Piano tab says "Studio isn't available on this
+device" or "This tablet doesn't have enough memory for Studio", and the + sheet has no Studio
+row. A transcription starts only with about 900 MiB free, else "Close other apps and try
+again."; the app uses about 0.75 GB while it transcribes and gives it back after.
+
+**Size.** ONNX Runtime, which runs the models, makes the app a bigger download: the release APK
+is 13.4 MB (1.6.2's was 2.8 MB), its library for 64-bit ARM only, so the app installs on arm64
+tablets and phones only. The models are separate downloads, kept in the app's own storage.
+
+**Privacy.** Recordings never leave the tablet: they are decoded and transcribed there, and a
+recording sent from the panel is deleted once its job ends. The only traffic is the model's
+download, when you ask for it.
+
+**On the piano:**
+
+- [ ] Download the transcription model on the school tablet; transcribe a three-minute recording
+      while a piece plays, then Stop and Share diagnostics: `link.log` has the transcription's
+      time and memory ("Studio: transcribed 180.0 s of audio in … s …; peak VmHWM … kB"; about a
+      minute and under 1 GB is right) and the piece's "Timing: … the latest N ms after its time"
+      (a few ms is right). The piece should keep its time throughout.
+- [ ] Listen to the new piece; Keep; play it again; Discard another.
+
 ## Test it on the piano
 
 - [ ] Sideload `app-release.apk` (uninstall a debug build first). The app launches
@@ -990,6 +1060,14 @@ The full audit, every finding and what was done about it, is in
 - The firmware releases' signatures are checked with **EdDSA-Java** by str4d and
   its contributors (CC0 1.0), linked unmodified from Maven Central (notice in
   `AUTHORS`, legal code in `third_party/eddsa/`).
+- Studio transcribes with ByteDance's high-resolution piano transcription model
+  by Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan and Yuxuan Wang (CC BY 4.0,
+  Zenodo 4034264), and its composing model is the Anticipatory Music Transformer
+  by John Thickstun, David Hall, Chris Donahue and Percy Liang (Stanford CRFM,
+  Apache License 2.0); both converted to ONNX, downloaded on demand and never
+  bundled (notices in `AUTHORS`, what changed in `third_party/`). They run on
+  **ONNX Runtime** by Microsoft (MIT), linked unmodified from Maven Central
+  (licence and its third-party notices in `third_party/onnxruntime/`).
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
   domain); those files are not part of this repository.

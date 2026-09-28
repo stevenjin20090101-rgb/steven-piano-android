@@ -3959,3 +3959,413 @@ Jin · v1.6.2 · eab16a502f679465", the entry drafted at the end of `releases/hi
   M21's: as stated. The release APK is 2,837,804 bytes (versionCode 13, "1.6.2", signed
   `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,537,905; staged as
   `../apk/steven-piano-1.6.2.apk` and `-debug.apk`.
+
+# v1.7 — M23: Studio, part 1 — transcription on the tablet (not released)
+
+Read `DESIGN.md › v1.7 — M23` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› item 13 and "M23 — Studio transcription" (binding, with the spike's numbers overriding its
+guesses: sizes, memory gates, the runtime's version); the contract is `docs/STUDIO_SPIKE.md` › The
+contract for M23 and M24. Built on `main` after the spike's merge (`1470549`), a commit a step
+(`67c0df2` runtime and gates, `e26435a` models, `72b4329` audio, `6eaf350` transcription, `25d9527`
+jobs and the service, `07f8f77` the UI and the panel, `eafbd84` and `0a52b90` what the emulator
+showed, then these notes). **No version bump**: `versionCode` 13, `versionName` "1.6.2" and `Provenance.text`
+stay; 1.7 is released after M24 (composing).
+
+## The rule: ONNX Runtime 1.28.0, and no provider of its own
+
+- `com.microsoft.onnxruntime:onnxruntime-android` is **1.28.0** (`gradle/libs.versions.toml`,
+  `onnxruntime`), and never 1.29.0 or newer: from 1.29 the AAR merges a startup provider,
+  `ai.onnxruntime.TelemetryInitializer`, into the app's manifest. The JVM build of the same version
+  (`com.microsoft.onnxruntime:onnxruntime`) is a test dependency only.
+- **The merged manifest of every variant holds no `<provider>` whose `android:name` starts with
+  `ai.onnxruntime`, and no `TelemetryInitializer` anywhere.** `checkOnnxTelemetry` (in
+  `app/build.gradle.kts`, `OnnxTelemetryCheck`) enforces it: `check<Variant>OnnxTelemetry` for each
+  variant reads `SingleArtifact.MERGED_MANIFEST`, writes its report under `build/reports`, and fails
+  the build naming what it found; `check` depends on the aggregate. Verified failing with 1.30.0 and
+  passing with 1.28.0. A newer runtime needs this rule changed first, by a decision, never by
+  removing the provider quietly.
+- `defaultConfig.ndk.abiFilters += "arm64-v8a"` (the only ABI the app ships, for every native
+  library); `packaging.jniLibs.useLegacyPackaging = true` (the 28.6 MB `libonnxruntime.so` travels
+  deflated, 10.6 MB, and is extracted at install); R8 `-keep class ai.onnxruntime.** { *; }` (the
+  JNI calls the Java API by name). `app/lint.xml` (new): `NewerVersionAvailable` ignored for
+  `com.microsoft.onnxruntime` (the pin is deliberate), `ChromeOsAbiSupport` ignored (arm64 only is
+  a decision).
+- `-PstudioModels=<dir>` hands `TranscriberTest` a folder holding `transcription-v1.onnx`
+  (system property `stevenpiano.studio.models`); without it the real-model case is skipped.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `M/studio/StudioAvailability.kt`: `StudioSupport` (Checking, Available, NoRuntime,
+  TooLittleMemory), `MemorySnapshot`, `object MemoryGate` (`OFFER_TOTAL_BYTES` 2.5 GiB,
+  `TRANSCRIPTION_FREE_BYTES` 900 MiB, `RUNNING_FREE_BYTES` 128 MiB; `offered`, `canStart`,
+  `canContinue`, `support`; the overrides `noruntime`, `lowmem`, `busy`), `StudioAvailability`
+  (asked once, off the main thread; `memory()`; `PROPERTY` `debug.stevenpiano.studio`).
+- `M/studio/ModelCatalogue.kt` (`ModelEntry`; `transcription`, `composer`, `all`, `named`),
+  `ModelManifest.kt` (+ `InvalidModelManifest`), `ModelStore.kt`, `ModelInstaller.kt`
+  (+ `StudioFailure`, `object StudioFailures`: every refusal's sentence).
+- `M/update/VerifiedDownloader.kt` (`Target`, `DownloadProblem`, `DownloadFailure`, `sha256Of`).
+- `M/studio/Resample.kt` (`Resample`, `Resampler`, `FloatSink`, `FloatBuilder`), `WavReader.kt`
+  (`AudioLimits`, `AudioFailure`, `DecodedAudio`, `MonoTo16k`, `WavReader`), `AudioDecoder.kt`
+  (`AudioSource`: `Document`, `Local`).
+- `M/studio/NotePostProcessor.kt` (`TranscribedNote`, `PedalEvent`, `Transcription`),
+  `Transcriber.kt` (`WindowOutputs`, `WindowModel`, `OrtWindowModel`), `M/midi/SmfWriter.kt`.
+- `M/studio/StudioPieces.kt` (`StudioLibrary`, `StudioPiece`), `AppStudioLibrary.kt`,
+  `StudioReview.kt` (`ReviewStore`, `ReviewPlayer`, `StoredReview`: DataStore "studio").
+- `M/studio/StudioJobs.kt` (`JobKind`, `JobState`, `JobStep`, `StudioJob`, `StudioJobs`),
+  `Studio.kt` (+ `RecordingReader`), `M/service/StudioService.kt`.
+- `M/ui/StudioCopy.kt`; `M/ui/screens/piano/pages/StudioPage.kt` (+ `rememberRecordingPicker`);
+  `M/ui/screens/nowplaying/StudioReviewBanner.kt`.
+- `app/lint.xml`; `third_party/onnxruntime/` (`LICENSE.txt`, `ThirdPartyNotices.txt` from the
+  1.28.0 artifact), `third_party/piano-transcription/NOTICE.txt`,
+  `third_party/anticipatory-music-transformer/` (`LICENSE.txt`, `NOTICE.txt`).
+- Tests: `T/studio/MemoryGateTest`, `ModelManifestTest`, `ModelStoreTest`, `ModelInstallerTest`,
+  `ResampleTest`, `AudioDecoderTest`, `StudioFixtures` (the spike's fixtures, WAV writer),
+  `NotePostProcessorTest`, `TranscriberTest`, `StudioPiecesTest`, `StudioReviewTest`, `StudioTest`;
+  `T/update/VerifiedDownloaderTest`; `T/midi/SmfWriterTest`; `T/ui/StudioCopyTest`.
+
+Changed: `gradle/libs.versions.toml`, `app/build.gradle.kts`, `app/proguard-rules.pro`,
+`AndroidManifest.xml` (`StudioService`, not exported, `dataSync`); `App.kt` (the "studio" channel),
+`AppGraph.kt` (`studio`, its thread, wake lock and log; the player's trail); `update/UpdateSource.kt`
+(`Kind.Models`, `allowsModel*`, `localModels`, `MAX_MODEL_BYTES`), `UpdateDownloader.kt` (runs on
+`VerifiedDownloader`, its behaviour and lines unchanged), `UpdateServer.kt` (the file's Accept),
+`UpdateOverride.kt` (`ModelsOverride`: `debug.stevenpiano.modelsurl`), `UpdateManifest.kt` (a note);
+`player/PlaybackEngine.kt` (`PlaybackTiming`), `Player.kt` (`trail`, `forget`, `timingLine`);
+`diag/LinkLog.kt` (a note); `data/art/ArtworkRepository.kt` (`describe`), `ArtworkFetcher.kt`
+("made in studio" is no one to look up), `data/imports/ComposerNames.kt` (`STUDIO`);
+`service/WebService.kt`; `web/WebBackend.kt`, `WebApi.kt`, `WebServer.kt`, `AppWebBackend.kt`;
+`ui/Routes.kt` (`SettingsPage.Studio`), `ui/NavHost.kt`; `ui/screens/piano/HubGroups.kt`,
+`GroupSummaries.kt`, `PianoScreen.kt`, `PianoViewModel.kt`, `AboutRow.kt`;
+`ui/screens/library/AddSheet.kt`, `ImportBar.kt` (`StudioBar`), `LibraryScreen.kt`;
+`ui/screens/nowplaying/NowPlayingScreen.kt`, `NowPlayingPanel.kt`;
+`ui/screens/piece/PieceDetailSheet.kt`; `assets/web/index.html`, `app.js`, `style.css`; tests
+`UpdateSourceTest`, `PlayerTest`, `PlaybackEngineTest`, `ComposerNamesTest`, `PieceNotesChoiceTest`,
+`RoutesTest`, `PianoPagesTest`, `GroupSummariesTest`, `FakeWebBackend`, `WebServerTest`,
+`WebApiTest`, `WebAssetsTest`; `AUTHORS`, `README.md`, `DESIGN.md`, `docs/SECURITY_AUDIT.md`.
+
+## Availability and the memory gates (`studio/StudioAvailability.kt`)
+
+- Asked once per process, the first time something shows Studio (the hub, the + sheet, the page,
+  the panel's upload), on `Dispatchers.Default`: `ActivityManager.MemoryInfo.totalMem` against
+  2.5 GiB, then `OrtEnvironment.getEnvironment()` in a `try` catching `Throwable` (an
+  `UnsatisfiedLinkError` is a no). Loading maps the 28 MB library, so it is never done at start.
+- A transcription starts only when `!lowMemory && availMem − threshold ≥ 900 MiB`
+  (`StudioFailures.BUSY`, "Close other apps and try again."); before every window it needs 128 MiB
+  (`canContinue`; else `RAN_OUT`). Numbers from the spike: the job costs at most 576 MiB above the
+  app's own resident set; the process peaks at 0.68–0.74 GiB.
+- `debug.stevenpiano.studio` (debug builds on an emulator only, read once per process with
+  `getprop`): `noruntime`, `lowmem` play those devices; `busy` makes `memory()` report nothing free.
+
+## Models (`studio/ModelCatalogue.kt`, `ModelManifest.kt`, `ModelStore.kt`, `ModelInstaller.kt`)
+
+- Pinned in source: `transcription` v1 `transcription-v1.onnx`, 124,511,036 bytes,
+  `f5db051a0af4a3601c18b3ecf679be3150912d8d535e3a03554c9662c8525383`, CC-BY-4.0; `composer` v1
+  `composer-v1.onnx`, 173,193,820 bytes,
+  `86ddb19c7afce2bab6be13706cb0a0f44cd7a4271c021706d02394c10cbda7b1`, Apache-2.0; each with its
+  address on the release `models`, its attribution, its title, licence label and use.
+- `ModelManifest.parse(text, source)`: `releases/models.json` as the spike's `publish_models.py`
+  writes it, at most 64 KB and 32 models, no name and version twice; names `[a-z][a-z0-9-]{0,31}`,
+  versions 1–1,000, the file exactly `<name>-v<version>.onnx` and the address's last segment, sizes
+  1 byte to `MAX_MODEL_BYTES`, 64-digit hashes, attribution to 300 characters, each address through
+  the source's model rules. A pinned model's version with another hash or size refuses the whole
+  list.
+- `ModelStore(filesDir/models)`: installed = the file at its pinned size; `open()` hashes it once per
+  process and deletes a mismatch (`MODEL_DAMAGED`); `remove`; `sweep` drops `.part` files at start.
+- `ModelInstaller.install(model)`: the list (`UNREACHABLE`, `UNREADABLE`, `NOT_OFFERED`), then
+  `VerifiedDownloader` with the catalogue's size and hash (never the list's), `MAX_MODEL_BYTES`
+  (1 GiB), a 256 MB free margin, progress every 256 KB.
+- `VerifiedDownloader` (the updater's way made general): `<dir>/<name>.part`, hashed as it is
+  written, at most `min(cap, size)` bytes whatever the server says, then renamed only on the exact
+  size and hash; `Mismatch`, `Stopped`, `Unreachable`, `NoRoom`. `UpdateDownloader` runs on it.
+- `UpdateSource.models`: the list at `https://raw.githubusercontent.com/stevenjin20090101-rgb/steven-piano-android/main/releases/models.json`
+  exactly; files `https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/models/<file>.onnx`;
+  hops there or on GitHub's two asset hosts. `ModelsOverride`: `debug.stevenpiano.modelsurl` names a
+  local list whose files are on its own origin (HTTP allowed; debug builds on an emulator only).
+
+## Audio (`studio/AudioDecoder.kt`, `WavReader.kt`, `Resample.kt`)
+
+- `AudioDecoder.decode(source, cancelled)`: over 200 MB refused (`TOO_LARGE`); the first 12 bytes
+  read: a MIDI file (`MThd`, or RIFF `RMID`) refused (`AudioFailure.MIDI`); a WAV file through
+  `WavReader`; anything else through `MediaExtractor` (the first `audio/` track; a container that
+  says it lasts over 20 minutes refused before decoding) and `MediaCodec` (16-bit or float PCM),
+  drained into `MonoTo16k`.
+- `WavReader`: PCM 8/16/24/32-bit, float 32/64, `WAVE_FORMAT_EXTENSIBLE`; 1–768 kHz, 1–16
+  channels; a data chunk of unknown size runs to the end; the announced length checked before
+  decoding. `MonoTo16k` averages the channels and resamples as frames arrive, 20 minutes of the
+  source at most (`TOO_LONG`), into one array sized from the estimate.
+- `Resampler`: windowed sinc, Kaiser β 9, 24 zero crossings, cutoff 0.94 of the lower Nyquist, a
+  512-point-per-sample table with linear interpolation, each output at its exact input position;
+  streaming (the same output whatever the pieces). `Resample.to16k` for whole arrays.
+
+## Transcription (`studio/Transcriber.kt`, `NotePostProcessor.kt`; `midi/SmfWriter.kt`)
+
+- `OrtWindowModel`: one `OrtSession` per job, CPU provider, `intraOpNumThreads` 4,
+  `interOpNumThreads` 1, `SEQUENTIAL`, `ALL_OPT`, memory patterns off; input `audio` `[1,160000]`;
+  the seven outputs copied into arrays kept for the job.
+- `Transcriber.transcribe(audio, model, progress)`: the audio zero-padded to whole 160,000-sample
+  windows, a window every 80,000 samples (`windowsFor`: 2 × padded / 160,000 − 1), one at a time;
+  frames stitched as the package's `deframe` (`rowsOf`: frame 1000 dropped; 0–749 of the first,
+  250–749 of the middle, 250–999 of the last; all 1,001 of a single window), every frame of the
+  padded audio kept, as the package keeps them; progress per window; before each window the
+  cancel and the memory checks.
+- `NotePostProcessor`: the port of `RegressionPostProcessor` with `piano_vad`'s note and pedal
+  detection (thresholds 0.3 / 0.3 / 0.1 / 0.2, pedal frame 0.5; float32 shifts, times via float64
+  kept as float32, velocity `int(v × 128)` to 127, Python's truth of frame 0), streaming: a frame is
+  decided once the four after it are in, so the outputs of a long recording are never all held.
+- `SmfWriter.write(notes, pedals, title, text)`: format 0, PPQ 480, tempo 500,000 µs (120 bpm), 4/4;
+  the title as the track name (FF 03, UTF-8), a text event (FF 01; Studio's is ASCII); CC64 and the
+  notes at one tick in the parser's order (controls, offs, ons), every note at least a tick long,
+  velocities 1–127; round-trips through `SmfParser`.
+
+## The piece, and Keep or Discard (`studio/StudioPieces.kt`, `AppStudioLibrary.kt`, `StudioReview.kt`)
+
+- `StudioPieces.add(transcription, recordingName, at)`: no notes → `NO_NOTES`; the title the
+  recording's name without its extension (cleaned and cut as imports' titles), or "Recording ·
+  <date>"; the MIDI with the title and "Made in Studio, yyyy-MM-dd HH:mm:ss" (so no two files are
+  the same); `library.add(<title>.mid, bytes, title, "Made in Studio")`, then `describe(id, "Made in
+  Studio · <date>")` (the date `FormatStyle.MEDIUM` in the device's locale).
+- `AppStudioLibrary.add`: an `OpenedSource` of one file with an `INDEX.csv` row naming title and
+  composer, through `Importer.importOpened` (the importer's caps, dedup and progress); the id found
+  by the file's SHA-256. `discard`: `Player.forget(id)` on the main thread (its queue entries go;
+  if loaded, the piano is silenced and the player empties), then the library's delete (the file too)
+  and the artwork row's.
+- `ComposerNames.STUDIO` keeps "Made in Studio" whole; `ArtworkFetcher` never looks it up; the
+  artwork row made by `describe` has no source, so the piece sheet shows the line without "From
+  Wikipedia" or Wikipedia's credit (`PieceDetailSheet`: `fromWikipedia` only with a source).
+- `StudioReview`: the undecided pieces (DataStore "studio", key "undecided"; read back at start less
+  those no longer in the library, deleted from its menu meanwhile: `StudioLibrary.exists`); a piece counts as heard
+  when, loaded and playing, its position reaches 15 s (or its end less 50 ms), read every 250 ms and
+  only after a position under that has been read (a new piece's state arrives before its clock:
+  found on the emulator, the last piece's position counted); `asking` = the loaded piece when
+  undecided and heard; `keep`, `discard`.
+
+## Jobs and the service (`studio/Studio.kt`, `StudioJobs.kt`; `service/StudioService.kt`)
+
+- `StudioJobs`: a `StateFlow` of the jobs waiting and running and the last 20 that ended.
+- `Studio`: `download(model)`, `transcribe(source, name)` (queues the model's download first when
+  it isn't installed), `cancel(id)`, `remove(model)`; one job at a time in the order asked, through
+  a channel, on `studioThread` (a single thread at `THREAD_PRIORITY_BACKGROUND`: ORT's pool, made
+  from it, takes its priority); a partial wake lock ("StevenPiano:studio", at most 30 min) around
+  each; a job's end published after its recording is given back (`AudioSource.Local` deleted, a
+  document's persisted grant released). Steps: Waiting, Downloading, Reading, Transcribing, Saving.
+  The log line (tag Studio), also on the link's trail (`trail = LinkLog.shared::add`, so Share
+  diagnostics' `link.log` carries the tablet's figures; no name in it): "Studio: transcribed 180.0 s
+  of audio in 69.3 s (read 12.6 s, 35 windows, model 56.7 s), 1231 notes, 146 pedal; peak VmHWM
+  750112 kB".
+- `StudioService` (`dataSync`, not exported): started (`startForegroundService`) whenever a job is
+  queued; follows `jobs`: the job running (else waiting) as a low-importance, silent notification on
+  channel "studio" ("Transcribing <name>", its line, a determinate bar or an indeterminate one while
+  reading, **Cancel** → `ACTION_CANCEL` to the service), at most every 400 ms unless the job or step
+  changes; when none is left, the foreground notification goes and one line stays ("<title> is in
+  the library" / "Listen, then keep it or discard it." opening the Library; "The transcription model
+  is installed"; "… didn't finish" with the reason); `onTimeout` (both overloads) cancels every
+  job. A refused start (`ForegroundServiceStartNotAllowedException`) leaves the jobs running in the
+  process without the notification.
+
+## Playback timing (`player/PlaybackEngine.kt`, `Player.kt`)
+
+`PlaybackTiming`, owned by the scheduler thread: per batch, the lateness of its earliest event
+against its time, in real microseconds (`(position − its time) × 100 / tempo`), the latest and the
+events counted; a run ends at the piece's end, a stop or another load. `Player.publish` writes the
+run to the link's trail (`LinkLog.warn`: logcat tag PianoLink and `link.log`) after the state:
+"Timing: 3059 events, the latest 6 ms after its time, at 1:15.5" (where in the piece the latest
+was). No title.
+
+## UI
+
+- `SettingsPage.Studio` ("studio", "Studio"), CONTROL after Kiosk (`HubGroups`); its value
+  `StudioCopy.hub` in `GroupSummaries.studio`; where Studio can't run the row is `UnsupportedRow`
+  (the reason, no chevron, nothing to open). `StudioPage`: MODELS (`ModelRow`), TRANSCRIBE
+  (`ActionRow` with the picker, the memory line as a `NoteLine`), JOBS (`JobRow`, newest first,
+  `Listen` → `NavHost`'s `listen`: play the piece alone and open Now playing). Locked in kiosk mode
+  as every page (`LockedPage`).
+- The picker: `OpenDocument` with `audio/*` and `application/ogg`; the grant taken persistable for
+  the job and released after.
+- `AddSheet(..., transcribe: TranscribeEntry?)`: the row below a hairline, only when `Available`;
+  the sheet opens fully expanded (`skipPartiallyExpanded`).
+- `StudioBar` under the Library's import bar (`StudioCopy.libraryLine`, the running job's
+  measured progress). `StudioReviewBanner` (an `OutlinedBanner`, Keep / Discard as text buttons,
+  Discard through the kiosk gate) on Now playing and `NowPlayingPanel`, where playback's problems
+  show. About: `StudioCopy.MODELS_CREDIT`.
+
+## Web (`/api/studio/*`)
+
+- The state's `studio`: `{available, reason, models: [{name, title, sizeBytes, licence, installed,
+  line, progress}], jobs: [{id, kind, name, state, line, progress, title}]}`; reading it asks the
+  device (once per process), `available` true while that runs (the upload waits for the answer and
+  refuses then). `WebService` pushes a state when the jobs, the models, the undecided set or the
+  support change.
+- `PUT /api/studio/audio?name=<file>` (write, untimed): the extension in `AUDIO_EXTENSIONS` (wav,
+  wave, mp3, m4a, mp4, aac, flac, ogg, oga, opus, webm, 3gp, amr; else 415), `Content-Length`
+  required and no chunked body (411), at most `AUDIO_BYTES` 200 MiB (413), not empty (400), Studio
+  able to run (409 "unavailable" before a byte is read), one upload at a time (the uploads' lock,
+  409 "busy"), streamed to `cacheDir/web/studio-<random>.<ext>` with the free-space margin (507);
+  then `transcribeUpload` queues the job: 202 `{name, job}`. `POST /api/studio/jobs/{id}/cancel`
+  (write): 204, or 404 for a job unknown or ended. The write matrix in `WebServerTest`: 24 routes.
+- The page (`app.js`): the ninth section, `#studio`; `zoneFor` and `uploadRow` shared with Add, each
+  upload carrying its route, its list and its words; the client checks the extension, size and
+  emptiness first; a 409 "busy" waits and retries, a 409 "unavailable" is refused in the tablet's
+  words.
+
+## Greps (v1.7 — M23)
+
+As in M19: no `Color(0x` outside `ui/theme`; no `0.0.0.0` or `Access-Control` in `app/src/main`;
+`DisplayBlack` in `Color.kt` and `Theme.kt`; `LocalNoteSounding` in `Theme.kt` and `ScorePages.kt`;
+Haze in `Glass.kt` (sources `Glass.kt`, `NavHost.kt`, `NotePanel.kt`); no `Modifier.blur`; no pure
+black or white in `assets/web` (only `white-space`). New: `ai.onnxruntime` only in `studio/` (and
+the R8 rule and the build's check); no `TelemetryInitializer` in any merged manifest.
+
+## Measured (September 2026, `steven_piano`, API 34, arm64, 4 GB, debug build, the emulated piano)
+
+The AVD booted headless with the emulator binary (`-memory 4096 -no-snapshot-save`, port 5556);
+the models served from the Mac (a local HTTP server throttled to 6 MB/s, its `models.json` naming
+`http://10.0.2.2:8766/<file>`; `debug.stevenpiano.modelsurl` pointing at it), since the GitHub
+repository is still private. Nearby devices granted with `pm grant` so the emulated piano
+connects (revoked after).
+
+- **Tests**: 1,085, none failing (998 before; 9 skipped without `-PstudioModels`: the corpus tests,
+  `PinnedKeyTest`'s firmware header, `TranscriberTest`'s real model). With
+  `-PstudioModels=<the spike's exports>` `TranscriberTest`'s real-model case runs and passes (ORT
+  1.28.0 for the JVM, the fixture window's outputs within 1e-2, the fixture's notes). `lint`: 0
+  errors, 28 warnings (29 before). `check`, `checkDebugOnnxTelemetry` and
+  `checkReleaseOnnxTelemetry` pass; `assembleDebug`, `assembleRelease` clean, no compiler warnings
+  in the app's sources. **The release APK is 13,417,624 bytes** (1.6.2: 2,837,804), the debug APK
+  28,511,948 (16,537,905); `lib/` holds `arm64-v8a` only (`libonnxruntime.so` 28,637,280 bytes and
+  its JNI 111,648, deflated; androidx's two small libraries, which shipped for four ABIs before).
+- **Download**: Piano › Studio › Transcription › Download: the list, then 124,511,036 bytes in
+  21.3 s, "Studio: transcription-v1.onnx downloaded and verified"; "Downloading · 23 of 125 MB" on
+  the page and in the job, the notification's bar, then "Installed · 125 MB · CC BY 4.0" and the
+  line "The transcription model is installed".
+- **The fixture** (`tools/studio/fixtures/transcription_window.wav`) through Library › + ›
+  Transcribe a recording…: 10.0 s of audio in 2.3 s (read 0.1 s, one window, the model 2.2 s with
+  its session), **84 notes and 1 pedal event: the fixture's**.
+- **Three minutes of `bach_bwv846.mid`** (the fixture MIDI twice through, 1.5 s apart, then silence
+  to 180.0 s; TinySoundFont with FreePats' Upright Piano KW; 44.1 kHz stereo 16-bit WAV, 31.75 MB,
+  and AAC in m4a by `afconvert`, 128 kb/s, 2.58 MB; 778 written notes) **while the Chopin études
+  played** (651, the emulated piano connected):
+  - The m4a sent through the panel's API eight times, nothing touching the screen: **65.2–69.3 s**
+    each (reading and decoding 11.1–12.7 s, the model 54.0–57.5 s for 35 windows: the spike's
+    57.4–59.0 s), 1,231 notes and 146 pedal events every time. The process's resident set
+    242–274 MB before each run, **744–774 MB at its peak** (VmRSS every 3 s; VmHWM 750,112–776,220
+    kB), about 300 MB after; no growth from run to run.
+  - The WAV through the + sheet while screenshots were taken: 67.2 s (read 1.2 s, the model
+    66.0 s), 1,285 notes, 128 pedal events; `dumpsys meminfo` every 5 s: **TOTAL RSS 764,356 kB,
+    TOTAL PSS 639,306 kB at the peak** (262–275 MB and 138–151 MB before).
+  - **Against the Mac** (the INT8 model through onnxruntime there, librosa's resampler, the
+    package's own post-processor): the reference finds 1,255 notes in the WAV, all 778 written ones
+    (recall 100 %, precision 62 %: SoundFont audio gets ghost re-attacks, as the spike found). The
+    app's WAV transcription agrees with it at F1 98.1 % (the resamplers differ), the m4a's at
+    96.1 % with onsets 0.0 ms apart on average (AAC's priming handled by the extractor); both find
+    all 778 written notes.
+- **Playback while transcribing** (the Timing lines, each a piece played through the API for
+  75–95 s, then Stop; nothing touching the screen):
+
+  | Runs | Latest lateness per run (ms) | Median |
+  |---|---|---|
+  | 8 with the m4a transcribing | 9, **101**, 6, 5, 17, 7, 6, 5 | 6.5 |
+  | 8 without Studio | 5, 9, 6, 6, 22, 12, 42, **298** | 10.5 |
+
+  About 3,000 events a run. No systematic lateness from Studio; the emulator itself stalls now and
+  then (a 298 ms batch with nothing else running, at 0:29.8 of the piece, beside a Wi-Fi beacon
+  loss in the log), and the one long batch during a transcription (101 ms) came before the "at"
+  was added, so where it fell is unknown. The tablet's own figures are the real test (README ›
+  Studio › On the piano).
+- **Other recordings**: the panel's page sent Gymnopédie No. 1 (Wikimedia Commons, CC0) as Ogg
+  Vorbis (44.1 kHz stereo, 204.8 s) and as FLAC (22.05 kHz stereo, no length in its header) one
+  after the other, a `.mid` refused in the page: 184.8 s and 125.2 s (headless Chrome and a second
+  emulator busy on the Mac); against the Mac's reference F1 97.4 % (652 / 641 notes) and 98.4 %
+  (612 / 601). A MIDI file picked on the tablet: "That's a MIDI file already. Add it with Add
+  files."
+- **Keep or Discard**: Listen played the piece and opened Now playing; the banner came 15 s in;
+  Keep ended it. Before `eafbd84` an undecided piece loaded after 20 s of another was asked about
+  at once; after it, 3 s in no banner, 19 s in the banner. Discard (the fixture's 10 s piece)
+  silenced the piano, emptied Now playing ("Choose a piece from the library.") and took the piece
+  and its file out of the library.
+- **Cancel** from the page's job and from the notification's action: "Cancelled", no result line.
+- **The gates** (`debug.stevenpiano.studio`): `noruntime` — the hub's row "Studio isn't available on
+  this device" without a chevron, the + sheet without its row, the panel's page the line alone;
+  `lowmem` — "This tablet doesn't have enough memory for Studio"; `busy` — a transcription sent
+  from the panel ended at once with "Close other apps and try again.", under TRANSCRIBE and in the
+  job.
+- **Screens** (`m23-shots/`): the hub's row (No models, 1 model, Transcribing 5%, the two reasons),
+  the page (no models, downloading, installed, a job transcribing with Cancel, Cancelled and Ready
+  with Listen, MIDI refused, the memory line), the + sheet with and without the row, the picker,
+  the Library's line while transcribing, the notifications (downloading; transcribing, expanded
+  with Cancel; the result), Now playing with the banner, the pieces by Made in Studio with their
+  roll cards, the piece sheet, About's credit; the panel's page at 1280 and 390 px, light and dark,
+  sending, transcribing, done, and unavailable.
+
+## Deviations from the plan, and why
+
+- **arm64 only is the whole app's ABI.** `abiFilters` (binding) applies to every native library,
+  so androidx's two small libraries, shipped for four ABIs until 1.6.2, now ship for arm64 only,
+  and the APK no longer installs on 32-bit ARM or x86 devices without an ARM translation layer.
+  The plan's "on x86_64 Studio hides" holds only on such devices (as on x86_64 emulator images,
+  which translate). Keeping the app on every ABI while shipping ONNX Runtime for arm64 alone would
+  be `packaging.jniLibs.excludes` for ORT's other ABIs instead of `abiFilters`; not done, as the
+  brief binds the filter. Steven's tablet is arm64.
+- **One service**, `StudioService`, for downloads and transcriptions (the plan offered a
+  `ModelDownloadService`; the brief preferred one).
+- **Timing lines** (`PlaybackTiming`): the link's trail had no measure of lateness, so the brief's
+  measurement needed one; it stays, one line a piece played, readable in Share diagnostics.
+- **Asked lazily**: whether Studio runs is asked the first time something shows it, never at start
+  (the check maps ORT's 28 MB library).
+- **A second memory gate** between windows (128 MiB; the brief's "peak-memory guard"), with its own
+  line.
+- **The hub's values** add "1 model", "Downloading 34%" and "Waiting" to the plan's three.
+- **The + sheet** opens all the way up (it opened half up on a phone, cutting Studio's row), and
+  the Library shows the job running under its import bar: a transcription started there showed
+  nothing for a minute. Neither was in the plan; both seen on the emulator.
+- **MIDI files** are refused with their own line: Android's picker offers them as audio, and
+  `MediaExtractor` would render one with its synthesizer and transcribe that.
+- **Keep or Discard** "after the first listen" is 15 s of the piece or all of it; the undecided
+  pieces persist across restarts; Discard goes through the kiosk PIN in kiosk mode (it deletes).
+- **The MIDI file's text event is ASCII** ("Made in Studio, <time>"): other programs read text
+  events as Latin-1; the title stays UTF-8, as the app's parser reads it.
+- **The web panel shows the models, never downloads them**: 125 MB and 173 MB go over the tablet's
+  own connection, started on the tablet.
+
+## Residuals
+
+- **Nothing measured on the tablet yet**: time, memory and the player's timing are the emulator's
+  (on a Mac running a second emulator). README's Studio checklist covers the tablet.
+- **The repository is private**: the models' addresses answer 404 until it is public, so Download
+  says "Couldn't reach the download server." there; downloads were tested only against the local
+  server. Nothing changes when the repository becomes public.
+- **Synthesized piano gets ghost notes** (the model hears held notes struck again); real
+  recordings did not show this in the spike.
+- **Jobs live in memory**: a job cut off with the process (Android ending it, the app updated) is
+  not resumed; a picked document's grant then stays with Android until it is next released. A piece
+  deleted from the Library's menu while its job reads "Ready" keeps that job's Listen until the app
+  restarts.
+- **Titles repeat**: the same recording transcribed twice makes two pieces of the same title, as
+  two imports of same-titled files do.
+- **Without the notification permission** (Android 13+, refused) jobs run with no notification;
+  the page and the Library still show them.
+
+## Tests added in M23
+
+`MemoryGateTest` (4), `UpdateSourceTest` (+4: the models' list, files and hops; no crossing with
+the app's or the firmware's), `ModelManifestTest` (7), `ModelStoreTest` (5), `VerifiedDownloaderTest`
+(6, the updater's fake server), `ModelInstallerTest` (4), `ResampleTest` (7: a 1 kHz tone kept;
+9–15 kHz gone rather than folded, below −60 dB, from 22.05, 44.1 and 48 kHz; 6 kHz passes; 8 kHz up
+with no image; 16 kHz untouched; any pieces, the same output; silence and DC), `AudioDecoderTest`
+(9: the fixture window exactly; 44.1 kHz stereo to 16 kHz mono; eight sample formats; unknown data
+sizes and a file cut short; the 20-minute cap before and during decoding; refusals in words;
+cancelling; a trickling stream; MIDI known by its first bytes), `NotePostProcessorTest` (6: the
+fixture's 84 notes and pedal exactly, in order; the same answer in any pieces; a note's end; the
+600-frame cut; peaks and their shifts; the pedal), `TranscriberTest` (4: windows; the deframe;
+cancel and memory between windows; the real model on the JVM when `-PstudioModels` is given),
+`SmfWriterTest` (4: notes, pedal, title and text round-trip through `SmfParser`; a tick at least,
+velocities 1–127, a key struck again as it ends; long silences and an empty piece; the bytes),
+`StudioPiecesTest` (3), `StudioReviewTest` (6: heard at 15 s, Keep; Discard; a short piece at its
+end, a paused one not listened to; read back after a restart; the last piece's position not
+counting for the next; pieces deleted meanwhile no longer waiting), `StudioTest` (7: the model downloaded first, then the piece; one at a time,
+in order; the gates, the recording and a silent result refused in words, the recording given back;
+no runtime; memory running short between windows; cancel waiting and running; a download needs the
+network, and a model in use can't be removed; the figures on the trail), `StudioCopyTest` (5),
+`PlayerTest` (+1: `forget`), `PlaybackEngineTest` (+1: timing), `ComposerNamesTest` (+1),
+`PieceNotesChoiceTest` (+1), `GroupSummariesTest` (+1), `WebServerTest` (+1: the upload's refusals
+and its 202, cancel; the write matrix at 24 routes); `WebApiTest`, `WebAssetsTest`, `RoutesTest`,
+`PianoPagesTest` changed. 998 tests before, 1,085 after.
