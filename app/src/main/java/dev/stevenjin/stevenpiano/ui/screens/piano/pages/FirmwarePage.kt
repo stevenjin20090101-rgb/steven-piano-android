@@ -30,6 +30,7 @@ import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.piano.PianoPage
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
+import dev.stevenjin.stevenpiano.ui.LockedFirmware
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -51,6 +52,18 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 fun FirmwarePage(report: PianoReport, actions: PianoSettingsActions, firmware: FirmwareReport, firmwareActions: FirmwareActions) {
     LaunchedEffect(Unit) { firmwareActions.checkFirmwareOnOpen() }   // a check as the page opens, at most every ten minutes
     PianoPageContent(PianoPage.Firmware, report, actions) { FirmwareSection(firmware, firmwareActions) }
+}
+
+/**
+ * FIRMWARE while the settings are locked in kiosk ([LockedFirmware], v1.6.2): the update's block
+ * alone, its progress with Cancel ([onCancel], which asks for the PIN) or how it ended, never the
+ * release on offer or Retry; nothing when there is no update to show. The locked page's note follows.
+ */
+@Composable
+fun LockedFirmwareUpdate(firmware: FirmwareReport, onCancel: () -> Unit) {
+    if (!LockedFirmware.shows(firmware.state)) return
+    SectionEyebrow("Firmware")
+    UpdateBlock(firmware.state, canSend = false, onUpdate = {}, onCancel = onCancel, locked = true)
 }
 
 /** What the FIRMWARE section shows: the piano as the updater sees it, and the update's state. */
@@ -97,9 +110,9 @@ private fun FirmwareSection(firmware: FirmwareReport, actions: FirmwareActions) 
     UpdateBlock(state, canSend, onUpdate = { actions.updateFirmware(context) }, onCancel = actions::cancelFirmware)
 }
 
-/** The update as it stands, under the check; nothing while there is none to show. */
+/** The update as it stands, under the check; nothing while there is none to show. [locked]: no Update or Retry (kiosk). */
 @Composable
-private fun UpdateBlock(state: FirmwareState, canSend: Boolean, onUpdate: () -> Unit, onCancel: () -> Unit) {
+private fun UpdateBlock(state: FirmwareState, canSend: Boolean, onUpdate: () -> Unit, onCancel: () -> Unit, locked: Boolean = false) {
     val manifest = state.manifest
     val show = when (state) {
         FirmwareState.Idle, FirmwareState.Checking, is FirmwareState.UpToDate -> false
@@ -128,7 +141,7 @@ private fun UpdateBlock(state: FirmwareState, canSend: Boolean, onUpdate: () -> 
                     manifest.usbOnly -> Blocked(manifest.version, manifest.notes, FirmwareCopy.USB_ONLY)
                     else -> Offer(manifest.version, manifest.notes, canSend, onUpdate)
                 }
-                else -> Failure(state, canSend, onUpdate)
+                else -> Failure(state, canSend, onUpdate, locked)
             }
             FirmwareState.Idle, FirmwareState.Checking, is FirmwareState.UpToDate -> Unit
         }
@@ -168,12 +181,12 @@ private fun Progress(line: String, fraction: Float?, onCancel: (() -> Unit)?) {
     }
 }
 
-/** How the update ended, in one line (and a second when there is something to do); Retry where it can mend it. */
+/** How the update ended, in one line (and a second when there is something to do); Retry where it can mend it, unless [locked]. */
 @Composable
-private fun Failure(state: FirmwareState.Failed, canSend: Boolean, onRetry: () -> Unit) {
+private fun Failure(state: FirmwareState.Failed, canSend: Boolean, onRetry: () -> Unit, locked: Boolean) {
     Line(state.message)
     state.hint?.let { Secondary(it, top = 4.dp) }
-    if (state.retryable && state.manifest != null) {
+    if (!locked && state.retryable && state.manifest != null) {
         Button(onClick = onRetry, enabled = canSend, modifier = Modifier.padding(top = 12.dp)) { Text("Retry") }
         Secondary(if (canSend) FirmwareCopy.QUIET else FirmwareCopy.CONNECT_FIRST, top = 8.dp)
     }

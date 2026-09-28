@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
@@ -36,6 +37,22 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 // kiosk mode is on, playing, queueing, browsing and the Keys tab stay free, and anything that changes
 // the piano or the library asks for the kiosk PIN first. A right PIN opens them for five minutes, or
 // until the tablet rests in display mode; "Unlock for now" counts as open.
+
+/**
+ * Firmware and status while the settings are locked (v1.6.2): a firmware update stays in view. While
+ * one runs ([FirmwareState.busy]) the page opens from the hub without the PIN and shows its line, its
+ * percentage and the hairline, with Cancel behind the PIN; how it ended stays in view too. The release
+ * on offer, Check for piano updates, Retry and the rest of the page wait for the PIN as every setting
+ * does. The idle relock (display mode coming) locks the settings, never the update's progress.
+ */
+object LockedFirmware {
+    /** Whether the locked page keeps [state]'s block in view: an update in progress, or how the last one ended. */
+    fun shows(state: FirmwareState): Boolean =
+        state.busy || state is FirmwareState.Done || (state is FirmwareState.Failed && !state.check)
+
+    /** Whether [page]'s row opens without the PIN while the settings are locked: Firmware and status during an update. */
+    fun opensUnlocked(page: SettingsPage, state: FirmwareState): Boolean = page == SettingsPage.Firmware && state.busy
+}
 
 /** The lock's words. */
 object KioskLockCopy {

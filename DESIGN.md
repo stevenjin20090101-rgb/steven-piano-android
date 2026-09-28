@@ -1334,6 +1334,13 @@ the kiosk PIN first.
   minutes ran out or the tablet rested) gives its controls up for the line "Settings are locked in
   kiosk." and an outlined **Unlock** ("The kiosk PIN opens them for five minutes."), which asks for
   the PIN; the page's title stays.
+- **A firmware update stays in view** (v1.6.2). While one runs, Firmware and status keeps its
+  FIRMWARE block over the locked page's line: "Sending · 38% · about 1 min left" over the progress
+  hairline, and **Cancel** while Cancel still stops it, which asks for the PIN; then how it ended
+  ("Updated to 2.1.0", or the failure's line, without Retry). Its row opens without the PIN while
+  the update runs (a chevron, not the padlock), and the tablet coming to rest locks the settings,
+  never the update's progress. The release on offer, Check for piano updates and Retry wait for the
+  PIN like every setting.
 - The Kiosk page's own Unlock for now, Turn kiosk off and Change PIN still ask for the PIN each time,
   whether the settings are open or not: they are the way out.
 

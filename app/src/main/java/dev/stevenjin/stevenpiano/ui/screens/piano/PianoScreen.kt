@@ -47,6 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
+import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.KioskGate
@@ -55,6 +56,7 @@ import dev.stevenjin.stevenpiano.ui.KioskLockCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.LockGlyph
+import dev.stevenjin.stevenpiano.ui.LockedFirmware
 import dev.stevenjin.stevenpiano.ui.LockedPage
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.SettingsPage
@@ -74,6 +76,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FeelPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareReport
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KioskPage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LockedFirmwareUpdate
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
@@ -119,7 +122,7 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
                 .background(MaterialTheme.colorScheme.background)
                 .padding(floatingSides()),
         ) {
-            PianoHub(vm, hubScroll, selected, { page -> gate.run { vm.pick(page) } }, Modifier.width(HubWidth).fillMaxHeight(), gate)
+            PianoHub(vm, hubScroll, selected, { page -> gate.openPage(vm, page) { vm.pick(page) } }, Modifier.width(HubWidth).fillMaxHeight(), gate)
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
             SettingsPageView(selected, vm, onBack = null, Modifier.weight(1f).fillMaxHeight(), gate)
         }
@@ -129,7 +132,7 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
             hubScroll,
             selected = null,
             onPage = { page ->
-                gate.run {
+                gate.openPage(vm, page) {
                     vm.open(page)
                     onOpenPage(page)
                 }
@@ -142,6 +145,11 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
         )
     }
     KioskGateSheet(gate)
+}
+
+/** A page row's tap: through the kiosk gate, but for Firmware and status while an update runs ([LockedFirmware]). */
+private fun KioskGate.openPage(vm: PianoViewModel, page: SettingsPage, open: () -> Unit) {
+    if (LockedFirmware.opensUnlocked(page, vm.firmware.value)) open() else run(open)
 }
 
 /** What keeps the tab clear of the rail (and the system bars at the sides); its background still reaches under them. */
@@ -247,7 +255,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
                 )
                 for (group in HubGroups.shown) {
                     SectionEyebrow(group.title)
-                    for (row in group.rows) HubRowView(row, summaries, settings, update, vm, selected, onPage, gate)
+                    for (row in group.rows) HubRowView(row, summaries, settings, update, firmware, vm, selected, onPage, gate)
                 }
                 AboutRow(Modifier.padding(16.dp))
                 Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))
@@ -262,6 +270,7 @@ private fun HubRowView(
     summaries: GroupSummaries,
     settings: PianoSettings,
     update: UpdateState,
+    firmware: FirmwareState,
     vm: PianoViewModel,
     selected: SettingsPage?,
     onPage: (SettingsPage) -> Unit,
@@ -269,7 +278,14 @@ private fun HubRowView(
 ) {
     val locked = gate.locked
     when (row) {
-        is HubRow.Page -> NavRow(row.page.title, summaries.of(row.page), onClick = { onPage(row.page) }, selected = selected?.let { it == row.page }, locked = locked)
+        is HubRow.Page -> NavRow(
+            row.page.title,
+            summaries.of(row.page),
+            onClick = { onPage(row.page) },
+            selected = selected?.let { it == row.page },
+            // Firmware and status during an update opens without the PIN: its chevron, not the padlock.
+            locked = locked && !LockedFirmware.opensUnlocked(row.page, firmware),
+        )
         HubRow.AutoConnect -> SwitchRow("Auto-connect on launch", settings.autoConnect, { on -> gate.run { vm.setAutoConnect(on) } }, locked = locked)
         HubRow.CheckForUpdates -> SwitchRow("Check for updates automatically", settings.checkForUpdates, { on -> gate.run { vm.setCheckForUpdates(on) } }, locked = locked)
         HubRow.CheckNow -> ActionRow(note = UpdateCopy.checkLine(update)) {
@@ -300,8 +316,12 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
         ) {
             Column(Modifier.readingWidth()) {
                 // Settings locked in kiosk: the page's controls wait behind the PIN (the page beside the hub,
-                // or one left open when the five minutes ran out or the tablet rested).
-                if (gate.locked) LockedPage(gate) else when (page) {
+                // or one left open when the five minutes ran out or the tablet rested). Firmware and status
+                // keeps a firmware update in view, its Cancel behind the PIN (LockedFirmware).
+                if (gate.locked) {
+                    if (page == SettingsPage.Firmware) LockedFirmwareUpdate(firmwareReport(vm), onCancel = { gate.run(vm::cancelFirmware) })
+                    LockedPage(gate)
+                } else when (page) {
                     SettingsPage.Feel -> FeelPage(pianoReport(vm), vm)
                     SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)
                     SettingsPage.Pedal -> PedalPage(pianoReport(vm), vm)
