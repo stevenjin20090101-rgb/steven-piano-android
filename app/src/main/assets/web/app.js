@@ -353,7 +353,7 @@
 
   // ---- Sections ---------------------------------------------------------------------------------
 
-  const SECTIONS = ['now', 'queue', 'library', 'channels', 'schedule', 'requests', 'add', 'piano'];
+  const SECTIONS = ['now', 'queue', 'library', 'channels', 'schedule', 'requests', 'add', 'studio', 'piano'];
   let section = 'now';
 
   function show(name) {
@@ -367,6 +367,7 @@
     if (section === 'requests') requestsLoad();
     if (section === 'piano') pianoLoad();
     if (section === 'add') renderAdd();
+    if (section === 'studio') renderStudio();
     render(state);
   }
 
@@ -387,6 +388,7 @@
     if (section === 'requests') renderGuestSwitches();
     if (section === 'schedule' && before && before.schedule.revision !== state.schedule.revision && !scheduling.editing) scheduleLoad();
     if (section === 'add') renderTally();
+    if (section === 'studio') renderStudioState();
     if (section === 'piano') renderPiano();
   }
 
@@ -1273,15 +1275,27 @@
 
   /** The drop zone, with a file chooser for touch screens. */
   function dropZone() {
-    const input = h('input', { type: 'file', multiple: true, accept: '.mid,.midi,.zip', hidden: true });
+    return zoneFor({
+      accept: '.mid,.midi,.zip',
+      multiple: true,
+      title: 'Drop MIDI files or a zip here',
+      meta: '.mid and .midi up to 8 MB, .zip up to 64 MB',
+      button: 'Choose files',
+      onFiles: addFiles,
+    });
+  }
+
+  /** A drop zone: [title] and [meta], a chooser for touch screens ([button]), files dropped or chosen to [onFiles]. */
+  function zoneFor(options) {
+    const input = h('input', { type: 'file', multiple: options.multiple, accept: options.accept, hidden: true });
     input.addEventListener('change', () => {
-      addFiles(input.files);
+      options.onFiles(input.files);
       input.value = '';
     });
     const zone = h('div', { class: 'drop' },
-      h('p', { text: 'Drop MIDI files or a zip here' }),
-      h('p', { class: 'meta', text: '.mid and .midi up to 8 MB, .zip up to 64 MB' }),
-      h('button', { class: 'outlined', type: 'button', onclick: () => input.click() }, glyph('i-add'), 'Choose files'),
+      h('p', { text: options.title }),
+      h('p', { class: 'meta', text: options.meta }),
+      h('button', { class: 'outlined', type: 'button', onclick: () => input.click() }, glyph('i-add'), options.button),
       input);
     zone.addEventListener('dragover', (event) => {
       if (!event.dataTransfer || !Array.from(event.dataTransfer.types).includes('Files')) return;
@@ -1293,7 +1307,7 @@
       if (!event.dataTransfer || event.dataTransfer.files.length === 0) return;
       event.preventDefault();
       zone.classList.remove('over');
-      addFiles(event.dataTransfer.files);
+      options.onFiles(event.dataTransfer.files);
     });
     return zone;
   }
@@ -1310,7 +1324,7 @@
       const lower = name.toLowerCase();
       const isMidi = lower.endsWith('.mid') || lower.endsWith('.midi');
       const isZip = lower.endsWith('.zip');
-      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0 };
+      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0, route: '/api/upload', list: 'upload-rows', sent: 'Sent to the tablet', refused: 'Not added' };
       if (!isMidi && !isZip) upload.status = 'Not added: only .mid, .midi and .zip files';
       else if (isMidi && file.size > MIDI_BYTES) upload.status = 'Not added: a MIDI file can be 8 MB at most';
       else if (isZip && file.size > ZIP_BYTES) upload.status = 'Not added: a zip can be 64 MB at most';
@@ -1324,17 +1338,21 @@
   }
 
   function renderUploads() {
-    const list = $('upload-rows');
-    if (!list) return;
-    list.replaceChildren(...uploads.slice(0, 50).map((upload) => {
-      const bar = h('div', { class: 'progress' }, h('span'));
-      bar.firstChild.style.setProperty('--fill', `${Math.round(upload.progress * 100)}%`);
-      return h('li', { class: 'row' },
-        h('div', { class: 'text' },
-          h('p', { class: 'title', text: upload.name }),
-          h('p', { class: 'meta', text: `${size(upload.size)} · ${upload.status}` }),
-          upload.pending || upload.sending ? bar : null));
-    }));
+    for (const id of ['upload-rows', 'studio-upload-rows']) {
+      const list = $(id);
+      if (list) list.replaceChildren(...uploads.filter((upload) => upload.list === id).slice(0, 50).map(uploadRow));
+    }
+  }
+
+  /** One file sent, or waiting: its name, its size and how it went, and its bar while it goes. */
+  function uploadRow(upload) {
+    const bar = h('div', { class: 'progress' }, h('span'));
+    bar.firstChild.style.setProperty('--fill', `${Math.round(upload.progress * 100)}%`);
+    return h('li', { class: 'row' },
+      h('div', { class: 'text' },
+        h('p', { class: 'title', text: upload.name }),
+        h('p', { class: 'meta', text: `${size(upload.size)} · ${upload.status}` }),
+        upload.pending || upload.sending ? bar : null));
   }
 
   /** "1.7 KB", "2.4 MB": decimal units to one place, as the app writes sizes (UpdateCopy). */
@@ -1354,7 +1372,7 @@
     uploading = true;
     renderUploads();
     const request = new XMLHttpRequest();
-    request.open('PUT', `/api/upload?name=${encodeURIComponent(upload.name)}`);
+    request.open('PUT', `${upload.route}?name=${encodeURIComponent(upload.name)}`);
     request.setRequestHeader('X-Steven-Piano', '1');
     request.upload.addEventListener('progress', (event) => {
       if (!event.lengthComputable) return;
@@ -1365,13 +1383,20 @@
     request.addEventListener('loadend', () => {
       upload.sending = false;
       uploading = false;
+      let answer = null;
+      try {
+        answer = JSON.parse(request.responseText);
+      } catch (e) {
+        // Not JSON: the status says enough.
+      }
+      const busy = request.status === 409 && (!answer || answer.error === 'busy');
       if (request.status === 202) {
         upload.progress = 1;
-        upload.status = 'Sent to the tablet';
+        upload.status = upload.sent;
       } else if (request.status === 401) {
-        upload.status = 'Not added: enter the PIN again';
+        upload.status = `${upload.refused}: enter the PIN again`;
         showGate();
-      } else if (request.status === 409) {
+      } else if (busy) {
         upload.pending = true;
         upload.status = 'Waiting';
         setTimeout(sendNext, 1500);
@@ -1382,10 +1407,10 @@
         } catch (e) {
           // Not JSON: the status says enough.
         }
-        upload.status = `Not added: ${reason}`;
+        upload.status = `${upload.refused}: ${reason}`;
       }
       renderUploads();
-      if (request.status !== 409) sendNext();
+      if (!busy) sendNext();
     });
     request.send(upload.file);
   }
@@ -1405,6 +1430,91 @@
       ].filter(Boolean).join(' · ');
     } else {
       node.textContent = '';
+    }
+  }
+
+  // ---- Studio (v1.7 — M23) ---------------------------------------------------------------------------------
+
+  const AUDIO_BYTES = 200 * 1024 * 1024;
+  const AUDIO_EXTENSIONS = ['wav', 'wave', 'mp3', 'm4a', 'mp4', 'aac', 'flac', 'ogg', 'oga', 'opus', 'webm', '3gp', 'amr'];
+
+  /** Studio's page: MODELS, TRANSCRIBE (the drop zone for recordings and what was sent), JOBS; or why Studio can't run on the tablet. */
+  function renderStudio() {
+    $('studio-body').replaceChildren(
+      h('p', { class: 'empty', id: 'studio-unavailable', hidden: true }),
+      h('div', { id: 'studio-parts' },
+        h('h2', { class: 'section-head eyebrow', text: 'Models' }),
+        h('ul', { class: 'rows', id: 'studio-models' }),
+        h('h2', { class: 'section-head eyebrow', text: 'Transcribe' }),
+        zoneFor({
+          accept: 'audio/*,' + AUDIO_EXTENSIONS.map((e) => '.' + e).join(','),
+          multiple: true,
+          title: 'Drop a piano recording here',
+          meta: '.wav, .mp3, .m4a, .flac, .ogg and the like, up to 200 MB. About a minute per three minutes of audio.',
+          button: 'Choose recordings',
+          onFiles: addRecordings,
+        }),
+        h('ul', { class: 'rows uploads', id: 'studio-upload-rows' }),
+        h('h2', { class: 'section-head eyebrow', id: 'studio-jobs-head', text: 'Jobs', hidden: true }),
+        h('ul', { class: 'rows', id: 'studio-jobs' })));
+    renderUploads();
+    renderStudioState();
+  }
+
+  /** Recordings sent one at a time, as the tablet takes them, each checked here first as the tablet will. */
+  function addRecordings(files) {
+    for (const file of Array.from(files)) {
+      const name = file.name;
+      const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
+      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0, route: '/api/studio/audio', list: 'studio-upload-rows', sent: 'Sent to the tablet · transcribing there', refused: 'Not sent' };
+      if (!AUDIO_EXTENSIONS.includes(extension)) upload.status = 'Not sent: only recordings (.wav, .mp3, .m4a, .flac, .ogg…)';
+      else if (file.size > AUDIO_BYTES) upload.status = 'Not sent: a recording can be 200 MB at most';
+      else if (file.size === 0) upload.status = 'Not sent: the file is empty';
+      else upload.pending = true;
+      uploads.unshift(upload);
+    }
+    if (section !== 'studio') show('studio');
+    renderUploads();
+    sendNext();
+  }
+
+  /** The models and the jobs, as the tablet reports them in its state. */
+  function renderStudioState() {
+    const body = $('studio-parts');
+    if (!body || !state || !state.studio) return;
+    const studio = state.studio;
+    const unavailable = $('studio-unavailable');
+    unavailable.hidden = studio.available;
+    unavailable.textContent = studio.reason || '';
+    body.hidden = !studio.available;
+    $('studio-models').replaceChildren(...studio.models.map((model) => h('li', { class: 'row' },
+      h('div', { class: 'text' },
+        h('p', { class: 'title', text: model.title }),
+        h('p', { class: 'meta', text: model.line }),
+        model.progress === null ? null : progressBar(model.progress)))));
+    $('studio-jobs-head').hidden = studio.jobs.length === 0;
+    $('studio-jobs').replaceChildren(...studio.jobs.map((job) => h('li', { class: 'row' },
+      h('div', { class: 'text' },
+        h('p', { class: 'title', text: job.state === 'done' && job.title ? job.title : job.name }),
+        h('p', { class: 'meta', text: job.line }),
+        job.state === 'running' ? progressBar(job.progress) : null),
+      job.state === 'queued' || job.state === 'running'
+        ? h('button', { class: 'outlined', type: 'button', 'aria-label': `Cancel ${job.name}`, onclick: () => cancelJob(job.id) }, 'Cancel')
+        : null)));
+  }
+
+  /** A 2 px bar; [fraction] null: under way, no measure yet. */
+  function progressBar(fraction) {
+    const bar = h('div', { class: fraction === null ? 'progress waiting' : 'progress' }, h('span'));
+    bar.firstChild.style.setProperty('--fill', `${Math.round((fraction === null ? 0 : fraction) * 100)}%`);
+    return bar;
+  }
+
+  async function cancelJob(id) {
+    try {
+      await post(`/api/studio/jobs/${id}/cancel`);
+    } catch (e) {
+      failed(e);
     }
   }
 

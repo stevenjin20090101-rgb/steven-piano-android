@@ -23,8 +23,8 @@ import java.io.File
 /**
  * Everything the web panel reads and does, and nothing else (DESIGN.md › v1.5.1 — M18): the
  * player's state and commands, the library's lists and art, the channels, the piano's settings,
- * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, imports, and
- * (v1.6.2 — M19) the schedules.
+ * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, imports,
+ * (v1.6.2 — M19) the schedules, and (v1.7 — M23) Studio.
  * The server ([WebServer]) sees the app only through this; the app's own ([AppWebBackend]) runs
  * every player command on the main thread, where `Player` lives, and the tests' fake records what
  * it is asked. Every call is made from one of the server's request threads.
@@ -133,6 +133,34 @@ interface WebBackend {
 
     /** Deletes schedule [id]; false when there is none. */
     suspend fun deleteSchedule(id: Long): Boolean
+
+    /** Studio (v1.7 — M23): whether it runs here, its models and its jobs (the state carries them too). */
+    suspend fun studio(): WebStudio
+
+    /**
+     * Transcribes the recording the panel sent, saved as [file] in [uploadDir] (deleted once read, or at
+     * once when Studio can't take it); [name] is its file name. Returns at once: the job is in [state].
+     */
+    suspend fun transcribeUpload(name: String, file: File): StudioUpload
+
+    /** Stops Studio's job [id]; false when there is none left to stop. */
+    suspend fun cancelStudioJob(id: Long): Boolean
+}
+
+/** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
+data class WebModel(val name: String, val title: String, val sizeBytes: Long, val licence: String, val installed: Boolean, val line: String, val progress: Float? = null)
+
+/** One of Studio's jobs as the tablet's page lists it: "download" or "transcribe", "queued"… "cancelled", its line, its progress, the piece it made. */
+data class WebStudioJob(val id: Long, val kind: String, val name: String, val state: String, val line: String, val progress: Float?, val title: String?)
+
+/** Studio on the panel: [available] (else [reason]), the models, the jobs newest first. */
+data class WebStudio(val available: Boolean = false, val reason: String? = null, val models: List<WebModel> = emptyList(), val jobs: List<WebStudioJob> = emptyList())
+
+/** How a recording the panel sent went: queued as job [jobId], or refused for [reason] (Studio can't run here). */
+sealed interface StudioUpload {
+    data class Queued(val jobId: Long) : StudioUpload
+
+    data class Refused(val reason: String) : StudioUpload
 }
 
 /** The Library's lists besides search: all pieces by title, the favourites, the last hundred played or added. */
@@ -306,6 +334,7 @@ data class WebState(
     val guests: GuestSettings = GuestSettings(open = false, approveFirst = true),
     val monochrome: Boolean = false,
     val schedule: WebScheduleState = WebScheduleState(),
+    val studio: WebStudio = WebStudio(),
 )
 
 /** The schedules in the state: the next start ("Next: Wednesday 12:30, Calm", null with none ahead) and a revision of the list. */

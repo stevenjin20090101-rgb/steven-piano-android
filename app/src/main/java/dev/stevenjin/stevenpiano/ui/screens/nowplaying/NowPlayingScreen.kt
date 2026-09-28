@@ -168,6 +168,7 @@ private fun ColumnScope.NowPlayingContent(
     }
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+    StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
     if (piece != null) {
         PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short) { onAbout(piece.pieceId) }
     } else if (!state.loading) {

@@ -142,7 +142,24 @@ class WebApiTest {
         assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio"), json.keys().asSequence().toSet())
+        // Studio (v1.7 — M23): whether it runs here, its models and its jobs, the progress null when not running.
+        val studio = WebApi.studio(
+            WebStudio(
+                available = true,
+                models = listOf(WebModel("transcription", "Transcription", 124_511_036, "CC BY 4.0", installed = false, line = "Downloading · 42 of 125 MB", progress = 0.34f)),
+                jobs = listOf(WebStudioJob(3, "transcribe", "take.m4a", "done", "Kept as take", progress = null, title = "take")),
+            ),
+        )
+        assertEquals(setOf("available", "reason", "models", "jobs"), studio.keys().asSequence().toSet())
+        assertTrue(studio.isNull("reason"))
+        val model = studio.getJSONArray("models").getJSONObject(0)
+        assertEquals(setOf("name", "title", "sizeBytes", "licence", "installed", "line", "progress"), model.keys().asSequence().toSet())
+        assertEquals(0.34, model.getDouble("progress"), 1e-6)
+        val job = studio.getJSONArray("jobs").getJSONObject(0)
+        assertEquals(setOf("id", "kind", "name", "state", "line", "progress", "title"), job.keys().asSequence().toSet())
+        assertTrue(job.isNull("progress"))
+        assertEquals("Kept as take", job.getString("line"))
         assertTrue("no schedule ahead: null, not missing", json.getJSONObject("schedule").isNull("next"))
         val scheduled = WebApi.state(state.copy(schedule = WebScheduleState("Next: Wednesday 12:30, Calm", 7)), pending = 0).getJSONObject("schedule")
         assertEquals("Next: Wednesday 12:30, Calm", scheduled.getString("next"))

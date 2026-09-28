@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<!-- Two of Studio's decisions (v1.7 — M23, BUILD_SPEC.md), which lint would otherwise report on every run. -->
+<lint>
+    <!-- ONNX Runtime stays at 1.28.0: 1.29.0 and newer add Microsoft's telemetry (checkOnnxTelemetry enforces it). -->
+    <issue id="NewerVersionAvailable">
+        <ignore regexp="com\.microsoft\.onnxruntime" />
+    </issue>
+    <!-- Studio's runtime ships for arm64-v8a alone, on purpose: the download grows by 11 MB, not 45. -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+</lint>

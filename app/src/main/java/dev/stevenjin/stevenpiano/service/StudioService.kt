@@ -67,7 +67,7 @@ class StudioService : Service() {
         }
         val current = shown(studio.jobs.jobs.value)
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(current), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ServiceCompat.startForeground(this, ID, notificationFor(current), DATA_SYNC)
         } catch (e: RuntimeException) {   // refused: the jobs go on in the app's process, without the notification
             Log.w(TAG, "Studio without the foreground service: ${e.javaClass.simpleName}")
             stopSelf(startId)
@@ -191,6 +191,9 @@ class StudioService : Service() {
         private const val UPDATE_MS = 400L
         private const val PROGRESS_MAX = 1_000
         private const val ACTION_CANCEL = "dev.stevenjin.stevenpiano.action.CANCEL_STUDIO"
+
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
 
         fun createChannel(context: Context) {
             val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)

@@ -97,7 +97,7 @@ class WebServerTest {
         val token = login(http)
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
-        assertEquals("the table's twenty-two routes that change something (the schedules' three from 1.6.2)", 22, writes.size)
+        assertEquals("the table's twenty-four routes that change something (the schedules' three from 1.6.2, Studio's two from 1.7)", 24, writes.size)
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
@@ -419,6 +419,44 @@ class WebServerTest {
         assertEquals(202, http.send("PUT", "/api/upload?name=pieces.zip", zip, auth).status)
         assertEquals(listOf("midi Chopin - Nocturne.MID 2000", "zip pieces.zip 10000"), backend.imported.toList())
         assertEquals("the zip's copy went once read", emptyList<String>(), backend.uploadDir.list()!!.toList())
+    }
+
+    @Test
+    fun `Studio takes a recording under its cap, refuses the rest before a byte is read, and cancels its jobs`() {
+        val (_, http) = start()
+        val token = login(http)
+        val auth = mapOf("X-Steven-Piano" to "1", "Cookie" to "sp_session=$token")
+        fun headOnly(path: String, length: Long?): RawHttp.Answer {
+            val headers = auth + (if (length != null) mapOf("Content-Length" to length.toString()) else emptyMap())
+            return http.send("PUT", path, null, headers, readTimeoutMs = 3_000)
+        }
+        assertEquals(415, headOnly("/api/studio/audio?name=notes.txt", 5_000).status)
+        assertEquals(415, headOnly("/api/studio/audio?name=song.mid", 5_000).status)
+        assertEquals(411, headOnly("/api/studio/audio?name=take.wav", null).status)
+        assertEquals(413, headOnly("/api/studio/audio?name=take.wav", AUDIO_BYTES + 1).status)
+        assertEquals(400, headOnly("/api/studio/audio?name=take.wav", 0).status)
+        assertEquals(400, headOnly("/api/studio/audio", 100).status)
+        backend.studioHeld = WebStudio(available = false, reason = "Studio isn't available on this device.")
+        val refused = headOnly("/api/studio/audio?name=take.m4a", 1_000)
+        assertEquals(409, refused.status)
+        assertEquals("Studio isn't available on this device.", refused.json().getString("message"))
+        assertTrue("nothing was sent to Studio", backend.recordings.isEmpty())
+
+        backend.studioHeld = WebStudio(available = true)
+        val recording = ByteArray(30_000) { (it % 251).toByte() }
+        val sent = http.send("PUT", "/api/studio/audio?name=..%2FClair%20de%20lune.M4A", recording, auth)
+        assertEquals(sent.toString(), 202, sent.status)
+        assertEquals("Clair de lune.M4A", sent.json().getString("name"))
+        assertEquals(40L, sent.json().getLong("job"))
+        val (name, length, bytes) = backend.recordings.single()
+        assertEquals("Clair de lune.M4A" to 30_000L, name to length)
+        assertTrue("the bytes arrive whole", bytes.contentEquals(recording))
+        assertEquals("the recording's copy went once handed over", emptyList<String>(), backend.uploadDir.list()!!.toList())
+        for (ext in AUDIO_EXTENSIONS) assertEquals(ext, 202, http.send("PUT", "/api/studio/audio?name=x.$ext", ByteArray(10) { 1 }, auth).status)
+
+        assertEquals(204, http.api("POST", "/api/studio/jobs/7/cancel", session = token).status)
+        assertEquals("gone once cancelled", 404, http.api("POST", "/api/studio/jobs/7/cancel", session = token).status)
+        assertEquals(404, http.api("POST", "/api/studio/jobs/0/cancel", session = token).status)
     }
 
     @Test

@@ -211,4 +211,24 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         record("schedule delete $id")
         return schedulesHeld.remove(id) != null
     }
+
+    /** Studio (v1.7 — M23): whether it runs here; the recordings it was sent (name, size, their bytes); the jobs that may be cancelled. */
+    var studioHeld = WebStudio(available = true)
+    val recordings: MutableList<Triple<String, Long, ByteArray>> = Collections.synchronizedList(mutableListOf())
+    val studioJobs = mutableSetOf(7L)
+    private var nextJob = 40L
+
+    override suspend fun studio(): WebStudio = studioHeld
+
+    override suspend fun transcribeUpload(name: String, file: File): StudioUpload {
+        recordings += Triple(name, file.length(), file.readBytes())
+        record("studio transcribe $name ${file.length()}")
+        file.delete()
+        return StudioUpload.Queued(nextJob++)
+    }
+
+    override suspend fun cancelStudioJob(id: Long): Boolean {
+        record("studio cancel $id")
+        return studioJobs.remove(id)
+    }
 }

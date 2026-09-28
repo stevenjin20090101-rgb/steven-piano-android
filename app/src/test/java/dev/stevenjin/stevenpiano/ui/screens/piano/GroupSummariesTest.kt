@@ -112,7 +112,7 @@ class GroupSummariesTest {
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off"),
+            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off", "No models"),
             SettingsPage.entries.map { rows.of(it) },
         )
     }
@@ -169,6 +169,12 @@ class GroupSummariesTest {
         assertEquals("On · 192.168.1.20", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20", panelOnWifi = true)))
         assertEquals("On", GroupSummaries.remote(on, WebStatus()))
         assertEquals("the Remote row reads without the piano", "Off", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).remote)
+    }
+
+    @Test
+    fun `Studio reads its job, or how many models it has, with or without the piano`() {
+        assertEquals("No models", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).of(SettingsPage.Studio))
+        assertEquals("2 models", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = true, studio = "2 models").of(SettingsPage.Studio))
     }
 
     @Test

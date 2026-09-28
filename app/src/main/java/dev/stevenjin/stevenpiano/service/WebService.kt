@@ -246,6 +246,11 @@ class WebService : Service() {
             panel.requests.requested.map { },
             panel.status.map { },
             graph.schedules.entries.map { },
+            // Studio (v1.7 — M23): its jobs, its models, the pieces waiting for Keep or Discard, whether it runs here.
+            graph.studio.jobs.jobs.map { },
+            graph.studio.models.installed.map { },
+            graph.studio.review.undecided.map { },
+            graph.studio.availability.support.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes)
         hub = created

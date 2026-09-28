@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -118,6 +119,11 @@ import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingPanel
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleDraftSaver
 import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleEditorSheet
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.rememberRecordingPicker
+import dev.stevenjin.stevenpiano.studio.AudioSource
+import dev.stevenjin.stevenpiano.studio.ModelCatalogue
+import dev.stevenjin.stevenpiano.studio.StudioSupport
+import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import kotlinx.coroutines.launch
@@ -271,7 +277,24 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         library(Modifier.fillMaxSize().then(sides))
     }
     val context = LocalContext.current
-    if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }) { adding = false }
+    // Studio's entry (v1.7 — M23): below a hairline, not there on a device Studio can't run on.
+    val studioSupport by graph.studio.availability.support.collectAsStateWithLifecycle()
+    val studioModels by graph.studio.models.installed.collectAsStateWithLifecycle()
+    LaunchedEffect(adding) { if (adding) graph.studio.availability.check() }
+    val pickRecording = rememberRecordingPicker { uri ->
+        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        graph.studio.transcribe(AudioSource.Document(uri))
+    }
+    val transcription = ModelCatalogue.transcription
+    val transcribe = if (studioSupport != StudioSupport.Available) {
+        null
+    } else {
+        TranscribeEntry(
+            detail = if (transcription.name in studioModels) StudioCopy.TRANSCRIBE_NOTE else "${StudioCopy.TRANSCRIBE_NOTE} ${StudioCopy.downloadsFirst(transcription)}",
+            onClick = pickRecording,
+        )
+    }
+    if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }, onDismiss = { adding = false }, transcribe = transcribe)
     dialog?.let { LibraryDialogs(it, vm) { dialog = null } }
     about?.let { PieceDetailSheet(it) { about = null } }
     volumeFor?.let { key ->

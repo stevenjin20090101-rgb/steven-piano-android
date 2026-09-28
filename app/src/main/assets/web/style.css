@@ -725,6 +725,13 @@ button, input, select { font: inherit; color: inherit; }
 
 .progress > span { display: block; height: 100%; width: var(--fill, 0%); background: var(--primary); }
 
+/* Studio (v1.7 — M23): a job under way before its first measure sweeps a short segment, as the app's hairline does. */
+.progress.waiting { position: relative; overflow: hidden; }
+.progress.waiting > span { position: absolute; width: 30%; animation: sweep 1.4s linear infinite; }
+@keyframes sweep { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .progress.waiting > span { animation: none; left: 0; } }
+#studio-models .row .meta, #studio-jobs .row .meta { white-space: normal; }
+
 /* ---- Library ----------------------------------------------------------------------------------- */
 
 .lib-tools { display: flex; flex-direction: column; gap: 12px; padding: 0 var(--inset) 12px; border-bottom: 1px solid var(--hairline); }

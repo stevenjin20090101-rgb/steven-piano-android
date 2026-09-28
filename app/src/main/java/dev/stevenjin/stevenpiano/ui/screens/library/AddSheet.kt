@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
+import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 
@@ -66,14 +67,18 @@ fun rememberImportPickers(onChosen: (ImportSource) -> Unit): ImportPickers {
     return remember(files, folder, zip) { ImportPickers(files, folder, zip) }
 }
 
+/** Studio's entry on the `+` sheet (v1.7 — M23): its line under it, and what a tap does (the system's audio picker). */
+class TranscribeEntry(val detail: String, val onClick: () -> Unit)
+
 /**
  * The `+` sheet: Add files, Add folder, Add zip; then, set apart by a hairline, Fetch artwork and
  * notes for every composer ([onFetchArtwork]), which asks again even for composers not found
- * before.
+ * before; then, below another hairline, Studio's Transcribe a recording… ([transcribe]; not there
+ * on a device Studio can't run on).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit) {
+fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit, transcribe: TranscribeEntry? = null) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
         Text(
             "Add MIDI files",
@@ -100,6 +105,13 @@ fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -
         SheetOption("Fetch artwork and notes for every composer", "Portraits and notes from Wikipedia. Nothing about you is sent.") {
             onDismiss()
             onFetchArtwork()
+        }
+        if (transcribe != null) {
+            HairlineDivider(Modifier.padding(vertical = 8.dp))
+            SheetOption(StudioCopy.TRANSCRIBE, transcribe.detail) {
+                onDismiss()
+                transcribe.onClick()
+            }
         }
         Spacer(Modifier.height(24.dp))
     }

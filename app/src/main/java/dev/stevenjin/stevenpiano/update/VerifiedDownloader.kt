@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.update
 
+import android.annotation.SuppressLint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,7 @@ class DownloadFailure(val problem: DownloadProblem, cause: Throwable? = null) : 
  * cancel deletes it too. Nothing is resumed: a new download starts from the first byte. Progress is
  * reported every [Target.progressEveryBytes] (and at the end).
  */
+@SuppressLint("UsableSpace")   // a floor under the file and its margin, not an allocation (as the web panel's uploads ask it)
 class VerifiedDownloader(
     private val server: UpdateServer,
     private val io: CoroutineDispatcher = Dispatchers.IO,

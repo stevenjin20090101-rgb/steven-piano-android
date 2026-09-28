@@ -124,6 +124,7 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
         }
         if (state.loading) ProgressHairline(null)
         state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+        StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         if (piece != null) {
             PanelPiece(piece, state, player, playback, link is LinkState.Connected, onOpenPiano, onAbout = { about = piece.pieceId })
         } else if (!state.loading) {

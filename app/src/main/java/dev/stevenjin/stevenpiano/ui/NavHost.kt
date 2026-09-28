@@ -143,6 +143,8 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val current = Route.of(entry?.destination?.route) ?: Route.Library
     val open: (Route) -> Unit = remember(nav) { { route -> nav.openTab(route) } }
     val select: (Route) -> Unit = remember(nav) { { route -> nav.selectTab(route) } }
+    // Studio's Listen (v1.7 — M23): the piece it made plays, and Now playing shows it (and asks Keep or Discard after a first listen).
+    val listen: (Long) -> Unit = remember(playback, open) { { pieceId -> playback.play(pieceId, listOf(pieceId)); open(Route.NowPlaying) } }
     val settings by LocalContext.current.graph.settings.collectAsStateWithLifecycle()
     val reducedTransparency = rememberReducedTransparency()
     val content = rememberHazeState()
@@ -254,6 +256,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                                             tab,
                                             onOpenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page)) },
                                             onReopenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page, cut = true)) },
+                                            onListen = listen,
                                         )
                                     }
                                     composable(
@@ -268,7 +271,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                                     ) { page ->
                                         val tab = remember(page) { nav.getBackStackEntry(Route.Piano.path) }
                                         val shown = page.arguments?.let { PianoRoutes.PageType[it, PianoRoutes.PAGE_KEY] } ?: SettingsPage.Feel
-                                        PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() })
+                                        PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() }, onListen = listen)
                                     }
                                 }
                             }

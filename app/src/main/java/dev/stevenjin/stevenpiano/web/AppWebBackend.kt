@@ -9,6 +9,14 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.studio.AudioSource
+import dev.stevenjin.stevenpiano.studio.JobKind
+import dev.stevenjin.stevenpiano.studio.JobState
+import dev.stevenjin.stevenpiano.studio.ModelCatalogue
+import dev.stevenjin.stevenpiano.studio.StudioFailures
+import dev.stevenjin.stevenpiano.studio.StudioSupport
+import dev.stevenjin.stevenpiano.ui.StudioCopy
+import java.util.Locale
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
@@ -109,6 +117,7 @@ class AppWebBackend(
             guests = guests(),
             monochrome = settings.artworkMonochrome,
             schedule = WebScheduleState(graph.schedules.nextNow()?.line, graph.schedules.revision),
+            studio = studio(),
         )
     }
 
@@ -398,6 +407,67 @@ class AppWebBackend(
         if (graph.schedules.repository.get(id) == null) return false
         graph.schedules.delete(id)
         return true
+    }
+
+    override suspend fun studio(): WebStudio {
+        val studio = graph.studio
+        studio.availability.check()
+        val support = studio.availability.support.value
+        val installed = studio.models.installed.value
+        val jobs = studio.jobs.jobs.value
+        val undecided = studio.review.undecided.value
+        val discarded = studio.review.discardedNow.value
+        return WebStudio(
+            // While the first check runs Studio reads as available; a job still meets the check before it starts.
+            available = support == StudioSupport.Available || support == StudioSupport.Checking,
+            reason = StudioCopy.unsupported(support)?.let { "$it." },
+            models = ModelCatalogue.all.map { model ->
+                val download = jobs.lastOrNull { it.kind == JobKind.Download && it.model == model.name && !it.state.finished }
+                val here = model.name in installed
+                WebModel(
+                    name = model.name,
+                    title = model.title,
+                    sizeBytes = model.sizeBytes,
+                    licence = model.licenceLabel,
+                    installed = here,
+                    line = download?.let { StudioCopy.jobLine(it) } ?: if (here) "Installed · ${StudioCopy.modelLine(model)}" else StudioCopy.modelLine(model),
+                    progress = download?.takeIf { it.state == JobState.Running }?.progress,
+                )
+            },
+            jobs = jobs.asReversed().map { job ->
+                WebStudioJob(
+                    id = job.id,
+                    kind = job.kind.name.lowercase(Locale.ROOT),
+                    name = job.name,
+                    state = job.state.name.lowercase(Locale.ROOT),
+                    line = StudioCopy.jobLine(job, undecided, discarded),
+                    progress = job.progress.takeIf { job.state == JobState.Running },
+                    title = job.title,
+                )
+            },
+        )
+    }
+
+    override suspend fun transcribeUpload(name: String, file: File): StudioUpload {
+        val studio = graph.studio
+        studio.availability.check()
+        val support = studio.availability.support.first { it != StudioSupport.Checking }
+        if (support != StudioSupport.Available) {
+            file.delete()
+            return StudioUpload.Refused(StudioCopy.unsupported(support)?.let { "$it." } ?: StudioFailures.UNAVAILABLE)
+        }
+        val job = withContext(Dispatchers.Main) { studio.transcribe(AudioSource.Local(file), name) }
+        return StudioUpload.Queued(job.id)
+    }
+
+    override suspend fun cancelStudioJob(id: Long): Boolean = withContext(Dispatchers.Main) {
+        val job = graph.studio.jobs.get(id)
+        if (job == null || job.state.finished) {
+            false
+        } else {
+            graph.studio.cancel(id)
+            true
+        }
     }
 
     /** In the app's scope, so an import outlives the request that sent it; the built-in lists and artwork follow, as after the app's own imports. */

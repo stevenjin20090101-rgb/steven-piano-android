@@ -80,7 +80,8 @@ interface WebSockets {
  *   request; closing also frees the pool's threads at once). APIs are `Cache-Control: no-store`.
  * - **Bodies**: JSON only, at most 64 KB, strict UTF-8, four levels deep ([WebApi]); uploads are a raw
  *   `PUT /api/upload?name=` body with its `Content-Length`, refused 411 / 413 / 415 before a byte is
- *   read, one at a time.
+ *   read, one at a time; Studio's recordings (v1.7 — M23) are `PUT /api/studio/audio?name=`, the same
+ *   way, 200 MB at most.
  * - **Threads**: a pool of [POOL_THREADS] with a short queue ([BoundedRunner]); NanoHTTPD's reverse
  *   lookup of every peer's name is skipped ([createClientHandler]); a socket read waits at most
  *   [SOCKET_READ_TIMEOUT_MS] and a whole request at most [REQUEST_DEADLINE_MS] ([DeadlineInput]),
@@ -411,6 +412,11 @@ class WebServer(
             if (backend.deleteSchedule(call.groups[0].toLong())) noContent() else notFound()
         },
         Route(Method.PUT, Regex("/api/upload"), Access.WRITE, "/api/upload?name=a.mid", timed = false) { call -> upload(call) },
+        // Studio (v1.7 — M23): a recording to transcribe, and a job's Cancel.
+        Route(Method.PUT, Regex("/api/studio/audio"), Access.WRITE, "/api/studio/audio?name=a.wav", timed = false) { call -> studioUpload(call) },
+        Route(Method.POST, Regex("/api/studio/jobs/([1-9]\\d{0,17})/cancel"), Access.WRITE, "/api/studio/jobs/1/cancel") { call ->
+            if (backend.cancelStudioJob(call.groups[0].toLong())) noContent() else notFound()
+        },
         Route(Method.POST, Regex("/api/logout"), Access.WRITE, "/api/logout") { call ->
             sessions.close(call.token)
             noContent().also { it.addHeader("Set-Cookie", WebCookies.endSession()) }
@@ -544,17 +550,53 @@ class WebServer(
     }
 
     /**
-     * The zip's bytes into `cacheDir/web/upload-….zip`, all [length] of them, with the cache's
+     * `PUT /api/studio/audio?name=<file>` (v1.7 — M23): a recording for Studio to transcribe, the file as
+     * the whole body, as [upload] takes a zip: its name must end as a recording's does (415), its length
+     * declared and not chunked (411), at most [AUDIO_BYTES] (413), not empty (400), Studio able to run
+     * here (409 "unavailable", before a byte is read), one upload at a time (409 "busy"); then it is
+     * streamed to `cacheDir/web/studio-….<ext>` with the free-space margin kept (507), and the job is
+     * queued: 202 `{name, job}`.
+     */
+    private suspend fun studioUpload(call: Call): Response {
+        val name = uploadName(call.param("name")) ?: throw ApiError(400, "name", "The file needs a name.")
+        val extension = AUDIO_EXTENSIONS.firstOrNull { name.lowercase(Locale.ROOT).endsWith(".$it") }
+            ?: throw ApiError(415, "type", "Only recordings can go to Studio: .wav, .mp3, .m4a, .flac, .ogg and the like.")
+        val headers = call.session.headers
+        if (headers.containsKey(TRANSFER_ENCODING)) throw ApiError(411, "length", "The upload must say how long it is.")
+        val length = contentLength(headers) ?: throw ApiError(411, "length", "The upload must say how long it is.")
+        if (length < 0) throw ApiError(400, "length", "The upload's length is not a length.")
+        if (length > AUDIO_BYTES) throw ApiError(413, "too-large", "A recording can be 200 MB at most.")
+        if (length == 0L) throw ApiError(400, "empty", "The file is empty.")
+        val studio = backend.studio()
+        if (!studio.available) return refuse(409, "unavailable", studio.reason ?: "Studio isn't available on this device.")
+        if (!uploading.tryLock()) throw ApiError(409, "busy", "Another file is being added. Try again in a moment.")
+        val file = try {
+            call.connection?.lift()
+            save(LimitedInputStream(call.session.inputStream, length), length, STUDIO_PREFIX, ".$extension")
+        } finally {
+            uploading.unlock()
+        }
+        return when (val outcome = backend.transcribeUpload(name, file)) {
+            is StudioUpload.Queued -> json(JSONObject().put("name", name).put("job", outcome.jobId), Response.Status.ACCEPTED)
+            is StudioUpload.Refused -> refuse(409, "unavailable", outcome.reason)
+        }
+    }
+
+    /** A zip upload, saved as [save] does, `upload-….zip`. */
+    private fun saveZip(input: InputStream, length: Long): File = save(input, length, UPLOAD_PREFIX, ".zip")
+
+    /**
+     * An upload's bytes into `cacheDir/web/<prefix>….<suffix>`, all [length] of them, with the cache's
      * free-space margin kept; deleted on any failure. The margin is a floor under a file of at
-     * most 64 MB, as the importer's own zip copy keeps it, not an allocation: `usableSpace` is the
-     * question to ask.
+     * most 64 MB (a zip) or 200 MB (a recording), as the importer's own zip copy keeps it, not an
+     * allocation: `usableSpace` is the question to ask.
      */
     @SuppressLint("UsableSpace")
-    private fun saveZip(input: InputStream, length: Long): File {
+    private fun save(input: InputStream, length: Long, prefix: String, suffix: String): File {
         val dir = backend.uploadDir
         if (!dir.isDirectory) dir.mkdirs()
         if (dir.usableSpace < length + ImportLimits.SPACE_MARGIN_BYTES) throw ApiError(507, "space", "The tablet hasn't the room for this file.")
-        val file = File.createTempFile(UPLOAD_PREFIX, ".zip", dir)
+        val file = File.createTempFile(prefix, suffix, dir)
         try {
             var total = 0L
             FileOutputStream(file).use { out ->
@@ -1074,6 +1116,7 @@ private const val REQUEST_PAGE = "/request"
 private const val JSON = "application/json; charset=utf-8"
 private const val SWITCHING_PROTOCOLS = 101
 private const val UPLOAD_PREFIX = "upload-"
+private const val STUDIO_PREFIX = "studio-"
 private const val COPY_BUFFER = 64 * 1024
 private const val GUEST_ID_BYTES = 16
 private const val MAX_PIN_TEXT = 16
@@ -1100,9 +1143,13 @@ const val CALL_TIMEOUT_MS = 10_000L
 const val POOL_THREADS = 4
 const val QUEUE_LENGTH = 32
 
-/** Upload caps: a MIDI file as the importer's own, a zip well under the importer's 512 MB. */
+/** Upload caps: a MIDI file as the importer's own, a zip well under the importer's 512 MB, a recording as Studio's own. */
 const val MIDI_BYTES = 8L * 1024 * 1024
 const val ZIP_BYTES = 64L * 1024 * 1024
+const val AUDIO_BYTES = 200L * 1024 * 1024
+
+/** What a recording sent to Studio may be called: the containers Android's decoders read (a video's sound included). */
+val AUDIO_EXTENSIONS = listOf("wav", "wave", "mp3", "m4a", "mp4", "aac", "flac", "ogg", "oga", "opus", "webm", "3gp", "amr")
 
 /** A composer key from a path: already percent-decoded by NanoHTTPD, cut as the library cuts keys, no control characters. */
 private fun composerKey(raw: String): String {

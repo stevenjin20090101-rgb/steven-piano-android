@@ -400,7 +400,35 @@ object WebApi {
             .put("web", JSONObject().put("address", s.web.panel ?: JSONObject.NULL).put("guestAddress", s.web.guest ?: JSONObject.NULL).put("guests", s.guests.open))
             .put("monochrome", s.monochrome)
             .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
+            .put("studio", studio(s.studio))
     }
+
+    /** Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, licence, installed, line, progress}], jobs: [{id, kind, name, state, line, progress, title}]}`. */
+    fun studio(s: WebStudio): JSONObject = JSONObject()
+        .put("available", s.available)
+        .put("reason", s.reason ?: JSONObject.NULL)
+        .put(
+            "models",
+            JSONArray().apply {
+                s.models.forEach { m ->
+                    put(
+                        JSONObject().put("name", m.name).put("title", m.title).put("sizeBytes", m.sizeBytes).put("licence", m.licence)
+                            .put("installed", m.installed).put("line", m.line).put("progress", m.progress?.toDouble() ?: JSONObject.NULL),
+                    )
+                }
+            },
+        )
+        .put(
+            "jobs",
+            JSONArray().apply {
+                s.jobs.forEach { j ->
+                    put(
+                        JSONObject().put("id", j.id).put("kind", j.kind).put("name", j.name).put("state", j.state).put("line", j.line)
+                            .put("progress", j.progress?.toDouble() ?: JSONObject.NULL).put("title", j.title ?: JSONObject.NULL),
+                    )
+                }
+            },
+        )
 
     /** A schedule: its fields as `POST` takes them, and (read-only) what its target is called and the tablet's two lines, `when` and `what`. */
     fun schedule(s: WebSchedule): JSONObject {

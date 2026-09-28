@@ -18,6 +18,7 @@ import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.SettingsPage
+import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.web.WebStatus
 import java.time.ZonedDateTime
@@ -41,6 +42,7 @@ data class GroupSummaries(
     val remote: String,
     val kiosk: String,
     val schedule: String = ScheduleCopy.NONE,
+    val studio: String = StudioCopy.hub(0, emptyList()),
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -53,6 +55,7 @@ data class GroupSummaries(
         SettingsPage.Remote -> remote
         SettingsPage.Kiosk -> kiosk
         SettingsPage.Schedule -> schedule
+        SettingsPage.Studio -> studio
     }
 
     companion object {
@@ -63,7 +66,7 @@ data class GroupSummaries(
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
          * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
          * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule]
-         * when the next schedule starts.
+         * when the next schedule starts; [studio] Studio's own value ([StudioCopy.hub], v1.7 — M23).
          */
         fun from(
             piano: PianoState,
@@ -73,6 +76,7 @@ data class GroupSummaries(
             firmwareUpdate: FirmwareState = FirmwareState.Idle,
             firmwareVersion: String? = null,
             nextSchedule: ZonedDateTime? = null,
+            studio: String = StudioCopy.hub(0, emptyList()),
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -83,6 +87,7 @@ data class GroupSummaries(
             remote = remote(settings, web),
             kiosk = kiosk(settings),
             schedule = schedule(nextSchedule),
+            studio = studio,
         )
 
         /** When the next schedule starts, "Next Wed 12:30", or "None". */
