@@ -34,6 +34,11 @@ nanohttpd = "2.3.1"
 qrcodeKotlin = "4.5.0"
 # The piano's firmware updates (v1.6 — M21): Ed25519 checks below Android 13, whose platform has none (CC0).
 eddsa = "0.3.0"
+# Studio (v1.7 — M23): ONNX Runtime (MIT) runs the downloaded models on the tablet. Pinned at 1.28.0 and
+# never 1.29.0 or newer: those add Microsoft's telemetry (a startup provider, ai.onnxruntime.TelemetryInitializer,
+# that reports to v10.events.data.microsoft.com at every process start; docs/STUDIO_SPIKE.md). The build's
+# checkOnnxTelemetry task (run by `check`) fails if a merged manifest ever carries it (BUILD_SPEC › v1.7 — M23).
+onnxruntime = "1.28.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -66,6 +71,10 @@ nanohttpd-websocket = { module = "org.nanohttpd:nanohttpd-websocket", version.re
 qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcodeKotlin" }
 # EdDSA-Java (CC0): checks a firmware release's Ed25519 signature where the platform can't; only firmware/Ed25519.kt names it.
 eddsa = { module = "net.i2p.crypto:eddsa", version.ref = "eddsa" }
+# Studio's runtime (MIT): arm64-v8a's native library only (app/build.gradle.kts); only studio/ names it.
+onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
+# Unit tests only: the same runtime for the JVM (macOS and Linux), so TranscriberTest runs the real model where it is on disk.
+onnxruntime-jvm = { module = "com.microsoft.onnxruntime:onnxruntime", version.ref = "onnxruntime" }
 # Unit tests only: the real org.json on the JVM, where android.jar's is a stub (the update manifest is read with it).
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 # Unit tests only: SQLite on the JVM (Apache-2.0), for SchemaV3Test's migration of a 1.4 database with its rows.

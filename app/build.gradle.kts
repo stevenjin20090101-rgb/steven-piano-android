@@ -7,7 +7,9 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
+import com.android.build.api.artifact.SingleArtifact
 import java.util.Properties
+import javax.xml.parsers.DocumentBuilderFactory
 
 plugins {
     alias(libs.plugins.android.application)
@@ -37,6 +39,10 @@ android {
         // updater's emulator test (README > Updates); every real build takes the number below.
         versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 13
         versionName = "1.6.2"
+
+        // Studio's ONNX Runtime (v1.7 — M23) is native code: arm64-v8a only, the tablets and phones of the last
+        // several years. Elsewhere the runtime can't load and Studio hides itself (studio/StudioAvailability.kt).
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
@@ -88,6 +94,11 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // ONNX Runtime's 28.6 MB library travels deflated (about 10.6 MB) and Android extracts it at install:
+        // the download grows by about 11 MB rather than 29 MB (docs/STUDIO_SPIKE.md › APK size).
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -112,6 +123,58 @@ tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkR
 
 room {
     schemaDirectory("$projectDir/schemas")
+}
+
+/**
+ * ONNX Runtime 1.29.0 and newer merge a telemetry provider into the app (`ai.onnxruntime.TelemetryInitializer`,
+ * a ContentProvider that starts Microsoft's 1DS uploader at every process start). The app stays on 1.28.0,
+ * which has none; this check fails the build if a merged manifest ever carries that provider, or any other
+ * provider from `ai.onnxruntime` (BUILD_SPEC.md › v1.7 — M23). `check` runs it for every variant.
+ */
+abstract class OnnxTelemetryCheck : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val manifest: RegularFileProperty
+
+    @get:OutputFile
+    abstract val report: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        val file = manifest.get().asFile
+        val text = file.readText()
+        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        val document = factory.newDocumentBuilder().parse(file)
+        val androidNs = "http://schemas.android.com/apk/res/android"
+        val providers = document.getElementsByTagName("provider")
+        val found = (0 until providers.length)
+            .map { providers.item(it).attributes?.getNamedItemNS(androidNs, "name")?.nodeValue.orEmpty() }
+            .filter { it.startsWith("ai.onnxruntime") }
+        if (found.isNotEmpty() || "TelemetryInitializer" in text) {
+            throw GradleException(
+                "ONNX Runtime's telemetry is in the merged manifest (${found.ifEmpty { listOf("TelemetryInitializer") }.joinToString()}): " +
+                    "keep com.microsoft.onnxruntime at 1.28.0 (BUILD_SPEC.md › v1.7 — M23).",
+            )
+        }
+        report.get().asFile.writeText("No ONNX Runtime provider or telemetry in ${file.name}.\n")
+    }
+}
+
+val checkOnnxTelemetry = tasks.register("checkOnnxTelemetry") {
+    group = "verification"
+    description = "Fails if ONNX Runtime's telemetry provider is in any variant's merged manifest."
+}
+tasks.named("check") { dependsOn(checkOnnxTelemetry) }
+
+androidComponents {
+    onVariants { variant ->
+        val perVariant = tasks.register<OnnxTelemetryCheck>("check${variant.name.replaceFirstChar { it.uppercase() }}OnnxTelemetry") {
+            group = "verification"
+            manifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+            report.set(layout.buildDirectory.file("reports/onnx-telemetry/${variant.name}.txt"))
+        }
+        checkOnnxTelemetry.configure { dependsOn(perVariant) }
+    }
 }
 
 dependencies {
@@ -142,10 +205,12 @@ dependencies {
     implementation(libs.nanohttpd.websocket)
     implementation(libs.qrcode.kotlin)
     implementation(libs.eddsa)
+    implementation(libs.onnxruntime.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.org.json)
     testImplementation(libs.sqlite.jdbc)
     testImplementation(libs.zxing.core)
+    testImplementation(libs.onnxruntime.jvm)
 }

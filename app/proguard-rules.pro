@@ -22,3 +22,7 @@
 # EdDSAEngine.initVerify, a class Android doesn't have. The app hands it the library's own
 # EdDSAPublicKey (firmware/Ed25519.kt), so that branch never runs. The library uses no reflection.
 -dontwarn sun.security.x509.X509Key
+
+# ONNX Runtime (v1.7 — M23, Studio): its Java API is called from its native library by name (JNI), so R8 must
+# neither rename nor remove any of it.
+-keep class ai.onnxruntime.** { *; }
