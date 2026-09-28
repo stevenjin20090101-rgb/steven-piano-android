@@ -31,7 +31,7 @@ import dev.stevenjin.stevenpiano.ui.LocalBylineHold
  * A tab's title in the Title style with the [byline] under it in the eyebrow style (PLAYER
  * PIANO · BY STEVEN JIN on every tab, DESIGN.md › v1.2 › Byline), and the tab's actions at the
  * end. The byline is simply there: no divider, no animation. In kiosk mode it is also the hidden
- * way out: a three-second hold opens the kiosk PIN ([LocalBylineHold], DESIGN.md › v1.6 — M20).
+ * way out: a three-second hold opens the kiosk PIN ([LocalBylineHold], DESIGN.md › v1.6.1 — M20).
  */
 @Composable
 fun ScreenHeader(

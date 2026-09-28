@@ -1218,13 +1218,13 @@ release the piano reports, "2.0.0" (the build stays on the page), else "—" as 
 
 ---
 
-# v1.6 — M20: kiosk mode
+# v1.6.1 — M20: kiosk mode
 
 Steven asked (2026-09-27) for the school tablet to be locked to the app, with a way out that
 doesn't mean rebuilding anything. Android gives a device owner a proper kiosk ("lock task"), and
 the school tablet is the app's device owner already (v1.4, for silent updates). Everything above
 still holds; this section adds the Kiosk page, the hidden way out, and display mode's resting
-state. It prepares release 1.6.
+state. It is release 1.6.1.
 
 ## What kiosk mode does
 

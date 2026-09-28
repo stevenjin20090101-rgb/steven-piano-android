@@ -34,7 +34,7 @@ import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.leave
 import kotlinx.coroutines.launch
 
-/** The Kiosk page's words (DESIGN.md › v1.6 — M20). */
+/** The Kiosk page's words (DESIGN.md › v1.6.1 — M20). */
 object KioskPageCopy {
     /** Under Kiosk mode while the app is not the tablet's device owner. */
     const val MAKE_DEVICE_OWNER = "Make the app the device owner first: README › Kiosk"
@@ -70,7 +70,7 @@ object KioskPageCopy {
 }
 
 /**
- * Kiosk (DESIGN.md › v1.6 — M20): the school tablet shows the app and nothing else. Kiosk mode, a
+ * Kiosk (DESIGN.md › v1.6.1 — M20): the school tablet shows the app and nothing else. Kiosk mode, a
  * switch, needs the app to be the device owner and a PIN (it says which is missing), with what it
  * does and the way out under it before it comes on; turning it off asks for the PIN. While it is
  * on: Unlock for now (the PIN, then Home and the other apps until the app is opened again), or Lock

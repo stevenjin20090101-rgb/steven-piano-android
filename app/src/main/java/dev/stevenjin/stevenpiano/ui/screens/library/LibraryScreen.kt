@@ -133,7 +133,7 @@ import kotlinx.coroutines.launch
  * (AppFrame.twoPane) the Library is two panes: the list in 55 % of the width and the now-playing
  * panel ([NowPlayingPanel]) beside it; playing a piece then stays on the Library, and the Now
  * playing tab remains for the full score. In kiosk mode the library's changes are locked (DESIGN.md
- * › v1.6 — M20): adding music (the + and its sheet), deleting, renaming, adding to and taking out of
+ * › v1.6.1 — M20): adding music (the + and its sheet), deleting, renaming, adding to and taking out of
  * playlists, reordering them, a playlist's photo and a channel's volume wait for the kiosk PIN
  * ([KioskGate]); playing, queueing, favourites and browsing never do.
  */

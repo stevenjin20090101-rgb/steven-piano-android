@@ -20,7 +20,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 
-// Kiosk mode (DESIGN.md and BUILD_SPEC.md › v1.6 — M20): the school tablet shows the app and
+// Kiosk mode (DESIGN.md and BUILD_SPEC.md › v1.6.1 — M20): the school tablet shows the app and
 // nothing else. Android gives a device owner a proper kiosk ("lock task"); this file is the part
 // that talks to Android, behind the [KioskDevice] seam so [KioskController] is tested on the JVM.
 

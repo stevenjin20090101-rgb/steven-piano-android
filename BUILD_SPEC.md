@@ -3251,12 +3251,12 @@ notes; no hash or size until `tools/publish-release.sh` builds it); `latest.json
 
 ---
 
-# v1.6 — M20: kiosk mode (prepares release 1.6)
+# v1.6.1 — M20: kiosk mode; release 1.6.1 (versionCode 12)
 
-Read `DESIGN.md › v1.6 — M20` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+Read `DESIGN.md › v1.6.1 — M20` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
 › M20 (binding) and feature item 11. Built in its own worktree (`m20-kiosk`, from `635d43b`: 1.5.1
 with the audit's W1–W3) beside other runs, so this run leaves the version alone: `versionCode` 10,
-`versionName` "1.5.1" and `Provenance.text` stay, and the version bump to 1.6 (build 12), the
+`versionName` "1.5.1" and `Provenance.text` stay, and the version bump to 1.6.1 (build 12), the
 provenance signature and the staged APKs come when the branch is merged.
 
 ## Files
@@ -3425,7 +3425,7 @@ android:enabled="false" android:exported="true">` with MAIN + HOME + DEFAULT. No
 exported; the device admin still declares no policies (lock task, the keyguard, the preferred home
 and `STAY_ON_WHILE_PLUGGED_IN` are a device owner's own powers).
 
-## Greps (v1.6 — M20)
+## Greps (v1.6.1 — M20)
 
 `Color(0x` outside `ui/theme`: none. `DisplayBlack`: `Color.kt`, `Theme.kt` (the resting state takes
 the canvas from `DisplayTheme`). `0.0.0.0`, `Access-Control`, `Modifier.blur`: none. `LocalLive`:
@@ -3503,7 +3503,7 @@ A fresh AVD of this run's own (never `steven_piano` or `steven_piano_tablet`), a
   `KioskController.of(context)` builds the Android one.
 - **Display mode at rest drifts 4 dp a minute** (burn-in, hours on end) and keeps the screen on only
   through "stay on while plugged in"; a PIN sheet counts its own touches and closes at rest.
-- **Not built here, for the merge**: the version bump to 1.6 (build 12), `Provenance.text`, the
+- **Not built here, for the merge**: the version bump to 1.6.1 (build 12), `Provenance.text`, the
   staged APKs and the provenance signature.
 - **Settings locked in kiosk, a little beyond the list it was given**: besides the + sheet, Delete
   playlist, Remove from playlist, Delete piece and Change photo, the library's other changes ask too
@@ -3548,3 +3548,44 @@ kiosk, `KioskModeTest` (+3: open for five minutes (its time shortened) and a sec
 again, then locked; coming to rest locks them early; unlock for now counts as open, and kiosk mode
 off leaves nothing locked, on again nothing left over). 840 tests before, 873 after (7
 skipped, as before: the corpus tests, `-Pcorpus`).
+
+## The merge: release 1.6.1 (versionCode 12)
+
+Merged into `main` after 1.6 (`ea8b2cb`, M21) as `f743943`, and released as **1.6.1**: `versionCode`
+12, `versionName` "1.6.1", `Provenance.text` "Made by Steven Jin · v1.6.1 · eab16a502f679465", the
+entry drafted at the end of `releases/history.json` (`"draft": true`, its notes; no hash or size until
+`tools/publish-release.sh` builds it); `latest.json` still names 1.6.
+
+- **Conflicts**: `PianoScreen.kt`'s imports (1.6's `FirmwareReport` beside this run's `KioskPage`: both
+  kept; the page switch merged by itself, so the Firmware and status page sits behind the kiosk gate
+  as the others do); DESIGN.md and this file, where 1.6's section and this one met at the end: both
+  kept, in release order, M21's first. `HubGroups` (CONTROL: Remote control · Kiosk), `GroupSummaries`
+  (the Firmware row's update and Kiosk's value), `Routes`, `AppGraph` (the kiosk's start first,
+  `firmwareUpdater.start()` beside the web's), the manifest and `GroupSummariesTest` merged by
+  themselves.
+- **ActionButton** (`53b82eb`, Fable's design fix): Material 3 1.4's outlined button draws its label in
+  `onSurfaceVariant`, so every action button read in the secondary ink, the same grey as when it was
+  unavailable. The label is `onSurface` now, `onSurfaceVariant` when unavailable, the hairline border
+  as before: Check now, Read status, All keys off, Save now, Test LED's Light it, Strike test's Floor
+  and Ceiling, Share diagnostics, the Firmware, Remote and Kiosk pages' buttons, the PIN sheets'
+  actions and the locked page's Unlock. The connection card's Disconnect and Cancel, the playlist's
+  Shuffle and the empty library's Add MIDI files are plain `OutlinedButton`s with the same default,
+  left as they are.
+- **`docs/SECURITY_AUDIT.md › 1.6.1 — kiosk`** (`621c992`): a note from the merge, since this run
+  could not edit the audit: the device owner's wider use, what the PIN protects, the five-minute
+  unlock, the adb escape hatch and the residuals.
+- **1.6.1, not 1.6**: this section's title and DESIGN's, README's *Kiosk*, and the comments that
+  pointed at them. README: *Kiosk* stands after *Updating the piano's firmware* (it followed
+  Authorship); the introduction, *What it does* (CONTROL's Kiosk, and a Kiosk entry), *School tablet*
+  and *Security* (the device owner's use; kiosk mode's PIN and its limits) say what M20 added.
+- **With 1.6's firmware updates**: Firmware and status is locked like every page. An update started
+  while the settings were open carries on when they lock again (the tablet rests after a minute
+  without a touch, or the five minutes run out): the updater runs in the app's scope and its service
+  holds the wake lock; the page then shows the locked page until the PIN, and Now playing still says
+  "Updating the piano". README › Kiosk says so.
+- Tests: 953 (1.6's 920 and this run's 33), 8 skipped (the corpus tests without `-Pcorpus`, and
+  `PinnedKeyTest`'s check against the firmware's `include/ota_pubkey.h`). `lint`: 0 errors, 29
+  warnings. No compiler warnings in the app's sources. The greps above and M21's: as stated. The
+  release APK is 2,758,096 bytes (versionCode 12, "1.6.1", signed `CN=Steven Piano, O=Steven
+  Jin, C=US`), the debug APK 16,132,483; staged as `../apk/steven-piano-1.6.1.apk` and
+  `-debug.apk`.

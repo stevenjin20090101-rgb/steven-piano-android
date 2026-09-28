@@ -110,7 +110,7 @@ private const val BACKDROP_FADED = 0.72f
  * composer and, while one plays, the channel as an eyebrow, the paper roll and its keyboard strip
  * across the whole width, the live dot with "Sent to piano", and the byline at the foot. No
  * controls: any touch, or back, leaves ([onLeave]); the touch goes no further. The screen stays
- * on and the system bars step aside while it shows. In kiosk mode (DESIGN.md › v1.6 — M20) it is
+ * on and the system bars step aside while it shows. In kiosk mode (DESIGN.md › v1.6.1 — M20) it is
  * also the resting state with nothing loaded ([DisplayRest]): the byline, and while guests may
  * request, the request page's code; the screen then stays on only as Android's "stay on while
  * plugged in" says (kiosk mode sets it).
@@ -191,7 +191,7 @@ fun DisplayScreen(onLeave: () -> Unit) {
 }
 
 /**
- * Kiosk mode's resting state, nothing loaded (DESIGN.md › v1.6 — M20): the canvas, the byline at
+ * Kiosk mode's resting state, nothing loaded (DESIGN.md › v1.6.1 — M20): the canvas, the byline at
  * the foot where display mode has it, and while Web control is on and guests may request, the
  * request page's code in the middle, as the poster has it: "Ask the piano" in Display, "Scan to
  * pick a piece for the piano", the code on its paper card (dark on light, as cameras read best) and

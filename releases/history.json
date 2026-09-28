@@ -42,5 +42,14 @@
     "minSdk": 26,
     "tag": "v1.6",
     "publishedAt": "2026-09-28"
+  },
+  {
+    "versionCode": 12,
+    "versionName": "1.6.1",
+    "notes": "Kiosk mode for the school tablet: with the app as device owner, Piano › Kiosk makes the app the home screen and switches off Home, Recents, the shade and the lock screen; the tablet comes straight back into the app after a reboot. Hold the byline for three seconds and enter the PIN to unlock for a while or turn kiosk off. In kiosk, settings, disconnecting, imports and deletions ask for the PIN; playing, queueing and browsing stay free. Left alone, the tablet rests in display mode.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.6.1/steven-piano-1.6.1.apk",
+    "minSdk": 26,
+    "tag": "v1.6.1",
+    "draft": true
   }
 ]

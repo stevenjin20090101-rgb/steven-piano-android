@@ -17,7 +17,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Kiosk mode's way out and its page, in words (DESIGN.md › v1.6 — M20). */
+/** Kiosk mode's way out and its page, in words (DESIGN.md › v1.6.1 — M20). */
 class KioskExitTest {
     @Test
     fun `the byline is held three seconds, and its sheet offers both ways out unless already unlocked`() {

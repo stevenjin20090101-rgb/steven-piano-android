@@ -130,7 +130,7 @@ import kotlin.math.min
  * its hub); [onImport] brings files into the library. Every touch anywhere is watched ([watchTouches]):
  * with Display mode after a minute on, a minute without one while a piece is loaded brings display
  * mode over the whole window ([DisplayScreen], DESIGN.md › v1.5 — M17), and the next touch leaves it.
- * In kiosk mode (DESIGN.md › v1.6 — M20) display mode is always on and is the resting state, with a
+ * In kiosk mode (DESIGN.md › v1.6.1 — M20) display mode is always on and is the resting state, with a
  * piece or without; the byline on every tab is the hidden way out ([LocalBylineHold]), and its PIN
  * sheet opens over whatever tab is showing.
  */
@@ -148,7 +148,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     val content = rememberHazeState()
     val floatingPlay = remember { FloatingPlaySlot() }
     // Display mode (DESIGN.md › v1.5 — M17): every touch anywhere keeps it away, a minute without one brings it.
-    // In kiosk mode it is always on (v1.6 — M20), and the byline's hold opens the kiosk's PIN sheet.
+    // In kiosk mode it is always on (v1.6.1 — M20), and the byline's hold opens the kiosk's PIN sheet.
     val kiosk = settings.kioskEnabled
     val idle = rememberIdle(enabled = DisplayRule.watched(settings.displayModeAfterMinute, kiosk), timeoutMs = DisplayModeTimeout.ms)
     val onTouch = remember(idle) { { idle.touch() } }

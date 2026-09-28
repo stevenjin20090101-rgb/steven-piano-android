@@ -61,7 +61,7 @@ interface OwnerRelease {
 }
 
 /**
- * Kiosk mode for the school tablet (DESIGN.md › v1.6 — M20), one per process in `AppGraph`: turning
+ * Kiosk mode for the school tablet (DESIGN.md › v1.6.1 — M20), one per process in `AppGraph`: turning
  * it on and off through the [controller] (Android's side) with the switch kept in the settings; the
  * kiosk PIN (a [PinHash] like the web panel's, kept apart from the settings) and its wrong tries
  * ([KioskPinGuard], kept across restarts); "Unlock for now", which lets go of the screen until the
@@ -100,7 +100,7 @@ class KioskMode(
     private var settingsTimer: Job? = null
 
     /**
-     * Settings locked in kiosk (DESIGN.md › v1.6 — M20): kiosk mode on, not unlocked for now, and no
+     * Settings locked in kiosk (DESIGN.md › v1.6.1 — M20): kiosk mode on, not unlocked for now, and no
      * right PIN in the last [settingsUnlockMs]. The Piano tab's pages and switches and the Library's
      * changes ask for the PIN while it is true; playing, queueing, browsing and Keys never do.
      */
@@ -283,7 +283,7 @@ class KioskMode(
         /** How long [turnOff] waits for the activity to let go of the screen before undoing the policy anyway. */
         const val LET_GO_MS = 2_000L
 
-        /** How long a right PIN opens the settings in kiosk mode (DESIGN.md › v1.6 — M20). */
+        /** How long a right PIN opens the settings in kiosk mode (DESIGN.md › v1.6.1 — M20). */
         const val SETTINGS_UNLOCK_MS = 5 * 60_000L
 
         private const val POLL_MS = 50L

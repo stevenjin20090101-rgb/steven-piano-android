@@ -98,7 +98,7 @@ private val HubWidth = 360.dp
  * the piano saves its settings when the tab itself stops (another tab, the app in the background),
  * never when a page closes. The tab draws under the glass of the bar and the rail: it keeps clear of
  * the rail at its side, and each scrolling column ends with room for the bar ([LocalFloatingPadding]).
- * In kiosk mode the settings are locked (DESIGN.md › v1.6 — M20): the rows show a padlock, and a
+ * In kiosk mode the settings are locked (DESIGN.md › v1.6.1 — M20): the rows show a padlock, and a
  * page, a switch of the APP group, Check now and Disconnect wait for the kiosk PIN ([KioskGate]).
  */
 @Composable

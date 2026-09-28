@@ -20,8 +20,8 @@ Wikipedia (see *Artwork and notes* below), for the app's own updates from its
 GitHub repository (see *Updates*) and for the piano's firmware releases from the
 firmware's (see *Updating the piano's firmware*). With **Web control** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
-page to guests on the tablet's Wi-Fi (see *Web control*). Made by Steven Jin.
-Version 1.6.
+page to guests on the tablet's Wi-Fi (see *Web control*). On the school tablet it can
+be locked to the app as a kiosk (see *Kiosk*). Made by Steven Jin. Version 1.6.1.
 
 ## What it does
 
@@ -204,7 +204,8 @@ Version 1.6.
   the system, light or dark), note display, wide layout, fingering, chord names,
   hand colours, artwork in black and white, fetching artwork automatically, and
   standby: display mode after a minute and its canvas), **CONTROL** (**Remote
-  control**: the web panel, its PIN, guests and the poster) and
+  control**: the web panel, its PIN, guests and the poster; **Kiosk**: kiosk
+  mode and its PIN) and
   **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
   then the About line. Each row says in a few words what its page holds
   ("Volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
@@ -226,6 +227,11 @@ Version 1.6.
   piano checks the signature, restarts on it, and rolls back by itself if it
   fails to start (see *Updating the piano's firmware*). Needs firmware 2.0.0 on
   the piano, flashed over USB once.
+- **Kiosk**: on the school tablet, with the app as device owner, the app becomes
+  the home screen and nothing else can be reached; it wakes and restarts into
+  the app, rests in display mode, and settings, disconnecting, imports and
+  deletions ask for a PIN while playing, queueing and browsing stay free. A
+  three-second hold on the byline and the PIN are the way out (see *Kiosk*).
 - **Diagnostics**: **Piano › Share diagnostics** sends a small zip
   of the app's own logs by any app you choose; after a crash, the Library offers
   it (see *Diagnostics*).
@@ -314,7 +320,7 @@ download, then the app closes and opens again on the new version about a second 
 on the Piano tab, reading "Updated to 1.5" (Android adds its own notice, "Updated by
 your admin"). The piano is silenced first, as for any stop. Device owner is used for
 this one thing: the app asks for no policies, locks nothing and hides nothing, and the
-tablet works as before, until kiosk mode is turned on (see *Kiosk*, at the end).
+tablet works as before, until kiosk mode is turned on (see *Kiosk*).
 
 One-time setup, with a computer and a USB cable:
 
@@ -323,7 +329,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.6.apk`.
+   `adb install ../apk/steven-piano-1.6.1.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -383,7 +389,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=12`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=13`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -684,6 +690,71 @@ v1.6 — M21):
       finishes it.
 - [ ] While updating, tap a piece, a channel and the Keys screen: nothing sounds.
 
+## Kiosk
+
+Kiosk mode (v1.6.1) locks the school tablet to the app: no Home, no Recents, no
+notifications, no other apps. The app is the tablet's home screen, so a restart lands
+back in it; the lock screen is off, so the power button wakes straight into it; and the
+screen stays on while the tablet is plugged in. With nobody touching it for a minute the
+tablet rests in display mode: the piece playing, or with nothing loaded the byline and,
+while Web control and **Guests can request** are on, the request page's QR code.
+
+**Turning it on**
+
+1. Make the app the tablet's device owner, once, with a computer and a USB cable (see
+   *School tablet* above for the fresh-tablet steps):
+
+   ```bash
+   adb shell dpm set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
+   # Success: Device owner set to package dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
+   ```
+
+2. On the tablet: **Piano › Kiosk › Set a PIN** (six digits, twice), then turn on
+   **Kiosk mode**. The screen locks to the app at once.
+
+If the tablet has its own screen lock (a PIN, pattern or password in Android's settings),
+Android keeps it: after a restart the tablet waits at the lock screen. Remove it to start
+straight into the piano; the Kiosk page says when this is the case.
+
+**Getting out**
+
+- Press and hold the line under any tab's title, *PLAYER PIANO · BY STEVEN JIN*, for three
+  seconds. Nothing on screen hints at it; a thin line grows under the words while you hold.
+- Enter the kiosk PIN, then **Unlock for now** (Home and the other apps come back until the
+  app is opened again, or the tablet is left alone for a minute) or **Turn kiosk off**
+  (everything goes back as it was; the PIN is kept for next time). On the Kiosk page,
+  **Unlock for now**, turning the switch off and **Change PIN** ask for the PIN too.
+- Wrong PINs: three are free, then each one makes the next wait 5 s, 10 s, 20 s… up to
+  five minutes. Restarting the app or the tablet doesn't reset the count.
+
+**Forgotten PIN**: give the device-owner role back over adb. Kiosk mode ends first (the
+tablet's own home screen and lock screen come back), then the role goes, and with it
+silent updates:
+
+```bash
+adb shell setprop debug.stevenpiano.releaseowner yes
+adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity   # the app ends kiosk mode, then gives up the role
+adb shell dpm list-owners                                        # "no owners"
+adb shell setprop debug.stevenpiano.releaseowner ""
+```
+
+(`am force-stop`, in *School tablet*'s sequence, is ignored by Android 14 for a device
+owner's own app; the `am start` is what reaches it.) Set the device owner again, as above,
+to use kiosk mode again. A factory reset also ends everything.
+
+**Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab,
+but anything that changes the piano or the library asks for the kiosk PIN first: every page
+of the Piano tab (Feel, Lighting, Pedal, Firmware and status, Playback, Display, Remote
+control, Kiosk), its two APP switches and Check now, Disconnect, and in the Library the **+**
+(adding music), deleting, renaming, playlists' edits, Change photo and a channel's volume. A
+small padlock marks them. The right PIN opens them for five minutes, or until the tablet
+rests in display mode, whichever comes first; while unlocked for now they are open too.
+
+Things to know: an update from the app's own updater reopens the app, which locks again; one
+installed over adb leaves Android's launcher up until Home is pressed. An update of the piano's
+firmware carries on if the tablet rests meanwhile; Firmware and status then asks for the PIN
+again before it shows how far it has got.
+
 ## Test it on the piano
 
 - [ ] Sideload `app-release.apk` (uninstall a debug build first). The app launches
@@ -815,7 +886,13 @@ The full audit, every finding and what was done about it, is in
   is left, are in the audit's 1.5.1 section.
 - **Updates** install only a file whose SHA-256 matches the manifest and that Android
   accepts as signed with the release key (see *Updates*); on the school tablet the
-  device owner role is used for silent updates and nothing else (see *School tablet*).
+  device owner role is used for silent updates and, once it is turned on, kiosk mode,
+  and nothing else (see *School tablet* and *Kiosk*).
+- **Kiosk mode** keeps a passer-by in the app, behind a PIN of its own, kept only as
+  a salted hash, with waits that grow after three wrong tries and outlast a restart;
+  a forgotten PIN needs a computer and adb. It is not a locked enclosure: someone with
+  the tablet's buttons can still reach Android's safe mode or recovery. The details
+  are in the audit's 1.6.1 section.
 - **The piano's firmware** goes to the piano only when its release is signed with
   Steven's authorship key: the app checks the Ed25519 signature over the SHA-256 of
   the very bytes it downloaded, and the piano checks both again before it restarts on
@@ -867,66 +944,3 @@ The full audit, every finding and what was done about it, is in
 MIT licensed with attribution preserved: see `LICENSE` and `AUTHORS`. Every
 source file is covered by an Ed25519-signed manifest; `python3
 provenance/verify.py` checks it (see `PROVENANCE.md`).
-
-## Kiosk
-
-Kiosk mode (v1.6) locks the school tablet to the app: no Home, no Recents, no
-notifications, no other apps. The app is the tablet's home screen, so a restart lands
-back in it; the lock screen is off, so the power button wakes straight into it; and the
-screen stays on while the tablet is plugged in. With nobody touching it for a minute the
-tablet rests in display mode: the piece playing, or with nothing loaded the byline and,
-while Web control and **Guests can request** are on, the request page's QR code.
-
-**Turning it on**
-
-1. Make the app the tablet's device owner, once, with a computer and a USB cable (see
-   *School tablet* above for the fresh-tablet steps):
-
-   ```bash
-   adb shell dpm set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
-   # Success: Device owner set to package dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
-   ```
-
-2. On the tablet: **Piano › Kiosk › Set a PIN** (six digits, twice), then turn on
-   **Kiosk mode**. The screen locks to the app at once.
-
-If the tablet has its own screen lock (a PIN, pattern or password in Android's settings),
-Android keeps it: after a restart the tablet waits at the lock screen. Remove it to start
-straight into the piano; the Kiosk page says when this is the case.
-
-**Getting out**
-
-- Press and hold the line under any tab's title, *PLAYER PIANO · BY STEVEN JIN*, for three
-  seconds. Nothing on screen hints at it; a thin line grows under the words while you hold.
-- Enter the kiosk PIN, then **Unlock for now** (Home and the other apps come back until the
-  app is opened again, or the tablet is left alone for a minute) or **Turn kiosk off**
-  (everything goes back as it was; the PIN is kept for next time). On the Kiosk page,
-  **Unlock for now**, turning the switch off and **Change PIN** ask for the PIN too.
-- Wrong PINs: three are free, then each one makes the next wait 5 s, 10 s, 20 s… up to
-  five minutes. Restarting the app or the tablet doesn't reset the count.
-
-**Forgotten PIN**: give the device-owner role back over adb. Kiosk mode ends first (the
-tablet's own home screen and lock screen come back), then the role goes, and with it
-silent updates:
-
-```bash
-adb shell setprop debug.stevenpiano.releaseowner yes
-adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity   # the app ends kiosk mode, then gives up the role
-adb shell dpm list-owners                                        # "no owners"
-adb shell setprop debug.stevenpiano.releaseowner ""
-```
-
-(`am force-stop`, in *School tablet*'s sequence, is ignored by Android 14 for a device
-owner's own app; the `am start` is what reaches it.) Set the device owner again, as above,
-to use kiosk mode again. A factory reset also ends everything.
-
-**Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab,
-but anything that changes the piano or the library asks for the kiosk PIN first: every page
-of the Piano tab (Feel, Lighting, Pedal, Firmware and status, Playback, Display, Remote
-control, Kiosk), its two APP switches and Check now, Disconnect, and in the Library the **+**
-(adding music), deleting, renaming, playlists' edits, Change photo and a channel's volume. A
-small padlock marks them. The right PIN opens them for five minutes, or until the tablet
-rests in display mode, whichever comes first; while unlocked for now they are open too.
-
-Things to know: an update from the app's own updater reopens the app, which locks again; one
-installed over adb leaves Android's launcher up until Home is pressed.

@@ -134,7 +134,7 @@ object DisplayModeTimeout {
 
 /**
  * When display mode comes: the idle clock runs while Display mode after a minute is on, or kiosk mode
- * is (DESIGN.md › v1.6 — M20: there it is always on); once idle it shows while a piece is loaded, or
+ * is (DESIGN.md › v1.6.1 — M20: there it is always on); once idle it shows while a piece is loaded, or
  * in kiosk mode with nothing loaded too, its resting state (the byline and, with guests on, the
  * request code).
  */

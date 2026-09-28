@@ -43,7 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Kiosk mode's way out (DESIGN.md › v1.6 — M20): nothing on screen hints at it. While kiosk mode is
+// Kiosk mode's way out (DESIGN.md › v1.6.1 — M20): nothing on screen hints at it. While kiosk mode is
 // on, a three-second hold on the byline under any tab's title opens the PIN sheet; the right PIN
 // offers "Unlock for now" and "Turn kiosk off". The Kiosk page asks for the same PIN before it
 // turns kiosk mode off, unlocks or changes the PIN.

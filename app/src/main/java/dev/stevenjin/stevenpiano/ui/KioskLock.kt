@@ -32,7 +32,7 @@ import dev.stevenjin.stevenpiano.ui.components.PinCheckSheet
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
-// Settings locked in kiosk (DESIGN.md › v1.6 — M20): the tablet stands in a public space, so while
+// Settings locked in kiosk (DESIGN.md › v1.6.1 — M20): the tablet stands in a public space, so while
 // kiosk mode is on, playing, queueing, browsing and the Keys tab stay free, and anything that changes
 // the piano or the library asks for the kiosk PIN first. A right PIN opens them for five minutes, or
 // until the tablet rests in display mode; "Unlock for now" counts as open.
