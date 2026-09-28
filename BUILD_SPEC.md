@@ -2823,7 +2823,7 @@ progress, one file at a time.
 
 - Tests: 832, none failing (7 skipped without `-Pcorpus`, as in M17). `lint`: 0 errors, 29
   warnings, M17's 29 (ZXing moved to 3.5.4 so the catalog raises no new notice). `assembleDebug`,
-  `assembleRelease` clean, no compiler warnings. The release APK is 2,675,240 bytes (1.5:
+  `assembleRelease` clean, no compiler warnings. The release APK is 2,675,444 bytes (1.5:
   2,548,714): NanoHTTPD, qrcode-kotlin and the pages (97 KB before compression).
 - A Tailscale and a Wi-Fi address stood in by dummy interfaces (`tun9` 100.101.2.3, `wlan9`
   192.168.77.20; the emulator has neither): `ss -ltn` shows 8737 on those two and `127.0.0.1`,
@@ -2838,9 +2838,10 @@ progress, one file at a time.
   two screenshots a second apart; a reorder in Up next; a `.mid` and a 546 KB zip uploaded at a
   throttled 60 KB/s ("Sending 12%" … "90%", then "Imported 3 pieces") and the new pieces in the
   Library; the Piano page's three groups; the request page, "Thanks — it's in the queue.", and
-  the 429 line; the Library's banner "1 request waiting" on the tablet, Approve, and the piece
-  tagged Requested on the panel. The poster at 1280, 390 and A4 print; its QR, the Remote page's
-  and Android's print preview all decode (ZXing) to the addresses shown.
+  the 429 line at the foot of the screen after a Request tapped fifteen rows down (it used to sit
+  under the list, out of sight); the Library's banner "1 request waiting" on the tablet, Approve,
+  and the piece tagged Requested on the panel. The poster at 1280, 390 and A4 print; its QR, the
+  Remote page's and Android's print preview all decode (ZXing) to the addresses shown.
 - Android's print dialog: one A4 page (it was two before the print rule was fixed: a sheet exactly
   297 mm tall spilled a blank page); two quick taps give two dialogs, each closing cleanly.
 - The Wi-Fi listener's address removed and put back (`ip addr del/add` on `wlan9`): its socket

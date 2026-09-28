@@ -1133,7 +1133,8 @@ piece. It joins the queue.", ONE REQUEST EVERY FIVE MINUTES; then Popular, Recog
 on piano (the built-in lists as they stand, each piece once) as eyebrowed lists of rows, title
 over composer, each with an outlined **Request**. A request turns the page into "Thanks — it's in
 the queue." (or "Thanks — it joins the queue once it's approved."), the piece and composer under
-it. A second within five minutes: "One request every five minutes. Try again in 4 min." Guests
+it. A second within five minutes: "One request every five minutes. Try again in 4 min.", in a
+line at the foot of the screen (seen wherever the list is scrolled; it goes after eight seconds). Guests
 off: "Requests are closed right now." Nothing to type, nothing but the list's pieces to ask for.
 It follows the system's light or dark.
 

@@ -31,11 +31,22 @@
     return node;
   }
 
-  function note(text) {
+  let noteTimer = null;
+
+  /**
+   * A line at the foot of the screen, where it is seen wherever the list is scrolled (a Request
+   * tapped far down the list must not answer out of sight). It goes after a few seconds, unless
+   * [stay]: the page has nothing else to show (the piano can't be reached).
+   */
+  function note(text, stay) {
     const node = $('guest-note');
     node.textContent = text;
     node.hidden = !text;
+    clearTimeout(noteTimer);
+    if (text && !stay) noteTimer = setTimeout(() => { node.hidden = true; }, NOTE_MS);
   }
+
+  const NOTE_MS = 8000;
 
   /** "30 s", "4 min". */
   function wait(seconds) {
@@ -91,7 +102,7 @@
       const response = await fetch('/api/public/catalogue', { credentials: 'same-origin', cache: 'no-store' });
       data = await response.json();
     } catch (e) {
-      note("The piano can't be reached. Try again in a moment.");
+      note("The piano can't be reached. Try again in a moment.", true);
       return;
     }
     if (!data.open) {
