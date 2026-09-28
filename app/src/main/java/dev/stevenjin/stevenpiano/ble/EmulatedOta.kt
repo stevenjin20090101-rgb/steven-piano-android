@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ble
 
 import android.os.Handler
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -21,8 +22,10 @@ import kotlinx.coroutines.flow.callbackFlow
  * after the pauses a real piano takes (READY [READY_MS] after BEGIN, each window's ACK [ACK_MS] after
  * its last frame: about 13 KB a second, 75 s for the worked example; VERIFYING, then OK
  * [OK_MS] later). [onDrop] runs where the scenario drops the link; [onRestart] after OK. Call from
- * [handler]'s thread (the main thread, where the updater runs).
+ * [handler]'s thread (the main thread, where the updater runs). A session's `isClosedForSend` (a
+ * delicate API, hence the opt-in) is only a shortcut here: `trySend` refuses a closed session anyway.
  */
+@OptIn(DelicateCoroutinesApi::class)
 class EmulatedOta(
     private val handler: Handler,
     private val script: OtaPiano.Script,

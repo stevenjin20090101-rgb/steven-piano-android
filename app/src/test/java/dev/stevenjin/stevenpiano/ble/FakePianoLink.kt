@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.hex
 import dev.stevenjin.stevenpiano.player.NanoClock
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
@@ -131,8 +132,10 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
  * with [beginAt] from [now]), and an [OtaPiano] with [script] answers as BLE_OTA.md says the
  * firmware does: at once, or with [answerScope], each answer [answerDelayMs] later (so a test can
  * step in between windows). Its [OtaPiano.Out.Drop] drops [link]; after OK, [onRestart] runs (the
- * test decides how the piano comes back). Not thread-safe: tests call it from one thread.
+ * test decides how the piano comes back). Not thread-safe: tests call it from one thread. Reads a
+ * session's `isClosedForSend` (a delicate API, hence the opt-in) as [EmulatedOta] does.
  */
+@OptIn(DelicateCoroutinesApi::class)
 class FakeOtaChannel(
     private val link: FakePianoLink,
     var script: OtaPiano.Script = OtaPiano.Script(),
