@@ -57,4 +57,14 @@ class FormatTest {
         assertEquals("−12", Format.semitones(-12))
         assertEquals("100%", Format.percent(100))
     }
+
+    @Test
+    fun `a pause reads in seconds, halves shown`() {
+        assertEquals("0 s", Format.seconds(0))
+        assertEquals("0.5 s", Format.seconds(500))
+        assertEquals("1 s", Format.seconds(1_000))
+        assertEquals("2 s", Format.seconds(2_000))
+        assertEquals("2.5 s", Format.seconds(2_500))
+        assertEquals("5 s", Format.seconds(5_000))
+    }
 }

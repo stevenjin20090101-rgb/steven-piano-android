@@ -19,7 +19,9 @@ import dev.stevenjin.stevenpiano.midi.NoteRouter
  * `song = anchorSong + (now - anchorNanos) * tempo / 100`, re-anchored on play and on every
  * tempo change so nothing jumps. [advance] sends everything due, as one batch, and says when
  * the next event is due. Pause, seek and stop silence the piano first; play and seek then
- * re-send the pedal in effect. Keys played on the Keys screen go out at once through the same
+ * re-send the pedal in effect. [play] may start with a pause before the piece (DESIGN.md ›
+ * v1.5 — M16): the anchor lies that far ahead, so the position runs below zero until it and the
+ * first event leaves exactly then; a pause inside it resumes from the start, a seek ends it. Keys played on the Keys screen go out at once through the same
  * [router] ([liveNoteOn] and friends), so a piece and the keys share its bookkeeping; a full
  * silence lets go of both. A pedal change the router holds back (it paces the pedal) is due by
  * the time [advance] returns. Not thread-safe: one thread (the scheduler's) owns it.
@@ -40,9 +42,18 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     var ended: Boolean = false
         private set
 
+    /**
+     * Where this run of playback began: the lowest position it reports. Below zero while a pause
+     * before the piece runs (by as much song time as the pause lasts at the tempo), otherwise the
+     * position it was anchored at; the player never shows a frame before it.
+     */
+    var startMicros: Long = 0L
+        private set
+
     private var cursor = 0
     private val batch = MidiBatch()
 
+    /** The song position at [nowNanos]; below zero while the pause before a piece runs. */
     fun positionMicros(nowNanos: Long): Long =
         if (status == PlaybackStatus.Playing) anchorSongMicros + (nowNanos - anchorNanos) * tempoPct / NANOS_PER_MICRO_PCT
         else anchorSongMicros
@@ -53,6 +64,7 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         piece = midi
         status = PlaybackStatus.Stopped
         anchorSongMicros = 0L
+        startMicros = 0L
         cursor = 0
         ended = false
     }
@@ -63,11 +75,17 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         piece = null
         status = PlaybackStatus.Stopped
         anchorSongMicros = 0L
+        startMicros = 0L
         cursor = 0
         ended = false
     }
 
-    fun play(nowNanos: Long) {
+    /**
+     * Plays from where the piece is. With [preRollNanos] (a new piece, or one starting again) the
+     * piano stays silent that long first: the anchor is set that far ahead, the position runs
+     * below zero until it, and the first event is due exactly at `now + preRoll`.
+     */
+    fun play(nowNanos: Long, preRollNanos: Long = 0L) {
         val midi = piece ?: return
         if (status == PlaybackStatus.Playing) return
         if (cursor >= midi.events.size) {   // over: play again from the top
@@ -75,14 +93,17 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
             cursor = 0
         }
         ended = false
-        anchorNanos = nowNanos
+        anchorNanos = nowNanos + preRollNanos.coerceAtLeast(0L)
         status = PlaybackStatus.Playing
+        startMicros = positionMicros(nowNanos)
         restorePedal(nowNanos)
     }
 
+    /** Silences and holds the position; a pause inside the pause before a piece holds its start, so Play begins it at once. */
     fun pause(nowNanos: Long) {
         if (status != PlaybackStatus.Playing) return
-        anchorSongMicros = positionMicros(nowNanos)
+        anchorSongMicros = positionMicros(nowNanos).coerceAtLeast(0L)
+        startMicros = anchorSongMicros
         status = PlaybackStatus.Paused
         silence()
     }
@@ -91,16 +112,21 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     fun stop(nowNanos: Long) {
         status = PlaybackStatus.Stopped
         anchorSongMicros = 0L
+        startMicros = 0L
         cursor = 0
         ended = false
         silence()
     }
 
-    /** Silences, then continues from [targetMicros]; a stopped piece becomes paused there. */
+    /**
+     * Silences, then continues from [targetMicros]; a stopped piece becomes paused there. A seek
+     * ends the pause before a piece: seeking does not pause, it plays from the target at once.
+     */
     fun seek(targetMicros: Long, nowNanos: Long) {
         val midi = piece ?: return
         silence()
         anchorSongMicros = targetMicros.coerceIn(0L, midi.durationMicros)
+        startMicros = anchorSongMicros
         anchorNanos = nowNanos
         cursor = midi.events.firstAtOrAfter(anchorSongMicros)
         ended = false
@@ -108,12 +134,24 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         if (status == PlaybackStatus.Playing) restorePedal(nowNanos)
     }
 
-    /** Silences and re-sends the pedal where playback is, e.g. after the link reconnects. */
-    fun resync(nowNanos: Long) = seek(positionMicros(nowNanos), nowNanos)
+    /**
+     * Silences and re-sends the pedal where playback is, e.g. after the link reconnects. Inside the
+     * pause before a piece nothing has sounded yet: the piano is silenced and the pause runs on.
+     */
+    fun resync(nowNanos: Long) {
+        val position = positionMicros(nowNanos)
+        if (status == PlaybackStatus.Playing && position < 0L) {
+            silence()
+            return
+        }
+        seek(position, nowNanos)
+    }
 
+    /** Re-anchors at the position now, so nothing jumps; inside the pause before a piece it scales what is left of it. */
     fun setTempo(pct: Int, nowNanos: Long) {
         anchorSongMicros = positionMicros(nowNanos)
         anchorNanos = nowNanos
+        startMicros = anchorSongMicros
         tempoPct = pct.coerceIn(PlaybackLimits.TempoPct)
     }
 

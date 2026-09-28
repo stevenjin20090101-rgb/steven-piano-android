@@ -138,6 +138,8 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     fun setDefaultTempo(pct: Int) = edit { setDefaultTempo(pct) }
 
+    fun setPreRoll(ms: Int) = edit { setPreRoll(ms) }
+
     fun setTranspose(semitones: Int) = edit { setTranspose(semitones) }
 
     fun setVelocity(pct: Int) = edit { setVelocity(pct) }

@@ -9,6 +9,12 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.nowplaying
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.LongState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -43,8 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -80,6 +89,7 @@ import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
 /**
@@ -186,6 +196,8 @@ private fun ColumnScope.PieceView(
     val roll = remember(player) { RollClock(player) }
     var settle by remember { mutableIntStateOf(0) }
     val frame = rememberFrameNanos(playing, piece.pieceId, settle, roll)
+    // The pause before the piece: playing, and the music not reached yet.
+    val starting by remember(roll, frame, playing) { derivedStateOf { playing && roll.positionAt(frame.longValue) < 0L } }
 
     Column(Modifier.padding(horizontal = 16.dp)) {
         // The title opens the piece sheet: its art and notes.
@@ -198,8 +210,9 @@ private fun ColumnScope.PieceView(
             overflow = TextOverflow.Ellipsis,
         )
         if (piece.composer.isNotBlank()) Eyebrow(piece.composer, Modifier.padding(top = 4.dp), maxLines = 1)
+        StartingLine(starting, Modifier.padding(top = 2.dp))
     }
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(8.dp))
     // Every seek (the scrubber, a bar of the score) silences the piano first; paused, the picture catches up.
     val seek: (Long) -> Unit = {
         player.seek(it)
@@ -384,6 +397,28 @@ private fun rememberFrameNanos(playing: Boolean, pieceId: Long, settle: Int, rol
 }
 
 private const val TEMPO_STEP = 5
+
+/**
+ * "STARTING" while the pause before a piece runs (DESIGN.md › v1.5 — M16): an eyebrow in the
+ * tertiary grey under the composer, fading in and out over 120 ms (a cut when motion is reduced).
+ * Its line is always kept, so nothing below it moves as it comes and goes.
+ */
+@Composable
+internal fun StartingLine(starting: Boolean, modifier: Modifier = Modifier) {
+    val reduced = rememberReducedMotion()
+    Box(modifier) {
+        Eyebrow(STARTING, Modifier.alpha(0f).clearAndSetSemantics { }, maxLines = 1)
+        AnimatedVisibility(
+            visible = starting,
+            enter = if (reduced) EnterTransition.None else fadeIn(tween(Motion.FastMs)),
+            exit = if (reduced) ExitTransition.None else fadeOut(tween(Motion.FastMs)),
+        ) {
+            Eyebrow(STARTING, maxLines = 1)
+        }
+    }
+}
+
+private const val STARTING = "Starting"
 
 /** What the note views show beside the notes, as the Piano tab's switches say. */
 private data class Marks(val fingering: Boolean, val chordNames: Boolean)

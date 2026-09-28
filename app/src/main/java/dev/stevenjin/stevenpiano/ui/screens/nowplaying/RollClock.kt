@@ -17,6 +17,9 @@ import dev.stevenjin.stevenpiano.ui.theme.Motion
  * The position Now playing draws at: the player's own, except for the one orchestrated moment.
  * When play is pressed the roll eases from still to moving over 320 ms (ease-out) and meets the
  * music exactly at the end, so the picture never lags the piano. Reduced motion: no ease, a cut.
+ * A piece that starts with the pause before it eases from below zero (about -2 s), so its first
+ * notes travel down to the tracker bar during the pause and meet it at 0, as the piano plays them;
+ * the pause is playing, so nothing cuts the ease short.
  */
 internal class RollClock(private val player: Player) : SongClock {
     private var easeFrom = 0L

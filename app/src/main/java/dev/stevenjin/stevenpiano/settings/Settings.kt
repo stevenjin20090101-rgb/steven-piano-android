@@ -52,8 +52,8 @@ enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 /**
  * The Piano tab's preferences, plus the last piano connected, where the Keys screen was, the
  * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
- * beside the notes (fingering, chord names, the hands in colour), and whether the app looks for
- * its own updates.
+ * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
+ * its own updates, and the pause before each piece.
  */
 data class PianoSettings(
     val autoConnect: Boolean = true,
@@ -84,9 +84,14 @@ data class PianoSettings(
     val handColours: Boolean = false,
     /** A newer release looked for on launch and once a day while the app is open (Check now works either way). */
     val checkForUpdates: Boolean = true,
+    /** Silence before every piece starts, in milliseconds, 0-5000 (Piano › Playback, "Pause before each piece"). */
+    val preRollMs: Int = DEFAULT_PRE_ROLL_MS,
 ) {
     companion object {
         const val DEFAULT_KEYS_VIEWPORT_START = 48
+
+        /** Two seconds of silence before every piece (Steven's choice, DESIGN.md › v1.5 — M16). */
+        const val DEFAULT_PRE_ROLL_MS = 2_000
     }
 }
 
@@ -138,6 +143,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setCheckForUpdates(on: Boolean) = edit { it[CHECK_FOR_UPDATES] = on }
 
+    suspend fun setPreRoll(ms: Int) = edit { it[PRE_ROLL_MS] = ms.coerceIn(PlaybackLimits.PreRollMs) }
+
     /** Whether the one-off repair of over-long library text (`TextRepair`) has run. Housekeeping, not a preference. */
     suspend fun textRepairDone(): Boolean =
         store.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.first()[TEXT_REPAIR_DONE] == true
@@ -182,6 +189,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             chordNames = this[CHORD_NAMES] ?: defaults.chordNames,
             handColours = this[HAND_COLOURS] ?: defaults.handColours,
             checkForUpdates = this[CHECK_FOR_UPDATES] ?: defaults.checkForUpdates,
+            preRollMs = (this[PRE_ROLL_MS] ?: defaults.preRollMs).coerceIn(PlaybackLimits.PreRollMs),
         )
     }
 
@@ -205,6 +213,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CHORD_NAMES = booleanPreferencesKey("chordNames")
         val HAND_COLOURS = booleanPreferencesKey("handColours")
         val CHECK_FOR_UPDATES = booleanPreferencesKey("checkForUpdates")
+        val PRE_ROLL_MS = intPreferencesKey("preRollMs")
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
     }

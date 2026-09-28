@@ -48,7 +48,8 @@ private const val NOT_DRAGGING = -1f
  * Where the piece is: elapsed time, a hairline track with a 12 dp round thumb, total time. The
  * times are eyebrows in tabular figures. Dragging scrubs (thumb and time follow the finger);
  * release seeks. The thumb is drawn per frame from [frameNanos] and [clock]; the times
- * change once a second. TalkBack can move it too.
+ * change once a second. TalkBack can move it too. During the pause before a piece the clock runs
+ * below zero: the thumb stays at the start and the time reads 0:00.
  */
 @Composable
 fun Scrubber(
@@ -63,7 +64,7 @@ fun Scrubber(
     val elapsedSeconds by remember(durationMicros, clock) {
         derivedStateOf {
             val micros = if (dragFraction >= 0f) (dragFraction * durationMicros).toLong() else clock.positionAt(frameNanos.longValue)
-            micros / 1_000_000L
+            micros.coerceAtLeast(0L) / 1_000_000L
         }
     }
     val totalSeconds = durationMicros / 1_000_000L
@@ -105,7 +106,7 @@ fun Scrubber(
                     val radius = ThumbSize.toPx() / 2
                     val line = Hairline.toPx()
                     val fraction = dragFraction.takeIf { it >= 0f }
-                        ?: if (durationMicros > 0) clock.positionAt(frameNanos.longValue).toFloat() / durationMicros else 0f
+                        ?: if (durationMicros > 0) (clock.positionAt(frameNanos.longValue).toFloat() / durationMicros).coerceAtLeast(0f) else 0f
                     val x = radius + (size.width - 2 * radius) * fraction
                     val y = size.height / 2
                     drawRect(track, Offset(radius, y - line / 2), Size(size.width - 2 * radius, line))

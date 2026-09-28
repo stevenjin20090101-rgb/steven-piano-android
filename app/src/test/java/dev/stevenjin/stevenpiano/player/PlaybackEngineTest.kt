@@ -225,4 +225,71 @@ class PlaybackEngineTest {
         engine.seek(9_000_000L, now)
         assertEquals(1_000_000L, engine.positionMicros(now))
     }
+
+    @Test
+    fun `with a pause before the piece the first event leaves exactly 2 s after play, and nothing before`() {
+        engine.load(piece { noteOn(0, 60); noteOff(500, 60) }, now)
+        engine.play(now, preRollNanos = 2_000 * ms)
+        runUntil(1_999)
+        assertTrue(link.sent.isEmpty())
+        runUntil(5_000)
+        assertEquals(listOf("2000 90 3C 50", "2500 80 3C 00", "2500 B0 40 00", "2500 B0 7B 00"), sent())
+    }
+
+    @Test
+    fun `during the pause the position runs below zero, and a tempo change scales what is left of it`() {
+        engine.load(piece { noteOn(0, 60); noteOff(500, 60) }, now)
+        engine.play(now, preRollNanos = 2_000 * ms)
+        assertEquals(-2_000_000L, engine.positionMicros(now))
+        assertEquals(-2_000_000L, engine.startMicros)
+        at(1_000)
+        assertEquals(-1_000_000L, engine.positionMicros(now))
+        engine.setTempo(50, now)   // the second left of the pause now takes two
+        assertEquals(-1_000_000L, engine.positionMicros(now))
+        assertEquals(3_000 * ms, engine.advance(now))
+        runUntil(10_000)
+        assertEquals("3000 90 3C 50", sent().first())
+    }
+
+    @Test
+    fun `a pause inside the pause before the piece holds its start, and play begins it at once`() {
+        engine.load(piece { noteOn(0, 60); noteOff(500, 60) }, now)
+        engine.play(now, preRollNanos = 2_000 * ms)
+        runUntil(1_000)
+        engine.pause(now)
+        assertEquals(PlaybackStatus.Paused, engine.status)
+        assertEquals(0L, engine.positionMicros(now))
+        at(4_000)
+        engine.play(now)
+        runUntil(10_000)
+        assertEquals(
+            listOf("1000 B0 40 00", "1000 B0 7B 00", "4000 90 3C 50", "4500 80 3C 00", "4500 B0 40 00", "4500 B0 7B 00"),
+            sent(),
+        )
+    }
+
+    @Test
+    fun `a seek during the pause before the piece plays from the target at once`() {
+        engine.load(piece { noteOn(0, 60); noteOff(500, 60); noteOn(800, 62); noteOff(1_300, 62) }, now)
+        engine.play(now, preRollNanos = 2_000 * ms)
+        runUntil(500)
+        engine.seek(700_000L, now)
+        assertEquals(700_000L, engine.positionMicros(now))
+        runUntil(10_000)
+        assertEquals(
+            listOf("500 B0 40 00", "500 B0 7B 00", "600 90 3E 50", "1100 80 3E 00", "1100 B0 40 00", "1100 B0 7B 00"),
+            sent(),
+        )
+    }
+
+    @Test
+    fun `during the pause advance sends nothing and wakes at the anchor, when the first event is due`() {
+        engine.load(piece { noteOn(0, 60); noteOff(500, 60) }, now)
+        engine.play(now, preRollNanos = 2_000 * ms)
+        assertEquals(2_000 * ms, engine.anchorNanos)
+        assertEquals(engine.anchorNanos, engine.advance(now))
+        at(1_234)
+        assertEquals(engine.anchorNanos, engine.advance(now))
+        assertTrue(link.sent.isEmpty())
+    }
 }

@@ -22,6 +22,9 @@ object PlaybackLimits {
     val TempoPct = 25..200
     val Transpose = -12..12
     val VelocityPct = 50..150
+
+    /** The pause before each piece, in milliseconds (Piano › Playback, "Pause before each piece"). */
+    val PreRollMs = 0..5_000
 }
 
 /**

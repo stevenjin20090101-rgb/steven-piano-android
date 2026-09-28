@@ -61,6 +61,9 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * A piece or a fingering replaced while it is worked out stops at the analyses' next checkpoint, and a
  * start that replaces one still running waits [SETTLE_MS] first, so a burst of Next taps or transpose
  * steps reads and works out only the first and the last (the v1.3 delta audit, L1).
+ * Every piece that starts (a tap, the end of the one before, Repeat one) begins with the pause
+ * before each piece ([setPreRoll]; DESIGN.md › v1.5 — M16): the position runs below zero and the
+ * piano stays silent until it ends. Resuming never pauses first, and a seek ends the pause.
  */
 class Player(
     private val link: PianoLink,
@@ -89,6 +92,7 @@ class Player(
     // Owned by the scope's thread.
     private var queue = Queue.Empty
     private var defaultTempoPct = 100
+    private var preRollMs = 0L
     private var loadJob: Job? = null
     private var advanceJob: Job? = null
     private var fingerJob: Job? = null
@@ -206,6 +210,14 @@ class Player(
     /** The tempo each new piece starts at. */
     fun setDefaultTempo(pct: Int) {
         defaultTempoPct = pct.coerceIn(PlaybackLimits.TempoPct)
+    }
+
+    /**
+     * The silence before each piece starts, in milliseconds (0-5000; Piano › Playback). It is part of
+     * the gap between two pieces, which is the longer of it and [AUTO_ADVANCE_DELAY_MS].
+     */
+    fun setPreRoll(ms: Int) {
+        preRollMs = ms.coerceIn(PlaybackLimits.PreRollMs).toLong()
     }
 
     fun setTranspose(semitones: Int) = configure { copy(transpose = semitones.coerceIn(PlaybackLimits.Transpose)) }
@@ -344,10 +356,11 @@ class Player(
                 )
             }
             refinger()   // transpose or folding changed while it loaded
+            val preRoll = preRollMs * NANOS_PER_MS
             scheduler.submit { now ->
                 engine.load(midi, now)
                 engine.setTempo(tempo, now)
-                engine.play(now)
+                engine.play(now, preRoll)
             }
             withContext(io) { source.markPlayed(id) }
         }
@@ -400,15 +413,17 @@ class Player(
     }
 
     /**
-     * After a piece ends, 1.5 s later, whatever the queue says follows it (asked again then, as
-     * Up next or the modes may have changed meanwhile): the next piece, or with Repeat one the
-     * same piece again from the top, already loaded, without reading it again.
+     * After a piece ends, whatever the queue says follows it (asked again then, as Up next or the
+     * modes may have changed meanwhile): the next piece, or with Repeat one the same piece again
+     * from the top, already loaded, without reading it again. The pause before each piece is part
+     * of the gap, so the wait here is what is left of 1.5 s after it: the gap is the longer of the
+     * two (2 s with the default pause, never 3.5 s).
      */
     private fun autoAdvance() {
         if (queue.afterEnd() == null) return
         advanceJob?.cancel()
         advanceJob = scope.launch {
-            delay(AUTO_ADVANCE_DELAY_MS)
+            delay((AUTO_ADVANCE_DELAY_MS - preRollMs).coerceAtLeast(0L))
             val ended = queue.current ?: return@launch
             val after = queue.afterEnd() ?: return@launch
             setQueue(after)
@@ -416,11 +431,12 @@ class Player(
         }
     }
 
-    /** The piece that just ended plays again from its start: the engine still has it. */
+    /** The piece that just ended plays again from its start, after the pause before each piece: the engine still has it. */
     private fun restartCurrent(pieceId: Long) {
+        val preRoll = preRollMs * NANOS_PER_MS
         scheduler.submit { now ->
             engine.seek(0L, now)
-            engine.play(now)
+            engine.play(now, preRoll)
         }
         scope.launch { withContext(io) { source.markPlayed(pieceId) } }
     }
@@ -455,9 +471,10 @@ class Player(
         val duration = engine.piece?.durationMicros ?: 0L
         val shown = position
         if (shown.anchorSongMicros != engine.anchorSongMicros || shown.anchorNanos != engine.anchorNanos ||
-            shown.tempoPct != engine.tempoPct || shown.running != running || shown.durationMicros != duration
+            shown.tempoPct != engine.tempoPct || shown.running != running || shown.durationMicros != duration ||
+            shown.startMicros != engine.startMicros
         ) {
-            position = PositionClock(engine.anchorSongMicros, engine.anchorNanos, engine.tempoPct, running, duration)
+            position = PositionClock(engine.anchorSongMicros, engine.anchorNanos, engine.tempoPct, running, duration, engine.startMicros)
         }
         if (status != shownStatus || engine.tempoPct != shownTempo) {
             shownStatus = status
@@ -470,21 +487,29 @@ class Player(
         }
     }
 
-    /** The engine's timeline as last published, readable from any thread without allocating. */
+    /**
+     * The engine's timeline as last published, readable from any thread without allocating. While
+     * playing, a frame reads between where this run began ([startMicros]: below zero during the pause
+     * before a piece, down to minus the pause at the tempo) and the piece's end, so a frame timed a
+     * moment before the anchor never shows a position the piece was not at; otherwise the held
+     * position, never below zero.
+     */
     private class PositionClock(
         val anchorSongMicros: Long,
         val anchorNanos: Long,
         val tempoPct: Int,
         val running: Boolean,
         val durationMicros: Long,
+        val startMicros: Long,
     ) {
         fun at(nanos: Long): Long {
-            val micros = if (running) anchorSongMicros + (nanos - anchorNanos) * tempoPct / 100_000L else anchorSongMicros
-            return micros.coerceIn(0L, durationMicros)
+            if (!running) return anchorSongMicros.coerceIn(0L, durationMicros)
+            val micros = anchorSongMicros + (nanos - anchorNanos) * tempoPct / 100_000L
+            return maxOf(minOf(micros, durationMicros), minOf(startMicros, durationMicros))
         }
 
         companion object {
-            val Zero = PositionClock(0L, 0L, 100, false, 0L)
+            val Zero = PositionClock(0L, 0L, 100, false, 0L, 0L)
         }
     }
 

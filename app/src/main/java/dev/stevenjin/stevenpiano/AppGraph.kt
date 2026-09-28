@@ -233,6 +233,7 @@ class AppGraph(private val app: Application) {
         appScope.launch {
             settingsRepository.settings.collect { s ->
                 player.setDefaultTempo(s.defaultTempoPct)
+                player.setPreRoll(s.preRollMs)
                 player.setTranspose(s.transpose)
                 player.setVelocity(s.velocityPct)
                 player.setFold(s.foldOutOfRange)

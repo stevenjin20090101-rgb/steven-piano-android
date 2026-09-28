@@ -85,8 +85,11 @@ data class GroupSummaries(
         fun firmware(piano: PianoState): String =
             (piano as? PianoState.Ready)?.facts?.get("fw")?.trim()?.takeIf { it.isNotEmpty() } ?: UNKNOWN
 
-        /** The default tempo, "100%" (from M16, the pause before each piece comes first: "2 s pause · 100%"). */
-        fun playback(settings: PianoSettings): String = Format.percent(settings.defaultTempoPct)
+        /** The pause before each piece, then the default tempo: "2 s pause · 100%", or "No pause · 100%". */
+        fun playback(settings: PianoSettings): String {
+            val pause = if (settings.preRollMs == 0) "No pause" else "${Format.seconds(settings.preRollMs)} pause"
+            return "$pause · ${Format.percent(settings.defaultTempoPct)}"
+        }
 
         /** The note display's name; on wide screens the roll's style, as the Display page offers it there. */
         fun display(settings: PianoSettings, wide: Boolean): String =

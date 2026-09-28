@@ -156,4 +156,21 @@ class SettingsRepositoryTest {
         assertEquals(PianoSettings(), repository.settings.first())
         scope.cancel()
     }
+
+    @Test
+    fun `the pause before each piece is 2 s at first, remembered, and held to 0-5 s`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "preroll.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(2_000, repository.settings.first().preRollMs)
+        repository.setPreRoll(500)
+        assertEquals(500, repository.settings.first().preRollMs)
+        repository.setPreRoll(0)
+        assertEquals(0, repository.settings.first().preRollMs)
+        repository.setPreRoll(9_000)
+        assertEquals(5_000, repository.settings.first().preRollMs)
+        repository.setPreRoll(-500)
+        assertEquals(0, repository.settings.first().preRollMs)
+        scope.cancel()
+    }
 }

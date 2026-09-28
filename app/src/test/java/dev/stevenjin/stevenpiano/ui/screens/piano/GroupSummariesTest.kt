@@ -58,15 +58,19 @@ class GroupSummariesTest {
         for (state in listOf(PianoState.Unknown, PianoState.Unsupported)) {
             val rows = GroupSummaries.from(state, PianoSettings(), wide = false)
             assertEquals(listOf(unknown, unknown, unknown, unknown), listOf(rows.feel, rows.lighting, rows.pedal, rows.firmware))
-            assertEquals("100%", rows.playback)
+            assertEquals("2 s pause · 100%", rows.playback)
             assertEquals("Paper roll", rows.display)
         }
     }
 
     @Test
-    fun `Playback reads the default tempo`() {
-        assertEquals("100%", GroupSummaries.playback(PianoSettings()))
-        assertEquals("85%", GroupSummaries.playback(PianoSettings(defaultTempoPct = 85)))
+    fun `Playback reads the pause before each piece, then the default tempo`() {
+        assertEquals("2 s pause · 100%", GroupSummaries.playback(PianoSettings()))
+        assertEquals("2 s pause · 85%", GroupSummaries.playback(PianoSettings(defaultTempoPct = 85)))
+        assertEquals("No pause · 100%", GroupSummaries.playback(PianoSettings(preRollMs = 0)))
+        assertEquals("0.5 s pause · 100%", GroupSummaries.playback(PianoSettings(preRollMs = 500)))
+        assertEquals("2.5 s pause · 120%", GroupSummaries.playback(PianoSettings(preRollMs = 2_500, defaultTempoPct = 120)))
+        assertEquals("5 s pause · 100%", GroupSummaries.playback(PianoSettings(preRollMs = 5_000)))
     }
 
     @Test
@@ -84,7 +88,7 @@ class GroupSummariesTest {
         val piano = ready("fullpower" to "0", "volume" to "70", "leds" to "0", "pedalon" to "1", facts = mapOf("fw" to "emulator"))
         val rows = GroupSummaries.from(piano, PianoSettings(defaultTempoPct = 90, noteDisplay = NoteDisplay.FALLING), wide = false)
         assertEquals(
-            listOf("Volume 70%", "Off", "On", "emulator", "90%", "Falling notes"),
+            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes"),
             SettingsPage.entries.map { rows.of(it) },
         )
     }

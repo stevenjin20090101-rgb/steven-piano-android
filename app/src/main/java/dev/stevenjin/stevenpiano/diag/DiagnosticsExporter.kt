@@ -127,6 +127,7 @@ object DiagnosticsText {
         line("lastDeviceName", s.lastDeviceName)
         line("noteDisplay", s.noteDisplay)
         line("wideLayout", s.wideLayout)
+        line("preRollMs", s.preRollMs)
         line("defaultTempoPct", s.defaultTempoPct)
         line("transpose", s.transpose)
         line("velocityPct", s.velocityPct)

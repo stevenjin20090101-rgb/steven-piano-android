@@ -191,7 +191,8 @@ private val Bravura = FontFamily(Font(R.font.bravura))
  * system, and sounding notes (and the heads tied to them, as the cursor reaches each) turn the
  * sounding yellow ([LocalNoteSounding], DESIGN.md › v1.5 — M16) with the roll's 120 ms flip (a cut
  * when motion is reduced), then settle back to the secondary grey; beams, ties and rests stay grey.
- * Pages turn by themselves so the cursor is always in sight ([PageTurn]).
+ * Pages turn by themselves so the cursor is always in sight ([PageTurn]); during the pause before a
+ * piece (the position still below zero) no cursor is drawn.
  *
  * Agency: a horizontal swipe looks at other pages, and a Follow chip then waits at the top right;
  * tapping it, or the next turn the music makes, follows again. Tapping a bar seeks to it
@@ -807,7 +808,9 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     /**
      * The cursor ([cursorColor]) in the system sounding at [now], and every note sounding (or easing
      * across its edges over [flipMicros]) coloured through [ramp], from the upcoming grey to the
-     * sounding yellow: only where their pages are [shown], at [slotLeft] for each slot.
+     * sounding yellow: only where their pages are [shown], at [slotLeft] for each slot. Nothing
+     * while [now] is below zero (the pause before a piece: no note sounds yet, and the cursor
+     * waits for the music).
      */
     fun DrawScope.overlay(
         layout: ScoreLayout,
@@ -819,6 +822,7 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
         flipMicros: Long,
         cursorColor: Color,
     ) {
+        if (now < 0L) return
         val current = layout.systems[layout.systemAt(now)]
         val cursorSlot = slotOf(shown, current.page)
         if (cursorSlot >= 0) {

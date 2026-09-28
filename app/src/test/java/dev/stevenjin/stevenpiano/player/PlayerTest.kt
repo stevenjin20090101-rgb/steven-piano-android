@@ -208,6 +208,45 @@ class PlayerTest {
     private fun noteOns(): List<String> = link.messages.filter { it.startsWith("90 ") && !it.endsWith(" 00") }
 
     @Test
+    fun `each piece begins after the pause before it, and the gap between two is the longer of the pause and 1_5 s`() = runBlocking {
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 30)
+        val pressed = System.nanoTime()
+        onMain {
+            player.setPreRoll(200)
+            player.play(1, listOf(1, 2))
+        }
+        withTimeout(8_000) { while (link.messages.count { it == "90 3E 50" } < 1) delay(10) }
+        val sent = link.sent
+        val first = sent.first { it.message == "90 3C 50" }
+        val firstStop = sent.first { it.message == "B0 7B 00" }   // the end of the first piece: its stop sequence
+        val second = sent.first { it.message == "90 3E 50" }
+        assertTrue("the first piece waited ${(first.atNanos - pressed) / 1_000_000} ms", first.atNanos - pressed >= 200_000_000L)
+        val gapMs = (second.atNanos - firstStop.atNanos) / 1_000_000
+        assertTrue("the gap was $gapMs ms", gapMs >= 1_500)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `play after a pause begins at once, without the pause before the piece`() = runBlocking {
+        source.pieces[1] = piece(60, 5_000)
+        onMain {
+            player.setPreRoll(2_000)
+            player.play(1)
+        }
+        withTimeout(5_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        onMain { player.pause() }   // inside the pause before the piece: it holds the piece's start
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Paused } }
+        assertTrue(link.messages.none { it.startsWith("90 ") })
+        val resumed = System.nanoTime()
+        onMain { player.resume() }
+        withTimeout(2_000) { while (link.messages.none { it == "90 3C 50" }) delay(5) }
+        val waitedMs = (link.sent.first { it.message == "90 3C 50" }.atNanos - resumed) / 1_000_000
+        assertTrue("the first note came $waitedMs ms after Play", waitedMs < 1_000)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
     fun `Next tapped again and again reads and works out only the first piece and the last`() = runBlocking {
         for (id in 1L..5L) source.pieces[id] = piece(59 + id.toInt(), 5_000)
         source.loadDelayMs = 100   // reading a file takes a while

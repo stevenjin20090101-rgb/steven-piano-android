@@ -44,6 +44,12 @@ object Format {
 
     fun percent(pct: Int): String = "$pct%"
 
+    /** A short span of milliseconds in seconds, halves shown: "0 s", "0.5 s", "1 s", "2.5 s". */
+    fun seconds(millis: Int): String {
+        val tenths = (millis.coerceAtLeast(0) + 50) / 100
+        return if (tenths % 10 == 0) "${tenths / 10} s" else "${tenths / 10}.${tenths % 10} s"
+    }
+
     /** Semitones with their sign: "+2", "0", "−3" (a true minus sign). */
     fun semitones(n: Int): String = when {
         n > 0 -> "+$n"

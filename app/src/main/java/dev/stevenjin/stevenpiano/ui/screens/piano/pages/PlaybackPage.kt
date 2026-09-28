@@ -20,13 +20,17 @@ import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 
 /**
- * Playback: how the app sends a piece to the piano, in one section. Default tempo, Transpose and
- * Velocity (steppers), Fold notes outside C1–B7 and Skip drum channel (switches). M16 puts "Pause
- * before each piece" first. The hub's row reads the default tempo, "100%".
+ * Playback: how the app sends a piece to the piano, in one section. Pause before each piece (Off,
+ * then half seconds up to 5 s; 2 s at first), Default tempo, Transpose and Velocity (steppers),
+ * Fold notes outside C1–B7 and Skip drum channel (switches). The hub's row reads the pause and the
+ * default tempo, "2 s pause · 100%".
  */
 @Composable
 fun PlaybackPage(settings: PianoSettings, vm: PianoViewModel) {
     SectionRule()
+    StepperRow("Pause before each piece") {
+        StepperControl(settings.preRollMs, PlaybackLimits.PreRollMs, PRE_ROLL_STEP_MS, ::pauseLabel, "Shorter pause", "Longer pause", vm::setPreRoll)
+    }
     StepperRow("Default tempo") {
         StepperControl(settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo)
     }
@@ -39,3 +43,9 @@ fun PlaybackPage(settings: PianoSettings, vm: PianoViewModel) {
     SwitchRow("Fold notes outside C1–B7", settings.foldOutOfRange, vm::setFold)
     SwitchRow("Skip drum channel", settings.skipDrumChannel, vm::setSkipDrums)
 }
+
+/** The pause steps by half a second. */
+private const val PRE_ROLL_STEP_MS = 500
+
+/** "Off", "0.5 s", "1 s", "2 s", "2.5 s". */
+private fun pauseLabel(ms: Int): String = if (ms == 0) "Off" else Format.seconds(ms)

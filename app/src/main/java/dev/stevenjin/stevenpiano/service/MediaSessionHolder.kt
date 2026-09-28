@@ -105,6 +105,11 @@ class MediaSessionHolder(
         }
         publishQueue(queue)
         val playing = state.status == PlaybackStatus.Playing
+        // Never a negative position: during the pause before a piece the system is told the piece is
+        // at its start as of the moment the pause ends, so its own clock waits there, then runs.
+        val micros = player.positionMicrosNow()
+        val positionMs = micros.coerceAtLeast(0L) / 1_000L
+        val waitMs = if (playing && micros < 0L) -micros * 100L / state.tempoPct.coerceAtLeast(1) / 1_000L else 0L
         val code = when (state.status) {
             PlaybackStatus.Playing -> PlaybackStateCompat.STATE_PLAYING
             PlaybackStatus.Paused -> PlaybackStateCompat.STATE_PAUSED
@@ -114,7 +119,7 @@ class MediaSessionHolder(
             PlaybackStateCompat.Builder()
                 .setActions(ACTIONS)
                 .setActiveQueueItemId(queue.currentUid ?: MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong())
-                .setState(code, player.positionMicrosNow() / 1_000L, if (playing) state.tempoPct / 100f else 0f, SystemClock.elapsedRealtime())
+                .setState(code, positionMs, if (playing) state.tempoPct / 100f else 0f, SystemClock.elapsedRealtime() + waitMs)
                 .build(),
         )
     }
