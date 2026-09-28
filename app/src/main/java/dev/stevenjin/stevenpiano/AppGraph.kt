@@ -270,7 +270,7 @@ class AppGraph(private val app: Application) {
             server = if (fake != null) FakeFirmwareServer(FakeOta::fromProperty) else HttpUpdateServer(UpdateSource.firmware, log = debugLog(FIRMWARE_TAG)),
             publicKey = if (fake != null) FirmwareKeys.rfc8032Test else FirmwareKeys.author,
             appVersionCode = BuildConfig.VERSION_CODE,
-            platformEd25519 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+            platformEd25519 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,   // asked first where it has Ed25519; Android 14 has none
             online = network.online,
             power = { batteryState(app) },
             scope = appScope,

@@ -28,13 +28,15 @@ import java.security.spec.X509EncodedKeySpec
 /**
  * Ed25519 signature checks (RFC 8032), for the piano's firmware releases (BLE_OTA.md › 8, 10).
  *
- * Android 13 and newer carry Ed25519 in the platform's own provider, which is asked there
- * ([check] with `platformFirst`, from `Build.VERSION.SDK_INT >= 33`); older versions, and a
- * platform that turns out to have none after all, use EdDSA-Java (`net.i2p.crypto:eddsa` 0.3.0,
- * CC0), linked for exactly this. The library is asked only when the platform cannot check Ed25519
- * at all, never a second time about a signature the platform refused. Both refuse a signature whose
- * S is not below the group order (RFC 8032 › 5.1.7): the library's own check is added here. Never
- * throws; anything malformed is simply not a valid signature.
+ * The platform's own provider is asked first from Android 13 on ([check] with `platformFirst`,
+ * from `Build.VERSION.SDK_INT >= 33`, as the plan expected Ed25519 there); where it has none, and on
+ * older versions, EdDSA-Java answers (`net.i2p.crypto:eddsa` 0.3.0, CC0), linked for exactly this.
+ * Measured on Android 14 (API 34, 2026-09-28): Conscrypt offers X25519 (XDH) but no Ed25519
+ * KeyFactory or Signature, so there too the library answers; the JDK's Ed25519 answers in unit
+ * tests. The library is asked only when the platform cannot check Ed25519 at all, never a second
+ * time about a signature the platform refused. Both refuse a signature whose S is not below the
+ * group order (RFC 8032 › 5.1.7): the library's own check is added here. Never throws; anything
+ * malformed is simply not a valid signature.
  */
 object Ed25519 {
     const val PUBLIC_KEY_BYTES = 32

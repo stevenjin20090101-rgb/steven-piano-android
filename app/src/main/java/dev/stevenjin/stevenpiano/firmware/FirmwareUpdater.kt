@@ -196,12 +196,14 @@ class FirmwareUpdater(
         if (before.manifest == null) _state.compareAndSet(before, FirmwareState.Checking)
         val result = try {
             val manifest = FirmwareManifest.parse(server.manifest())
-            if (!manifest.verify(publicKey, platformEd25519)) {
+            val signature = withContext(compute) { manifest.check(publicKey, platformEd25519) }
+            if (!signature.valid) {
                 log("Firmware check: the release manifest for ${manifest.version} is not signed with the author's key; not offered")
                 FirmwareState.Failed(FirmwareFailures.UNSIGNED, retryable = false, check = true)
             } else {
                 lastManifest = manifest
-                weigh(manifest, piano.version).also { log("Firmware check: ${describe(it, piano)}") }
+                val engine = if (signature.engine == Ed25519.Engine.Platform) "the platform's Ed25519" else "EdDSA-Java"
+                weigh(manifest, piano.version).also { log("Firmware check: ${describe(it, piano)}; signature checked with $engine") }
             }
         } catch (e: CancellationException) {
             _state.compareAndSet(FirmwareState.Checking, before)

@@ -149,7 +149,7 @@ class FirmwareUpdaterTest {
         rig.check()
         assertEquals(FirmwareState.Available(manifest), rig.updater.state.value)
         assertTrue(rig.updater.state.value.offered)
-        assertTrue(rig.logged.contains("Firmware check: 2.1.0 is available (the piano runs 2.0.0+a1b2c3d)"))
+        assertTrue(rig.logged.contains("Firmware check: 2.1.0 is available (the piano runs 2.0.0+a1b2c3d); signature checked with EdDSA-Java"))
     }
 
     @Test

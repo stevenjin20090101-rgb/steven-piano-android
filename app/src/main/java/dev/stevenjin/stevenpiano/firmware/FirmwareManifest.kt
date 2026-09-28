@@ -63,8 +63,11 @@ data class FirmwareManifest(
      * Whether [sig] is [publicKey]'s Ed25519 signature of the 32 raw bytes of [sha256] (BLE_OTA.md
      * › 8): the release is the author's. [platformFirst]: Android 13 and newer ([Ed25519]).
      */
-    fun verify(publicKey: ByteArray, platformFirst: Boolean = false): Boolean =
-        Ed25519.verify(publicKey, digest(), signature(), platformFirst)
+    fun verify(publicKey: ByteArray, platformFirst: Boolean = false): Boolean = check(publicKey, platformFirst).valid
+
+    /** [verify], with the engine that answered (the platform's or the library's), for the log. */
+    fun check(publicKey: ByteArray, platformFirst: Boolean = false): Ed25519.Answer =
+        Ed25519.check(publicKey, digest(), signature(), platformFirst)
 
     /** Whether this release needs a newer app than the one whose versionCode is [appVersionCode]. */
     fun needsNewerApp(appVersionCode: Int): Boolean = minAppVersionCode > appVersionCode
