@@ -204,7 +204,7 @@ class SamplerTest {
         val model = ScriptedModel { context ->
             logits().apply {
                 when (ScriptedModel.slot(context)) {
-                    0 -> this[ScriptedModel.lastTime(context) + 10] = 0f
+                    0 -> this[ScriptedModel.lastTime(context) + 15] = 0f   // 150 ms: clear of the same-key rule
                     1 -> this[Amt.DUR_OFFSET + 20] = 0f
                     else -> {
                         this[11_060] = 5f
@@ -216,7 +216,7 @@ class SamplerTest {
         val threeSixties = listOf(AmtEvent(0, 20, 60), AmtEvent(10, 20, 60), AmtEvent(20, 20, 60))
         val out = Sampler(model).generate(threeSixties, SamplingSettings.Greedy, budget = 36)
         assertEquals(listOf(60, 64, 60, 60, 60, 60, 64, 60, 60, 60, 60, 64), out.events.map { it.pitch })
-        assertEquals((1..12).map { 20 + 10 * it }, out.events.map { it.time })
+        assertEquals((1..12).map { 20 + 15 * it }, out.events.map { it.time })
     }
 
     @Test

@@ -40,7 +40,7 @@ class Generation(val events: List<AmtEvent>, val tokens: IntArray, val slides: I
  * - **Repetition guards.** No more than [MAX_REPEATS] identical notes in a row (after four the fifth
  *   must differ), and no more than [MAX_RESTS] rest in a row (a rest is a second without a new note:
  *   left alone the model can fall into long runs of them, measured on Clair de lune's seed, and the
- *   piano, without pedal, falls silent). And a key struck less than [SAME_KEY_TICKS] (100 ms) ago is
+ *   piano, without pedal, falls silent). And a key struck less than [SAME_KEY_TICKS] (120 ms) ago is
  *   not offered: the piano can't strike it again that soon ([Postprocess] would merge the two), and
  *   left alone the model can fall into restriking a few keys at once, spending its budget in seconds of
  *   music. At most [MAX_CHORD] notes start at one instant (ten fingers; the model otherwise can pile up a
@@ -338,8 +338,8 @@ class Sampler(
         /** At most this many rests in a row (each a second without a new note). */
         const val MAX_RESTS = 1
 
-        /** The piano's re-strike: a key struck again at least this many ticks (100 ms) later. */
-        const val SAME_KEY_TICKS = 10
+        /** A key struck again at least this many ticks (120 ms) later: [Postprocess.SAME_KEY_MICROS]. */
+        const val SAME_KEY_TICKS = 12
 
         /** At most this many notes start at one instant. */
         const val MAX_CHORD = 10

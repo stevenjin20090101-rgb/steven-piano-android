@@ -22,7 +22,7 @@ import kotlin.random.Random
 
 /**
  * The composer's post-processor (v1.7 — M24): the light 1/16 grid at the chosen tempo, the piece moved
- * to start on a beat, folding into 24–107, one strike of a key per 100 ms, velocities by mood within
+ * to start on a beat, folding into 24–107, one strike of a key per 120 ms, velocities by mood within
  * 20–110 with the closing fade, no pedal, and a MIDI file the app's parser reads back.
  */
 class PostprocessTest {
@@ -111,18 +111,30 @@ class PostprocessTest {
     }
 
     @Test
-    fun `a key is struck at most once in 100 ms, and let go before it is struck again`() {
+    fun `a key is struck at most once in 120 ms, and let go before it is struck again`() {
         val events = listOf(
             note(1_500, 50, 60),    // 0-500 ms
             note(1_505, 20, 60),    // 50 ms later: too soon, joins the first
             note(1_502, 10, 64),    // another key: untouched
             note(1_530, 30, 60),    // 300 ms: a strike of its own; the first is let go here
+            note(1_600, 5, 67),
+            note(1_611, 5, 67),     // 110 ms: the piano could, but the margin says no; joins
+            note(1_700, 5, 69),
+            note(1_712, 5, 69),     // 120 ms: a strike of its own
         )
         val piece = Postprocess.compose(events, 120, Mood.Calm, even, strength = 0.0)
         assertEquals(
-            listOf(Triple(0L, 300_000L, 60), Triple(20_000L, 120_000L, 64), Triple(300_000L, 600_000L, 60)),
+            listOf(
+                Triple(0L, 300_000L, 60), Triple(20_000L, 120_000L, 64), Triple(300_000L, 600_000L, 60),
+                Triple(1_000_000L, 1_170_000L, 67), Triple(2_000_000L, 2_060_000L, 69), Triple(2_120_000L, 2_180_000L, 69),
+            ),
             piece.notes.map { Triple(it.onMicros, it.offMicros, it.key) },
         )
+        // Written at the slowest tempo, where a tick is 3.1 ms, no two strikes of a key come under 100 ms in the file.
+        val slow = Postprocess.compose(randomEvents(Random(40), 3_000), 40, Mood.Wild, Random(6))
+        val file = SmfParser.parse(SmfWriter.write(slow.notes, tempoMicros = SmfWriter.tempoOf(40)))
+        val starts = (0 until file.noteCount).groupBy({ file.notes.note(it) }, { file.notes.startMicros[it] })
+        for ((key, times) in starts) for ((a, b) in times.sorted().zipWithNext()) assertTrue("key $key in the file: ${b - a} µs", b - a >= 100_000)
         // Keys folded onto one another count as one key.
         val folded = Postprocess.compose(listOf(note(1_500, 100, 12), note(1_504, 100, 24)), 120, Mood.Calm, even, strength = 0.0)
         assertEquals(1, folded.notes.size)

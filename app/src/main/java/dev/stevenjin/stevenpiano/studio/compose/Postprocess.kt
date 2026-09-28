@@ -34,9 +34,9 @@ class Composition(val notes: List<SmfWriter.Note>, val bpm: Int, val durationMic
  *    first note): each onset moves [STRENGTH] of the way to its nearest grid line, its end with it.
  * 3. The piece starts at its first note, moved back by whole beats so the grid stays on the beat.
  * 4. **Folding** into the piano's 24–107 with [KeyMap] (by octaves).
- * 5. **One key, one strike at a time**: the piano needs [SAME_KEY_MICROS] between two onsets of a key,
- *    so a strike sooner than that joins the note before it (which lasts to the later end), and a
- *    note still held when its key is struck again ends there.
+ * 5. **One key, one strike at a time**: the piano needs 100 ms between two onsets of a key, so a strike
+ *    sooner than [SAME_KEY_MICROS] (120 ms, a margin over it) joins the note before it (which lasts to
+ *    the later end), and a note still held when its key is struck again ends there.
  * 6. **Velocities by mood** ([Mood.velocity], [Mood.spread]): the top note of each chord sings out,
  *    the bottom one and the inner voices step back, higher notes a touch brighter, a four-bar swell,
  *    a little unevenness; then a **closing fade** over the last [FADE_BARS] bars (4/4 at the tempo) to
@@ -53,8 +53,13 @@ object Postprocess {
     const val MIN_VELOCITY = 20
     const val MAX_VELOCITY = 110
 
-    /** The piano's re-strike: two onsets of one key at least 100 ms apart. */
-    const val SAME_KEY_MICROS = 100_000L
+    /**
+     * Two onsets of one key at least 120 ms apart: the piano needs 100 ms, and the player's guard
+     * ([dev.stevenjin.stevenpiano.midi.NoteRouter]) thins a strike that comes sooner by the clock it is
+     * sent at; the 20 ms more keep the file's ticks (up to 3 ms at 40 bpm) and the player's timing from
+     * ever bringing a composition's two strikes under it (measured: a 100 ms gap was 99 ms in the file).
+     */
+    const val SAME_KEY_MICROS = 120_000L
     const val MIN_NOTE_MICROS = 60_000L
     const val FADE_BARS = 2
     const val BEATS_PER_BAR = 4
