@@ -581,8 +581,8 @@ internet or any server of ours.
 
 **The panel** has what the app has: Now playing (the time running, the transport,
 tempo, a channel's volume), Up next (reorder, remove, clear), the Library (search,
-playlists, composers; Play, Play next, Add to queue), Channels, Schedule (coming in
-the next update), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
+playlists, composers; Play, Play next, Add to queue), Channels, Schedule (see
+*Schedules*), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
 to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
 tally) and **Piano** (the piano's Feel, Lighting and Pedal settings, Read status, All
 keys off, Save now). It updates as things change on the tablet, and it follows the
@@ -794,3 +794,47 @@ The full audit, every finding and what was done about it, is in
 MIT licensed with attribution preserved: see `LICENSE` and `AUTHORS`. Every
 source file is covered by an Ed25519-signed manifest; `python3
 provenance/verify.py` checks it (see `PROVENANCE.md`).
+
+## Schedules
+
+The piano can play by itself at set times, as a Disklavier's timer does: a channel, a playlist
+or a piece, on chosen days, at a start time, until an end time or its end, at a volume.
+**Piano › Schedule** (the hub's row reads when the next one starts, "Next Wed 12:30"):
+
+1. **Add schedule**: choose the days (Weekdays and Every day are one tap), the start time, and
+   an end time or **Until the end** (a playlist or a piece plays out; a channel plays until
+   someone stops it). An end before the start is past midnight: "The next day".
+2. Under PLAYS, choose a channel, a playlist or a piece (search by title or composer).
+3. **Set the volume** (70% at first): the piano's own volume while it plays, or how hard its
+   keys are struck where the piano has none; what was there comes back when it ends, and the
+   piano never saves it. Off, the piano plays as it is set, and a channel at its own volume.
+4. **Save.** The row reads "Weekdays 12:30 · Calm channel · until 13:15 · 70%"; its switch
+   turns it off and on; a tap edits it; a long press offers Edit and Delete.
+
+A channel's card has **Schedule** in its long-press menu too, with that channel chosen. With
+nothing loaded, Now playing (and the tablet's panel) shows the next one: "Next: Wednesday 12:30,
+Calm". The web panel's **Schedule** page lists, adds, edits and deletes them the same way.
+
+**The tablet must be on**, charged and near the piano, with Bluetooth on: it is the tablet
+that starts each schedule, at the minute, with its screen off and asleep (an exact alarm wakes
+it). If the piano isn't connected, the tablet reaches for it and waits 20 seconds; if the piano
+doesn't come (switched off, out of range, another device holding it), nothing plays and the
+page says so: "Missed: Wednesday 12:30 (piano not connected)", also in Share diagnostics'
+connection log. A schedule replaces whatever was playing; at its end time the tablet stops what
+the schedule started, but never something someone chose meanwhile. A tablet switched off misses
+what falls while it is off; after it restarts, the next schedule is set again by itself (the app
+need not be opened). Set the app's battery use to *Unrestricted* (see *Keep playing with the
+screen off*).
+
+Android 13 and newer let the app start at an exact time by itself. On Android 12 the person may
+take that away (Settings › Apps › Special app access › Alarms & reminders): the page then shows
+**Allow exact alarms**, which opens that setting, and no schedule starts until it is allowed.
+
+**On the piano** (add to *Test it on the piano*):
+
+- [ ] A schedule two minutes ahead with the tablet's screen off and the piano not connected: at
+      the minute the tablet connects and plays at the schedule's volume; at the end time the
+      piano stops and its volume comes back.
+- [ ] The piano switched off: 20 seconds after the minute the page reads "Missed: … (piano not
+      connected)".
+- [ ] Restart the tablet with a schedule ahead and don't open the app: it still plays.
