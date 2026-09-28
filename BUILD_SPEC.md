@@ -4398,3 +4398,234 @@ reports it now). `unzip -l` of the release APK (13,441,796 bytes; 13,417,624 wit
 | `lib/{arm64-v8a,armeabi-v7a,x86,x86_64}/libdatastore_shared_counter.so` | 10,360 · 8,432 · 7,976 · 9,424 |
 
 No `libonnxruntime*` outside `arm64-v8a`. `lint`: 0 errors, 28 warnings; `checkOnnxTelemetry` passes.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- The engine (branch `m24-composer`, merged at `3591813`): `M/studio/compose/AmtTokenizer.kt` (`Amt`,
+  `AmtEvent`, `SeedNote`, `AmtTokenizer`), `PromptBuilder.kt` (`SamplingSettings`, `Mood`, `MusicKey`,
+  `SeedPiece`, `SeedFacts`, `ComposeRequest`, `Prompt`, `PromptBuilder`), `ComposerModel.kt`
+  (`ComposerModel`, `OrtComposerModel`), `Sampler.kt` (`Stop`, `Generation`, `Sampler`),
+  `Postprocess.kt` (`Composition`, `Postprocess`), `ComposeFailures.kt`.
+- `M/ui/screens/piano/pages/ComposeSheet.kt`; `M/ui/components/SheetChip.kt` and `PieceSearch.kt`
+  (`PieceSearch`, `SheetChoiceRow`, `SheetNote`, `pieceMeta`: the schedule editor's, now shared).
+- Tests: `T/studio/compose/AmtTokenizerTest`, `PromptBuilderTest`, `SamplerTest`, `PostprocessTest`,
+  `ComposerTest` (the real model when `-PstudioModels` names the spike's exports, else skipped),
+  `ComposerFixtures`.
+
+Changed: `app/build.gradle.kts`, `app/lint.xml`; `M/midi/SmfWriter.kt` (a tempo); `M/studio/Studio.kt`
+(`SeedSource`, `ComposeOrder`, `SeedChoice`; `compose`, `seedChoice`), `StudioJobs.kt`
+(`JobKind.Compose`, `JobStep.Composing`), `StudioAvailability.kt` (`MemoryGate.COMPOSING_FREE_BYTES`,
+`canStartComposing`), `ModelCatalogue.kt` (the composer's use), `ModelInstaller.kt` (`NO_COMPOSER`,
+`COMPOSER_DAMAGED`), `StudioPieces.kt` (`addComposition`, `compositionTitle`,
+`compositionDescription`, `mannerOf`), `AppStudioLibrary.kt` (`LibrarySeeds`); `M/AppGraph.kt`;
+`M/data/db/PieceDao.kt` (`seedPiece`), `M/data/LibraryRepository.kt` (`seedPiece`);
+`M/service/StudioService.kt`; `M/ui/StudioCopy.kt`; `M/ui/screens/piano/pages/StudioPage.kt`;
+`M/ui/screens/library/AddSheet.kt` (`StudioEntry` for `TranscribeEntry`), `LibraryScreen.kt`;
+`M/ui/screens/nowplaying/StudioReviewBanner.kt`; `M/ui/screens/schedule/ScheduleEditorSheet.kt` (the
+shared chip and search); `M/web/WebBackend.kt` (`StudioCompose`), `WebApi.kt`, `WebServer.kt`,
+`AppWebBackend.kt`; `assets/web/app.js`, `style.css`; tests `SmfWriterTest`, `StudioTest`,
+`StudioCopyTest`, `MemoryGateTest`, `StudioPiecesTest`, `FakeWebBackend`, `WebServerTest`,
+`WebApiTest`, `WebAssetsTest`; `DESIGN.md`, `README.md`, `docs/SECURITY_AUDIT.md`.
+
+## The engine (`studio/compose/`)
+
+- `AmtTokenizer`: the vocabulary of `anticipation` at af37397 (time 0–9,999 and duration 0–999 in
+  10 ms ticks, note 11,000 + 128 × instrument + pitch, REST 27,512, controls 27,513–55,024 and the
+  specials 55,025–55,027 never produced) and a port of `midi_to_events`, `clip`, `pad`, `unpad`,
+  `translate`, `min_time`/`max_time`, tokens and `decode`. Times as mido makes them: each gap's
+  seconds summed in floating point over the parsed piece's events and rounded half to even (the Bach
+  fixture's key 62 at exactly 707.5 ticks is 707, as the package wrote it); a gap whose sum departs
+  from the parser's microseconds by over 2 µs held a tempo change and takes the parser's time.
+  Channel 10 is left out and every note is the piano's. The fixture's 214-token seed comes out
+  token for token.
+- `PromptBuilder`: the seed is the piece's first 15 s from its first note, time-scaled to the chosen
+  tempo (the seed's own tempo, rounded, leaves it untouched), transposed to the chosen key by
+  signature (up or down: fewer notes off 24–107, then the smaller move, then toward the middle),
+  folded into 24–107, padded with rests, after AUTOREGRESS. `facts`: the key from the file's key
+  signature in force at the seed's start (its major or relative minor, by the notes' Krumhansl–
+  Kessler profile), else from the notes over all 24 keys; the tempo as the tempo map's beats over
+  the 15 s. Moods: Calm 0.8 / 0.9, Bright 1.0 / 0.95, Wild 1.15 / 0.98, Melancholy 0.85 / 0.9
+  (temperature / top-p), with velocities 46, 66, 78, 52 and spreads 8, 12, 18, 10. Budget: 1,800
+  tokens a minute, at most 9,000; the end time the seed's 15 s plus the length.
+- `OrtComposerModel`: `composer-v1.onnx` with transcription's session options; `input_ids`,
+  `attention_mask`, `position_ids` and the 24 `past_key_values`, `present.*` fed back as the next
+  past, the logits into one pinned buffer; at most 1,024 positions.
+- `Sampler`: the package's masks (no controls or specials; a time from the current time on, a
+  duration, and a piano note or a rest), NaN and infinities masked; temperature, then top-p
+  (Hugging Face's rule); greedy = argmax. Guards: no more than 4 identical notes in a row and
+  `MAX_RESTS` 1 rest in a row; no key struck again within `SAME_KEY_TICKS` 12 (120 ms); at most
+  `MAX_CHORD` 10 notes at one instant (then the time must move on); a rest where no key is left. The
+  window slides before an event that wouldn't fit, or 90 s past its origin: the last 170 events
+  (none over 50 s back), re-based, prefilled after AUTOREGRESS. The cancel before every token, the
+  memory every 100 tokens and before a slide, progress (tokens, and the larger of the budget spent
+  and the music written toward the end time) every 100 tokens and at the end. Stops at the budget,
+  the end time, or SEPARATOR when `allowEnd` opens it (never, as the moods have it).
+- `Postprocess`: rests out, notes at least 60 ms; each onset half-way to its sixteenth at the chosen
+  tempo; the piece from its first beat; keys folded into 24–107; a key's strike under
+  `SAME_KEY_MICROS` 120,000 after its last joins it, a note held into its key's next strike ends
+  there; velocities by mood (the top of a chord up, the bottom and inner voices down, a register
+  tilt, a four-bar swell, a touch of the job's Random) with the last two bars faded to 45 %, held
+  to 20–110; no pedal.
+
+## The job (`studio/Studio.kt`, `StudioPieces.kt`, `AppStudioLibrary.kt`)
+
+- `Studio.compose(ComposeOrder(pieceId, ComposeRequest), name)`: a `Compose` job, after the composing
+  model's download when it isn't installed. On the job thread: Studio's support; the model opened
+  (its hash once per process; `NO_COMPOSER`, `COMPOSER_DAMAGED`); `MemoryGate.canStartComposing`
+  (700 MiB above the threshold, not `lowMemory`; else `BUSY`); the seed from `SeedSource` (the piece
+  named, else `defaultPieceId`: `PieceDao.seedPiece`, the piece played last whose composer isn't
+  "Made in Studio", else the first by title; `EMPTY_LIBRARY`, `SEED_GONE`, `NO_SEED`); the prompt;
+  `Sampler(model, Random(seed), cancelled, memoryHolds = canContinue)` with the job's progress
+  (`JobStep.Composing`); `Postprocess` of the generated events only; `addComposition`; `review.made`.
+  A failure's line by kind (`ComposeFailures.RAN_OUT`, `FAILED`). The composer can't be removed while
+  a composition waits or runs. The figures (log, and the link's trail for Share diagnostics; no
+  title): "Studio: composed 121.1 s of music in 5.2 s (912 tokens, 5.7 ms a token, 2 slides, stop
+  endtime), 235 notes at 68 bpm, calm, 2 min; seed 1836982538541; peak VmHWM 577108 kB".
+- `seedChoice(pieceId)`: the seed and its facts, for the sheet and the panel, off the main thread.
+- `StudioPieces.addComposition`: title "Composition · Sep 28, 2026 2:05 PM" (`FormatStyle.MEDIUM`
+  date and `SHORT` time in the device's locale), composer "Made in Studio", the MIDI written at the
+  composition's tempo (`SmfWriter.tempoOf`) with the text "Made in Studio, yyyy-MM-dd HH:mm:ss",
+  imported through `importOpened`, then described "Made in Studio · in the manner of <title>
+  (<composer>)". `LibrarySeeds` reads a seed through `LibraryRepository.load` (the player's parser).
+- `SmfWriter.write(..., tempoMicros)`: the one tempo and every tick at it; 120 bpm by default (M23's
+  files byte for byte as before).
+
+## UI
+
+- `ComposeSheet` (from the Studio page's COMPOSE and the Library's + sheet): MOOD, KEY (twelve
+  `SheetChip`s in the mode's spelling, Major · Minor), TEMPO and LENGTH (`StepperRow` +
+  `StepperButtons`, repeating while held), IN THE MANNER OF (`PieceSearch` behind Change); the key
+  and tempo follow the seed until changed (and the key the mood's suggestion); Compose passes the
+  seed's id and title.
+- `StudioPage`: COMPOSE after TRANSCRIBE (`StudioCopy.COMPOSE`, `COMPOSE_NOTE`, `withDownload`), its
+  memory line; job titles by `StudioCopy.jobTitle` ("In the manner of Clair de lune" until the piece
+  exists). `AddSheet(..., studio: List<StudioEntry>)`: Transcribe and Compose under one hairline.
+  `StudioReviewBanner`: `StudioCopy.reviewLine` from the piece's artwork row (a composition's line
+  says what it is in the manner of). `StudioCopy.hub`: "Composing 42%".
+
+## Web (`/api/studio/compose`, `/api/studio/seed`)
+
+- `POST /api/studio/compose` (write): `WebApi.composeOrder`: only `pieceId` (an id, or absent/null:
+  the default seed), `mood` (calm, bright, wild, melancholy), `key` (`{tonic: 0–11, minor}` or null),
+  `bpm` (40–200 or null), `minutes` (1–5); anything else 400. Studio unable to run: 409
+  "unavailable"; the piece not in the library: 404; else 202 `{job}`. The write matrix: 25 routes.
+- `GET /api/studio/seed[?piece=<id>]` (read): `{pieceId, title, composer, key: {tonic, minor,
+  label}, bpm}`; 404 without a piece, 400 for a malformed id.
+- The page (`app.js`): `renderCompose`, `composeEditor`, `stepperField` + `holdToRepeat` (the value
+  changes in place so a held button keeps its hold), `seedPart` (the search as the schedule editor's),
+  `sendCompose`; the styles shared with the schedule editor (`.compose-editor`, `.compose-start`).
+
+## Greps (v1.7 — M24)
+
+M23's hold: no `Color(0x` outside `ui/theme`; no `0.0.0.0` or `Access-Control` in `app/src/main`;
+`DisplayBlack` in `Color.kt` and `Theme.kt`; `LocalNoteSounding` in `Theme.kt` and `ScorePages.kt`;
+Haze imported in `Glass.kt` only; no `Modifier.blur`; no pure black or white in `assets/web`;
+`ai.onnxruntime` only under `studio/` (the compose package included), the R8 rule and the build's
+check; no `TelemetryInitializer` in any merged manifest.
+
+## Measured (September 2026, `steven_piano`, API 34, arm64, 4 GB, debug build, the emulated piano)
+
+Booted headless as M23 (`-memory 4096 -no-snapshot-save`, port 5556), the models from the Mac's
+local server (6 MB/s, `debug.stevenpiano.modelsurl`), Nearby devices granted for the emulated
+piano (revoked after). The Mac was busy throughout (load average 8–13; a second emulator running),
+which the per-token times show.
+
+- **Tests**: 1,137, none failing (1,123 before; 12 skipped without `-PstudioModels`, 8 with it: then
+  `ComposerTest`'s three and `TranscriberTest`'s real-model case run and pass, the INT8 fixture's 64
+  greedy tokens exactly). `lint`: 0 errors, 28 warnings. `check` passes (`checkDebugOnnxTelemetry`,
+  `checkReleaseOnnxTelemetry`); no compiler warnings in the app's sources. **The release APK is
+  13,471,172 bytes**, the debug APK 28,777,600; `lib/` as in *The build* above.
+- **Download**: Piano › Studio › Composing › Download: "Downloading · 36 of 173 MB", then
+  "Studio: composer-v1.onnx downloaded and verified", "Installed · 173 MB · Apache 2.0".
+- **The seeds**: Clair de lune (Suite bergamasque's MIDI, 733 tempo changes) D♭ major, 68 bpm (F
+  minor before `cf3bff3`); Für Elise A minor, 69 bpm (its file says C major).
+- **Two minutes of Calm in the manner of Clair de lune**, from the sheet (the seed the default, the
+  piece played last): 121.1 s of music in **5.2 s** (912 tokens, 5.7 ms a token, 2 slides), 235
+  notes at 68 bpm, velocities 20–55; the process 226,788 kB before, **577,108 kB at its peak**
+  (VmHWM; `dumpsys meminfo` TOTAL RSS 531,212, PSS 412,854 kB mid-way), about 245 MB after. On the
+  final build, a fresh process with the Mac at load 10: 119.7 s of music in 32.1 s (1,920 tokens,
+  16.7 ms a token), 583 notes, 256,724 → **630,932 kB**.
+- **One minute of Wild in the manner of Für Elise**, from the web panel's form (Für Elise found
+  through its search): 61.2 s of music in **9.5 s** (861 tokens, 11.0 ms a token, 1 slide), 280
+  notes at 69 bpm; 224,876 → **634,524 kB** (TOTAL RSS 634,128, PSS 517,035). On the final build,
+  load 13: the 1,800-token budget ran out at 42.3 s of music (570 notes, 13.5 a second) in 30.9 s,
+  212,840 → 630,908 kB.
+- **Five minutes** (Wild, Wild, Melancholy): 301.1 s in 24.6 s (3,861 tokens, 6 slides, 1,268
+  notes), 301.8 s in 12.8 s (2,499 tokens), 300.4 s in 25.4 s (4,596 tokens, 8 slides, 1,532 notes);
+  peak 634,624–638,208 kB.
+- **The model's ruts** (found here, measured on the Mac with the real model and the real Sampler,
+  Clair de lune's seed, Calm, two minutes, ten random seeds): the first build's piece had 88 notes
+  and 83 one-second rests in 116 s. Before the guards, 3 of 10 runs were rest-bound (0.59–1.45 notes
+  a second) and some restruck a few keys at one instant (1,174–1,195 notes in 13–59 s of music, the
+  100 ms rule keeping 42–555 of them, the budget spent: a "two-minute" piece of 13–64 s). With the
+  guards, thirty runs (Clair de lune Calm and Wild two minutes, Für Elise Wild one minute) all stop
+  at their end time with the length asked (117–130 s, 60–61 s), 2.4–7.3 notes a second in Calm,
+  1.6–6.9 in Wild, 3.1–7.2 for Für Elise, at most 2,610 of 3,600 tokens.
+- **Same-key onsets**: the guards build's five files had 0 under 100 ms but one of 99 ms (a 100 ms
+  gap rounded to ticks at 68 bpm), hence the 120 ms margin (`883443d`). Played through the emulated
+  piano (every message in logcat, tag PianoLink): the Calm piece **235 Note Ons for its 235 notes,
+  the closest two strikes of a key 658 ms apart, none under 100 ms**, "Timing: 470 events, the
+  latest 3 ms after its time"; the final build's dense Wild piece **570 Note Ons for 570 notes,
+  closest 169 ms, none under 100 ms**, "Timing: 1140 events, the latest 15 ms after its time"
+  (nothing thinned by the player's guard). The largest chord in any file: 7 notes.
+- **Keep or Discard**: Listen, then 15 s in "Keep this piece? Composed in Studio in the manner of
+  Clair de lune (Claude Debussy). Discard deletes it."; Discard emptied Now playing and took the
+  piece out of the library; Keep ended the question. The piece sheet: the roll card and "Made in
+  Studio · in the manner of Clair de lune (Claude Debussy)", no Wikipedia line.
+- **Progress**: the Library "Composing in the manner of Clair de lune · 3%", the hub "Composing
+  33%", the notification "Composing in the manner of Clair de lune" with its bar, the page
+  "Composing · 19%", then the result "Composition · … is in the library" / "Listen, then keep it
+  or discard it."
+- **Cancel** mid-way (19%) from the job's row: "Cancelled", no figures, nothing added.
+- **The panel**: the form at 1280 px (light and dark) and 390 px (no horizontal scroll), the default
+  seed, the search, Wild and one minute, then "Composing on the tablet. It shows under Jobs." and
+  the job composing and ready. Its console: the 401 before signing in and the favicon's 404, as in
+  M23.
+- **Screens** (`m24-shots/`): the hub (No models, Composing 33%), the Studio page (COMPOSE without
+  the model, downloading, installed, composing, ready, cancelled), the notifications (downloading,
+  composing, the result), the sheet (top, the search, the end, Wild and 5 min), the + sheet, the
+  Library's line and its compositions with roll cards and the mini player, Now playing, Keep or
+  Discard (both), after Discard, the piece sheet; the panel's page (`web01`–`web07`).
+
+## Deviations from the plan and the brief, and why
+
+- **The sampler's guards** (one rest in a row, a key every 120 ms, ten notes at an instant) are
+  not in the brief: the emulator's first piece showed the model's ruts, measured above; they steer
+  the model, not the result, and leave the fixture's greedy tokens alone.
+- **120 ms, not 100, between two strikes of a key** in a composition: the file's ticks and the
+  player's clock can shorten a gap; the piano's 100 ms stays the player's own rule.
+- **The seed's key from the file's key signature** when it has one (the notes choose the mode):
+  Clair de lune read F minor from its notes alone.
+- **The default seed skips Studio's own pieces**: after listening to a composition, the piece
+  played last would otherwise be that composition.
+- **The budget stays at the brief's 30 tokens a second**: a dense piece can end short of its length
+  (42 s of a one-minute Wild piece once); raising it (say 45 a second, still at most 9,000) is a
+  decision for later.
+- **Progress** reports the larger of the budget spent and the music written, so a piece that ends at
+  its length reads 100 %, not the share of an unspent budget.
+- **`GET /api/studio/seed`**: the panel's form needs the seed's key and tempo, as the sheet has them.
+- **The sheet's parts from the schedule editor** (`SheetChip`, `PieceSearch`) moved to
+  `ui/components`, shared rather than copied; the + sheet's `TranscribeEntry` became `StudioEntry`.
+- **The Keep or Discard line** for a composition is read from its sheet's own line.
+- **Cancel from the notification** was not seen on the emulator (a five-minute piece took 13–25 s,
+  over before the shade opened); Cancel from the job's row was, and both reach `Studio.cancel`.
+
+## Residuals
+
+- **Nothing measured on the tablet**: time, memory and timing are the emulator's on a busy Mac.
+- **The repository is private**: the models answer 404 until it is public (as M23).
+- **A dense piece can be shorter than asked** (the budget); a sparse one can be thin (the guards
+  keep it at 1.6 notes a second or more in the runs measured).
+- **Jobs live in memory** (as M23); the panel composes without the kiosk PIN (its own PIN).
+
+## Tests added in M24
+
+The engine (branch): `AmtTokenizerTest` (10), `PromptBuilderTest` (8, now 9), `SamplerTest` (9, now
+10), `PostprocessTest` (8), `ComposerTest` (3). On `main`: `SmfWriterTest` +1 (a tempo round-trips),
+`StudioTest` +5, `StudioCopyTest` +2, `MemoryGateTest` +1, `StudioPiecesTest` +1, `PromptBuilderTest`
++1 (the key signature), `SamplerTest` +1 (the guards), `WebServerTest` +1 (compose and the seed; the
+matrix at 25), `WebApiTest` +1 (16 bodies refused); `PostprocessTest`, `SamplerTest`,
+`WebAssetsTest` changed. 1,084 before the branch, 1,122 after it; 1,123 on `main` before this part,
+1,137 after.

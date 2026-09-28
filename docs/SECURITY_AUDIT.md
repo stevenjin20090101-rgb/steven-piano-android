@@ -990,8 +990,9 @@ tablet or use the panel. What may reach each is held at these places:
   check (`checkOnnxTelemetry`, run by `check`: `check<Variant>OnnxTelemetry` for each variant) reads
   the merged manifest and fails the build if any `<provider>` from `ai.onnxruntime`, or the
   initializer's name anywhere, is in it. The runtime runs on the CPU only (no NNAPI or other
-  execution provider), from Maven Central, arm64 only; R8 keeps its Java API whole (its JNI looks
-  classes up by name).
+  execution provider), from Maven Central, its native library for arm64 only (M24: the app's other
+  native libraries keep their four ABIs); R8 keeps its Java API whole (its JNI looks classes up by
+  name).
 - **Recordings stay on the tablet.** A recording is decoded, transcribed and written as a MIDI file
   on the tablet; nothing about it is sent anywhere, and the models see only 16 kHz samples. Caps: a
   file over 200 MB is refused before it is read; one whose container says it lasts over 20 minutes
@@ -1022,3 +1023,51 @@ Residuals:
   files are read by the app's own reader, which checks every chunk against the caps above.
 - **The GitHub repository is private for now**: until it is public the models' address answers
   404 and Download says it couldn't reach the server. Nothing else changes when it becomes public.
+
+Composing (M24, BUILD_SPEC.md › v1.7 — M24) adds the third input, what a composition is asked for,
+and one output, a piece the piano plays:
+
+- **The seed only from the library.** A composition names a piece of the library by its id
+  (`ComposeOrder`); the job reads it through the library and the app's own MIDI parser, as the
+  player reads it (`LibrarySeeds`), and turns its first 15 s into tokens: integers for times,
+  durations and pitches, nothing else. No file, recording or text from the panel or anyone else is
+  ever a seed; a piece gone meanwhile ends the job in words ("That piece is no longer in the
+  library. Choose another.").
+- **No free text to the model.** The sheet and the panel send choices only: a piece id, one of four
+  moods, a key (a tonic 0–11 and a minor flag), a tempo of 40–200 bpm, a length of 1–5 minutes.
+  `POST /api/studio/compose` reads the body strictly (`WebApi.composeOrder`): any other field, a
+  mood not among the four, a value out of range or of the wrong type is 400 before anything is
+  queued (`WebApiTest` refuses 16 such bodies, one with a `prompt`); the model's inputs are token
+  ids alone. `GET /api/studio/seed` reads a piece's key and tempo, nothing more.
+- **The token budget cap.** A length of 1–5 minutes allows 1,800 tokens a minute, at most 9,000 a
+  job (`PromptBuilder.budget`): the sampler stops there whatever the model writes, and at the
+  length asked. The context is at most 1,024 positions (the window slides to the last 170 events);
+  time tokens stay under 10,000 (it slides before 90 s from its origin). So a job's time and memory
+  are bounded: on the emulator 5–17 ms a token, the process at 0.55–0.62 GiB at its peak.
+- **The gates.** A composition starts only with 700 MiB free above Android's low mark and Android
+  not short of memory (`MemoryGate.canStartComposing`); every 100 tokens and before a slide it
+  needs 128 MiB (else "The tablet ran short of memory, so composing stopped. …"). One job at a
+  time, on Studio's background thread, cancellable between any two tokens; the service's timeout
+  cancels it.
+- **What reaches the piano.** Every composition is bounded before it is written: keys 24–107
+  (folded), velocities 20–110, no pedal, a key struck again no sooner than 120 ms after itself (the
+  piano needs 100; the margin keeps the file's ticks and the player's timing from ever bringing
+  two strikes under it), at most ten notes starting at one instant (the sampler's guard; measured
+  runs peak at seven). The firmware's own limits stay the backstop. The piece is a MIDI file
+  imported through the importer's own path and caps, and waits for Keep or Discard.
+- **Where it can be asked for.** On the tablet, the Library's + (behind the kiosk PIN in kiosk
+  mode, as adding music is) and the Studio page (a settings page, locked in kiosk mode); on the
+  panel, behind its sign-in like every changing route (the write matrix in `WebServerTest`: 25
+  routes; the seed route among the read routes, which need a session too).
+
+Residuals (composing):
+
+- **The panel is its own gate.** A signed-in panel can compose (as it can transcribe, play or
+  change the piano's settings) whether or not the tablet is in kiosk mode: kiosk mode locks the
+  tablet's screen, and the panel has its PIN and Tailscale.
+- **Resemblance.** The model continues 15 s of a library piece in its manner; the seed itself is
+  never written into the result, but nothing measures how close the new music comes to any
+  existing piece. It is written for the school's own piano, not published.
+- **The model's own behaviour.** Left alone it can fall into long runs of rests or restrike a few
+  keys at one instant (measured, BUILD_SPEC.md › v1.7 — M24); the sampler's guards (one rest in a
+  row, a key every 120 ms, ten notes at an instant) and the budget bound what that can cost.

@@ -23,8 +23,9 @@ download them (see *Studio*). With **Web control** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
 page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself at set
 times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
-(see *Kiosk*), and **Studio** turns a piano recording into a piece on the tablet itself
-(see *Studio*). Made by Steven Jin. Version 1.6.2.
+(see *Kiosk*), and **Studio** turns a piano recording into a piece, or composes a new one in the
+manner of a piece from the library, on the tablet itself (see *Studio*). Made by Steven Jin.
+Version 1.6.2.
 
 ## What it does
 
@@ -231,10 +232,11 @@ times (see *Schedules*), on the school tablet it can be locked to the app as a k
   chosen days at a set time, until an end time or its end, at its own volume; the
   tablet wakes for it with its screen off (see *Schedules*).
 - **Studio**: turns a piano recording (m4a, mp3, wav, flac, ogg…) into a piece on
-  the tablet itself, with how hard each note was played and the pedal: from the
-  Library's **+**, **Piano › Studio** or the web panel's Studio page. Listen, then
-  keep it or discard it. The transcription model (125 MB) downloads once, when
-  you ask; nothing you record leaves the tablet (see *Studio*).
+  the tablet itself, with how hard each note was played and the pedal, and
+  composes new pieces in the manner of one from the library, with a mood, a key, a
+  tempo and a length: from the Library's **+**, **Piano › Studio** or the web
+  panel's Studio page. Listen, then keep it or discard it. Each model (125 MB, 173 MB)
+  downloads once, when you ask; nothing you record leaves the tablet (see *Studio*).
 - **The piano's firmware**: Piano › Firmware and status shows the version the
   piano runs, looks for a new signed release and sends it over Bluetooth; the
   piano checks the signature, restarts on it, and rolls back by itself if it
@@ -570,8 +572,9 @@ holds:
 - `link.log`: the last 500 lines of the piano link's log, with their times (Bluetooth
   addresses, device names and status codes, as in *Send a log*), for each piece played how
   many notes went out and how late the latest was ("Timing: 3059 events, the latest 6 ms after
-  its time, at 1:15.5"), and for each Studio transcription how long it took and the memory it
-  used ("Studio: transcribed 180.0 s of audio in 66.1 s …"), no titles or file names;
+  its time, at 1:15.5"), and for each Studio transcription or composition how long it took and
+  the memory it used ("Studio: transcribed 180.0 s of audio in 66.1 s …", "Studio: composed
+  121.1 s of music in 5.2 s …"), no titles or file names;
 - the app's last five crash reports, if any: the time, version, device, thread and
   stack trace, with any file address or web address in a message taken out.
 
@@ -822,11 +825,14 @@ take that away (Settings › Apps › Special app access › Alarms & reminders)
 
 ## Studio
 
-Studio makes pieces on the tablet itself: no service, no account, nothing sent anywhere. Its
-first job **turns a piano recording into a piece**: the tablet listens to the recording with a
+Studio makes pieces on the tablet itself: no service, no account, nothing sent anywhere. It
+**turns a piano recording into a piece**: the tablet listens to the recording with a
 transcription model and writes down what it hears, every note with how hard it was played, and
-the pedal, as a MIDI file in the library that the piano then plays. (Studio comes with 1.7; the
-composing model it also lists is for the next part.)
+the pedal, as a MIDI file in the library that the piano then plays. And it **composes a new
+piece in the manner of one from the library**: a composing model continues the first fifteen
+seconds of that piece into music of its own. (Studio comes with 1.7.)
+
+**Transcribing a recording**
 
 1. **Piano › Studio › Transcription › Download**, once: 125 MB from this repository's GitHub
    release `models`, checked against the SHA-256 the app carries before it is used. **Remove**
@@ -843,6 +849,30 @@ composing model it also lists is for the next part.)
    to its end), Now playing asks **Keep this piece?** **Keep** keeps it; **Discard** deletes it
    (in kiosk mode, behind the PIN). The job's **Listen** plays it straight away.
 
+**Composing a piece**
+
+1. **Piano › Studio › Composing › Download**, once: 173 MB, checked the same way.
+2. **Library › + › Compose a piece…** (or the button on the Studio page) opens the sheet:
+   **Mood** (Calm, Bright, Wild, Melancholy); **Key** (C to B, major or minor) and **Tempo** (40–200
+   bpm), both the chosen piece's own until you change them (Melancholy turns the key to its minor);
+   **Length** (1–5 minutes); and **In the manner of**: the piece played last, or **Change** to search
+   the library for another. From a computer or a phone, the web panel's **Studio** page has the same
+   form.
+3. **Compose**. It runs in the background like a transcription: "Composing in the manner of Clair
+   de lune · 42%" in the notification (with Cancel), on the Studio page, on the Piano tab's
+   Studio row and in the Library. About **a minute for a two-minute piece**, often less.
+4. The piece appears as **Composition · Sep 28, 2026 2:05 PM** by **Made in Studio**, its sheet
+   saying "Made in Studio · in the manner of Clair de lune (Claude Debussy)", written at the tempo
+   chosen. Keep it or discard it after a first listen, as a transcription.
+
+**What it writes**: new music only. The chosen piece's first fifteen seconds are the model's
+starting point and are never part of the result; the model (trained on the Lakh MIDI collection,
+not on piano alone) carries on in their manner, not note for note. Calm plays softest, Wild the
+most freely; every piece ends with a two-bar fade and no pedal. Every note is one the piano can
+play: keys 24–107, a key struck again no sooner than 120 ms after itself, at most ten notes
+starting at once. A dense piece can come out a little shorter than asked (the model is stopped
+at about 30 tokens a second of music, 9,000 at most).
+
 **What it hears well**: a clear recording of a solo piano. The model was trained on real pianos
 (the MAESTRO recordings; its authors measured a 96.8 % note F1 there); audio from a synthesizer gets
 extra notes (held notes struck again), and voices or other instruments turn into notes of their
@@ -855,21 +885,24 @@ files."
 | Model | Size | Licence | From |
 |---|---|---|---|
 | Transcription | 125 MB | CC BY 4.0 | ByteDance's high-resolution piano transcription (Kong et al., Zenodo 4034264), converted to ONNX |
-| Composing (next part) | 173 MB | Apache 2.0 | The Anticipatory Music Transformer, music-small-800k (Thickstun et al., Stanford CRFM), converted to ONNX |
+| Composing | 173 MB | Apache 2.0 | The Anticipatory Music Transformer, music-small-800k (Thickstun et al., Stanford CRFM), converted to ONNX |
 
 **Memory and devices.** Studio needs an arm64 tablet or phone with at least 2.5 GiB of memory
 (most sold with 3 GB or more); elsewhere the Piano tab says "Studio isn't available on this
 device" or "This tablet doesn't have enough memory for Studio", and the + sheet has no Studio
-row. A transcription starts only with about 900 MiB free, else "Close other apps and try
-again."; the app uses about 0.75 GB while it transcribes and gives it back after.
+row. A transcription starts only with about 900 MiB free, a composition with about 700 MiB, else
+"Close other apps and try again."; the app uses about 0.75 GB while it transcribes and 0.6 GB
+while it composes, and gives it back after.
 
 **Size.** ONNX Runtime, which runs the models, makes the app a bigger download: the release APK
-is 13.4 MB (1.6.2's was 2.8 MB), its library for 64-bit ARM only, so the app installs on arm64
-tablets and phones only. The models are separate downloads, kept in the app's own storage.
+is 13.4 MB (1.6.2's was 2.8 MB). Its library comes for 64-bit ARM only; the app itself installs
+wherever 1.6.2 did, and Studio hides on the other devices. The models are separate downloads, kept
+in the app's own storage.
 
 **Privacy.** Recordings never leave the tablet: they are decoded and transcribed there, and a
-recording sent from the panel is deleted once its job ends. The only traffic is the model's
-download, when you ask for it.
+recording sent from the panel is deleted once its job ends. A composition starts only from a
+piece already in the library, and nothing anyone types reaches the model. The only traffic is the
+models' download, when you ask for it.
 
 **On the piano:**
 
@@ -879,6 +912,11 @@ download, when you ask for it.
       minute and under 1 GB is right) and the piece's "Timing: … the latest N ms after its time"
       (a few ms is right). The piece should keep its time throughout.
 - [ ] Listen to the new piece; Keep; play it again; Discard another.
+- [ ] Download the composing model; compose a two-minute Calm piece in the manner of Clair de lune
+      and a one-minute Wild one in the manner of Für Elise. `link.log` has each one's figures
+      ("Studio: composed … s of music in … s (… ms a token …); peak VmHWM … kB": about a minute
+      and under 1 GB is right). Play one and listen: every note should sound (none dropped for
+      coming too soon).
 
 ## Test it on the piano
 

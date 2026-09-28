@@ -1579,3 +1579,111 @@ hash built into the app. Everything above still holds. Not released yet: 1.7 com
 - **JOBS**, as on the tablet, with **Cancel** on those waiting or running; the lines are the
   tablet's own. Keep and Discard stay on the tablet, where the piece is heard.
 - Where Studio can't run, the page is the reason alone.
+
+# v1.7 — M24: Studio, part 2 (composing)
+
+Studio's second job composes a new piece **in the manner of** one from the library: the composing
+model (the Anticipatory Music Transformer, Apache 2.0) continues the first fifteen seconds of that
+piece into music of its own, steered by a mood, a key, a tempo and a length. Like a transcription it
+runs on the tablet alone, and its piece waits for Keep or Discard. Everything in v1.7 — M23 still
+holds; the composing model's row on the Studio page now reads **"173 MB · Apache 2.0 · Writes a new
+piano piece in the manner of one in the library."**
+
+## Where composing is
+
+- **Piano › Studio**: a **COMPOSE** section after TRANSCRIBE: **Compose a piece…** (outlined) and
+  the note "Runs on this tablet. About a minute for a two-minute piece." (with "Downloads the
+  composing model (173 MB) first." while it isn't there). When the tablet's memory refused the last
+  composition, that line follows as the section's note ("Close other apps and try again.", "The
+  tablet ran short of memory, so composing stopped. Close other apps and try again.").
+- **Library › + › Compose a piece…**, below Transcribe a recording…, under the same hairline and
+  with the same note. It opens the same sheet over the Library.
+- **The hub's value** while it runs: **"Composing 42%"** (as "Transcribing 42%").
+- **The web panel's Studio page**: a COMPOSE section between TRANSCRIBE and JOBS (below).
+- **In kiosk mode** the Studio page is locked as every settings page, and the Library's + waits for
+  the kiosk PIN, so composing is a settings action there.
+
+## The sheet
+
+A sheet with its drag handle, on the elevated tone, laid out as the schedule editor:
+
+- The eyebrow names the seed: **IN THE MANNER OF CLAIR DE LUNE (CLAUDE DEBUSSY)**; the title
+  **Compose a piece**.
+- **MOOD**: four chips, **Calm** · **Bright** · **Wild** · **Melancholy**, Calm chosen. Calm plays
+  softest and most smoothly, Wild most freely; Melancholy turns the key to the seed's minor (its
+  relative minor) while no key has been chosen.
+- **KEY**: a chip for each of the twelve tonics, spelled as the mode spells them (D♭ in major, C♯
+  in minor), then **Major** · **Minor**. The seed's own key is chosen at first: read from the file's
+  key signature where it has one (its major or its relative minor, as the notes lean), else from
+  its notes. TalkBack reads "D flat major".
+- **TEMPO**: "Tempo", "BPM" beneath, and the − 68 + stepper (40–200, repeating while held), the
+  seed's own tempo at first, with the note "The piece's own tempo" (or "The piece's own: 68 bpm"
+  once changed).
+- **LENGTH**: "Length", "MIN", − 2 + (1–5 minutes).
+- **IN THE MANNER OF**: the seed's title over "Claude Debussy · D♭ major · 68 bpm", and **Change**
+  (outlined), which opens the library's search below it (the pieces played or added last before a
+  search; the chosen one checked); a piece chosen closes it and brings its own key and tempo. The
+  seed at first is the piece played last that Studio didn't make, else the library's first by
+  title. An empty library says "A composition starts from a piece in the library. Add one first."
+- The note, then **Cancel** and **Compose**, which queues the job and closes the sheet.
+
+## A composition
+
+- **The steps**: when the composing model isn't there, its download is queued first. Then the seed
+  is read from the library and the model writes, token by token, until the length is reached or
+  its budget (about 30 tokens a second of music, 9,000 at most) is spent; then the piece is written
+  and added. One job at a time; Cancel stops it between two tokens.
+- **The job** is named for its seed: **"In the manner of Clair de lune"**, "Composing · 42%" over
+  the hairline, "Adding it to the library…", then as a transcription's: "Ready: listen, then keep
+  it or discard it", "Kept as Composition · Sep 28, 2026 2:05 PM", "Discarded", "Cancelled", or its
+  failure's sentence ("That piece has no notes to start from. Choose another.", "That piece is no
+  longer in the library. Choose another.", "The model didn't write any notes this time. Try
+  again.", the memory lines, "The composition didn't finish.").
+- **The notification** (channel Studio): "Composing in the manner of Clair de lune", its line, its
+  progress and **Cancel**; then "Composition · Sep 28, 2026 2:05 PM is in the library" with
+  "Listen, then keep it or discard it." The Library's line: "Composing in the manner of Clair de
+  lune · 42%".
+- **The piece**: **Composition · Sep 28, 2026 2:05 PM** (the date and time in the tablet's own
+  style) by **Made in Studio**, with its roll card; its sheet reads **"Made in Studio · in the
+  manner of Clair de lune (Claude Debussy)"** (the title alone when the composer isn't known) and has
+  no "From Wikipedia" line. It holds only the new music, never the seed, written at the tempo
+  chosen so its bars follow its beats.
+- **Keep or Discard**, as a transcription's, after 15 seconds of it: "Keep this piece?",
+  **"Composed in Studio in the manner of Clair de lune (Claude Debussy). Discard deletes it."**,
+  Keep and Discard.
+
+## What the music is
+
+- New music only, continuing the seed's manner; the model was trained on the Lakh MIDI collection,
+  so it knows more than the piano, and the app keeps it to the piano: piano notes only, keys 24–107
+  (folded by octaves), no pedal.
+- Lightly on a sixteenth-note grid at the chosen tempo (each onset half-way to its line), starting
+  on a beat.
+- Velocities by mood, never under 20 or over 110: the top of each chord sings, the bass and inner
+  voices step back, a four-bar swell, a little unevenness; Calm around 46, Melancholy 52, Bright 66,
+  Wild 78. The last two bars fade to 45 %.
+- Playable by the piano as written: a key is struck again no sooner than 120 ms after itself, and
+  no more than ten notes start at one instant; rests (a second without a new note) never follow
+  one another, so the piano never falls silent for long.
+
+## The web panel's Studio page
+
+- **COMPOSE**: **Compose a piece…** and the note; it opens the form above JOBS, the tablet's sheet
+  laid flat: the eyebrow, **Compose a piece**, MOOD and KEY chips, TEMPO and LENGTH steppers (− and
+  + repeat while held), IN THE MANNER OF with **Change** and the library's search, the note, the
+  tablet's refusals in its own words, **Cancel** and **Compose**. Then "Composing on the tablet.
+  It shows under Jobs." and the job under JOBS, with Cancel, as the tablet lists it.
+
+## Memory and time
+
+- A composition starts only with **700 MiB** free above Android's low mark and Android not short of
+  memory; it stops if the free memory falls under 128 MiB while it runs. The app peaks at about
+  **0.6 GB** while it composes (measured 0.55–0.62 GiB on the emulator).
+- About **a minute for a two-minute piece** on a recent tablet; on the emulator a two-minute piece
+  took 5–32 s and a five-minute one 13–25 s, depending on how dense the music is and how busy the
+  computer running it was.
+
+## The app on every device again
+
+M23 made the whole app arm64-only; now only ONNX Runtime's library is, and the app installs
+wherever 1.6.2 did. Where the runtime isn't there, Studio hides as on any device it can't run on.
