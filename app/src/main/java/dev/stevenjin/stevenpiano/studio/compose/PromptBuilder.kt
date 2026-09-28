@@ -86,8 +86,9 @@ class SeedPiece(val title: String, val composer: String?, val midi: MidiPiece)
 
 /**
  * What a seed brings before anything is chosen, the compose sheet's defaults: its [key], estimated
- * from its first 15 s, and its tempo over them, [exactBpm] as the file has it (quarter notes a minute)
- * and [bpm], rounded into the stepper's 40–200.
+ * from its first 15 s (between the file's own key signature's two keys when it has one), and its tempo
+ * over them, [exactBpm] as the file has it (quarter notes a minute) and [bpm], rounded into the
+ * stepper's 40–200.
  */
 data class SeedFacts(val key: MusicKey, val bpm: Int, val exactBpm: Double)
 
@@ -149,7 +150,17 @@ object PromptBuilder {
 
     private fun facts(midi: MidiPiece, notes: List<SeedNote>): SeedFacts {
         val exact = bpmOf(midi, notes)
-        return SeedFacts(keyOf(notes), exact.roundToInt().coerceIn(MIN_BPM, MAX_BPM), exact)
+        return SeedFacts(keyOf(notes, signatureAt(midi, notes)), exact.roundToInt().coerceIn(MIN_BPM, MAX_BPM), exact)
+    }
+
+    /**
+     * The key signature in force where the seed starts (its sharps, flats negative), or null when the file
+     * has none there. Its count of sharps or flats is what files get right; their major or minor flag,
+     * often not (Für Elise's files say C major), so only the count is kept.
+     */
+    private fun signatureAt(midi: MidiPiece, notes: List<SeedNote>): Int? {
+        val start = notes.firstOrNull()?.let { (it.on * 1e6).roundToLong() } ?: 0L
+        return midi.keySignatures.lastOrNull { it.atMicros <= start }?.sharps
     }
 
     /** The key the sheet suggests for [mood]: the seed's own, or for Melancholy its minor (the relative minor of a major seed). */
@@ -209,18 +220,22 @@ object PromptBuilder {
 
     /**
      * The key of [notes] by Krumhansl and Kessler's key profiles: the pitch classes weighed by how long
-     * they sound (each note 50 ms to 2 s), set against each of the 24 keys' profile; the best
-     * correlation wins (a major key on a tie). C major when there is nothing to go on.
+     * they sound (each note 50 ms to 2 s), set against each key's profile; the best correlation wins (a
+     * major key on a tie). With the file's key signature ([sharps], flats negative) only its two keys are
+     * weighed, its major and that major's relative minor (Clair de lune's five flats: D♭ major or B♭
+     * minor); without one, all 24. C major when there is nothing to go on (or the signature's major).
      */
-    fun keyOf(notes: List<SeedNote>): MusicKey {
+    fun keyOf(notes: List<SeedNote>, sharps: Int? = null): MusicKey {
+        val signed = sharps?.let { Math.floorMod(7 * it, 12) }
         val weight = DoubleArray(12)
         for (n in notes) weight[Math.floorMod(n.key, 12)] += (n.off - n.on).coerceIn(0.05, 2.0)
-        if (weight.all { it == 0.0 }) return MusicKey.C
-        var best = MusicKey.C
+        if (weight.all { it == 0.0 }) return MusicKey(signed ?: 0, false)
+        var best = MusicKey(signed ?: 0, false)
         var bestScore = Double.NEGATIVE_INFINITY
         for (minor in listOf(false, true)) {
             val profile = if (minor) MINOR_PROFILE else MAJOR_PROFILE
             for (tonic in 0..11) {
+                if (signed != null && tonic != (if (minor) (signed + 9) % 12 else signed)) continue
                 val score = correlation(weight) { pc -> profile[Math.floorMod(pc - tonic, 12)] }
                 if (score > bestScore + 1e-12) {
                     bestScore = score

@@ -133,6 +133,31 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun `a key signature in the file narrows the key to its major and relative minor`() {
+        // G major's triad and scale, in a file that says no sharps or flats: C major, not G major.
+        val gNotes = listOf(55, 59, 62, 67, 71, 74, 79, 66, 67, 62, 59, 55)
+        fun file(sharps: Int?, keys: List<Int>) = SmfParser.parse(
+            SmfBuilder(format = 0).track {
+                if (sharps != null) keySignature(0, sharps)
+                keys.forEachIndexed { i, key ->
+                    noteOn(i * 480L, key)
+                    noteOff(i * 480L + 460, key)
+                }
+            }.build(),
+        )
+        assertEquals("the notes alone", MusicKey(7, false), PromptBuilder.facts(file(null, gNotes)).key)
+        assertEquals("the signature's two keys", MusicKey(0, false), PromptBuilder.facts(file(0, gNotes)).key)
+        // A minor's figure in a file that says C major (as Für Elise's do): its relative minor.
+        val aMinor = listOf(76, 75, 76, 75, 76, 71, 74, 72, 69, 57, 64, 69, 72, 76, 81, 71, 64, 68, 71, 69)
+        assertEquals(MusicKey(9, true), PromptBuilder.facts(file(0, aMinor)).key)
+        // Five flats: D♭ major or B♭ minor, never F minor.
+        val dFlat = listOf(61, 65, 68, 73, 77, 80, 66, 70, 73, 68, 72, 75, 61, 65, 68)
+        assertEquals(MusicKey(1, false), PromptBuilder.facts(file(-5, dFlat)).key)
+        assertEquals("nothing to go on: the signature's major", MusicKey(1, false), PromptBuilder.keyOf(emptyList(), -5))
+        assertEquals(MusicKey.C, PromptBuilder.keyOf(emptyList()))
+    }
+
+    @Test
     fun `a seed starts at its first note, stays on the piano's keys, and one without notes is refused`() {
         val late = midi(Triple(2_880L, 480L, 60), Triple(3_360L, 480L, 64))
         val prompt = PromptBuilder.build(SeedPiece("Late", null, late), ComposeRequest())
