@@ -4629,3 +4629,38 @@ The engine (branch): `AmtTokenizerTest` (10), `PromptBuilderTest` (8, now 9), `S
 matrix at 25), `WebApiTest` +1 (16 bodies refused); `PostprocessTest`, `SamplerTest`,
 `WebAssetsTest` changed. 1,084 before the branch, 1,122 after it; 1,123 on `main` before this part,
 1,137 after.
+
+## Audit (delta 2) — 2026-09-28
+
+`docs/SECURITY_AUDIT.md › 1.7 — Studio: audit (delta 2)` records it in full: one Medium and seven Low
+findings, all fixed; no model could be swapped, the runtime sent nothing, no hostile recording took the
+app down. What changed, and where the build now differs from the notes above:
+
+- **S1** (`8f32157`): a seed is read to `AmtTokenizer.MAX_NOTES` = 4,096 notes, into primitive arrays
+  (`notes(piece, seconds, limit)`); a crafted 6 MB file of a million notes had the compose sheet allocate
+  151 MB and a prompt 377 MB. `Studio.seedChoice` reads and parses on `Dispatchers.Default` and returns null
+  rather than throw (an OutOfMemoryError included); `LibrarySeeds` takes an `SmfException` for no seed.
+- **S2** (`e0baa5b`): saving a finished piece (import, line, review) is one `NonCancellable` step
+  (`Studio.save`); a cancel from then on leaves the job **Done** and the piece undecided, where the notes
+  above had "Cancelled" (which could orphan the piece in the library).
+- **S3** (`8d5e4e4`): `outcome` ends a job failed on any `Throwable` but cancellation, not only
+  `Exception` and `OutOfMemoryError`.
+- **S4** (`7202ecc`): the panel's `PUT /api/studio/audio` and `POST /api/studio/compose` answer 409 "full"
+  while `STUDIO_JOBS_MAX` = 8 jobs wait or run, before a byte of a recording is read. The tablet's own
+  entries are not capped (a decision: one person picks its files).
+- **S5** (`2da9e3c`): `VerifiedDownloader` deletes its part on any throw.
+- **S6** (`3d1ca73`): `NotePostProcessor(maxNotes = MAX_NOTES)`, 200,000 notes, past which
+  `StudioFailures.TOO_MANY_NOTES` ("More notes were heard in this recording than a piece can hold.").
+- **S7** (`14340d9`): `OnnxTelemetryCheck` also fails unless every `com.microsoft.onnxruntime` module the
+  variant's runtime classpath resolves is at `onnxRuntimePinned` = "1.28.0", set in `app/build.gradle.kts`
+  (the version catalog's line alone no longer decides it); its report names the runtime.
+- **S8** (`0c6db38`): `WavReader.decode(input, cancelled, fileBytes)` sizes a `data` chunk of unknown size
+  from the file's length (`AudioDecoder` passes it): 90.5 MB of heap for a 20-minute file of unknown
+  length, 158 MB before.
+- Tests: `SeedLimitsTest` (2, new), `StudioTest` +3, `WebServerTest` +1 (and the guests' listener test
+  walks every panel route, `241b8ae`), `VerifiedDownloaderTest` +1, `NotePostProcessorTest` +1,
+  `AudioDecoderTest` +1, `StudioPiecesTest` +1 (`37f0daa`: what reaches the piano from a transcription).
+  1,137 tests before the audit, **1,147 after**; with `-PstudioModels` 8 skipped (the corpus's seven and
+  `PinnedKeyTest`'s firmware header), without 12. `check` passes; lint 0 errors, 28 warnings.
+- README (*Artwork and notes*, *Security*, *Studio*) and DESIGN.md (v1.7 — M23's refusals, the panel's
+  Studio page) carry the new lines and the corrected network statements.

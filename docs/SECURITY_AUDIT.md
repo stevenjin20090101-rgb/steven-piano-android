@@ -1071,3 +1071,301 @@ Residuals (composing):
 - **The model's own behaviour.** Left alone it can fall into long runs of rests or restrike a few
   keys at one instant (measured, BUILD_SPEC.md › v1.7 — M24); the sampler's guards (one rest in a
   row, a key every 120 ms, ten notes at an instant) and the budget bound what that can cost.
+
+## 1.7 — Studio: audit (delta 2) — 2026-09-28
+
+A delta audit read Studio at `d2a66a6` (M23's transcription and M24's composing on top of 1.6.2)
+against the ten points of its brief, adversarially: in JVM tests (the real models too, with
+`-PstudioModels`), and on the `steven_piano` emulator (API 34, arm64, `-memory 4096`, the app's heap
+limit 192 MB), with the models served from the Mac on 10.0.2.2 by a stand-in for the `models`
+release and by a hostile one. Read closely: `studio/**` and `studio/compose/**`, `midi/SmfWriter.kt`,
+`update/UpdateSource.kt`, `VerifiedDownloader.kt`, `UpdateServer.kt`, `net/HttpFetch.kt`,
+`service/StudioService.kt`, the Studio routes in `web/`, `ui/screens/piano/pages/ComposeSheet.kt`,
+the manifest, `app/build.gradle.kts`, and the tests. The coders' notes above were treated as claims
+and checked one by one.
+
+**Studio holds.** A model is trusted only by the hashes compiled into the app, and every way tried to
+hand it another file failed; the runtime is 1.28.0 and sent nothing, by the kernel's own count; every
+hostile recording tried failed in words without taking the app down; the panel's Studio routes sit
+behind the same sign-in, header, `Host` and `Origin` stack as the rest; no free text reaches the
+model and the token budget holds. The findings are one Medium, a memory amplification a crafted MIDI
+file reached through the composer's seed, and seven Low, each a bound or a cleanup that was missing;
+all eight are fixed. Tests went from 1,137 to 1,147 (8 skipped with the models, 12 without; see point
+10). Commits: `8f32157` (S1), `e0baa5b` (S2), `8d5e4e4` (S3), `7202ecc` (S4), `2da9e3c` (S5),
+`3d1ca73` (S6), `14340d9` (S7), `0c6db38` (S8), two tests (`37f0daa`, `241b8ae`), then this one
+(docs, BUILD_SPEC, README, DESIGN) and the provenance.
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| S1 | Medium | A crafted MIDI file within the importer's caps, used as a composition's seed (by default the piece played last), was read whole: 151 MB for the compose sheet's key and tempo, 377 MB for a prompt, parsed on the main thread, with nothing in the sheet to catch an OutOfMemoryError | Fixed |
+| S2 | Low | A cancel while a finished piece was being saved left it in the library, its job "Cancelled", never asked about | Fixed |
+| S3 | Low | An Error other than OutOfMemoryError from a job escaped Studio into the app's scope: a crash, or a job "Running" for good | Fixed |
+| S4 | Low | The panel could queue Studio jobs without bound, each recording held in the cache until its turn | Fixed |
+| S5 | Low | A verified download that failed with an unexpected exception left its part file behind | Fixed |
+| S6 | Low | A transcription's notes had no bound (the peak rule allows a note at every frame of every key, 8,800 a second) | Fixed |
+| S7 | Low | The build's runtime check guarded ONNX Runtime's telemetry provider, not the version pin | Fixed |
+| S8 | Low | A WAV of unknown length grew its 20-minute buffer by quarters: 158 MB of heap where 78 MB would do | Fixed |
+
+### S1: a crafted seed read whole (Medium): fixed
+
+`studio/compose/AmtTokenizer.kt:120` (`notes`, at `d2a66a6`) read every note starting within the
+seed's window into three `ArrayList`s of boxed numbers, then a list of `SeedNote`s; nothing bounded
+how many. The compose sheet reads its default seed, the piece played last, the moment it opens
+(`ComposeSheet.kt:110`, `produceState` → `Studio.seedChoice`, `Studio.kt:167`), and so does the
+panel's `GET /api/studio/seed`; a composition reads it again to build its prompt. A MIDI file of 6 MB
+and 2,000,000 events (every key let go and struck again each tick, in running status: a million notes
+in 12.4 s) passes the importer's 8 MB and the parser's 2,097,152-event caps. From it the key and tempo
+allocated **151 MB** and the prompt **377 MB** (JVM, `…/audit2/seed-probe-before.txt`), and the prompt
+held 104,246 events of which 340 are ever read. On `steven_piano` (`…/audit2/seed-bomb-baseline-emulator.txt`)
+the file imported (piece 1756), played, and then Library › + › Compose a piece… drove the heap to
+**187 MB of 192 MB** with blocking GCs on the main thread: `LibraryRepository.load` parses on its
+caller's thread, and `produceState` runs on the main one. It did not run out in two tries, but nothing
+in the sheet would have caught it if it had: the app is the piano's driver, so an OutOfMemoryError there
+is a crash (CrashSilencer then silences the piano). `LibrarySeeds` (`AppStudioLibrary.kt:63`) also let
+the parser's own refusal of a file damaged on disk (`SmfException`) escape to the sheet.
+
+- **Fix** (`8f32157`): a seed is read to `AmtTokenizer.MAX_NOTES` = 4,096 notes (`AmtTokenizer.kt:191`;
+  fifteen seconds of a dense étude hold some 300; the prompt keeps 340 events), into primitive arrays;
+  the notes past it are left out as notes past the window are. `Studio.seedChoice` (`Studio.kt:170`) reads
+  and parses on `Dispatchers.Default` and never throws but for cancellation (an exception or an
+  OutOfMemoryError is no choice); `LibrarySeeds.seed` (`AppStudioLibrary.kt:72`) takes an `SmfException`
+  for no seed. Ordinary seeds are untouched: the fixture's 214 tokens come out as before.
+- **After:** facts and prompt allocate under 1 MB for the same file (`…/audit2/seed-probe-after.txt`);
+  on the emulator the sheet opened on it with one background GC at 58 of 82 MB and nothing on the main
+  thread (`…/audit2/seed-bomb-after-emulator.txt`).
+- **Test:** `SeedLimitsTest` (2): the crafted file (built in the test, within 8 MB) reads to 4,096 notes,
+  its facts allocate under 8 MB and its prompt under 16 MB (the thread's allocation counter); an ordinary
+  seed is untouched and a limit keeps a piece's first notes. `StudioTest` › *a seed that can't be read is
+  no choice, and the sheet's call never throws* (it threw the `SmfException` before, checked).
+
+### S2: a cancel while saving orphaned the piece (Low): fixed
+
+`Studio.kt:273` and `:317` (at `d2a66a6`) imported the finished piece, then marked it undecided; a cancel
+arriving meanwhile (the notification's, the page's, the panel's) threw at the import's next suspension,
+and `outcome` (`:342`) turned it into "Cancelled". The piece could already be in the library (the
+importer's transaction done), with no Keep or Discard ever asked and sometimes no "Made in Studio" line.
+
+- **Fix** (`e0baa5b`): saving (the import, the sheet's line, the review) runs as one step under
+  `NonCancellable` once it begins (`Studio.save`, `Studio.kt:347`), and a cancel that lands after it
+  changes nothing: the job is Done and the piece waits for Keep or Discard (Discard deletes it).
+- **Test:** `StudioTest` › *a cancel while the piece is saved changes nothing* (cancelled while the fake
+  library holds the import open: Done, the piece undecided, the recording given back; it ended
+  "Cancelled" with the piece orphaned before, checked).
+
+### S3: an Error escaped a job (Low): fixed
+
+`outcome` (`Studio.kt:350` at `d2a66a6`) caught `Exception` and `OutOfMemoryError`. Any other `Error` from
+a job (a `StackOverflowError`, a `LinkageError` from the native runtime) propagated out of the job's
+coroutine into `appScope` (`AppGraph.kt:121`: a `SupervisorJob` on the main dispatcher, no handler): a
+crash on the tablet, and short of that a job "Running" for good, its notification with it. The class
+already promised that nothing a job does can throw out of it.
+
+- **Fix** (`8d5e4e4`): every `Throwable` but cancellation ends the job as failed, in words
+  (`Studio.kt:368`); `OutOfMemoryError` keeps its own line.
+- **Test:** `StudioTest` › *an Error from the runtime fails the job in words, and Studio goes on* (a model
+  that throws `StackOverflowError`: Failed, the recording given back, the next job Done; before, the job
+  stayed Running and the test timed out, checked).
+
+### S4: the panel's Studio queue had no bound (Low): fixed
+
+Studio's queue is a `Channel.UNLIMITED` (`Studio.kt:117`) and the panel fed it: `PUT /api/studio/audio`
+and `POST /api/studio/compose` queued a job each, as fast as a signed-in panel (or a page stuck
+retrying) could send them. Each recording waited in `cacheDir/web` until its turn, bounded only by the
+64 MB free-space margin; each composition added a piece. On the emulator twelve uploads sent behind a
+five-minute composition were all taken: 13 jobs to do, 44 MB held (`…/audit2/queue-baseline.txt`).
+
+- **Fix** (`7202ecc`): both routes answer 409 "full" ("Studio has 8 jobs to do already. Try again when
+  one has finished.") while eight jobs wait or run (`STUDIO_JOBS_MAX`, `WebServer.kt:1193`;
+  `studioFull`, `:618`), before a byte of a recording is read; the page shows it as any refusal. The
+  tablet's own Studio page and + sheet, one person picking files, are not held to it.
+- **Test:** `WebServerTest` › *Studio takes no more from the panel while it has eight jobs to do* (at
+  eight: both refused, a declared 150 MB body unread, nothing kept or queued; at seven with twenty
+  finished: both taken; fails with the check removed, checked).
+
+### S5: a failed download's part file left behind (Low): fixed
+
+`VerifiedDownloader` (`update/VerifiedDownloader.kt:107–119` at `d2a66a6`) deleted `<name>.part` for its
+own failures, the server's refusal, a cancel and an `IOException`; anything else thrown half-way (a
+`RuntimeException` from the platform's HTTP) left up to a whole model, or an APK, until the next start's
+sweep. A part is never loaded, so this was space, not trust.
+
+- **Fix** (`2da9e3c`): any throw deletes the part and is passed on (`VerifiedDownloader.kt:120`).
+- **Test:** `VerifiedDownloaderTest` › *whatever else is thrown half-way, the part goes with it*.
+
+### S6: a transcription's notes had no bound (Low): fixed
+
+`NotePostProcessor` kept every note. The package's peak rule (neighbours need only not rise) makes a
+level onset above 0.3, as a saturated output gives, a peak at every frame: a note can start at every
+frame of each of 88 keys, 8,800 a second, some ten million in twenty minutes, held as objects and then
+written as twice as many MIDI events, far past the heap before the importer's event cap would refuse the
+file. The real model gave far less on everything tried (clicks, noise, a square wave, all 88
+fundamentals, bursts, piano-like strikes on 40 keys every 100 ms: at most 78 notes a second, which is
+94,000 in twenty minutes; JVM, `-PstudioModels`), so this bounds a crafted or pathological recording.
+
+- **Fix** (`3d1ca73`): the notes are counted as they close; past `NotePostProcessor.MAX_NOTES` = 200,000
+  (`NotePostProcessor.kt:275`, about 170 a second for twenty minutes) the job ends "More notes were heard
+  in this recording than a piece can hold." (`StudioFailures.TOO_MANY_NOTES`).
+- **Test:** `NotePostProcessorTest` › *a level onset above the threshold is a peak at every frame, and a
+  recording's notes stop at 200,000* (87,736 notes from one window of it; refused past a cap).
+
+### S7: the runtime check guarded the symptom, not the pin (Low): fixed
+
+`checkOnnxTelemetry` read the merged manifest for `ai.onnxruntime.TelemetryInitializer`. On a scratch
+worktree of main with `onnxruntime = "1.29.0"` the check failed, as it should; with the provider removed
+by `tools:node="remove"` (the spike's own recipe for a later version) both variants' checks **passed**
+while the build resolved `onnxruntime-android:1.29.0`, whose telemetry the spike stopped only with that
+removal and `setTelemetry(false)` together, the latter never measured alone (`…/audit2/ort-bump-1.29.0.txt`).
+
+- **Fix** (`14340d9`): each variant's check also reads every `com.microsoft.onnxruntime` module its runtime
+  classpath resolves (from the variant's resolution result; configuration-cache safe) and fails unless it
+  is at `onnxRuntimePinned` = "1.28.0" (`app/build.gradle.kts:139`). Bumping the version catalog alone now
+  fails the build: a newer runtime needs the rule changed first, as BUILD_SPEC says. The reports name the
+  runtime ("runtime onnxruntime-android:1.28.0").
+- **Evidence:** the four cases on the scratch worktree (`…/audit2/ort-bump-1.29.0.txt`): 1.29.0 with its
+  provider fails before and after; with the provider removed it passed before and fails now; main passes.
+
+### S8: a WAV of unknown length grew its buffer (Low): fixed
+
+A WAV whose `data` size was never written (0 or 0xFFFFFFFF, as a recorder cut off leaves it) is read to
+the end of the file into `MonoTo16k`'s buffer, which `WavReader` sized for a minute (`WavReader.kt:202` at
+`d2a66a6`) and `FloatBuilder` grew by a quarter at a time (`Resample.kt:75`), two copies alive at each
+step. A 19.9-minute 16 kHz file of unknown length took the app's Java heap to **158 MB** of 192 while
+being read, against **78 MB** for the same audio with its length written (`…/audit2/wav-buffer-heap.txt`).
+The notes' "at most 77 MB of floats" held for the result, not on the way.
+
+- **Fix** (`0c6db38`): `WavReader.decode` takes the file's length (`AudioDecoder` passes the document's or
+  the upload's size, `AudioDecoder.kt:61`) and sizes the buffer from what is left after the header
+  (`WavReader.kt:165`); a wrong length only sizes it, and without one a minute is still the guess. After:
+  **90.5 MB** peak for the unknown-length file, 77.5 MB for the known one.
+- **Test:** `AudioDecoderTest` › *a data chunk of unknown size is sized from the file's length, not grown
+  from a minute* (one buffer sized once, the same samples; a length too long or short changes nothing read).
+
+### The ten points, verified
+
+Transcripts are kept with the run's evidence (`…/audit2/`); tests are JVM unit tests.
+
+1. **Model provenance.** Size and SHA-256 of both models are compiled in (`ModelCatalogue.kt:48–49, 63–64`)
+   and a download is checked against them, never against the list (`ModelInstaller.kt:72–81`). Against the
+   hostile server on the emulator (`…/audit2/model-provenance-probe.txt`, `evil_server.py`): a list naming
+   another SHA-256 for transcription v1 → "The list of models couldn't be read."; the same size with one
+   byte flipped → "The download didn't match the model; try again."; a file cut off after 10 MB → "The
+   download stopped; try again."; one 1 MB longer (no length declared) → the mismatch, at the pinned size;
+   a 302 to another origin → "Couldn't reach the download server." with nothing requested there (the other
+   server's log). Each time `files/models` stayed empty, no part left. The good path installed both
+   (84 notes and one pedal from the fixture window). A byte changed on disk under the installed model was
+   found by the first job of the next process ("The transcription model was damaged and has been removed.
+   Download it again."), the file gone (`…/audit2/model-corrupt-on-disk.txt`). The allow-list admits only
+   `raw.githubusercontent.com/<repo>/main/releases/models.json` exactly and `.onnx` assets of this
+   repository's `models` release (a fork, a version tag, `http`, a port, a query, a sub-path, an asset host
+   named directly: refused; `UpdateSourceTest`), and each redirect hop is checked before anything is sent
+   (`HttpFetch.exchange`). 1 GB cap and the model's own size as the read limit (`VerifiedDownloader`), a
+   256 MB margin (`VerifiedDownloaderTest`; a disk reporting 0 usable bytes is "unknown: tried", by design
+   since 1.4, and fails at its first write). `ModelStore` verifies each model's hash before its first
+   session in a process (`ModelStoreTest`).
+2. **The runtime.** `onnxruntime-android` resolves at exactly 1.28.0 (`…/audit2/runtime-manifests.txt`);
+   the merged debug and release manifests hold two providers (`FileProvider`, androidx.startup's), none of
+   `ai.onnxruntime`, and no "telemetry" anywhere. With the models installed, iptables counters on the app's
+   UID (every packet it sends anywhere but loopback; `adb root` on the userdebug image) read **0 packets**
+   through a 3-minute m4a transcription (86.9 s) and a 2-minute composition (23.8 s), and 8 packets for the
+   positive control, the app's own update check at its start (`…/audit2/runtime-network-iptables.txt`;
+   `…/audit2/runtime-network.txt` has the socket watch). The check task on 1.29.0: S7.
+3. **Audio input.** Nineteen hostile files through the panel, one at a time (`…/audit2/hostile-audio.txt`):
+   a WAV whose header claims 3.4 hours, one claiming ten hours, a chunk to skip 4 GB, a `fmt ` chunk of
+   4 GB, a block alignment of 0, 100 and 17 channels, a zip and a MIDI file named `.wav`, a header alone,
+   an empty data chunk, random bytes as `.mp3`/`.flac`/`.ogg`/`.m4a`, an m4a claiming ten hours, a
+   25-minute m4a, a 25-minute WAV of unknown length: each ended in its own words within 0.1–4.3 s
+   ("A recording can be 20 minutes long at most.", "This file isn't a recording the tablet can read.",
+   "That's a MIDI file already…", "The recording is empty."), the process the same, `cache/web` empty. An
+   m4a cut to 30 % and to 97 % transcribed what was there; 384 kHz stereo (30 s) transcribed in 10.7 s;
+   a 384 kHz FLAC is refused by Android's decoder in words; 768 kHz mono (60 s) read and transcribed in
+   23.3 s. The 200 MB cap and the 20-minute cap are checked before decoding (`AudioDecoderTest`); the
+   resampler keeps only the input its filter still reads (`Resampler.compact`), and after S8 the output
+   buffer is sized once. Decoding runs on Studio's thread (`StudioTest`), and a cancel mid-decode released
+   the app's `c2.android.aac.decoder` (`dumpsys media.resource_manager`, `…/audit2/cancel-codec.txt`).
+4. **The generation loop.** `PromptBuilder.budget` holds any length to 1–5 minutes and 9,000 tokens
+   (`PromptBuilderTest`); a five-minute Wild piece on the emulator stopped at 9,000 tokens ("stop
+   budget", `…/audit2/foreground-job.txt`). SEPARATOR is masked unless `SamplingSettings.allowEnd`, which
+   no mood, no sheet and no route sets. The panel's body is read strictly (`WebApi.composeOrder`: only
+   `pieceId`, `mood`, `key`, `bpm`, `minutes`; `WebApiTest` refuses 16 bodies, the live matrix a `prompt`
+   field), and the seed is a library piece by id, turned into integer tokens; after S1 it is bounded too.
+   The KV cache cannot pass 1,024 positions (`OrtComposerModel.feed` requires it) and the history the
+   budget; the cancel is asked before every token and the memory every hundred (`SamplerTest`,
+   `StudioTest`). A job that throws adds nothing and leaves no notification (S2, S3).
+5. **Foreground jobs.** One at a time on one background thread (`StudioTest`); `StudioService` is not
+   exported, foreground with type `dataSync` (`types=00000001`); its Cancel is a `startService`
+   PendingIntent to it and its content a `startActivity`, both immutable. With the task removed (`am stack
+   remove`, as a swipe from Recents) the process and the five-minute composition carried on to the end;
+   then the service stopped and `Wake Locks: size=0` (the lock's history: acquired and released around
+   the job's 54 s) (`…/audit2/foreground-job.txt`). The wake lock is at most 30 minutes a job, not
+   reference-counted. `onTimeout` (both overloads) cancels every job and stops the service: read, not run,
+   since the app targets API 34 and Android applies the dataSync limit from a target of 35. In kiosk mode
+   the Library's + waits for the PIN (`LibraryScreen`: `addMusic = gate.run`), the Studio page is a locked
+   settings page (`LockedFirmwareTest`: no page but Firmware during an update opens unlocked), and the
+   notification shade is out of reach under lock task.
+6. **The panel's Studio routes.** The live matrix on the emulator (`…/audit2/studio-routes-matrix.txt`):
+   401 without a session for all four and `/api/state`; 403 without `X-Steven-Piano`, with a foreign
+   `Origin`, with a foreign `Host`; 415 as a cross-site form and for `.exe`; 400 for a `prompt` field and
+   for six minutes; 413 for a declared 200 MB + 1 before a byte is read; 411 chunked; 400 empty; 405 for a
+   wrong method; no `Access-Control-*` header; `cache/web` empty after. `WebServerTest`'s matrix walks all
+   25 changing routes and every read route; the guests' listener now answers 404 to every route that
+   isn't public, Studio's included (`241b8ae`). The Studio part of the state is the models (name, title,
+   size, licence, installed, line, progress) and the jobs (id, kind, name, state, line, progress, title):
+   no path, no address. The temp file goes when its job ends or is cancelled while waiting (twelve
+   cancelled uploads left `cache/web` at 8 kB), and `cacheDir/web` is swept at start.
+7. **The pieces Studio writes.** Compositions: keys 24–107, velocities 20–110, no pedal, a key struck
+   again no sooner than 120 ms (100 ms or more in the file at 40 bpm), round-tripping through the app's
+   parser (`PostprocessTest`); transcriptions: velocities held to 1–127 and every note at least a tick
+   (`SmfWriterTest`). A transcription's file keeps what was heard (keys 21–23 and 108, a key struck again
+   40 ms later), as any imported file keeps its author's; the player's router folds and thins it, so the
+   piano gets 24–107 only and 100 ms between strikes of a key (`StudioPiecesTest` +1, `37f0daa`). The
+   files go through the importer's own caps. The "Made in Studio" artwork row carries a description and no
+   image, source URL or source title (`ArtworkRepository.describe`). Measured: a composition in the manner
+   of the crafted seed was as dense as its seed allowed, 575 notes in 1.3 s before the budget ran out,
+   within the sampler's ten-at-an-instant guard and the player's limits, as any file is.
+8. **Memory gates.** The gates are the spike's measured costs plus half (900 MiB to transcribe, 700 MiB to
+   compose, 128 MiB to go on; `MemoryGate`). With `debug.stevenpiano.studio=busy` a composition and a
+   transcription both ended at once with "Close other apps and try again.": no session made (the process
+   gained one thread, Studio's, and none of ONNX Runtime's), the service stopped, no wake lock
+   (`…/audit2/gate-refusal.txt`). `lowMemory` mid-job stops a transcription between windows and a
+   composition within a hundred tokens (`StudioTest`, both).
+9. **Privacy promise.** About's line ("Studio models: ByteDance piano transcription (CC BY 4.0) ·
+   Anticipatory Music Transformer (Apache-2.0)") and README's acknowledgements match AUTHORS and
+   `third_party/`. README had gone stale in two places, corrected here: the Wikipedia section said the
+   app's own updates were its only other network use, and *Security* counted "the two manifests" without
+   Studio's list or its models. No host beyond GitHub's four serves the models (point 1). Share
+   diagnostics after a transcription and a composition (`…/audit2/diagnostics-export.txt`): `link.log`
+   holds the figures lines only ("Studio: composed 1.3 s of music … seed 2830993359307 …", the job's random
+   seed, not the seed piece); no title, file name, model path, content URI or address in any file.
+10. **Regression sweep.** The whole suite passes with the real models (`-PstudioModels`): 1,147 tests, 8
+    skipped, the seven corpus tests and `PinnedKeyTest`'s firmware header, which is still the only skip
+    beyond the corpus; without the models 12 (their four cases too). `WebServerTest`'s 401/403 matrix over
+    the grown table, the upload and JSON caps, `UpdateSourceTest`'s firmware and model allow-lists and
+    `PinGuardTest`'s kiosk PIN all pass. `check` passes: lint 0 errors, 28 warnings (as before), both
+    variants' runtime checks.
+
+### Residuals (stated honestly)
+
+- **Nothing is measured on the tablet yet**: every figure here is the emulator's on a Mac, the heap limit
+  its 192 MB. README's Studio checklist is still to run on the school tablet.
+- **The models are pinned, not signed**: their trust is the app's own signature over the hashes it
+  carries. ONNX Runtime parses the model in native code; only a file with the pinned hash reaches it.
+- **Android's decoders parse what a recording claims to be**, in the app's process and the media
+  service; every malformed file tried was refused in words. A codec that never ends its stream would keep
+  its job reading until Cancel (the wake lock lets go after 30 minutes).
+- **A document whose provider gives no size** is not held to the 200 MB cap before reading (the
+  20-minute cap still bounds what is decoded); pickers of local files give one.
+- **A compressed recording whose container gives no duration** still starts its buffer at a minute and
+  grows it (S8 sized WAVs from their length); Android's extractors gave a duration for every format tried.
+- **The panel is its own gate**: signed in, it can transcribe and compose whether or not the tablet is in
+  kiosk mode, eight jobs at a time (S4); the tablet's own queue has no cap, as one person picks its files.
+- **The dataSync time limit** is written for (`onTimeout`) but not exercised: the app targets API 34.
+- **A composition can be as dense as its seed**, within the sampler's guards; what reaches the piano is
+  bounded by the player and the firmware as for any file.
+- **The app's updater would follow a redirect onto the models' release path** (its hops admit any release
+  asset of this repository); what arrives must still be the APK's size and SHA-256.
+
+### What the owner must do
+
+Nothing new beyond 1.7's release: make the repository public for the models to download, run README's
+Studio checklist on the school tablet, and keep the audit's two new lines in mind ("Studio has 8 jobs to
+do already…" on the panel; "More notes were heard in this recording than a piece can hold.").

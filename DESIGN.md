@@ -1527,10 +1527,13 @@ hash built into the app. Everything above still holds. Not released yet: 1.7 com
 - **The steps**: when the transcription model isn't there yet, its download is queued first and
   the transcription waits for it. Then the recording is read (decoded, made mono and 16 kHz), then
   transcribed ten seconds at a time (the percentage), then written as a piece and added to the
-  library. One job at a time; others wait their turn. Cancel stops a job between two windows.
+  library. One job at a time; others wait their turn. Cancel stops a job between two windows; once
+  its piece is being saved a Cancel changes nothing, and the piece waits for Keep or Discard (audit
+  delta 2).
 - **What it refuses**, in its line: "A recording can be 200 MB at most.", "A recording can be 20
   minutes long at most.", "This file isn't a recording the tablet can read.", "The recording is
-  empty.", "No piano was heard in this recording.", and the memory lines above.
+  empty.", "No piano was heard in this recording.", "More notes were heard in this recording than a
+  piece can hold." (past 200,000 notes: audit delta 2), and the memory lines above.
 - **The piece**: the recording's file name without its extension ("Recording · Sep 28, 2026" when
   it has none) by **Made in Studio**, a composer that is no one: no portrait and no Wikipedia text
   is looked for, and the Library draws its roll card. Its sheet reads **"Made in Studio · Sep 28,
@@ -1576,6 +1579,9 @@ hash built into the app. Everything above still holds. Not released yet: 1.7 com
   Recordings go one at a time, each checked in the page first as the tablet will ("Not sent: only
   recordings (.wav, .mp3, .m4a, .flac, .ogg…)", "Not sent: a recording can be 200 MB at most"),
   their rows reading "Sending 52%" over the bar, then **"Sent to the tablet · transcribing there"**.
+  While Studio has eight jobs waiting or running, the tablet refuses more before a byte is sent
+  (audit delta 2): the row reads "Not sent: Studio has 8 jobs to do already. Try again when one has
+  finished.", and the compose form says the same.
 - **JOBS**, as on the tablet, with **Cancel** on those waiting or running; the lines are the
   tablet's own. Keep and Discard stay on the tablet, where the piece is heard.
 - Where Studio can't run, the page is the reason alone.

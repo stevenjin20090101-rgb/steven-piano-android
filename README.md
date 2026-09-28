@@ -272,7 +272,8 @@ Composers get their Wikipedia portrait and a two-sentence blurb; a piece's sheet
 (*About this piece*) shows its Wikipedia notes when it has a page, otherwise its
 composer's. For this the app talks to **two hosts and no others**: `en.wikipedia.org`
 (page summaries and search) and `upload.wikimedia.org` (the portraits); a redirect
-anywhere else is refused. (The only other network use is the app's own updates, below.) What it sends is a page title or a search made from the library's own
+anywhere else is refused. (The only other network use is the app's own updates and the piano's firmware
+releases, below, and Studio's models when you download them, *Studio*.) What it sends is a page title or a search made from the library's own
 composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),
 with the app's User-Agent. **Nothing about you is sent**: no account, no identifier, no
 location, nothing about what you play.
@@ -840,10 +841,12 @@ seconds of that piece into music of its own. (Studio comes with 1.7.)
 2. **Library › + › Transcribe a recording…** (or the button on the Studio page) and pick a
    recording: m4a, mp3, wav, flac, ogg, opus, whatever the tablet plays, up to 20 minutes and
    200 MB. From a computer or a phone, drop recordings on the web panel's **Studio** page instead;
-   they go to the tablet one at a time. Without the model, the job downloads it first.
+   they go to the tablet one at a time, and while Studio has eight jobs waiting or running the page
+   says to try again when one has finished. Without the model, the job downloads it first.
 3. It runs in the background, with its progress in the notification (and Cancel), on the Studio
    page and in the Library: "Transcribing Clair de lune.m4a · 42%". About **a minute per three
-   minutes of audio**; the piano can go on playing meanwhile, and keeps its time.
+   minutes of audio**; the piano can go on playing meanwhile, and keeps its time. A Cancel that comes
+   once the piece is being saved changes nothing: the piece is kept, to keep or discard.
 4. The piece appears in the library titled after the file, by **Made in Studio** (a roll card,
    and "Made in Studio · Sep 28, 2026" on its sheet). Play it: once it has played 15 seconds (or
    to its end), Now playing asks **Keep this piece?** **Keep** keeps it; **Discard** deletes it
@@ -870,14 +873,15 @@ starting point and are never part of the result; the model (trained on the Lakh 
 not on piano alone) carries on in their manner, not note for note. Calm plays softest, Wild the
 most freely; every piece ends with a two-bar fade and no pedal. Every note is one the piano can
 play: keys 24–107, a key struck again no sooner than 120 ms after itself, at most ten notes
-starting at once. A dense piece can come out a little shorter than asked (the model is stopped
-at about 30 tokens a second of music, 9,000 at most).
+starting at once. A dense piece can come out shorter than asked, much shorter in the manner of a
+very dense one (the model is stopped at about 30 tokens a second of music, 9,000 at most).
 
 **What it hears well**: a clear recording of a solo piano. The model was trained on real pianos
 (the MAESTRO recordings; its authors measured a 96.8 % note F1 there); audio from a synthesizer gets
 extra notes (held notes struck again), and voices or other instruments turn into notes of their
 own. A MIDI file picked by mistake is refused: "That's a MIDI file already. Add it with Add
-files."
+files." So is a recording that would make more than 200,000 notes (a piano recording of twenty
+minutes makes a few tens of thousands).
 
 **The models**, downloaded only when asked, never bundled, each keeping its own licence (AUTHORS,
 `third_party/`; About credits them):
@@ -1027,13 +1031,16 @@ The full audit, every finding and what was done about it, is in
 
 - **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
   `upload.wikimedia.org`, carrying page titles and searches made from the library's
-  own names, and, for updates of the app and of the piano's firmware, to
-  `raw.githubusercontent.com` (the two manifests), `github.com` (the release
-  downloads of this repository and of the firmware's,
-  `stevenjin20090101-rgb/Steven-Jin-Player-Piano`, only) and
+  own names, and, for updates of the app and of the piano's firmware and for Studio's
+  models (only when you download one), to `raw.githubusercontent.com` (the three
+  lists: the app's `latest.json`, the firmware's, and `models.json`), `github.com` (the
+  release downloads of this repository, its release `models` among them, and of the
+  firmware's, `stevenjin20090101-rgb/Steven-Jin-Player-Piano`, only) and
   `objects.githubusercontent.com` / `release-assets.githubusercontent.com` (where
   GitHub hands the file over), carrying nothing but the app's User-Agent and, as with
-  any connection, the device's IP address. No analytics, no accounts, and no crash
+  any connection, the device's IP address. Studio's runtime (ONNX Runtime 1.28.0) sends
+  nothing: during a transcription and a composition the app's UID sent no packet at all
+  (the audit's count, `docs/SECURITY_AUDIT.md`). No analytics, no accounts, and no crash
   report goes anywhere by itself: diagnostics leave only when you share them. Nothing
   is backed up to the cloud or carried to a new device by Android's transfer (the
   library stays where it was imported). Release builds log no file names or URLs; the
