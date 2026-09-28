@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -95,6 +96,13 @@ fun Modifier.watchTouches(onTouch: () -> Unit): Modifier = pointerInput(Unit) {
     }
 }
 
+/**
+ * The app's idleness, for windows of the app's own that the nav host's [watchTouches] cannot see (a
+ * sheet is a window of its own): the PIN sheets count their touches with it, and close when display
+ * mode comes (the person walked away). Null outside the nav host.
+ */
+val LocalIdleState = staticCompositionLocalOf<IdleState?> { null }
+
 /** The app's idleness: [IdleState.idle] once [enabled] and no touch came for [timeoutMs]. */
 @Composable
 fun rememberIdle(enabled: Boolean, timeoutMs: Long): IdleState {
@@ -122,4 +130,16 @@ object DisplayModeTimeout {
         }.getOrDefault("").toLongOrNull()
         if (seconds != null && seconds > 0) seconds * 1_000L else DEFAULT_MS
     }
+}
+
+/**
+ * When display mode comes: the idle clock runs while Display mode after a minute is on, or kiosk mode
+ * is (DESIGN.md › v1.6 — M20: there it is always on); once idle it shows while a piece is loaded, or
+ * in kiosk mode with nothing loaded too, its resting state (the byline and, with guests on, the
+ * request code).
+ */
+object DisplayRule {
+    fun watched(afterMinute: Boolean, kiosk: Boolean): Boolean = afterMinute || kiosk
+
+    fun shows(pieceLoaded: Boolean, kiosk: Boolean): Boolean = pieceLoaded || kiosk
 }

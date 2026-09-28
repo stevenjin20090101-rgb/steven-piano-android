@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano
 
+import android.app.ActivityManager
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -59,7 +60,10 @@ import kotlin.coroutines.resume
  * recomputes from the new configuration and nothing is recreated, so nothing may rely on
  * recreation to refresh. After the first frame, and for as long as the activity is started, the
  * app looks for its own updates (at once, then daily; see [AppGraph.runUpdateSchedule]). Where the
- * display offers more than 60 frames a second the window asks for 60 ([capRefreshRate]).
+ * display offers more than 60 frames a second the window asks for 60 ([capRefreshRate]). In kiosk
+ * mode (Piano › Kiosk) the activity, while in front, locks the screen to the app whenever the kiosk
+ * wants it and lets go when it doesn't ([followKiosk]); it is also the tablet's home screen then,
+ * through the manifest's `KioskHome` alias.
  */
 class MainActivity : ComponentActivity() {
     private var requestedTab by mutableStateOf<Route?>(null)
@@ -98,6 +102,29 @@ class MainActivity : ComponentActivity() {
             awaitFrame()   // nothing about updates holds up the first frame
             repeatOnLifecycle(Lifecycle.State.STARTED) { graph.runUpdateSchedule() }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) { graph.kiosk.lockWanted.collect { followKiosk(it) } }
+        }
+    }
+
+    /**
+     * Kiosk mode, while the activity is in front (lock task needs a task in the foreground): the
+     * screen locked to the app when the kiosk wants it and Android permits it (the lock task list
+     * holds this package: never before, or Android would ask the person to pin the screen instead),
+     * let go otherwise ("Unlock for now", Turn kiosk off). Only the device owner's own lock is ever
+     * let go, never a screen the person pinned themselves.
+     */
+    private fun followKiosk(wanted: Boolean) {
+        val mode = getSystemService(ActivityManager::class.java)?.lockTaskModeState ?: return
+        try {
+            if (wanted && mode == ActivityManager.LOCK_TASK_MODE_NONE && graph.kiosk.lockTaskPermitted()) {
+                startLockTask()
+            } else if (!wanted && mode == ActivityManager.LOCK_TASK_MODE_LOCKED) {
+                stopLockTask()
+            }
+        } catch (e: RuntimeException) {   // not in front after all, or the list changed meanwhile
+            Log.w(TAG, "Kiosk: lock task not changed (${e.javaClass.simpleName})")
+        }
     }
 
     /**
@@ -130,27 +157,38 @@ class MainActivity : ComponentActivity() {
         if (pendingShare.isNotEmpty()) outState.putParcelableArrayList(STATE_SHARED, ArrayList(pendingShare))
     }
 
-    /** In the foreground a foreground service may start: composers never looked up are fetched now, and the web panel, if on, listens. */
+    /**
+     * In the foreground a foreground service may start: composers never looked up are fetched now, and
+     * the web panel, if on, listens. Opened again after "Unlock for now", the kiosk locks again; and
+     * the adb way back (`debug.stevenpiano.releaseowner`) is looked for, as on every new intent.
+     */
     override fun onStart() {
         super.onStart()
         graph.fetchArtworkIfDue()
         graph.startWebIfOn(this)
+        graph.kiosk.appOpened()   // back after "Unlock for now": locked again
+        graph.releaseOwnerIfAsked()   // the adb way back, which `am start` reaches (DeviceOwnerRelease)
     }
 
     /**
      * In the background nothing may hold a key down: the Keys screen's keys and sustain let go.
      * Not when the activity only stops to be recreated for a configuration change (a rotation
      * never gets here: the activity handles it without stopping); the Keys screen lets go of
-     * whatever its own window held as that window goes.
+     * whatever its own window held as that window goes. Left after "Unlock for now", the next
+     * start locks the kiosk again.
      */
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) graph.player.silenceLive()
+        if (!isChangingConfigurations) {
+            graph.player.silenceLive()
+            graph.kiosk.appLeft()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         route(intent)
+        graph.releaseOwnerIfAsked()
     }
 
     /**

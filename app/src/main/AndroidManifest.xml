@@ -137,6 +137,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Kiosk mode (Piano › Kiosk, v1.6): the app as the tablet's home screen, so Home and a restart land in it.
+             Off as installed; only kiosk mode turns it on, and only while the app is the device owner, which also makes
+             Home prefer it (admin/Kiosk.kt). Exported, as any home screen: Android starts it for Home. -->
+        <activity-alias
+            android:name=".KioskHome"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
         <!-- Playback with the screen off: the media notification, session and wake lock. -->
         <service
             android:name=".service.PlaybackService"
@@ -187,7 +202,7 @@
             android:name=".update.UpdateResultReceiver"
             android:exported="false" />
 
-        <!-- The school tablet's device owner, for silent updates only: no policies (res/xml/device_admin.xml).
+        <!-- The school tablet's device owner, for silent updates and kiosk mode: no policies (res/xml/device_admin.xml).
              Exported for the system, which alone holds BIND_DEVICE_ADMIN. -->
         <receiver
             android:name=".admin.PianoDeviceAdmin"

@@ -119,7 +119,7 @@ object DiagnosticsText {
         append("Piano link: ").append(linkLine(link)).append('\n')
     }
 
-    /** `settings.txt`: every preference, one a line; of the web panel's PIN only whether one is set. */
+    /** `settings.txt`: every preference, one a line; of the web panel's and the kiosk's PINs only whether one is set. */
     fun settings(s: PianoSettings): String = buildString {
         fun line(name: String, value: Any?) = append(name).append(" = ").append(value ?: "(none)").append('\n')
         line("autoConnect", s.autoConnect)
@@ -152,6 +152,8 @@ object DiagnosticsText {
         line("webOnWifi", s.webOnWifi)
         line("webHostName", s.webHostName)
         line("webPinSet", s.webPinSet)
+        line("kioskEnabled", s.kioskEnabled)
+        line("kioskPinSet", s.kioskPinSet)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

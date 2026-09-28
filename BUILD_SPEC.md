@@ -3248,3 +3248,303 @@ notes; no hash or size until `tools/publish-release.sh` builds it); `latest.json
   `lint`: 0 errors, 29 warnings. The greps above: as stated. The release APK is 2,724,616 bytes
   (versionCode 11, "1.6", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,490,995;
   staged as `../apk/steven-piano-1.6.apk` and `-debug.apk`.
+
+---
+
+# v1.6 — M20: kiosk mode (prepares release 1.6)
+
+Read `DESIGN.md › v1.6 — M20` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M20 (binding) and feature item 11. Built in its own worktree (`m20-kiosk`, from `635d43b`: 1.5.1
+with the audit's W1–W3) beside other runs, so this run leaves the version alone: `versionCode` 10,
+`versionName` "1.5.1" and `Provenance.text` stay, and the version bump to 1.6 (build 12), the
+provenance signature and the staged APKs come when the branch is merged.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `M/admin/Kiosk.kt`: `KioskDevice` (the seam over `DevicePolicyManager` as `PianoDeviceAdmin`,
+  `Settings.Global`, `PackageManager` and `ActivityManager`), `KioskResult` (`On(stayOnBefore,
+  keyguardOff)` · `NotOwner` · `Refused(reason)`), `KioskController(device, packageName, log)` with
+  `KioskController.of(context)` over `AndroidKioskDevice`.
+- `M/admin/KioskMode.kt`: `KioskStatus`, `OwnerRelease` (the adb way back as a seam), `KioskMode`
+  (`AppGraph.kiosk`).
+- `M/admin/KioskPin.kt`: `KioskPinGuard` (the kiosk's schedule on the web panel's `LoginGuard`, kept
+  across restarts).
+- `M/ui/KioskExit.kt`: `LocalBylineHold`, `KioskCopy`, `KioskExit` (Unlock · TurnOff · ChangePin,
+  `offered(unlocked)`), `KIOSK_HOLD_MS`, `HeldByline`, `KioskPinSheet`, `KioskExitSheet`,
+  `KioskMode.leave`.
+- `M/ui/screens/piano/pages/KioskPage.kt` (`KioskPageCopy`, `KioskPage`).
+- `M/ui/KioskLock.kt` (settings locked in kiosk: `KioskLockCopy`, `KioskGate`, `rememberKioskGate`,
+  `KioskGateSheet`, `LockGlyph`, `LockedPage`) and `res/drawable/ic_lock.xml` (an outlined padlock).
+- Tests: `T/admin/FakeKioskDevice.kt`, `KioskControllerTest.kt`, `KioskModeTest.kt`,
+  `PinGuardTest.kt`; `T/ui/KioskExitTest.kt`.
+
+Changed: `AndroidManifest.xml` (the `KioskHome` alias; the device admin's comment);
+`AppGraph.kt` (`kiosk`, `releaseOwnerIfAsked`, the kiosk's start first); `MainActivity.kt`
+(`followKiosk`, `onStart`/`onStop`/`onNewIntent`); `admin/DeviceOwnerRelease.kt` (`asked`,
+`release`); `admin/PianoDeviceAdmin.kt` (its KDoc); `settings/Settings.kt` (below);
+`diag/DiagnosticsExporter.kt` (two lines); `ui/components/PinSheet.kt` (`PinCheckSheet`, `PinWait`,
+the shared `PinSheetFrame` and `PinField`; `PinSheet` itself unchanged); `ui/components/ScreenHeader.kt`
+(the byline through `LocalBylineHold`); `ui/NavHost.kt`; `ui/IdleWatch.kt` (`DisplayRule`,
+`LocalIdleState`); `ui/Routes.kt` (`SettingsPage.Kiosk`); `ui/screens/piano/HubGroups.kt`,
+`GroupSummaries.kt`, `PianoScreen.kt` (and the settings lock); `ui/screens/display/DisplayScreen.kt`
+(`DisplayRest`); `ui/components/SettingsRows.kt` (`NavRow`/`SwitchRow` `locked`);
+`ui/screens/library/LibraryScreen.kt` (the settings lock);
+tests `SettingsRepositoryTest`, `DiagnosticsExporterTest`, `IdleWatchTest`, `RoutesTest`,
+`PianoPagesTest`, `GroupSummariesTest`; DESIGN.md, this file, README.
+
+## Settings
+
+DataStore keys: `kioskEnabled` (false) and `kioskPinSalt`/`kioskPinHash` (a `PinHash`, as the web
+panel's: PBKDF2-HMAC-SHA256, 100,000 rounds, a 16-byte salt), read on their own
+(`SettingsRepository.kioskPin()` → `StoredPin`); `PianoSettings` carries `kioskEnabled` and
+`kioskPinSet` only. Housekeeping, read on their own too: `kioskPinStrikes` and
+`kioskPinLockedUntil` (the wrong tries in a row and when their wait ends, epoch ms; a new PIN
+removes both), `kioskStayOnBefore` (the "stay on while plugged in" mask kiosk mode replaced).
+`settings.txt` in Share diagnostics gains `kioskEnabled` and `kioskPinSet` (32 lines); no hash,
+salt or count ever travels.
+
+## The controller (`admin/Kiosk.kt`)
+
+- `enable()`, as device owner only (else `NotOwner`, nothing touched): `setLockTaskPackages([package])`
+  first (a `startLockTask` before it shows Android's screen-pinning prompt instead),
+  `setLockTaskFeatures(LOCK_TASK_FEATURE_NONE)` (API 28+; before it, lock task already hides the
+  status bar and the power menu), `setKeyguardDisabled(true)` (false when the tablet has a secure lock
+  screen: reported, not fatal), `setGlobalSetting(STAY_ON_WHILE_PLUGGED_IN, "7")` (AC | USB |
+  WIRELESS) after reading the old value, the `KioskHome` alias enabled
+  (`COMPONENT_ENABLED_STATE_ENABLED`, `DONT_KILL_APP`), `clearPackagePersistentPreferredActivities`
+  then `addPersistentPreferredActivity(MAIN + HOME + DEFAULT → .KioskHome)`. A refused step undoes
+  the rest (`Refused`). Safe to repeat.
+- `disable(stayOnBefore)` reverses it, each step on its own (one refusal never stops the others,
+  logged): the preferred home, the alias (back to the manifest's default, off), stay-on as it was,
+  the lock screen, the lock task features back to Android's default (`GLOBAL_ACTIONS`), and **the
+  lock task list last**: Android clears a locked task whose package leaves the list (the app would
+  close), so the caller lets go of the screen first.
+- `tidyWithoutOwner()`: without the device owner a home alias left on goes off (an enabled home
+  alias the app does not own would leave it a launcher nobody could take away); nothing else is
+  touched.
+
+## Kiosk mode in the app (`admin/KioskMode.kt`)
+
+- `status: StateFlow<KioskStatus(checked, owner, unlockedForNow, keyguardKept, problem)>` and
+  `lockWanted = kioskEnabled && checked && owner && !unlockedForNow`, which `MainActivity` follows in
+  `repeatOnLifecycle(RESUMED)`: `startLockTask()` when wanted, the lock task mode NONE and
+  `isLockTaskPermitted`; `stopLockTask()` when not wanted and the mode is LOCKED (never a screen the
+  person pinned themselves, PINNED).
+- `start()` (from `AppGraph.start`, first, on IO): the kept strikes back into the guard; the adb way
+  back (`releaseIfAsked`); without the device owner `tidyWithoutOwner()` and `kioskEnabled` off; with
+  it, kiosk mode on and the lock task list lost, `enable()` again. `checked` is set in a `finally`:
+  nothing locks before it.
+- `turnOn()`: a PIN is needed; `enable()` on the policy dispatcher (IO); the old stay-on kept once;
+  `kioskEnabled` on. `turnOff()`: `unlockedForNow` (the activity lets go), `kioskEnabled` off, then it
+  waits for `isLocked()` to clear (`LET_GO_MS` 2 s at most, polled every 50 ms), then `disable()` with
+  the kept stay-on.
+- Unlock for now: `unlockForNow()`; it ends at `relock()` (Lock again, display mode coming) or when
+  the activity starts again after stopping (`appLeft` from `onStop` outside configuration changes,
+  `appOpened` from `onStart`), or when the process restarts (the flag is in memory).
+- `check(pin)`: the stored `PinHash` weighed by `KioskPinGuard.attempt` on `Dispatchers.Default`;
+  after every weighed try the strikes are kept. `setPin(pin)`: `PinHash.create` off the main thread,
+  the strikes cleared.
+- `releaseIfAsked()` (one at a time, a `Mutex`): when `OwnerRelease.asked()` (the device owner and
+  `debug.stevenpiano.releaseowner` yes), the screen is let go and waited for as in `turnOff`, then
+  `disable`, `kioskEnabled` off, then `OwnerRelease.release()` (`clearDeviceOwnerApp`). Asked at start
+  and whenever `MainActivity` starts or is sent an intent (`AppGraph.releaseOwnerIfAsked`, IO).
+
+## The guard (`admin/KioskPin.kt`)
+
+`KioskPinGuard` = `LoginGuard(threshold = 4, firstLockMs = 5 s, maxLockMs = 5 min, globalThreshold =
+Int.MAX_VALUE, maxKeys = 1)` on one key, "screen": the waits after each wrong try in a row are 0, 0,
+0, 5 s, 10 s, 20 s, 40 s, 80 s, 160 s, 300 s, 300 s…; a try during a wait is refused uncounted
+(`Attempt.Wait`); a right PIN or a new PIN clears it. `Strikes(count, lockedUntil)` is kept after
+each weighed try; a restart replays `count` failures into a fresh guard at the moment that makes the
+last wait end at the kept `lockedUntil` (the waits come from a scratch copy of the guard, so the
+schedule is stated once); a count past 64 is held to it, a nonsense one reads as none. `WebAuth.kt`
+is untouched.
+
+## The way out (`ui/KioskExit.kt`, `ui/components/PinSheet.kt`)
+
+- `NavHost` provides `LocalBylineHold` (non-null only while `kioskEnabled`) and composes
+  `KioskExitSheet` over every tab; `ScreenHeader` draws its byline through `HeldByline` when a hold
+  is provided: `awaitEachGesture { awaitFirstDown(requireUnconsumed = false); … waitForUpOrCancellation() }`,
+  a coroutine that grows `fill` from 0 to 1 over `KIOSK_HOLD_MS` = 3 s with `withFrameMillis` (or
+  sets it to 1 at once under reduced motion) and calls the hold at the end; the fill is a 1 dp rect
+  in `LocalTertiary` along the text's foot (`drawBehind`, no layout change, mirrored in RTL). A
+  `CustomAccessibilityAction("Kiosk PIN")` does the same for TalkBack.
+- `PinCheckSheet(eyebrow, title, hint, actions, waitMs, check, onRight, onDismiss)`: the web PIN
+  sheet's frame and field (`PinSheetFrame`, `PinField`, shared, not copied); one `ActionButton` per
+  action in a `FlowRow` (end-aligned, wraps at large text); the countdown re-reads `waitMs()` every
+  250 ms; the field is enabled only while no wait runs and no try is being weighed, and takes the
+  focus in an effect keyed on that (a disabled field cannot be focused). `PinWait.text(ms)`: "5 s"
+  under a minute, then "2 min" rounded up.
+- `PinSheetFrame` watches its own touches for display mode (`LocalIdleState`, which `NavHost`
+  provides) and dismisses itself when the app goes idle.
+- `KioskPage`: `LifecycleResumeEffect` → `kiosk.refresh()` (the owner may have been set over adb);
+  the switch off, Unlock for now and Change PIN (while on) open `KioskPinSheet` with the one action;
+  Lock again calls `relock()`.
+
+## Display mode (`ui/IdleWatch.kt`, `ui/NavHost.kt`, `ui/screens/display/DisplayScreen.kt`)
+
+`DisplayRule.watched(afterMinute, kiosk) = afterMinute || kiosk` (the idle clock) and
+`shows(pieceLoaded, kiosk) = pieceLoaded || kiosk`. `DisplayOverlay` calls `kiosk.relock()` as it
+shows in kiosk mode. `DisplayScreen` with no piece composes `DisplayRest`: the canvas, the byline
+(`Alignment.End`, at the foot), and while `webEnabled && webGuests` and the panel has a guests'
+address, `RequestCode(url, wide)`: "Ask the piano" (`displayLarge` on `twoPane`, else
+`displayMedium`), the line, `QrTile(url, side)` with `side = min(70 % of the width, 45 % of the
+height, 280 dp or 360 dp on wide frames)`, the address. `rememberDrift()` steps the whole column
+round an eight-point square of 4 dp once a minute (`offset`, never animated). `keepScreenOn` only
+while a piece is loaded; the bars' hiding moved to its own effect.
+
+## Settings locked in kiosk (`ui/KioskLock.kt`)
+
+- `KioskMode.settingsLocked = kioskEnabled && !unlockedForNow && !settingsOpen` (`StateFlow`,
+  distinct). `unlockSettings()` opens it and starts a timer of `SETTINGS_UNLOCK_MS` = 5 min in the
+  app's scope (a second right PIN starts it again); `relock()` (display mode coming, Lock again, the
+  app opened again after Unlock for now) closes it early; `turnOn`/`turnOff` start with it closed.
+- `KioskGate` (`rememberKioskGate()`, over `settingsLocked` collected with the lifecycle):
+  `run(action)` runs at once, or, while locked, keeps the action and `KioskGateSheet(gate)` shows
+  `PinCheckSheet(KIOSK, "Settings are locked in kiosk", "The kiosk PIN opens them for five minutes.",
+  [Unlock])`; the right PIN calls `unlockSettings()`, then the action. The guard and the waits are
+  the kiosk's (`KioskMode.check`).
+- `PianoScreen`/`PianoPageScreen`: page rows through the gate (`vm.open` + navigate on phones,
+  `vm.pick` beside the hub), the APP group's two switches and Check now through it, Disconnect through
+  it (Connect, Cancel and connecting to another piano stay free); `NavRow(locked)` draws `LockGlyph`
+  (18 dp, `LocalTertiary`, described "Locked") in the chevron's 24 dp, `SwitchRow(locked)` before the
+  switch; Check now's button reads "Check now, locked" with a padlock beside it. `SettingsPageView`
+  shows `LockedPage(gate)` in place of any page while locked.
+- `LibraryScreen`: the header's + ("Add MIDI files, locked", a padlock before it) and the empty
+  library's button, every `LibraryDialog` (`openDialog`: Add to playlist, Rename, Delete, Rename
+  playlist, Delete playlist), `removeFromPlaylist` and `move`, Change photo, and a channel's Set
+  volume go through the gate; `reorderable` is false while locked (no drag handles, no Move items).
+  `setFavorite`, playing, Play next, Add to queue, About this piece and the requests banner do not.
+
+## Manifest
+
+`<activity-alias android:name=".KioskHome" android:targetActivity=".MainActivity"
+android:enabled="false" android:exported="true">` with MAIN + HOME + DEFAULT. Nothing else is
+exported; the device admin still declares no policies (lock task, the keyguard, the preferred home
+and `STAY_ON_WHILE_PLUGGED_IN` are a device owner's own powers).
+
+## Greps (v1.6 — M20)
+
+`Color(0x` outside `ui/theme`: none. `DisplayBlack`: `Color.kt`, `Theme.kt` (the resting state takes
+the canvas from `DisplayTheme`). `0.0.0.0`, `Access-Control`, `Modifier.blur`: none. `LocalLive`:
+`LiveDot.kt`, `Theme.kt`. `startLockTask`/`stopLockTask`: `MainActivity.followKiosk` only.
+
+## Measured (September 2026, `steven_piano_m20`, API 34, Pixel 7 profile, debug build)
+
+Settings locked in kiosk, on the AVD made again for it (`m20/kiosk-lock-evidence.log`): with kiosk
+mode on, the hub read "Locked" on its eight page rows, both APP switches and Check now ("Check now,
+locked"); Feel's row and the Library's + (read "Add MIDI files, locked", a padlock beside it) each
+opened "Settings are locked in kiosk" and cancelling left the screen as it was; the right PIN from
+Feel's row opened Feel, and back on the hub the padlocks were gone; with Feel open and the tablet
+left alone, display mode came at the (shortened) idle time, and the first touch found Feel reading
+"Settings are locked in kiosk." with Unlock, the hub's padlocks back; on a 2560 × 1600 px, 240 dpi
+frame the page beside the hub showed the same locked page.
+
+A fresh AVD of this run's own (never `steven_piano` or `steven_piano_tablet`), addressed with
+`adb -s emulator-5558`; the evidence log is `m20/kiosk-evidence.log` in the run's scratchpad.
+
+- `adb shell dpm set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin` on the fresh
+  AVD: "Success". The Kiosk page read "Set a PIN first", then its explanation; Kiosk mode on:
+  `mLockTaskModeState=LOCKED`, HOME resolving to `.KioskHome`, `stay_on_while_plugged_in` 1 → 7.
+- Home and Recents dead: `KEYCODE_HOME`, `KEYCODE_APP_SWITCH`, the home gesture (a swipe up from the
+  bottom edge) and a swipe down from the top edge each left the screen pixel for pixel as it was
+  and the app on top, locked; Back twice at the Library (the root) left it there, locked.
+- The byline held: the hairline half grown at 1.7 s, the sheet at 3 s over the Library; with
+  animations off, the hairline whole at 0.9 s. Wrong PINs: three with no wait, then "Try again in
+  5 s", "… 10 s", and after reinstalling the app (a new process) the next wrong try "… 20 s": the
+  count outlasted the restart. When a wait ended the field took the focus and the keyboard came
+  back.
+- Unlock for now: LOCKED → NONE, the shade and Recents opened, Home came back to the app (still the
+  home screen); Lock again on the Kiosk page: LOCKED.
+- Turn kiosk off: NONE with the app still open (not closed by Android), HOME resolving to the Pixel
+  launcher again, the alias off, stay-on back to 1; Home opened the launcher.
+- Kiosk on again, `adb reboot`: booted into the app, LOCKED; the power button off and on: straight
+  into the app, no lock screen.
+- The way back: `setprop debug.stevenpiano.releaseowner yes`; `am force-stop` was ignored ("Ignoring
+  request to force stop protected package"); `am start -n …/.MainActivity` delivered to the running
+  app ended kiosk mode and gave the role back ("no owners"), NONE with the app still open, HOME the
+  launcher, stay-on 1.
+- Display mode at rest (`debug.stevenpiano.idlesecs 15`, nothing loaded): black with the byline;
+  with Web control and guests on, "Ask the piano", the code (ZXing reads
+  `http://10.0.2.17:8737/request`) and the address; on a 2560 × 1600 px, 240 dpi frame the code
+  at its 360 dp cap under Display Large. A PIN sheet touched every 5 s stayed open past the idle
+  time; left alone it closed and the tablet rested.
+- Dark and font scale 2.0: the Kiosk page and both sheets wrap without clipping (the exit sheet's
+  buttons go to two lines).
+- `./gradlew lint`: 0 errors and 29 warnings (28 on an earlier run: the newer-version notices vary
+  with what the check finds online), none in code this run wrote (the manifest's
+  `DataExtractionRules` warning predates it). `assembleRelease` builds (2,708,324 bytes, the alias
+  disabled and exported in its manifest, the provenance string in `classes.dex`); not staged.
+
+## Deviations from the plan, and why
+
+- **The way back is asked on every activity start and new intent, not only at process start.**
+  Android 14 ignores `am force-stop` for a device owner's own package ("protected"; `am stop-app`
+  too), so the documented setprop, force-stop, start never restarted the process and the release
+  never ran; `am start` now reaches the running app. The README's sequence works unchanged.
+- **The way back lets go of the screen first**, as Turn kiosk off does: emptying the lock task list
+  under a locked task makes Android clear the task, closing the app.
+- **The wrong tries are kept across restarts** (`kioskPinStrikes`, `kioskPinLockedUntil`), as the
+  2026-09-27 design asked, so a restart of the tablet gives nobody the three free tries back. The
+  schedule is still `LoginGuard`'s: `KioskPinGuard` wraps it and replays kept strikes, and
+  `WebAuth.kt` is untouched (its audit runs beside this run).
+- **One sheet shape for the PIN before an action**: `PinCheckSheet` (one entry, then the actions),
+  sharing `PinSheet`'s frame and field rather than a second sheet; the byline's sheet offers both
+  actions at once instead of a second step after the PIN.
+- **Lock again** (while unlocked for now) and the rule that Unlock for now also ends when the app is
+  opened again or the tablet rests in display mode: "until the next launch" read as a school
+  tablet needs it, since an unlocked kiosk left alone would stay open indefinitely otherwise.
+- **The PIN is asked for before Change PIN while kiosk mode is on**, and before the switch turns off,
+  besides the byline: the Kiosk page is reachable in kiosk mode.
+- **The stay-on value is put back**, not reset to 0 (`kioskStayOnBefore`).
+- **`KioskController` takes a `KioskDevice`**, not `(dpm, admin, context)`: the seam the test fakes;
+  `KioskController.of(context)` builds the Android one.
+- **Display mode at rest drifts 4 dp a minute** (burn-in, hours on end) and keeps the screen on only
+  through "stay on while plugged in"; a PIN sheet counts its own touches and closes at rest.
+- **Not built here, for the merge**: the version bump to 1.6 (build 12), `Provenance.text`, the
+  staged APKs and the provenance signature.
+- **Settings locked in kiosk, a little beyond the list it was given**: besides the + sheet, Delete
+  playlist, Remove from playlist, Delete piece and Change photo, the library's other changes ask too
+  (Rename a piece or a playlist, Add to playlist, Move up and Move down) and drag reordering is not
+  offered while locked, following the rule "anything that changes the piano or the library asks";
+  a channel's Set volume asks as a change to the piano. Share diagnostics, the UPDATE row (Update,
+  Restart) and Connect stay free. A page shown while locked gives way to a locked page rather than
+  showing its controls: on a tablet the hub always shows a page beside it.
+- **The Kiosk page's own actions still ask each time**, even with the settings open: they are the way
+  out, as before.
+
+## Residuals
+
+- Settings locked in kiosk gate the app's own screens; the web panel (behind its own PIN, on the
+  tailnet) is not gated by the kiosk.
+- An update installed over adb while kiosk mode is on leaves the launcher up until Home is pressed
+  (the app then locks again: measured). The in-app updater reopens the app itself as device owner
+  (`UpdateResultReceiver.reopen`), which then locks again: from the code, not run here.
+- "Unlock for now" lives in memory: a restart of the app ends it (it locks again).
+- A tablet with its own secure lock screen keeps it (Android refuses `setKeyguardDisabled`); the page
+  says so.
+
+## Tests added in M20
+
+`KioskControllerTest` (8: the order as device owner, the lock task list first; repeating it never
+stacks two preferred homes; nothing touched without the owner; a screen lock Android keeps; off in
+reverse with the list last; a refused step undoes the rest; one refused step while turning off
+never stops the others; the tidy-up without the owner touches only the alias), `KioskModeTest`
+(10: on only with a PIN and the owner; nothing locks before the checks; unlock for now until
+opened again, and relock; off waits for the screen to let go; an activity that never lets go does
+not keep kiosk mode on; the adb way back ends kiosk mode before the owner goes; the way back while
+locked lets go first; without the owner the alias goes off and kiosk mode reads off; a lost lock
+task list put back at start; the PIN weighed as the panel's, its tries outlasting a restart),
+`PinGuardTest` (6: 0, 0, 0, 5 s, 10 s… to 5 min; a try during a wait is refused uncounted; a right
+or new PIN starts again; a restart gives nobody the free tries back; a wait that ended while away;
+the cap whatever is kept), `KioskExitTest` (3: three seconds and the offers; the wait's words; the
+switch's note and the page's explanation), `SettingsRepositoryTest` (+1: kiosk mode off at first,
+its PIN kept apart, its housekeeping), `IdleWatchTest` (+1: display mode always on in kiosk and at
+rest with nothing loaded), `GroupSummariesTest` (+1: Kiosk reads on or off); `RoutesTest`,
+`PianoPagesTest` and `DiagnosticsExporterTest` (32 lines) changed; then, with settings locked in
+kiosk, `KioskModeTest` (+3: open for five minutes (its time shortened) and a second PIN starts it
+again, then locked; coming to rest locks them early; unlock for now counts as open, and kiosk mode
+off leaves nothing locked, on again nothing left over). 840 tests before, 873 after (7
+skipped, as before: the corpus tests, `-Pcorpus`).

@@ -72,4 +72,14 @@ class IdleWatchTest {
         assertFalse(Appearance.LIGHT.dark(systemDark = true))
         assertTrue(Appearance.DARK.dark(systemDark = false))
     }
+
+    @Test
+    fun `in kiosk mode display mode is always on, and rests with nothing loaded`() {
+        assertFalse("off by default", DisplayRule.watched(afterMinute = false, kiosk = false))
+        assertTrue(DisplayRule.watched(afterMinute = true, kiosk = false))
+        assertTrue("kiosk mode: on regardless of the switch", DisplayRule.watched(afterMinute = false, kiosk = true))
+        assertTrue(DisplayRule.shows(pieceLoaded = true, kiosk = false))
+        assertFalse("nothing to show outside kiosk mode", DisplayRule.shows(pieceLoaded = false, kiosk = false))
+        assertTrue("the resting state: the byline and the request code", DisplayRule.shows(pieceLoaded = false, kiosk = true))
+    }
 }

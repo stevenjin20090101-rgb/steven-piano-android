@@ -109,7 +109,7 @@ class GroupSummariesTest {
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "On · 100.101.2.3"),
+            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "On · 100.101.2.3", "Off"),
             SettingsPage.entries.map { rows.of(it) },
         )
     }
@@ -156,5 +156,12 @@ class GroupSummariesTest {
         assertEquals("On · 192.168.1.20", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20", panelOnWifi = true)))
         assertEquals("On", GroupSummaries.remote(on, WebStatus()))
         assertEquals("the Remote row reads without the piano", "Off", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).remote)
+    }
+
+    @Test
+    fun `Kiosk reads on or off, with or without the piano`() {
+        assertEquals("Off", GroupSummaries.kiosk(PianoSettings()))
+        assertEquals("On", GroupSummaries.kiosk(PianoSettings(kioskEnabled = true, kioskPinSet = true)))
+        assertEquals("On", GroupSummaries.from(PianoState.Unknown, PianoSettings(kioskEnabled = true), wide = true).of(SettingsPage.Kiosk))
     }
 }

@@ -1215,3 +1215,124 @@ release the piano reports, "2.0.0" (the build stays on the page), else "—" as 
   transfer carries on with the screen off or the app in the background.
 - **The piano's own screen** shows "Updating • 38 %", then "Updated to 2.1.0" for a minute after it
   confirms itself (BLE_OTA.md › 7, 9): the tablet and the piano say the same thing.
+
+---
+
+# v1.6 — M20: kiosk mode
+
+Steven asked (2026-09-27) for the school tablet to be locked to the app, with a way out that
+doesn't mean rebuilding anything. Android gives a device owner a proper kiosk ("lock task"), and
+the school tablet is the app's device owner already (v1.4, for silent updates). Everything above
+still holds; this section adds the Kiosk page, the hidden way out, and display mode's resting
+state. It prepares release 1.6.
+
+## What kiosk mode does
+
+- The screen shows the app and nothing else: no Home, no Recents, no notifications or status bar,
+  no power menu (Android's lock task with none of its features). Back works inside the app and
+  stops at its root.
+- The app is the tablet's home screen: a restart, or anything that sends the tablet home, lands in
+  the app, locked. The lock screen is off, so the power button wakes straight into the app, and the
+  screen stays on while the tablet is plugged in (a charger, USB or a wireless pad).
+- Display mode is always on, and is the resting state (below).
+- It needs the app to be the tablet's device owner (README › School tablet) and a kiosk PIN.
+
+## The Kiosk page (Piano › CONTROL › Kiosk)
+
+- **The row.** CONTROL gains **Kiosk** under Remote control, reading "On" or "Off" ("On" while
+  unlocked for now too: it locks again by itself).
+- **Kiosk mode**, a switch. While the app is not the device owner it is greyed with "Make the app
+  the device owner first: README › Kiosk"; without a PIN, "Set a PIN first", as Web control is.
+  Before it comes on, a line in Body under it says what it does and where the way out is: "The
+  tablet shows only this app, wakes into it and comes back to it after a restart. To leave, hold the
+  byline under any tab's title for three seconds." Turning it on locks the screen at once; turning
+  it off asks for the PIN.
+- While it is on, **Unlock for now** (outlined, "Home and the other apps come back until the app is
+  opened again"), which asks for the PIN; while unlocked, **Lock again** in its place ("Unlocked
+  until the app is opened again, or left alone"), which asks for nothing.
+- **Set a PIN** / **Change PIN** (outlined, "Six digits, asked for to leave kiosk mode"): the web
+  panel's sheet, six digits twice. While kiosk mode is on, the old PIN first.
+- The page ends with the note **Display mode is always on in kiosk**.
+- Should Android keep the tablet's own screen lock (a PIN, pattern or password set on the tablet),
+  the line under the switch says so: "The tablet has a screen lock, so after a restart it waits at
+  the lock screen. Remove the lock in Android's settings to start straight into the piano."
+
+## The way out
+
+- **Nothing on screen hints at it.** While kiosk mode is on, a three-second hold on the byline under
+  any tab's title (PLAYER PIANO · BY STEVEN JIN) opens the kiosk's PIN sheet. While the finger is
+  down, a hairline in the byline's own grey grows along its foot over the three seconds, and goes
+  the moment the finger lifts or strays; with animations removed it stands whole at once (a cut).
+  Nothing else moves and the header keeps its size. TalkBack offers the same as an action on the
+  byline, "Kiosk PIN". With kiosk mode off the byline is plain text with no gesture at all.
+- **The PIN sheet**: the KIOSK eyebrow, **Enter the PIN** in Title, "The six digits set in Piano ›
+  Kiosk.", the six-digit field of the web PIN's sheet (masked, a number pad, tabular figures spaced
+  wide), then Cancel and two outlined buttons side by side, **Unlock for now** and **Turn kiosk
+  off** (Turn kiosk off alone while already unlocked). A button weighs the PIN; nothing is decided
+  before one is pressed.
+- **Wrong**: "That PIN isn't right." The first three wrong tries cost nothing; after that each one
+  makes the next wait 5 s, 10 s, 20 s…, doubling to five minutes, and the line counts it down,
+  "That PIN isn't right. Try again in 5 s." (seconds under a minute, then whole minutes), the field
+  and the buttons greyed until it ends. The count outlasts a restart of the app or of the tablet; the
+  right PIN, or a new one, starts it again.
+- **Unlock for now**: the screen lets go. Home, Recents, the notifications and the other apps are
+  back until the app is next opened (after another app, or the screen turning off) or the tablet
+  rests in display mode; then it locks again by itself. The app stays the home screen meanwhile, so
+  Home comes back to it.
+- **Turn kiosk off**: everything kiosk mode changed goes back as it was: the screen lets go, the
+  tablet's own launcher is home again, the lock screen returns, and "stay on while plugged in" is
+  what it was before. The PIN is kept for next time.
+- **A forgotten PIN**: the adb way back (README › Kiosk). The app gives up the device owner, ending
+  kiosk mode first; only someone with a computer and a cable can do it.
+- A PIN sheet counts its own touches for display mode; left alone until display mode comes all the
+  same, it closes, so the tablet never rests with a PIN sheet over it.
+
+## Display mode at rest
+
+- In kiosk mode display mode is always on, whatever Piano › Display › STANDBY says, and it comes
+  after the same minute without a touch with nothing loaded too: the resting state. Coming to rest
+  ends an "Unlock for now".
+- **A piece loaded**: display mode as v1.5 — M17 draws it.
+- **Nothing loaded**: the canvas (true black, or the app's own surface on "Same as the app") with
+  the byline at the foot where display mode has it, and nothing else, unless guests may ask. While
+  Web control and Guests can request are both on, the request page's code stands in the middle as
+  the poster has it: **Ask the piano** in Display (Display Large on wide screens), "Scan to pick a
+  piece for the piano" in Body, the code on its paper card (the paper's ink on its elevated paper
+  inside a hairline, as on the Remote page: cameras read dark on light), as large as the screen
+  allows up to 280 dp on phones and 360 dp on tablets, and the address under it in tabular figures.
+- Nothing moves at rest but the whole: once a minute it steps 4 dp round a small square, never
+  animated, so hours of the same words burn nothing into the screen. At rest the screen stays on only
+  as "stay on while plugged in" says (kiosk mode sets it); with a piece loaded it stays on as before.
+- Any touch leaves, as before, and goes no further.
+
+## Settings locked in kiosk
+
+The tablet stands in a public space (Fable, 2026-09-28): in kiosk mode, playing, queueing,
+browsing and the Keys tab stay free, and anything that changes the piano or the library asks for
+the kiosk PIN first.
+
+- **The Piano tab.** The hub keeps its groups and their values, but every page row (Feel,
+  Lighting, Pedal, Firmware and status, Playback, Display, Remote control, Kiosk) carries a small
+  padlock in its chevron's place, in the tertiary grey, and opens only after the PIN. The APP
+  group's two switches carry the padlock just before the switch and Check now beside its button;
+  each asks before it acts. Share diagnostics stays free. The connection card's **Disconnect** asks;
+  **Connect** never does.
+- **The Library.** A padlock stands beside the **+**, which asks before its sheet (adding music)
+  opens, as the empty library's Add MIDI files does. Delete (a piece or a playlist), Remove from
+  playlist, Rename (a piece or a playlist), Add to playlist, Move up and Move down, Change photo, and
+  a channel's Set volume ask too; while locked a playlist shows no drag handles, since a drag cannot
+  wait for a PIN. Playing, Shuffle, Play next, Add to queue, Favorite, About this piece, the guests'
+  banner and everything on Now playing and Keys never ask.
+- **The sheet**: the kiosk's PIN sheet with the title **Settings are locked in kiosk** and the line
+  "The kiosk PIN opens them for five minutes.", then Cancel and **Unlock**. The right PIN opens the
+  settings and the action goes on (the page opens, the switch turns, the + sheet rises); a wrong one
+  counts against the same waits as the way out.
+- **How long.** The right PIN opens the settings for five minutes, or until the tablet rests in
+  display mode, whichever comes first; while unlocked for now they are open too. While open the
+  padlocks give way to the chevrons, and nothing asks.
+- **A page shown while locked** (beside the hub on a tablet, or a page left open when the five
+  minutes ran out or the tablet rested) gives its controls up for the line "Settings are locked in
+  kiosk." and an outlined **Unlock** ("The kiosk PIN opens them for five minutes."), which asks for
+  the PIN; the page's title stays.
+- The Kiosk page's own Unlock for now, Turn kiosk off and Change PIN still ask for the PIN each time,
+  whether the settings are open or not: they are the way out.

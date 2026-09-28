@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.ui.LockGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalDisabledGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
@@ -101,7 +102,8 @@ fun SectionRule(modifier: Modifier = Modifier) {
 /**
  * On or off. [note] is a line of explanation under the label, in the eyebrow style and sentence
  * case; [stateDescription] is what TalkBack says of the value when "on" and "off" are not enough
- * ("not known" before the piano has answered).
+ * ("not known" before the piano has answered). [locked]: settings locked in kiosk mode, a padlock
+ * before the switch (the change asks for the kiosk PIN).
  */
 @Composable
 fun SwitchRow(
@@ -112,6 +114,7 @@ fun SwitchRow(
     enabled: Boolean = true,
     note: String? = null,
     stateDescription: String? = null,
+    locked: Boolean = false,
 ) {
     Row(
         modifier
@@ -135,6 +138,10 @@ fun SwitchRow(
             }
         }
         Spacer(Modifier.width(16.dp))
+        if (locked) {
+            LockGlyph()
+            Spacer(Modifier.width(8.dp))
+        }
         Switch(checked = checked, onCheckedChange = null, enabled = enabled, colors = switchColors())
     }
     HairlineDivider(startInset = RowInset)
@@ -304,6 +311,8 @@ fun ChoiceRow(
  * colour and a chevron in the tertiary one at the end. A value too long to sit beside the label
  * (large text) goes under it. [selected] marks the page open beside the hub on wide screens: the
  * row is filled with the elevated surface edge to edge; null on phones, where a row navigates.
+ * [locked]: settings locked in kiosk mode, a padlock in the chevron's place (the page opens after
+ * the kiosk PIN).
  */
 @Composable
 fun NavRow(
@@ -312,6 +321,7 @@ fun NavRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean? = null,
+    locked: Boolean = false,
 ) {
     val tap = if (selected == null) {
         Modifier.clickable(role = Role.Button, onClick = onClick)
@@ -330,14 +340,18 @@ fun NavRow(
     ) {
         LabelAndValue(label, value, Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
-        Icon(
-            painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            modifier = Modifier
-                .size(24.dp)
-                .mirrored(rtl),
-            tint = LocalTertiary.current,
-        )
+        if (locked) {
+            LockGlyph(Modifier.padding(3.dp))   // in the chevron's 24 dp
+        } else {
+            Icon(
+                painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(24.dp)
+                    .mirrored(rtl),
+                tint = LocalTertiary.current,
+            )
+        }
     }
     HairlineDivider(startInset = RowInset)
 }

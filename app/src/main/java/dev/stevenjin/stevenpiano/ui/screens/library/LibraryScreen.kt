@@ -83,11 +83,16 @@ import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.KioskGate
+import dev.stevenjin.stevenpiano.ui.KioskGateSheet
+import dev.stevenjin.stevenpiano.ui.KioskLockCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.LockGlyph
 import dev.stevenjin.stevenpiano.ui.Sentences
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
+import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
@@ -127,7 +132,10 @@ import kotlinx.coroutines.launch
  * floats as a glass circle at the bottom end of its column ([FloatingPlayRequest]). On wide frames
  * (AppFrame.twoPane) the Library is two panes: the list in 55 % of the width and the now-playing
  * panel ([NowPlayingPanel]) beside it; playing a piece then stays on the Library, and the Now
- * playing tab remains for the full score.
+ * playing tab remains for the full score. In kiosk mode the library's changes are locked (DESIGN.md
+ * › v1.6 — M20): adding music (the + and its sheet), deleting, renaming, adding to and taking out of
+ * playlists, reordering them, a playlist's photo and a channel's volume wait for the kiosk PIN
+ * ([KioskGate]); playing, queueing, favourites and browsing never do.
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -144,6 +152,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     var photoFor by rememberSaveable { mutableStateOf<Long?>(null) }
     var volumeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    val gate = rememberKioskGate()
     val pickers = rememberImportPickers(onImport)
     // The picker's grant ends with this screen: the photo is copied at once, in the app's scope.
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -152,18 +161,23 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         if (uri != null && playlistId != null) graph.appScope.launch { graph.artwork.setPlaylistPhoto(playlistId, uri) }
     }
     val changePhoto: (Long) -> Unit = { playlistId ->
-        photoFor = playlistId
-        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        gate.run {
+            photoFor = playlistId
+            photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
     }
-    val actions = remember(vm, playback) {
+    // Every dialog changes the library (add to a playlist, rename, delete): in kiosk mode each waits for the PIN.
+    val openDialog: (LibraryDialog) -> Unit = { next -> gate.run { dialog = next } }
+    val addMusic: () -> Unit = { gate.run { adding = true } }
+    val actions = remember(vm, playback, gate) {
         PieceActions(
             playNext = { playback.playNext(listOf(it.id)) },
             addToQueue = { playback.addToQueue(listOf(it.id)) },
             about = { about = it.id },
-            addToPlaylist = { dialog = LibraryDialog.AddToPlaylist(it) },
+            addToPlaylist = { piece -> gate.run { dialog = LibraryDialog.AddToPlaylist(piece) } },
             setFavorite = vm::setFavorite,
-            rename = { dialog = LibraryDialog.Rename(it) },
-            delete = { dialog = LibraryDialog.Delete(it) },
+            rename = { piece -> gate.run { dialog = LibraryDialog.Rename(piece) } },
+            delete = { piece -> gate.run { dialog = LibraryDialog.Delete(piece) } },
         )
     }
     val frame = LocalAppFrame.current
@@ -181,7 +195,9 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         Column(modifier.imePadding()) {
             Column(Modifier.readingWidth()) {
                 ScreenHeader("Library") {
-                    GlyphButton(R.drawable.ic_add, "Add MIDI files") { adding = true }
+                    // Settings locked in kiosk: a padlock beside the +, which then asks for the PIN.
+                    if (gate.locked) LockGlyph(description = null)
+                    GlyphButton(R.drawable.ic_add, if (gate.locked) "Add MIDI files, ${KioskLockCopy.LOCKED.lowercase()}" else "Add MIDI files", onClick = addMusic)
                 }
                 HairlineDivider()
                 ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
@@ -195,7 +211,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                     CategoryChips(state.category, vm::selectCategory)
                     OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
                 }
-                state.empty -> EmptyLibrary(onAdd = { adding = true })
+                state.empty -> EmptyLibrary(onAdd = addMusic)
                 else -> {
                     var listBounds by remember { mutableStateOf<Rect?>(null) }
                     BoxWithConstraints(
@@ -212,7 +228,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                                 Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
                             }
                         }
-                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { volumeFor = it }) { dialog = it }
+                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, gate, openDialog)
                     }
                 }
             }
@@ -247,6 +263,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         val name = rememberChannelName(key) ?: key
         ChannelVolumeSheet(key, name) { volumeFor = null }
     }
+    KioskGateSheet(gate)
 }
 
 /** The list's share of a wide frame; the now-playing panel has the rest. */
@@ -290,6 +307,7 @@ private fun LibraryItems(
     play: LibraryPlay,
     onChangePhoto: (Long) -> Unit,
     onSetVolume: (String) -> Unit,
+    gate: KioskGate,
     onDialog: (LibraryDialog) -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
@@ -303,8 +321,9 @@ private fun LibraryItems(
     val pieces = (listing as? Listing.Pieces)?.pieces.orEmpty()
     // A built-in playlist's order and pieces are the app's: no handles, no Move or Remove in its rows.
     val builtIn = (listing as? Listing.Pieces)?.playlist?.builtIn == true
-    // Reordering needs the whole playlist on screen: not while a search narrows it.
-    val reorderable = playlistId != null && !builtIn && vm.query.isBlank()
+    // Reordering needs the whole playlist on screen: not while a search narrows it, nor while kiosk mode
+    // locks the library's changes (a drag can't wait for a PIN: the handles are simply not there).
+    val reorderable = playlistId != null && !builtIn && vm.query.isBlank() && !gate.locked
     // The order on screen while a drag is under way and until the playlist has caught up with it.
     var dragged by remember(playlistId) { mutableStateOf<List<Long>?>(null) }
     val shown = dragged?.let { order -> reorderedBy(pieces, order) { it.id } } ?: pieces
@@ -321,13 +340,13 @@ private fun LibraryItems(
     LaunchedEffect(pieces, drag.draggingKey) {
         if (drag.draggingKey == null && dragged == pieces.map { it.id }) dragged = null
     }
-    val rowActions = remember(actions, playlistId, builtIn) {
+    val rowActions = remember(actions, playlistId, builtIn, gate) {
         if (playlistId == null || builtIn) {
             actions
         } else {
             actions.forPlaylist(
-                remove = { vm.removeFromPlaylist(playlistId, it.id) },
-                move = { piece, delta -> vm.movePiece(playlistId, piece.id, delta) },
+                remove = { piece -> gate.run { vm.removeFromPlaylist(playlistId, piece.id) } },
+                move = { piece, delta -> gate.run { vm.movePiece(playlistId, piece.id, delta) } },
             )
         }
     }
