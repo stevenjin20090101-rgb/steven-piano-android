@@ -22,8 +22,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +34,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.os.BundleCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
@@ -80,7 +83,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val size = calculateWindowSizeClass(this)
             val frame = remember(size) { AppFrame(size.widthSizeClass, size.heightSizeClass) }
-            PianoTheme {
+            // Light, dark, or as the system says (Piano › Display › Appearance); nothing is drawn until it is known.
+            val appearance by graph.appearance.collectAsStateWithLifecycle()
+            val dark = appearance?.dark(isSystemInDarkTheme()) ?: return@setContent
+            LaunchedEffect(dark) { systemBarsFor(dark) }
+            PianoTheme(darkTheme = dark) {
                 PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }) { source ->
                     ImportService.start(this, source, fromPicker = true)
                 }
@@ -91,6 +98,17 @@ class MainActivity : ComponentActivity() {
             awaitFrame()   // nothing about updates holds up the first frame
             repeatOnLifecycle(Lifecycle.State.STARTED) { graph.runUpdateSchedule() }
         }
+    }
+
+    /**
+     * The status and navigation bars stay transparent over the app, with their icons light on the
+     * camera body and dark on the paper, as the app appears (which may not be as the system does).
+     */
+    private fun systemBarsFor(dark: Boolean) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+        )
     }
 
     /**

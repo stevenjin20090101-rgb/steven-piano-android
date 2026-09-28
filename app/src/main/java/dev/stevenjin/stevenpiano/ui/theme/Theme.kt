@@ -115,3 +115,26 @@ fun PianoTheme(
         )
     }
 }
+
+/**
+ * Display mode's canvas (DESIGN.md › v1.5 — M17). [black]: the camera body's colours and tokens on
+ * true black ([DisplayBlack] as the surface and background) in both appearances, the only pure
+ * black in the app and read nowhere else; otherwise the app's own surface as it appears
+ * ([darkTheme]: ink, else paper) with its tokens. Wraps display mode alone: nothing behind it
+ * changes.
+ */
+@Composable
+fun DisplayTheme(black: Boolean, darkTheme: Boolean, content: @Composable () -> Unit) {
+    if (!black) {
+        PianoTheme(darkTheme = darkTheme, content = content)
+        return
+    }
+    PianoTheme(darkTheme = true) {
+        MaterialTheme(
+            colorScheme = DarkScheme.copy(surface = DisplayBlack, background = DisplayBlack),
+            typography = PianoTypography,
+            shapes = PianoShapes,
+            content = content,
+        )
+    }
+}

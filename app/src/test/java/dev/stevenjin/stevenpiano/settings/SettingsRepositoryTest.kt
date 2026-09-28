@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -197,5 +199,40 @@ class SettingsRepositoryTest {
         assertEquals(emptyMap<String, Int>(), ChannelVolumesJson.read(null))
         assertEquals(mapOf("calm" to 60), ChannelVolumesJson.read("""{"calm":60,"epic":"loud"}"""))
         assertEquals("""{"calm":60,"epic":80}""", ChannelVolumesJson.write(mapOf("epic" to 80, "calm" to 60)))
+    }
+
+    @Test
+    fun `the appearance follows the system, display mode is off on a black canvas, and all three are remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "display.preferences_pb") }
+        val repository = SettingsRepository(store)
+        val start = repository.settings.first()
+        assertEquals(Appearance.SYSTEM, start.appearance)
+        assertEquals(false, start.displayModeAfterMinute)
+        assertEquals(StandbyCanvas.BLACK, start.standbyCanvas)
+        repository.setAppearance(Appearance.LIGHT)
+        repository.setDisplayModeAfterMinute(true)
+        repository.setStandbyCanvas(StandbyCanvas.INK)
+        assertEquals(
+            PianoSettings(appearance = Appearance.LIGHT, displayModeAfterMinute = true, standbyCanvas = StandbyCanvas.INK),
+            repository.settings.first(),
+        )
+        repository.setAppearance(Appearance.DARK)
+        assertEquals(Appearance.DARK, repository.settings.first().appearance)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an appearance or canvas this version does not know reads as the default`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "unknown.preferences_pb") }
+        store.edit {
+            it[stringPreferencesKey("appearance")] = "SEPIA"
+            it[stringPreferencesKey("standbyCanvas")] = "GLASS"
+        }
+        val read = SettingsRepository(store).settings.first()
+        assertEquals(Appearance.SYSTEM, read.appearance)
+        assertEquals(StandbyCanvas.BLACK, read.standbyCanvas)
+        scope.cancel()
     }
 }

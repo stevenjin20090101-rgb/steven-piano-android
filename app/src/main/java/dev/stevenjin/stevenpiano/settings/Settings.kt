@@ -52,10 +52,32 @@ enum class NoteDisplay {
 enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
 /**
+ * The app's appearance (Piano › Display › APPEARANCE, DESIGN.md › v1.5 — M17): as the system sets
+ * it (the default), or the paper roll or the camera body whatever the system says.
+ */
+enum class Appearance {
+    SYSTEM,
+    LIGHT,
+    DARK,
+    ;
+
+    /** Whether the app draws dark, when the system's own appearance is [systemDark]. */
+    fun dark(systemDark: Boolean): Boolean = when (this) {
+        SYSTEM -> systemDark
+        LIGHT -> false
+        DARK -> true
+    }
+}
+
+/** Display mode's canvas: true black (the default), or the app's own surface, ink or paper as the app appears. */
+enum class StandbyCanvas { BLACK, INK }
+
+/**
  * The Piano tab's preferences, plus the last piano connected, where the Keys screen was, the
  * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
  * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
- * its own updates, and the pause before each piece.
+ * its own updates, the pause before each piece, the channels' volumes, the app's appearance and
+ * display mode.
  */
 data class PianoSettings(
     val autoConnect: Boolean = true,
@@ -90,6 +112,12 @@ data class PianoSettings(
     val preRollMs: Int = DEFAULT_PRE_ROLL_MS,
     /** Each channel's volume as the person set it, 0-100 %, by channel key; a channel not here plays at [DEFAULT_CHANNEL_VOLUME]. */
     val channelVolumes: Map<String, Int> = emptyMap(),
+    /** Display mode after a minute without a touch while a piece is loaded (Piano › Display › STANDBY). */
+    val displayModeAfterMinute: Boolean = false,
+    /** Light, dark, or as the system says (Piano › Display › APPEARANCE). */
+    val appearance: Appearance = Appearance.SYSTEM,
+    /** Display mode's canvas: black, or the app's own (Piano › Display › STANDBY). */
+    val standbyCanvas: StandbyCanvas = StandbyCanvas.BLACK,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -155,6 +183,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setPreRoll(ms: Int) = edit { it[PRE_ROLL_MS] = ms.coerceIn(PlaybackLimits.PreRollMs) }
 
+    suspend fun setDisplayModeAfterMinute(on: Boolean) = edit { it[DISPLAY_MODE_AFTER_MINUTE] = on }
+
+    suspend fun setAppearance(appearance: Appearance) = edit { it[APPEARANCE] = appearance.name }
+
+    suspend fun setStandbyCanvas(canvas: StandbyCanvas) = edit { it[STANDBY_CANVAS] = canvas.name }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -206,6 +240,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             checkForUpdates = this[CHECK_FOR_UPDATES] ?: defaults.checkForUpdates,
             preRollMs = (this[PRE_ROLL_MS] ?: defaults.preRollMs).coerceIn(PlaybackLimits.PreRollMs),
             channelVolumes = ChannelVolumesJson.read(this[CHANNEL_VOLUMES]),
+            displayModeAfterMinute = this[DISPLAY_MODE_AFTER_MINUTE] ?: defaults.displayModeAfterMinute,
+            appearance = Appearance.entries.firstOrNull { it.name == this[APPEARANCE] } ?: defaults.appearance,
+            standbyCanvas = StandbyCanvas.entries.firstOrNull { it.name == this[STANDBY_CANVAS] } ?: defaults.standbyCanvas,
         )
     }
 
@@ -231,6 +268,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CHECK_FOR_UPDATES = booleanPreferencesKey("checkForUpdates")
         val PRE_ROLL_MS = intPreferencesKey("preRollMs")
         val CHANNEL_VOLUMES = stringPreferencesKey("channelVolumes")
+        val DISPLAY_MODE_AFTER_MINUTE = booleanPreferencesKey("displayModeAfterMinute")
+        val APPEARANCE = stringPreferencesKey("appearance")
+        val STANDBY_CANVAS = stringPreferencesKey("standbyCanvas")
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
     }

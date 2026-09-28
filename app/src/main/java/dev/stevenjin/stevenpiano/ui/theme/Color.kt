@@ -58,3 +58,5 @@ val HandRightLight   = Color(0xFF3E6189)   // 5.7:1 / 6.1:1
 // surfaceElevated (the score panel) of its own appearance (ColorTokensTest; the floor is 3:1):
 val NoteSoundingDark  = Color(0xFFF2C94C)   // 12.2:1 / 11.0:1 on InkSurface / InkElevated
 val NoteSoundingLight = Color(0xFF9C7A00)   //  3.6:1 /  3.8:1 on PaperSurface / PaperElevated
+
+val DisplayBlack      = Color(0xFF000000)   // display mode's canvas only (DisplayTheme): the one pure black in the app

@@ -45,6 +45,7 @@ import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.service.ArtworkService
+import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.settingsDataStore
@@ -89,6 +90,10 @@ class AppGraph(private val app: Application) {
     /** The latest settings, for callers that cannot suspend. */
     val settings: StateFlow<PianoSettings> =
         settingsRepository.settings.stateIn(appScope, SharingStarted.Eagerly, PianoSettings())
+
+    /** The appearance the person chose; null until the settings have been read, so the first frame is never the wrong one. */
+    val appearance: StateFlow<Appearance?> =
+        settingsRepository.settings.map { it.appearance }.stateIn(appScope, SharingStarted.Eagerly, null)
 
     /** Opening it runs the one-off repair of text imported before 1.2 capped it ([TextRepair]), before any query. */
     private val database: PianoDatabase by lazy {

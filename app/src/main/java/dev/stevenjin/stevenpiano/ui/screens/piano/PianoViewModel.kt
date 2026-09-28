@@ -21,7 +21,9 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.WideLayout
@@ -159,6 +161,12 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setHandColours(on: Boolean) = edit { setHandColours(on) }
 
     fun setCheckForUpdates(on: Boolean) = edit { setCheckForUpdates(on) }
+
+    fun setAppearance(appearance: Appearance) = edit { setAppearance(appearance) }
+
+    fun setDisplayModeAfterMinute(on: Boolean) = edit { setDisplayModeAfterMinute(on) }
+
+    fun setStandbyCanvas(canvas: StandbyCanvas) = edit { setStandbyCanvas(canvas) }
 
     /** Check now: asks the server whatever the switch says, in the app's scope so leaving the tab does not stop it. */
     fun checkNow() {

@@ -143,6 +143,9 @@ object DiagnosticsText {
         line("handColours", s.handColours)
         line("checkForUpdates", s.checkForUpdates)
         line("channelVolumes", s.channelVolumes.toSortedMap().entries.joinToString(", ", "{", "}") { (key, pct) -> "$key=$pct" })
+        line("appearance", s.appearance)
+        line("displayModeAfterMinute", s.displayModeAfterMinute)
+        line("standbyCanvas", s.standbyCanvas)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

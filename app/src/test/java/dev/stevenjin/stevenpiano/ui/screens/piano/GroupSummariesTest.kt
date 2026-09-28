@@ -10,8 +10,10 @@
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
+import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -81,6 +83,15 @@ class GroupSummariesTest {
         assertEquals("Score", shown(NoteDisplay.STAFF, wide = false))
         assertEquals("the score has its own place there", "Paper roll", shown(NoteDisplay.STAFF, wide = true))
         assertEquals("Falling notes", shown(NoteDisplay.FALLING, wide = true))
+    }
+
+    @Test
+    fun `Display still reads the note display, whatever the appearance and standby say`() {
+        val plain = GroupSummaries.display(PianoSettings(), wide = false)
+        val changed = PianoSettings(appearance = Appearance.DARK, displayModeAfterMinute = true, standbyCanvas = StandbyCanvas.INK)
+        assertEquals("Paper roll", plain)
+        assertEquals(plain, GroupSummaries.display(changed, wide = false))
+        assertEquals(GroupSummaries.display(PianoSettings(), wide = true), GroupSummaries.display(changed, wide = true))
     }
 
     @Test

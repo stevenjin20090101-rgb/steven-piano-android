@@ -89,4 +89,27 @@ class ColorTokensTest {
         // The live reds, for scale: their red runs far past their green.
         for (red in listOf(LiveRedDark, LiveRedLight)) assertTrue(red.red - red.green > 0.5f)
     }
+
+    @Test
+    fun `display mode's canvas is true black, and the camera body's text reads on it`() {
+        assertEquals(Color(0f, 0f, 0f, 1f), DisplayBlack)
+        assertTrue(contrast(SilverPrimary, DisplayBlack) >= 7.0)
+        assertTrue(contrast(SilverSecondary, DisplayBlack) >= 7.0)
+        assertTrue(contrast(SilverTertiary, DisplayBlack) >= 4.5)
+        assertEquals(18.8, contrast(SilverPrimary, DisplayBlack), 0.05)
+        assertEquals(8.3, contrast(SilverSecondary, DisplayBlack), 0.05)
+        assertEquals(6.1, contrast(SilverTertiary, DisplayBlack), 0.05)
+        // Nothing else leans darker than the ink surface: the black is display mode's alone.
+        assertTrue(Wcag.luminance(InkSurface) > Wcag.luminance(DisplayBlack))
+    }
+
+    @Test
+    fun `a channel card's band keeps its words at the glass's contrast over any portrait`() {
+        // The band is the surface at the glass's opacity over the mosaic: over pure white (dark) or
+        // pure black (light), the content colour still reads as it does on the glass.
+        val darkBand = Wcag.over(InkSurface, GlassTokens.ContainerAlpha, Color.White)
+        val lightBand = Wcag.over(PaperSurface, GlassTokens.ContainerAlpha, Color.Black)
+        assertTrue(contrast(SilverPrimary, darkBand) >= 7.0)
+        assertTrue(contrast(CarbonPrimary, lightBand) >= 7.0)
+    }
 }

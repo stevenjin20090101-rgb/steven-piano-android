@@ -156,7 +156,9 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
  * allocated per note or per frame. Notes travel [dpPerSecond] (the now-playing panel's strip runs
- * slower than Now playing's roll, so its short window still shows what is coming).
+ * slower than Now playing's roll, so its short window still shows what is coming). Without
+ * [blackKeyLanes] the black keys' lanes are not painted: the notes stand on whatever lies behind
+ * the canvas (display mode's portrait).
  */
 @Composable
 fun NoteCanvas(
@@ -171,6 +173,7 @@ fun NoteCanvas(
     fingers: ByteArray? = null,
     chords: ChordTrack? = null,
     dpPerSecond: Float = NOTES_DP_PER_SECOND,
+    blackKeyLanes: Boolean = true,
 ) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -227,8 +230,10 @@ fun NoteCanvas(
                 val edgeLine = Hairline.toPx()
                 onDrawBehind {
                     val now = clock.positionAt(frameNanos.longValue)
-                    for (i in 0 until KeyMap.KEY_COUNT) {
-                        if (roll.keys.isBlack(i)) drawRect(blackLane, Offset(roll.keys.left(i), 0f), Size(roll.keys.width(i), size.height))
+                    if (blackKeyLanes) {
+                        for (i in 0 until KeyMap.KEY_COUNT) {
+                            if (roll.keys.isBlack(i)) drawRect(blackLane, Offset(roll.keys.left(i), 0f), Size(roll.keys.width(i), size.height))
+                        }
                     }
                     val drawn = roll.drawNotes(this, now, black = false, budget = MAX_NOTE_DRAWS)
                     roll.drawNotes(this, now, black = true, budget = MAX_NOTE_DRAWS - drawn)

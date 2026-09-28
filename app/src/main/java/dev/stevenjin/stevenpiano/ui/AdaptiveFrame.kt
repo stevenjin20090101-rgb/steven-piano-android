@@ -17,7 +17,9 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.score.ScoreWidth
+import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.WideLayout
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
 
@@ -53,6 +55,21 @@ val WideLayout.label: String
         WideLayout.STAFF_AND_NOTES -> "Score and notes"
         WideLayout.NOTES_ONLY -> "Notes only"
         WideLayout.STAFF_ONLY -> "Score only"
+    }
+
+/** What the Display page calls each Appearance choice. */
+val Appearance.label: String
+    get() = when (this) {
+        Appearance.SYSTEM -> "Follow system"
+        Appearance.LIGHT -> "Light"
+        Appearance.DARK -> "Dark"
+    }
+
+/** What the Display page calls each Standby canvas choice. */
+val StandbyCanvas.label: String
+    get() = when (this) {
+        StandbyCanvas.BLACK -> "Black"
+        StandbyCanvas.INK -> "Same as the app"
     }
 
 /** Now playing's note views: their arrangement and the roll's style (paper roll or falling notes). */
