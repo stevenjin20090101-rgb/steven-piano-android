@@ -1235,3 +1235,35 @@ state. It prepares release 1.6.
   animated, so hours of the same words burn nothing into the screen. At rest the screen stays on only
   as "stay on while plugged in" says (kiosk mode sets it); with a piece loaded it stays on as before.
 - Any touch leaves, as before, and goes no further.
+
+## Settings locked in kiosk
+
+The tablet stands in a public space (Fable, 2026-09-28): in kiosk mode, playing, queueing,
+browsing and the Keys tab stay free, and anything that changes the piano or the library asks for
+the kiosk PIN first.
+
+- **The Piano tab.** The hub keeps its groups and their values, but every page row (Feel,
+  Lighting, Pedal, Firmware and status, Playback, Display, Remote control, Kiosk) carries a small
+  padlock in its chevron's place, in the tertiary grey, and opens only after the PIN. The APP
+  group's two switches carry the padlock just before the switch and Check now beside its button;
+  each asks before it acts. Share diagnostics stays free. The connection card's **Disconnect** asks;
+  **Connect** never does.
+- **The Library.** A padlock stands beside the **+**, which asks before its sheet (adding music)
+  opens, as the empty library's Add MIDI files does. Delete (a piece or a playlist), Remove from
+  playlist, Rename (a piece or a playlist), Add to playlist, Move up and Move down, Change photo, and
+  a channel's Set volume ask too; while locked a playlist shows no drag handles, since a drag cannot
+  wait for a PIN. Playing, Shuffle, Play next, Add to queue, Favorite, About this piece, the guests'
+  banner and everything on Now playing and Keys never ask.
+- **The sheet**: the kiosk's PIN sheet with the title **Settings are locked in kiosk** and the line
+  "The kiosk PIN opens them for five minutes.", then Cancel and **Unlock**. The right PIN opens the
+  settings and the action goes on (the page opens, the switch turns, the + sheet rises); a wrong one
+  counts against the same waits as the way out.
+- **How long.** The right PIN opens the settings for five minutes, or until the tablet rests in
+  display mode, whichever comes first; while unlocked for now they are open too. While open the
+  padlocks give way to the chevrons, and nothing asks.
+- **A page shown while locked** (beside the hub on a tablet, or a page left open when the five
+  minutes ran out or the tablet rested) gives its controls up for the line "Settings are locked in
+  kiosk." and an outlined **Unlock** ("The kiosk PIN opens them for five minutes."), which asks for
+  the PIN; the page's title stays.
+- The Kiosk page's own Unlock for now, Turn kiosk off and Change PIN still ask for the PIN each time,
+  whether the settings are open or not: they are the way out.

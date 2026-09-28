@@ -2934,6 +2934,8 @@ Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
   `offered(unlocked)`), `KIOSK_HOLD_MS`, `HeldByline`, `KioskPinSheet`, `KioskExitSheet`,
   `KioskMode.leave`.
 - `M/ui/screens/piano/pages/KioskPage.kt` (`KioskPageCopy`, `KioskPage`).
+- `M/ui/KioskLock.kt` (settings locked in kiosk: `KioskLockCopy`, `KioskGate`, `rememberKioskGate`,
+  `KioskGateSheet`, `LockGlyph`, `LockedPage`) and `res/drawable/ic_lock.xml` (an outlined padlock).
 - Tests: `T/admin/FakeKioskDevice.kt`, `KioskControllerTest.kt`, `KioskModeTest.kt`,
   `PinGuardTest.kt`; `T/ui/KioskExitTest.kt`.
 
@@ -2945,7 +2947,9 @@ Changed: `AndroidManifest.xml` (the `KioskHome` alias; the device admin's commen
 the shared `PinSheetFrame` and `PinField`; `PinSheet` itself unchanged); `ui/components/ScreenHeader.kt`
 (the byline through `LocalBylineHold`); `ui/NavHost.kt`; `ui/IdleWatch.kt` (`DisplayRule`,
 `LocalIdleState`); `ui/Routes.kt` (`SettingsPage.Kiosk`); `ui/screens/piano/HubGroups.kt`,
-`GroupSummaries.kt`, `PianoScreen.kt`; `ui/screens/display/DisplayScreen.kt` (`DisplayRest`);
+`GroupSummaries.kt`, `PianoScreen.kt` (and the settings lock); `ui/screens/display/DisplayScreen.kt`
+(`DisplayRest`); `ui/components/SettingsRows.kt` (`NavRow`/`SwitchRow` `locked`);
+`ui/screens/library/LibraryScreen.kt` (the settings lock);
 tests `SettingsRepositoryTest`, `DiagnosticsExporterTest`, `IdleWatchTest`, `RoutesTest`,
 `PianoPagesTest`, `GroupSummariesTest`; DESIGN.md, this file, README.
 
@@ -3050,6 +3054,29 @@ height, 280 dp or 360 dp on wide frames)`, the address. `rememberDrift()` steps 
 round an eight-point square of 4 dp once a minute (`offset`, never animated). `keepScreenOn` only
 while a piece is loaded; the bars' hiding moved to its own effect.
 
+## Settings locked in kiosk (`ui/KioskLock.kt`)
+
+- `KioskMode.settingsLocked = kioskEnabled && !unlockedForNow && !settingsOpen` (`StateFlow`,
+  distinct). `unlockSettings()` opens it and starts a timer of `SETTINGS_UNLOCK_MS` = 5 min in the
+  app's scope (a second right PIN starts it again); `relock()` (display mode coming, Lock again, the
+  app opened again after Unlock for now) closes it early; `turnOn`/`turnOff` start with it closed.
+- `KioskGate` (`rememberKioskGate()`, over `settingsLocked` collected with the lifecycle):
+  `run(action)` runs at once, or, while locked, keeps the action and `KioskGateSheet(gate)` shows
+  `PinCheckSheet(KIOSK, "Settings are locked in kiosk", "The kiosk PIN opens them for five minutes.",
+  [Unlock])`; the right PIN calls `unlockSettings()`, then the action. The guard and the waits are
+  the kiosk's (`KioskMode.check`).
+- `PianoScreen`/`PianoPageScreen`: page rows through the gate (`vm.open` + navigate on phones,
+  `vm.pick` beside the hub), the APP group's two switches and Check now through it, Disconnect through
+  it (Connect, Cancel and connecting to another piano stay free); `NavRow(locked)` draws `LockGlyph`
+  (18 dp, `LocalTertiary`, described "Locked") in the chevron's 24 dp, `SwitchRow(locked)` before the
+  switch; Check now's button reads "Check now, locked" with a padlock beside it. `SettingsPageView`
+  shows `LockedPage(gate)` in place of any page while locked.
+- `LibraryScreen`: the header's + ("Add MIDI files, locked", a padlock before it) and the empty
+  library's button, every `LibraryDialog` (`openDialog`: Add to playlist, Rename, Delete, Rename
+  playlist, Delete playlist), `removeFromPlaylist` and `move`, Change photo, and a channel's Set
+  volume go through the gate; `reorderable` is false while locked (no drag handles, no Move items).
+  `setFavorite`, playing, Play next, Add to queue, About this piece and the requests banner do not.
+
 ## Manifest
 
 `<activity-alias android:name=".KioskHome" android:targetActivity=".MainActivity"
@@ -3064,6 +3091,15 @@ the canvas from `DisplayTheme`). `0.0.0.0`, `Access-Control`, `Modifier.blur`: n
 `LiveDot.kt`, `Theme.kt`. `startLockTask`/`stopLockTask`: `MainActivity.followKiosk` only.
 
 ## Measured (September 2026, `steven_piano_m20`, API 34, Pixel 7 profile, debug build)
+
+Settings locked in kiosk, on the AVD made again for it (`m20/kiosk-lock-evidence.log`): with kiosk
+mode on, the hub read "Locked" on its eight page rows, both APP switches and Check now ("Check now,
+locked"); Feel's row and the Library's + (read "Add MIDI files, locked", a padlock beside it) each
+opened "Settings are locked in kiosk" and cancelling left the screen as it was; the right PIN from
+Feel's row opened Feel, and back on the hub the padlocks were gone; with Feel open and the tablet
+left alone, display mode came at the (shortened) idle time, and the first touch found Feel reading
+"Settings are locked in kiosk." with Unlock, the hub's padlocks back; on a 2560 × 1600 px, 240 dpi
+frame the page beside the hub showed the same locked page.
 
 A fresh AVD of this run's own (never `steven_piano` or `steven_piano_tablet`), addressed with
 `adb -s emulator-5558`; the evidence log is `m20/kiosk-evidence.log` in the run's scratchpad.
@@ -3128,11 +3164,20 @@ A fresh AVD of this run's own (never `steven_piano` or `steven_piano_tablet`), a
   through "stay on while plugged in"; a PIN sheet counts its own touches and closes at rest.
 - **Not built here, for the merge**: the version bump to 1.6 (build 12), `Provenance.text`, the
   staged APKs and the provenance signature.
+- **Settings locked in kiosk, a little beyond the list it was given**: besides the + sheet, Delete
+  playlist, Remove from playlist, Delete piece and Change photo, the library's other changes ask too
+  (Rename a piece or a playlist, Add to playlist, Move up and Move down) and drag reordering is not
+  offered while locked, following the rule "anything that changes the piano or the library asks";
+  a channel's Set volume asks as a change to the piano. Share diagnostics, the UPDATE row (Update,
+  Restart) and Connect stay free. A page shown while locked gives way to a locked page rather than
+  showing its controls: on a tablet the hub always shows a page beside it.
+- **The Kiosk page's own actions still ask each time**, even with the settings open: they are the way
+  out, as before.
 
 ## Residuals
 
-- In kiosk mode the app's own settings stay reachable (the piano's pages, Remote control and its
-  web PIN, Check now…); only leaving kiosk mode, unlocking and changing the kiosk PIN ask for it.
+- Settings locked in kiosk gate the app's own screens; the web panel (behind its own PIN, on the
+  tailnet) is not gated by the kiosk.
 - An update installed over adb while kiosk mode is on leaves the launcher up until Home is pressed
   (the app then locks again: measured). The in-app updater reopens the app itself as device owner
   (`UpdateResultReceiver.reopen`), which then locks again: from the code, not run here.
@@ -3157,5 +3202,8 @@ the cap whatever is kept), `KioskExitTest` (3: three seconds and the offers; the
 switch's note and the page's explanation), `SettingsRepositoryTest` (+1: kiosk mode off at first,
 its PIN kept apart, its housekeeping), `IdleWatchTest` (+1: display mode always on in kiosk and at
 rest with nothing loaded), `GroupSummariesTest` (+1: Kiosk reads on or off); `RoutesTest`,
-`PianoPagesTest` and `DiagnosticsExporterTest` (32 lines) changed. 840 tests before, 870 after (7
+`PianoPagesTest` and `DiagnosticsExporterTest` (32 lines) changed; then, with settings locked in
+kiosk, `KioskModeTest` (+3: open for five minutes (its time shortened) and a second PIN starts it
+again, then locked; coming to rest locks them early; unlock for now counts as open, and kiosk mode
+off leaves nothing locked, on again nothing left over). 840 tests before, 873 after (7
 skipped, as before: the corpus tests, `-Pcorpus`).

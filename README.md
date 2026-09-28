@@ -847,7 +847,13 @@ adb shell setprop debug.stevenpiano.releaseowner ""
 owner's own app; the `am start` is what reaches it.) Set the device owner again, as above,
 to use kiosk mode again. A factory reset also ends everything.
 
-Things to know: inside the app every tab and setting stays reachable in kiosk mode (the
-piano's own settings, Remote control, the library); only leaving the kiosk and changing its
-PIN ask for the PIN. An update from the app's own updater reopens the app, which locks
-again; one installed over adb leaves Android's launcher up until Home is pressed.
+**Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab,
+but anything that changes the piano or the library asks for the kiosk PIN first: every page
+of the Piano tab (Feel, Lighting, Pedal, Firmware and status, Playback, Display, Remote
+control, Kiosk), its two APP switches and Check now, Disconnect, and in the Library the **+**
+(adding music), deleting, renaming, playlists' edits, Change photo and a channel's volume. A
+small padlock marks them. The right PIN opens them for five minutes, or until the tablet
+rests in display mode, whichever comes first; while unlocked for now they are open too.
+
+Things to know: an update from the app's own updater reopens the app, which locks again; one
+installed over adb leaves Android's launcher up until Home is pressed.
