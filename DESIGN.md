@@ -58,7 +58,8 @@ row at the bottom of the Piano tab.
 
 Dark is the default ("the camera body"). Light follows the system setting ("the
 paper roll"). No in-app appearance switch — `dark-mode.md › Best practices`: *"Avoid
-offering an app-specific appearance setting."*
+offering an app-specific appearance setting."* (Overridden at Steven's request in
+v1.5 — M17: Piano › Display › Appearance, following the system unless changed.)
 
 Contrast ratios computed from the hex values against their surface (relative
 luminance, WCAG formula). Target is `dark-mode.md › Dark Mode colors`: *"at a minimum
@@ -726,7 +727,8 @@ it inset 16 dp to the text; the system ripple and nothing else.
   Skip drum channel (M16 puts Pause before each piece first).
 - **Display**: NOTES (Note display as chips, with Wide layout under it on wide screens;
   Fingering, Chord names, Hand colours) · ARTWORK (Artwork in black and white, Fetch artwork
-  automatically with its line) (M17 adds STANDBY).
+  automatically with its line) (M17 puts APPEARANCE first and adds STANDBY last:
+  see v1.5 — M17).
 - The piano's pages carry the status line at their top; until the piano has answered, their
   controls are there, disabled, under it. Firmware without the Bluetooth console: each piano
   page shows that one line and nothing else (the v1.1 rule, now per page). A refusal shows
@@ -883,3 +885,123 @@ roll's ease now begins at the pause's start, so the first notes reach the bar at
 On displays faster than 60 Hz the app asks for 60 frames a second: enough for the roll and the
 score, and half the glass's work. The piano's timing never depends on the display.
 
+---
+
+# v1.5 — M17: built-in playlists, channels, display mode
+
+Steven asked (2026-09-27) for playlists that fill themselves with the pieces everyone knows,
+channels that play the library without end like a radio, shown as image tiles, and a display
+for the tablet on the piano when nobody is touching it. After seeing the mockups he asked to keep
+the ink and the paper everywhere: the only pure black in the app is display mode's canvas, and
+nothing else leans darker than the surface tokens. Then he wanted the choice in Settings: the
+app's appearance, and the canvas of display mode. Everything above still holds except where this
+section says otherwise. This is release 1.5, with M15 and M16.
+
+## Built-in playlists
+
+- **Popular** (the pieces everyone knows: Für Elise, the Moonlight's first movement, Clair de
+  lune, the E-flat Nocturne, the first Gymnopédie, the Turkish March, the C major Prelude…),
+  **Recognisable** (the concert warhorses: the second Hungarian Rhapsody, the Heroic Polonaise,
+  Rachmaninoff's C-sharp minor Prelude, the Revolutionary Étude, Pictures at an Exhibition…) and
+  **Epic on piano** (the 45 pieces of Steven's Epic on piano set). They fill themselves from the
+  library through a catalogue that ships with the app: for each piece its composer and a pattern
+  for its title, so a piece is found however its file names it (the `midi` folder's INDEX,
+  ALL-SONGS.zip's file names, the Epic zip). They hold only what the library has, each piece in
+  at most four recordings, in the catalogue's order, which is the playing order. Nothing is added
+  that the library does not already hold: public domain and openly licensed, as the library is.
+- **Where.** First among the Playlists' tiles, in the order they were made (Popular,
+  Recognisable, Epic on piano), then the others as before. The tile's eyebrow reads **BUILT IN ·
+  14 PIECES**. A list with nothing in it is not shown at all: no empty tiles.
+- **What can be done with them.** Play, Shuffle, play one piece, and Change photo: the tile's
+  menu and the page's offer nothing else. No rename, no delete (no dialog ever offers it), no
+  reordering (no drag handles) and no Remove; the person's own playlists are untouched. The page's
+  eyebrow reads "BUILT IN · …"; a list that has emptied while open says "It fills itself from
+  the library's pieces."
+- **Names.** A built-in list is known by its key, never its name. When a playlist of the person's
+  (or an INDEX set) is already called "Popular", the built-in reads **Popular · built in** (then
+  "Popular · built in 2"); a name the person chooses later wins the same way.
+- **When they fill.** When the app starts, after an import that brought pieces in, and two
+  seconds after renaming stops (a renamed piece can join or leave a list).
+- In Steven's library: from the `midi` folder they hold 17, 29 and 49 pieces; from ALL-SONGS.zip
+  17, 30 and 50; from the Epic zip alone 7, 13 and all 45, in the set's order.
+
+## Channels
+
+- Eight, in this order: **Calm** (Satie, Debussy, Field, or any piece called a nocturne,
+  berceuse, gymnopédie, gnossienne, Clair de lune, adagio, lullaby, rêverie, Träumerei,
+  consolation, arabesque or andante; and only pieces that play at most six notes a second on
+  average), **Epic** (the built-in list's pieces, in its order), **Baroque** (Bach, Handel,
+  Scarlatti, Couperin, Rameau, Purcell, Telemann, C. P. E. Bach), **Romantic** (Chopin,
+  Schumann, Liszt, Brahms, Mendelssohn, Schubert, Grieg, Tchaikovsky, Rachmaninoff, Dvořák,
+  Smetana, Mussorgsky), **Impressionist** (Debussy, Ravel, Satie, Fauré, Albéniz, Granados,
+  Falla, Scriabin), **Nocturnes** (nocturne, notturno, Nachtstück), **Études** (étude, study),
+  **Everything** (the whole library). A channel's pool is worked out from the library whenever it
+  changes and never stored. From Steven's `midi` folder: 30, 49, 197, 912, 120, 23, 186 and 1,727
+  pieces.
+- **Playing.** A tap plays the channel without end: 25 of its pieces, shuffled, become Up next;
+  whenever fewer than five are left, ten more join; nothing comes twice until the whole pool has
+  played, and the next round leaves out the last 20 heard (at most half the pool, so a small one
+  still shuffles). Up next, Next, Previous, Add to queue and Play next work as ever and keep the
+  channel. Playing a piece or a playlist, Stop, or dismissing the notification ends it. A channel
+  of fewer than three pieces reads "Add more pieces" and does not play.
+- **The eyebrow.** While a channel plays, the composer line reads **CLAUDE DEBUSSY · CALM ·
+  CHANNEL** on Now playing, in the tablet's panel and in display mode.
+- **Volume.** Each channel has its own, 70 % at first. While the channel plays it is the piano's
+  own volume, when the piano's firmware offers it; otherwise the app's velocity (50 % and half the
+  volume: 70 % plays at 85 %). When the channel ends, what it replaced comes back: the piano's
+  volume together with its Full power, and the velocity unless the person has changed it
+  meanwhile. Nothing is saved on the piano. A channel chosen while another plays keeps the first
+  one's "what comes back".
+
+## Channel tiles
+
+- **The row.** At the top of the Playlists listing (not while searching): the eyebrow CHANNELS
+  with **See all** at its end, then the cards in a row that scrolls sideways, 280 × 200 dp, 12 dp
+  apart, 16 dp in from the edges. See all opens them as a page of the Library: the back glyph,
+  the title Channels over "8 CHANNELS", and the cards in a grid, two, three or four across as the
+  playlist tiles.
+- **The card.** Its art is a two-by-two mosaic of the four composers the pool holds most pieces
+  by (fewer cells when it has fewer): their portraits, else their roll cards; a channel with no
+  known composer shows its monogram. Along its foot a **band** at least 56 dp tall: the surface at
+  the glass's opacity (72 %) with a hairline along its top, a static scrim and not glass, since
+  nothing moves behind it; on it the name in Title and an eyebrow, "49 PIECES", "ADD MORE
+  PIECES", or the live dot and **PLAYING** while it plays. Everything on the band is
+  `contentPrimary`, as on glass, and reads as text on glass does over the worst portrait. The
+  band is today's surface: ink on the camera body, paper on the paper roll.
+- **Touch.** A tap plays. A long press opens a menu: **Set volume** (a sheet: CHANNEL, the name,
+  the Volume slider from 0 to 100 % with its value, and the line "The piano's own volume while
+  this channel plays, or how hard its keys are struck where the piano has none. What was there
+  comes back when it ends.") and **Schedule**, greyed, with "Coming in the next update" under it
+  (M19). A move of the slider is heard at once when that channel is playing.
+
+## Display mode
+
+- **When.** Piano › Display › STANDBY › **Display mode after a minute** (off at first; "A black
+  screen with the portrait and the roll, for passers-by"). With it on, a minute without a touch
+  anywhere, while a piece is loaded, brings the display over everything: the tab bar, the rail
+  and the mini player included. Any touch, or Back, leaves it, and that touch does nothing else;
+  the app is as it was, its tab, page and scroll.
+- **What it shows.** The composer's portrait fills the screen at a quarter of its strength (in
+  black and white when Artwork in black and white is on), fading into the canvas towards the foot;
+  over it the title in Display, the composer and the channel in Eyebrow; the paper roll across the
+  whole width over its keyboard strip, without the black-key lanes (over a portrait they read as a
+  barcode); and at the foot the live dot with "Sent to piano" (or "Not connected") and the byline.
+  No controls. The screen stays on, and the status and navigation bars step aside while it shows
+  (a swipe from the edge brings them back for a moment).
+- **The black rule.** Its canvas is **true black**, `DisplayBlack` `#000000`, in both appearances:
+  the one pure black in the app, with the camera body's tokens on it (`contentPrimary` 18.8:1,
+  `contentSecondary` 8.3:1, `contentTertiary` 6.1:1). Every other surface keeps its ink or paper,
+  nothing else leans darker than the surface tokens, and the display's black never reaches the
+  screens beneath it: it is one full-window layer, nothing more.
+- **Standby canvas.** Piano › Display › STANDBY › **Standby canvas**: **Black** (the default) or
+  **Same as the app**, which lays the display on the app's own surface, ink or paper as the
+  appearance resolves, with that appearance's tokens for the portrait's fade, the roll and the
+  words.
+
+## Appearance
+
+The Display page opens with **APPEARANCE**: **Appearance**, chips **Follow system** (the default)
+· **Light** · **Dark**. The choice applies at once and everywhere: every screen, the glass bars,
+the system bars' icons, display mode on "Same as the app", and the web panel when it comes
+(M18). The hub's Display row still reads the note display. The Display page is now APPEARANCE ·
+NOTES · ARTWORK · STANDBY.

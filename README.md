@@ -17,7 +17,7 @@ while the piano plays it, play the piano yourself on **Keys**, and on the
 playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
 analytics, and the network only for composers' portraits and short notes from
 Wikipedia (see *Artwork and notes* below) and for the app's own updates from its
-GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
+GitHub repository (see *Updates*). Made by Steven Jin. Version 1.5.
 
 ## What it does
 
@@ -31,6 +31,27 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**
   floats as a glass circle at the bottom of the list, wherever it is scrolled.
   Rename, change the photo or delete it from its menu.
+- **Built-in playlists**: **Popular**, **Recognisable** and **Epic on piano** fill
+  themselves from the library: the pieces everyone knows (Für Elise, the
+  Moonlight, Clair de lune…), the concert warhorses (the Hungarian Rhapsody No. 2,
+  the Heroic Polonaise, La Campanella…), and the 45 pieces of the Epic on piano
+  set, however they came in. They come first among the playlists with a *BUILT
+  IN* eyebrow, fill again after every import, hold only what the library has
+  (each piece in at most four recordings), and can't be renamed, reordered or
+  deleted; Change photo still works. A list that finds nothing is not shown.
+  From Steven's `midi` folder they hold 17, 29 and 49 pieces.
+- **Channels**: a row of wide cards above the playlists (**See all** shows them
+  all as a grid): Calm, Epic, Baroque, Romantic, Impressionist, Nocturnes,
+  Études and Everything, each faced with its four most frequent composers. A tap
+  plays the channel without end: 25 of its pieces shuffled into Up next, ten
+  more whenever fewer than five are left, and nothing again until the whole pool
+  has played (the next round leaves out the last 20). Now playing and the panel read
+  "CLAUDE DEBUSSY · CALM · CHANNEL", and the card "● PLAYING". A long press sets
+  the channel's **volume** (70 % at first): the piano's own volume while the
+  channel plays, when its firmware offers it (else the app's velocity), put back
+  as it was when the channel ends; *Schedule* comes in the next update. Playing
+  anything else, or Stop, ends the channel. A channel of fewer than three pieces
+  reads "Add more pieces" and does not play.
 - **Up next, shuffle and repeat**: the queue glyph on Now playing opens *Up
   next*, to reorder, remove, clear, or skip to a piece. **Shuffle** and
   **Repeat** (off, all, one) sit at the two ends of the transport and are
@@ -54,6 +75,14 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
 - **The mini player**: on a phone, whatever is playing sits above the tab bar
   with its portrait, title and composer, play/pause and next; tap it for Now
   playing.
+- **Display mode** (**Piano › Display › Display mode after a minute**, off at
+  first): after a minute without a touch while a piece is loaded, the screen
+  becomes a display for passers-by: the composer's portrait faint behind the
+  title, the composer and the channel, the paper roll across the whole width
+  over its keyboard, "● Sent to piano" and the byline, on true black (or on the
+  app's own ink or paper: **Standby canvas**). No controls: any touch, or Back,
+  brings the app back as it was, and does nothing else. The screen stays on and
+  the system bars step aside while it shows.
 - **Glass**: the tab bar, the rail, the mini player, the transport and a
   playlist's Play are frosted glass over the content, monochrome. With *High
   contrast text* on (Android's accessibility setting), or on Android 11 and
@@ -167,9 +196,10 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
 - **Piano**: one page of groups. The connection card on top, then **PIANO**
   (Feel · Lighting · Pedal · Firmware and status, the piano's settings above),
   **PLAYING** (**Playback**: the pause before each piece, default tempo,
-  transpose, velocity, folding, drum channel; **Display**: note display, wide
-  layout, fingering, chord names, hand
-  colours, artwork in black and white, fetching artwork automatically) and
+  transpose, velocity, folding, drum channel; **Display**: appearance (follow
+  the system, light or dark), note display, wide layout, fingering, chord names,
+  hand colours, artwork in black and white, fetching artwork automatically, and
+  standby: display mode after a minute and its canvas) and
   **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
   then the About line. Each row says in a few words what its page holds
   ("Volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
@@ -188,7 +218,7 @@ GitHub repository (see *Updates*). Made by Steven Jin. Version 1.4.
   on its side opens two pages). The Library and the Piano tab keep a comfortable
   720 dp reading column in the middle of the screen. The Library is two panes: the
   list, and beside it a now-playing panel (the portrait, the title, a small live
-  roll, the scrubber and the transport, Up next), so playing a piece keeps you in
+  roll, the scrubber and the transport, Up next, and where the piece goes), so playing a piece keeps you in
   the Library; the Now playing tab is still there for the full score.
 
 The phone does all the timing: the piano plays each note the moment it arrives.
@@ -275,7 +305,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.4.apk`.
+   `adb install ../apk/steven-piano-1.5.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -326,14 +356,16 @@ skipped when the firmware folder isn't beside this one.
 On an emulator, debug builds reach an emulated piano instead of Bluetooth, with
 its console, so the Piano tab's settings work there (`adb logcat -s PianoLink`
 shows every line both ways). `adb shell setprop debug.stevenpiano.console none`
-before connecting stands in for firmware without the console.
+before connecting stands in for firmware without the console. `adb shell setprop
+debug.stevenpiano.idlesecs 6` shortens display mode's minute to 6 s in a debug build
+(read when the app starts: force-stop it after setting it).
 
 The updater can be tried on an emulator without GitHub: serve a manifest and an APK
 from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=9`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=10`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -362,7 +394,9 @@ The school tablet and any piano that stays gets the release build,
 One command on this Mac, after the version is set and committed:
 
 1. In `app/build.gradle.kts` raise `versionCode` by one and set `versionName` (and
-   `Provenance.text`, the README and BUILD_SPEC); commit, then re-sign provenance
+   `Provenance.text`, the README and BUILD_SPEC); draft the release's entry at the end
+   of `releases/history.json` (`"draft": true`, its version and notes: a test checks
+   it); commit, then re-sign provenance
    (`~/.platformio/penv/bin/python3 provenance/sign.py && ~/.platformio/penv/bin/python3 provenance/verify.py`)
    and commit `provenance/`.
 2. Run:
@@ -378,9 +412,9 @@ that it is signed with Steven Piano's key; copies it to `../apk/steven-piano-1.5
 pushes `main` and creates the GitHub release `v1.5` with the APK attached (`gh release
 create`); and only then writes `releases/latest.json` (versionCode read from the APK,
 the notes, the asset's address, SHA-256, size, minSdk), appends it to
-`releases/history.json`, commits and pushes. A tablet never sees a manifest whose file
-is not there yet. Installed copies offer the release within a day, or at once with
-Check now. It needs the GitHub CLI signed in (`brew install gh`, `gh auth login`) and a
+`releases/history.json` in place of the drafted entry, commits and pushes. A tablet
+never sees a manifest whose file is not there yet. Installed copies offer the release
+within a day, or at once with Check now. It needs the GitHub CLI signed in (`brew install gh`, `gh auth login`) and a
 public repository.
 
 ## Bring in the music
@@ -604,6 +638,18 @@ the first play, so the lock screen shows play and pause.
 - [ ] Share diagnostics opens the share sheet with `steven-piano-diagnostics-….zip`;
       send it to yourself and check it holds about.txt, settings.txt, link.log and no
       titles.
+- [ ] Channels, with the piano's firmware offering its settings: note the Feel row
+      ("Full power" or "Volume …"), then tap the Calm card: the piano plays at 70 %
+      and Feel reads "Volume 70%"; pieces follow one another without end. Long-press
+      Calm › Set volume and move the slider: the piano follows. Tap a piece in the
+      library: the channel ends and Feel reads as it did before; power-cycle the
+      piano: its own volume never changed (nothing was saved). With older firmware
+      the channel plays at the app's velocity instead, and the Playback page's
+      Velocity comes back when it ends.
+- [ ] Display mode on the school tablet: Piano › Display › Display mode after a
+      minute on, play a channel and leave the tablet: a minute later the black
+      display shows (portrait, title, roll) and the tablet does not sleep; a touch
+      brings the app back without pressing what was under the finger.
 
 ## Security
 

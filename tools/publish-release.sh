@@ -28,7 +28,8 @@
 #   4. pushes main, then creates the GitHub release v<versionName> at that commit with the APK
 #      attached (gh release create);
 #   5. writes releases/latest.json (versionCode read from the APK itself, versionName, notes, the
-#      release asset's URL, SHA-256, size, minSdk), appends it to releases/history.json, commits
+#      release asset's URL, SHA-256, size, minSdk), appends it to releases/history.json (in place
+#      of the entry drafted there with the version bump, "draft": true, if there is one), commits
 #      them ("Co-Authored-By: Claude Fable 5.1") and pushes.
 # The release exists before the manifest that names it is pushed, so no phone ever reads a
 # manifest whose file is not there yet. Phones read the manifest from raw.githubusercontent.com,
@@ -129,6 +130,8 @@ history = []
 if os.path.exists("releases/history.json"):
     with open("releases/history.json", encoding="utf-8") as f:
         history = json.load(f)
+# The entry drafted with the version bump gives way to the published one.
+history = [h for h in history if not (h.get("draft") and h.get("tag") == tag)]
 history.append(dict(latest, tag=tag, publishedAt=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")))
 with open("releases/history.json", "w", encoding="utf-8") as f:
     json.dump(history, f, indent=2, ensure_ascii=False)

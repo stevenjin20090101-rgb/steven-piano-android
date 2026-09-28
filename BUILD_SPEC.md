@@ -2158,3 +2158,376 @@ the specular whites; the veiled lens equals the container), `TransportFloatsTest
 (the Playback value) and `DiagnosticsExporterTest` (20 lines) changed; `Wcag` shared. 681 tests
 before, 701 after.
 
+---
+
+# v1.5 — M17: schema v3, built-in playlists, channels and tiles, display mode; release 1.5 (versionCode 9)
+
+Read `DESIGN.md › v1.5 — M17` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M17. This run releases 1.5 (M15, M16 and M17): `versionCode` 9, `versionName` "1.5",
+`Provenance.text` "Made by Steven Jin · v1.5 · eab16a502f679465", the entry drafted at the end of
+`releases/history.json` (`"draft": true`), which `tools/publish-release.sh` replaces when it
+publishes; `latest.json` still names 1.4 until then.
+
+## Files
+
+Added:
+
+- `data/db/ScheduleEntity.kt` (`enum class ScheduleKind { PLAYLIST, CHANNEL, PIECE }`,
+  `ScheduleEntity(id, days, startMinute, kind, target, endMinute?, volumePct?, enabled = true,
+  createdAt)`), `data/db/ScheduleDao.kt` (`observeAll()` by start then id, `@Upsert upsert`,
+  `delete(id)`, `setEnabled(id, enabled)`): made now, used from M19.
+- `data/builtin/BuiltInCatalogue.kt` (`ASSET` "builtin_playlists.json", `load(context)`,
+  `parse(json)`), `data/builtin/BuiltInPlaylists.kt` (`Matcher`, `BuiltInList.matches(pieces)`,
+  `interface BuiltInStore`, `BuiltInPlaylists.refresh(store)`, `builtInName`, `linkChanges` →
+  `LinkChanges`).
+- `channels/Channels.kt` (`PoolMatcher` = `All` | `BuiltIn(list)` | `Match(composers, titles,
+  maxNotesPerSecond)`, `Channel(key, name, pool)`, `CardComposer`, `ChannelSummary(key, name, ids,
+  composers)` with `size`, `playable` (`MIN_POOL` 3), `object Channels` (`ASSET` "channels.json",
+  `CARD_COMPOSERS` 4, `load`, `parse`, `summaries`, `topComposers`), `ChannelPools`),
+  `channels/ChannelPlayer.kt` (`interface ChannelDeck`, `PianoLoudness(volume, fullPower)`,
+  `interface PianoVolume`, `ChannelPlayer`).
+- `ui/ChannelCopy.kt` (the channel's words: `eyebrow(composer, channel)` "CLAUDE DEBUSSY · CALM ·
+  CHANNEL" before the Eyebrow's capitals, `cardMeta(summary, playing)`, "Add more pieces",
+  "Coming in the next update"; `rememberChannelName(key)`), `ui/IdleWatch.kt` (`IdleTimer`,
+  `IdleState`, `Modifier.watchTouches`, `rememberIdle`, `DisplayModeTimeout`),
+  `ui/screens/display/DisplayScreen.kt`, `ui/screens/library/ChannelCard.kt`, `ChannelRow.kt`,
+  `ChannelsGrid.kt` (`ChannelsHeader`, `LazyListScope.channelsGrid`), `ChannelVolumeSheet.kt`.
+- Assets `builtin_playlists.json`, `channels.json`; `app/schemas/…PianoDatabase/3.json`.
+- Tests: `data/db/SchemaV3Test.kt`, `data/db/ExportedSchema.kt` (the exported schemas' reader,
+  shared with `SchemaV2Test`), `data/builtin/BuiltInPlaylistsTest.kt`, `LibraryFixture.kt`,
+  `LibraryFixtureTest.kt`, `channels/ChannelsTest.kt`, `ChannelPlayerTest.kt`, `ui/IdleWatchTest.kt`;
+  resources `library_titles.csv` (the `midi` folder as the importer names it: collection, composer,
+  title, notes, duration; 1,727 rows), `library_titles_all_songs.csv` (ALL-SONGS.zip, 1,726) and
+  `epic_on_piano_index.csv` (the Epic zip's INDEX, 45).
+
+Changed: `data/db/Migrations.kt`, `PianoDatabase.kt`, `PlaylistEntity.kt`, `PlaylistDao.kt`,
+`PieceDao.kt` (`list()`, `existing(ids)`); `data/LibraryRepository.kt`; `AppGraph.kt`;
+`MainActivity.kt`; `service/ImportService.kt`, `PlaybackService.kt`; `player/Player.kt`,
+`PlayerState.kt`; `piano/PianoSettingsRepository.kt`; `settings/Settings.kt`;
+`diag/DiagnosticsExporter.kt`; `ui/theme/Color.kt`, `Theme.kt`; `ui/components/Artwork.kt`,
+`NoteCanvas.kt`; `ui/NavHost.kt`, `AdaptiveFrame.kt`, `PlaybackStarter.kt`;
+`ui/screens/library/LibraryScreen.kt`, `LibraryViewModel.kt`, `LibraryRows.kt`,
+`LibraryDialogs.kt`, `PlaylistHeader.kt`; `ui/screens/nowplaying/NowPlayingScreen.kt`,
+`NowPlayingPanel.kt`; `ui/screens/piano/PianoViewModel.kt`, `pages/DisplayPage.kt`;
+`Provenance.kt`; `app/build.gradle.kts`, `gradle/libs.versions.toml` (sqlite-jdbc, tests only);
+`releases/history.json`; `tools/publish-release.sh`; tests `SchemaV2Test`, `PlayerTest`,
+`PianoSettingsRepositoryTest`, `SettingsRepositoryTest`, `DiagnosticsExporterTest`,
+`LibraryStatesTest`, `GroupSummariesTest`, `ColorTokensTest`, `ReleaseManifestTest`; README.
+
+## Schema v3
+
+`PianoDatabase` version 3, `.addMigrations(MIGRATION_1_2, MIGRATION_2_3)`. `MIGRATION_2_3` runs
+`SchemaV3.DDL` in order, each statement pinned to `3.json` by `SchemaV3Test`:
+
+```sql
+ALTER TABLE `collections` ADD COLUMN `builtIn` INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE `collections` ADD COLUMN `builtInKey` TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS `index_collections_builtInKey` ON `collections` (`builtInKey`);
+CREATE TABLE IF NOT EXISTS `schedules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  `days` INTEGER NOT NULL, `startMinute` INTEGER NOT NULL, `kind` TEXT NOT NULL,
+  `target` TEXT NOT NULL, `endMinute` INTEGER, `volumePct` INTEGER,
+  `enabled` INTEGER NOT NULL DEFAULT 1, `createdAt` INTEGER NOT NULL);
+```
+
+`PlaylistEntity` gains `@ColumnInfo(defaultValue = "0") builtIn: Boolean = false` and `builtInKey:
+String?` (unique index; SQLite lets any number of rows hold NULL in it); `PlaylistSummary` carries
+both. `PlaylistDao.byId`, `byBuiltInKey`. Nothing is dropped or rewritten: a 1.4 database opens
+with every row (`SchemaV3Test` migrates one on a real SQLite, then checks it against `3.json`).
+
+## Built-in playlists
+
+- **The catalogue** (`assets/builtin_playlists.json`): `{"about": …, "lists": [{"key", "name",
+  "pieces": [{"composer", "title", "collection"?}, …]}, …]}`, the lists in their order (popular 28
+  matchers, recognisable 25, epic 45) and each list's matchers in playing order. `composer` is
+  the library's `composerKey` (the folded surname `ComposerNames` gives), a string or a list (a
+  piece known by its arranger too: `["schubert", "liszt"]`; `""` is an unknown composer); `title` a
+  regular expression, case-insensitive, found (`containsMatchIn`) in `PieceEntity.titleKey` =
+  `TextKeys.fold(title)`, so written without accents; `collection` the INDEX.csv collection,
+  exactly. Popular and Recognisable start every pattern with `^(?!.*\[\d)`: ALL-SONGS.zip's
+  numbered repeats ("… [2]") are other takes of a MAESTRO piece already counted. Epic's patterns are
+  anchored on the titles the set's own files carry under the three names one file can have (the
+  Epic zip's INDEX, the `midi` folder's INDEX, ALL-SONGS.zip's file name), so the list is Steven's
+  set wherever it came from. The catalogue was tuned with the corpus dumps (below); written from
+  scratch for Canon in D and Rhapsody in Blue it would find nothing (the corpus has neither), so
+  they are not in it.
+- **Matching** (`BuiltInList.matches`, pure): pieces grouped by `composerKey`; for each matcher its
+  composers' pieces it accepts (composer, collection when given, title), sorted by
+  (`titleKey`, `id`), the first `MAX_HITS` = 4; a `LinkedHashSet` keeps each piece at its first
+  place. The same library always gives the same list.
+- **Refresh** (`BuiltInPlaylists.refresh(store)`, one at a time under a `Mutex`): reads every piece
+  once (`PieceDao.list()`); for each list, when it matches nothing and has no row yet it is
+  skipped, else `ensureBuiltIn(key, name)` and `setPlaylistPieces(id, ids)`. `AppGraph`:
+  `refreshBuiltIns()` on IO, logging and swallowing failures; at `start()`; after an import with
+  `imported > 0` (`ImportService`, inside the import's coroutine, before `ArtworkService.start`); and
+  `library.namesChanged` (a `SharedFlow` that `rename`, `renamePlaylist` and `deletePlaylist` emit)
+  debounced by `BUILT_INS_SETTLE_MS` = 2,000.
+- **`LibraryRepository`** implements `BuiltInStore`. `ensureBuiltIn(key, name)` (one transaction):
+  the row with that `builtInKey`, made if needed, named `builtInName(name, taken)`: the name, or
+  when another playlist holds it (`byName`, case aside) "name · built in", then "name · built in
+  2"…; an existing row is renamed when its wanted name changed (it takes its own back once free).
+  `setPlaylistPieces(id, orderedIds)` (one transaction): the ids still in the library
+  (`PieceDao.existing`, in chunks), then `linkChanges(current, ordered)`: remove, move (a new
+  `position`) and add only what differs. `renamePlaylist`, `deletePlaylist`, `addToPlaylist`,
+  `removeFromPlaylist`, `reorderPlaylist`, `movePiece` return without writing for a built-in.
+  `playlistId(name)` (a new playlist, an INDEX set) and `renamePlaylist` first move a built-in
+  that holds the name aside (`moveBuiltInAside`), so the person's playlist takes it.
+- **UI.** `LibraryViewModel.playlists` (Add to playlist's choices, the rename dialog's names) leaves
+  the built-ins out. `PlaylistShelf.shown(all)`: the built-ins first, by id (the order made), those
+  with no pieces left out, then the rest as before. Tiles: the eyebrow `BUILT_IN` · "14 PIECES"; the
+  menu Change photo only. The playlist page: eyebrow "Built in · …", menu Change photo only, no
+  drag handles, no Remove or Move in the rows' menus, the Play and Shuffle as any playlist; empty:
+  "This playlist is empty." / "It fills itself from the library's pieces." `LibraryDialogs`: for a
+  built-in, Rename and Delete become `NeverFor(onClose)` (nothing shown).
+
+## Channels
+
+- **The catalogue** (`assets/channels.json`): `{"about": …, "channels": [{"key", "name", and
+  "all": true | "builtIn": "<list key>" | "composers": [...], "titles": [...],
+  "maxNotesPerSecond"?}]}`, in their order on screen: calm (composers satie, debussy, field; titles
+  nocturne, berceuse, gymnop, gnossienne, clair de lune, adagio, lullaby, reverie, traumerei,
+  consolation, arabesque, andante; 6 notes a second), epic (`builtIn` "epic"), baroque (bach,
+  handel, scarlatti, couperin, rameau, purcell, telemann, "bach cpe"), romantic (chopin, schumann,
+  liszt, brahms, mendelssohn, schubert, grieg, tchaikovsky, rachmaninoff, dvorak, smetana,
+  mussorgsky), impressionist (debussy, ravel, satie, faure, albeniz, granados, falla, scriabin),
+  nocturnes (nocturne, notturno, nachtst), etudes "Études" (etude, etued, `\bstud(?:y|ies|ie)\b`),
+  everything (`all`).
+- **Pools** (`PoolMatcher.pool(pieces)`, pure, in the library's order; Epic in the list's):
+  `Match` accepts a piece whose `composerKey` is one of `composers` or whose `titleKey` matches
+  one of `titles` (joined into one case-insensitive regex), and, with `maxNotesPerSecond`, whose
+  `noteCount × 1000 / durationMs` is at most that (a piece of no length is left out). `ChannelPools`:
+  `library.all()` debounced 500 ms, `Channels.summaries` on `Dispatchers.Default`,
+  `distinctUntilChanged` (a play count changes the library, not a card), failures logged,
+  `stateIn(Eagerly, null)`; `summary(key)`. A card's composers: the pool's pieces with a known
+  composer grouped by key, most pieces first, then by name, four.
+- **`ChannelPlayer(deck, pools, volumeOf, piano, scope, random)`**, on the main thread after
+  `start()` (which collects `deck.state`):
+  - `play(key)`: the pool from `pools(key)` (the card's ids; null until worked out), distinct;
+    under `MIN_POOL` → false and nothing changes. A `Session(key, pool)` shuffles the pool into
+    `remaining`; with `starting` set, `applyVolume(volumeOf(key))`, the session, then
+    `deck.playAll(deal(FIRST = 25), shuffle = false, channel = key)`; then `onState` once.
+  - `onState(state)`: ignored while `starting`; when `state.channel != session.key` the session ends
+    (and when `state.channel == null`, the volume is restored; a channel that took over keeps the
+    first one's restore); else when `state.queue.upNextIds.size < TOP_UP_BELOW = 5`,
+    `deck.addToQueue(deal(TOP_UP = 10), channel = key)`.
+  - `deal(n)`: from `remaining`, reshuffling when it runs out: the pool without the last
+    `min(RECENT = 20, pool.size / 2)` dealt. `recent` keeps the last 20.
+  - Volume: `applyVolume(pct)` (0–100): when `piano.current()` (`PianoState.Ready` with "volume")
+    is known, the first time `Restore.Piano(loudness)` and `piano.hold(pct)`; else the first time
+    `Restore.Velocity(the player's velocity, applied)` and `deck.setVelocity(velocityFor(pct))`,
+    `velocityFor(v) = 50 + v / 2` (in `PlaybackLimits.VelocityPct`). `restoreVolume()`:
+    `piano.release(loudness)`, or `setVelocity(previous)` only while the velocity is still the one
+    the channel set. `volumeChanged(key, pct)` applies at once to the channel playing. `stop()` =
+    `deck.stop()`; `playing` = the session's key.
+- **`AppGraph.pianoVolume`**: `current()` = `PianoLoudness(values["volume"] rounded,
+  values["fullpower"] == "1")`; `hold(pct)` = `pianoSettings.holdTemporarily("volume", pct)`;
+  `release(previous)` = `releaseTemporary("volume", previous.volume)`, and when it was on,
+  `releaseTemporary("fullpower", 1)` (the firmware turns Full power off below 100).
+- **`PianoSettingsRepository.holdTemporarily(name, value)` / `releaseTemporary(name, value)`**: a
+  held value is sent like any other but its write has `persist = false` (never counted for a
+  save); while anything is held, a save that `leave()` asks for waits (`saveWhenReleased`) and goes
+  after the last release. A release writes the value back unless the person set that setting on
+  this connection (`setByPerson`, whose value stands and is saved as usual); a hold from before a
+  reconnection is put back too.
+- **`Player`** (`ChannelDeck`): `PlayerState.channel: String?`. `playAll(ids, shuffle, channel)`
+  sets the queue and the channel in one state update (`setQueue(queue, channel)`), and remembers
+  the channel's queue uids (`channelUids`); `addToQueue(ids, channel)` adds the new uids when the
+  channel matches; `play` (a piece from a list), `playAll` without a channel, `stop`,
+  `stopAndFlush` and `leaveChannel()` (the notification's dismiss, `PlaybackService`) clear it;
+  `skipToQueueEntry` keeps it only for one of the channel's entries; `next`, `previous`,
+  `addToQueue`, `playNext` keep it. Every queue change publishes queue and channel together, so a
+  watcher running at once on the main thread never sees the channel's queue without its channel.
+- **`AppGraph.start`'s settings collector** applies each playback setting only when it changed
+  (`applied`), so a channel's velocity stands until the person changes Velocity.
+- **UI.** `PlaybackStarter.playChannel(key)`: `channelPlayer.play`, then the playback service as
+  for any start; `LibraryPlay.channel(key)` then opens Now playing on phones, as a piece does. The
+  eyebrow: `ChannelCopy.eyebrow(composer, rememberChannelName(
+  state.channel))` on Now playing, in `NowPlayingPanel`'s title and in display mode.
+  `ChannelVolumeSheet`: `ModalBottomSheet` (`surfaceVariant`), Eyebrow "Channel", the name in
+  Title, `SliderRow("Volume", 0..100, step 1, Format.percent)` whose change saves
+  `setChannelVolume` and calls `channelPlayer.volumeChanged`, and its note.
+- **Settings**: `channelVolumes: Map<String, Int>` (key "channelVolumes", one JSON object,
+  `{"calm":60}`, sorted; unreadable → none; values held to 0–100), `channelVolume(key)` (default
+  `DEFAULT_CHANNEL_VOLUME` 70), `setChannelVolume(key, pct)`.
+
+## Tiles
+
+`ChannelRow` (at the top of `Listing.Playlists` when the search is empty): `SectionEyebrow`-like
+row "Channels" with a "See all" `TextButton`, then a `LazyRow(contentPadding 16 dp, spacedBy
+12 dp)` keyed by channel. `ChannelCard(summary, playing, connected, onPlay, onSetVolume)`: 280 dp
+wide (`ChannelCardWidth`), `ArtFrame(aspect = CHANNEL_CARD_ASPECT 1.4f)` (`Artwork.kt` gains
+`aspect`, and `framed` on the art so a mosaic's cells carry no frames of their own), a public
+`Mosaic(count, modifier, cell)` of `ComposerArt(key, name, ArtSize.Tile, framed = false)`, or
+`MonogramTile(name)` with no composer; the band: `heightIn(min = 56 dp)`, `surface.copy(alpha =
+GlassTokens.ContainerAlpha)`, a 1 dp `LocalHairline` top, the name `titleLarge` and the Eyebrow in
+`onSurface` (with `LiveDot` while playing). `combinedClickable` (no haptic) with
+`clearAndSetSemantics` ("Calm channel, playing", Button); the long-press `DropdownMenu`: "Set
+volume", and "Schedule" disabled with `disabledTextColor = onSurfaceVariant`. `ChannelsGrid`: a
+Library page (`Group.Channels`, `Listing.Channels`) with `ChannelsHeader(count, onBack)` and
+`channelsGrid(...)` in `TileRow`s of `columns` (2/3/4). The flows: `ChannelPools` (debounced, off
+the main thread, distinct), so a refresh never re-lays the row.
+
+## Display mode
+
+- `IdleTimer(now, timeoutMs)` (pure): `touch(now)` remembers a touch at most once a second
+  (`WRITE_EVERY_MS`), always when idle; `isIdle`, `remaining`, `retimed`. `IdleState` (`touch()`,
+  `idle`, `touches`); `Modifier.watchTouches(onTouch)` = `pointerInput(Unit) {
+  awaitPointerEventScope { while (true) { awaitPointerEvent(PointerEventPass.Initial); onTouch() }
+  } }`, consuming nothing; `rememberIdle(enabled, timeoutMs)`: a `LaunchedEffect(state, enabled,
+  timeoutMs, state.touches)` that waits `remaining` and sets `idle`. `DisplayModeTimeout.ms`: 60 s;
+  in debug builds `debug.stevenpiano.idlesecs` (read once per process with `getprop`).
+- `NavHost`: `rememberIdle(settings.displayModeAfterMinute, DisplayModeTimeout.ms)`; the outer
+  `Box(fillMaxSize().watchTouches(onTouch))` holds `RailFrame { Scaffold … }` and, last,
+  `DisplayOverlay(idle, onLeave = onTouch)`, which composes `DisplayScreen` when `idle` and the
+  player holds a piece. Inside the nav host's `CompositionLocalProvider` (the monochrome switch
+  reaches it).
+- `DisplayScreen(onLeave)`: `DisplayTheme(black = standbyCanvas == BLACK, darkTheme =
+  appearance.dark(isSystemInDarkTheme()))` (`Theme.kt`: black → `PianoTheme(true)` with
+  `DarkScheme.copy(surface = DisplayBlack, background = DisplayBlack)`; otherwise the app's
+  `PianoTheme(darkTheme)`); `BackHandler(onLeave)`; `DisposableEffect`: `keepScreenOn` and the
+  system bars hidden (`WindowInsetsControllerCompat`, `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`),
+  both undone on dispose. A `Box(fillMaxSize, background(canvas))` whose `pointerInput` consumes
+  every change of each gesture and calls `onLeave` (semantics: "Display mode: <title>", click
+  "Leave display mode"); `PieceArt(pieceId, composerKey, ArtSize.Full, fillMaxSize, framed = false)`
+  at alpha 0.25; a vertical gradient from transparent to the canvas at 0.72; then, inside the
+  system bars' and cutout's insets and 24/16 dp: the title (`displayMedium`, two lines), the Eyebrow
+  (composer and channel), `NoteCanvas(PAPER_ROLL, blackKeyLanes = false)` with `RollClock` and
+  `rememberFrameNanos`, a hairline, `KeyboardStrip`, and a `FlowRow` of `LiveDot` with "Sent to
+  piano" / "Not connected" and `Eyebrow(Provenance.byline)`. `NoteCanvas` gains `blackKeyLanes:
+  Boolean = true`.
+- `Color.kt` `DisplayBlack = Color(0xFF000000)`, used by `Theme.kt`'s `DisplayTheme` only.
+- Settings: `displayModeAfterMinute` (false), `standbyCanvas: StandbyCanvas { BLACK, INK }`
+  (BLACK), both on the Display page (STANDBY: `SwitchRow` "Display mode after a minute" with its
+  note, `ChoiceRow` "Standby canvas" "Black" · "Same as the app"); unknown stored names read as
+  the default.
+
+## Appearance
+
+`Appearance { SYSTEM, LIGHT, DARK }` (`dark(systemDark)`), key "appearance", default SYSTEM,
+unknown → SYSTEM; `AppGraph.appearance: StateFlow<Appearance?>` (null until the settings are read).
+`MainActivity.setContent`: nothing is composed until it is known (so the first frame is never the
+wrong appearance); `dark = appearance.dark(isSystemInDarkTheme())`; `PianoTheme(darkTheme = dark)`;
+`LaunchedEffect(dark)` → `enableEdgeToEdge(SystemBarStyle.auto(TRANSPARENT, TRANSPARENT) { dark }`
+for both bars), so the bars' icons follow the app. The Display page's first section, APPEARANCE:
+`ChoiceRow("Appearance")` "Follow system" · "Light" · "Dark" (`Appearance.label`). The hub's
+Display value is unchanged (`GroupSummariesTest`). `settings.txt` in Share diagnostics lists
+`channelVolumes`, `appearance`, `displayModeAfterMinute`, `standbyCanvas` (24 lines).
+
+## Greps (v1.5 — M17)
+
+- `grep -rn "Color(0x" app/src/main --include=*.kt | grep -v ui/theme`: nothing.
+- `grep -rn "DisplayBlack" app/src/main`: `ui/theme/Color.kt`, `ui/theme/Theme.kt`.
+- `grep -rn "LocalNoteSounding" app/src/main`: `Theme.kt`, `ScorePages.kt`.
+- `grep -rln "dev.chrisbanes" app/src/main`: `Glass.kt`; `hazeSource`/`HazeState`: `Glass.kt`,
+  `NavHost.kt`, `NotePanel.kt`.
+- `grep -rn "Modifier.blur\|0\.0\.0\.0" app/src/main`: nothing.
+
+## Measured (September 2026)
+
+- Tests: 763, none failing (7 skipped without `-Pcorpus`: the two `LibraryFixtureTest`s beside
+  M16's five). `lint`: 0 errors, 29 warnings (M16's 28 and the version catalog's notice that
+  sqlite-jdbc has a newer version). `assembleDebug`, `assembleRelease` clean.
+- The built-in lists (`BuiltInPlaylistsTest`, `LibraryFixtureTest -Pcorpus`), Popular ·
+  Recognisable · Epic on piano: the `midi` folder 17 · 29 · 49; ALL-SONGS.zip 17 · 30 · 50; the
+  Epic zip alone 7 · 13 · 45 (all 45, in the zip's order); no matcher over 4. Matchers that find
+  nothing in Steven's library (their pieces are not in it; they fill when such a file comes):
+  Popular 13 of 28 (Gymnopédie No. 1, Arabesque No. 1, Rêverie, the Minute Waltz, Waltz Op. 69
+  No. 2, Gnossienne No. 1, Consolation No. 3, Solfeggietto, the Maple Leaf Rag, Spring Song,
+  Nocturne Op. 9 No. 1, Ave Maria, To a Wild Rose), Recognisable 9 of 25 from the folder, 8 from
+  ALL-SONGS.zip (Tristesse, the Military Polonaise, the Wedding March, the Swan, the Toccata and
+  Fugue, the Mountain King, the Sugar Plum Fairy, Ode to Joy; the Appassionata's finale only as
+  ALL-SONGS.zip names it: piano-midi.de calls all three movements alike).
+- Channel pools, the folder / ALL-SONGS.zip: Calm 30 / 31, Epic 49 / 50, Baroque 197 / 284,
+  Romantic 912 / 912, Impressionist 120 / 121, Nocturnes 23 / 24, Études 186 / 186, Everything
+  1,727 / 1,726.
+- On `steven_piano` (debug build, the emulated piano; phone 1080 × 2400 px at 420 dpi, and
+  2560 × 1600 px at 240 dpi for the tablet frame): M16's library (1,726 pieces) upgraded in place
+  to v3 with its playlist kept and the three built-ins made (14 · 30 · 47 there: 27 of its pieces
+  came from an older test set whose short names, "Moonlight Sonata I", shadow the ALL-SONGS copies
+  of the same files); the channel row and grid, Calm playing with its badge and eyebrow on Now
+  playing and the tablet panel; the emulated console (`adb logcat -s PianoLink`) received volume
+  70 when Calm started, volume 100 and fullpower 1 when a piece chosen from the list ended the
+  channel, and no save; 21 Nexts took the queue from 25 to 35 pieces; the Set volume sheet sent
+  volume 49 at once while Calm played, and kept it for Calm; display mode after the shortened wait on
+  the phone and the tablet frame, dark and light, black at every edge (pixels `#000000`), and on
+  "Same as the app" ink (`#0E0E0E`) and paper (`#F4F1EA`); leaving it on a touch with the app as it
+  was; Appearance Light with the system dark (and Dark with it light).
+- The 1.4 → 1.5 migration with the release builds (the same release key): 1.4 from `../apk/`, the
+  Epic on piano folder imported (45 pieces, and the INDEX's playlist "Epic on piano") and a
+  playlist "Popular" made with two pieces; 1.5 installed over it (`adb install -r`): both
+  playlists as they were, and before them the built-ins "Popular · built in" (7 pieces),
+  "Recognisable" (13) and "Epic on piano · built in" (45); the channel row with Epic at 45 and
+  Calm reading "Add more pieces" (fewer than three pieces of the set are calm enough). Renaming
+  the person's "Popular" to "Evening" gave the built-in its name back a few seconds later;
+  renaming it "Popular" again moved the built-in beside it once more.
+
+## Deviations from the plan, and why
+
+- **The channel volume is held, not set.** `pianoSettings.set("volume", pct)` counts the change for
+  the save the Piano tab sends when it stops (M15), so a channel's volume would have been stored
+  on the piano. `holdTemporarily` / `releaseTemporary` send it the same way but never count it, and
+  hold back a save meanwhile. The firmware turns Full power off below 100 %, so the release puts
+  back the pair, volume and Full power.
+- **Queue and channel in one update, and `starting`.** With `playAll` setting the queue and then
+  the channel, `ChannelPlayer`'s watcher (on `Dispatchers.Main.immediate`) saw the new queue
+  without the channel and ended the channel at once (the emulated console showed the volume put
+  back right after the tap). `Player` now publishes both together, and `ChannelPlayer` ignores what
+  the player says while it hands a channel over; `ChannelPlayerTest` holds the case on the real
+  `Player`.
+- **Pools come from the cards** (`ChannelPools`, worked out off the main thread and cached) rather
+  than from the library at `play`: the tap needs no query, and a pool not yet worked out (the first
+  half second after start) does not play.
+- **Calm's "chopin-by-title"** is the titles for any composer: a Field or Chopin nocturne, a
+  Beethoven adagio and a Schumann Träumerei all qualify, and the density cap keeps the busy ones
+  out. Études also takes `etued` (a misspelling in the corpus) and the German `Studie`.
+- **Epic's matchers are anchored titles** under the three names a file can have, rather than loose
+  composer-and-title patterns: loose ones pulled other pieces of the same name into Steven's set;
+  anchored, the zip's 45 come back in order, and the folder and ALL-SONGS.zip find the same files
+  (a few pieces have more than one recording there, hence 49 and 50).
+- **`composer` may be a list, or "" for an unknown composer**, beyond the plan's single key: a
+  piece is known under its arranger too (Ave Maria as Schubert's or Liszt's, the Flight of the
+  Bumblebee as Rimsky-Korsakov's or Rachmaninoff's), and Mutopia's Entertainer in the `midi` folder
+  carries no composer.
+- **A playlist renamed to a built-in's name takes it**, the built-in moving beside it, as a new
+  playlist or an INDEX set does (the plan named only the first case). The rename dialog lists only
+  the person's playlists, so it no longer refuses such a name with a database error.
+- **Test-only dependency `org.xerial:sqlite-jdbc` 3.41.2.2** (Apache-2.0), so `SchemaV3Test`
+  migrates a real 1.4 database with its rows on the JVM (the project has no instrumented tests).
+- **`releases/history.json` holds a drafted entry** (`"draft": true`, versionCode 9, "1.5", the
+  notes, the APK's address, minSdk; no hash or size until the script builds it).
+  `ReleaseManifestTest` compares `latest.json` with the last published entry and checks the draft
+  (this source's version, the last entry, notes ≤ 1,000 characters), and `tools/publish-release.sh`
+  drops a draft with its tag before appending the published entry. Nothing else in the script
+  changed; it was not run.
+- **Steven's additions during the run**: the Appearance setting (overriding v1.0's "no in-app
+  appearance switch") and the Standby canvas, with `DisplayBlack` still only in `DisplayTheme`.
+- **Display mode hides the system bars** while it shows (a tablet's taskbar left a light strip
+  under the black), and the roll there has no black-key lanes (a barcode over the portrait).
+- **The tablet panel's connection row** (Fable's review item) takes the place of the 8 dp spacer
+  that closed the panel's column: with the row added on top, the roll strip on a 2560 × 1600 px
+  tablet was 2 dp short of holding the glass transport.
+- **The M16 library on the emulator** carried an older 27-file test set, so its built-ins read
+  14 · 30 · 47, not the 17 · 30 · 50 of a clean ALL-SONGS.zip import; replaying the catalogue over
+  that database's own rows gives the same pieces in the same order.
+
+## Tests added in M17
+
+`SchemaV3Test` (7: the two columns as `3.json` declares them; the index and the schedules table
+with its statements; everything else as v2; a 1.4 database migrated on a real SQLite keeps every
+row; the result is what Room expects at v3; a built-in key names one playlist while NULLs are
+many; a schedule is enabled by default), `BuiltInPlaylistsTest` (13: the catalogue's order;
+patterns written for folded titles; folding; at most four, the first by title; order kept and each
+piece once; collections and several or unknown composers; refresh makes a list when there is
+something, then follows the library; the name beside the person's; link changes; in Steven's
+library ≥ 15 · ≥ 15 · ≥ 30 both ways; no matcher over four in four libraries; the Epic zip's 45 in
+order; Popular and Recognisable find only their own pieces in the zip), `LibraryFixtureTest` (2,
+`-Pcorpus`: the two CSVs are what the importer makes of the corpus and of ALL-SONGS.zip),
+`ChannelsTest` (8), `ChannelPlayerTest` (12, among them the real `Player` with a watcher that runs
+at once, and Full power put back with the volume), `IdleWatchTest` (6), `PianoSettingsRepositoryTest`
+(+4: a held value never saved; a save waits for the release; the person's value stands; a release
+after a reconnection), `PlayerTest` (+1: the channel's life), `SettingsRepositoryTest` (+4: channel
+volumes; unreadable volumes; appearance, display mode and canvas remembered; unknown names read as
+the defaults), `LibraryStatesTest` (+1: the shelf), `GroupSummariesTest` (+1: Display unchanged by
+appearance and standby), `ColorTokensTest` (+2: the display's black and the camera body's text on
+it, 18.8 · 8.3 · 6.1:1; the card's band keeps the glass's contrast), `ReleaseManifestTest` (+1: the
+drafted release); `DiagnosticsExporterTest` (24 lines) and `SchemaV2Test` (the shared reader)
+changed. 701 tests before, 763 after.

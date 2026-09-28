@@ -9,5 +9,14 @@
     "minSdk": 26,
     "tag": "v1.4",
     "publishedAt": "2026-09-26"
+  },
+  {
+    "versionCode": 9,
+    "versionName": "1.5",
+    "notes": "Channels play the library without end: Calm, Epic, Baroque, Romantic, Impressionist, Nocturnes, Études and Everything, each at its own volume. Popular, Recognisable and Epic on piano now fill themselves from your pieces. Left alone for a minute, the tablet can become a display for passers-by: the portrait, the title and the roll on black. Every piece begins after a short pause, the score lights the notes it plays in yellow, a mini player (on a tablet, a now-playing panel beside the library) keeps the piece in sight, the Piano tab's settings are grouped into pages, and the app can follow the system's appearance or stay light or dark.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.5/steven-piano-1.5.apk",
+    "minSdk": 26,
+    "tag": "v1.5",
+    "draft": true
   }
 ]
