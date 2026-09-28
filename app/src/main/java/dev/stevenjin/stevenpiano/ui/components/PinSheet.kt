@@ -56,7 +56,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.stevenjin.stevenpiano.ui.LocalIdleState
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.watchTouches
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.web.LoginGuard
@@ -234,16 +236,28 @@ object PinWait {
 /** How often a wait's line counts down. */
 private const val COUNTDOWN_TICK_MS = 250L
 
-/** Both PIN sheets: the drag handle, the eyebrow, the title, the line (read out as it changes), then [content]. */
+/**
+ * Both PIN sheets: the drag handle, the eyebrow, the title, the line (read out as it changes), then
+ * [content]. A sheet is a window of its own, so its touches are counted for display mode here
+ * ([LocalIdleState]); should display mode come all the same (the person walked away), the sheet
+ * closes, and in kiosk mode the tablet rests locked with no PIN sheet left over it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PinSheetFrame(eyebrow: String, title: String, line: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val idle = LocalIdleState.current
+    if (idle?.idle == true) LaunchedEffect(Unit) { onDismiss() }
+    val touched = remember(idle) { { idle?.touch() ?: Unit } }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
+        Column(
+            Modifier
+                .watchTouches(touched)
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        ) {
             Eyebrow(eyebrow)
             Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(8.dp))

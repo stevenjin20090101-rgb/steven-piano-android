@@ -170,6 +170,7 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         LocalHazeState provides content,
         LocalFloatingPlaySlot provides floatingPlay,
         LocalBylineHold provides if (kiosk) openKioskSheet else null,
+        LocalIdleState provides idle,
     ) {
         Box(
             Modifier

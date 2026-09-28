@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -94,6 +95,13 @@ fun Modifier.watchTouches(onTouch: () -> Unit): Modifier = pointerInput(Unit) {
         }
     }
 }
+
+/**
+ * The app's idleness, for windows of the app's own that the nav host's [watchTouches] cannot see (a
+ * sheet is a window of its own): the PIN sheets count their touches with it, and close when display
+ * mode comes (the person walked away). Null outside the nav host.
+ */
+val LocalIdleState = staticCompositionLocalOf<IdleState?> { null }
 
 /** The app's idleness: [IdleState.idle] once [enabled] and no touch came for [timeoutMs]. */
 @Composable
