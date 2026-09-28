@@ -3923,7 +3923,8 @@ Jin · v1.6.2 · eab16a502f679465", the entry drafted at the end of `releases/hi
   it ended; never the offer or Retry) above the locked page's line, and opens from the hub without
   the PIN while an update runs (its chevron back); the idle relock locks the settings, never the
   progress. `LockedFirmware` in `ui/KioskLock.kt`, `LockedFirmwareUpdate` in `FirmwarePage`;
-  `LockedFirmwareTest` (2). DESIGN.md › v1.6.1 — M20 › Settings locked in kiosk says so.
+  `LockedFirmwareTest` (2). DESIGN.md › v1.6.1 — M20 › Settings locked in kiosk says so. Under the
+  block the locked page leaves its own top rule out (`e37eea5`, seen on the emulator: two rules).
 - **`docs/SECURITY_AUDIT.md › 1.6 — firmware updates (notes)`** (`26210bf`), before the 1.6.1 kiosk
   note: the allow-list, the caps, the app's and the piano's Ed25519 checks, `PinnedKeyTest`, the
   player lock, and the residuals.
@@ -3933,9 +3934,28 @@ Jin · v1.6.2 · eab16a502f679465", the entry drafted at the end of `releases/hi
   channels' Schedule, PLAYING's Schedule, a Schedules entry) and *Kiosk* (the Schedule page and a
   channel's Schedule behind the PIN; the firmware update kept in view) say what M19 and the fixes
   added.
+- **Measured at the merge** (`steven_piano_int`, API 34, Pixel 7 profile, debug build, the emulated
+  piano; the run's own AVD, removed after): four MIDI files added through Add files; the hub's
+  Schedule row "None", then "Next Tue 11:53"; the editor (days, the app's time picker, Everything,
+  70 %); a Weekdays 11:53–11:55 schedule of the Everything channel two minutes ahead, the piano
+  disconnected, the screen off and the emulator forced into deep Doze on battery: the exact alarm
+  (`RTC_WAKEUP`, `exactAllowReason=policy_permission`) fired at 11:53:00.04, the playback service
+  started from the background (`ALARM_MANAGER_WHILE_IDLE`), the piano connected 1.6 s later,
+  "Schedule started: Monday 11:53 (channel everything, schedule 1)", `volume 70` on the console,
+  the first notes 2 s after; at 11:55:00 the stop sequence, "Schedule ended: Monday 11:55
+  (schedule 1)", `volume 100` and `fullpower 1` back, the next start planned for Tuesday; the page
+  read "Last: Monday 11:53, Everything channel". With `debug.stevenpiano.fakeota happy`, a 12:00
+  schedule falling in a transfer (sending from 11:59:12): "Missed: Monday 12:00 (the piano was
+  updating)" in the link's log and on the page; the update went on to 2.1.0. Kiosk mode on
+  (`dpm set-device-owner`, a test PIN): Firmware and status opened with the PIN, Update, then
+  display mode after the (shortened) idle time relocked the settings; a touch back found the page
+  "Sending · 58%" with its hairline and Cancel over "Settings are locked in kiosk."; Cancel opened
+  the PIN sheet (dismissed; the update went on); the hub's row read "Updating…" with its chevron
+  and opened the page without the PIN; at the end "Updated to 2.1.0 · confirming…" over the lock's
+  line. The device owner given back (`no owners`, lock task NONE, stay-on 1). No crash.
 - Tests: 998 (1.6.1's 953, this run's 39, the merge's 6), 8 skipped (the corpus tests without
   `-Pcorpus`, and `PinnedKeyTest`'s check against the firmware's `include/ota_pubkey.h`). `lint`: 0
   errors, 29 warnings. No compiler warnings in the app's sources. The greps above, M20's and
   M21's: as stated. The release APK is 2,837,804 bytes (versionCode 13, "1.6.2", signed
-  `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,285,479; staged as
+  `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,537,905; staged as
   `../apk/steven-piano-1.6.2.apk` and `-debug.apk`.
