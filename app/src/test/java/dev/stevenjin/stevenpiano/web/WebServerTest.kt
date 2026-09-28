@@ -502,6 +502,30 @@ class WebServerTest {
     }
 
     @Test
+    fun `Studio takes no more from the panel while it has eight jobs to do (audit delta 2)`() {
+        val (_, http) = start()
+        val token = login(http)
+        val auth = mapOf("X-Steven-Piano" to "1", "Cookie" to "sp_session=$token")
+        fun jobs(toDo: Int, ended: Int) = List(toDo) { WebStudioJob(it + 1L, "compose", "a piece", if (it == 0) "running" else "queued", "", null, null) } +
+            List(ended) { WebStudioJob(100L + it, "transcribe", "a take", "done", "", null, null) }
+        backend.studioHeld = WebStudio(available = true, jobs = jobs(STUDIO_JOBS_MAX, 5))
+        val refused = http.send("PUT", "/api/studio/audio?name=take.wav", null, auth + mapOf("Content-Length" to "150000000"), readTimeoutMs = 3_000)
+        assertEquals("refused before a byte of the 150 MB is read", 409, refused.status)
+        assertEquals("full", refused.json().getString("error"))
+        assertEquals("Studio has 8 jobs to do already. Try again when one has finished.", refused.json().getString("message"))
+        val composeRefused = http.api("POST", "/api/studio/compose", """{"mood":"calm","minutes":2}""", session = token)
+        assertEquals(409, composeRefused.status)
+        assertEquals("full", composeRefused.json().getString("error"))
+        assertTrue("nothing reached Studio", backend.recordings.isEmpty() && backend.composed.isEmpty())
+        assertEquals("nothing was kept", emptyList<String>(), backend.uploadDir.list()?.toList().orEmpty())
+
+        // One job fewer to do (the finished ones don't count), and both are taken again.
+        backend.studioHeld = WebStudio(available = true, jobs = jobs(STUDIO_JOBS_MAX - 1, 20))
+        assertEquals(202, http.send("PUT", "/api/studio/audio?name=take.wav", ByteArray(1_000) { 1 }, auth).status)
+        assertEquals(202, http.api("POST", "/api/studio/compose", """{"mood":"calm","minutes":2}""", session = token).status)
+    }
+
+    @Test
     fun `one upload at a time`() {
         val (server, http) = start()
         val token = login(http)

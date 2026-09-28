@@ -552,14 +552,6 @@ class WebServer(
         return json(JSONObject().put("name", name), Response.Status.ACCEPTED)
     }
 
-    /**
-     * `PUT /api/studio/audio?name=<file>` (v1.7 — M23): a recording for Studio to transcribe, the file as
-     * the whole body, as [upload] takes a zip: its name must end as a recording's does (415), its length
-     * declared and not chunked (411), at most [AUDIO_BYTES] (413), not empty (400), Studio able to run
-     * here (409 "unavailable", before a byte is read), one upload at a time (409 "busy"); then it is
-     * streamed to `cacheDir/web/studio-….<ext>` with the free-space margin kept (507), and the job is
-     * queued: 202 `{name, job}`.
-     */
     /** `GET /api/studio/seed?piece=<id>` (v1.7 — M24): the seed and its key and tempo for the compose form (no `piece`: the default one); 404 when there is none. */
     private suspend fun studioSeed(call: Call): Response {
         val piece = call.param("piece")?.let { it.toLongOrNull()?.takeIf { id -> id > 0 } ?: throw ApiError(400, "field", "piece must be a piece's id.") }
@@ -569,13 +561,14 @@ class WebServer(
 
     /**
      * `POST /api/studio/compose` (v1.7 — M24): the form's choices, every field checked
-     * ([WebApi.composeOrder]); Studio able to run (409 "unavailable"); the piece in the library (404);
-     * then the job is queued: 202 `{job}`.
+     * ([WebApi.composeOrder]); Studio able to run (409 "unavailable") with room for another job (409
+     * "full", [STUDIO_JOBS_MAX]); the piece in the library (404); then the job is queued: 202 `{job}`.
      */
     private suspend fun studioCompose(call: Call): Response {
         val order = WebApi.composeOrder(call.body())
         val studio = backend.studio()
         if (!studio.available) return refuse(409, "unavailable", studio.reason ?: "Studio isn't available on this device.")
+        studioFull(studio)?.let { return it }
         return when (val outcome = backend.compose(order)) {
             is StudioCompose.Queued -> json(JSONObject().put("job", outcome.jobId), Response.Status.ACCEPTED)
             is StudioCompose.Refused -> refuse(409, "unavailable", outcome.reason)
@@ -583,6 +576,14 @@ class WebServer(
         }
     }
 
+    /**
+     * `PUT /api/studio/audio?name=<file>` (v1.7 — M23): a recording for Studio to transcribe, the file as
+     * the whole body, as [upload] takes a zip: its name must end as a recording's does (415), its length
+     * declared and not chunked (411), at most [AUDIO_BYTES] (413), not empty (400), Studio able to run
+     * here (409 "unavailable") with room for another job (409 "full", [STUDIO_JOBS_MAX]), all before a
+     * byte is read, one upload at a time (409 "busy"); then it is streamed to `cacheDir/web/studio-….<ext>`
+     * with the free-space margin kept (507), and the job is queued: 202 `{name, job}`.
+     */
     private suspend fun studioUpload(call: Call): Response {
         val name = uploadName(call.param("name")) ?: throw ApiError(400, "name", "The file needs a name.")
         val extension = AUDIO_EXTENSIONS.firstOrNull { name.lowercase(Locale.ROOT).endsWith(".$it") }
@@ -595,6 +596,7 @@ class WebServer(
         if (length == 0L) throw ApiError(400, "empty", "The file is empty.")
         val studio = backend.studio()
         if (!studio.available) return refuse(409, "unavailable", studio.reason ?: "Studio isn't available on this device.")
+        studioFull(studio)?.let { return it }
         if (!uploading.tryLock()) throw ApiError(409, "busy", "Another file is being added. Try again in a moment.")
         val file = try {
             call.connection?.lift()
@@ -606,6 +608,16 @@ class WebServer(
             is StudioUpload.Queued -> json(JSONObject().put("name", name).put("job", outcome.jobId), Response.Status.ACCEPTED)
             is StudioUpload.Refused -> refuse(409, "unavailable", outcome.reason)
         }
+    }
+
+    /**
+     * 409 "full" when Studio already has [STUDIO_JOBS_MAX] jobs to do (waiting or running), before a byte of a
+     * recording is read (audit delta 2): the panel could queue without end, each recording kept in the tablet's
+     * storage until its turn and each composition adding a piece. Null when there is room.
+     */
+    private fun studioFull(studio: WebStudio): Response? {
+        val toDo = studio.jobs.count { it.state == "queued" || it.state == "running" }
+        return if (toDo < STUDIO_JOBS_MAX) null else refuse(409, "full", "Studio has $STUDIO_JOBS_MAX jobs to do already. Try again when one has finished.")
     }
 
     /** A zip upload, saved as [save] does, `upload-….zip`. */
@@ -1173,6 +1185,12 @@ const val QUEUE_LENGTH = 32
 const val MIDI_BYTES = 8L * 1024 * 1024
 const val ZIP_BYTES = 64L * 1024 * 1024
 const val AUDIO_BYTES = 200L * 1024 * 1024
+
+/**
+ * The most Studio jobs the panel lets wait or run at once (audit delta 2): a person's batch of recordings
+ * fits, a script's endless stream doesn't. The tablet's own Studio page and + sheet are not held to it.
+ */
+const val STUDIO_JOBS_MAX = 8
 
 /** What a recording sent to Studio may be called: the containers Android's decoders read (a video's sound included). */
 val AUDIO_EXTENSIONS = listOf("wav", "wave", "mp3", "m4a", "mp4", "aac", "flac", "ogg", "oga", "opus", "webm", "3gp", "amr")
