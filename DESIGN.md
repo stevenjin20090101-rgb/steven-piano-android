@@ -35,7 +35,9 @@ Two disciplines make the palette a choice rather than a default:
    and breathes gently while it is playing. It is never a button fill, never text,
    never a highlight. If red appears anywhere else, the design has been broken.
 2. **No other colour, anywhere.** No tinted nav indicator, no coloured icons, no
-   error red. Errors are copy plus an outlined banner.
+   error red. Errors are copy plus an outlined banner. *(Two named exceptions since, both
+   Steven's: the hand colours on the waterfall (v1.3, a switch, off by default) and the
+   sounding yellow on the score (v1.5 — M16). Neither is red, and neither carries meaning alone.)*
 
 ## Principles applied (Apple HIG, adapted for Android)
 
@@ -127,7 +129,8 @@ All sizes in `sp`. Layouts must survive system font scale 2.0× with hierarchy i
 
 Bottom `NavigationBar`, four tabs since v1.1 (Library · Now playing · Keys · Piano; the
 sketch below is v1.0's three), short labels, tabs navigate and never act.
-Indicator pill is `surfaceElevated`, not a tint.
+Indicator pill is `surfaceElevated`, not a tint. *(v1.5 — M16: the bar is glass, with the
+mini player above it on phones; see that section.)*
 
 ```
 ┌──────────────────────────────┐   ┌──────────────────────────────┐
@@ -190,7 +193,9 @@ Indicator pill is `surfaceElevated`, not a tint.
 - Scrubber: hairline track, 12 dp round thumb, times in Eyebrow with tabular figures.
   Dragging scrubs; release seeks.
 - Transport: previous · **play/pause (72 dp circle, contentPrimary fill, surface
-  glyph)** · next. Play sits mid-screen-low for one-handed reach.
+  glyph)** · next. Play sits mid-screen-low for one-handed reach. *(v1.5 — M16: the
+  scrubber and transport float on glass over the roll's history, and the play control is
+  a frosted lens there; the filled circle stays wherever the transport is solid.)*
 - Below transport: **TEMPO** with a compact `−  100%  +` stepper (25–200 %), and the
   connection state as *"● Sent to piano"* (dot live) or *"○ Not connected"* (hollow,
   tap to open the Piano tab).
@@ -422,7 +427,8 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
 - The chip reads **Playlists**. Imported INDEX sets appear as playlists too.
 - A playlist is a page: cover art (96 dp, `shapes.medium`), name in Title, an Eyebrow
   "12 pieces · 41:20", then a filled 56 dp **Play** circle and an outlined **Shuffle**
-  button side by side, then the rows.
+  button side by side, then the rows. *(v1.5 — M16: Play floats as a glass circle at the
+  list's bottom end; Shuffle stays in the head.)*
 - Rows inside a playlist carry a trailing **drag handle** (48 dp) for reordering; the row
   menu also offers *Move up* and *Move down* so reordering works without dragging.
 - Row menu everywhere, in three groups with hairline separators (context menus scan best
@@ -492,7 +498,7 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
   page otherwise. Bar lines, clefs at each system, bar numbers as Eyebrows at each
   system's start. Staff lines `contentTertiary`, clefs `contentSecondary`.
 - A 2 dp `contentPrimary` cursor moves within the current system; sounding notes brighten
-  with the same 120 ms flip as the roll. Pages turn so the cursor is always visible: with
+  with the same 120 ms flip as the roll. *(v1.5 — M16: they turn the sounding yellow.)* Pages turn so the cursor is always visible: with
   two pages the left page turns to the page after next while the right page is being
   finished, and vice versa.
 - Agency: swipe left or right to look at other pages; a small outlined **Follow** chip
@@ -542,6 +548,7 @@ values. v1.3 adds the rest, in the app's own language.
   dynamics glyphs. Performed files show dynamics only when the change is clear.
 - Everything here is monochrome and follows the existing colours: staff `contentTertiary`,
   glyphs `contentSecondary`, sounding notes `contentPrimary`, playhead `contentPrimary`.
+  *(v1.5 — M16: sounding notes are the sounding yellow; the playhead stays `contentPrimary`.)*
 - Honest limits, in the README: no voices within a hand, no tuplets, no grace notes, no
   pedal markings; performed files (MAESTRO) keep heads and duration bars.
 
@@ -751,3 +758,128 @@ background), as before; closing a page never does.
 Every later feature with settings adds its page to the tab and one row to its group, with a
 value of a few words (Schedule "Next Wed 12:30", Remote control "On · 100.101.2.3", Kiosk
 "On", Studio "2 models"). Nothing else goes on the hub.
+
+---
+
+# v1.5 — M16: glass, yellow, the pause before each piece, the mini player, two panes
+
+Steven asked (2026-09-27) for the sounding notes on the score in yellow, an Apple Music-style
+now-playing panel that stays in sight while browsing, two seconds of silence before every piece,
+and a Liquid Glass look for the floating controls. He decided: yellow on the **score only**;
+glass on the **floating controls only**, monochrome. Everything above still holds except where
+this section, or a note above pointing here, says otherwise.
+
+## The glass
+
+- **The material.** The surface colour at 72 % over a 24 dp blur of whatever lies beneath; no
+  tint, no noise. A 1 dp edge in the hairline token and, inside it, a 1 dp specular line, white
+  at 10 % on the camera body and 70 % on the paper: along the top of a bar, the inner edge of the
+  rail, round the upper half of a circle. The play control on glass is a **lens**: clearer (60 %)
+  than the glass around it, inside a hairline ring, its glyph `contentPrimary`.
+- **Where.** The tab bar (and the mini player in it), the rail, the transport on Now playing and
+  in the now-playing panel (the scrubber, Shuffle, Previous, the play lens, Next, Repeat), and a
+  playlist's Play. **Never** on content: cards, rows, tiles, the roll, the score, the keyboard,
+  sheets, dialogs, banners. M17's channel cards carry a static scrim, not glass.
+- **What sits on glass.** Text is `contentPrimary`: over the worst backdrop the blur can bring
+  (pure white under the dark bar, pure black under the light one) it reads 7.1:1 and 8.3:1.
+  Glyphs may be `contentSecondary` (3.2:1, above the 3:1 graphics floor). Nothing tertiary sits on
+  glass: the tab labels are all primary (the pill and the brighter glyph tell the chosen tab), the
+  scrubber's times are primary, Shuffle and Repeat when off are secondary. The play lens's glyph
+  reads 4.5:1 and 5.8:1 at worst.
+- **Solid when it must be.** Below Android 12 (no blur), and whenever the person has turned on
+  *High contrast text* (Android's nearest to Reduce Transparency), the glass is today's solid
+  surface with its hairline, and controls that float on glass go back to their solid places (the
+  transport under the roll). The switch is followed as it changes.
+- **Only where something passes beneath.** A glass surface re-blurs whenever the screen beneath
+  it changes, which is every frame while a piece plays. Where nothing can pass beneath it (the
+  rail, which every screen keeps clear of; the tab bar over the fixed layouts of Now playing and
+  Keys) it draws the glass's look without blurring, the same pixels over the bare background, and
+  costs nothing per frame.
+
+## The floating padding
+
+The content draws beneath the bar and the rail, and each screen keeps clear of them itself:
+lists take the bar's height as padding under their last row, so they scroll beneath the glass and
+their last row still rises above it (the Library, the Piano tab's hub and pages); fixed layouts
+stop above the bar (Now playing, Keys). Everything keeps clear of the rail. **The Keys keyboard
+is never under glass.** With the keyboard open, a list ends at the keyboard.
+
+## Yellow on the score
+
+- A sounding note's head, stem, flags, ledger lines and accidental turn a warm yellow as the
+  cursor reaches it (the 120 ms flip; a cut when motion is reduced), hold it for the note's length,
+  and settle back to `contentSecondary`. A note's tied heads light as the cursor reaches each.
+- The token `noteSounding`: `#F2C94C` on the camera body (11.0:1 on the score panel, 12.2:1 on the
+  surface) and `#9C7A00` on the paper (3.8:1 on the panel, 3.6:1 on the surface): a yellow (hue
+  about 45°), never read as the live red.
+- The score's cursor stays `contentPrimary`; beams, ties, rests, marks and the staff stay grey;
+  the roll, the falling notes and the keyboard strip keep `contentPrimary` or the hand colours.
+  Nothing else in the app is yellow.
+
+## The pause before each piece
+
+- Every piece begins after a pause of silence: a tap in the Library, a playlist's Play, the end
+  of the piece before, Repeat one (later: schedules and channels). **Piano › Playback › Pause
+  before each piece**, the page's first row: Off, then half seconds to 5 s; 2 s at first. The
+  hub's Playback row reads "2 s pause · 100%", or "No pause · 100%".
+- During the pause the play glyph already reads pause, the timer reads 0:00 with the thumb at the
+  start, the roll shows the first notes travelling down to the tracker bar and meeting it as the
+  piano plays them, the score shows no cursor yet, and an eyebrow **STARTING** in
+  `contentTertiary` stands under the composer (on Now playing and in the panel), fading in and out
+  over 120 ms (a cut when motion is reduced). Its line is always kept, so nothing moves.
+- Resuming after Pause never waits (a pause inside the pause holds the piece's start: Play then
+  begins it at once). A seek plays from its bar at once. Between two pieces the gap is the longer
+  of the pause and 1.5 s: 2 s with the default, not 3.5.
+
+## The mini player (phones)
+
+- Whenever a piece is loaded (or loading), a 64 dp row sits above the tab bar, inside the bar's
+  glass, a hairline between them (the moving hairline while a piece loads): the piece's art at
+  48 dp (the composer's portrait, else the piece's own roll card), its title in Body over its
+  composer as an eyebrow, one line each, then play/pause and next, 48 dp each.
+- The whole row opens Now playing ("Open Now playing"); it has no swipes. It is not shown on Now
+  playing itself, which is the full player, nor on wide screens, which have the panel.
+- It grows in from the bar and gives way into it over 240 ms (a cut when motion is reduced); the
+  lists' padding follows it. At large text it grows rather than clipping; the composer ellipsizes.
+
+## The Library in two panes (wide screens)
+
+- Anything wider than a phone held upright shows the list (55 %, keeping its 720 dp reading
+  column) and, beside it past a hairline, the **now-playing panel** (45 %): a NOW PLAYING eyebrow
+  with the Up next glyph at its end; the piece's art, at most 320 dp, centred (smaller on a short
+  pane); the title in Title (it opens the piece sheet); the composer eyebrow (M17's channel joins
+  it); STARTING during the pause; a live **roll strip** (the paper roll, slower, at 48 dp a second,
+  over its keyboard strip; no hands, fingering or chord names: a glance, not a study), 120 dp at
+  least and taking the pane's height; then the scrubber and the transport, floating on glass over
+  the strip's history where it can hold them, solid beneath it where it cannot. With nothing
+  loaded: "Choose a piece from the library."
+- Playing from the list stays on the Library: the panel shows the piece. The Now playing tab stays
+  for the full score; the notification still opens it. Turning the device switches between one
+  pane and two without losing the list's place or the piece.
+
+## The transport on glass
+
+On Now playing the scrubber and the transport float on glass over the paper roll's **history**,
+the third below the tracker bar, with their bottom on the keyboard strip's top edge: never over
+the tracker bar, never over the keys. The notes just played pass beneath them, blurred; the lens
+shows them a little clearer. Falling notes and the score alone have no history, and a short
+screen (a phone on its side, large text) has too little: there the transport stands under the
+views, solid, as before.
+
+## A playlist's Play
+
+Play floats as a 56 dp glass circle at the bottom end of the playlist's column, above the mini
+player and the bar, where a thumb finds it wherever the list is scrolled; the last row can rise
+clear of it. Shuffle stays in the head, outlined. It gives the play tick.
+
+## Motion
+
+Two small additions, both cut when motion is reduced: STARTING fades over 120 ms, and the mini
+player grows and gives way over 240 ms. Pressing play is still the one orchestrated moment; the
+roll's ease now begins at the pause's start, so the first notes reach the bar at 0.
+
+## Sixty frames
+
+On displays faster than 60 Hz the app asks for 60 frames a second: enough for the roll and the
+score, and half the glass's work. The piano's timing never depends on the display.
+

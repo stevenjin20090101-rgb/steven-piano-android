@@ -28,6 +28,7 @@ import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -78,6 +79,7 @@ class MediaSessionHolder(
     private var shownRepeat: RepeatMode? = null
     private var shownWindow: List<Long>? = null
     private var queueJob: Job? = null
+    private var pauseEndJob: Job? = null
 
     val token: MediaSessionCompat.Token get() = session.sessionToken
 
@@ -105,11 +107,19 @@ class MediaSessionHolder(
         }
         publishQueue(queue)
         val playing = state.status == PlaybackStatus.Playing
-        // Never a negative position: during the pause before a piece the system is told the piece is
-        // at its start as of the moment the pause ends, so its own clock waits there, then runs.
+        // Never a negative position: during the pause before a piece the system is told the piece
+        // stands at its start, not moving; when the pause ends it is told again, now running.
         val micros = player.positionMicrosNow()
         val positionMs = micros.coerceAtLeast(0L) / 1_000L
-        val waitMs = if (playing && micros < 0L) -micros * 100L / state.tempoPct.coerceAtLeast(1) / 1_000L else 0L
+        val waiting = playing && micros < 0L
+        pauseEndJob?.cancel()
+        if (waiting) {
+            val waitMs = -micros * 100L / state.tempoPct.coerceAtLeast(1) / 1_000L + 1L
+            pauseEndJob = scope.launch {
+                delay(waitMs)
+                update(player.state.value)
+            }
+        }
         val code = when (state.status) {
             PlaybackStatus.Playing -> PlaybackStateCompat.STATE_PLAYING
             PlaybackStatus.Paused -> PlaybackStateCompat.STATE_PAUSED
@@ -119,13 +129,14 @@ class MediaSessionHolder(
             PlaybackStateCompat.Builder()
                 .setActions(ACTIONS)
                 .setActiveQueueItemId(queue.currentUid ?: MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong())
-                .setState(code, positionMs, if (playing) state.tempoPct / 100f else 0f, SystemClock.elapsedRealtime() + waitMs)
+                .setState(code, positionMs, if (playing && !waiting) state.tempoPct / 100f else 0f, SystemClock.elapsedRealtime())
                 .build(),
         )
     }
 
     fun release() {
         queueJob?.cancel()
+        pauseEndJob?.cancel()
         session.isActive = false
         session.release()
     }
