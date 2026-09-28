@@ -529,6 +529,29 @@ class WebServerTest {
         )
     }
 
+    @Test
+    fun `a listening socket that keeps failing pauses a little longer each time, then closes itself`() {
+        // A socket Android destroyed with its address fails every accept at once; NanoHTTPD would retry without end.
+        val pauses = mutableListOf<Long>()
+        var failing = true
+        val socket = object : SteadyServerSocket(pause = { pauses += it }) {
+            override fun acceptOnce(): Socket = if (failing) throw java.net.SocketException("Software caused connection abort") else Socket()
+        }
+        socket.use {
+            assertTrue(runCatching { it.accept() }.exceptionOrNull() is java.io.IOException)
+            assertEquals(1, it.failuresInARow)
+            failing = false
+            it.accept().close()
+            assertEquals("a success starts the count again", 0, it.failuresInARow)
+            failing = true
+            repeat(SteadyServerSocket.MAX_ACCEPT_FAILURES) { _ -> assertTrue(runCatching { it.accept() }.isFailure) }
+            assertTrue("closed after twenty in a row, which ends NanoHTTPD's loop", it.isClosed)
+            val expected = listOf(20L) + (1 until SteadyServerSocket.MAX_ACCEPT_FAILURES).map { n -> minOf(n * 20L, 500L) }
+            assertEquals(expected, pauses)
+            assertTrue("never more than half a second at a time", pauses.all { ms -> ms <= SteadyServerSocket.MAX_ACCEPT_PAUSE_MS })
+        }
+    }
+
     /** A WebSocket handshake by hand. */
     private fun handshake(http: RawHttp, port: Int, cookie: String?, origin: String? = "http://127.0.0.1:$port", path: String = "/ws", host: String? = null): RawHttp.Answer {
         val headers = LinkedHashMap<String, String>()

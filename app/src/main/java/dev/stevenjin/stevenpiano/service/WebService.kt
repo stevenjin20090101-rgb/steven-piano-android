@@ -157,12 +157,14 @@ class WebService : Service() {
 
     /**
      * Listens where the networks allow now ([WebAddress.plan]), unless it listens there already on
-     * every address (one that could not be bound is tried again at the next look).
+     * every address. A listener that could not be bound, or whose socket closed itself (Android
+     * destroyed it with its address: [dev.stevenjin.stevenpiano.web.SteadyServerSocket]), is
+     * started again at the next look.
      */
     private suspend fun listen(settings: PianoSettings) {
         val choice = withContext(Dispatchers.IO) { WebAddress.choose(WebAddress.list()) }
         val wanted = WebAddress.plan(choice, settings.webOnWifi, loopback = LoggingPianoLink.isWanted())
-        if (wanted == listening && servers.isNotEmpty() && servers.size == wanted.size) return
+        if (wanted == listening && servers.isNotEmpty() && servers.size == wanted.size && servers.all { it.isAlive }) return
         stopListening()
         val started = withContext(Dispatchers.IO) { wanted.mapNotNull(::server) }
         servers = started

@@ -29,6 +29,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
+import java.net.ServerSocket
 import java.net.Socket
 import java.security.SecureRandom
 import java.util.Base64
@@ -71,7 +72,8 @@ interface WebSockets {
  *   read, one at a time.
  * - **Threads**: a pool of [POOL_THREADS] with a short queue ([BoundedRunner]); NanoHTTPD's reverse
  *   lookup of every peer's name is skipped ([createClientHandler]); a socket read waits at most
- *   [SOCKET_READ_TIMEOUT_MS]; a handler that needs the app waits at most [CALL_TIMEOUT_MS] for it.
+ *   [SOCKET_READ_TIMEOUT_MS]; a handler that needs the app waits at most [CALL_TIMEOUT_MS] for it;
+ *   a listening socket that keeps failing closes itself rather than spin ([SteadyServerSocket]).
  * - **The socket** (`/ws`, [WebSockets]) opens only for a session, from the panel's own origin, on a
  *   listener that serves the panel.
  */
@@ -107,6 +109,7 @@ class WebServer(
     init {
         setAsyncRunner(runner)
         setTempFileManagerFactory { CacheTempFiles(config.tempDir) }
+        setServerSocketFactory { SteadyServerSocket() }
     }
 
     /** Listens, with every socket read waiting at most [SOCKET_READ_TIMEOUT_MS]; the listener's thread keeps the process up while it runs. */
@@ -715,6 +718,51 @@ class WebServer(
             if (n > 0) left -= n
             return n
         }
+    }
+}
+
+/**
+ * The listening socket, steadied. NanoHTTPD's accept loop runs until its socket is closed and tries
+ * again at once after any failure, so a socket Android destroyed under it (netd destroys the
+ * sockets of an address that goes away, as the Wi-Fi's does when it drops) would keep a core at
+ * 100 % (seen on `steven_piano`: a dummy interface's address removed). Here each failure in a row
+ * waits a little longer ([ACCEPT_PAUSE_MS] more each time, at most [MAX_ACCEPT_PAUSE_MS]), a success
+ * starts the count again, and after [MAX_ACCEPT_FAILURES] in a row the socket closes, which ends
+ * NanoHTTPD's loop: the web service finds the listener gone at its next look and listens again.
+ */
+internal open class SteadyServerSocket(private val pause: (Long) -> Unit = ::pauseQuietly) : ServerSocket() {
+    private var failures = 0
+
+    /** Failures in a row so far. */
+    val failuresInARow: Int get() = failures
+
+    override fun accept(): Socket {
+        try {
+            return acceptOnce().also { failures = 0 }
+        } catch (e: IOException) {
+            if (!isClosed) {
+                failures++
+                if (failures >= MAX_ACCEPT_FAILURES) close() else pause(minOf(failures * ACCEPT_PAUSE_MS, MAX_ACCEPT_PAUSE_MS))
+            }
+            throw e
+        }
+    }
+
+    /** One accept, as `ServerSocket` does it (a test stands in its own). */
+    protected open fun acceptOnce(): Socket = super.accept()
+
+    companion object {
+        const val MAX_ACCEPT_FAILURES = 20
+        const val ACCEPT_PAUSE_MS = 20L
+        const val MAX_ACCEPT_PAUSE_MS = 500L
+    }
+}
+
+private fun pauseQuietly(ms: Long) {
+    try {
+        Thread.sleep(ms)
+    } catch (e: InterruptedException) {
+        Thread.currentThread().interrupt()
     }
 }
 
