@@ -34,7 +34,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * "console < ledbright=40"). The emulated piano keeps its values across connections, as a
  * powered piano does. [consoleMode] is asked on each connection: `adb shell setprop
  * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
- * to one whose console never answers; anything else, the full console. Its connections (not the
+ * to one whose console never answers; anything else, the full console. `debug.stevenpiano.piano
+ * away` is a piano switched off: the scan ends unfound after the real one's 12 s (v1.5.2, for a
+ * schedule's missed start). Its connections (not the
  * MIDI it logs) also go to [LinkLog], so the diagnostics share has a link log on the emulator too.
  * The firmware (v1.6 — M21): with `debug.stevenpiano.fakeota` naming a [FakeOta] scenario, the
  * emulated piano reports its version and has the update service ([EmulatedOta]), and after an
@@ -163,11 +165,20 @@ class LoggingPianoLink(
         if (_state.value is LinkState.Connected) return
         LinkLog.shared.add("Connect (emulated): ${address ?: "no piano remembered yet"}")
         _state.value = LinkState.Scanning
-        main.postDelayed(found, SCAN_MS)
+        main.removeCallbacks(found)
+        main.removeCallbacks(notFound)
+        // `debug.stevenpiano.piano away`: the piano is switched off; the scan ends unfound, as the real one's timeout.
+        main.postDelayed(if (pianoAway()) notFound else found, if (pianoAway()) SCAN_TIMEOUT_MS else SCAN_MS)
+    }
+
+    private val notFound = Runnable {
+        LinkLog.shared.add("Not found (emulated): debug.stevenpiano.piano is away")
+        _state.value = LinkError.NotFound().toState()
     }
 
     override fun disconnect() {
         main.removeCallbacks(found)
+        main.removeCallbacks(notFound)
         if (_state.value != LinkState.Disconnected) LinkLog.shared.add("Disconnected (emulated)")
         console = null
         ota = null
@@ -197,6 +208,15 @@ class LoggingPianoLink(
         private const val REPLY_MS = 40L
         private const val REPLY_BUFFER_LINES = 512
         private const val CONSOLE_PROPERTY = "debug.stevenpiano.console"
+        private const val PIANO_PROPERTY = "debug.stevenpiano.piano"
+
+        /** The real scan's timeout (PianoScanner), for the piano that stays away. */
+        private const val SCAN_TIMEOUT_MS = 12_000L
+
+        /** `debug.stevenpiano.piano away`: no piano to find (a schedule's missed start, on the emulator). Read with getprop each time. */
+        private fun pianoAway(): Boolean = runCatching {
+            ProcessBuilder("getprop", PIANO_PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() } == "away"
+        }.getOrDefault(false)
 
         /** How long the emulated piano is away while it restarts after an update. */
         private const val BOOT_MS = 4_000L

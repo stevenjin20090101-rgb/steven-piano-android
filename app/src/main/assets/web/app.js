@@ -91,8 +91,8 @@
   /** A request to the tablet: JSON both ways; every change carries the panel's header, which no other site's page can send. */
   async function call(method, path, body) {
     const init = { method, credentials: 'same-origin', cache: 'no-store', headers: {} };
-    if (method !== 'GET') {
-      init.headers['X-Steven-Piano'] = '1';
+    if (method !== 'GET') init.headers['X-Steven-Piano'] = '1';
+    if (method !== 'GET' && method !== 'DELETE') {
       init.headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body === undefined ? {} : body);
     }
@@ -121,6 +121,7 @@
   const get = (path) => call('GET', path);
   const post = (path, body) => call('POST', path, body);
   const put = (path, body) => call('PUT', path, body);
+  const del = (path) => call('DELETE', path);
 
   /** A short line at the foot of the window for what a tap did or could not do. */
   let toastTimer = null;
@@ -384,6 +385,7 @@
     if (section === 'channels' && (!before || channelOf(before) !== channelOf(state))) channelsLoad();
     if (section === 'requests' && (!before || before.requests.pending !== state.requests.pending)) requestsLoad();
     if (section === 'requests') renderGuestSwitches();
+    if (section === 'schedule' && before && before.schedule.revision !== state.schedule.revision && !scheduling.editing) scheduleLoad();
     if (section === 'add') renderTally();
     if (section === 'piano') renderPiano();
   }
@@ -461,7 +463,7 @@
     $('now-title').textContent = piece ? piece.title : 'Choose a piece from the library.';
     $('now-eyebrow').textContent = piece
       ? [piece.composer, player.channel && player.channel.name, player.channel && 'Channel'].filter(Boolean).join(' · ')
-      : '';
+      : state.schedule.next || '';   // with nothing loaded, the next schedule (DESIGN.md › v1.5.2 — M19)
     const play = $('now-play');
     play.disabled = !piece && !player.loading;
     play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
@@ -752,12 +754,18 @@
   }
 
   function openMenu(anchor, piece, queue) {
+    showMenu(anchor, piece.title, [
+      ['Play', () => play(piece.id, queue)],
+      ['Play next', () => queueCommand({ action: 'playNext', ids: [piece.id] }).then(() => toast('It plays next.'))],
+      ['Add to queue', () => queueCommand({ action: 'add', ids: [piece.id] }).then(() => toast('Added to Up next.'))],
+    ]);
+  }
+
+  /** A small menu under [anchor] (above it near the window's foot): [items] are [label, action] pairs. */
+  function showMenu(anchor, label, items) {
     closeMenu();
-    const item = (label, action) => h('button', { type: 'button', role: 'menuitem', text: label, onclick: () => { closeMenu(); action(); } });
-    menu = h('div', { class: 'menu', role: 'menu', 'aria-label': piece.title },
-      item('Play', () => play(piece.id, queue)),
-      item('Play next', () => queueCommand({ action: 'playNext', ids: [piece.id] }).then(() => toast('It plays next.'))),
-      item('Add to queue', () => queueCommand({ action: 'add', ids: [piece.id] }).then(() => toast('Added to Up next.'))));
+    const item = ([text, action]) => h('button', { type: 'button', role: 'menuitem', text, onclick: () => { closeMenu(); action(); } });
+    menu = h('div', { class: 'menu', role: 'menu', 'aria-label': label }, items.map(item));
     document.body.append(menu);
     const box = anchor.getBoundingClientRect();
     const width = menu.offsetWidth;
@@ -916,20 +924,282 @@
 
   // ---- Schedule ------------------------------------------------------------------------------------
 
+  // The tablet's Piano › Schedule (DESIGN.md › v1.5.2 — M19): the next start and what the last one did,
+  // a row a schedule with its switch, and an editor with the tablet's fields. The tablet checks every
+  // save again (the same rules) and keeps the one alarm; its words come back when it refuses one.
+
+  const DAYS = [['Mon', 'Monday'], ['Tue', 'Tuesday'], ['Wed', 'Wednesday'], ['Thu', 'Thursday'], ['Fri', 'Friday'], ['Sat', 'Saturday'], ['Sun', 'Sunday']];
+  const WEEKDAYS = 31;
+  const EVERY_DAY = 127;
+  const scheduling = { data: null, editing: null, tab: 'channel', query: '', deleting: null, error: null, channels: null, playlists: null, pieces: null };
+
   async function scheduleLoad() {
-    const body = $('schedule-body');
     try {
-      const data = await get('/api/schedules');
-      body.replaceChildren(h('p', { class: 'empty', text: data && data.schedules && data.schedules.length ? '' : 'No schedules yet.' }));
+      scheduling.data = await get('/api/schedules');
+      renderSchedule();
     } catch (e) {
-      if (e.status === 404) {
-        body.replaceChildren(
-          h('h2', { class: 'section-head eyebrow', text: 'Schedule' }),
-          h('p', { class: 'empty', text: 'Coming in the next update.' }));
+      failed(e);
+    }
+  }
+
+  /** Why the schedule being edited can't be saved, as the tablet says it; null when it can. */
+  function scheduleProblem(d) {
+    if (!d.days) return 'Choose at least one day.';
+    if (d.endMinute !== null && d.endMinute === d.startMinute) return 'The end must differ from the start.';
+    if (!d.kind || !d.target) return 'Choose what to play.';
+    return null;
+  }
+
+  function renderSchedule() {
+    const data = scheduling.data;
+    const body = $('schedule-body');
+    if (!data || !body) return;
+    $('schedule-add').hidden = !!scheduling.editing;
+    fill(body,
+      data.next ? h('p', { class: 'eyebrow inset schedule-next', text: data.next }) : null,
+      data.last && data.schedules.length ? h('p', { class: 'note inset', text: data.last }) : null,
+      data.exactAlarms ? null : h('div', { class: 'banner', role: 'status', text: 'Exact alarms are off on the tablet, so no schedule will start. Allow them there: Piano › Schedule › Allow exact alarms.' }),
+      scheduling.editing ? scheduleEditor() : null,
+      h('ul', { class: 'rows schedule-list' }, data.schedules.map(scheduleRow)),
+      data.schedules.length === 0 && !scheduling.editing ? h('p', { class: 'empty', text: 'No schedules yet. The piano can play by itself at set times: a channel, a playlist or a piece.' }) : null,
+      h('p', { class: 'note inset', text: 'The tablet starts them: keep it on, charged and near the piano.' }));
+  }
+
+  /** What a schedule's fields are, as the tablet takes them. */
+  const fields = (s) => ({ days: s.days, startMinute: s.startMinute, kind: s.kind, target: s.target, endMinute: s.endMinute, volumePct: s.volumePct, enabled: s.enabled });
+
+  function scheduleRow(s) {
+    if (scheduling.deleting === s.id) {
+      return h('li', { class: 'row' },
+        h('div', { class: 'text' }, h('p', { class: 'title', text: 'Delete this schedule?' }), h('p', { class: 'meta', text: `${s.when} · ${s.what}. It won't play again.` })),
+        h('button', { class: 'text-button', type: 'button', onclick: () => { scheduling.deleting = null; renderSchedule(); } }, 'Cancel'),
+        h('button', { class: 'outlined', type: 'button', onclick: () => deleteSchedule(s) }, 'Delete schedule'));
+    }
+    const toggle = h('button', { class: 'switch', role: 'switch', type: 'button', 'aria-checked': s.enabled ? 'true' : 'false', 'aria-label': `${s.when}, ${s.what}` });
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggle.setAttribute('aria-checked', s.enabled ? 'false' : 'true');
+      sendSchedule({ ...fields(s), enabled: !s.enabled }, s.id);
+    });
+    const row = h('li', { class: 'row clickable schedule-row' },
+      h('div', { class: 'text' },
+        h('p', { class: s.enabled ? 'title' : 'title off', text: s.when }),
+        h('p', { class: 'meta', text: s.what })),
+      toggle,
+      h('button', { class: 'icon-button', type: 'button', 'aria-label': `More for ${s.when}`, 'aria-haspopup': 'menu', onclick: (event) => {
+        event.stopPropagation();
+        showMenu(event.currentTarget, s.when, [
+          ['Edit', () => editSchedule(s)],
+          ['Delete', () => { scheduling.deleting = s.id; renderSchedule(); }],
+        ]);
+      } }, glyph('i-more')));
+    row.addEventListener('click', () => editSchedule(s));
+    return row;
+  }
+
+  function editSchedule(s) {
+    scheduling.editing = { id: s.id, ...fields(s), name: s.name };
+    scheduling.tab = s.kind;
+    scheduling.error = null;
+    renderSchedule();
+    $('schedule-body').scrollIntoView({ block: 'start' });
+  }
+
+  $('schedule-add').addEventListener('click', () => {
+    const now = new Date();
+    const start = ((now.getHours() + 1) % 24) * 60;
+    scheduling.editing = { id: null, days: WEEKDAYS, startMinute: start, kind: null, target: null, endMinute: (start + 60) % 1440, volumePct: 70, enabled: true, name: null };
+    scheduling.tab = 'channel';
+    scheduling.error = null;
+    renderSchedule();
+  });
+
+  /** The editor: DAYS, TIME, PLAYS and VOLUME as on the tablet, then what keeps it from saving, Cancel and Save. */
+  function scheduleEditor() {
+    const d = scheduling.editing;
+    const again = () => {
+      scheduling.error = null;
+      renderSchedule();
+    };
+    const dayChips = DAYS.map(([short, full], i) => {
+      const bit = 1 << i;
+      const node = chip(short, (d.days & bit) !== 0, () => {
+        d.days ^= bit;
+        again();
+      });
+      node.setAttribute('aria-label', full);
+      return node;
+    });
+    const problem = scheduling.error || scheduleProblem(d);
+    return h('div', { class: 'schedule-editor' },
+      h('p', { class: 'eyebrow inset', text: 'Schedule' }),
+      h('h2', { class: 'editor-title', text: d.id ? 'Edit schedule' : 'Add schedule' }),
+      h('h3', { class: 'section-head eyebrow', text: 'Days' }),
+      h('div', { class: 'actions' },
+        h('div', { class: 'chips', role: 'group', 'aria-label': 'Days' }, dayChips),
+        h('div', { class: 'chips' },
+          chip('Weekdays', d.days === WEEKDAYS, () => { d.days = WEEKDAYS; again(); }),
+          chip('Every day', d.days === EVERY_DAY, () => { d.days = EVERY_DAY; again(); }))),
+      h('h3', { class: 'section-head eyebrow', text: 'Time' }),
+      timeSetting('Starts', d.startMinute, null, (m) => { d.startMinute = m; again(); }),
+      switchSetting('Until the end', d.endMinute === null, 'A playlist or a piece plays to its end; a channel plays until someone stops it', (on) => {
+        d.endMinute = on ? null : (d.startMinute + 60) % 1440;
+        again();
+      }),
+      d.endMinute === null ? null : timeSetting('Ends', d.endMinute, d.endMinute < d.startMinute ? 'The next day' : null, (m) => { d.endMinute = m; again(); }),
+      h('h3', { class: 'section-head eyebrow', text: 'Plays' }),
+      h('div', { class: 'actions' }, h('div', { class: 'chips', role: 'group', 'aria-label': 'Plays' },
+        [['channel', 'Channels'], ['playlist', 'Playlists'], ['piece', 'Pieces']].map(([kind, label]) => chip(label, scheduling.tab === kind, () => {
+          scheduling.tab = kind;
+          renderSchedule();
+        })))),
+      scheduleChoices(d),
+      h('h3', { class: 'section-head eyebrow', text: 'Volume' }),
+      switchSetting('Set the volume', d.volumePct !== null, 'Off: the piano plays as it is set, and a channel at its own volume', (on) => {
+        d.volumePct = on ? 70 : null;
+        again();
+      }),
+      d.volumePct === null ? null : volumeSetting(d),
+      problem ? h('p', { class: 'note inset', role: 'status', text: problem }) : null,
+      h('div', { class: 'actions editor-actions' },
+        h('button', { class: 'text-button', type: 'button', onclick: () => { scheduling.editing = null; renderSchedule(); } }, 'Cancel'),
+        h('button', { class: 'outlined', type: 'button', disabled: !!scheduleProblem(d), onclick: () => sendSchedule(fields(d), d.id, true) }, 'Save')));
+  }
+
+  /** A time of day on the 24-hour clock, as the tablet shows it whatever the browser's own clock: the hour and the minutes. */
+  function timeSetting(label, minute, note, onChange) {
+    const select = (count, value, name) => {
+      const node = h('select', { class: 'field time-part', 'aria-label': `${label}, ${name}` },
+        Array.from({ length: count }, (_, i) => h('option', { value: String(i), text: String(i).padStart(2, '0') })));
+      node.value = String(value);
+      return node;
+    };
+    const hour = select(24, Math.floor(minute / 60), 'hour');
+    const minutes = select(60, minute % 60, 'minutes');
+    const changed = () => onChange(Number(hour.value) * 60 + Number(minutes.value));
+    hour.addEventListener('change', changed);
+    minutes.addEventListener('change', changed);
+    return h('div', { class: 'setting' },
+      h('div', { class: 'label' }, label, note ? h('span', { class: 'meta', text: note }) : null),
+      h('div', { class: 'time-field' }, hour, h('span', { class: 'time-colon', text: ':' }), minutes));
+  }
+
+  function switchSetting(label, on, note, onChange) {
+    const button = h('button', { class: 'switch', role: 'switch', type: 'button', 'aria-checked': on ? 'true' : 'false', 'aria-label': label });
+    button.addEventListener('click', () => onChange(!on));
+    return h('div', { class: 'setting' }, h('div', { class: 'label' }, label, h('span', { class: 'meta', text: note })), button);
+  }
+
+  function volumeSetting(d) {
+    const range = h('input', { class: 'range', type: 'range', min: '0', max: '100', step: '1', 'aria-label': 'Volume' });
+    const value = h('span', { class: 'value', text: `${d.volumePct}%` });
+    setRange(range, d.volumePct, 100);
+    range.addEventListener('input', () => {
+      d.volumePct = Number(range.value);
+      setRange(range, d.volumePct, 100);
+      value.textContent = `${d.volumePct}%`;
+    });
+    return h('div', { class: 'setting stacked' },
+      h('div', { class: 'label' }, 'Volume', h('span', { class: 'eyebrow', text: '%' })),
+      h('div', { class: 'with-value' }, range, value),
+      h('p', { class: 'meta', text: "The piano's own volume while it plays, or how hard its keys are struck where the piano has none. What was there comes back when it ends." }));
+  }
+
+  /** The choices for what to play, as rows with a check on the chosen one: the channels, the playlists, or pieces searched. */
+  function scheduleChoices(d) {
+    const list = h('ul', { class: 'rows', role: 'radiogroup', 'aria-label': 'What to play' });
+    const choose = (kind, target, name) => {
+      d.kind = kind;
+      d.target = String(target);
+      d.name = name;
+      scheduling.error = null;
+      renderSchedule();
+    };
+    const row = (kind, target, title, meta, enabled) => {
+      const chosen = d.kind === kind && d.target === String(target);
+      const node = h('li', { class: enabled ? 'row clickable choice' : 'row choice off', role: 'radio', tabindex: enabled ? '0' : '-1', 'aria-checked': chosen ? 'true' : 'false', 'aria-disabled': enabled ? null : 'true' },
+        h('div', { class: 'text' }, h('p', { class: 'title', text: title }), meta ? h('p', { class: 'meta', text: meta }) : null),
+        chosen ? glyph('i-check') : null);
+      if (enabled) {
+        node.addEventListener('click', () => choose(kind, target, title));
+        node.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            choose(kind, target, title);
+          }
+        });
+      }
+      return node;
+    };
+    const fillRows = (rows, empty) => fill(list, rows.length ? rows : h('li', { class: 'row' }, h('p', { class: 'meta', text: empty })));
+    const wrap = h('div', { class: 'choices' });
+    if (scheduling.tab === 'channel') {
+      const show = () => fillRows(scheduling.channels.map((c) => row('channel', c.key, c.name, c.playable ? plural(c.size, 'piece', 'pieces') : 'Add more pieces', c.playable)), 'The channels are being worked out from the library.');
+      if (scheduling.channels) show();
+      else get('/api/channels').then((r) => { scheduling.channels = r.channels; show(); }).catch(failed);
+      wrap.append(list);
+    } else if (scheduling.tab === 'playlist') {
+      const show = () => fillRows(scheduling.playlists
+        .slice().sort((a, b) => Number(b.builtIn) - Number(a.builtIn))
+        .map((p) => row('playlist', p.id, p.name, [p.builtIn ? 'Built in' : null, plural(p.pieceCount, 'piece', 'pieces')].filter(Boolean).join(' · '), true)), 'No playlists yet.');
+      if (scheduling.playlists) show();
+      else get('/api/playlists').then((r) => { scheduling.playlists = r.playlists; show(); }).catch(failed);
+      wrap.append(list);
+    } else {
+      const search = h('input', { class: 'field', type: 'search', placeholder: 'Search titles and composers', 'aria-label': 'Search pieces', autocomplete: 'off', maxlength: '200' });
+      search.value = scheduling.query;
+      const show = (pieces) => {
+        const rows = pieces.map((p) => row('piece', p.id, p.title, [p.composerShort || 'Unknown composer', clock(p.durationMs)].join(' · '), true));
+        const chosenShown = pieces.some((p) => d.kind === 'piece' && String(p.id) === d.target);
+        if (d.kind === 'piece' && d.target && !chosenShown) rows.unshift(row('piece', d.target, d.name || 'The piece chosen', null, true));
+        fillRows(rows, scheduling.query ? 'Nothing matches that search.' : 'No pieces yet.');
+      };
+      const load = () => {
+        const params = new URLSearchParams({ limit: '30' });
+        if (scheduling.query) params.set('q', scheduling.query);
+        else params.set('category', 'recent');
+        get(`/api/library?${params}`).then((page) => show(page.pieces)).catch(failed);
+      };
+      search.addEventListener('input', debounce(() => {
+        scheduling.query = search.value.trim();
+        load();
+      }, 250));
+      load();
+      wrap.append(h('div', { class: 'inset' }, search), list);
+    }
+    return wrap;
+  }
+
+  /** Saves a schedule: a new one (POST) or [id]'s (PUT); the tablet's refusal comes back in its own words. */
+  async function sendSchedule(body, id, fromEditor) {
+    try {
+      if (id) await put(`/api/schedules/${id}`, body);
+      else await post('/api/schedules', body);
+      if (fromEditor) {
+        scheduling.editing = null;
+        toast('Saved. The tablet starts it on time.');
+      }
+      await scheduleLoad();
+    } catch (e) {
+      if (fromEditor && e.status && e.status !== 401) {
+        scheduling.error = e.message;
+        renderSchedule();
       } else {
         failed(e);
+        scheduleLoad();
       }
     }
+  }
+
+  async function deleteSchedule(s) {
+    scheduling.deleting = null;
+    try {
+      await del(`/api/schedules/${s.id}`);
+      toast('Schedule deleted.');
+    } catch (e) {
+      failed(e);
+    }
+    scheduleLoad();
   }
 
   // ---- Requests ------------------------------------------------------------------------------------

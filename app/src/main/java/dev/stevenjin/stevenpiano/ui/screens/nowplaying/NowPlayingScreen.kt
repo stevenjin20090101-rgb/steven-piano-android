@@ -91,6 +91,7 @@ import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
@@ -176,12 +177,16 @@ private fun ColumnScope.NowPlayingContent(
                 .padding(32.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                "Choose a piece from the library.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.5.2 — M19).
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
+                Text(
+                    "Choose a piece from the library.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }

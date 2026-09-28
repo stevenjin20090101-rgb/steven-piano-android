@@ -13,12 +13,14 @@ import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.web.WebStatus
+import java.time.ZonedDateTime
 import kotlin.math.roundToInt
 import dev.stevenjin.stevenpiano.piano.PianoSettings as PianoTable
 
@@ -38,6 +40,7 @@ data class GroupSummaries(
     val display: String,
     val remote: String,
     val kiosk: String,
+    val schedule: String = ScheduleCopy.NONE,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -49,6 +52,7 @@ data class GroupSummaries(
         SettingsPage.Display -> display
         SettingsPage.Remote -> remote
         SettingsPage.Kiosk -> kiosk
+        SettingsPage.Schedule -> schedule
     }
 
     companion object {
@@ -58,7 +62,8 @@ data class GroupSummaries(
         /**
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
          * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
-         * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status.
+         * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule]
+         * when the next schedule starts.
          */
         fun from(
             piano: PianoState,
@@ -67,6 +72,7 @@ data class GroupSummaries(
             web: WebStatus = WebStatus(),
             firmwareUpdate: FirmwareState = FirmwareState.Idle,
             firmwareVersion: String? = null,
+            nextSchedule: ZonedDateTime? = null,
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -76,7 +82,11 @@ data class GroupSummaries(
             display = display(settings, wide),
             remote = remote(settings, web),
             kiosk = kiosk(settings),
+            schedule = schedule(nextSchedule),
         )
+
+        /** When the next schedule starts, "Next Wed 12:30", or "None". */
+        fun schedule(next: ZonedDateTime?): String = ScheduleCopy.hub(next)
 
         /** "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"). */
         fun remote(settings: PianoSettings, web: WebStatus): String {

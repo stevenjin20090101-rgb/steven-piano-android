@@ -27,9 +27,6 @@ object ChannelCopy {
     /** A card's eyebrow while its channel plays, beside the live dot. */
     const val PLAYING = "Playing"
 
-    /** Schedule, in a card's menu, until schedules come (M19). */
-    const val SCHEDULE_LATER = "Coming in the next update"
-
     /**
      * The composer line on Now playing and in the panel: the composer, and while a channel plays
      * its name and "Channel" ("Claude Debussy · Calm · Channel", set in capitals by the eyebrow).

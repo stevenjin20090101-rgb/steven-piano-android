@@ -245,6 +245,7 @@ class WebService : Service() {
             panel.requests.pending.map { },
             panel.requests.requested.map { },
             panel.status.map { },
+            graph.schedules.entries.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes)
         hub = created

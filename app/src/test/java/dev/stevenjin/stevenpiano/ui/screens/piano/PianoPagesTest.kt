@@ -82,13 +82,13 @@ class PianoPagesTest {
     }
 
     @Test
-    fun `the hub's groups run piano, playing, control, app, and control has Remote control and Kiosk`() {
+    fun `the hub's groups run piano, playing, control, app, playing has Schedule and control has Remote control and Kiosk`() {
         assertEquals(listOf("Piano", "Playing", "Control", "App"), HubGroups.all.map { it.title })
         assertEquals("with its first row the CONTROL eyebrow shows", listOf("Piano", "Playing", "Control", "App"), HubGroups.shown.map { it.title })
         assertEquals(
             listOf(
                 listOf(HubRow.Page(SettingsPage.Feel), HubRow.Page(SettingsPage.Lighting), HubRow.Page(SettingsPage.Pedal), HubRow.Page(SettingsPage.Firmware)),
-                listOf(HubRow.Page(SettingsPage.Playback), HubRow.Page(SettingsPage.Display)),
+                listOf(HubRow.Page(SettingsPage.Playback), HubRow.Page(SettingsPage.Display), HubRow.Page(SettingsPage.Schedule)),
                 listOf(HubRow.Page(SettingsPage.Remote), HubRow.Page(SettingsPage.Kiosk)),
                 listOf(HubRow.AutoConnect, HubRow.CheckForUpdates, HubRow.CheckNow, HubRow.ShareDiagnostics),
             ),

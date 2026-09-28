@@ -15,6 +15,10 @@ import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
+import dev.stevenjin.stevenpiano.schedule.SaveResult
+import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
+import dev.stevenjin.stevenpiano.schedule.ScheduleRules
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import kotlinx.coroutines.TimeoutCancellationException
@@ -292,6 +296,7 @@ class WebServer(
         Route(Method.GET, Regex("/api/channels"), Access.READ, "/api/channels") { json(WebApi.channels(backend.channels())) },
         Route(Method.GET, Regex("/api/requests"), Access.READ, "/api/requests") { json(WebApi.requests(requests.pending.value, backend.guestSettings())) },
         Route(Method.GET, Regex("/api/piano"), Access.READ, "/api/piano") { json(WebApi.piano(backend.piano())) },
+        Route(Method.GET, Regex("/api/schedules"), Access.READ, "/api/schedules") { json(WebApi.schedules(backend.schedules())) },
 
         // The panel acts.
         Route(Method.POST, Regex("/api/play"), Access.WRITE, "/api/play") { call ->
@@ -398,6 +403,13 @@ class WebServer(
             backend.applySettings(WebApi.settingsChange(call.body()))
             noContent()
         },
+        Route(Method.POST, Regex("/api/schedules"), Access.WRITE, "/api/schedules") { call -> saveSchedule(WebApi.scheduleDraft(call.body())) },
+        Route(Method.PUT, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { call ->
+            saveSchedule(WebApi.scheduleDraft(call.body(), id = call.groups[0].toLong()))
+        },
+        Route(Method.DELETE, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { call ->
+            if (backend.deleteSchedule(call.groups[0].toLong())) noContent() else notFound()
+        },
         Route(Method.PUT, Regex("/api/upload"), Access.WRITE, "/api/upload?name=a.mid", timed = false) { call -> upload(call) },
         Route(Method.POST, Regex("/api/logout"), Access.WRITE, "/api/logout") { call ->
             sessions.close(call.token)
@@ -421,6 +433,27 @@ class WebServer(
         val offset = call.param("offset")?.let { it.toIntOrNull()?.takeIf { n -> n >= 0 } ?: throw ApiError(400, "field", "offset must be 0 or more.") } ?: 0
         val limit = call.param("limit")?.let { it.toIntOrNull()?.takeIf { n -> n in 1..WebLimits.PAGE_MAX } ?: throw ApiError(400, "field", "limit must be from 1 to ${WebLimits.PAGE_MAX}.") } ?: DEFAULT_PAGE
         return json(WebApi.page(backend.library(query, category, offset, limit)))
+    }
+
+    /**
+     * A schedule the panel made ([ScheduleDraft.isNew]: 201 with it) or changed (204), once its
+     * target is found in the app (400 otherwise); 409 past [ScheduleRules.MAX_SCHEDULES], 404 for an
+     * edit of one deleted meanwhile. The alarm follows the table in the app.
+     */
+    private suspend fun saveSchedule(draft: ScheduleDraft): Response {
+        val name = backend.scheduleTarget(draft.kind!!, draft.target!!)
+            ?: throw ApiError(400, "target", "That channel, playlist or piece isn't in the library.")
+        return when (val result = backend.saveSchedule(draft)) {
+            is SaveResult.Saved -> if (!draft.isNew) {
+                noContent()
+            } else {
+                val e = result.schedule
+                val row = WebSchedule(e, name, ScheduleCopy.whenLine(e.days, e.startMinute), ScheduleCopy.whatLine(e.kind, name, e.endMinute, e.volumePct))
+                json(JSONObject().put("schedule", WebApi.schedule(row)), Response.Status.CREATED)
+            }
+            SaveResult.TooMany -> refuse(409, "too-many", "There are ${ScheduleRules.MAX_SCHEDULES} schedules already. Delete one first.")
+            SaveResult.Gone -> notFound()
+        }
     }
 
     private suspend fun login(call: Call): Response {

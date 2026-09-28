@@ -55,6 +55,7 @@ import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.WebService
 import dev.stevenjin.stevenpiano.settings.Appearance
@@ -317,6 +318,9 @@ class AppGraph(private val app: Application) {
         }
     }
 
+    /** Timed play (Piano › Schedule): the schedules, the one exact alarm that keeps the next of them, and what runs them. */
+    val schedules: Schedules by lazy { Schedules(app, this, database.schedules()) }
+
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
     val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }
 
@@ -421,6 +425,7 @@ class AppGraph(private val app: Application) {
         channelPlayer.start()
         web.start()
         firmwareUpdater.start()
+        schedules.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.

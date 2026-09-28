@@ -24,6 +24,7 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.schedule.NextSchedule
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
@@ -89,6 +90,9 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     }
 
     override fun cancelFirmware() = graph.firmwareUpdater.cancel()
+
+    /** The next schedule's start (the hub's Schedule row). */
+    val nextSchedule: StateFlow<NextSchedule?> = graph.schedules.next
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 

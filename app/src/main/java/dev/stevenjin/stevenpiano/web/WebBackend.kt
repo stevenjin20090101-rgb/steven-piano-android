@@ -9,17 +9,22 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.schedule.SaveResult
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import java.io.File
 
 /**
  * Everything the web panel reads and does, and nothing else (DESIGN.md › v1.5.1 — M18): the
  * player's state and commands, the library's lists and art, the channels, the piano's settings,
- * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, and imports.
+ * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, imports, and
+ * (v1.5.2 — M19) the schedules.
  * The server ([WebServer]) sees the app only through this; the app's own ([AppWebBackend]) runs
  * every player command on the main thread, where `Player` lives, and the tests' fake records what
  * it is asked. Every call is made from one of the server's request threads.
@@ -116,6 +121,18 @@ interface WebBackend {
 
     /** The panel's PIN as it is kept (salted and hashed); null while none is set. */
     suspend fun pinHash(): PinHash?
+
+    /** Piano › Schedule as the panel shows it: every schedule by start time, the next start, the last one's outcome, whether exact alarms are allowed. */
+    suspend fun schedules(): WebSchedules
+
+    /** What a schedule's target is called (a channel's name, a playlist's, a piece's title); null when there is no such one. */
+    suspend fun scheduleTarget(kind: ScheduleKind, target: String): String?
+
+    /** Saves a schedule the panel made or changed, already checked (no [ScheduleDraft.problem], its target found). */
+    suspend fun saveSchedule(draft: ScheduleDraft): SaveResult
+
+    /** Deletes schedule [id]; false when there is none. */
+    suspend fun deleteSchedule(id: Long): Boolean
 }
 
 /** The Library's lists besides search: all pieces by title, the favourites, the last hundred played or added. */
@@ -275,7 +292,9 @@ data class CatalogueList(val key: String, val name: String, val pieces: List<Web
 
 /**
  * Everything `/api/state` carries but the requests waiting. [monochrome]: Artwork in black and
- * white is on, so the panel draws portraits without colour, as the app does.
+ * white is on, so the panel draws portraits without colour, as the app does. [schedule]: the next
+ * start's line for Now playing with nothing loaded, and a revision that changes whenever the
+ * schedules do, so an open Schedule page reads them again.
  */
 data class WebState(
     val player: WebPlayer = WebPlayer(),
@@ -286,7 +305,17 @@ data class WebState(
     val web: WebAddresses = WebAddresses(null, null),
     val guests: GuestSettings = GuestSettings(open = false, approveFirst = true),
     val monochrome: Boolean = false,
+    val schedule: WebScheduleState = WebScheduleState(),
 )
+
+/** The schedules in the state: the next start ("Next: Wednesday 12:30, Calm", null with none ahead) and a revision of the list. */
+data class WebScheduleState(val next: String? = null, val revision: Int = 0)
+
+/** A schedule as the panel lists it: its row, what its target is called, and the two lines the tablet shows ("Weekdays 12:30", "Calm channel · until 13:15 · 70%"). */
+data class WebSchedule(val entry: ScheduleEntity, val name: String, val whenLine: String, val whatLine: String)
+
+/** Piano › Schedule for the panel: the rows, the next start's line, the last one's outcome, and whether Android allows exact alarms. */
+data class WebSchedules(val schedules: List<WebSchedule>, val next: String?, val last: String?, val exactAlarms: Boolean)
 
 /**
  * The preferences the panel may change (`PUT /api/settings`); null leaves one as it is. The

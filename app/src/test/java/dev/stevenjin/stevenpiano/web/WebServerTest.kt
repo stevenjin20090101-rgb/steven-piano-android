@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.schedule.ScheduleRules
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import org.junit.After
@@ -96,7 +97,7 @@ class WebServerTest {
         val token = login(http)
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
-        assertEquals("the table's nineteen routes that change something", 19, writes.size)
+        assertEquals("the table's twenty-two routes that change something (the schedules' three from 1.5.2)", 22, writes.size)
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
@@ -684,6 +685,89 @@ class WebServerTest {
             ),
             backend.calls.toList(),
         )
+    }
+
+    @Test
+    fun `schedules are listed, made, changed and deleted, each checked as the app's editor checks them`() {
+        val (_, http) = start()
+        val token = login(http)
+        val auth = mapOf("Cookie" to "sp_session=$token")
+        backend.calls.clear()
+        val empty = http.get("/api/schedules", auth).json()
+        assertEquals(0, empty.getJSONArray("schedules").length())
+        assertTrue(empty.isNull("next"))
+        assertTrue(empty.getBoolean("exactAlarms"))
+
+        val calm = """{"days":31,"startMinute":750,"kind":"channel","target":"calm","endMinute":795,"volumePct":70}"""
+        val made = http.api("POST", "/api/schedules", calm, session = token)
+        assertEquals(made.toString(), 201, made.status)
+        val schedule = made.json().getJSONObject("schedule")
+        assertEquals(1L, schedule.getLong("id"))
+        assertEquals("Weekdays 12:30", schedule.getString("when"))
+        assertEquals("Calm channel · until 13:15 · 70%", schedule.getString("what"))
+        assertTrue("enabled unless it says otherwise", schedule.getBoolean("enabled"))
+
+        fun post(json: String) = http.api("POST", "/api/schedules", json, session = token)
+        val refused = listOf(
+            """{"days":0,"startMinute":750,"kind":"channel","target":"calm"}""",
+            """{"days":128,"startMinute":750,"kind":"channel","target":"calm"}""",
+            """{"days":31,"startMinute":1440,"kind":"channel","target":"calm"}""",
+            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","endMinute":750}""",
+            """{"days":31,"startMinute":"750","kind":"channel","target":"calm"}""",
+            """{"days":31,"startMinute":750,"kind":"radio","target":"calm"}""",
+            """{"days":31,"startMinute":750,"kind":"channel","target":"Calm Channel"}""",
+            """{"days":31,"startMinute":750,"kind":"channel","target":"jazz"}""",
+            """{"days":31,"startMinute":750,"kind":"playlist","target":"99"}""",
+            """{"days":31,"startMinute":750,"kind":"piece","target":"0"}""",
+            """{"days":31,"startMinute":750,"kind":"piece","target":3}""",
+            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","volumePct":101}""",
+            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","enabled":"yes"}""",
+            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","name":"Calm"}""",
+            """{"days":31,"startMinute":750,"kind":"channel"}""",
+        )
+        for (body in refused) assertEquals(body, 400, post(body).status)
+        assertEquals("the day rule in the app's words", "Choose at least one day.", post(refused[0]).json().getString("message"))
+        assertEquals("That channel, playlist or piece isn't in the library.", post(refused[7]).json().getString("message"))
+        assertEquals("only the first save reached the app", 1, backend.calls.size)
+
+        assertEquals(201, post("""{"days":64,"startMinute":1410,"kind":"playlist","target":"10","endMinute":30,"volumePct":null,"enabled":false}""").status)
+        assertEquals(201, post("""{"days":127,"startMinute":420,"kind":"piece","target":"3"}""").status)
+        val listed = http.get("/api/schedules", auth).json()
+        val rows = listed.getJSONArray("schedules")
+        assertEquals("by start time", listOf(3L, 1L, 2L), (0 until rows.length()).map { rows.getJSONObject(it).getLong("id") })
+        val late = rows.getJSONObject(2)
+        assertEquals("Sundays 23:30", late.getString("when"))
+        assertEquals("Evening · until 00:30", late.getString("what"))
+        assertTrue(late.isNull("volumePct"))
+        assertFalse(late.getBoolean("enabled"))
+        assertEquals("no volume given: none", "Für Elise · until the end", rows.getJSONObject(0).getString("what"))
+        assertEquals("Next: Wednesday 12:30, Calm", listed.getString("next"))
+
+        val changed = http.api("PUT", "/api/schedules/1", """{"days":31,"startMinute":760,"kind":"channel","target":"calm","endMinute":null,"volumePct":40,"enabled":false}""", session = token)
+        assertEquals(204, changed.status)
+        assertEquals(760, backend.schedulesHeld.getValue(1).startMinute)
+        assertEquals(null, backend.schedulesHeld.getValue(1).endMinute)
+        assertEquals(404, http.api("PUT", "/api/schedules/99", calm, session = token).status)
+        assertEquals(400, http.api("PUT", "/api/schedules/1", """{"days":31}""", session = token).status)
+        assertEquals("no id 0: a new schedule is a POST", 404, http.api("PUT", "/api/schedules/0", calm, session = token).status)
+        val patch = http.api("PATCH", "/api/schedules/1", calm, session = token)
+        assertEquals(405, patch.status)
+        assertEquals("PUT, DELETE", patch.header("allow"))
+
+        assertEquals(204, http.api("DELETE", "/api/schedules/1", session = token).status)
+        assertEquals("deleted once", 404, http.api("DELETE", "/api/schedules/1", session = token).status)
+        assertEquals(2, backend.schedulesHeld.size)
+
+        repeat(ScheduleRules.MAX_SCHEDULES - 2) { assertEquals(201, post(calm).status) }
+        val full = post(calm)
+        assertEquals(409, full.status)
+        assertEquals("too-many", full.json().getString("error"))
+
+        backend.exactAlarms = false
+        backend.lastOutcome = "Missed: Wednesday 12:30 (piano not connected)"
+        val told = http.get("/api/schedules", auth).json()
+        assertFalse(told.getBoolean("exactAlarms"))
+        assertEquals("Missed: Wednesday 12:30 (piano not connected)", told.getString("last"))
     }
 
     @Test

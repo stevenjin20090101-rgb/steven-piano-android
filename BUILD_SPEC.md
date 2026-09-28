@@ -3595,3 +3595,293 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, its notes;
   release APK is 2,758,096 bytes (versionCode 12, "1.6.1", signed `CN=Steven Piano, O=Steven
   Jin, C=US`), the debug APK 16,132,483; staged as `../apk/steven-piano-1.6.1.apk` and
   `-debug.apk`.
+
+---
+
+# v1.5.2 — M19: schedules
+
+Read `DESIGN.md › v1.5.2 — M19` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› M19 (binding). Built on its own branch (`m19-schedules`) beside M20 and M21: the version stays
+`versionCode` 10, `versionName` "1.5.1" and `Provenance.text` as they were; the bump to 1.5.2
+(`versionCode` 11), the provenance manifest and the APKs are made when the branch is merged. The
+M18 review's Up next fix came first, as its own commit (`4edb505`).
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`):
+
+- `M/schedule/Occurrences.kt`: `Edge` (START, END), `Occurrence(scheduleId, edge, at)` (`atMillis`),
+  `object Occurrences` (`dayBit`, `next`, `nextStart`, `dueAt`, `startAfter`, `endOfRun`, `endAt`;
+  `ALL_DAYS` 127, `WEEKDAYS` 31, `WEEKENDS` 96).
+- `M/schedule/ScheduleDraft.kt`: `ScheduleRules` (days 1–127, minutes 0–1439, an end that differs
+  from the start, a channel's key `[a-z0-9_-]{1,40}` or an id `[1-9][0-9]{0,17}`, volume 0–100 or
+  none, `MAX_SCHEDULES` 50; each problem a sentence), `ScheduleDraft` (`problem`, `toggle`,
+  `toEntity`, `of`, `fresh`).
+- `M/schedule/ScheduleCopy.kt`: the lines, shared by the tablet and the panel (`days`, `clock`,
+  `whenLine`, `whatLine`, `next`, `hub`, `missed`, `played`, `recent` and `LAST_SHOWN_MS`).
+- `M/schedule/ScheduleRepository.kt` (+ `SaveResult`: `Saved`, `TooMany`, `Gone`).
+- `M/schedule/AlarmScheduler.kt`, `AndroidAlarmScheduler.kt`, `SchedulePlanner.kt`,
+  `ScheduleReceiver.kt`, `ScheduleRunner.kt` (+ `ScheduleDeck`, `ScheduleOutcomes`),
+  `StoredOutcomes.kt`, `Schedules.kt` (+ `ScheduleRow`, `NextSchedule`; `AppGraph.schedules`).
+- `M/channels/LoudnessHold.kt` (the channel's volume logic taken out of `ChannelPlayer`, with an
+  owner).
+- `M/ui/screens/piano/pages/SchedulePage.kt`; `M/ui/screens/schedule/ScheduleEditorSheet.kt`,
+  `NextScheduleLine.kt` (+ `ScheduleDraftSaver`).
+- Tests: `schedule/OccurrencesTest.kt`, `ScheduleCopyTest.kt`, `ScheduleDraftTest.kt`,
+  `SchedulePlannerTest.kt`, `ScheduleRunnerTest.kt`, `FakeScheduleDao.kt`;
+  `channels/LoudnessHoldTest.kt`.
+
+Changed: `AndroidManifest.xml` (`USE_EXACT_ALARM`; `SCHEDULE_EXACT_ALARM` with `maxSdkVersion` 32;
+`RECEIVE_BOOT_COMPLETED`; the receiver); `AppGraph.kt` (`schedules`, started with the app);
+`data/db/ScheduleDao.kt` (`list`, `byId`, `count`), `ScheduleEntity.kt` (its note);
+`channels/ChannelPlayer.kt` (`loudness`, `play(key, volumePct)`); `service/PlaybackService.kt`
+(stays in the foreground while a schedule starts), `WebService.kt` (pushes a state when the
+schedules change); `ble/LoggingPianoLink.kt` (`debug.stevenpiano.piano away`); `web/WebBackend.kt`,
+`WebApi.kt`, `WebServer.kt`, `AppWebBackend.kt`; `ui/Routes.kt` (`SettingsPage.Schedule`),
+`ui/ChannelCopy.kt` (`SCHEDULE_LATER` gone); `ui/components/SettingsRows.kt` (`switchColors`
+internal); `ui/screens/piano/GroupSummaries.kt`, `HubGroups.kt`, `PianoScreen.kt`,
+`PianoViewModel.kt`; `ui/screens/library/ChannelCard.kt`, `ChannelRow.kt`, `ChannelsGrid.kt`,
+`LibraryScreen.kt`; `ui/screens/nowplaying/NowPlayingScreen.kt`, `NowPlayingPanel.kt`;
+`assets/web/app.js`, `index.html`, `style.css`; tests `FakeWebBackend`, `WebServerTest`,
+`WebApiTest`, `WebAssetsTest`, `GroupSummariesTest`, `RoutesTest`, `PianoPagesTest`.
+
+## When (`Occurrences`, pure)
+
+- A schedule starts at `startMinute` on each day whose bit is set (Monday 1 … Sunday 64), in the
+  zone of the `ZonedDateTime` given. `startAfter(entry, now)` looks eight days ahead from today
+  and returns the first start strictly after `now`. `endOfRun(entry, now)`: the run that started
+  today or yesterday (a run lasts under a day) and ends after `now`; the end is on the start's
+  day, or the next day when `endMinute <= startMinute` (past midnight); no `endMinute`, no end.
+- `next(entries, now)`: the earliest of every enabled, well-formed schedule's next start and the
+  end of its run going on; at one instant an END before a START, then by id. `nextStart`: starts
+  only (the "Next:" line). `dueAt(entries, at)`: everything at exactly that instant, the ends
+  first, then the starts by id.
+- Local times go through `ZonedDateTime.of(date, time, zone)`: a start in the hour spring skips
+  moves forward by the gap (02:30 plays at 03:30), one in the hour autumn repeats takes the
+  earlier offset and plays once; a run across either is an hour shorter or longer in real time.
+
+## The alarm (`AlarmScheduler`, `SchedulePlanner`, `ScheduleReceiver`)
+
+- One alarm: `AlarmManager.setExactAndAllowWhileIdle(RTC_WAKEUP, atMillis, PendingIntent.getBroadcast(
+  context, 0, explicit Intent(ScheduleReceiver) ACTION_FIRE + at, schedule, edge, FLAG_IMMUTABLE |
+  FLAG_UPDATE_CURRENT))`; request code 0, so each alarm replaces the last; `cancel()` looks it up
+  with `FLAG_NO_CREATE`. `canScheduleExact()`: below API 31 true, else `canScheduleExactAlarms()`;
+  in debug builds `debug.stevenpiano.noexact` (any value, read with getprop each time) answers no.
+- `SchedulePlanner.replan(afterMillis?)` (one at a time, under a `Mutex`): asks
+  `canScheduleExact()` (→ `exactAllowed`), works out `Occurrences.next(entries, after)` in the
+  system zone, and sets the alarm for it, or cancels it when nothing is ahead **or exact alarms
+  are refused** (then nothing is planned). `recheckExact()` plans again when the answer changed.
+- It runs when the table changes (`Schedules.start` collects `repository.all`: every edit, from
+  the page or the panel, and the app's start), at every alarm (from the alarm's own minute), and
+  from `ScheduleReceiver` for `BOOT_COMPLETED`, `TIME_SET`, `TIMEZONE_CHANGED`,
+  `MY_PACKAGE_REPLACED` and `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, each under
+  `goAsync()`. The receiver is not exported: only the system and the app's own alarm reach it.
+
+## What an alarm does (`Schedules.onAlarm`, `ScheduleRunner`)
+
+- On a START alarm, before anything is read: a partial wake lock (`StevenPiano:schedule`, 45 s at
+  most) and `runner.prepare()`, which sets `starting` and starts the playback service while the
+  exact alarm's grace allows a foreground-service start from the background (Android attaches a
+  10 s temporary allow list of type "foreground service allowed" to an exact allow-while-idle
+  alarm when the app may schedule exact alarms). `PlaybackService` keeps itself in the foreground
+  and the tablet awake while `starting` holds.
+- Then: the table is read, `dueAt(at)` found, the alarm planned again from `at`, the broadcast
+  answered; every END goes to `runner.end`, the first START to `runner.fire`, any other START at
+  that minute to `runner.skipped` (a LinkLog line).
+- `fire(occurrence, entry)`: when the link is not `Connected`, `link.connect(lastDeviceAddress)`
+  and wait `CONNECT_WAIT_MS` 20 s for `Connected`; after that `missed()`: LinkLog "Missed:
+  Wednesday 12:30 (piano not connected)" (through `LinkLog.warn`, tag PianoLink) and the stored
+  last line. Connected: wait up to `SETTINGS_WAIT_MS` 3 s for the piano's settings (`PianoState`
+  not Unknown, read on every connection), so the volume reaches the piano's own; then play:
+  `ChannelPlayer.play(key, volumePct)` (waiting up to 5 s for the channels' pools on a cold
+  start), `player.playAll(playlist's ids, false)`, or `player.play(id)`; a playlist's or a piece's
+  volume through `LoudnessHold.hold(run, pct)`. What it can't play is missed with the reason ("the
+  playlist has no pieces", "the piece was deleted", "the channel needs more pieces"). LinkLog
+  "Schedule started: Wednesday 12:30 (channel calm, schedule 4)": a key or an id, never a title.
+- **The run** (what a schedule started): a channel's, in charge while `PlayerState.channel` is its
+  key; a queue's (its entries' uids at the start), in charge while one of them is current, no
+  channel has taken over and it has not failed to load. It ends when it is no longer in charge, or
+  when it has stood stopped, not loading, for `IDLE_GRACE_MS` 8 s after it has played (its list
+  ran out, or someone stopped it; the gap between pieces is 1.5 s at most). Its end releases its
+  hold. `end(occurrence)`: for the run of that schedule only, `player.stop()` if it is still in
+  charge, then the release; a later schedule's start takes the run over (and, holding a volume,
+  the loudness).
+- **`LoudnessHold`** (one, `ChannelPlayer.loudness`, shared): `hold(owner, pct)` remembers what was
+  there the first time (`PianoLoudness` from the piano's state, or the player's velocity) and
+  holds the new level (`PianoSettingsRepository.holdTemporarily`, never saved; else `setVelocity(50
+  + pct / 2)`); a later hold by another owner takes over and keeps that memory; `release(owner)`
+  puts it back only for the owner holding it now (the piano's volume with its Full power; the
+  velocity only if unchanged). `ChannelPlayer` uses it exactly as before (ChannelPlayerTest's
+  twelve pass unchanged), its session as the owner.
+- **The last line** (`StoredOutcomes`, its own DataStore "schedules": `last`, `lastAt`): "Last:
+  Wednesday 12:30, Calm channel" or the missed line, shown for six days (`ScheduleCopy.recent`);
+  not in Share diagnostics' settings (the link log carries the missed starts).
+
+## UI
+
+- `SettingsPage.Schedule` ("schedule", "Schedule") between Display and Remote control (the pages
+  are in the hub's order, `PianoPagesTest`); `HubGroups` PLAYING = Playback, Display, Schedule;
+  `GroupSummaries.schedule` = `ScheduleCopy.hub(next start)` ("Next Wed 12:30" / "None"), from
+  `PianoViewModel.nextSchedule` (`Schedules.next`: the table, the channels and a minute tick,
+  `WhileSubscribed`).
+- `SchedulePage()`: `NextScheduleLine`, the last line (`Schedules.last`, only with rows), the
+  exact-alarm `ActionRow` while `exactAllowed` is false (`ACTION_REQUEST_SCHEDULE_EXACT_ALARM` with
+  the package, else `ACTION_APPLICATION_DETAILS_SETTINGS`; `LifecycleResumeEffect` →
+  `recheckExact()`), `SectionRule`, a row a `ScheduleRow` (`combinedClickable`: tap edits, long
+  press `DropdownMenu` Edit/Delete; `Switch` with `switchColors()`, described by the row's lines),
+  the delete `AlertDialog`, and the Add schedule `ActionRow`. Writes run in the app's scope.
+- `ScheduleEditorSheet(initial, onDismiss)`: `ModalBottomSheet` (`surfaceVariant`,
+  `skipPartiallyExpanded`, `imePadding`, scrolling); the draft in `rememberSaveable(stateSaver =
+  ScheduleDraftSaver)`; chips `FilterChip` with `selectedContainerColor = surface` and a
+  tertiary 1 dp selected border; the times on `ActionButton`s opening `TimeDialog`
+  (`BasicAlertDialog` + `Surface(surfaceVariant, tonalElevation 0)` + `TimePicker(is24Hour = true,
+  TimePickerDefaults.colors(...))`, every colour an ink or paper token); the choices from
+  `channelPools.summaries`, `library.playlists()`, `library.search`/`recent` (30); Save through
+  `Schedules.save` in the app's scope (TooMany / Gone shown in the sheet).
+- `ChannelCard(…, onSchedule)`: the menu's Schedule is live; `LibraryScreen` opens
+  `ScheduleEditorSheet(ScheduleDraft.fresh(now, CHANNEL, key, the channel's volume))`.
+- `NextScheduleLine(modifier, centred)`: `Schedules.next`'s line in `Eyebrow` (two lines at most),
+  over the empty line of `NowPlayingScreen` and `NowPlayingPanel` (a centred `Column`).
+
+## Web (`/api/schedules`)
+
+| Method | Path | Access | Body | Answer |
+|---|---|---|---|---|
+| GET | `/api/schedules` | read | — | `{schedules: [{id, days, startMinute, kind, target, endMinute, volumePct, enabled, name, when, what}], next, last, exactAlarms}` |
+| POST | `/api/schedules` | write | `{days, startMinute, kind, target, endMinute?, volumePct?, enabled?}` | 201 `{schedule}`; 400; 409 `too-many` |
+| PUT | `/api/schedules/{id}` (id from 1) | write | as POST | 204; 400; 404 (gone) |
+| DELETE | `/api/schedules/{id}` | write | — | 204; 404 |
+
+- `kind` is playlist · channel · piece; `target` a channel's key or the id as text; `endMinute`
+  null (or absent) plays until the end; `volumePct` null (or absent) sets none; `enabled` true
+  unless false. Fields strictly (`onlyKeys`, whole numbers); the numbers then judged by
+  `ScheduleRules`, so a refusal reads as the editor's ("Choose at least one day."); the target
+  must be in the library (`WebBackend.scheduleTarget`, 400 "That channel, playlist or piece isn't
+  in the library."). `name`, `when`, `what` are read-only (400 if sent).
+- The write routes need the cookie, `X-Steven-Piano: 1`, the panel's Host and Origin, as every
+  other: the WebServerTest matrix is 22 routes now. `WebBackend` gains `schedules`,
+  `scheduleTarget`, `saveSchedule`, `deleteSchedule`; the state gains `schedule: {next, revision}`
+  (the next start's line; a hash of the table), and the web service pushes a state when the
+  table changes, so an open Schedule page reads it again. A panel DELETE sends no body.
+- The panel (`app.js`): `scheduleLoad`/`renderSchedule`, rows with `showMenu` (the pieces' menu
+  builder, shared), the delete asked in the row, the editor (`scheduling.editing`) with the times
+  as two `<select>`s each (00–23, 00–59), choices from `/api/channels`, `/api/playlists`,
+  `/api/library`; Now playing's eyebrow shows `state.schedule.next` with nothing loaded.
+
+## Greps (v1.5.2 — M19)
+
+As in M18: no `Color(0x` outside `ui/theme`; no `0.0.0.0` or `Access-Control` in `app/src/main`;
+`DisplayBlack` in `Color.kt` and `Theme.kt`; `LocalNoteSounding` in `Theme.kt` and `ScorePages.kt`;
+Haze in `Glass.kt` (sources `Glass.kt`, `NavHost.kt`, `NotePanel.kt`); no `Modifier.blur`; no pure
+black or white in `assets/web` (only `white-space`).
+
+## Measured (September 2026, `steven_piano`, API 34, debug build, the emulated piano)
+
+- Tests: 879, none failing (7 skipped without `-Pcorpus`, as before). `lint`: 0 errors, 29
+  warnings, M18's 29 (none in this run's code; three in touched files predate it).
+  `assembleDebug`, `assembleRelease` clean, no compiler warnings; the release APK 2,771,540 bytes
+  (1.5.1: 2,675,444).
+- The alarm, `dumpsys alarm`: `RTC_WAKEUP … tag=*walarm*:dev.stevenjin.stevenpiano.action.SCHEDULE_FIRE
+  … exactAllowReason=policy_permission`, its delivery carrying `temporaryAppAllowlistDuration=10000,
+  temporaryAppAllowlistType=0` (foreground-service starts allowed).
+- **Screen off** (`input keyevent KEYCODE_SLEEP`, `mWakefulness=Asleep` throughout; a schedule made
+  through the API two minutes ahead, Calm at 60 % until two minutes later, the link disconnected):
+  the alarm at 10:15:00.044 (the end planned at .061); the piano connected at 01.572 (the emulated
+  scan's 1.5 s); its settings read by 01.626; "Schedule started" at 01.647; `volume 60` held at
+  01.786 (the firmware turned Full power off); the first notes at 03.745, after the 2 s pause;
+  `PlaybackService` in the foreground (mediaPlayback) with the screen asleep. The end at
+  10:17:00.022: `B0 40 00`, `B0 7B 00` at .044, "Schedule ended", `volume 100` and `fullpower 1`
+  back; the service gone. (`schedule-fire.txt`)
+- **Deep Doze** (`dumpsys battery unplug; dumpsys deviceidle force-idle deep`, IDLE throughout): a
+  playlist at 45 % started at 10:19:00.034, the playback service started from the background
+  (ActivityManager's own line), 858 notes in its minute, the end at 10:20:00.009 with the volume
+  back. (`schedule-fire-doze.txt`)
+- **Missed** (`debug.stevenpiano.piano away`): the alarm at 10:32:00.060, "Missed: Monday 10:32
+  (piano not connected)" at 10:32:20.101 in the log and then on the page. (`schedule-missed.txt`)
+- **Restart** (`adb reboot`): the 12:30 alarm before; after the boot, the app's process started for
+  `BOOT_COMPLETED` about 24 s in, "Planning again after android.intent.action.BOOT_COMPLETED", the
+  12:30 alarm set again, the app never opened. (`reboot-alarm.txt`)
+- **Time zone** (auto zone off; `IAlarmManager.setTimeZone` by `service call`): to Europe/London the
+  alarm moved to 20:00 BST (five hours earlier in absolute time), back to America/New_York 20:00
+  EDT. A force-stop and a launch set the alarm again at the start. (`timezone-replan.txt`)
+- **Exact alarms refused** (`debug.stevenpiano.noexact 1`): "Exact alarms not allowed: no alarm",
+  nothing pending for the app's uid, the row shown; its button opened Android's Alarms & reminders
+  page for the app, whose switch is greyed on API 34 (the app holds `USE_EXACT_ALARM`); the
+  property cleared, back on the page: the row gone and the alarm set again.
+- The page (empty, with rows, the editor, the piece search, the time picker, the channel card's
+  Schedule with Calm at its 49 %, the missed line), Now playing's empty state and the tablet frame's
+  panel (2560 × 1600 px, 240 dpi) with "NEXT: MONDAY 12:30, CALM", light and dark. The time
+  picker's dialog measures `#FBF9F4` with the dial `#F4F1EA` (Material's TimePickerDialog gave
+  `#DCDAD3`, the paper under the ink's elevation tint).
+- The panel (headless Chrome, 1280 × 800 and 390 × 844, light and dark): the list, the editor,
+  a save (201, "Weekdays 17:00 · Calm channel · until 17:45 · 70%"), a POST without days (400
+  "Choose at least one day."), a delete asked in its row; Now playing's empty state with "Next:
+  Monday 12:30, Calm"; nothing scrolls sideways at 390 px. (`web-evidence.txt`)
+
+## Deviations from the plan, and why
+
+- **The end stops only what the schedule started**: a piece the person played meanwhile plays on
+  (the plan: "the end alarm → `player.stop()`"). Stopping someone's own choice at a minute they
+  did not set would be a surprise; the run's rule above decides.
+- **`LoudnessHold`**, taken out of `ChannelPlayer` with an owner, rather than a second copy of the
+  channel's volume logic: a schedule, a channel and a schedule that plays a channel then share one
+  "what comes back", in whatever order the player tells them.
+- **No alarm without exact alarms** (no inexact fallback): an inexact alarm may come hours late,
+  and a piano starting at a random time is worse than one that says why it won't.
+- **`USE_EXACT_ALARM` makes the Allow row Android 12's only**; on API 33+ the person cannot take
+  exact alarms away (Android's page shows the switch greyed), so the emulator shows the row
+  through `debug.stevenpiano.noexact` (debug builds only).
+- **`AlarmScheduler.schedule(atMillis, occurrence)`** takes the occurrence (the plan's
+  `occurrenceId`); the alarm carries its minute, the schedule and the edge, and what is due is read
+  again from the table at that minute (`dueAt`), so an edit made since counts.
+- **Planned from the alarm's minute**, not the clock, after an alarm: a start sharing the minute
+  was due with it and is not planned twice; two starts at one minute: the first plays, the others
+  are logged as skipped.
+- **The playback service comes up at the alarm** (`prepare`), before the 20 s wait, while the
+  exact alarm's grace lets it start from the background, and stays in the foreground meanwhile;
+  plus a 45 s wake lock. Started after a 20 s wait it could be refused.
+- **Up to 3 s for the piano's settings** after connecting (not in the plan): without them the
+  volume would fall back to the app's velocity on a piano that has a volume of its own.
+- **Also planned again** on `MY_PACKAGE_REPLACED` and whenever the app starts (the table's first
+  read), beyond boot, time, zone and the permission.
+- **The last line in a DataStore of its own** ("schedules"), shown six days and only beside
+  schedules: a weekday without a date is only clear within the week; kept apart from
+  `Settings.kt`, which M20 edits too.
+- **The time picker in a `BasicAlertDialog` of the app's own**, not Material's `TimePickerDialog`,
+  whose surface is the paper tinted by the ink's elevation overlay (`#DCDAD3`, no token). The times
+  sit on outlined buttons (an outlined button acts).
+- **"Set the volume"** (the schema's `volumePct` null) beside the slider the plan named.
+- **Percentages "70%"**, not "70 %": `Format.percent`, as every percentage since M15.
+- **The web API's shapes**: GET adds read-only `name`, `when`, `what` and `{next, last,
+  exactAlarms}`; POST answers 201 with the schedule, PUT 204; ids from 1 in the paths (a PUT
+  never makes one); 409 past fifty; the state carries `schedule {next, revision}`. The panel's
+  times are selects, as a browser's time field follows its own 12-hour clock (seen: "05:00 PM").
+- **The panel's Now playing shows the Next line too** (the plan: "also on Now playing's empty state
+  and the panel").
+- **`debug.stevenpiano.piano away`** (debug builds on an emulator): the stand-in piano never found,
+  for the missed start's evidence.
+- **A schedule turned off or deleted while it plays** leaves what it started playing: its end
+  alarm follows the enabled schedules only.
+- **`SettingsPage.Schedule` sits after Display** in the enum, not at its end: the pages are in the
+  hub's order (`PianoPagesTest`).
+- **No version bump** in this run (above).
+
+## Tests added in M19
+
+`OccurrencesTest` (11: the day bits and a start on its days only; a week round; a run's end, then
+the next start; past midnight, across a day the schedule isn't on; until the end; spring's skipped
+hour and a run across it; autumn's repeated hour, once; the zone; disabled and malformed schedules;
+an end before a start at one instant, and `nextStart`; what is due at a minute), `ScheduleCopyTest`
+(5: the days; a row's lines; the next start, the hub, the missed and played lines; six days for
+the last line; the 24-hour clock), `ScheduleDraftTest` (3: the rules' sentences; a new draft; the
+repository's made-when, the fifty-first and a schedule gone), `SchedulePlannerTest` (6, a
+`FakeAlarmScheduler`: the next start; a run's end then the next start; changes and no alarm with
+nothing ahead; a start sharing an alarm's minute not planned twice; exact alarms refused and
+allowed again; a new time zone), `ScheduleRunnerTest` (10, virtual time: the piano connecting after
+2 s; never, missed at 20 s; the settings waited for; a channel and its end; the person taking over;
+the end stopping a playlist; the gap between pieces is not an end, a list run out is; a second
+schedule taking the loudness over; what can't play; no volume), `LoudnessHoldTest` (2),
+`GroupSummariesTest` (+1: None, Next Wed 12:30), `WebServerTest` (+1: list, make, change, delete,
+fifteen refusals in the app's words, the fifty-first, exact alarms off and the last line; the
+write matrix at 22 routes); `WebApiTest` (the state's schedule), `WebAssetsTest` (the page's
+copy), `RoutesTest` and `PianoPagesTest` (the new page) changed. 840 tests before, 879 after.

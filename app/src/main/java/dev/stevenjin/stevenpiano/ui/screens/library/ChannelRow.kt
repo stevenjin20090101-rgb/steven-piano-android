@@ -44,6 +44,7 @@ fun ChannelRow(
     connected: Boolean,
     onPlay: (String) -> Unit,
     onSetVolume: (String) -> Unit,
+    onSchedule: (String) -> Unit,
     onSeeAll: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -68,6 +69,7 @@ fun ChannelRow(
                     connected = connected,
                     onPlay = { onPlay(channel.key) },
                     onSetVolume = { onSetVolume(channel.key) },
+                    onSchedule = { onSchedule(channel.key) },
                     modifier = Modifier.width(ChannelCardWidth),
                 )
             }

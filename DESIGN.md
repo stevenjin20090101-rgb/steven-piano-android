@@ -1336,3 +1336,124 @@ the kiosk PIN first.
   the PIN; the page's title stays.
 - The Kiosk page's own Unlock for now, Turn kiosk off and Change PIN still ask for the PIN each time,
   whether the settings are open or not: they are the way out.
+
+---
+
+# v1.5.2 — M19: schedules
+
+Steven asked for timed play, Disklavier's Timer Play in the app's language: a playlist, a channel
+or a piece on chosen days at a start time, until an end time or its end, at a volume. The tablet
+plays them itself, from one exact alarm, with its screen off and dozing; the web panel lists and
+edits them too. Everything above still holds. This is 1.5.2.
+
+## The Schedule page (Piano tab)
+
+- **The row.** PLAYING › **Schedule**, after Display, reading when the next one starts, **"Next Wed
+  12:30"** (the day short, the 24-hour clock), or **"None"**.
+- **At the top**, under the page's header: **NEXT: WEDNESDAY 12:30, CALM** in the eyebrow style,
+  then what the last one did, in the eyebrow's size, sentence case, `contentSecondary`: **"Last:
+  Wednesday 12:30, Calm channel"** or **"Missed: Wednesday 12:30 (piano not connected)"**. The
+  last line is kept on the device for six days (so its weekday is always the last such day) and
+  shows only while there are schedules; neither line shows with nothing to say.
+- **Allow exact alarms**, only while Android refuses them: an action row, the outlined button
+  and under it "Schedules start at an exact time, which Android asks you to allow. Until then,
+  none will start." The button opens Android's Alarms & reminders page for the app; the page
+  asks again when it comes back into view. (From Android 13 the app holds `USE_EXACT_ALARM`,
+  which cannot be taken away, so the row appears on Android 12 only.)
+- **The rows**, after a full-width hairline: **"Weekdays 12:30"** in Body over **"Calm channel ·
+  until 13:15 · 70%"** in the eyebrow's size, sentence case, secondary, and the switch at the
+  end (off: the first line turns secondary too). A tap edits; a long press offers **Edit** and
+  **Delete**, which asks: "Delete this schedule?", the row's two lines and "It won't play again.",
+  **Delete schedule** / **Cancel**. None yet: "No schedules yet. The piano can play by itself at
+  set times: a channel, a playlist or a piece."
+- **Add schedule**, the app's outlined button, with "The tablet starts them: keep it on, charged
+  and near the piano."
+- **The words.** Days: "Every day", "Weekdays", "Weekends", "Wednesdays" for one day, else the
+  days in week order, Monday first, "Mon, Wed, Fri". Times on the 24-hour clock with two-digit
+  hours, "07:45". "until 13:15", or "until the end". The volume as every percentage in the app,
+  "70%", and nothing when the schedule sets none. What plays: "Calm channel", a playlist's name,
+  a piece's title; "A deleted playlist" / "A deleted piece" once it is gone.
+
+## The editor
+
+A sheet on the elevated tone with its drag handle: SCHEDULE over **Add schedule** or **Edit
+schedule** in Title, then:
+
+- **DAYS**: a chip a day, Mon to Sun (TalkBack reads "Monday"), then **Weekdays** and **Every
+  day**, chosen when the days are exactly those. A chosen chip carries its check and, on the
+  sheet (the elevated tone the theme also gives chosen chips), takes the surface's tone inside a
+  tertiary hairline, as the panel's chips do.
+- **TIME**: **Starts**, the time on the app's outlined button, which opens the time picker; then
+  **Until the end** (a switch: "A playlist or a piece plays to its end; a channel plays until
+  someone stops it"); off, **Ends**, with **"The next day"** under it when the end comes before
+  the start. A new schedule starts at the next whole hour, ends an hour later, on weekdays.
+- **The time picker**: Material's clock dial on the 24-hour clock, in the ink only: the chosen
+  hour or minutes on `contentPrimary` with the surface's tone for its figures, the other on the
+  surface's tone; the selector `contentPrimary`; the dial on the surface; the dialog itself on
+  the elevated tone, as the app's other dialogs (not Material's own dialog, which tints the paper
+  grey), the field's name as an eyebrow (STARTS), **Cancel** and **Done**.
+- **PLAYS**: chips **Channels · Playlists · Pieces**, then the choices as rows, the name in Body
+  over what it is ("32 pieces", "Built in · 14 pieces", "Debussy · 4:08"), a check at the end of
+  the chosen one. The channels in their order (one too small reads "Add more pieces" and can't be
+  chosen); the playlists, the built-in ones first; the pieces through the Library's search field,
+  and before a search the ones played or added last (PLAYED OR ADDED LAST).
+- **VOLUME**: **Set the volume** (on at first, "Off: the piano plays as it is set, and a channel
+  at its own volume"), then the **Volume** slider from 0 to 100% with its value and the channel
+  sheet's line ("The piano's own volume while it plays, or how hard its keys are struck where the
+  piano has none. What was there comes back when it ends.").
+- Above **Cancel** and **Save**, what keeps it from saving, in Body, secondary: "Choose at least
+  one day.", "Choose what to play.", "The end must differ from the start." (Save is greyed
+  meanwhile), or "There are 50 schedules already. Delete one first."
+- **From a channel's card**: its long press's **Schedule** (no longer greyed "Coming in the next
+  update") opens the editor with that channel chosen, at the channel's own volume.
+
+## "Next", where nothing plays
+
+With nothing loaded, Now playing and the tablet's now-playing panel show **NEXT: WEDNESDAY 12:30,
+CALM** in the eyebrow style, centred 8 dp above "Choose a piece from the library."; nothing when
+no schedule is ahead. It moves on as the minutes pass.
+
+## When a schedule plays
+
+- At its minute the tablet wakes (asleep or dozing), its playback notification comes up, and if
+  the piano is not connected the tablet reaches for the last one and waits up to 20 seconds. It
+  waits a moment more for the piano's settings, so the volume goes to the piano's own. Then it
+  plays, in place of whatever played: a channel (at the schedule's volume, else the channel's
+  own), a playlist from its top, or a piece, each after the usual pause before a piece.
+- **The volume** is held as a channel's is: never saved on the piano, and what was there comes
+  back when the schedule's play ends: at its end time, by a stop, when its list runs out, or when
+  someone plays something else. A schedule or a channel that follows another keeps the first
+  one's "what comes back".
+- **At the end time** the tablet stops what the schedule started, if it still plays; something
+  the person chose meanwhile plays on. "Until the end": a playlist or a piece plays out, a channel
+  until someone stops it.
+- **Missed**: no piano within 20 seconds, and nothing plays; the page's last line and the
+  connection log (Share diagnostics) say "Missed: Wednesday 12:30 (piano not connected)". Two
+  schedules at the same minute: the first on the page plays, the other is skipped (in the log).
+- A schedule turned off or deleted while it plays leaves what it started playing.
+- The tablet must be on, with Bluetooth on: a tablet switched off misses what falls while it is
+  off; after a restart the next schedule is set again by itself. The piano's own safety layers
+  (its hold ceiling, its silence on a dropped link) apply as to any playing.
+
+## The web panel's Schedule page
+
+- The page's head: **Schedule**, and **Add schedule** (outlined) at its end. Then NEXT: …, the
+  last line in the notes' size, a banner while exact alarms are off on the tablet ("Exact alarms
+  are off on the tablet, so no schedule will start. Allow them there: Piano › Schedule › Allow
+  exact alarms."), a hairline, the rows as on the tablet (the two lines, the switch, a ⋮ menu with
+  **Edit** and **Delete**; Delete asks in the row itself: "Delete this schedule?", **Cancel**,
+  **Delete schedule**), "No schedules yet. …" and the tablet's line.
+- **The editor** opens above the list, the tablet's sheet laid flat: DAYS, TIME, PLAYS, VOLUME,
+  the same chips, switches and rows; the times as two selects each, the hour 00–23 and the
+  minutes, so every browser shows the tablet's 24-hour clock; Cancel and Save, and the tablet's
+  own words when it refuses one. The page reads the list again whenever the tablet's schedules
+  change.
+- Now playing with nothing loaded: "Choose a piece from the library." with NEXT: … under it, in
+  the eyebrow.
+
+## The panel's Up next column (the M18 review's fix)
+
+From 1280 px the Up next column beside Now playing widens with the window (three fifths of Now
+playing's column, never under 360 px; 1100–1279 px keeps the fixed 360); its titles take a second
+line before any ellipsis, there and on the Up next page, while the composer · length line stays
+single.

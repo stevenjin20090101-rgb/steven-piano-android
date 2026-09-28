@@ -677,6 +677,11 @@ button, input, select { font: inherit; color: inherit; }
   .now-side { border-top: 0; border-left: 1px solid var(--hairline); min-height: calc(100vh - 1px); }
 }
 
+/* From 1280 px Up next widens with the window (three fifths of Now playing's column), never below 360 px. */
+@media (min-width: 1280px) {
+  .now { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.6fr); }
+}
+
 /* ---- Up next ------------------------------------------------------------------------------- */
 
 .queue-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px var(--inset); border-bottom: 1px solid var(--hairline); }
@@ -684,6 +689,16 @@ button, input, select { font: inherit; color: inherit; }
 .queue-row { padding-right: 4px; }
 
 .queue-row .handle { cursor: grab; color: var(--tertiary); }
+
+/* Up next's titles take a second line rather than an ellipsis; the composer · length line stays single. */
+.queue-row .title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+}
 
 .queue-row.current { background: var(--elevated); }
 
@@ -795,6 +810,42 @@ button, input, select { font: inherit; color: inherit; }
 .band .name { font-size: 20px; line-height: 26px; font-weight: 500; }
 
 .band .eyebrow { display: flex; align-items: center; gap: 6px; color: var(--primary); }
+
+/* ---- Schedule (v1.5.2) -------------------------------------------------------------------------- */
+
+.schedule-next { padding-top: 16px; }
+
+.schedule-row .switch { margin-left: 4px; }
+
+.row .title.off { color: var(--secondary); }
+
+/* The editor opens over the list, in the page's own rows: the tablet's sheet, laid flat. */
+.schedule-editor { border-bottom: 1px solid var(--hairline); }
+
+.schedule-editor > .eyebrow:first-child { padding-top: 16px; padding-bottom: 0; }
+
+.editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 500; }
+
+.schedule-editor .actions { flex-direction: column; }
+
+.schedule-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-bottom: 0; }
+
+.setting .label .meta { display: block; }
+
+/* A time as two selects, hour and minutes, on the 24-hour clock whatever the browser's own. */
+.time-field { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+
+.time-part { width: auto; min-width: 64px; min-height: 40px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+
+.time-colon { font-weight: 500; }
+
+.schedule-list { border-top: 1px solid var(--hairline); margin-top: 8px; }
+
+.schedule-editor + .schedule-list { border-top: 0; margin-top: 0; }
+
+.choice .glyph { color: var(--primary); }
+
+.choice.off { color: var(--secondary); cursor: default; }
 
 /* ---- Piano ------------------------------------------------------------------------------------ */
 

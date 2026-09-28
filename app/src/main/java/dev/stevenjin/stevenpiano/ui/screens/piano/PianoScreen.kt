@@ -78,6 +78,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SchedulePage
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.WebStatus
@@ -199,6 +200,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val web by vm.web.collectAsStateWithLifecycle()
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val firmwarePiano by vm.firmwarePiano.collectAsStateWithLifecycle()
+    val nextSchedule by vm.nextSchedule.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val context = LocalContext.current
     var canInstall by remember { mutableStateOf(vm.canInstall()) }
@@ -206,8 +208,16 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano) {
-        GroupSummaries.from(piano, settings, frame.wide, web, firmware, (firmwarePiano as? FirmwarePiano.Connected)?.text)
+    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule) {
+        GroupSummaries.from(
+            piano,
+            settings,
+            frame.wide,
+            web,
+            firmware,
+            (firmwarePiano as? FirmwarePiano.Connected)?.text,
+            nextSchedule?.occurrence?.at,
+        )
     }
 
     Column(modifier) {
@@ -298,6 +308,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm, firmwareReport(vm), vm)
                     SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                     SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
+                    SettingsPage.Schedule -> SchedulePage()
                     SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
                     SettingsPage.Kiosk -> KioskPage(appSettings(vm))
                 }

@@ -79,8 +79,10 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.KioskGate
@@ -113,9 +115,12 @@ import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingPanel
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
+import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleDraftSaver
+import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleEditorSheet
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import kotlinx.coroutines.launch
+import java.time.LocalTime
 
 /**
  * The Library tab: search, the category chips, then text rows, or grids of tiles for Playlists
@@ -134,8 +139,9 @@ import kotlinx.coroutines.launch
  * panel ([NowPlayingPanel]) beside it; playing a piece then stays on the Library, and the Now
  * playing tab remains for the full score. In kiosk mode the library's changes are locked (DESIGN.md
  * › v1.6.1 — M20): adding music (the + and its sheet), deleting, renaming, adding to and taking out of
- * playlists, reordering them, a playlist's photo and a channel's volume wait for the kiosk PIN
- * ([KioskGate]); playing, queueing, favourites and browsing never do.
+ * playlists, reordering them, a playlist's photo, a channel's volume and scheduling a channel wait for
+ * the kiosk PIN ([KioskGate]); playing, queueing, favourites and browsing never do. A channel's
+ * Schedule opens the schedule editor with the channel chosen (DESIGN.md › v1.6.2 — M19).
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit) {
@@ -153,6 +159,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     var photoFor by rememberSaveable { mutableStateOf<Long?>(null) }
     var volumeFor by rememberSaveable { mutableStateOf<String?>(null) }
     val gate = rememberKioskGate()
+    var scheduling by rememberSaveable(stateSaver = ScheduleDraftSaver) { mutableStateOf<ScheduleDraft?>(null) }
     val pickers = rememberImportPickers(onImport)
     // The picker's grant ends with this screen: the photo is copied at once, in the app's scope.
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -228,7 +235,14 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                                 Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
                             }
                         }
-                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, gate, openDialog)
+                        // A schedule changes when the piano plays: in kiosk mode it waits for the PIN, as a
+                        // channel's volume does.
+                        val schedule: (String) -> Unit = { key ->
+                            gate.run {
+                                scheduling = ScheduleDraft.fresh(LocalTime.now(), ScheduleKind.CHANNEL, key, graph.settings.value.channelVolume(key))
+                            }
+                        }
+                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog)
                     }
                 }
             }
@@ -263,6 +277,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         val name = rememberChannelName(key) ?: key
         ChannelVolumeSheet(key, name) { volumeFor = null }
     }
+    scheduling?.let { draft -> ScheduleEditorSheet(draft) { scheduling = null } }
     KioskGateSheet(gate)
 }
 
@@ -307,6 +322,7 @@ private fun LibraryItems(
     play: LibraryPlay,
     onChangePhoto: (Long) -> Unit,
     onSetVolume: (String) -> Unit,
+    onSchedule: (String) -> Unit,
     gate: KioskGate,
     onDialog: (LibraryDialog) -> Unit,
 ) {
@@ -430,6 +446,7 @@ private fun LibraryItems(
                             connected = connected,
                             onPlay = play::channel,
                             onSetVolume = onSetVolume,
+                            onSchedule = onSchedule,
                             onSeeAll = { vm.openGroup(Group.Channels) },
                         )
                     }
@@ -449,7 +466,7 @@ private fun LibraryItems(
                     }
                 }
             }
-            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume)
+            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, onSchedule)
             is Listing.Composers -> {
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 items(listing.composers.chunked(columns), key = { row -> "tiles-k-${row.first().composerKey}" }) { row ->
