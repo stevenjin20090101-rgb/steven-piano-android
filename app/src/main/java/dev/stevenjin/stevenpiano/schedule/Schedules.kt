@@ -262,6 +262,8 @@ class Schedules(private val app: Application, private val graph: AppGraph, dao: 
     private inner class AppDeck : ScheduleDeck {
         override val state: StateFlow<PlayerState> get() = graph.player.state
 
+        override val locked: Boolean get() = graph.player.locked
+
         override suspend fun playChannel(key: String, volumePct: Int?): Boolean {
             // Started by an alarm, the app may have only just opened: its channels' pools take a moment.
             withTimeoutOrNull(POOLS_WAIT_MS) { graph.channelPools.summaries.first { it != null } }

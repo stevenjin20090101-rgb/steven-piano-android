@@ -1428,8 +1428,10 @@ no schedule is ahead. It moves on as the minutes pass.
   the person chose meanwhile plays on. "Until the end": a playlist or a piece plays out, a channel
   until someone stops it.
 - **Missed**: no piano within 20 seconds, and nothing plays; the page's last line and the
-  connection log (Share diagnostics) say "Missed: Wednesday 12:30 (piano not connected)". Two
-  schedules at the same minute: the first on the page plays, the other is skipped (in the log).
+  connection log (Share diagnostics) say "Missed: Wednesday 12:30 (piano not connected)". While
+  the piano's firmware is being updated (v1.6), a start is missed the same way, "Missed: Wednesday
+  12:30 (the piano was updating)", and the piano is not asked for. Two schedules at the same
+  minute: the first on the page plays, the other is skipped (in the log).
 - A schedule turned off or deleted while it plays leaves what it started playing.
 - The tablet must be on, with Bluetooth on: a tablet switched off misses what falls while it is
   off; after a restart the next schedule is set again by itself. The piano's own safety layers

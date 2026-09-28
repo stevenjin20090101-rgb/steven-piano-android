@@ -33,6 +33,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 interface ScheduleDeck {
     val state: StateFlow<PlayerState>
 
+    /** Nothing may play now: the piano's firmware is being updated (the player's lock, DESIGN.md › v1.6 — M21). */
+    val locked: Boolean
+
     /** Channel [key] from a fresh shuffle, at [volumePct] or its own volume. False when it can't play (a pool too small, or not known in time). */
     suspend fun playChannel(key: String, volumePct: Int?): Boolean
 
@@ -66,6 +69,10 @@ interface ScheduleOutcomes {
  * the background (for a few seconds after an exact alarm), and stays in the foreground while
  * [starting] is true, holding the tablet awake. Then [fire]:
  *
+ * 0. while the piano's firmware is being updated (the player is locked) nothing starts: the start is
+ *    missed, "Missed: Wednesday 12:30 (the piano was updating)", in the link's trail and on the page,
+ *    and the piano is not even asked for; an update that begins while the schedule waits turns it
+ *    away the same way;
  * 1. the piano: when the link is not connected, it is asked to connect to the last piano, and the
  *    schedule waits [connectWaitMs] (20 s) at most; after that the start is missed, and says so in
  *    the link's trail and on the Schedule page: "Missed: Wednesday 12:30 (piano not connected)";
@@ -126,8 +133,12 @@ class ScheduleRunner(
     suspend fun fire(occurrence: Occurrence, entry: ScheduleEntity) {
         _starting.value = true
         try {
+            if (deck.locked) return missed(occurrence, ScheduleCopy.UPDATING)
             if (!connected()) return missed(occurrence, ScheduleCopy.NO_PIANO)
             withTimeoutOrNull(settingsWaitMs) { piano.first { it !is PianoState.Unknown } }
+            // A firmware update that began while it waited for the piano turns it away too (BLE_OTA.md › 11:
+            // no schedule runs during a transfer).
+            if (deck.locked) return missed(occurrence, ScheduleCopy.UPDATING)
             val name = deck.nameOf(entry.kind, entry.target)
             val previous = run
             play(entry)?.let { reason -> return missed(occurrence, reason) }

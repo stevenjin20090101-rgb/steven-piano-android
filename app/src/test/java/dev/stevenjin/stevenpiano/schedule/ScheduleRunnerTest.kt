@@ -218,6 +218,35 @@ class ScheduleRunnerTest {
     }
 
     @Test
+    fun `while the piano's firmware is updated a start is missed, in the link's trail and on the page, and nothing plays`() = runTest {
+        val link = SlowLink(backgroundScope, connectAfterMs = 2_000)
+        val runner = runner(link)
+        deck.locked = true
+        runner.prepare()
+        runner.fire(start, schedule(ScheduleKind.CHANNEL, "calm"))
+        assertEquals("not even the piano was asked for", emptyList<String?>(), link.connects)
+        assertEquals(emptyList<String>(), deck.calls)
+        assertEquals(emptyList<String>(), volume.calls)
+        assertEquals(listOf("Missed: Wednesday 12:30 (the piano was updating)"), trail)
+        assertEquals("Missed: Wednesday 12:30 (the piano was updating)", outcomes.line)
+        assertFalse("the service may go", runner.starting.value)
+    }
+
+    @Test
+    fun `an update that begins while the schedule waits for the piano turns it away too`() = runTest {
+        val runner = runner(SlowLink(backgroundScope, connectAfterMs = 2_000))
+        backgroundScope.launch {
+            delay(1_000)
+            deck.locked = true
+        }
+        runner.fire(start, schedule(ScheduleKind.PLAYLIST, "10"))
+        assertEquals("judged once the piano came", 2_000L, currentTime)
+        assertEquals(emptyList<String>(), deck.calls)
+        assertEquals(emptyList<String>(), volume.calls)
+        assertEquals(listOf("Missed: Wednesday 12:30 (the piano was updating)"), trail)
+    }
+
+    @Test
     fun `a schedule without a volume leaves the piano as it is`() = runTest {
         val runner = runner()
         runner.fire(start, schedule(ScheduleKind.PLAYLIST, "10", volumePct = null))
@@ -257,6 +286,9 @@ class ScheduleRunnerTest {
     private class FakeDeck : ScheduleDeck, ChannelDeck {
         private val flow = MutableStateFlow(PlayerState())
         override val state: StateFlow<PlayerState> = flow
+
+        /** The player's lock, as a firmware update holds it. */
+        override var locked = false
         val calls = mutableListOf<String>()
         val playlists = mutableMapOf(10L to listOf(1L, 2L, 3L))
         private var nextUid = 1L

@@ -30,6 +30,9 @@ object ScheduleCopy {
     /** What a missed start says when the piano never came. */
     const val NO_PIANO = "piano not connected"
 
+    /** What a missed start says when the piano's firmware was being updated (nothing plays meanwhile). */
+    const val UPDATING = "the piano was updating"
+
     /** The words after "until" for a schedule without an end time. */
     const val UNTIL_THE_END = "until the end"
 
