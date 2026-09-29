@@ -873,8 +873,8 @@ starting point and are never part of the result; the model (trained on the Lakh 
 not on piano alone) carries on in their manner, not note for note. Calm plays softest, Wild the
 most freely; every piece ends with a two-bar fade and no pedal. Every note is one the piano can
 play: keys 24–107, a key struck again no sooner than 120 ms after itself, at most ten notes
-starting at once. A dense piece can come out shorter than asked, much shorter in the manner of a
-very dense one (the model is stopped at about 30 tokens a second of music, 9,000 at most).
+starting at once. A very dense piece can come out shorter than asked, above all at four or five
+minutes (the model is stopped at 45 tokens a second of music, 9,000 at most).
 
 **What it hears well**: a clear recording of a solo piano. The model was trained on real pianos
 (the MAESTRO recordings; its authors measured a 96.8 % note F1 there); audio from a synthesizer gets

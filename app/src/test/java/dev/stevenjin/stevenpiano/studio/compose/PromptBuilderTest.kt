@@ -51,9 +51,10 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun `a length of 1 to 5 minutes is 30 tokens a second, at most 9,000`() {
-        assertEquals(listOf(1_800, 3_600, 5_400, 7_200, 9_000), (1..5).map { PromptBuilder.budget(it) })
-        assertEquals(1_800, PromptBuilder.budget(0))
+    fun `a length of 1 to 5 minutes is 45 tokens a second, at most 9,000`() {
+        assertEquals(listOf(2_700, 5_400, 8_100, 9_000, 9_000), (1..5).map { PromptBuilder.budget(it) })
+        assertEquals(45, PromptBuilder.TOKENS_PER_SECOND)
+        assertEquals(2_700, PromptBuilder.budget(0))
         assertEquals(9_000, PromptBuilder.budget(12))
         assertTrue((1..5).all { PromptBuilder.budget(it) % 3 == 0 })
     }
@@ -70,7 +71,7 @@ class PromptBuilderTest {
         assertEquals(120, prompt.bpm)
         assertEquals(MusicKey.C, prompt.key)
         assertEquals(Mood.Calm.sampling, prompt.sampling)
-        assertEquals(3_600, prompt.budget)
+        assertEquals(5_400, prompt.budget)
         assertEquals("the seed's 15 s and 2 minutes", 1_500 + 12_000, prompt.endTime)
         assertEquals("Prelude in C major (Johann Sebastian Bach)", prompt.mannerOf)
         // Choosing the seed's own key and tempo is the same as leaving them.

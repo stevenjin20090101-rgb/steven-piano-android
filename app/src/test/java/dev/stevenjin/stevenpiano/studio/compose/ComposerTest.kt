@@ -118,7 +118,8 @@ class ComposerTest {
                         piece.durationMicros / 1e6, piece.notes.minOf { it.velocity }, piece.notes.maxOf { it.velocity },
                     ),
             )
-            assertTrue(out.tokens.size <= 1_800)
+            assertEquals("a minute's budget", 2_700, prompt.budget)
+            assertTrue(out.tokens.size <= prompt.budget)
             assertTrue("never at or past the end", out.events.all { it.time < prompt.endTime })
             assertTrue(heard.zipWithNext().all { (a, b) -> b > a || b == heard.last() } && heard.last() == out.tokens.size)
             assertPlayable(piece)

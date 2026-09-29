@@ -126,13 +126,17 @@ class Prompt(
  * after AUTOREGRESS; [AmtTokenizer]); time-scaled to the chosen tempo; transposed to the chosen key and
  * folded into the piano's 24–107. The seed's own key and tempo ([facts]) leave it untouched, so the
  * Bach fixture's seed comes out as the spike's 214 tokens. A mood sets the sampling; a length of 1–5
- * minutes sets the token budget (about 30 tokens a second of music, at most 9,000) and where the piece
+ * minutes sets the token budget (45 tokens a second of music, at most 9,000) and where the piece
  * ends. Pure.
  */
 object PromptBuilder {
     const val SEED_SECONDS = 15
     const val SEED_TICKS = SEED_SECONDS * Amt.TICKS_PER_SECOND
-    const val TOKENS_PER_SECOND = 30
+    /**
+     * The token budget per second of music asked for (1.7): 45, so a dense piece reaches its length (at M24's
+     * 30 a one-minute Wild piece once stopped at 42 s); [MAX_TOKENS] still caps a job.
+     */
+    const val TOKENS_PER_SECOND = 45
     const val MAX_TOKENS = 9_000
     const val MIN_MINUTES = 1
     const val MAX_MINUTES = 5
@@ -142,7 +146,7 @@ object PromptBuilder {
     /** The piano's middle, where a transposition that could go either way leans. */
     private const val MIDDLE = (KeyMap.LOWEST + KeyMap.HIGHEST) / 2.0
 
-    /** Tokens for [minutes] of music: 1,800 a minute, at most [MAX_TOKENS]; whole events always. */
+    /** Tokens for [minutes] of music: 2,700 a minute, at most [MAX_TOKENS] (from 3 minutes on); whole events always. */
     fun budget(minutes: Int): Int = min(minutes.coerceIn(MIN_MINUTES, MAX_MINUTES) * 60 * TOKENS_PER_SECOND, MAX_TOKENS)
 
     /** The seed's key and tempo: the compose sheet's defaults. */

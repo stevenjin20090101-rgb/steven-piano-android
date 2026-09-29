@@ -4447,8 +4447,9 @@ shared chip and search); `M/web/WebBackend.kt` (`StudioCompose`), `WebApi.kt`, `
   signature in force at the seed's start (its major or relative minor, by the notes' Krumhansl–
   Kessler profile), else from the notes over all 24 keys; the tempo as the tempo map's beats over
   the 15 s. Moods: Calm 0.8 / 0.9, Bright 1.0 / 0.95, Wild 1.15 / 0.98, Melancholy 0.85 / 0.9
-  (temperature / top-p), with velocities 46, 66, 78, 52 and spreads 8, 12, 18, 10. Budget: 1,800
-  tokens a minute, at most 9,000; the end time the seed's 15 s plus the length.
+  (temperature / top-p), with velocities 46, 66, 78, 52 and spreads 8, 12, 18, 10. Budget: 2,700
+  tokens a minute (`TOKENS_PER_SECOND` 45; 1,800 until the 1.7 release), at most 9,000; the end time
+  the seed's 15 s plus the length.
 - `OrtComposerModel`: `composer-v1.onnx` with transcription's session options; `input_ids`,
   `attention_mask`, `position_ids` and the 24 `past_key_values`, `present.*` fed back as the next
   past, the logits into one pinned buffer; at most 1,024 positions.
@@ -4600,9 +4601,10 @@ which the per-token times show.
   Clair de lune read F minor from its notes alone.
 - **The default seed skips Studio's own pieces**: after listening to a composition, the piece
   played last would otherwise be that composition.
-- **The budget stays at the brief's 30 tokens a second**: a dense piece can end short of its length
-  (42 s of a one-minute Wild piece once); raising it (say 45 a second, still at most 9,000) is a
-  decision for later.
+- **The budget is 45 tokens a second, not the brief's 30** (raised at the 1.7 release): at 30 a dense
+  piece could end short of its length (42 s of a one-minute Wild piece once, measured above); 45 lets it
+  reach it, and 9,000 still caps a job, from three minutes on (2,700, 5,400, 8,100, then 9,000 and
+  9,000 for one to five minutes). A job's time and memory stay bounded by the same 9,000.
 - **Progress** reports the larger of the budget spent and the music written, so a piece that ends at
   its length reads 100 %, not the share of an unspent budget.
 - **`GET /api/studio/seed`**: the panel's form needs the seed's key and tempo, as the sheet has them.
@@ -4616,8 +4618,9 @@ which the per-token times show.
 
 - **Nothing measured on the tablet**: time, memory and timing are the emulator's on a busy Mac.
 - **The repository is private**: the models answer 404 until it is public (as M23).
-- **A dense piece can be shorter than asked** (the budget); a sparse one can be thin (the guards
-  keep it at 1.6 notes a second or more in the runs measured).
+- **A very dense piece can still be shorter than asked** at four or five minutes, where 9,000 tokens
+  cap it; a sparse one can be thin (the guards keep it at 1.6 notes a second or more in the runs
+  measured).
 - **Jobs live in memory** (as M23); the panel composes without the kiosk PIN (its own PIN).
 
 ## Tests added in M24

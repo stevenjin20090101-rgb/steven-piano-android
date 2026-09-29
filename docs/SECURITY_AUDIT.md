@@ -1039,8 +1039,8 @@ and one output, a piece the piano plays:
   mood not among the four, a value out of range or of the wrong type is 400 before anything is
   queued (`WebApiTest` refuses 16 such bodies, one with a `prompt`); the model's inputs are token
   ids alone. `GET /api/studio/seed` reads a piece's key and tempo, nothing more.
-- **The token budget cap.** A length of 1–5 minutes allows 1,800 tokens a minute, at most 9,000 a
-  job (`PromptBuilder.budget`): the sampler stops there whatever the model writes, and at the
+- **The token budget cap.** A length of 1–5 minutes allows 1,800 tokens a minute (2,700 from the
+  1.7 release), at most 9,000 a job (`PromptBuilder.budget`): the sampler stops there whatever the model writes, and at the
   length asked. The context is at most 1,024 positions (the window slides to the last 170 events);
   time tokens stay under 10,000 (it slides before 90 s from its origin). So a job's time and memory
   are bounded: on the emulator 5–17 ms a token, the process at 0.55–0.62 GiB at its peak.

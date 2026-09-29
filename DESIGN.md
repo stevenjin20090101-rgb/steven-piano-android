@@ -1637,7 +1637,7 @@ A sheet with its drag handle, on the elevated tone, laid out as the schedule edi
 
 - **The steps**: when the composing model isn't there, its download is queued first. Then the seed
   is read from the library and the model writes, token by token, until the length is reached or
-  its budget (about 30 tokens a second of music, 9,000 at most) is spent; then the piece is written
+  its budget (45 tokens a second of music, 9,000 at most) is spent; then the piece is written
   and added. One job at a time; Cancel stops it between two tokens.
 - **The job** is named for its seed: **"In the manner of Clair de lune"**, "Composing · 42%" over
   the hairline, "Adding it to the library…", then as a transcription's: "Ready: listen, then keep
