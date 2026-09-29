@@ -1475,7 +1475,7 @@ listens to the audio with a transcription model (ByteDance's piano transcription
 writes what it hears, notes, velocities and the pedal, as a MIDI file in the library. Composing
 (M24) follows; its model is already listed. The models are large and optional: the app downloads
 them only when someone asks, from the app's own GitHub release, and checks each one against a
-hash built into the app. Everything above still holds. Not released yet: 1.7 comes after M24.
+hash built into the app. Everything above still holds. Released in 1.7, with M24's composing.
 
 ## Where Studio is
 
@@ -1498,7 +1498,8 @@ hash built into the app. Everything above still holds. Not released yet: 1.7 com
 
 - **MODELS**, a row a model: its name in Body (**Transcription**, **Composing**), then in the
   eyebrow's size, sentence case: **"125 MB · CC BY 4.0 · Turns a piano recording into a piece."**
-  (the composer's: "For composing, which comes in the next update."), and **Download** (outlined).
+  (the composer's, until M24: "For composing, which comes in the next update."; in 1.7 it is v1.7 —
+  M24's line), and **Download** (outlined).
   Downloading: **"Downloading · 42 of 125 MB"** over the hairline progress line, and **Cancel**.
   Installed: **"Installed · 125 MB · CC BY 4.0"** and **Remove**. A download that failed says why
   in its line ("Downloading a model needs an internet connection.", "Couldn't reach the download
@@ -1593,7 +1594,8 @@ model (the Anticipatory Music Transformer, Apache 2.0) continues the first fifte
 piece into music of its own, steered by a mood, a key, a tempo and a length. Like a transcription it
 runs on the tablet alone, and its piece waits for Keep or Discard. Everything in v1.7 — M23 still
 holds; the composing model's row on the Studio page now reads **"173 MB · Apache 2.0 · Writes a new
-piano piece in the manner of one in the library."**
+piano piece in the manner of one in the library."** This is 1.7 (with M23 and the security audit's
+second delta).
 
 ## Where composing is
 

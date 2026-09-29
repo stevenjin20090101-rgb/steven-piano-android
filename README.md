@@ -25,7 +25,7 @@ page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself 
 times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
 (see *Kiosk*), and **Studio** turns a piano recording into a piece, or composes a new one in the
 manner of a piece from the library, on the tablet itself (see *Studio*). Made by Steven Jin.
-Version 1.6.2.
+Version 1.7.
 
 ## What it does
 
@@ -345,7 +345,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.6.2.apk`.
+   `adb install ../apk/steven-piano-1.7.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -405,7 +405,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=14`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=15`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -831,7 +831,7 @@ Studio makes pieces on the tablet itself: no service, no account, nothing sent a
 transcription model and writes down what it hears, every note with how hard it was played, and
 the pedal, as a MIDI file in the library that the piano then plays. And it **composes a new
 piece in the manner of one from the library**: a composing model continues the first fifteen
-seconds of that piece into music of its own. (Studio comes with 1.7.)
+seconds of that piece into music of its own. (Studio came with 1.7.)
 
 **Transcribing a recording**
 
@@ -899,7 +899,7 @@ row. A transcription starts only with about 900 MiB free, a composition with abo
 while it composes, and gives it back after.
 
 **Size.** ONNX Runtime, which runs the models, makes the app a bigger download: the release APK
-is 13.4 MB (1.6.2's was 2.8 MB). Its library comes for 64-bit ARM only; the app itself installs
+is 13.5 MB (1.6.2's was 2.8 MB). Its library comes for 64-bit ARM only; the app itself installs
 wherever 1.6.2 did, and Studio hides on the other devices. The models are separate downloads, kept
 in the app's own storage.
 

@@ -3960,7 +3960,7 @@ Jin · v1.6.2 · eab16a502f679465", the entry drafted at the end of `releases/hi
   `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 16,537,905; staged as
   `../apk/steven-piano-1.6.2.apk` and `-debug.apk`.
 
-# v1.7 — M23: Studio, part 1 — transcription on the tablet (not released)
+# v1.7 — M23: Studio, part 1 — transcription on the tablet; release 1.7 (versionCode 14, with M24)
 
 Read `DESIGN.md › v1.7 — M23` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
 › item 13 and "M23 — Studio transcription" (binding, with the spike's numbers overriding its
@@ -3968,8 +3968,9 @@ guesses: sizes, memory gates, the runtime's version); the contract is `docs/STUD
 contract for M23 and M24. Built on `main` after the spike's merge (`1470549`), a commit a step
 (`67c0df2` runtime and gates, `e26435a` models, `72b4329` audio, `6eaf350` transcription, `25d9527`
 jobs and the service, `07f8f77` the UI and the panel, `eafbd84` and `0a52b90` what the emulator
-showed, then these notes). **No version bump**: `versionCode` 13, `versionName` "1.6.2" and `Provenance.text`
-stay; 1.7 is released after M24 (composing).
+showed, then these notes). **No version bump in this run** (`versionCode` 13, `versionName` "1.6.2" and
+`Provenance.text` stayed): 1.7 was released after M24 (composing) and the security audit's second delta
+(v1.7 — M24 › The release: 1.7).
 
 ## The rule: ONNX Runtime 1.28.0, and no provider of its own
 
@@ -4371,12 +4372,13 @@ network, and a model in use can't be removed; the figures on the trail), `Studio
 and its 202, cancel; the write matrix at 24 routes); `WebApiTest`, `WebAssetsTest`, `RoutesTest`,
 `PianoPagesTest` changed. 998 tests before, 1,085 after.
 
-# v1.7 — M24: Studio, part 2 — composing on the tablet (not released)
+# v1.7 — M24: Studio, part 2 — composing on the tablet; release 1.7 (versionCode 14)
 
 Read `DESIGN.md › v1.7 — M24` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
 › item 13 and "M24 — Studio composing"; the contract is `docs/STUDIO_SPIKE.md` › The contract for M23
 and M24. The engine was built on the branch `m24-composer` and merged at `3591813`; the rest on `main`,
-a commit a step. **No version bump**: 1.7 is released after the security audit's second delta.
+a commit a step. **No version bump in this run**: 1.7 was released after the security audit's second
+delta (The release: 1.7, at the end of this section).
 
 ## The build: ONNX Runtime alone is arm64
 
@@ -4664,6 +4666,35 @@ app down. What changed, and where the build now differs from the notes above:
   walks every panel route, `241b8ae`), `VerifiedDownloaderTest` +1, `NotePostProcessorTest` +1,
   `AudioDecoderTest` +1, `StudioPiecesTest` +1 (`37f0daa`: what reaches the piano from a transcription).
   1,137 tests before the audit, **1,147 after**; with `-PstudioModels` 8 skipped (the corpus's seven and
-  `PinnedKeyTest`'s firmware header), without 12. `check` passes; lint 0 errors, 28 warnings.
+  `PinnedKeyTest`'s firmware header), without 12. `check` passes; lint 0 errors, 28 warnings. At the 1.7
+  release, after the budget's change (which changed two tests and added none), **1,147**.
 - README (*Artwork and notes*, *Security*, *Studio*) and DESIGN.md (v1.7 — M23's refusals, the panel's
   Studio page) carry the new lines and the corrected network statements.
+
+## The release: 1.7 (versionCode 14)
+
+Released from `main` after the security audit's second delta (`025ab0c`) as **1.7**: `versionCode` 14,
+`versionName` "1.7" (`-PversionCodeOverride`'s example now 15), `Provenance.text` "Made by Steven Jin ·
+v1.7 · eab16a502f679465", the entry drafted at the end of `releases/history.json` (`"draft": true`, tag
+`v1.7`, its notes; no hash or size until `tools/publish-release.sh` builds it, which was not run);
+`latest.json` still names 1.6.2. The release is M23 (transcription), M24 (composing and the build that
+keeps the app's other ABIs) and the audit's eight fixes, with one change of its own:
+
+- **The composer's budget** (`7c331b2`): `PromptBuilder.TOKENS_PER_SECOND` 45, not the brief's 30, still
+  at most `MAX_TOKENS` 9,000: 2,700, 5,400, 8,100, 9,000 and 9,000 tokens for one to five minutes (the
+  deviation above says why). A piece that ends at its length is unchanged: six Wild one-minute runs from
+  Für Elise with the real model came out identical at 30 and 45 (60.3–60.8 s, "stop endtime", 696–1,662
+  tokens). `PromptBuilderTest` (the budgets, the constant, the Bach prompt's 5,400) and `ComposerTest`'s
+  real-model minute (held to its prompt's 2,700) follow; README, DESIGN.md and the audit's M24 notes say 45.
+- **Docs**: README "Version 1.7.", the device-owner setup's `adb install ../apk/steven-piano-1.7.apk`,
+  "Studio came with 1.7", the release APK's 13.5 MB; DESIGN.md's v1.7 — M23 and M24 say they are 1.7.
+- **Tests**: **1,147**, none failing; 12 skipped (8 with `-PstudioModels`, whose real-model cases pass).
+  `check` passes: lint 0 errors, 28 warnings, and `checkDebugOnnxTelemetry` / `checkReleaseOnnxTelemetry`
+  ("runtime onnxruntime-android:1.28.0"). No compiler warnings in the app's sources.
+- **APKs**: the release APK is **13,471,112 bytes**, `versionCode` 14, `versionName` 1.7, signed with Steven
+  Piano's release key (`CN=Steven Piano, O=Steven Jin, C=US`; APK Signature Scheme v2 and v3), as built
+  here (`tools/publish-release.sh` builds its own and records its hash and size); the debug APK 27,964,579
+  bytes. `lib/` holds ONNX Runtime for `arm64-v8a` only (`libonnxruntime.so` 28,637,280 bytes and its JNI
+  111,648, deflated) and androidx's two small libraries for all four ABIs.
+- **Provenance** re-signed after this commit.
+
