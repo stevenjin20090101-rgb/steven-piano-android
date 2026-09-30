@@ -341,4 +341,18 @@ class SettingsRepositoryTest {
         assertEquals(dev.stevenjin.stevenpiano.audio.TabletSoundMode.OFF, repository.settings.first().tabletSound)
         scope.cancel()
     }
+
+    @Test
+    fun `the library pack loaded starts at none and is remembered`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "library.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(0, repository.settings.first().libraryPackVersion)
+        repository.setLibraryPackVersion(2)
+        assertEquals(2, repository.settings.first().libraryPackVersion)
+        assertEquals(2, SettingsRepository(store).settings.first().libraryPackVersion)
+        repository.setLibraryPackVersion(-1)
+        assertEquals(0, repository.settings.first().libraryPackVersion)
+        scope.cancel()
+    }
 }

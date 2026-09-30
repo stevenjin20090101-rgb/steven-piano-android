@@ -46,6 +46,7 @@ import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.TextRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.data.imports.Importer
 import dev.stevenjin.stevenpiano.diag.CrashReports
 import dev.stevenjin.stevenpiano.diag.Diagnostics
@@ -58,6 +59,9 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
 import dev.stevenjin.stevenpiano.firmware.FirmwarePlayer
 import dev.stevenjin.stevenpiano.firmware.FirmwareUpdater
 import dev.stevenjin.stevenpiano.firmware.batteryState
+import dev.stevenjin.stevenpiano.library.LibraryOverride
+import dev.stevenjin.stevenpiano.library.LibraryPack
+import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
@@ -66,6 +70,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
+import dev.stevenjin.stevenpiano.service.LibraryService
 import dev.stevenjin.stevenpiano.service.StudioService
 import dev.stevenjin.stevenpiano.service.WebService
 import dev.stevenjin.stevenpiano.settings.Appearance
@@ -232,6 +237,41 @@ class AppGraph(private val app: Application) {
         if (player.state.value.status == PlaybackStatus.Playing) player.pause()
     }
 
+    /**
+     * Steven's library from GitHub (v1.10 — M27): the pack's manifest and zip from this repository's release
+     * `library` (on the emulator in debug builds, the server [LibraryOverride] names), its pieces through the
+     * importer, the version loaded kept in the settings. The Library's buttons and the console's
+     * `library.load` call [LibraryPack.load]; [LibraryService] holds the foreground while it runs.
+     */
+    val libraryPack: LibraryPack by lazy {
+        val source = LibraryOverride.source() ?: UpdateSource.library
+        val server = HttpUpdateServer(source, log = debugLog(LIBRARY_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
+        LibraryPack(
+            source = source,
+            server = server,
+            downloader = VerifiedDownloader(server),
+            offered = OfferedPacks(File(app.filesDir, LibraryPack.FILES_DIR)),
+            cacheDir = File(app.cacheDir, LibraryPack.CACHE_DIR),
+            loadedVersion = settingsRepository.settings.map { it.libraryPackVersion }.distinctUntilChanged(),
+            recordLoaded = settingsRepository::setLibraryPackVersion,
+            import = ::importLibraryPack,
+            online = network.online,
+            scope = appScope,
+            start = { everything -> LibraryService.start(app, everything) },
+            log = { Log.i(LIBRARY_TAG, it) },
+        )
+    }
+
+    /** The pack's pieces through the importer; then, as after the app's own imports, the built-in playlists and artwork. */
+    private suspend fun importLibraryPack(source: ImportSource.LocalZip): ImportProgress {
+        val result = importer.import(app, source)
+        if (result.imported > 0) {
+            refreshBuiltIns()
+            if (settingsRepository.settings.first().fetchArtworkAutomatically) ArtworkService.start(app, force = false)
+        }
+        return result
+    }
+
     /** The piano's own settings over its console, read on every connection. */
     val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
 
@@ -301,11 +341,12 @@ class AppGraph(private val app: Application) {
      * once, then daily, while the switch is on and the device online. The switch is read from
      * DataStore itself, so a check never runs on the default before the saved value is known. The
      * piano's firmware is looked for on the same switch (v1.6 — M21), while a piano that can be
-     * updated is connected.
+     * updated is connected, and a newer library pack (v1.10 — M27), once a day.
      */
     suspend fun runUpdateSchedule() = coroutineScope {
         val switch = settingsRepository.settings.map { it.checkForUpdates }.distinctUntilChanged()
         launch { firmwareUpdater.runSchedule(switch) }
+        launch { libraryPack.runSchedule(switch) }   // v1.10 — M27: a newer library pack, on the same switch
         updateChecker.runSchedule(switch)
     }
 
@@ -525,6 +566,7 @@ class AppGraph(private val app: Application) {
         appScope.launch(Dispatchers.IO) {
             runCatching { ImportLimits.sweepStale(app.cacheDir, app.filesDir, before = startedAt) }
             runCatching { updateDownloader.sweep(before = startedAt) }
+            runCatching { LibraryPack.sweep(File(app.cacheDir, LibraryPack.CACHE_DIR), before = startedAt) }
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
         }
         // The built-in playlists follow the library: now (the first query opens the database), and
@@ -656,6 +698,7 @@ class AppGraph(private val app: Application) {
         const val FIRMWARE_TAG = "Firmware"
         const val STUDIO_TAG = "Studio"
         const val SOUND_TAG = "TabletSound"
+        const val LIBRARY_TAG = "Library"
         const val MODELS_DIR = "models"
         const val STUDIO_WAKE_MS = 30 * 60_000L
         const val UPDATES_DIR = "updates"

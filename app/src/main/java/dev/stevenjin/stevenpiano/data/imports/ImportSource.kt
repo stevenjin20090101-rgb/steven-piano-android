@@ -15,6 +15,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import dev.stevenjin.stevenpiano.data.TextLimits
 import java.io.Closeable
+import java.io.File
 import java.io.FileNotFoundException
 import java.io.InputStream
 
@@ -28,6 +29,14 @@ sealed interface ImportSource {
 
     /** A zip file. */
     data class Zip(val uri: Uri) : ImportSource
+
+    /**
+     * A zip the app saved in its own storage (v1.10 — M27: Steven's library, downloaded and checked by
+     * `LibraryPack`): read where it lies, never copied, and deleted when the import closes it
+     * ([openLocalZip]). Pieces whose INDEX.csv row gives a SHA-256 in [skipShas] are left out: an update
+     * of the library brings only the pieces it never offered before.
+     */
+    class LocalZip(val file: File, val skipShas: Set<String> = emptySet()) : ImportSource
 }
 
 /** One file to import. [relativePath] is its path inside the chosen folder or zip. */
@@ -98,6 +107,30 @@ fun openSource(context: Context, source: ImportSource, cancelled: () -> Boolean 
                 throw e
             }
         }
+        is ImportSource.LocalZip -> openLocalZip(source)
+    }
+}
+
+/**
+ * [source]'s zip opened where it lies (v1.10 — M27), with the caps every zip has ([ZipSource]: the
+ * entry count, the index's size), its MIDI files less those whose index row gives a SHA-256 in
+ * [ImportSource.LocalZip.skipShas] (a file with no row, or no SHA-256 in it, is always read: the
+ * importer's own hash still keeps one copy of each piece). Closing it deletes the zip; a zip that
+ * can't be opened is left for the caller. Plain java.io, so it is unit-tested.
+ */
+fun openLocalZip(source: ImportSource.LocalZip): OpenedSource {
+    val zip = ZipSource(source.file, deleteWhenClosed = true)
+    try {
+        val index = zip.readIndex()
+        val base = zip.indexBase
+        val items = zip.items().filter { item ->
+            source.skipShas.isEmpty() || index == null || !item.relativePath.startsWith(base, ignoreCase = true) ||
+                index.lookup(item.relativePath.substring(base.length))?.sha256 !in source.skipShas
+        }
+        return OpenedSource(items, index, base, zip::close)
+    } catch (e: Exception) {
+        zip.close()
+        throw e
     }
 }
 

@@ -151,6 +151,8 @@ data class PianoSettings(
     val tabletSound: TabletSoundMode = TabletSoundMode.WHEN_NOT_CONNECTED,
     /** The tablet's piano sound's volume, 0–100 % (Now playing's speaker, the Playback page, the web panel). */
     val tabletVolume: Int = Sampler.DEFAULT_VOLUME,
+    /** The version of Steven's library pack last loaded in full (v1.10 — M27); 0: never loaded. */
+    val libraryPackVersion: Int = 0,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -306,6 +308,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The tablet's piano sound's volume, held to 0-100 %. */
     suspend fun setTabletVolume(pct: Int) = edit { it[TABLET_VOLUME] = pct.coerceIn(0, 100) }
 
+    /** Steven's library pack [version] has been loaded (v1.10 — M27): the Library offers a later one as an update. */
+    suspend fun setLibraryPackVersion(version: Int) = edit { it[LIBRARY_PACK_VERSION] = version.coerceAtLeast(0) }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -373,6 +378,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             kioskPinSet = this[KIOSK_PIN_SALT] != null && this[KIOSK_PIN_HASH] != null,
             tabletSound = TabletSoundMode.entries.firstOrNull { it.name == this[TABLET_SOUND] } ?: defaults.tabletSound,
             tabletVolume = (this[TABLET_VOLUME] ?: defaults.tabletVolume).coerceIn(0, 100),
+            libraryPackVersion = (this[LIBRARY_PACK_VERSION] ?: defaults.libraryPackVersion).coerceAtLeast(0),
         )
     }
 
@@ -420,6 +426,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
         val TABLET_SOUND = stringPreferencesKey("tabletSound")
         val TABLET_VOLUME = intPreferencesKey("tabletVolume")
+        val LIBRARY_PACK_VERSION = intPreferencesKey("libraryPackVersion")
     }
 }
 

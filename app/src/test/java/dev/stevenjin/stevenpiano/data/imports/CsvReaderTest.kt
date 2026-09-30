@@ -82,4 +82,57 @@ class IndexCsvTest {
         val headless = IndexCsv.parse("col,Some One,Title,1.0,x/y.mid")
         assertEquals("Some One", headless.lookup("x/y.mid")?.composer)
     }
+
+    // v1.10 — M27: the optional `sha256` column Steven's library pack writes (each file's SHA-256), so the app
+    // knows a pack's pieces before it reads them; an index without it reads as it always has.
+
+    private val a = "005bb905439454713df12f46d63ac6b884f7a37fbdd4e77f962aac102e7d363c"
+    private val b = "358cc000dd00edaf6c683517e3f4f0cfc935bdf98f2b7880126a9e30607c7e2f"
+
+    @Test
+    fun `an index without the column reads as before, with no hash`() {
+        val index = IndexCsv.parse("collection,composer,title,size_kb,path\npiano-midi.de,chopin,Nocturne,7.9,piano-midi.de/chopin/noct.mid\n")
+        val row = index.lookup("piano-midi.de/chopin/noct.mid")!!
+        assertEquals(IndexCsv.Row("piano-midi.de", "chopin", "Nocturne", "piano-midi.de/chopin/noct.mid"), row)
+        assertNull(row.sha256)
+        assertEquals(emptySet<String>(), index.sha256s())
+    }
+
+    @Test
+    fun `the pack's column gives each row its hash, kept lower-case`() {
+        val index = IndexCsv.parse(
+            "collection,composer,title,size_kb,path,sha256\n" +
+                "maestro,Bizet,Carmen Variations,41.4,maestro/Bizet/Carmen Variations.mid,$a\n" +
+                "\"piano-midi.de\",chopin,\"Nocturne, Op. 9\",7.9,piano-midi.de/chopin/noct.mid,${b.uppercase()}\n",
+        )
+        assertEquals(a, index.lookup("maestro/Bizet/Carmen Variations.mid")!!.sha256)
+        assertEquals("the path's case never mattered", a, index.lookup("MAESTRO/bizet/carmen variations.mid")!!.sha256)
+        assertEquals(b, index.lookup("piano-midi.de/chopin/noct.mid")!!.sha256)
+        assertEquals("Nocturne, Op. 9", index.lookup("piano-midi.de/chopin/noct.mid")!!.title)
+        assertEquals(setOf(a, b), index.sha256s())
+    }
+
+    @Test
+    fun `a value that is not 64 hex digits is no hash, and the row still reads`() {
+        val index = IndexCsv.parse(
+            "path,sha256,title\n" +
+                "one.mid,${a.dropLast(1)},One\n" +
+                "two.mid,${a}0,Two\n" +
+                "three.mid,${a.replaceFirst('0', 'g')},Three\n" +
+                "four.mid,,Four\n" +
+                "five.mid, $b ,Five\n",
+        )
+        for (name in listOf("one", "two", "three", "four")) assertNull(name, index.lookup("$name.mid")!!.sha256)
+        assertEquals("One", index.lookup("one.mid")!!.title)
+        assertEquals("found by its header name, wherever it stands; spaces trimmed", b, index.lookup("five.mid")!!.sha256)
+        assertEquals(setOf(b), index.sha256s())
+    }
+
+    @Test
+    fun `without a header the hash is the sixth column`() {
+        val index = IndexCsv.parse("maestro,Bizet,Carmen,41.4,maestro/carmen.mid,$a\nmaestro,Bizet,Habanera,3.1,maestro/habanera.mid\n")
+        assertEquals(a, index.lookup("maestro/carmen.mid")!!.sha256)
+        assertNull(index.lookup("maestro/habanera.mid")!!.sha256)
+        assertEquals(2, index.size)
+    }
 }

@@ -186,6 +186,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Steven's library (v1.10 — M27): the pack's download from the release `library` and its import,
+             with a progress notification and Cancel. -->
+        <service
+            android:name=".service.LibraryService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- The web panel's server (Piano › Remote control › Web control): it listens on the tablet's tailnet
              address (the panel) and its Wi-Fi address (guests only, unless Panel on Wi-Fi too), never on all
              addresses, only while the switch is on and a PIN is set. Not exported: only the app starts it. -->
