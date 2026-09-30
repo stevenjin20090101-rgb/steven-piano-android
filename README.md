@@ -674,6 +674,8 @@ Leave it off on any Wi-Fi that is not your own; Tailscale encrypts everything. S
 school networks keep devices from reaching each other (client isolation): guests'
 phones then cannot reach the request page, and only Tailscale works.
 
+**From anywhere without Tailscale**, over HTTPS: Steven Piano Cloud, a relay and a console on your own Cloudflare account; see [`cloud/README.md`](cloud/README.md).
+
 ## Updating the piano's firmware
 
 From version 1.6 the app can update the piano's own firmware (the ESP32 program that strikes the
