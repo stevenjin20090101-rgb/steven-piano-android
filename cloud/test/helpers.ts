@@ -216,3 +216,19 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function pianoRow(pianoId: string): Promise<Record<string, any> | null> {
   return env.DB.prepare('SELECT * FROM pianos WHERE id = ?').bind(pianoId).first();
 }
+
+/** A tablet's status, as M26 sends it every 30 s and after changes. */
+export function status(title: string, at: number, extra: Record<string, unknown> = {}) {
+  return {
+    t: 'status',
+    app: { version: '1.10', code: 18 },
+    firmware: '2.0.0',
+    link: { state: 'connected', name: 'Steven Piano' },
+    player: { status: 'playing', title, composer: 'Claude Debussy', positionMs: 1000, durationMs: 300000, channel: { key: 'debussy', name: 'Debussy' } },
+    guests: { open: true, approveFirst: false },
+    panel: { web: true, host: '100.101.2.3:8737' },
+    library: { pieces: 1727, pack: 3 },
+    at,
+    ...extra,
+  };
+}

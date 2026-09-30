@@ -9,6 +9,9 @@
 
 import type { TabletStatus } from './protocol';
 
+/** The name the console gives a piano until the tablet or the owner names it. */
+export const DEFAULT_NAME = 'New piano';
+
 /** The database both Workers share (migrations/0001_init.sql), and what they read and write in it. */
 
 export interface PianoRow {

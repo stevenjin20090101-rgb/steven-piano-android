@@ -8,13 +8,11 @@
    ============================================================================ */
 
 import type { RelayEnv } from '../env';
+import { DEFAULT_NAME } from '../shared/db';
 import { sha256Hex } from '../shared/hash';
 import { clientAddress, error, json, readJson, tooMany } from '../shared/http';
 import { newSecret, normalizeCode } from '../shared/ids';
 import { isObject, text } from '../shared/protocol';
-
-/** The name the console gives a piano until someone names it. */
-export const DEFAULT_NAME = 'New piano';
 
 /** Stands in for a code that can't be one, so a malformed code costs what a wrong one does. */
 const NO_CODE = '----';
