@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ui
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -102,6 +103,7 @@ import dev.stevenjin.stevenpiano.ui.components.hazeSource
 import dev.stevenjin.stevenpiano.ui.components.miniPlayerShown
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.display.DisplayScreen
+import dev.stevenjin.stevenpiano.ui.screens.display.RestingMotion
 import dev.stevenjin.stevenpiano.ui.screens.keys.KeysScreen
 import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
@@ -111,7 +113,9 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedTransparency
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlin.math.min
 
 /**
@@ -291,17 +295,28 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
 /**
  * Display mode over the whole window while the app is idle and a piece is loaded, or in kiosk mode
  * with nothing loaded too (its resting state); not a route, so the tabs beneath keep their state. It
- * reads the player here, apart from the frame, so a piece changing never recomposes the frame. In
- * kiosk mode, coming to rest ends an "Unlock for now": a tablet left alone locks itself again.
+ * comes over the app in a slow cross-fade and goes on a touch in a quicker one (DESIGN.md › v1.7.1,
+ * [RestingMotion]; cuts under reduced motion): from the moment it starts to go, the app beneath is
+ * live, its touches, Back and TalkBack. It reads only whether a piece is loaded here, apart from the
+ * frame, so a piece changing never recomposes the frame. In kiosk mode, coming to rest ends an
+ * "Unlock for now": a tablet left alone locks itself again.
  */
 @Composable
 private fun DisplayOverlay(idle: IdleState, kiosk: Boolean, onLeave: () -> Unit) {
-    if (!idle.idle) return
     val graph = LocalContext.current.graph
-    val state by graph.player.state.collectAsStateWithLifecycle()
-    if (!DisplayRule.shows(state.piece != null, kiosk)) return
-    if (kiosk) LaunchedEffect(Unit) { graph.kiosk.relock() }
-    DisplayScreen(onLeave)
+    val loaded by remember(graph) { graph.player.state.map { it.piece != null }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(initialValue = graph.player.state.value.piece != null)
+    val reduced = rememberReducedMotion()
+    AnimatedVisibility(
+        visible = idle.idle && DisplayRule.shows(loaded, kiosk),
+        enter = RestingMotion.enter(reduced),
+        exit = RestingMotion.leave(reduced),
+        label = "resting screen",
+    ) {
+        val resting = transition.targetState == EnterExitState.Visible
+        if (kiosk) LaunchedEffect(Unit) { graph.kiosk.relock() }
+        DisplayScreen(onLeave, resting)
+    }
 }
 
 /**
