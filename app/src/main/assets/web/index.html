@@ -40,14 +40,16 @@
 </svg>
 
 <main id="gate" class="gate" hidden>
-  <p class="eyebrow">Steven Piano</p>
-  <h1 class="display">Enter the PIN</h1>
-  <p class="note">The six digits set on the tablet, in Piano › Remote control.</p>
-  <form id="gate-form" class="gate-form" novalidate>
-    <input id="pin" class="pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN" aria-describedby="gate-note">
-    <button class="outlined" type="submit" id="gate-open">Open</button>
-  </form>
-  <p id="gate-note" class="note" role="status" aria-live="polite"></p>
+  <div class="gate-card">
+    <p class="eyebrow">Steven Piano</p>
+    <h1 class="display">Enter the PIN</h1>
+    <p class="note">The six digits set on the tablet, in Piano › Remote control.</p>
+    <form id="gate-form" class="gate-form" novalidate>
+      <input id="pin" class="pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN" aria-describedby="gate-note">
+      <button class="outlined" type="submit" id="gate-open">Open</button>
+    </form>
+    <p id="gate-note" class="note" role="status" aria-live="polite"></p>
+  </div>
 </main>
 
 <div id="panel" class="panel" hidden>
@@ -89,7 +91,7 @@
         <div class="transport">
           <button class="icon-button mode" id="now-shuffle" type="button" aria-pressed="false" aria-label="Shuffle"><svg class="glyph"><use href="#i-shuffle"/></svg></button>
           <button class="icon-button" id="now-previous" type="button" aria-label="Previous"><svg class="glyph"><use href="#i-previous"/></svg></button>
-          <button class="lens" id="now-play" type="button" aria-label="Play"><svg class="glyph"><use href="#i-play" id="now-play-glyph"/></svg></button>
+          <button class="play-circle" id="now-play" type="button" aria-label="Play"><svg class="glyph"><use href="#i-play" id="now-play-glyph"/></svg></button>
           <button class="icon-button" id="now-next" type="button" aria-label="Next"><svg class="glyph"><use href="#i-next"/></svg></button>
           <button class="icon-button mode" id="now-repeat" type="button" aria-pressed="false" aria-label="Repeat off"><svg class="glyph"><use href="#i-repeat" id="now-repeat-glyph"/></svg></button>
         </div>

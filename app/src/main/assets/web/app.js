@@ -377,6 +377,15 @@
 
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
+  // The scroll-edge effect (DESIGN.md › v1.9): once the page is scrolled, the content fades into the
+  // tab strip's glass (style.css, .scrolled). At the top of the page there is no band.
+  let edgeFrame = 0;
+  function markScrolled() {
+    edgeFrame = 0;
+    $('panel').classList.toggle('scrolled', window.scrollY > 0);
+  }
+  window.addEventListener('scroll', () => { if (!edgeFrame) edgeFrame = requestAnimationFrame(markScrolled); }, { passive: true });
+
   function render(before) {
     if (!state) return;
     renderNow();

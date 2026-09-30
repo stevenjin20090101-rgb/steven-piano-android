@@ -11,7 +11,11 @@
    monochrome language. The two palettes below are ui/theme/Color.kt's tokens, value for value
    (WebAssetsTest checks them): the paper roll in light, the camera body in dark, as the
    system says unless the panel's Appearance control says otherwise (data-theme on <html>). No
-   surface is pure black or pure white. Red means one thing: live, and only the dot uses it. */
+   surface is pure black or pure white. Red means one thing: live, and only the dot uses it.
+   Liquid Glass (DESIGN.md › v1.9) as the app has it: the functional layer (the section list, the tab
+   strip, menus, the toast, the PIN gate's card, the editors' sheets) is the surface over a 24 px blur
+   of what lies beneath, at 72 % for bars and 86 % for sheets, menus and dialogs, with a hairline and
+   a faint specular line; content is never glass. */
 
 :root {
   /* Light: the paper roll */
@@ -43,6 +47,17 @@
   --live: var(--paper-live);
   color-scheme: light;
 
+  /* The glass (ui/theme/Glass.kt's GlassTokens): the fills, the blur, the scroll-edge band and the
+     specular line, white at 10 % on the camera body and 70 % on the paper. */
+  --glass-bar: 72%;
+  --glass-sheet: 86%;
+  --glass-blur: 24px;
+  --glass-band: 24px;
+  --glass-rail-band: 16px;
+  --paper-specular: hsl(0 0% 100% / 0.70);
+  --ink-specular: hsl(0 0% 100% / 0.10);
+  --specular: var(--paper-specular);
+
   --row: 56px;
   --inset: 16px;
   --radius-control: 8px;
@@ -60,6 +75,7 @@
     --secondary: var(--ink-secondary);
     --tertiary: var(--ink-tertiary);
     --live: var(--ink-live);
+    --specular: var(--ink-specular);
     color-scheme: dark;
   }
 }
@@ -73,6 +89,7 @@
   --secondary: var(--ink-secondary);
   --tertiary: var(--ink-tertiary);
   --live: var(--ink-live);
+  --specular: var(--ink-specular);
   color-scheme: dark;
 }
 
@@ -436,7 +453,10 @@ button, input, select { font: inherit; color: inherit; }
   z-index: 20;
   max-width: 480px;
   margin: 0 auto;
-  background: var(--elevated);
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular);
 }
 
 @media (max-width: 511px) {
@@ -505,6 +525,24 @@ button, input, select { font: inherit; color: inherit; }
 
 .gate-form { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 16px; }
 
+/* The gate's card: a sheet's glass, laid on the page (nothing passes beneath it, so it is the surface
+   with its hairline and specular line). */
+.gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 440px;
+  padding: 32px 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular);
+}
+
 .pin-field {
   width: 240px;
   height: 56px;
@@ -524,13 +562,47 @@ button, input, select { font: inherit; color: inherit; }
 
 .panel { min-height: 100vh; }
 
+/* The tab strip (narrow) and the section list (wide) are the panel's bar and rail, on glass. Narrow,
+   the page scrolls beneath the strip: the bar's fill over the blur, the hairline and the specular line
+   along its bottom edge. The scroll-edge effect: once the page is scrolled (.scrolled, app.js), the
+   content fades into the strip over 24 px and the frost thickens inside its edge. */
 .sections {
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--surface);
+  background-color: color-mix(in srgb, var(--surface) var(--glass-bar), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--hairline);
+  box-shadow: inset 0 -1px 0 var(--specular);
 }
+
+.sections::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--glass-band);
+  margin-top: 1px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--surface) var(--glass-sheet), transparent), color-mix(in srgb, var(--surface) 0%, transparent));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+.panel.scrolled .sections::after { opacity: 1; }
+
+.panel.scrolled .sections {
+  background-image: linear-gradient(to bottom, transparent calc(100% - var(--glass-band)), color-mix(in srgb, var(--surface) 50%, transparent));
+}
+
+/* Text on a bar's glass with content beneath it is the content colour, as the app's (the secondary grey
+   reads 3.1:1 over the worst backdrop there); the chosen tab keeps its underline. At rest, today's greys. */
+.panel.scrolled .section-tab, .panel.scrolled .connection { color: var(--primary); }
+
+/* On a sheet's glass the tertiary grey gives way to the secondary, which reads 4.5:1 there, as the app's. */
+.gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow { color: var(--secondary); }
 
 .identity { padding: 12px var(--inset) 4px; }
 
@@ -604,13 +676,36 @@ button, input, select { font: inherit; color: inherit; }
 /* Wide screens: the sections as a 200 px list at the left, the page beside it. */
 @media (min-width: 900px) {
   .panel { display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+  /* Wide, the section list is the rail: nothing passes beneath it, so it is glass without a blur (the
+     surface, as the app's rail), its hairline and specular line along its end, today's greys on it; the
+     page meets it over its own 16 px margin, fading into it. */
   .sections {
     height: 100vh;
     display: flex;
     flex-direction: column;
     border-bottom: 0;
     border-right: 1px solid var(--hairline);
+    background-color: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: inset -1px 0 0 var(--specular);
   }
+  .sections::after {
+    left: 100%;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    width: var(--glass-rail-band);
+    height: auto;
+    margin-top: 0;
+    margin-left: 1px;
+    background: linear-gradient(to right, color-mix(in srgb, var(--surface) var(--glass-sheet), transparent), color-mix(in srgb, var(--surface) 0%, transparent));
+    opacity: 1;
+  }
+  .panel.scrolled .sections { background-image: none; }
+  .panel.scrolled .section-tab { color: var(--secondary); }
+  .panel.scrolled .section-tab[aria-selected="true"] { color: var(--primary); }
+  .panel.scrolled .connection { color: var(--secondary); }
   .identity { padding: 24px var(--inset) 16px; }
   .section-list { flex-direction: column; gap: 0; padding: 8px 0; overflow: visible; }
   .section-tab { width: 100%; min-height: 44px; padding: 0 var(--inset); justify-content: space-between; }
@@ -640,24 +735,25 @@ button, input, select { font: inherit; color: inherit; }
 
 .transport { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 560px; }
 
-/* The play control as the app's lens: a 56 px circle inside a hairline ring, the glyph in the content colour. */
-.lens {
+/* The play control, the primary action: a 56 px circle filled in the content colour, the glyph in the
+   surface colour, as the app's (DESIGN.md › v1.9: never glass). */
+.play-circle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 56px;
   height: 56px;
   padding: 0;
-  border: 1px solid var(--tertiary);
+  border: 0;
   border-radius: 50%;
-  background: var(--elevated);
-  color: var(--primary);
+  background: var(--primary);
+  color: var(--surface);
   cursor: pointer;
 }
 
-.lens .glyph { width: 28px; height: 28px; }
+.play-circle .glyph { width: 28px; height: 28px; }
 
-.lens:disabled { color: var(--disabled); border-color: var(--hairline); cursor: default; }
+.play-circle:disabled { background: var(--disabled); cursor: default; }
 
 .now-controls { width: 100%; max-width: 560px; margin-top: 8px; border-top: 1px solid var(--hairline); }
 
@@ -750,8 +846,10 @@ button, input, select { font: inherit; color: inherit; }
   padding: 6px 0;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-control);
-  background: var(--elevated);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .menu button {
@@ -767,7 +865,7 @@ button, input, select { font: inherit; color: inherit; }
   cursor: pointer;
 }
 
-.menu button:hover, .menu button:focus-visible { background: var(--surface); }
+.menu button:hover, .menu button:focus-visible { background: color-mix(in srgb, var(--primary) 6%, transparent); }
 
 /* ---- Channels -------------------------------------------------------------------------------- */
 
@@ -827,7 +925,18 @@ button, input, select { font: inherit; color: inherit; }
 .row .title.off { color: var(--secondary); }
 
 /* The editor opens over the list, in the page's own rows: the tablet's sheet, laid flat (the schedule's; composing's, v1.7 — M24). */
-.schedule-editor, .compose-editor { border-bottom: 1px solid var(--hairline); }
+/* The editors are the tablet's sheets laid flat: a sheet's glass (nothing passes beneath them in the page,
+   so the surface), its hairline round it and the specular line along its top. */
+.schedule-editor, .compose-editor {
+  margin: 8px var(--inset) 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular);
+  overflow: hidden;
+}
 
 .schedule-editor > .eyebrow:first-child, .compose-editor > .eyebrow:first-child { padding-top: 16px; padding-bottom: 0; }
 
@@ -885,6 +994,40 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--elevated);
   font: 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
+}
+
+/* ---- The glass's accessibility states (DESIGN.md › v1.9) ------------------------------------------ */
+
+/* Reduce transparency, or more contrast: solid surfaces and their hairlines, no scroll-edge bands. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .sections, .menu, .toast, .gate-card, .schedule-editor, .compose-editor {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .sections { background-color: var(--surface); }
+  .panel.scrolled .sections { background-image: none; }
+  .sections::after { display: none; }
+  .menu, .toast { background: var(--elevated); }
+  .gate-card, .schedule-editor, .compose-editor { background: var(--surface); }
+  .panel.scrolled .section-tab { color: var(--secondary); }
+  .panel.scrolled .section-tab[aria-selected="true"] { color: var(--primary); }
+  .panel.scrolled .connection { color: var(--secondary); }
+  .gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow { color: var(--tertiary); }
+}
+
+/* More contrast: every hairline in the content colour at 40 %, as the app's. */
+@media (prefers-contrast: more) {
+  :root, :root[data-theme="dark"], :root[data-theme="light"] { --hairline: color-mix(in srgb, var(--primary) 40%, var(--surface)); }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --hairline: color-mix(in srgb, var(--primary) 40%, var(--surface)); }
+}
+
+/* Reduced motion: the bands come and go as a cut. */
+@media (prefers-reduced-motion: reduce) {
+  .sections::after { transition: none; }
 }
 
 /* ---- The request page -------------------------------------------------------------------------- */
