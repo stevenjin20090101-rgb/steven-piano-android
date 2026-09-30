@@ -490,6 +490,14 @@
       setRange($('channel-volume-range'), channel.volume, 100);
       $('channel-volume-value').textContent = `${channel.volume}%`;
     }
+    // The tablet's piano sound (v1.8 — M25): its volume, while its mode isn't Off; the mode is set on the tablet.
+    const tablet = player.tablet;
+    $('tablet-volume').hidden = !tablet || tablet.mode === 'off';
+    if (tablet && !tabletDragging) {
+      setRange($('tablet-volume-range'), tablet.volume, 100);
+      $('tablet-volume-value').textContent = `${tablet.volume}%`;
+    }
+    if (tablet) $('tablet-volume-note').textContent = tabletLine(tablet);
     const connected = state.link.state === 'connected';
     $('link-dot').classList.toggle('live', connected);
     $('link-dot').classList.toggle('breathing', connected && playing);
@@ -590,6 +598,32 @@
     }
     volumeDragging = false;
   }, 150);
+
+  /** What the tablet's piano sound is doing, as the tablet's popover says it. */
+  function tabletLine(tablet) {
+    if (!tablet.installed) return "The piano sound isn't on the tablet yet: download it there, in Piano › Playback.";
+    if (!tablet.active) return 'Silent while the piano is connected.';
+    return tablet.mode === 'always' ? 'Playing on the tablet with the piano.' : "Playing on the tablet while the piano isn't connected.";
+  }
+
+  let tabletDragging = false;
+  const sendTabletVolume = debounce(async (pct) => {
+    try {
+      await put('/api/settings', { tabletVolume: pct });
+    } catch (e) {
+      failed(e);
+    }
+    tabletDragging = false;
+  }, 150);
+
+  $('tablet-volume-range').addEventListener('input', () => {
+    const input = $('tablet-volume-range');
+    const pct = Number(input.value);
+    tabletDragging = true;
+    setRange(input, pct, 100);
+    $('tablet-volume-value').textContent = `${pct}%`;
+    sendTabletVolume(pct);
+  });
 
   $('channel-volume-range').addEventListener('input', () => {
     const input = $('channel-volume-range');

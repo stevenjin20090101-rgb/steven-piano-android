@@ -223,14 +223,16 @@ private fun ColumnScope.PanelPiece(
                 Panel(Modifier.height(RollStripHeight).fillMaxWidth(), strip)
                 controls()
             }
-            // Where the piece goes, as Now playing says it at its bottom right: "● Sent to piano".
+            // Where the piece goes, as Now playing says it at its bottom right: "● Sent to piano"; and at the
+            // start the tablet's speaker (v1.8 — M25), as at the end of Now playing's tempo row.
             Row(
                 Modifier
                     .fillMaxWidth()
                     .height(CONNECTION_ROW),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                TabletSoundSpeaker(Modifier.wrapContentHeight(unbounded = true))
                 // Its 48 dp target (it opens the Piano tab when not connected) reaches past the 40 dp row.
                 ConnectionLine(connected, state.status == PlaybackStatus.Playing, onOpenPiano, Modifier.wrapContentHeight(unbounded = true))
             }

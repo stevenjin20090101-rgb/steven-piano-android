@@ -320,4 +320,25 @@ class SettingsRepositoryTest {
         assertEquals(null, repository.kioskStayOnBefore())
         scope.cancel()
     }
+
+    @Test
+    fun `the tablet's sound plays when the piano isn't connected, at 60 %, until changed`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "tablet.preferences_pb") }
+        val repository = SettingsRepository(store)
+        val first = repository.settings.first()
+        assertEquals(dev.stevenjin.stevenpiano.audio.TabletSoundMode.WHEN_NOT_CONNECTED, first.tabletSound)
+        assertEquals(60, first.tabletVolume)
+        repository.setTabletSound(dev.stevenjin.stevenpiano.audio.TabletSoundMode.ALWAYS)
+        repository.setTabletVolume(85)
+        assertEquals(dev.stevenjin.stevenpiano.audio.TabletSoundMode.ALWAYS, repository.settings.first().tabletSound)
+        assertEquals(85, repository.settings.first().tabletVolume)
+        repository.setTabletVolume(140)
+        assertEquals(100, repository.settings.first().tabletVolume)
+        repository.setTabletVolume(-3)
+        assertEquals(0, repository.settings.first().tabletVolume)
+        repository.setTabletSound(dev.stevenjin.stevenpiano.audio.TabletSoundMode.OFF)
+        assertEquals(dev.stevenjin.stevenpiano.audio.TabletSoundMode.OFF, repository.settings.first().tabletSound)
+        scope.cancel()
+    }
 }

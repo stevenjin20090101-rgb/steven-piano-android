@@ -4877,3 +4877,298 @@ changed. 1,147 before, **1,163** after.
   Steven Piano's release key (`CN=Steven Piano, O=Steven Jin, C=US`; v2 and v3), the provenance string in
   `classes.dex`; the debug APK 27,987,251 bytes. Not staged in `../apk/`.
 - **Provenance** re-signed after this commit.
+
+---
+
+# v1.8 — M25: the tablet's piano sound
+
+Read `DESIGN.md › v1.8 — M25` first. Built on the branch `m25-sound` from the 1.7 release commit
+(`1768655`), beside another run on `main`; commits a step each. **No version bump, no `Provenance.text`
+change, no provenance signing, no APK here**: the integrator's, at the merge. The SoundFont is published
+(below); `releases/models.json` on `main` names it once this branch is merged and pushed.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- The engine, `M/audio/` (no Android but `AudioOut`): `Sf2Reader.kt` (`Sf2Reader`, `SoundFont`, `Region`,
+  `Sf2Sample`, `Sf2Exception`), `Sampler.kt`, `Limiter.kt`, `PianoVoice.kt`, `AudioOut.kt`, `TabletSound.kt`
+  (`TabletSoundMode`, `TabletSoundState`, `SoundDownload`, `TeeSink`, `TabletSound`).
+- UI: `M/ui/TabletSoundCopy.kt`; `M/ui/components/TabletSoundControls.kt` (`TabletSoundButton` and its
+  popover, `TabletSoundNote`, `SoundFontRow`); `M/ui/screens/nowplaying/TabletSoundSpeaker.kt`
+  (`TabletSoundSpeaker`, `TabletSoundDownloadNote`); `res/drawable/ic_speaker.xml`.
+- `third_party/upright-piano-kw/` (`NOTICE.txt`, `LICENSE.txt`: CC0 1.0's legal code from the archive).
+- Tests: `T/audio/Sf2Fixture` (SoundFonts the tests write), `Sf2ReaderTest`, `SamplerTest`, `PianoVoiceTest`,
+  `OfflineRender` and `OfflineRenderTest`, `TabletSoundRenderTest` (the real SoundFont, when
+  `-PpianoSound` names it), `TabletSoundTest`; `T/ui/TabletSoundCopyTest`.
+
+Changed (each addition small and marked v1.8 — M25): `app/build.gradle.kts` (`-PpianoSound`,
+`-PpianoRender`, `-PpianoRenderMidi` for the render test); `M/AppGraph.kt` (`tabletSound`, its output, the
+player's tee, the collectors in `start()`); `M/player/Player.kt` (a `tablet: MidiSink?` parameter: the engine's
+sink is `TeeSink(link, tablet)`); `M/settings/Settings.kt` (`tabletSound`, `tabletVolume`);
+`M/diag/DiagnosticsExporter.kt` (the two in `settings.txt`); `M/studio/ModelCatalogue.kt` (`ModelKind`,
+`ModelEntry.kind`, `pianoSound`, `kept`, `pinned`), `ModelManifest.kt` (the `sounds` array),
+`ModelInstaller.kt` (the cap by kind), `ModelStore.kt` (`alsoKept`); `M/update/UpdateSource.kt` (`.sf2`,
+`MAX_SOUND_BYTES`); `M/ui/screens/keys/KeysViewModel.kt`, `KeysScreen.kt`; `M/ui/screens/nowplaying/
+NowPlayingScreen.kt`, `NowPlayingPanel.kt`; `M/ui/screens/piano/pages/PlaybackPage.kt`, `PianoViewModel.kt`,
+`AboutRow.kt`; `M/ui/components/SettingsRows.kt` (`ChoiceRow(note)`); `M/web/WebBackend.kt` (`WebTablet`,
+`SettingsChange.tabletVolume`), `WebApi.kt`, `AppWebBackend.kt`; `M/service/WebService.kt`;
+`assets/web/index.html`, `app.js`; `releases/models.json`; `tools/studio/publish_models.py`; tests
+`ModelManifestTest`, `ModelStoreTest`, `UpdateSourceTest`, `SettingsRepositoryTest`,
+`DiagnosticsExporterTest`, `WebApiTest`, `WebServerTest`, `WebAssetsTest`; `AUTHORS`, `DESIGN.md`,
+`README.md`.
+
+## The SoundFont and its download
+
+- **What**: FreePats' Upright Piano KW, 2022-02-21 (`UprightPianoKW-20220221.sf2` in
+  `https://freepats.zenvoid.org/Piano/UprightPianoKW/UprightPianoKW-SF2-20220221.7z`, archive SHA-256
+  `17c084c6…07c826`), CC0 1.0 as FreePats' page and the archive's readme and `cc0.txt` state. One preset
+  (bank 0, preset 0), one instrument of 132 zones (66 stereo pairs: key ranges of about a minor third, two
+  velocity layers, 0–80 and 81–127), 132 samples at 44.1 kHz, 28,678,096 frames; bass zones loop; release
+  −884 timecents (0.6 s); no modulators; three soft-layer zones set a low-pass (ignored, below). Published
+  unmodified as `upright-piano-kw-v1.sf2`: **57,377,848 bytes, SHA-256
+  `d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108`**, an asset of the release `models`.
+- **Listed** in `releases/models.json` under a new top-level **`sounds`** array (the models stay in
+  `models`, byte for byte): `name` `upright-piano-kw`, `version` 1, `file`, `url`, `sizeBytes`, `sha256`,
+  `licence` `CC0-1.0`, `source`, `attribution`, and in place of inputs and outputs `format`, `soundfont`,
+  `sampleRates`. 1.7's `ModelManifest` reads `models` alone and refuses the whole list if an entry there
+  isn't `<name>-v<n>.onnx`: a sound beside the models never reaches it (checked with 1.7's own parser, compiled
+  from `1768655`, on the new list: it reads its two models and nothing else).
+- **Pinned** in `ModelCatalogue.pianoSound` (`kind` `ModelKind.Sound`: `.sf2`, list key `sounds`, cap
+  `UpdateSource.MAX_SOUND_BYTES` = 200 MiB); `ModelCatalogue.all` is still Studio's two, so the Studio page,
+  the hub's "2 models" and the panel's Studio page are untouched. `ModelManifest.parse` reads both arrays
+  (at most 32 each, a name and version once across both), each entry checked for its kind's extension and
+  cap, a pinned entry held to its pin; `entryFor` matches the kind too. `UpdateSource.allowsModel(url,
+  extension)` / `allowsModelFile(url, extension)` take `.onnx` or `.sf2` and nothing else;
+  `ModelInstaller` caps a download at its kind's `maxBytes`.
+- **Downloaded** by `TabletSound.download()` through Studio's path (`ModelInstaller` → `ModelManifest` →
+  `VerifiedDownloader`: the part file hashed as it arrives, kept only at the pinned size and SHA-256, 256 MB
+  kept free beside it) into `filesDir/models/`, in the app's scope (not a Studio job; no foreground service),
+  with its progress, Cancel and failures in the piano sound's words (`TabletSound.failureLine`). On the
+  emulator in debug builds, `debug.stevenpiano.modelsurl` points it at a local server as it does Studio's.
+  `ModelStore(alsoKept = ModelCatalogue.kept)`: Studio's sweep at start keeps the SoundFont, and the sound's
+  own store (`listOf(pianoSound)`, never swept) Studio's models. Before its first use in a process the file's
+  SHA-256 is checked (`ModelStore.open`: 81 ms on the emulator), then it is memory-mapped and its pages
+  brought in (`Sf2Reader.read(file)`, `MappedByteBuffer.load()`; 35 ms): nothing of it on the Java heap.
+- **Publishing**: `tools/studio/publish_models.py --work DIR --models upright-piano-kw --upload` fetches the
+  archive from FreePats (its hash checked), extracts the `.sf2` (bsdtar), checks its hash, writes the
+  `sounds` entry into both `models.json` files (entries not named are kept as `releases/models.json` has
+  them, so one file publishes without the others), uploads the `.sf2` and `models.json` to the release
+  (`--clobber`) and reads both back through `gh` to compare hashes. Run on 2026-09-30: "round trip OK" for
+  both; the public URL answers 200 through `release-assets.githubusercontent.com` with the pinned bytes.
+
+## The engine's SF2 (`Sf2Reader`)
+
+RIFF `sfbk`: `LIST INFO` (`INAM`), `LIST sdta` (`smpl`, 16-bit; `sm24` ignored), `LIST pdta` (`phdr`,
+`pbag`, `pgen`, `inst`, `ibag`, `igen`, `shdr`; `pmod`/`imod` read past). Every table's size a whole number
+of records, every bag, generator, instrument and sample index checked against its table, every chunk
+within its parent; anything else is an `Sf2Exception` in words. The preset is bank 0 preset 0, else the
+first. Zones: an instrument's first zone without a `sampleID` (a preset's without an `instrument`) is its
+global zone; a zone's own generators over its global zone's over SF2's defaults; the preset zone's (its
+own over its global's) **added** for the generators the preset level may set, the key and velocity ranges
+**intersected**. Kept per region: key and velocity range; the sample and its start, end and loop moved by
+the four address offsets and their coarse forms (instrument level only), clamped to the data; sample modes
+(0 and 2 once, 1 loop, 3 loop until release); root key (`overridingRootKey`, else the sample's pitch);
+coarse and fine tune with the sample's correction; scale tuning; initial attenuation; the volume envelope
+(delay, attack, hold, decay, sustain, release, key to hold, key to decay). Read and not used: pan.
+Ignored: filters and their modulators, the LFOs, the modulation envelope, chorus and reverb sends,
+exclusive class, keynum and velocity overrides, modulators (the sampler applies SF2's default velocity
+curve). ROM samples are skipped. A left sample's region whose linked right sample's region matches it in
+everything but pan becomes one region with a `partner`: the pair plays as one voice.
+
+## The sampler (`Sampler`, `Limiter`)
+
+- **Voices**: struct-of-arrays, allocation-free after construction; `POLYPHONY` 48 voices that count
+  (a stereo pair is one), plus `FADE_SLOTS` 16 where stolen and silenced voices fade out over `FADE_MS` 12.
+  A new note past 48 fades the oldest released voice, else the oldest held one. A key struck again releases
+  what it still sounds (held or pedalled), as FluidSynth does, so pedalled repeats don't pile up. Note Off
+  releases, or with the pedal down marks the voice sustained; pedal up releases those; `allOff` (the stop
+  sequence's CC123) releases all and lifts the pedal; `silence` (a mode change, focus lost, CC120) fades all;
+  `reset` frees all at once (the output closed). A note is at least `MIN_NOTE_MS` 50 long: a key let go
+  sooner releases then (a Note On and Off in one block would otherwise never be heard).
+- **Playback**: linear interpolation between 16-bit frames (a pair's two channels summed and halved);
+  a step of 2^((key − root) × scaleTuning / 1200 + tune / 1200) × sampleRate / outputRate; loops wrap
+  within `loopStart`–`loopEnd` (mode 3 plays on to the end once released); a voice ends at its sample's end
+  (not looping), when its release reaches −100 dB, or when its fade ends.
+- **Envelope**: worked out at the end of each block of at most `BLOCK` 64 frames and ramped across it.
+  Delay (the sample waits), attack linear in amplitude (at least one frame), hold, then decay, sustain and
+  release linear in decibels, a full change being **100 dB** (SF2 2.04 § 8.1.2: sustain `sustainCb` below
+  full; decay and release the time of a 100 dB change); a release during the attack continues from the
+  attack's amplitude in the decibel domain. Timecents: 2^(tc/1200) s; −12,000 and below instant; release
+  at least `MIN_RELEASE_MS` 10.
+- **Gain**: SF2's default note-on velocity to attenuation modulator (concave, negative, 960 cB):
+  −40·log10(v/127) dB, an amplitude of **(v/127)²**; initial attenuation 10^(−cB/200); the master
+  **(volume/100)² × `HEADROOM` 2** (+6 dB at 100 %, −2.9 dB at the default 60 %), ramped over a block when it
+  changes; then the **`Limiter`**: unchanged while |x| × gain stays under the ceiling, 0.8913 (−1 dBFS); a
+  peak over it sets the gain to ceiling / |x| at once (that sample leaves at the ceiling exactly), and the
+  gain recovers exponentially with a 250 ms time constant. The headroom was chosen on the real SoundFont
+  (below: *Measured*).
+- `render(out, frames)` fills mono floats; `activeVoices`, `liveVoices`, `heldKeys()`,
+  `takeLowestLimiterGain()` for tests and the log.
+
+## The voice and the output (`PianoVoice`, `AudioOut`)
+
+- `PianoVoice(outputRate)`: `noteOn`, `noteOff`, `sustain`, `allOff`, `silence`, `reset` queue packed events
+  (a 4,096-entry ring under a lock held for one store; a full queue nobody drains starts again from
+  `silence`); `volume` is a volatile read at each render; `load(font)` swaps the sampler, and `load(null)`
+  queues `silence` and lets the sampler go on the audio thread once nothing sounds (a compare-and-set, so a
+  font loaded meanwhile stays), playing nothing new meanwhile: turning the sound off never clicks. The audio thread's
+  `drain()` and `render()` apply the queue in order, then mix. `onPost` hears each event (the output's
+  unpark). `sink(active)` / `play(batch)` read the player's batches: Note On (velocity 0: Off), Note Off,
+  CC64 (≥ 64 down), CC123 → `allOff`, CC120 → `silence`; the rest ignored, as the piano ignores it.
+  `notesPosted` counts keys for the log.
+- `AudioOut`: one thread, "steven-piano-sound", `THREAD_PRIORITY_URGENT_AUDIO`, parked while nothing
+  sounds and no piece plays. Woken, it applies the queue; once a voice sounds, or `keepOpen` (the tablet
+  active and the player playing: so a piece's first note after its pause, and its rests, find the output
+  open), it requests `AUDIOFOCUS_GAIN_TRANSIENT` (usage media, content music; the listener on the main
+  thread) and builds an `AudioTrack`: `ENCODING_PCM_FLOAT`, stereo (the mono mix on both sides), at the
+  device's output rate (`PROPERTY_OUTPUT_SAMPLE_RATE`, 44.1 or 48 kHz, else 48), `MODE_STREAM`,
+  `PERFORMANCE_MODE_LOW_LATENCY`, a buffer of 20 ms or two of the device's bursts
+  (`PROPERTY_OUTPUT_FRAMES_PER_BUFFER`), whichever is more, room for twice that. It renders and writes
+  (`WRITE_BLOCKING`) the device's burst or 5 ms, whichever is less; each new underrun
+  (`getUnderrunCount`) grows the buffer by a burst up to its capacity. After `IDLE_MS` 3 s without a sound,
+  a pending event or `keepOpen`, it pauses, flushes and releases the track and abandons the focus.
+  `AUDIOFOCUS_LOSS` and `LOSS_TRANSIENT`: the output resets the voices and closes, `onFocusLost` pauses the
+  player (Play resumes); until a new note, a piece still playing no longer keeps the output open.
+  `LOSS_TRANSIENT_CAN_DUCK` is Android's to duck (API 26+). Refused focus is a loss. The media volume stream
+  governs the track; the media session's volume stays the system's.
+
+## Wiring (`TabletSound`, `Player`, `AppGraph`, Keys)
+
+- `TabletSoundState(mode, volume, connected, installed, download)`: `wanted` = `mode.sounds(connected)`
+  (OFF never, WHEN_NOT_CONNECTED while the link isn't `Connected`, ALWAYS always), `active` = wanted and
+  installed, `needsDownload` = wanted and not installed.
+- `TabletSound.follow(mode, volume, connected)`, from `AppGraph.start()` (`combine(settings, link.state)`,
+  distinct), sets the voice's volume and settles: `active` (volatile, read by the sink on the scheduler
+  thread) is the state's `active` and a loaded voice; it turning false queues `silence` (the fade), so the
+  piano connecting mid-piece silences the tablet before the next note. The SoundFont is read whenever the mode
+  isn't OFF and it is installed, and let go at OFF. `playing(on)` (the player's status, distinct) feeds
+  `keepOpen`. Each change of `active` is logged with the notes played so far.
+- `Player(…, tablet = tabletSound.sink)`: `PlaybackEngine(TeeSink(link, tablet))`: each batch goes to the
+  link, then to the tablet, on the scheduler thread at the same moment; the tablet's sink only queues. So the
+  tablet hears the router's output (folding, the velocity percentage, the pedal's pacing, the 100 ms guard,
+  the reference counts, the stop sequence) for pieces, channels, schedules, Studio's Listen and the Keys tab.
+- The Keys tab: `KeysViewModel.noteOn` sends to the player while the piano is connected **or the tablet is
+  active**; its line reads "Not connected. The tablet plays these keys." while the tablet plays them.
+- Settings: `tabletSound` (`TabletSoundMode`, `WHEN_NOT_CONNECTED`), `tabletVolume` (0–100, 60); both in
+  `settings.txt`.
+
+## UI
+
+`PlaybackPage`: after its rows, `SectionEyebrow("Tablet sound")`, `ChoiceRow` with the new `note`,
+`SliderRow` (the value shown at once, the setting written as it moves), `SoundFontRow`.
+`NowPlayingScreen`: `TabletSoundSpeaker()` at the end of the tempo row and `TabletSoundDownloadNote` under
+it; `NowPlayingPanel`: `TabletSoundSpeaker()` at the start of its foot row. `TabletSoundButton`: an
+`IconButton` tinted `onSurface` when active and `LocalTertiary` otherwise; a `DropdownMenu` with a
+`LocalHairline` border, 300 dp wide, the eyebrow, the status, Volume and its value, `HairlineSlider`
+(full width), and the download while it waits. `AboutRow`: `TabletSoundCopy.CREDIT`. Kiosk: nothing asks
+on Now playing; the Playback page is a locked page as before.
+
+## Web
+
+`WebPlayer.tablet: WebTablet(mode "off" | "whenNotConnected" | "always", volume, active, installed)` →
+`player.tablet` in `/api/state` and the socket's state; `PUT /api/settings` takes `tabletVolume` (0–100;
+anything else 400, the mode among it); `WebService` pushes on `tabletSound.state`. `index.html`: the
+`#tablet-volume` row under the channel's volume; `app.js`: `tabletLine`, the slider sent debounced
+(150 ms) as the channel's is, hidden while the mode is off.
+
+## Greps (v1.8 — M25)
+
+M24's hold: no `Color(0x` outside `ui/theme`; no `0.0.0.0` or `Access-Control` in `app/src/main`;
+`DisplayBlack` in `Color.kt` and `Theme.kt`; `LocalNoteSounding` in `Theme.kt` and `ScorePages.kt`;
+`LocalLive` in `LiveDot.kt` and `Theme.kt`; Haze imported in `Glass.kt` only; no `Modifier.blur`; no pure
+black or white in `assets/web` but the stylesheet's comment; `ai.onnxruntime` only under `studio/`. New:
+`AudioTrack` and `AudioFocusRequest` in `audio/AudioOut.kt` only; nothing in `audio/` but `AudioOut.kt`
+imports Android.
+
+## Measured (2026-09-30)
+
+- **Tests**: **1,195**, none failing (1,147 before); 13 skipped without `-PpianoSound`
+  (`TabletSoundRenderTest` joins the 12). `check` passes: lint 0 errors, 28 warnings (as 1.7; none in the new
+  code), `checkDebugOnnxTelemetry` and `checkReleaseOnnxTelemetry`.
+- **Clair de lune offline** (`TabletSoundRenderTest`, piano-midi.de's `deb_clai.mid`, the real SoundFont,
+  the app's engine and voice at 48 kHz, volume 60): 251.6 s of music rendered in 0.43–0.46 s on the Mac's
+  JVM (about 550–580× real time), peak 0.412 (−7.7 dBFS), RMS 0.0261 (−31.7 dBFS), at most 26 voices at
+  once, no clipping, no clicks (no sample-to-sample jump over 8× the local RMS), no DC; the SoundFont read
+  in 36 ms. The WAV (48 kHz, 16-bit, stereo, 48,314,608 bytes) reads back through `WavReader` at its
+  length.
+- **The level, chosen on the real SoundFont** (the mix unlimited at gain 1, then the gain and the limiter;
+  RMS / most limiting): Clair de lune −28.8 dBFS RMS at gain 1 (its velocities: median 36, 28–52 for four
+  in five); Für Elise −27.0; Chopin's Op. 10 No. 12 −16.4 with peaks at +4.9 dBFS. `HEADROOM` 0.25 (the
+  first build) left Clair de lune at −49.7 dBFS RMS at the default volume: far too quiet. At 2.0: Clair de
+  lune −31.6 dBFS at 60 % and −22.9 at 100 % (2.2 dB of limiting at most, 0.3 % of the time), the étude
+  −19.3 at 60 % (3.0 dB at most, 0.7 %) and −13.1 at 100 % (11.9 dB at most, 41 % of the time: 100 % on the
+  loudest pieces is held down hard). 1.5 and 3.0 were measured too.
+- **The emulator** (`steven_piano_m25`, API 34, Pixel 7 profile, arm64, 4 GB, `-no-audio`, which keeps the
+  guest's audio running and sends nothing to the Mac; tablet shots at 2560 × 1600, 240 dpi; logs in
+  `m25-shots/emulator-evidence.log`):
+  - *The real path first*: Download fetched `main`'s `releases/models.json`, which has no `sounds` until
+    this branch is pushed: "The piano sound isn't offered right now." Then the local server (5 MB/s): 57 MB
+    in 15.6 s from Now playing's note ("Downloading the piano sound · 10 of 57 MB"), "downloaded and
+    verified", read in 35 ms, sounding.
+  - *Clair de lune with the piano not connected*: the output opened as the piece started, 48 kHz, 2,176
+    frames of buffer (the emulator's burst is 1,088 frames, 22.7 ms), writing 240 at a time; `dumpsys
+    media.audio_flinger`: the track active, PCM float, stereo, usage media, content music, the media
+    stream's −33 dB applied, **0 underruns**; it closed 3.6 s after the piece ended, "0 underruns, at most
+    19 voices" after 128 s. `top -H`: the sound thread (PR 1, NI −19) at **1–4 % of a core**; the UI's
+    RenderThread 16–19 %. Not a fast track on the emulator (its normal mixer; the track asks for low latency).
+  - *The Keys tab*: the output opened on the first key, closed 3 s after the last: 0 underruns, at most 10
+    voices.
+  - *The piano connecting mid-piece* (When the piano isn't connected): connected at 12:20:45.770, the tablet
+    silent at 45.773 ("after 126 notes"), the piano's resync at 45.773 and the piece's next notes on the
+    piano at 46.184: **silent within the note**.
+  - *Always, the piano connected*: "sounding (always, the piano connected)", the output open beside it.
+  - *Audio focus*: YouTube Music opening a WAV took transient focus; the tablet's output closed and gave the
+    focus back within 22 ms, and the piece paused (the piano got the stop sequence); Play resumed it.
+  - *The popover's volume* moved to 87 %: the Playback page read 87 % after (the setting kept).
+- **Screens** (`m25-shots/`): the Playback page (light, tablet: Download; dark: Installed, and Always with
+  its warning), Now playing with the download note, downloading and sounding, the popover (light at 60 and
+  87 %, dark), the Keys tab sounding, and on the phone Now playing, the popover and the Playback page (light
+  and dark).
+
+## Deviations from the brief, and why
+
+- **The list's `sounds` array**, not an entry in `models`: 1.7's parser refuses the whole list over one entry
+  it can't read, which would have stopped every 1.7 tablet's Studio downloads the moment the list reached
+  `main`. Checked with 1.7's own parser.
+- **A stereo pair plays as one voice**, its two channels summed to mono (the brief's "pan ignored →
+  mono-to-stereo", done per pair): the 48 voices are 48 notes, and each note reads the pair's two
+  recordings, as the font was made.
+- **100 dB for a full envelope change** (SF2 2.04), not FluidSynth's 96 dB; the default velocity curve as
+  SF2 specifies it, (v/127)².
+- **A peak limiter and +6 dB of headroom** in place of a fixed gain: the measured levels above (a pp piece
+  at −50 dBFS with the first build's gain).
+- **A note is at least 50 ms**, stealing prefers released voices and fades the stolen one, and a key struck
+  again releases its old voice: none named in the brief, each measured or tested (`SamplerTest`,
+  `PianoVoiceTest`), each so the tablet sounds like a piano and never clicks.
+- **The output isn't open all the time**: only while something sounds or a piece plays, and 3 s after, so an
+  idle tablet holds no audio focus and no audio thread awake; the first key after a silence waits for the
+  track to open (tens of milliseconds, once).
+- **Audio focus**: `GAIN_TRANSIENT` as asked; a transient loss (a call) pauses as a loss does; a duck is
+  Android's. A pause pauses the player, so in Always the piano pauses with the tablet.
+- **The download runs in the app's scope**, not as a Studio job: no foreground service or wake lock for
+  57 MB; its progress is on the Playback page and Now playing.
+- **The filter is ignored** (as the brief says): three soft-layer zones (keys 47–52 and 59–61, velocity
+  0–80) set a 1.5–2.5 kHz low-pass, so those keys are brighter there than FreePats meant.
+- **The popover has a hairline edge**: the app's standard popover (no Liquid Glass pass in this tree), whose
+  shadow alone doesn't show over the score's panel in the dark.
+- **The emulator's buffer is 45 ms**, two of its 1,088-frame bursts; about 20 ms wherever the device's burst
+  is 10 ms or less.
+- **The web panel's volume shows only while the mode isn't Off**, and the mode stays on the tablet.
+
+## Residuals
+
+- **Nothing measured on the tablet itself**: its latency (the brief's 20–40 ms), the fast path, the sound
+  thread's CPU and how the Always mode lines up with the real piano.
+- **The real download** needs `releases/models.json` with its `sounds` on `main` (this branch, pushed); the
+  asset is published and verified.
+- The SoundFont's `sm24` (24-bit) and every modulator but the default velocity curve are ignored; no reverb.
+- With the output closed, the first note after a silence is late by the track's opening.
+
+## Tests added in M25
+
+`Sf2ReaderTest` (10), `SamplerTest` (13), `PianoVoiceTest` (6), `OfflineRenderTest` (2),
+`TabletSoundRenderTest` (1, skipped without `-PpianoSound`), `TabletSoundTest` (7), `TabletSoundCopyTest`
+(4), `ModelManifestTest` +2, `ModelStoreTest` +1, `UpdateSourceTest` +1, `SettingsRepositoryTest` +1;
+`WebApiTest`, `WebServerTest`, `WebAssetsTest` and `DiagnosticsExporterTest` changed. 1,147 before,
+**1,195** after.

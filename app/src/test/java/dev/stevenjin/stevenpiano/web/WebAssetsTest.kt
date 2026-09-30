@@ -118,6 +118,7 @@ class WebAssetsTest {
         for (copy in listOf("No schedules yet.", "Choose at least one day.", "Choose what to play.", "The tablet starts them: keep it on, charged and near the piano.")) {
             assertTrue(copy, text("app.js").contains(copy))
         }
+        assertTrue("the tablet's piano sound (1.8)", index.contains("Piano sound on the tablet") && text("app.js").contains("tabletVolume"))
         assertTrue(text("poster.html").contains("data-theme=\"light\""))
     }
 }

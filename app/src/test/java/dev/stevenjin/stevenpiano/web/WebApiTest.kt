@@ -95,6 +95,9 @@ class WebApiTest {
         assertEquals(SettingsChange(defaultTempoPct = 90, webApproveFirst = false), WebApi.settingsChange(JSONObject("""{"defaultTempoPct":90,"webApproveFirst":false}""")))
         assertEquals(SettingsChange(webHostName = ""), WebApi.settingsChange(JSONObject("""{"webHostName":""}""")))
         refused(400) { WebApi.settingsChange(JSONObject("""{"transpose":13}""")) }
+        assertEquals(SettingsChange(tabletVolume = 35), WebApi.settingsChange(JSONObject("""{"tabletVolume":35}""")))
+        refused(400) { WebApi.settingsChange(JSONObject("""{"tabletVolume":101}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"tabletSound":"always"}""")) }   // the mode is the tablet's alone
         refused(400) { WebApi.settingsChange(JSONObject("""{"webHostName":"-piano"}""")) }
         refused(400) { WebApi.settingsChange(JSONObject("""{"webHostName":"piano:8737"}""")) }
         assertEquals(RepeatMode.ALL, WebApi.repeatOf("all"))
@@ -140,7 +143,12 @@ class WebApiTest {
         )
         val json = WebApi.state(state, pending = 2)
         val player = json.getJSONObject("player")
-        assertEquals(setOf("status", "loading", "piece", "positionMs", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "queue", "problem"), player.keys().asSequence().toSet())
+        assertEquals(setOf("status", "loading", "piece", "positionMs", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem"), player.keys().asSequence().toSet())
+        // The tablet's piano sound (v1.8 — M25): its mode, volume, whether it sounds, whether its SoundFont is there.
+        val tablet = player.getJSONObject("tablet")
+        assertEquals(setOf("mode", "volume", "active", "installed"), tablet.keys().asSequence().toSet())
+        assertEquals("whenNotConnected", tablet.getString("mode"))
+        assertEquals(60, tablet.getInt("volume"))
         assertEquals("playing", player.getString("status"))
         assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art"), player.getJSONObject("piece").keys().asSequence().toSet())
         assertEquals("Calm", player.getJSONObject("channel").getString("name"))

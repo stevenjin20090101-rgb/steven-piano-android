@@ -1,0 +1,33 @@
+Upright Piano KW (the tablet's piano sound, upright-piano-kw-v1.sf2)
+====================================================================
+
+Not part of this repository and not bundled in the app: the app downloads it on
+demand, from this project's GitHub release "models", when someone chooses
+Download on Piano > Playback > TABLET SOUND (or on Now playing), and checks its
+SHA-256 before it is used.
+
+Source:  FreePats project, "Upright Piano KW", version 2022-02-21: the SoundFont 2
+         file UprightPianoKW-20220221.sf2 in the archive
+         https://freepats.zenvoid.org/Piano/UprightPianoKW/UprightPianoKW-SF2-20220221.7z
+         (archive SHA-256 17c084c6e4205233dc49b34e4bc44a9b2d7c7a2c02b04729ecda77079b07c826),
+         described at https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html#UprightKW.
+         Created from a Kawai upright piano, recorded by Gonzalo and Roberto
+         (roberto@zenvoid.org) in January 2017 with a Zoom H1 in front of the
+         piano; the recordings cropped, edited and processed by Roberto. Stereo,
+         two velocity layers, 44.1 kHz, 16-bit; bass notes contain loops.
+
+Licence: Creative Commons CC0 1.0 Universal (public domain dedication),
+         https://creativecommons.org/publicdomain/zero/1.0/. The archive's own
+         copy of the legal code is LICENSE.txt beside this file; the archive's
+         readme says: "Published under the terms of Creative Commons CC0 public
+         domain dedication".
+
+Changes: none. upright-piano-kw-v1.sf2 is UprightPianoKW-20220221.sf2 byte for
+         byte (57,377,848 bytes, SHA-256
+         d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108),
+         renamed. tools/studio/publish_models.py fetches it from FreePats, checks
+         both hashes and publishes it.
+
+CC0 asks for no attribution; the app credits it all the same, in About ("Piano
+sound: Upright Piano KW, FreePats (CC0)"), in AUTHORS and in the README. The
+MIT licence of this project does not apply to it.

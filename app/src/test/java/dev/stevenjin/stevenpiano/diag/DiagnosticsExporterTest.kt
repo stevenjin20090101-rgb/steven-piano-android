@@ -77,7 +77,8 @@ class DiagnosticsExporterTest {
         assertTrue("webEnabled = true\nwebGuests = false\nwebApproveFirst = true\nwebOnWifi = false\nwebHostName = (none)\nwebPinSet = true\n" in prefs)
         assertTrue("kioskEnabled = false\nkioskPinSet = false\n" in prefs)
         assertFalse("the PINs' hashes and salts never travel", "Pin" in prefs.replace("webPinSet", "").replace("kioskPinSet", ""))
-        assertEquals(33, prefs.lines().count { it.isNotEmpty() })
+        assertTrue("tabletSound = WHEN_NOT_CONNECTED\ntabletVolume = 60\n" in prefs)
+        assertEquals(35, prefs.lines().count { it.isNotEmpty() })
 
         assertTrue(entries.getValue("link.log").endsWith("with its console\n"))
         assertTrue("IllegalStateException: second" in entries.getValue("crash-${now}.txt"))

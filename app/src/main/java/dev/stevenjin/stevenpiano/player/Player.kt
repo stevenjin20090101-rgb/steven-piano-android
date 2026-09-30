@@ -9,10 +9,12 @@
 
 package dev.stevenjin.stevenpiano.player
 
+import dev.stevenjin.stevenpiano.audio.TeeSink
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.channels.ChannelDeck
 import dev.stevenjin.stevenpiano.midi.MidiPiece
+import dev.stevenjin.stevenpiano.midi.MidiSink
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.ChordTrack
 import dev.stevenjin.stevenpiano.score.Chords
@@ -88,8 +90,10 @@ class Player(
     private val compute: CoroutineDispatcher = Dispatchers.Default,
     /** The link's trail (LinkLog), where each run's timing goes: "Timing: 1204 events, the latest 3 ms after its time, at 1:23.4". */
     private val trail: (String) -> Unit = {},
+    /** The tablet's piano sound (v1.8 — M25): what the link is sent goes here too, after it, at the same moment. */
+    tablet: MidiSink? = null,
 ) : ChannelDeck {
-    private val engine = PlaybackEngine(link)
+    private val engine = PlaybackEngine(if (tablet == null) link else TeeSink(link, tablet))
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
     private val _state = MutableStateFlow(PlayerState())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()

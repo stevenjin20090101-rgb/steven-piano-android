@@ -288,6 +288,12 @@ data class WebChannel(
 /** The channel playing, its name and volume. */
 data class WebChannelPlaying(val key: String, val name: String, val volume: Int)
 
+/**
+ * The tablet's piano sound (v1.8 — M25): its [mode] ("off", "whenNotConnected", "always"), its [volume]
+ * (the panel may change it), whether it sounds now ([active]) and whether the SoundFont is on the tablet.
+ */
+data class WebTablet(val mode: String = "whenNotConnected", val volume: Int = 60, val active: Boolean = false, val installed: Boolean = false)
+
 /** An entry of the queue with its piece; [requested] when a guest asked for it. */
 data class WebQueueItem(val uid: Long, val piece: WebPiece, val requested: Boolean = false)
 
@@ -306,6 +312,7 @@ data class WebPlayer(
     val velocityPct: Int = 100,
     val preRollMs: Int = 0,
     val channel: WebChannelPlaying? = null,
+    val tablet: WebTablet = WebTablet(),
     val queue: QueueSnapshot = QueueSnapshot(),
     val items: List<WebQueueItem> = emptyList(),
     val problem: String? = null,
@@ -381,6 +388,8 @@ data class SettingsChange(
     val webGuests: Boolean? = null,
     val webApproveFirst: Boolean? = null,
     val webHostName: String? = null,
+    /** The tablet's piano sound's volume, 0–100 % (v1.8 — M25); its mode is the tablet's alone. */
+    val tabletVolume: Int? = null,
 ) {
     val isEmpty: Boolean get() = this == SettingsChange()
 }

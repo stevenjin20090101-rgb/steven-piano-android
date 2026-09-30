@@ -237,6 +237,7 @@ object WebApi {
             webGuests = boolOrNull(json, "webGuests"),
             webApproveFirst = boolOrNull(json, "webApproveFirst"),
             webHostName = host,
+            tabletVolume = if (json.has("tabletVolume")) int(json, "tabletVolume", 0..100) else null,
         )
         if (change.isEmpty) throw ApiError(400, "field", "Nothing to change.")
         return change
@@ -386,6 +387,7 @@ object WebApi {
                     .put("velocityPct", p.velocityPct)
                     .put("preRollMs", p.preRollMs)
                     .put("channel", p.channel?.let { JSONObject().put("key", it.key).put("name", it.name).put("volume", it.volume) } ?: JSONObject.NULL)
+                    .put("tablet", JSONObject().put("mode", p.tablet.mode).put("volume", p.tablet.volume).put("active", p.tablet.active).put("installed", p.tablet.installed))
                     .put(
                         "queue",
                         JSONObject()
@@ -560,7 +562,7 @@ object WebApi {
 
     private val SETTINGS_KEYS = setOf(
         "preRollMs", "defaultTempoPct", "transpose", "velocityPct", "foldOutOfRange", "skipDrumChannel",
-        "webGuests", "webApproveFirst", "webHostName",
+        "webGuests", "webApproveFirst", "webHostName", "tabletVolume",
     )
 
     private const val MAX_HOST_NAME = 253

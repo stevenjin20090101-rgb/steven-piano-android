@@ -155,6 +155,8 @@ object DiagnosticsText {
         line("webPinSet", s.webPinSet)
         line("kioskEnabled", s.kioskEnabled)
         line("kioskPinSet", s.kioskPinSet)
+        line("tabletSound", s.tabletSound)
+        line("tabletVolume", s.tabletVolume)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

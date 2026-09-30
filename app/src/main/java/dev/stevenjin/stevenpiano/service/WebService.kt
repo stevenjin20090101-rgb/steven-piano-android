@@ -251,6 +251,8 @@ class WebService : Service() {
             graph.studio.models.installed.map { },
             graph.studio.review.undecided.map { },
             graph.studio.availability.support.map { },
+            // The tablet's piano sound (v1.8 — M25): whether it sounds, and its SoundFont.
+            graph.tabletSound.state.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes)
         hub = created

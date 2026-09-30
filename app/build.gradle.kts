@@ -89,6 +89,12 @@ android {
             // ~/studio-work/exports) lets TranscriberTest run the real model on the JVM. Without it, skipped.
             val studioModels = providers.gradleProperty("studioModels")
             if (studioModels.isPresent) test.systemProperty("stevenpiano.studio.models", studioModels.get())
+            // `-PpianoSound=<upright-piano-kw-v1.sf2>` (v1.8 — M25) has TabletSoundRenderTest play Clair de lune through the
+            // tablet's sampler into a WAV (`-PpianoRender=<file.wav>`, else app/build/tablet-sound/); without it, skipped.
+            for ((property, key) in listOf("pianoSound" to "stevenpiano.pianoSound", "pianoRender" to "stevenpiano.pianoRender", "pianoRenderMidi" to "stevenpiano.pianoRenderMidi")) {
+                val value = providers.gradleProperty(property)
+                if (value.isPresent) test.systemProperty(key, value.get())
+            }
         }
     }
 

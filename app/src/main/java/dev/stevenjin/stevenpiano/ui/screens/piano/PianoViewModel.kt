@@ -19,6 +19,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.audio.TabletSoundMode
+import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
@@ -125,6 +127,19 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
         runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         graph.studio.transcribe(AudioSource.Document(uri))
     }
+
+    /** The tablet's piano sound (v1.8 — M25): its mode and volume as set, the piano's link, the SoundFont and its download. */
+    val tabletSound: StateFlow<TabletSoundState> = graph.tabletSound.state
+
+    fun setTabletSound(mode: TabletSoundMode) = edit { setTabletSound(mode) }
+
+    fun setTabletVolume(pct: Int) = edit { setTabletVolume(pct) }
+
+    fun downloadTabletSound() = graph.tabletSound.download()
+
+    fun cancelTabletSound() = graph.tabletSound.cancelDownload()
+
+    fun removeTabletSound() = graph.tabletSound.remove()
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 

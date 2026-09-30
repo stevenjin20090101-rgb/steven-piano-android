@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Build
 import android.os.PowerManager
 import android.os.Process
@@ -21,8 +22,12 @@ import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
 import dev.stevenjin.stevenpiano.admin.KioskMode
 import dev.stevenjin.stevenpiano.admin.OwnerRelease
+import dev.stevenjin.stevenpiano.audio.AudioOut
+import dev.stevenjin.stevenpiano.audio.PianoVoice
+import dev.stevenjin.stevenpiano.audio.TabletSound
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
+import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.channels.Channel
@@ -57,6 +62,7 @@ import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
@@ -70,6 +76,7 @@ import dev.stevenjin.stevenpiano.studio.AppStudioLibrary
 import dev.stevenjin.stevenpiano.studio.AudioDecoder
 import dev.stevenjin.stevenpiano.studio.AudioSource
 import dev.stevenjin.stevenpiano.studio.LibrarySeeds
+import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.studio.ModelInstaller
 import dev.stevenjin.stevenpiano.studio.ModelStore
 import dev.stevenjin.stevenpiano.studio.ReviewPlayer
@@ -188,8 +195,42 @@ class AppGraph(private val app: Application) {
     /** The link if something has made it already, else null: the crash handler's view, which must never make one. */
     fun pianoLinkIfMade(): PianoLink? = if (link.isInitialized()) link.value else null
 
-    /** The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23). */
-    val player: Player by lazy { Player(pianoLink, library, appScope, trail = LinkLog::warn) }
+    /**
+     * The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23), and
+     * what it sends the piano goes to the tablet's piano sound too (v1.8 — M25).
+     */
+    val player: Player by lazy { Player(pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink) }
+
+    /**
+     * The tablet's piano sound (v1.8 — M25): the Upright Piano KW SoundFont (downloaded on demand from the
+     * release `models` through Studio's verified path into `filesDir/models/`, as the models are), the voice
+     * that plays it at the device's own output rate, and when it sounds (Piano › Playback › TABLET SOUND).
+     */
+    val tabletSound: TabletSound by lazy {
+        val source = ModelsOverride.source() ?: UpdateSource.models
+        val server = HttpUpdateServer(source, log = debugLog(SOUND_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
+        val store = ModelStore(File(app.filesDir, MODELS_DIR), listOf(ModelCatalogue.pianoSound))
+        TabletSound(
+            scope = appScope,
+            store = store,
+            installer = ModelInstaller(source, server, store, VerifiedDownloader(server)),
+            online = network::isOnline,
+            voice = PianoVoice(AudioOut.nativeRate(app.getSystemService(AudioManager::class.java))),
+            log = { Log.i(SOUND_TAG, it) },
+            poke = { soundOut.poke() },
+        )
+    }
+
+    /** The tablet's speaker for the piano sound: its own thread, opened only while something sounds or a piece plays. */
+    private val soundOut: AudioOut by lazy {
+        AudioOut(app, tabletSound.voice, keepOpen = { tabletSound.keepOpen }, onFocusLost = ::tabletSoundFocusLost, log = { Log.i(SOUND_TAG, it) })
+    }
+
+    /** Another app took the sound (a call, a video): the tablet's piano has gone quiet; the piece pauses, and Play resumes it. */
+    private fun tabletSoundFocusLost() {
+        tabletSound.focusLost()
+        if (player.state.value.status == PlaybackStatus.Playing) player.pause()
+    }
 
     /** The piano's own settings over its console, read on every connection. */
     val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
@@ -516,6 +557,16 @@ class AppGraph(private val app: Application) {
                 applied = s
             }
         }
+        // The tablet's piano sound (v1.8 — M25) follows its mode, its volume and the piano's link, and holds
+        // its output open while a piece plays.
+        soundOut.start()
+        tabletSound.start()
+        appScope.launch {
+            combine(settingsRepository.settings, pianoLink.state) { s, link -> Triple(s.tabletSound, s.tabletVolume, link is LinkState.Connected) }
+                .distinctUntilChanged()
+                .collect { (mode, volume, connected) -> tabletSound.follow(mode, volume, connected) }
+        }
+        appScope.launch { player.state.map { it.status == PlaybackStatus.Playing }.distinctUntilChanged().collect(tabletSound::playing) }
         channelPools.summaries   // the channels' pools are worked out from the start, for the Library's first look
         channelPlayer.start()
         web.start()
@@ -604,6 +655,7 @@ class AppGraph(private val app: Application) {
         const val UPDATES_TAG = "Updates"
         const val FIRMWARE_TAG = "Firmware"
         const val STUDIO_TAG = "Studio"
+        const val SOUND_TAG = "TabletSound"
         const val MODELS_DIR = "models"
         const val STUDIO_WAKE_MS = 30 * 60_000L
         const val UPDATES_DIR = "updates"

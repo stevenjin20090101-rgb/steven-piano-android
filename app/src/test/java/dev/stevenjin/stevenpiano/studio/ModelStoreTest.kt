@@ -123,4 +123,19 @@ class ModelStoreTest {
         assertEquals(listOf("small-v1.onnx"), dir.list()!!.toList())
         assertEquals(setOf("small"), store.installed.value)
     }
+
+    @Test
+    fun `a sweep leaves the piano sound, which shares the folder, and the sound's store leaves Studio's models`() {
+        dir.mkdirs()
+        val sound = File(dir, ModelCatalogue.pianoSound.file).apply { writeText("sf2") }
+        val transcription = File(dir, ModelCatalogue.transcription.file).apply { writeText("onnx") }
+        val stray = File(dir, "old-v0.onnx").apply { writeText("old") }
+        ModelStore(dir).sweep()
+        assertTrue(sound.exists())
+        assertTrue(transcription.exists())
+        assertFalse(stray.exists())
+        ModelStore(dir, listOf(ModelCatalogue.pianoSound)).sweep()
+        assertTrue(sound.exists())
+        assertTrue(transcription.exists())
+    }
 }

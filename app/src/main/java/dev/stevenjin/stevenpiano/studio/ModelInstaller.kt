@@ -47,7 +47,8 @@ object StudioFailures {
  * Brings one of Studio's models onto the device: the models' list from [source] (`releases/models.json`,
  * checked against the pins, [ModelManifest]), then the model's file from the address the list gives,
  * downloaded to the pinned size and SHA-256 ([VerifiedDownloader]: at most
- * [UpdateSource.MAX_MODEL_BYTES], with the file's size and [FREE_MARGIN] free beside it, progress every
+ * [UpdateSource.MAX_MODEL_BYTES], a sound at most [UpdateSource.MAX_SOUND_BYTES] (v1.8 — M25), with the
+ * file's size and [FREE_MARGIN] free beside it, progress every
  * [PROGRESS_EVERY]) into [store]. Failures are [StudioFailure]s with the line to show.
  */
 class ModelInstaller(
@@ -75,7 +76,7 @@ class ModelInstaller(
             name = model.file,
             sizeBytes = model.sizeBytes,
             sha256 = model.sha256,
-            cap = UpdateSource.MAX_MODEL_BYTES,
+            cap = model.kind.maxBytes,
             freeMargin = FREE_MARGIN,
             progressEveryBytes = PROGRESS_EVERY,
         )

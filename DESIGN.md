@@ -1768,3 +1768,110 @@ Nothing on the screen moves while it comes or goes: it keeps clear of the displa
 system bars step aside while it rests and come back as it leaves), and holds its piece and its margins
 once it starts to go. **Reduced motion**: all three are cuts. The idle timer (a minute without a touch,
 the same touches) and the screen staying on are as before.
+
+---
+
+# v1.8 — M25: piano sound on the tablet
+
+Steven asked (2026-09-30): "add piano noise when playing, with volume control; don't make it sound so
+synthesised." The tablet gets a piano voice of its own: **recordings of a real upright**, note by note,
+never a synthesiser, playing what the app plays, when the piano isn't there to (or, if Steven chooses,
+beside it). Everything above still holds except where this section says otherwise: v1.1's "No sound from
+the phone" on the Keys screen gives way to the choice below.
+
+## The sound
+
+- A Kawai upright recorded in a living room, key by key at two strengths: FreePats' **Upright Piano KW**
+  (2022-02-21), published under CC0. It is the app's one sound, a 57 MB download (the models' way: from
+  the app's own GitHub release, its SHA-256 checked against the one built into the app), kept until
+  Remove. Nothing about it is generated: each note is the recording of that key (or its neighbour, moved
+  by a semitone or two), fading as the real string fades, damped when the key is let go (a little over
+  half a second), held by the sustain pedal as the piano holds it.
+- The tablet plays exactly what the piano is sent, at the same moments: pieces, channels, schedules, the
+  Keys tab and Studio's Listen, after the pause before each piece, folded into C1–B7, at the Velocity the
+  person set; pause, stop and seek silence it as they silence the piano.
+- **Loudness.** Soft pieces are soft and loud ones loud, as on the piano; **Volume** 60 % at first sits a
+  quiet piece (Clair de lune) well below a loud one, and 100 % brings the quiet ones up to about the level
+  of other media. At the top the loudest chords are turned down smoothly rather than clipped. The tablet's
+  own media volume governs it too, as any music app.
+
+## When it sounds
+
+**Piano sound on the tablet**, three chips:
+
+- **Off**: never.
+- **When the piano isn't connected** (at first): the tablet plays while the piano's link is anything but
+  connected, so it never doubles the real piano out of step. The piano connecting mid-piece silences the
+  tablet at once (within a note; measured on the emulator: 3 ms after the connection, before the piece's
+  next note), and the piece goes on on the piano.
+- **Always**: the tablet plays beside the piano too (Steven's choice). The page says what that costs:
+  "It may sound slightly early or late compared with the piano." (the tablet's own delay, some 20–40 ms,
+  and the piano's are not the same).
+
+Another app taking the sound (a call, a video) pauses what plays, as the piano's drop does; Play resumes
+it. A notification lowers the tablet for its moment, as Android lowers any music.
+
+## Piano › Playback › TABLET SOUND
+
+After the page's rows, a section under the eyebrow **TABLET SOUND** (the page's first section keeps its
+hairline alone):
+
+- **Piano sound on the tablet**, the three chips as the app's choice rows draw them (the chosen one with its
+  check), and under them, in the eyebrow's size, sentence case, secondary, what the choice does: "The tablet
+  stays silent. Pieces play on the piano alone." · "The tablet plays pieces and the Keys tab itself while the
+  piano isn't connected." · "The tablet plays along with the piano. It may sound slightly early or late
+  compared with the piano."
+- **Volume**, the app's hairline slider with "%" beneath the label and the value beside it, "60%".
+- **The SoundFont's row**, as Studio's model rows: **Upright piano** in Body, then in the eyebrow's size,
+  sentence case: "57 MB · CC0 · FreePats · A Kawai upright, recorded note by note." with **Download**;
+  "Downloading · 12 of 57 MB" over the progress hairline with **Cancel**; "Installed · 57 MB · CC0" with
+  **Remove**; or why the download failed, in words ("Downloading the piano sound needs an internet
+  connection.", "Couldn't reach the download server.", "The download didn't match the piano sound; try
+  again.", "There isn't enough free space for the piano sound.", "The piano sound isn't offered right
+  now.") with Download again.
+
+The hub's Playback row keeps its value ("2 s pause · 100%").
+
+## The speaker (Now playing, and the tablet's now-playing panel)
+
+- At the end of Now playing's tempo row, after the stepper (in the panel, at the start of its foot row,
+  across from "● Sent to piano"): a **speaker** (a cone and two arcs, 48 dp target) in the content colour
+  while the tablet sounds, and in the tertiary grey while it doesn't (off, the piano connected, or no
+  SoundFont yet), as Shuffle and Repeat show off and on. TalkBack: "Tablet sound, volume 60%" / "Tablet
+  sound, off here, volume 60%".
+- A tap opens a **popover**, the app's standard one (the elevated tone, with a hairline edge so it holds
+  its shape over the score's panel in the dark; not glass): the eyebrow **TABLET SOUND**, what the sound is
+  doing in Body, secondary ("Playing on this tablet while the piano isn't connected.", "Playing on this
+  tablet with the piano.", "Silent while the piano is connected.", "The piano sound isn't on this tablet
+  yet.", "Off. Piano › Playback turns it on."), then **Volume** with its value and the hairline slider, which
+  is heard as it moves. While the sound waits for its download, the download's line and **Download** (or
+  the progress hairline) follow. The mode is not here: it is a setting.
+- **Now playing's note**: while the mode wants the tablet to sound and the SoundFont isn't there, one line
+  under the tempo row, in Body, secondary: "Hear it on this tablet: the piano sound is a 57 MB download."
+  with **Download**; then "Downloading the piano sound · 12 of 57 MB" with **Cancel** over the progress
+  hairline, or the failure's line with Download again. It goes once the sound is installed, or the mode no
+  longer wants it (the piano connected, Off).
+
+## The Keys tab
+
+Keys sound on the tablet while it plays the piano sound (the piano not connected, or Always), and the
+connection line says so: "Not connected. The tablet plays these keys." (otherwise, as before, "Not
+connected. The piano won't play these keys."). The same key rules as the piano's (a key held is not struck
+again, the 100 ms guard); every note sounds at least 50 ms, as a key tapped briefly still does.
+
+## The web panel
+
+Now playing gains, under the channel's volume, **Piano sound on the tablet** with "%" and the slider and
+its value (the same volume: moving either moves the other), and under it the tablet's line ("Playing on the
+tablet while the piano isn't connected.", "Silent while the piano is connected.", "The piano sound isn't on
+the tablet yet: download it there, in Piano › Playback."). Hidden while the mode is Off. The mode itself,
+and the download, stay on the tablet.
+
+## Kiosk mode
+
+The volume is free, like everything on Now playing: the speaker's popover never asks for the kiosk PIN. The
+mode and the SoundFont are settings: the Playback page is locked as every settings page is.
+
+## About
+
+A line after Studio's models: "Piano sound: Upright Piano KW, FreePats (CC0)".

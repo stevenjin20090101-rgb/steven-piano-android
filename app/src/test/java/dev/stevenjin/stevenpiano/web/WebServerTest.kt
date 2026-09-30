@@ -734,12 +734,14 @@ class WebServerTest {
         fun put(json: String) = http.api("PUT", "/api/settings", json, session = token).status
         assertEquals(204, put("""{"webGuests":true,"preRollMs":1500}"""))
         assertEquals(204, put("""{"webHostName":"Piano-Tablet"}"""))
-        for (bad in listOf("""{"webEnabled":true}""", """{"webOnWifi":true}""", """{"webPinHash":"x"}""", "{}", """{"preRollMs":9000}""", """{"webHostName":"100.101.2.3"}""", """{"webHostName":"piano tablet"}""", """{"webGuests":"yes"}""")) {
+        assertEquals(204, put("""{"tabletVolume":45}"""))
+        for (bad in listOf("""{"tabletVolume":-1}""", """{"tabletSound":"off"}""", """{"webEnabled":true}""", """{"webOnWifi":true}""", """{"webPinHash":"x"}""", "{}", """{"preRollMs":9000}""", """{"webHostName":"100.101.2.3"}""", """{"webHostName":"piano tablet"}""", """{"webGuests":"yes"}""")) {
             assertEquals(bad, 400, put(bad))
         }
-        assertEquals(2, backend.calls.size)
+        assertEquals(3, backend.calls.size)
         assertTrue(backend.calls[0], "webGuests=true" in backend.calls[0] && "preRollMs=1500" in backend.calls[0])
         assertTrue(backend.calls[1], "webHostName=piano-tablet" in backend.calls[1])
+        assertTrue(backend.calls[2], "tabletVolume=45" in backend.calls[2])
     }
 
     @Test
