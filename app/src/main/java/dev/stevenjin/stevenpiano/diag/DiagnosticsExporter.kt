@@ -161,6 +161,8 @@ object DiagnosticsText {
         line("cloudEnabled", s.cloudEnabled)
         line("cloudHost", s.cloudHost)
         line("cloudEnrolled", s.cloudEnrolled)
+        // Steven's library (v1.10 — M27): the version of the pack loaded, 0: none.
+        line("libraryPackVersion", s.libraryPackVersion)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

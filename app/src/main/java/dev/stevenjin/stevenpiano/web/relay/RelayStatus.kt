@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.web.relay
 
+import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.web.WebChannel
 import dev.stevenjin.stevenpiano.web.WebState
 import org.json.JSONArray
@@ -21,13 +22,25 @@ import java.util.Locale
  * `fw`), the piano link's state, the player (playing, paused or stopped; the piece's title and
  * composer; where it is and how long it lasts; the channel), whether guests may request and wait for
  * approval, whether the panel is on and where on the tablet's own networks, the library's size and
- * the library pack's version (null until M27 brings the pack), and the channels' keys and names for
+ * the version of Steven's library pack loaded (v1.10 — M27; 0: none yet), and the channels' keys and names for
  * the console's list. Nothing that names the device: no Bluetooth address, no piano name, no serial,
  * no Android id. Texts are cut to [MAX_TEXT] characters.
  */
 object RelayStatus {
     const val MAX_TEXT = 200
     const val MAX_CHANNELS = 32
+
+    /** [report] as the web service sends it: whether the panel is on and the library pack loaded, from [settings]. */
+    fun report(
+        appVersion: String,
+        appCode: Int,
+        state: WebState,
+        settings: PianoSettings,
+        panelHost: String?,
+        libraryPieces: Int?,
+        channels: List<WebChannel>,
+        at: Long,
+    ): JSONObject = report(appVersion, appCode, state, settings.webEnabled, panelHost, libraryPieces, settings.libraryPackVersion, channels, at)
 
     fun report(
         appVersion: String,

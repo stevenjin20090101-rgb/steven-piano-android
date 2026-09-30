@@ -5655,7 +5655,8 @@ frames:
   `secret.ack`.
 - **The status** (`RelayStatus`): `app {version, code}`, `firmware` (the piano's report's `fw`), `link` (the
   state's name), `player {status, title, composer, positionMs, durationMs, channel {key, name}}`, `guests
-  {open, approveFirst}`, `panel {web, host}`, `library {pieces, pack}` (`pack` null until M27), `channels`
+  {open, approveFirst}`, `panel {web, host}`, `library {pieces, pack}` (`pack` null until M27; from its merge
+  the version loaded, 0 for none), `channels`
   (at most 32 `{key, name}`: the console lists them), `at`; texts cut to 200 characters. On hello, every
   30 s, and at most 2 s after a change (the changes conflated, then 2 s for more to join them).
 
@@ -5717,7 +5718,8 @@ frames:
   client again for it.
 - `RelayCommands`: the allow-list `transport {action}`, `play {pieceId}`, `playChannel {key}`,
   `stopChannel`, `guests {open?, approveFirst?}`, `library.load` (through a `libraryLoad` the library pack
-  will pass in M27; until then "Loading Steven's library isn't available on this tablet yet."), `status` (a
+  will pass in M27; until then "Loading Steven's library isn't available on this tablet yet."; from M27's
+  merge `RelayCommands.libraryLoad`, v1.10 — M27 › *The merge*), `status` (a
   line of what plays); exactly those arguments, of their types, refused otherwise with the reason (the relay
   checks them first too); acted on through `WebBackend` as the panel's own routes act; a trail line for
   each, its name and outcome only.

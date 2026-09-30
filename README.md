@@ -729,9 +729,6 @@ phones then cannot reach the request page, and only Tailscale works.
 
 ## Cloud
 
-**From anywhere without Tailscale**, over HTTPS: Steven Piano Cloud, a relay and a console on your own
-Cloudflare account; see [`cloud/README.md`](cloud/README.md).
-
 From version 1.10 the panel can also be reached from anywhere, over HTTPS, without Tailscale, through
 **Steven Piano Cloud**: a small relay and a console that run on **your own Cloudflare account** (free
 plan). The tablet keeps one connection out to the relay; a browser opens
@@ -756,8 +753,9 @@ adds "· Cloud" while connected. If the tablet loses its network, the line says 
 next try; it reconnects by itself. A panel already open says "The piano is offline" at the top until the
 tablet is back; a page opened meanwhile is the relay's own offline page.
 
-**From the console** you can see each piano (online, what plays, versions), pause or skip, play a piece or
-a channel, open or close guests' requests, and **Rotate secret** (the tablet takes its new key by itself),
+**From the console** you can see each piano (online, what plays, versions, Steven's library's version), pause
+or skip, play a piece or a channel, open or close guests' requests, **Load Steven's library** (see *Steven's
+library*), and **Rotate secret** (the tablet takes its new key by itself),
 **Revoke** (the tablet shows "Revoked in the console. Enrol again." and stops trying) or **Forget** a
 piano ("Removed from the console. Enrol again."). On the tablet, **Forget this cloud** turns remote access
 off and deletes the tablet's key; remove its row in the console too.
@@ -1217,7 +1215,11 @@ The full audit, every finding and what was done about it, is in
   firmware's, `stevenjin20090101-rgb/Steven-Jin-Player-Piano`, only) and
   `objects.githubusercontent.com` / `release-assets.githubusercontent.com` (where
   GitHub hands the file over), carrying nothing but the app's User-Agent and, as with
-  any connection, the device's IP address. Studio's runtime (ONNX Runtime 1.28.0) sends
+  any connection, the device's IP address. With *Remote access over the internet* on (off
+  at first; see *Cloud*), one connection more, over HTTPS to your own relay: what the panel
+  shows and is sent, and every 30 seconds the tablet's status (versions, what plays, the
+  library's size and pack, the channels' names), never a device identifier (*What the relay
+  sees*). Studio's runtime (ONNX Runtime 1.28.0) sends
   nothing: during a transcription and a composition the app's UID sent no packet at all
   (the audit's count, `docs/SECURITY_AUDIT.md`). No analytics, no accounts, and no crash
   report goes anywhere by itself: diagnostics leave only when you share them. Nothing
@@ -1231,8 +1233,10 @@ The full audit, every finding and what was done about it, is in
   address. The panel's PIN is kept only as a salted PBKDF2 hash; every change needs the
   session and a header no other site can send; no other site's page can use the panel;
   uploads and requests are capped before they are read. The panel is plain HTTP: over
-  Tailscale that is encrypted by Tailscale, over Wi-Fi it is not. The details, and what
-  is left, are in the audit's 1.5.1 section.
+  Tailscale that is encrypted by Tailscale, over Wi-Fi it is not. With *Remote access over
+  the internet* on, the same panel also comes in through your relay, over HTTPS, behind the
+  same PIN, which the tablet checks, never the relay. The details, and what is left, are in
+  the audit's 1.5.1 section and its 1.10 notes.
 - **Updates** install only a file whose SHA-256 matches the manifest and that Android
   accepts as signed with the release key (see *Updates*); on the school tablet the
   device owner role is used for silent updates and, once it is turned on, kiosk mode,

@@ -16,6 +16,8 @@ import dev.stevenjin.stevenpiano.midi.SmfBuilder
 import dev.stevenjin.stevenpiano.update.FakeUpdateServer
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
+import dev.stevenjin.stevenpiano.web.relay.CommandResult
+import dev.stevenjin.stevenpiano.web.relay.RelayCommands
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -401,6 +403,32 @@ class LibraryPackTest {
         val refused = pack { throw IllegalStateException("not allowed") }
         assertFalse(refused.load())
         assertEquals(PackState.Failed(LibraryFailures.NOT_STARTED), refused.state.value)
+    }
+
+    @Test
+    fun `the console's library load starts the + sheet's load, and says why when it can't`() = runTest {
+        publish(1, v1Pieces)
+        val pack = pack()
+        // As the web service answers the console's library.load (v1.10: M26's command, this pack).
+        fun console() = RelayCommands.libraryLoad(online.value, { pack.state.value }) { pack.load(everything = false) }
+        online.value = false
+        assertEquals(CommandResult(false, LibraryFailures.OFFLINE), console())
+        assertTrue("nothing starts offline", starts.isEmpty())
+        assertEquals("and no failure is left on the tablet's screen", PackState.Idle, pack.state.value)
+        online.value = true
+        assertEquals(CommandResult(true, RelayCommands.LIBRARY_STARTED), console())
+        assertEquals("the + sheet's load, not everything", listOf(false), starts)
+        assertEquals(CommandResult(false, RelayCommands.LIBRARY_BUSY), console())
+        online.value = false
+        assertEquals("a load under way is said first", CommandResult(false, RelayCommands.LIBRARY_BUSY), console())
+        assertEquals(listOf(false), starts)
+        online.value = true
+        pack.run(everything = false)
+        assertEquals(PackState.Done(5), pack.state.value)
+        assertEquals(1, loaded.value)
+
+        val refused = pack { throw IllegalStateException("not allowed") }
+        assertEquals(CommandResult(false, LibraryFailures.NOT_STARTED), RelayCommands.libraryLoad(true, { refused.state.value }) { refused.load() })
     }
 
     @Test

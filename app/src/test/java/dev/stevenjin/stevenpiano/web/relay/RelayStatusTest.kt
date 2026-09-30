@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.web.relay
 
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.web.GuestSettings
 import dev.stevenjin.stevenpiano.web.WebChannel
 import dev.stevenjin.stevenpiano.web.WebChannelPlaying
@@ -61,6 +62,19 @@ class RelayStatusTest {
         val text = status.toString()
         for (identifier in listOf("C8:2E:18", "Steven Piano", "mac")) assertFalse("$identifier never goes to the relay", identifier in text)
         assertTrue(RelayProtocol.utf8Length(RelayMessage.Status(status).encode()) < RelayProtocol.MAX_TEXT)
+    }
+
+    @Test
+    fun `the web service's report reads the panel's switch and the library pack loaded from the settings`() {
+        val state = WebState(piano = WebPianoState("unknown"))
+        fun sent(settings: PianoSettings) = RelayStatus.report("1.10", 18, state, settings, panelHost = null, libraryPieces = 1_726, channels = emptyList(), at = 5)
+        val loaded = sent(PianoSettings(webEnabled = true, libraryPackVersion = 1))
+        assertEquals("Steven's library, version 1 (v1.10 — M27)", 1, loaded.getJSONObject("library").getInt("pack"))
+        assertTrue(loaded.getJSONObject("panel").getBoolean("web"))
+        val fresh = sent(PianoSettings())
+        assertEquals("none loaded yet: 0, which the console leaves out", 0, fresh.getJSONObject("library").getInt("pack"))
+        assertFalse(fresh.getJSONObject("panel").getBoolean("web"))
+        assertEquals(1_726, fresh.getJSONObject("library").getInt("pieces"))
     }
 
     @Test

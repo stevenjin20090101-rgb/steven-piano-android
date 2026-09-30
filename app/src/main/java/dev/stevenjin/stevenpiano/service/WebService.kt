@@ -246,7 +246,15 @@ class WebService : Service() {
             },
             server = server,
             hub = sockets,
-            commands = RelayCommands(panel.backend, libraryLoad = null, trail = LinkLog::warn),
+            // The console's "Load Steven's library" (v1.10: M27's pack): the + sheet's load, answered at once.
+            commands = RelayCommands(
+                panel.backend,
+                libraryLoad = {
+                    val pack = graph.libraryPack
+                    RelayCommands.libraryLoad(graph.network.online.value, { pack.state.value }) { pack.load(everything = false) }
+                },
+                trail = LinkLog::warn,
+            ),
             status = cloudStatus(),
             secrets = { secret -> withContext(Dispatchers.IO) { panel.cloudSecrets.keep(secret) } },
             scope = CoroutineScope(scope.coroutineContext + Dispatchers.IO),
@@ -256,7 +264,7 @@ class WebService : Service() {
         )
     }
 
-    /** The tablet's status for the relay: what the panel shows, the library's size, the channels ([RelayStatus]). */
+    /** The tablet's status for the relay: what the panel shows, the library's size and pack, the channels ([RelayStatus]). */
     private fun cloudStatus(): StatusSource = object : StatusSource {
         override suspend fun report(): JSONObject {
             val panel = graph.web
@@ -265,10 +273,9 @@ class WebService : Service() {
                 appVersion = BuildConfig.VERSION_NAME,
                 appCode = BuildConfig.VERSION_CODE,
                 state = panel.backend.state(),
-                webEnabled = settings.webEnabled,
+                settings = settings,
                 panelHost = panel.status.value.panelHost,
                 libraryPieces = runCatching { graph.library.count().first() }.getOrNull(),
-                pack = null,
                 channels = panel.backend.channels(),
                 at = System.currentTimeMillis(),
             )
@@ -279,7 +286,7 @@ class WebService : Service() {
             graph.player.state.map { it.channel },
             graph.pianoLink.state.map { },
             graph.pianoSettings.state.map { },
-            graph.settings.map { Triple(it.webGuests, it.webApproveFirst, it.webEnabled) },
+            graph.settings.map { listOf(it.webGuests, it.webApproveFirst, it.webEnabled, it.libraryPackVersion) },   // a pack loaded: the console's line at once
             graph.web.status.map { it.panelHost },
         ).map { }
     }

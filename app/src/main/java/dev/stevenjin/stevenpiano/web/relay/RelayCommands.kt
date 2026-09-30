@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.web.relay
 
+import dev.stevenjin.stevenpiano.library.LibraryFailures
+import dev.stevenjin.stevenpiano.library.PackState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.web.ChannelStart
 import dev.stevenjin.stevenpiano.web.SettingsChange
@@ -30,8 +32,8 @@ fun interface CommandHandler {
  * on through the web panel's [backend] as the panel's own routes act: [TRANSPORT] (`action`, one of
  * the transport's buttons), [PLAY] (`pieceId`), [PLAY_CHANNEL] (`key`), [STOP_CHANNEL], [GUESTS]
  * (`open`, `approveFirst`: Guests can request and Approve requests first), [LIBRARY_LOAD] (Steven's
- * library, through [libraryLoad] once the library pack exists on this tablet, else "not available"),
- * and [STATUS] (a line of what plays; the relay client then reports its status at once). Every
+ * library, through [libraryLoad]: the web service passes the library pack's load, [Companion.libraryLoad];
+ * without one, "not available"), and [STATUS] (a line of what plays; the relay client then reports its status at once). Every
  * command, and how it went, is a line of the link's [trail] (`LinkLog`): its name and its outcome,
  * never a title.
  */
@@ -130,6 +132,26 @@ class RelayCommands(
         const val GUESTS = "guests"
         const val LIBRARY_LOAD = "library.load"
         const val STATUS = "status"
+
+        /** `library.load`'s answers: a load started, or one under way already. */
+        const val LIBRARY_STARTED = "Loading Steven's library."
+        const val LIBRARY_BUSY = "Steven's library is loading already."
+
+        /**
+         * The console's `library.load` on this tablet (v1.10: M26's command, M27's pack): the pack's [load]
+         * as the + sheet's Update calls it (`everything = false`: a newer pack's new pieces, pieces a teacher
+         * deleted staying deleted; on a tablet with none, the whole pack, without the licence sheet: the
+         * owner's command), answered at once. A load under way ([state] busy): [LIBRARY_BUSY], nothing new
+         * started; the tablet offline ([online] false): the library's own [LibraryFailures.OFFLINE], nothing
+         * started (and no failure left on the tablet's screen); a load that could not start: its line. What
+         * the load does then follows in the pack's state, and the version it brings in the status report.
+         */
+        fun libraryLoad(online: Boolean, state: () -> PackState, load: () -> Boolean): CommandResult = when {
+            state().busy -> CommandResult(false, LIBRARY_BUSY)
+            !online -> CommandResult(false, LibraryFailures.OFFLINE)
+            load() -> CommandResult(true, LIBRARY_STARTED)
+            else -> CommandResult(false, (state() as? PackState.Failed)?.line ?: LIBRARY_BUSY)
+        }
 
         /** The commands the console may send, and no others. */
         val NAMES: Set<String> = setOf(TRANSPORT, PLAY, PLAY_CHANNEL, STOP_CHANNEL, GUESTS, LIBRARY_LOAD, STATUS)
