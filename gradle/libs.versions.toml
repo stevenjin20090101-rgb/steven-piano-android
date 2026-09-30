@@ -41,6 +41,10 @@ eddsa = "0.3.0"
 # at any version but the pin in app/build.gradle.kts (onnxRuntimePinned): changing this line alone fails the build
 # (BUILD_SPEC › v1.7 — M23; audit delta 2).
 onnxruntime = "1.28.0"
+# Steven Piano Cloud (v1.10 — M26): OkHttp's WebSocket client (Apache-2.0, with Okio) carries the tablet's one
+# outbound connection to the relay: hostname verification by default, pings. Only web/relay/ names it; the
+# updater and Wikipedia keep HttpURLConnection.
+okhttp = "4.12.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -73,6 +77,8 @@ nanohttpd-websocket = { module = "org.nanohttpd:nanohttpd-websocket", version.re
 qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcodeKotlin" }
 # EdDSA-Java (CC0): checks a firmware release's Ed25519 signature where the platform can't; only firmware/Ed25519.kt names it.
 eddsa = { module = "net.i2p.crypto:eddsa", version.ref = "eddsa" }
+# The relay's WebSocket client (Apache-2.0); only web/relay/ names it (v1.10 — M26).
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 # Studio's runtime (MIT): arm64-v8a's native library only (app/build.gradle.kts); only studio/ names it.
 onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
 # Unit tests only: the same runtime for the JVM (macOS and Linux), so TranscriberTest runs the real model where it is on disk.

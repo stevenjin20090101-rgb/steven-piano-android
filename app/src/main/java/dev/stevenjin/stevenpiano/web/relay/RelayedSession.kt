@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.web.relay
 
+import dev.stevenjin.stevenpiano.web.WebApi
+import dev.stevenjin.stevenpiano.web.securityHeaders
 import fi.iki.elonen.NanoHTTPD
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -149,6 +151,23 @@ class RelayedResponse(val status: Int, val headers: Map<String, String>, val bod
             headers["Content-Length"] = body.size.toString()
             return RelayedResponse(response.status.requestStatus, headers, body)
         }
+
+        /**
+         * An answer the relay client gives itself, before or without the server (503 busy past the
+         * requests in flight; 500 when the server failed): the panel's JSON error with the headers
+         * the server's own refusals carry, for the relay's [host] over [scheme].
+         */
+        fun refusal(status: Int, code: String, message: String, host: String, scheme: String): RelayedResponse {
+            val body = WebApi.error(code, message).toString().toByteArray(Charsets.UTF_8)
+            val headers = LinkedHashMap<String, String>()
+            headers["Content-Type"] = JSON
+            for ((name, value) in securityHeaders(host, scheme)) headers[name] = value
+            headers["Cache-Control"] = "no-store"
+            headers["Content-Length"] = body.size.toString()
+            return RelayedResponse(status, headers, body)
+        }
+
+        private const val JSON = "application/json; charset=utf-8"
 
         private fun readCapped(input: InputStream): ByteArray {
             val out = ByteArrayOutputStream()
