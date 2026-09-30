@@ -5061,8 +5061,9 @@ everything but pan becomes one region with a `partner`: the pair plays as one vo
 `NowPlayingScreen`: `TabletSoundSpeaker()` at the end of the tempo row and `TabletSoundDownloadNote` under
 it; `NowPlayingPanel`: `TabletSoundSpeaker()` at the start of its foot row. `TabletSoundButton`: an
 `IconButton` tinted `onSurface` when active and `LocalTertiary` otherwise; a `DropdownMenu` with a
-`LocalHairline` border, 300 dp wide, the eyebrow, the status, Volume and its value, `HairlineSlider`
-(full width), and the download while it waits. `AboutRow`: `TabletSoundCopy.CREDIT`. Kiosk: nothing asks
+`LocalHairline` border (from 1.9 `GlassPopover`, its content 268 dp inside the glass's 16 dp), 300 dp wide,
+the eyebrow, the status, Volume and its value, `HairlineSlider` (full width), and the download while it
+waits. `AboutRow`: `TabletSoundCopy.CREDIT`. Kiosk: nothing asks
 on Now playing; the Playback page is a locked page as before.
 
 ## Web
@@ -5152,7 +5153,8 @@ imports Android.
 - **The filter is ignored** (as the brief says): three soft-layer zones (keys 47–52 and 59–61, velocity
   0–80) set a 1.5–2.5 kHz low-pass, so those keys are brighter there than FreePats meant.
 - **The popover has a hairline edge**: the app's standard popover (no Liquid Glass pass in this tree), whose
-  shadow alone doesn't show over the score's panel in the dark.
+  shadow alone doesn't show over the score's panel in the dark. (At 1.9's merge it moved onto the glass
+  pass's `GlassPopover`, whose outline and specular line mark its edge: v1.9 › *The merge*.)
 - **The emulator's buffer is 45 ms**, two of its 1,088-frame bursts; about 20 ms wherever the device's burst
   is 10 ms or less.
 - **The web panel's volume shows only while the mode isn't Off**, and the mode stays on the tablet.

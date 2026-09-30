@@ -1846,7 +1846,8 @@ The hub's Playback row keeps its value ("2 s pause · 100%").
   SoundFont yet), as Shuffle and Repeat show off and on. TalkBack: "Tablet sound, volume 60%" / "Tablet
   sound, off here, volume 60%".
 - A tap opens a **popover**, the app's standard one (the elevated tone, with a hairline edge so it holds
-  its shape over the score's panel in the dark; not glass): the eyebrow **TABLET SOUND**, what the sound is
+  its shape over the score's panel in the dark; not glass; from v1.9 the menus' glass, **GlassPopover**,
+  below the speaker with its end at the speaker's end): the eyebrow **TABLET SOUND**, what the sound is
   doing in Body, secondary ("Playing on this tablet while the piano isn't connected.", "Playing on this
   tablet with the piano.", "Silent while the piano is connected.", "The piano sound isn't on this tablet
   yet.", "Off. Piano › Playback turns it on."), then **Volume** with its value and the hairline slider, which

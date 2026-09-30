@@ -9,7 +9,6 @@
 
 package dev.stevenjin.stevenpiano.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -45,7 +43,6 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
-import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import kotlin.math.roundToInt
@@ -58,8 +55,9 @@ import kotlin.math.roundToInt
  * The speaker: the content colour while the tablet sounds, the tertiary grey while it doesn't (off, the
  * piano connected, or no SoundFont yet), as Shuffle and Repeat show off and on. A tap opens the popover:
  * the TABLET SOUND eyebrow, what the sound is doing, the Volume slider with its value, and the download
- * when the sound waits for it. The app's standard popover (the elevated tone, a hairline edge), not glass. The volume is
- * never locked in kiosk mode; the mode is a setting, on the Playback page.
+ * when the sound waits for it, on the menus' glass ([GlassPopover], DESIGN.md › v1.9): below the speaker, ends
+ * aligned, above it where there is no room. The volume is never locked in kiosk mode; the mode is a setting,
+ * on the Playback page.
  */
 @Composable
 fun TabletSoundButton(
@@ -78,23 +76,19 @@ fun TabletSoundButton(
         ) {
             Icon(painterResource(R.drawable.ic_speaker), contentDescription = TabletSoundCopy.glyphDescription(state))
         }
-        // A hairline edge: over the score's panel (the same elevated tone) the menu's shadow alone doesn't show in the dark.
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, border = BorderStroke(Hairline, LocalHairline.current)) {
+        // The glass's own outline and specular line mark its edge over the score's panel, in either appearance.
+        GlassPopover(expanded = open, onDismissRequest = { open = false }) {
             TabletSoundPopover(state, onVolume, onDownload)
         }
     }
 }
 
-/** The popover's content: 300 dp wide, 16 dp in. */
+/** The popover's content, inside [GlassPopover]'s 16 dp: 300 dp wide with them, as before. */
 @Composable
 private fun TabletSoundPopover(state: TabletSoundState, onVolume: (Int) -> Unit, onDownload: () -> Unit) {
     // The slider shows the finger's value at once; the setting follows a moment later.
     var shown by remember(state.volume) { mutableIntStateOf(state.volume) }
-    Column(
-        Modifier
-            .width(POPOVER_WIDTH)
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-    ) {
+    Column(Modifier.width(POPOVER_CONTENT_WIDTH)) {
         Eyebrow(TabletSoundCopy.EYEBROW)
         Text(
             TabletSoundCopy.status(state),
@@ -218,4 +212,5 @@ fun SoundFontRow(state: TabletSoundState, onDownload: () -> Unit, onCancel: () -
     HairlineDivider(startInset = 16.dp)
 }
 
-private val POPOVER_WIDTH = 300.dp
+/** The popover's content: its 300 dp less the glass's 16 dp each side. */
+private val POPOVER_CONTENT_WIDTH = 268.dp
