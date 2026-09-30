@@ -94,6 +94,16 @@ https://huggingface.co/stanford-crfm/music-small-800k.
   keeps its own licence; the MIT licence of this project does not apply to
   it.
 
+Upright Piano KW (the tablet's piano sound; downloaded by the app on demand,
+never bundled): the SoundFont UprightPianoKW-20220221.sf2 by the FreePats
+project, a Kawai upright recorded by Gonzalo and Roberto (2022-02-21),
+https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html#UprightKW.
+  Dedicated to the public domain under Creative Commons CC0 1.0 Universal;
+  the legal code is in third_party/upright-piano-kw/LICENSE.txt and at
+  https://creativecommons.org/publicdomain/zero/1.0/. Published unmodified
+  as upright-piano-kw-v1.sf2 (third_party/upright-piano-kw/NOTICE.txt). It
+  keeps its own terms; the MIT licence of this project does not apply to it.
+
 Wikipedia text (fetched while the app runs, never bundled): composers'
 blurbs and pieces' notes are text from Wikipedia, the free encyclopedia,
 by its contributors:

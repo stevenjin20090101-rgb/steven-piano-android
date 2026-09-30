@@ -1122,3 +1122,59 @@ The full audit, every finding and what was done about it, is in
 MIT licensed with attribution preserved: see `LICENSE` and `AUTHORS`. Every
 source file is covered by an Ed25519-signed manifest; `python3
 provenance/verify.py` checks it (see `PROVENANCE.md`).
+
+## Piano sound on the tablet
+
+The tablet can play the pieces itself, with **recordings of a real piano**: FreePats'
+**Upright Piano KW**, a Kawai upright recorded key by key at two strengths, played back
+note by note by the app's own sampler (nothing is synthesised). It plays exactly what
+the piano would be sent: pieces, channels, schedules, the **Keys** tab, and Studio's
+Listen. (It comes with 1.8.)
+
+1. **Piano › Playback › TABLET SOUND › Upright piano › Download**, once: 57 MB from this
+   repository's GitHub release `models`, checked against the SHA-256 the app carries
+   before it is used (the same way as Studio's models). **Remove** frees the space. While
+   the tablet would play but has no sound yet, Now playing offers the same download in a
+   line under the tempo.
+2. **Piano sound on the tablet** chooses when it plays:
+   - **Off**: never.
+   - **When the piano isn't connected** (the default): only while the piano's Bluetooth
+     link isn't connected, so it never plays alongside the real piano. If the piano
+     connects in the middle of a piece, the tablet goes quiet at once and the piano
+     carries on.
+   - **Always**: alongside the piano too. It may sound slightly early or late compared
+     with the piano: the tablet's own delay (some 20–40 ms) and the piano's are not the
+     same.
+3. **Volume**: the speaker at the end of Now playing's tempo row (and at the foot of the
+   now-playing panel on a tablet) opens it; so does the Playback page, and the web
+   panel's Now playing has the same slider while the sound is on. The speaker is bright
+   while the tablet plays and grey while it doesn't. The tablet's media volume applies
+   on top, as for any music. In kiosk mode the volume stays free; the choice of when it
+   plays is a setting, behind the PIN.
+
+On the **Keys** tab the keys sound on the tablet while it plays the piano sound (the
+line under the keys says "Not connected. The tablet plays these keys.").
+
+When another app takes the sound (a call, a video), the piece pauses; **Play** resumes
+it. A notification only lowers the tablet for its moment.
+
+**The licence.** The Upright Piano KW is dedicated to the public domain under **CC0 1.0**
+by the FreePats project (https://freepats.zenvoid.org, version 2022-02-21); the app
+downloads it unmodified. It is credited all the same, in About, in `AUTHORS` and in
+`third_party/upright-piano-kw/`.
+
+**On the emulator and the Mac.** Point the download at a server on this Mac as for
+Studio: `adb shell setprop debug.stevenpiano.modelsurl
+http://10.0.2.2:8766/models.json` (a `models.json` with the sound's entry under
+`"sounds"` and its `url` on that server), then start the app. The emulator has no
+speaker to record, so the sound can be heard as a file instead:
+`./gradlew testDebugUnitTest --tests '*TabletSoundRenderTest'
+-PpianoSound=<upright-piano-kw-v1.sf2> -PpianoRender=<out.wav>` plays Clair de lune
+(`../midi/piano-midi.de/debussy/deb_clai.mid`, or `-PpianoRenderMidi=<file.mid>`)
+through the app's own engine and sampler into a 48 kHz WAV.
+
+**Publishing the sound** (done once, for 1.8): `python tools/studio/publish_models.py
+--work <dir> --models upright-piano-kw --upload` fetches the archive from FreePats,
+checks its hash and the SoundFont's, writes the entry into `releases/models.json`
+(under `"sounds"`, which 1.7 never reads, so older tablets keep working) and uploads the
+file to the release `models`.
