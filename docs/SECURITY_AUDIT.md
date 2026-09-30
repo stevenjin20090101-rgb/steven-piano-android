@@ -1369,3 +1369,121 @@ Transcripts are kept with the run's evidence (`…/audit2/`); tests are JVM unit
 Nothing new beyond 1.7's release: make the repository public for the models to download, run README's
 Studio checklist on the school tablet, and keep the audit's two new lines in mind ("Studio has 8 jobs to
 do already…" on the panel; "More notes were heard in this recording than a piece can hold.").
+
+
+## 1.10 — the cloud (pre-audit notes)
+
+2026-09-30, written by the coding run (M26, the tablet's side of Steven Piano Cloud) for the auditor
+(R3, delta 3), who verifies it; not an audit. 1.10 adds the app's first **long-lived outbound connection
+that carries requests in**: with *Remote access over the internet* on (off by default, and only with the
+panel's PIN set and the tablet enrolled), the tablet keeps one WebSocket to the owner's relay (a
+Cloudflare Worker on Steven's account, `cloud/`), and the relay carries browsers' requests and sockets
+for `https://<relay>/p/<piano>/…` down it to the same web server the listeners use. BUILD_SPEC.md ›
+v1.10 — M26 has the protocol and every cap; `relay-checks.txt` (the run's evidence) is the transcript
+over the relay under `wrangler dev`. Nothing of 1.5.1's audit is weakened: the listeners, their
+addresses, `allowedHosts`, the network security config and the permissions are unchanged (the app had
+`INTERNET` already).
+
+1. **One outbound host, TLS only.** The relay's WebSocket is `wss://<host>/tablet` for the host the person
+   typed (`CloudAddress.host`: a DNS name or IPv4, an optional port, nothing else) and no other; OkHttp
+   verifies the certificate and the hostname as the platform does (no pinning); no redirect is followed,
+   OkHttp's own retries are off; the 101 must echo the subprotocol (else 1002); the hello must name this
+   tablet's piano, a host of the relay's form, and `/p/<id>` (else 1008/dropped). Plain `ws://` exists only
+   through `CloudOverride`, a debug-build, emulator-only property, and the debug network security config
+   allows cleartext to 10.0.2.2 alone. `RelayClientTest`, `RelayProtocolTest`, `EnrolmentTest`.
+2. **The bearer secret.** 32 random bytes from the relay, sent as `Authorization: Bearer <id>.<secret>` to
+   that host only. Kept sealed: AES-256-GCM under an AndroidKeyStore key (`steven-piano-cloud`, never
+   exported, randomized encryption), a fresh IV each seal, the tag checked; DataStore holds `v1:` + base64.
+   Read on its own (`SettingsRepository.cloudSecret`), never in `PianoSettings`, `settings.txt`, a log line
+   or a `toString` (`RelayConfig`, `EnrolResult.Enrolled`, `RelayMessage.Secret` print "kept"). A key that
+   vanished, or a text that was changed, opens to nothing: "not enrolled". Rotation keeps the new secret
+   only once it seals and opens again, then acknowledges (`secret.ack`); the relay accepts both hashes for
+   10 minutes meanwhile. *Forget this cloud* deletes the text and the key. `allowBackup="false"` as before.
+   `SealedSecretTest`, `SettingsRepositoryTest`, `DiagnosticsExporterTest`; on the emulator: enrol, rotate
+   (committed), reconnect with the new secret.
+3. **Enrolment.** One `POST https://<typed host>/api/enrol` of `{"code": "XXXX-XXXX"}` alone (no name, no
+   model), after the code is read into the relay's 32-letter form; `HttpPost`'s allow-list: `https`, the host
+   and port exactly as typed, the path `/api/enrol`, no user info, query, fragment or backslash; no redirect
+   followed; at most 16 KB of answer; `pianoId` and `secret` must be of the relay's forms (depth ≤ 2). The
+   id and the sealed secret are written in one DataStore edit. `EnrolmentTest`.
+4. **Relayed requests meet the audited route table** (`WebServer.serveRelayed` → `answer`), with the relay's
+   edge in place of the listener's: `Host` exactly the relay's host (the hello's), 403 otherwise; an
+   `Origin` of `https://<host>` for every change and for the login (403 otherwise; the tablet's LAN origin
+   is refused too); `X-Steven-Piano: 1` for every change (403); the session for every read (401); cookies
+   `HttpOnly; SameSite=Strict; Path=/p/<id>/; Secure`, no `Domain`; the policy's `connect-src` names
+   `wss://<host>`; a method NanoHTTPD doesn't know 501, an address that doesn't decode 400 (as
+   `RequestHead` on a listener); a relayed upgrade request 404. `WebServerRelayTest` proves every route's
+   relayed status and headers equal the listener's over `RawHttp` (but the socket's scheme and the cookie's
+   path and `Secure`), and that no header a listener sends is lost on the relay. `relay-checks.txt` shows the
+   401/403 matrix through the real relay.
+5. **Only the forwarded headers reach the server**: `host`, `cookie`, `origin`, `content-type`,
+   `content-length`, `x-steven-piano`, `accept` (the relay sends no others; `RelayedSession` keeps no others,
+   so no `Upgrade`, no `Transfer-Encoding`, no `X-Forwarded-*` can be smuggled). The client address is the
+   relay's `CF-Connecting-IP`, used only for the login guard's and the guests' per-address counts, and only
+   when it looks like an address ("unknown" otherwise).
+6. **Guests over the relay** exist only while *Guests can request* is on: `/request`, `/request.js`,
+   `/poster` and `/api/public/*` answer 404 otherwise (on the listeners the page says requests are closed, as
+   before). The per-cookie and per-address limits apply as on the Wi-Fi. `WebServerRelayTest`.
+7. **Bodies.** The relay refuses a body without a length or chunked (411) and over 100 MB (413) at its
+   edge; on the tablet the route's own caps apply unchanged before a byte is read (JSON 64 KB; a MIDI file
+   8 MB, a zip 64 MB, a recording 200 MB, which the relay's 100 MB never lets through; one upload at a time).
+   A relayed body is a `BodyPipe` of the credit window (1 MB): the relay may never have more outstanding,
+   a chunk past it ends the body; credit goes back only as the server reads; a read waits at most 30 s;
+   `req.abort` ends it. `BodyPipeTest`, `RelayClientTest` (1 MB under a 128 KB window).
+8. **Concurrency.** At most 8 relayed requests at once (the relay's cap mirrored): past it 503 `busy` at
+   once; they run on 4 threads of their own (the listeners' pool untouched). At most 4 relayed browser
+   sockets (the relay's cap mirrored), apart from the listeners' 2. The OkHttp queue is kept under 1 MB
+   between an answer's chunks (OkHttp closes a socket past 16 MB). `RelayClientTest`.
+9. **Relayed sockets**: `ws.open` must name the relay's host, then `admitSocket` (a valid session, the
+   origin `https://<host>` exactly: 401/403 → `ws.refuse`); the tablet reads nothing a browser sends (the
+   relay drops it); a session that ends closes the socket at the hub's next ping (4000); the hub's messages
+   are fitted to one 64 KB frame (Up next gives up rows) or dropped. `WebSocketHubTest`, `RelayClientTest`,
+   and through the real relay: 1008 "Enter the PIN first." without a session.
+10. **Console commands are trusted because they arrive on the tablet's own authenticated connection** (the
+    console Worker, behind Cloudflare Access, is the only other holder of the room's binding). The tablet
+    checks them again all the same: `transport`, `play`, `playChannel`, `stopChannel`, `guests`,
+    `library.load`, `status` with exactly their arguments and types, anything else refused with its reason;
+    they act through `WebBackend` as the panel's routes do (the same range checks); each is a trail line of
+    its name and outcome, never a title. No command reaches the PIN, the kiosk, the firmware, Studio's
+    models or the settings beyond the two guest switches. `RelayCommandsTest`.
+11. **What the relay learns** (`RelayStatus`, every 30 s and ≤ 2 s after a change): the app's version and
+    build, the piano's firmware version, the link's state, what plays (title, composer, position, length,
+    channel), the guest switches, whether Web control is on and its address on the tablet's own networks,
+    the library's size, the channels' names. No device identifier: no Bluetooth address or name, no serial,
+    no Android id. `RelayStatusTest`. The relay also sees every relayed request's content, as an HTTPS
+    site's server does; it is the owner's own Worker.
+12. **The relay's messages are read strictly** (`RelayProtocol.decode`): 64 KB in UTF-8 bytes, six deep
+    before `org.json` parses them, ids u32, known fields of their types and lengths, the rest dropped;
+    frames of at most 64 KB. A relay that misbehaves can waste the tablet's four threads for 30 s at a time
+    and send commands from the allow-list; nothing else.
+13. **Logs**: the trail (`LinkLog`, kept in release builds) gets "Cloud: enrolled with <host>", "connected
+    to <host>", the connection's ends and waits, "revoked", "removed from the console", "a new secret is
+    kept", and the console's commands by name and outcome. Never a secret, a cookie, a PIN, a path or a body.
+14. **The service** runs only while (Web control or remote access) is on and a PIN is set, as a
+    foreground service with its notification ("· Cloud" while connected); its special-use subtype now reads
+    "Web control panel for the piano: on the person's own network, and through the owner's own relay". No
+    new permission.
+15. **The dependency**: OkHttp 4.12.0 (Apache-2.0), pinned, named only under `web/relay/` (grep), with the
+    Okio the app already had; `HttpFetch` and the enrolment stay on `HttpURLConnection`.
+16. **Residuals.**
+    - **The login guard is shared** by the listeners and the relay: the internet can now reach W1's lever
+      (wrong PINs closing the gate for everyone for up to ten minutes), behind the relay's own 10 logins a
+      minute per address and the guard's per-address lock. Existing sessions keep working.
+    - **CSRF over HTTPS** still rests on the custom header, `SameSite=Strict`, the exact `Origin` and the
+      absence of CORS (the relay adds none), not on a token.
+    - **Sessions live in the app's memory**: a restart signs relayed browsers out too.
+    - **No certificate pinning**: a CA the platform trusts could stand in for the relay's host.
+    - **The relay is trusted with content**: it is the owner's own Cloudflare account; the PIN is never
+      checked or held there, but a compromised account could serve a page that asks for it.
+    - **A tablet asleep off power** keeps the connection only as Doze allows; the school tablet is expected
+      on its charger.
+    - **Not on real hardware or Cloudflare yet**: every figure is `wrangler dev` on the Mac with the
+      emulator.
+17. **Tests.** 1,219 before, 1,273 after: `RelayProtocolTest` 9, `BodyPipeTest` 6, `WebServerRelayTest` 8,
+    `RelayClientTest` 10, `RelayCommandsTest` 4, `EnrolmentTest` 4, `SealedSecretTest` 3, `RelayStatusTest`
+    2, `CloudCopyTest` 1, `WebSocketHubTest` +4, `WebAssetsTest` +1, `SettingsRepositoryTest` +1,
+    `GroupSummariesTest` +1; `WebApiTest` and `DiagnosticsExporterTest` changed. `lint` 0 errors.
+
+**What the owner must do:** deploy the relay and the console (`cloud/README.md`), put Cloudflare Access in
+front of the console, then enrol each tablet with a code and turn on *Remote access over the internet*.
+Keep the Cloudflare account's own sign-in strong (two-factor): whoever holds it holds the relay.
