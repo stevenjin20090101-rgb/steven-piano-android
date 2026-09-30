@@ -20,6 +20,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -162,9 +163,9 @@ class RelayClient(
         _state.value = CloudStatus.Off
     }
 
-    /** A network came back (or the web service looked again): a wait for the next try ends now. */
+    /** A network came back (or the web service looked again): a wait for the next try ends now, if the device is online. */
     fun nudge() {
-        if (_state.value is CloudStatus.Waiting) wake.trySend(Unit)
+        if (_state.value is CloudStatus.Waiting && online()) wake.trySend(Unit)
     }
 
     /** The wait before try [attempt] (0 first): 1 s × 2ⁿ, at most [MAX_WAIT_MS], ±20 %. */
@@ -183,6 +184,7 @@ class RelayClient(
             }
             _state.value = CloudStatus.Connecting
             val end = connect(cfg)
+            currentCoroutineContext().ensureActive()   // stopped meanwhile: the state is Off, and stays so
             when {
                 end.code == RelayProtocol.CLOSE_REVOKED || end.httpStatus == UNAUTHORIZED -> {
                     log("Cloud: the relay refused this tablet (${end.code ?: end.httpStatus}): revoked")
@@ -305,9 +307,9 @@ class RelayClient(
             val frame = Frame.decode(bytes.toByteArray()) ?: return
             val pending = requests[frame.id] ?: return   // over already, or never begun: the relay learns from our answer
             when (frame.kind) {
-                Frame.REQ_CHUNK -> if (pending.pipe?.offer(frame.payload) != true) {
+                Frame.REQ_CHUNK -> if (pending.pipe?.offer(frame.payload) != true && !pending.aborted) {
                     log("Cloud: a request's body went past its window; the request ends")
-                    pending.pipe?.abort()
+                    pending.abort()
                 }
                 Frame.REQ_END -> pending.pipe?.end()
             }
@@ -385,7 +387,7 @@ class RelayClient(
         private fun onReq(req: RelayMessage.Req) {
             val hello = hello ?: return
             if (requests.size >= MAX_IN_FLIGHT) {
-                answer(req.id, RelayedResponse.refusal(503, "busy", "The piano is busy. Try again.", hello.host, cfg.scheme), Pending(null), hello)
+                answer(req.id, RelayedResponse.refusal(503, "busy", "The piano is busy. Try again.", hello.host, cfg.scheme), Pending(null), hello, wait = false)
                 return
             }
             val pending = Pending(if (req.body) BodyPipe(hello.caps.window, onCredit = { n -> send(RelayMessage.ReqCredit(req.id, n.toLong())) }) else null)
@@ -395,7 +397,7 @@ class RelayClient(
             } catch (e: RejectedExecutionException) {
                 requests.remove(req.id, pending)
                 pending.abort()
-                answer(req.id, RelayedResponse.refusal(503, "busy", "The piano is busy. Try again.", hello.host, cfg.scheme), Pending(null), hello)
+                answer(req.id, RelayedResponse.refusal(503, "busy", "The piano is busy. Try again.", hello.host, cfg.scheme), Pending(null), hello, wait = false)
             }
         }
 
@@ -416,13 +418,16 @@ class RelayClient(
             }
         }
 
-        /** `res`, then the body in chunks (waiting while the socket's queue is long), then the end. */
-        private fun answer(id: Long, answer: RelayedResponse, pending: Pending, hello: RelayMessage.Hello) {
+        /**
+         * `res`, then the body in chunks (waiting while the socket's queue is long, unless [wait] is false: the
+         * reading thread's own small refusals, which must never hold it), then the end.
+         */
+        private fun answer(id: Long, answer: RelayedResponse, pending: Pending, hello: RelayMessage.Hello, wait: Boolean = true) {
             if (!send(answer.res(id))) return
             val body = answer.body
             var at = 0
             while (at < body.size) {
-                if (pending.aborted || !roomToSend()) return
+                if (pending.aborted || (wait && !roomToSend())) return
                 val n = min(hello.caps.chunk, body.size - at)
                 if (!sendFrame(Frame(id, Frame.RES_CHUNK, body.copyOfRange(at, at + n)))) return
                 at += n

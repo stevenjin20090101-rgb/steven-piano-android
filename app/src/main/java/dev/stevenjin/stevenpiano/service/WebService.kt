@@ -473,6 +473,7 @@ class WebService : Service() {
             web -> local
             cloud is CloudStatus.Connected -> "Cloud · ${cloud.host}"
             cloud is CloudStatus.Waiting -> "Cloud · ${cloud.reason}"
+            cloud is CloudStatus.Revoked || cloud is CloudStatus.Disabled || cloud is CloudStatus.NotEnrolled -> "Cloud · enrol this tablet again"
             else -> "Cloud · connecting"
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
