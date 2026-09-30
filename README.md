@@ -37,7 +37,7 @@ Version 1.7.1.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
   composer's portrait), **Shuffle**, and its pieces in the order you give them:
   drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**
-  floats as a glass circle at the bottom of the list, wherever it is scrolled.
+  floats as a filled circle at the bottom of the list, wherever it is scrolled.
   Rename, change the photo or delete it from its menu.
 - **Built-in playlists**: **Popular**, **Recognisable** and **Epic on piano** fill
   themselves from the library: the pieces everyone knows (Für Elise, the
@@ -98,10 +98,16 @@ Version 1.7.1.
   touch, or Back, fades it away and brings the app back as it was, and does
   nothing else. The screen stays on and the system bars step aside while it
   shows.
-- **Glass**: the tab bar, the rail, the mini player, the transport and a
-  playlist's Play are frosted glass over the content, monochrome. With *High
-  contrast text* on (Android's accessibility setting), or on Android 11 and
-  older, they are solid, as before.
+- **Glass**: Apple's Liquid Glass across the app's functional layer, monochrome:
+  the headers, the tab bar and the rail, the mini player, the transport, sheets,
+  menus and dialogs, and the Keys pills are frosted surfaces the content scrolls
+  under, with a soft fade where content meets a bar; the content itself (rows,
+  cards, the roll, the score, the art) never is. At rest a header looks as it
+  always has; the glass shows once the list is scrolled beneath it. The play
+  control is a solid circle. With *High contrast text* on (Android's
+  accessibility setting), or on Android 11 and older, the surfaces are solid and
+  their hairlines stronger. The web panel's tab strip, section list, menus and
+  PIN card follow it.
 - **The score**: the piece as sheet music, in systems of bars on pages (two
   bars a system on a phone, three on a small tablet, four on a tablet on its
   side, and two pages side by side when the score has a tablet's width to

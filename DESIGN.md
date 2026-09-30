@@ -1768,3 +1768,155 @@ Nothing on the screen moves while it comes or goes: it keeps clear of the displa
 system bars step aside while it rests and come back as it leaves), and holds its piece and its margins
 once it starts to go. **Reduced motion**: all three are cuts. The idle timer (a minute without a touch,
 the same touches) and the screen staying on are as before.
+
+---
+
+# v1.9 — Liquid Glass across the functional layer
+
+Steven asked (2026-09-30) for Apple's Liquid Glass across the whole app, designed with the
+`apple-design` skill (`references/hig/liquid-glass.md`, `materials.md`, `scroll-views.md`), and
+reminded us that the app is made for the school tablet first. v1.5 — M16 put glass on the floating
+controls only; this pass extends it to every floating functional surface, adds the scroll-edge
+effect, and brings the primary action back to a filled circle. Everything above still holds except
+where this section says otherwise; **M16's "Where." list in *The glass* is superseded by the list
+below**, and its lens is gone.
+
+## Two layers
+
+- **Content** is never glass: rows, cards, tiles, the connection card, channel cards (their band is
+  a static scrim), the roll, the score, the art, the keyboard, the Keys mini-map, the tempo row, the
+  resting screen and display mode's controls. A control in the content layer never takes glass.
+- **The functional layer** is glass: the headers, the tab bar and the rail, the mini player, the
+  transport, sheets, menus, popovers and dialogs, the Keys pills. Nothing else.
+
+## The material
+
+Regular glass everywhere (text-heavy surfaces), monochrome: the surface colour over a 24 dp blur of
+whatever lies beneath, no tint, no noise, no colour but the live red dot; a 1 dp edge in the hairline
+token with the 1 dp specular line inside it, along the edge that faces the content (a bar's top, a
+header's bottom, the rail's end, round a floating shape with the line along its top).
+
+| Fill | Where |
+|---|---|
+| **0.72** (bars) | the headers, the tab bar and the mini player, the rail, the transport, the Keys pills |
+| **0.86** (sheets) | every bottom sheet (Up next, the piece sheet, Add, the PIN sheets, a channel's volume, the schedule editor, Compose, the QR code, a share), menus (a row's, a tile's, a playlist's, a channel's, a schedule's), popovers, dialogs (Add to playlist, Rename, the confirmations, the time picker) |
+
+- **What sits on it.** On a bar, text is the content colour (7.1:1 and 8.3:1 over the worst backdrop,
+  pure white under the dark glass, pure black under the light); glyphs may be the secondary grey
+  (3.1:1); the tertiary grey never. On a sheet the content colour reads 11.8:1 and 11.9:1 and the
+  secondary grey 5.3:1 and 4.6:1, so sheets keep their secondary lines; their tertiary eyebrows take
+  the secondary grey (3.8:1 and 3.5:1 would be too little).
+- **Why 0.86 and not 0.84.** At 0.84 the secondary grey on the paper reads 4.3:1 over the worst
+  backdrop (a black portrait under a sheet); 0.86 is the least fill, in hundredths, at which it reads
+  4.5:1 on both appearances. The difference does not show.
+- **Only where something passes beneath** (M16's rule, kept): a surface blurs only while content can
+  pass beneath it. The rail, the Keys pills, the tab bar over Now playing and Keys, and a header with
+  nothing scrolled beneath it draw the glass's look without a blur: the surface itself, their edge,
+  the text rule.
+
+## The headers
+
+Every tab's header is a glass navigation bar the content scrolls under, reaching up under the status
+bar: the title, the byline and the header's action (the Library's +, Now playing's queue glyph); the
+Piano tab's pages have theirs (the back glyph on phones, the title beside the hub). On the tablet's
+splits each pane has its own: the Library's list and the now-playing panel (whose NOW PLAYING row is
+its header, as tall as the list's at every text size), the Piano hub and its page.
+
+A header has the two appearances of a navigation bar (UIKit's scroll-edge and standard appearances):
+
+- **At rest**, with nothing scrolled beneath it, it is the surface itself, with no edge and no band,
+  its byline in the tertiary grey: every tab looks as it always has. (The Library's hairline under its
+  header becomes this edge.)
+- **With content beneath it**, the glass shows: the rows blurred under the bar's fill, the edge and
+  the specular line along its bottom, the scroll-edge band, and its text in the content colour (the
+  byline, the Library's progress lines). The change fades over 120 ms.
+
+What stays in the content: the Library's search field and chips (they scroll away), the crash and
+requests banners (the list's first lines). What joins the header: the Library's import, artwork and
+Studio progress lines, which stay in sight. Now playing's column scrolls beneath its header only where
+the screen is short; Keys never scrolls, and its header is always at rest.
+
+## The scroll-edge effect
+
+Where scrolling content meets a bar it fades into the glass instead of colliding with it:
+
+- **The content's band**: over the last **24 dp** before the bar's edge the content fades, from clear
+  to the surface at a sheet's opacity at the edge. Under the header only while content is scrolled
+  beneath it (**at the resting scroll position there is no band**); above the tab bar and the mini
+  player on phones while there is more beneath them; beside the rail over the content's own **16 dp**
+  margin, where the list, the hub or a page meets it (a 24 dp band there would wash the first letters
+  of every row, inset 16 dp).
+- **The glass's band**: inside a blurring bar's edge the frost thickens over the last 24 dp, from the
+  bar's fill to a sheet's (0.72 to 0.86), so the eye reads a denser band just where content goes under.
+- Each pane has its own (the list and the panel, the hub and the page), level with each other.
+
+## The primary action
+
+The play control is the app's filled monochrome circle again wherever it stands: 72 dp, the content
+colour filled, the surface-coloured glyph (17.2:1 and 16.3:1), sitting on the transport's glass band;
+never glass on glass. A playlist's floating Play is the same circle at 56 dp. Shuffle, Repeat,
+Previous and Next stay glyphs on the band.
+
+## Sheets, menus and dialogs
+
+One material for all of them (0.86), their scrim or dim behind as before. Sheets carry their grabber
+inside the glass (32 × 4 dp, the secondary grey), with Material's sheet actions for TalkBack (close,
+expand, collapse); dialogs keep the 24 dp corners, menus theirs and their shadow. The blur runs only
+while one is open. A small popover (for a control's setting in place, such as a volume) is the same
+glass, anchored below its control, 16 dp inside.
+
+## Keys
+
+The latching Sustain and, where the keys scroll, the ‹ › octave buttons are 48 dp glass pills floating
+just above the keyboard's top edge: ‹ and Sustain at the start, › at the end. Nothing moves beneath
+them, so they are glass without a blur: the surface, their ring in the action outline's grey (the
+content colour while Sustain is on, reading *Sustain on*) and the specular line along their top. They
+never cover the keys, whose tops are every key's soft end: the keyboard is never under glass. The
+mini-map stays at the top, now across the whole width; VELOCITY moves under the keys beside the
+connection line.
+
+## Tablet first
+
+- **The rail** is the main bar: glass without a blur (nothing passes beneath it), its end edge, the
+  selected pill and the labels as before; the list, the hub and the pages fade into its inner edge
+  over their margin.
+- **The two-pane Library**: the list's header is glass with its band; the now-playing panel's NOW
+  PLAYING row is its own header; the panel's transport keeps its glass band with the filled circle; the
+  roll strip is content.
+- **The Piano split**: the hub and the page each have a glass header; the connection card is content;
+  sheets opened from either pane are glass over the whole window.
+- **Now playing**: the score and the roll with the transport's band; the header is glass; the tempo row
+  is content. The resting screen and kiosk mode's rest are untouched.
+
+## Accessibility
+
+- **Reduce Transparency** (Android's *High contrast text*, the nearest the platform has): every glass
+  surface is the solid surface with its hairline, as before; no bands; controls that float on glass
+  go back to their solid places (the transport under the roll). Sheets, menus and dialogs take today's
+  elevated tone.
+- **Increase Contrast** (the same switch, `ACCESSIBILITY_HIGH_TEXT_CONTRAST`): every hairline is the
+  content colour at 0.4 instead of the hairline token (3.5:1 on the ink, 2.5:1 on the paper, against
+  1.3:1).
+- **Reduced motion**: the bands and the header's glass appear and go as a cut; sheets, menus and
+  popovers appear without their motion (the platform's animation scale), and nothing morphs.
+- Targets stay 48 dp or more.
+
+## The web panel
+
+The same two layers. Narrow, the tab strip is the bar: the surface at 72 % over a 24 px backdrop blur,
+the hairline and the specular line along its bottom; once the page is scrolled beneath it the content
+fades into it over 24 px, its frost thickens and its text takes the content colour. Wide, the section
+list is the rail: glass without a blur, its end edge, the page fading into it over its margin. Row
+menus and the toast are the sheets' glass (86 %); the PIN gate's card and the schedule and compose
+editors are sheets laid flat. The play control is the filled circle. *prefers-reduced-transparency*
+and *prefers-contrast: more* give solid surfaces (and more contrast, hairlines in the content colour
+at 40 %); *prefers-reduced-motion* drops the bands' fade.
+
+## Performance
+
+One source per glass surface: the navigation content for the tab bar, the mini player and every sheet,
+menu and dialog; each pane's own content for its header (recorded in a layer of its own, so a roll
+playing in the other pane, or a list scrolling beside it, never re-blurs a header it is not under);
+the note panel for the transport. A header blurs only its own bounds, and only while content is
+scrolled beneath it. The wide surfaces (headers, sheets, menus, dialogs) blur a copy at a fifth of the
+resolution; the bars keep M16's third.
