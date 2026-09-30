@@ -152,6 +152,8 @@ export class PianoRoom extends DurableObject<RelayEnv> {
   private readonly waiting: Array<{ grant: () => void }> = [];
   private uploading = false;
   private readonly acceptTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** Moves on at every revoke and forget: a connection checked before one is refused, not accepted. */
+  private authEpoch = 0;
 
   constructor(ctx: DurableObjectState, env: RelayEnv) {
     super(ctx, env);
@@ -206,14 +208,20 @@ export class PianoRoom extends DurableObject<RelayEnv> {
           this.commands.delete(cmdId);
           resolve({ ok: false, message: "The piano didn't answer." });
         }, this.timing.answer);
-        this.commands.set(cmdId, {
+        const waiter = {
           session,
-          resolve: (r) => {
+          resolve: (r: CommandResult) => {
             clearTimeout(timer);
             resolve(r);
           },
-        });
-        tablet.send(JSON.stringify({ t: 'cmd', id: cmdId, name: check.name, args: check.args }));
+        };
+        this.commands.set(cmdId, waiter);
+        try {
+          tablet.send(JSON.stringify({ t: 'cmd', id: cmdId, name: check.name, args: check.args }));
+        } catch {
+          this.commands.delete(cmdId);
+          waiter.resolve({ ok: false, message: 'The piano went offline.' });
+        }
       });
     }
     await auditStatement(this.env.DB, { at: this.now(), actor, pianoId: id, action: 'command', detail: { name: check.name, args: check.args, ok: result.ok, message: result.message } }).run();
@@ -248,7 +256,11 @@ export class PianoRoom extends DurableObject<RelayEnv> {
         resolve(value);
       };
       this.rotationWaiter = settle;
-      tablet.send(JSON.stringify({ t: 'secret', secret }));
+      try {
+        tablet.send(JSON.stringify({ t: 'secret', secret }));
+      } catch {
+        settle(false);
+      }
     });
     return committed
       ? { ok: true, committed: true, message: 'The tablet has its new secret; the old one no longer works.' }
@@ -259,6 +271,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
   async revoke(pianoId: string, actor: string): Promise<CommandResult> {
     const id = this.pianoId(pianoId);
     const now = this.now();
+    this.authEpoch++;
     await this.env.DB.batch([
       this.env.DB.prepare('UPDATE pianos SET secret_hash = NULL, pending_secret_hash = NULL, pending_until = NULL, revoked_at = ?, online = 0 WHERE id = ?').bind(now, id),
       auditStatement(this.env.DB, { at: now, actor, pianoId: id, action: 'revoke' }),
@@ -271,6 +284,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
   async forget(pianoId: string, actor: string): Promise<CommandResult> {
     const id = this.pianoId(pianoId);
     const now = this.now();
+    this.authEpoch++;
     this.sendTabletsAway(Close.Disabled, 'Removed from the console.', 'The piano was removed.');
     await this.env.DB.batch([
       this.env.DB.prepare('DELETE FROM enrol_codes WHERE piano_id = ?').bind(id),
@@ -293,6 +307,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     const pianoId = this.pianoId(given);
     const hash = h.get('x-relay-secret-hash') ?? '';
     const now = this.now();
+    const epoch = this.authEpoch;
     const row = await this.env.DB.prepare('SELECT secret_hash, pending_secret_hash, pending_until FROM pianos WHERE id = ?')
       .bind(pianoId)
       .first<{ secret_hash: string | null; pending_secret_hash: string | null; pending_until: number | null }>();
@@ -300,7 +315,12 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     const pending = !current && !!row?.pending_secret_hash && (row.pending_until ?? 0) > now && constantTimeEqual(hash, row.pending_secret_hash);
     if (!row || (!current && !pending)) return error(401, 'auth', "This tablet isn't enrolled here, or its access was revoked.");
     // A tablet that comes back with the rotation's new secret has it: the rotation is done.
-    if (pending) await this.commitRotation(pianoId, row.pending_secret_hash!, now, 'tablet');
+    if (pending) {
+      await this.commitRotation(pianoId, row.pending_secret_hash!, now, 'tablet');
+      this.rotationWaiter?.(true);
+    }
+    // Revoked or forgotten while this was checked: the tablet asks again, and is refused then.
+    if (epoch !== this.authEpoch) return error(503, 'busy', 'Try again.');
 
     const older = this.ctx.getWebSockets('tablet');
     if (older.some((ws) => ws.readyState === OPEN)) {
@@ -334,6 +354,14 @@ export class PianoRoom extends DurableObject<RelayEnv> {
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    try {
+      await this.onMessage(ws, message);
+    } catch {
+      // The database failed us (a status, a confirmation): the next one tries again.
+    }
+  }
+
+  private async onMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = ws.deserializeAttachment() as Attachment | null;
     if (!attachment) return;
     if (attachment.role === 'browser') return this.fromBrowser(ws, message);
@@ -372,11 +400,11 @@ export class PianoRoom extends DurableObject<RelayEnv> {
 
   override async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
     closeQuietly(ws, code === 1005 || code === 1006 || code === 1015 ? 1000 : code, reason);
-    await this.socketGone(ws, code, reason);
+    await this.socketGone(ws, code, reason).catch(() => undefined);
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
-    await this.socketGone(ws, 1011, 'Error');
+    await this.socketGone(ws, 1011, 'Error').catch(() => undefined);
   }
 
   private async socketGone(ws: WebSocket, code: number, reason: string): Promise<void> {
@@ -477,6 +505,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
 
   private async forward(request: Request): Promise<Response> {
     const h = request.headers;
+    const pianoId = this.pianoId(h.get('x-relay-piano'));
     const path = h.get('x-relay-path') ?? '/';
     const api = path === '/api' || path.startsWith('/api/');
     const tablet = this.tablet();
@@ -496,7 +525,6 @@ export class PianoRoom extends DurableObject<RelayEnv> {
         this.release();
         return offline(api, request.method);
       }
-      const pianoId = this.pianoId(h.get('x-relay-piano'));
       const headers: Record<string, string> = {};
       for (const name of FORWARDED_HEADERS) {
         const value = name === 'host' ? h.get('x-relay-host') : name === 'content-length' ? h.get('x-relay-length') : h.get(name);
@@ -618,8 +646,8 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       p.tablet.send(encodeFrame(p.id, Kind.ReqEnd));
       this.arm(p, this.timing.res, () => this.fail(p, 504, 'timeout', "The piano didn't answer in time."));
     } catch {
-      // The browser went away mid-body (or the socket to the tablet did).
-      if (!p.finished) this.fail(p, 400, 'short', 'The upload ended early.');
+      // The browser went away mid-body (or the socket to the tablet did); not when the tablet has answered.
+      if (!over()) this.fail(p, 400, 'short', 'The upload ended early.');
     }
   }
 
@@ -648,7 +676,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       this.fail(p, 502, 'relay', 'The piano gave an answer the relay could not read.');
       return;
     }
-    const headers = responseHeaders(msg.headers, this.storedPianoId ?? attachment.pianoId);
+    const headers = responseHeaders(msg.headers, attachment.pianoId);
     withSecurity(headers, headers.get('content-type')?.includes('json') ? API_CSP : PAGE_CSP);
     const noBody = p.method === 'HEAD' || status === 204 || status === 205 || status === 304;
     const encodeBody = headers.has('content-encoding') ? 'manual' : 'automatic';

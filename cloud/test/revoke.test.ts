@@ -7,10 +7,12 @@
    Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
    ============================================================================ */
 
+import { runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
+import type { PianoRoom } from '../src/relay/room';
 import { owner } from './console-helpers';
-import { FakeBrowser, FakeTablet, pianoRow, seedPiano, tabletRequest } from './helpers';
+import { FakeBrowser, FakeTablet, pianoRow, room, seedPiano, tabletRequest } from './helpers';
 
 describe('revoking and forgetting', () => {
   it('revoke: the tablet is sent away with 4401, its browsers closed, and it cannot come back', async () => {
@@ -53,5 +55,54 @@ describe('revoking and forgetting', () => {
     expect((await call(`/api/pianos/${pianoId}`)).status).toBe(404);
     const live = await env.ROOMS.getByName(pianoId).status(pianoId);
     expect(live).toMatchObject({ online: false, status: null });
+  });
+
+  it('refuses a connection whose check was overtaken by a revoke', async () => {
+    const { pianoId, secret } = await seedPiano();
+    const stub = room(pianoId);
+    // Hold the connection's look at its secret until the revoke is done.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const atCheck = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    await runInDurableObject(stub, (instance: PianoRoom) => {
+      const room = instance as unknown as { env: typeof env };
+      const db = room.env.DB;
+      room.env = {
+        ...room.env,
+        DB: new Proxy(db, {
+          get(target, prop) {
+            if (prop !== 'prepare') return Reflect.get(target, prop).bind(target);
+            return (sql: string) => {
+              const statement = target.prepare(sql);
+              if (!sql.startsWith('SELECT secret_hash, pending_secret_hash')) return statement;
+              return {
+                bind: (...values: unknown[]) => ({
+                  first: async () => {
+                    const row = await statement.bind(...values).first();
+                    reached();
+                    await held;
+                    return row;
+                  },
+                }),
+              };
+            };
+          },
+        }),
+      };
+    });
+    const connecting = tabletRequest(pianoId, secret);
+    await atCheck;
+    const { call } = await owner();
+    expect(await (await call(`/api/pianos/${pianoId}/revoke`, { method: 'POST' })).json()).toMatchObject({ ok: true });
+    release();
+    const response = await connecting;
+    expect(response.status).toBe(503);
+    expect(response.webSocket).toBeNull();
+    expect((await tabletRequest(pianoId, secret)).status).toBe(401);
   });
 });
