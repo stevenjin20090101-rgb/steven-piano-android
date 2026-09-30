@@ -5860,7 +5860,7 @@ no entry is drafted in `releases/history.json` and no APK is staged.
   `WebService`, `Settings`, `DiagnosticsExporter` and its test, `GroupSummaries`, `PianoViewModel`,
   `AppGraph`, the web panel's assets, the manifest. `CloudSection` is on the glass (`GlassSheet`,
   `GlassAlertDialog`), as `GlassContainersTest` requires.
-- **The panel's speaker opens its popover within the panel** (the 1.9 review): `GlassPopover` gains
+- **The panel's speaker opens its popover within the panel** (`a54e506`, the 1.9 review): `GlassPopover` gains
   `alignment`: `Alignment.End` as before, or `Alignment.Start`, the popover's start at the anchor's start
   (each mirrored in right to left). Its placement is now `popoverPosition`, a pure function that
   `PopoverPosition` calls with the offset and the margin in pixels. `TabletSoundButton` and
@@ -5869,3 +5869,30 @@ no entry is drafted in `releases/history.json` and no APK is staged.
   over the divider onto the list's pane; Now playing's tempo row keeps the ends. `GlassPopoverTest` (8):
   ends and starts aligned, right to left, the offset, above where there is no room below, the window's
   margin, the panel's case against its divider, and the two call sites.
+- **Measured at the merge** (`steven_piano_int`, API 34, Pixel 7 profile, 4 GB, `wm size 2560x1600`,
+  `wm density 240`, the integrator's own AVD, removed after; the shots in the session's
+  `integrate-m26-shots/`): the merged debug build installed over 1.9's; three piano-midi.de pieces through
+  Add folder; Für Elise playing beside the Library. The panel's speaker (1487–1559 px, the pane from 1463)
+  opened its popover above it with its start at the speaker's start: inside the panel, over the
+  transport's start. On a second boot, 1.9's build and then the merged one in the same session: 1.9's
+  popover at 1109–1559 × 1217–1438, across the divider over the list; the merged build's at 1487–1937 ×
+  1217–1438, 4 dp above the speaker as before. (On the first boot, whose top inset was 49 px taller, it sat
+  31 px higher: `popoverPosition` keeps it 8 dp inside the window's visible height, which that inset
+  shortened; 1.9's placement had the same bound.)
+  Piano › Remote control without a PIN: CLOUD's switch "Set a PIN first", "Cloud address · Not set",
+  **Enrol with code** "Get a code from the console"; with a PIN (generated, not recorded) the switch reads
+  "Enrol this tablet first", not enrolled; the enrol sheet on the sheets' glass (the relay's address as its
+  placeholder, Enrol waiting for a code), cancelled. Web control on: "No Tailscale address yet: the panel
+  waits for one (or for Panel on Wi-Fi too)…"; with Panel on Wi-Fi too, `http://10.0.2.18:8737` with its QR
+  and the hub's row **"On · 10.0.2.18"**, the notification "Web control on"; listening on 10.0.2.18 and
+  127.0.0.1 only; through `adb forward`, a foreign Host refused ("This address isn't the panel's."), the
+  gate 200 with the listener's own, `/api/state` 401 without a session. No crash (the crash buffer empty).
+- Tests: **1,281** (1.9's 1,219, M26's 54, the merge's 8), 13 skipped (as 1.9). `check` passes: `lint` 0
+  errors, 29 warnings (1.9's 28 and OkHttp's newer version, 5.5.0; M26 keeps 4.12.0 on purpose), the ONNX
+  Runtime checks. No compiler warnings in the app's sources (the release compile ran whole). The greps
+  above and every earlier section's: as stated; `okhttp3` and `okio` only in `web/relay/RelayClient.kt`.
+- **The release build**, R8 with OkHttp's own rules: no R8 warnings; 13,692,055 bytes (1.9's 13,514,380:
+  +177,675), versionCode 17, "1.9", signed `CN=Steven Piano, O=Steven Jin, C=US`; OkHttp's client, its
+  WebSocket and the relay's classes kept, renamed. Not staged in `../apk/`: 1.10 is cut after M27 and the
+  audit. The debug APK is 29,321,129 bytes.
+- The provenance manifest re-signed last, the signer's sources now with `cloud/`'s.
