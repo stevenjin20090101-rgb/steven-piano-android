@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +44,7 @@ import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.components.ArtFrame
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.Mosaic
@@ -112,7 +112,7 @@ fun ChannelCard(
                 Band(summary.name, meta, playing, connected, Modifier.align(Alignment.BottomCenter))
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Set volume", { menu = false }, onSetVolume)
             MenuItem("Schedule", { menu = false }, onSchedule)
         }

@@ -16,6 +16,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -52,7 +53,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,9 +103,10 @@ import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayRequest
+import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
+import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
-import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.CrashBanner
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
@@ -113,6 +117,7 @@ import dev.stevenjin.stevenpiano.ui.components.readingPadding
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
 import dev.stevenjin.stevenpiano.ui.components.rememberDragReorderState
+import dev.stevenjin.stevenpiano.ui.components.scrollEdges
 import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingPanel
@@ -139,10 +144,13 @@ import java.time.LocalTime
  * picker. A composer opens with their portrait and blurb. [onImport] brings files in; artwork
  * fetched in the background shows its progress under the import bar. On the launch after a crash,
  * an outlined banner offers to share diagnostics; while guests' requests wait for approval, another
- * offers the oldest with Approve and Dismiss ([RequestsBanner]). On wide screens the content stays a 720 dp
+ * offers the oldest with Approve and Dismiss ([RequestsBanner]); both are the list's first lines. The
+ * header, with the import's, artwork's and Studio's progress lines under it, is a glass navigation bar
+ * the list scrolls beneath ([GlassHeaderPane], DESIGN.md › v1.9). On wide screens the content stays a 720 dp
  * column in the middle; the list still scrolls from anywhere across the screen, and under the tab
- * bar's glass, its last row able to rise above it ([LocalFloatingPadding]). An open playlist's Play
- * floats as a glass circle at the bottom end of its column ([FloatingPlayRequest]). On wide frames
+ * bar's glass, its first and last rows able to rest clear of the header and the bar ([LocalFloatingPadding]),
+ * fading into them where they meet ([scrollEdges]). An open playlist's Play floats as a filled circle at
+ * the bottom end of its column ([FloatingPlayRequest]). On wide frames
  * (AppFrame.twoPane) the Library is two panes: the list in 55 % of the width and the now-playing
  * panel ([NowPlayingPanel]) beside it; playing a piece then stays on the Library, and the Now
  * playing tab remains for the full score. In kiosk mode the library's changes are locked (DESIGN.md
@@ -207,57 +215,91 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val listBottom = (floating.calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding()).coerceAtLeast(0.dp)
     val sides = Modifier.padding(start = floating.calculateStartPadding(direction), end = floating.calculateEndPadding(direction))
 
+    // The list, when there is one: it scrolls beneath the header's glass (DESIGN.md › v1.9).
+    val listed = state.loaded && !state.unreadable && !state.empty
     val library: @Composable (Modifier) -> Unit = { modifier ->
-        Column(modifier.imePadding()) {
-            Column(Modifier.readingWidth()) {
-                ScreenHeader("Library") {
-                    // Settings locked in kiosk: a padlock beside the +, which then asks for the PIN.
-                    if (gate.locked) LockGlyph(description = null)
-                    GlyphButton(R.drawable.ic_add, if (gate.locked) "Add MIDI files, ${KioskLockCopy.LOCKED.lowercase()}" else "Add MIDI files", onClick = addMusic)
+        GlassHeaderPane(
+            scroll = if (listed) listState else null,
+            modifier = modifier,
+            header = {
+                Column(Modifier.readingWidth()) {
+                    ScreenHeader("Library") {
+                        // Settings locked in kiosk: a padlock beside the +, which then asks for the PIN.
+                        if (gate.locked) LockGlyph(description = null)
+                        GlyphButton(R.drawable.ic_add, if (gate.locked) "Add MIDI files, ${KioskLockCopy.LOCKED.lowercase()}" else "Add MIDI files", onClick = addMusic)
+                    }
+                    // What runs in the background stays in sight in the bar: an import, artwork arriving, a Studio job.
+                    ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
+                    ArtworkBar(artworkProgress)
+                    StudioBar(studioJobs)
                 }
-                HairlineDivider()
-                ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
-                ArtworkBar(artworkProgress)
-                StudioBar(studioJobs)
-                if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
-                RequestsBanner(requests, onApprove = graph.web::approve, onDismiss = graph.web::dismiss, modifier = Modifier.padding(16.dp))
+            },
+        ) {
+            val top = LocalFloatingPadding.current.calculateTopPadding()
+            // The banners are the list's first lines, and scroll away with the search field.
+            val banners: @Composable () -> Unit = {
+                Column(Modifier.readingWidth()) {
+                    if (crashed) CrashBanner(onAnswered = graph::answerCrashNotice, modifier = Modifier.padding(16.dp))
+                    RequestsBanner(requests, onApprove = graph.web::approve, onDismiss = graph.web::dismiss, modifier = Modifier.padding(16.dp))
+                }
             }
-            when {
-                !state.loaded -> Unit
-                state.unreadable -> Column(Modifier.readingWidth()) {
-                    CategoryChips(state.category, vm::selectCategory)
-                    OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
-                }
-                state.empty -> EmptyLibrary(onAdd = addMusic)
-                else -> {
-                    var listBounds by remember { mutableStateOf<Rect?>(null) }
-                    BoxWithConstraints(
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .imePadding(),
+            ) {
+                when {
+                    !state.loaded -> Unit
+                    state.unreadable -> Column(
                         Modifier
-                            .fillMaxSize()
-                            .onGloballyPositioned { listBounds = it.boundsInRoot() },
+                            .readingWidth()
+                            .padding(top = top),
                     ) {
-                        val padding = readingPadding(maxWidth, bottom = listBottom)
-                        // The reading column's bottom end, above the floating controls: where a playlist's Play floats.
-                        val density = LocalDensity.current
-                        val anchor = listBounds?.let { box ->
-                            with(density) {
-                                val side = padding.calculateStartPadding(direction).toPx()
-                                Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
+                        banners()
+                        CategoryChips(state.category, vm::selectCategory)
+                        OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
+                    }
+                    state.empty -> Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = top),
+                    ) {
+                        banners()
+                        EmptyLibrary(onAdd = addMusic)
+                    }
+                    else -> {
+                        var listBounds by remember { mutableStateOf<Rect?>(null) }
+                        BoxWithConstraints(
+                            Modifier
+                                .fillMaxSize()
+                                .onGloballyPositioned { listBounds = it.boundsInRoot() },
+                        ) {
+                            val padding = readingPadding(maxWidth, top = top, bottom = listBottom)
+                            // The reading column's bottom end, above the floating controls: where a playlist's Play floats.
+                            val density = LocalDensity.current
+                            val anchor = listBounds?.let { box ->
+                                with(density) {
+                                    val side = padding.calculateStartPadding(direction).toPx()
+                                    Rect(box.left + side, box.top, box.right - side, box.bottom - listBottom.toPx())
+                                }
                             }
-                        }
-                        // A schedule changes when the piano plays: in kiosk mode it waits for the PIN, as a
-                        // channel's volume does.
-                        val schedule: (String) -> Unit = { key ->
-                            gate.run {
-                                scheduling = ScheduleDraft.fresh(LocalTime.now(), ScheduleKind.CHANNEL, key, graph.settings.value.channelVolume(key))
+                            // A schedule changes when the piano plays: in kiosk mode it waits for the PIN, as a
+                            // channel's volume does.
+                            val schedule: (String) -> Unit = { key ->
+                                gate.run {
+                                    scheduling = ScheduleDraft.fresh(LocalTime.now(), ScheduleKind.CHANNEL, key, graph.settings.value.channelVolume(key))
+                                }
                             }
+                            LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog, banners)
                         }
-                        LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog)
                     }
                 }
             }
         }
     }
+    // The transport yields to a scrolling list (DESIGN.md › v1.9): while the list scrolls beneath its header's
+    // glass, the panel's transport beside it draws its glass without a blur.
+    val listScrolling = remember(listState) { derivedStateOf { listState.isScrollInProgress } }
     if (frame.twoPane) {
         // The list (55 %, its 720 dp reading width inside it) and the now-playing panel (45 %), a hairline between.
         Row(
@@ -267,14 +309,16 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         ) {
             library(Modifier.weight(LIST_SHARE).fillMaxHeight())
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
-            NowPlayingPanel(
-                playback,
-                onOpenPiano,
-                Modifier
-                    .weight(1f - LIST_SHARE)
-                    .fillMaxHeight()
-                    .padding(bottom = floating.calculateBottomPadding()),
-            )
+            CompositionLocalProvider(LocalYieldBlur provides listScrolling) {
+                NowPlayingPanel(
+                    playback,
+                    onOpenPiano,
+                    Modifier
+                        .weight(1f - LIST_SHARE)
+                        .fillMaxHeight()
+                        .padding(bottom = floating.calculateBottomPadding()),
+                )
+            }
         }
     } else {
         library(Modifier.fillMaxSize().then(sides))
@@ -354,6 +398,7 @@ private fun LibraryItems(
     onSchedule: (String) -> Unit,
     gate: KioskGate,
     onDialog: (LibraryDialog) -> Unit,
+    banners: @Composable () -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
     val graph = LocalContext.current.graph
@@ -405,11 +450,14 @@ private fun LibraryItems(
     } else {
         PaddingValues(
             start = padding.calculateStartPadding(direction),
+            top = padding.calculateTopPadding(),
             end = padding.calculateEndPadding(direction),
             bottom = padding.calculateBottomPadding() + FloatingPlayClearance,
         )
     }
-    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = listPadding) {
+    // The list draws beneath the header, the bar and beside the rail, and fades into them where it meets them.
+    LazyColumn(Modifier.fillMaxSize().scrollEdges(listState), state = listState, contentPadding = listPadding) {
+        item(key = "banners") { banners() }
         item(key = "search") { SearchField(vm.query, vm::search) }
         item(key = "categories") { CategoryChips(state.category, vm::selectCategory) }
         when (group) {

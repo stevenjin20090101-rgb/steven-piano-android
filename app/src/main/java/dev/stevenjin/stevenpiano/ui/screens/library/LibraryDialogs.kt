@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 
 /** The dialogs the menus can open. */
 sealed interface LibraryDialog {
@@ -87,7 +87,7 @@ private fun AddToPlaylistDialog(piece: PieceEntity, vm: LibraryViewModel, onClos
     val playlists by remember { vm.playlists }.collectAsStateWithLifecycle(emptyList())
     val member by remember(piece.id) { vm.membershipOf(piece.id) }.collectAsStateWithLifecycle(emptyList())
     var newName by rememberSaveable { mutableStateOf("") }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onClose,
         title = { DialogTitle("Add to playlist") },
         text = {
@@ -143,7 +143,7 @@ private fun AddToPlaylistDialog(piece: PieceEntity, vm: LibraryViewModel, onClos
 private fun RenamePieceDialog(piece: PieceEntity, onClose: () -> Unit, onRename: (String, String) -> Unit) {
     var title by rememberSaveable { mutableStateOf(piece.title) }
     var composer by rememberSaveable { mutableStateOf(piece.composer) }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onClose,
         title = { DialogTitle("Rename") },
         text = {
@@ -162,7 +162,7 @@ private fun RenamePlaylistDialog(playlist: PlaylistSummary, vm: LibraryViewModel
     val others by remember { vm.playlists }.collectAsStateWithLifecycle(emptyList())
     var name by rememberSaveable { mutableStateOf(playlist.name) }
     val taken = others.any { it.id != playlist.id && it.name.equals(name.trim(), ignoreCase = true) }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onClose,
         title = { DialogTitle("Rename") },
         text = {
@@ -186,7 +186,7 @@ private fun RenamePlaylistDialog(playlist: PlaylistSummary, vm: LibraryViewModel
 
 @Composable
 private fun ConfirmDialog(title: String, text: String, confirm: String, onClose: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onClose,
         title = { DialogTitle(title) },
         text = { Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) },

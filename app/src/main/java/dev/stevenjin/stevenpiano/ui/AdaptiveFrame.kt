@@ -184,12 +184,14 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
 val LocalAppFrame = staticCompositionLocalOf { AppFrame(WindowWidthSizeClass.Compact) }
 
 /**
- * What the floating controls cover of a screen that draws beneath them (DESIGN.md › v1.5 — M16):
- * bottom, the tab bar's column (the mini player, the bar and the navigation bar beneath it), or on
- * wide frames the navigation bar alone; start, the rail on wide frames; end, the system bars and
- * cutout there. The top inset is the nav host's. Lists take the bottom as content padding, so
- * they scroll under the glass and their last row can still rise above it; fixed layouts (Keys, Now
- * playing) take it all as padding, so the keyboard is never under glass. Provided by the nav host,
- * measured, so it follows the mini player as it comes and goes.
+ * What the floating controls cover of a screen that draws beneath them (DESIGN.md › v1.5 — M16,
+ * v1.9): bottom, the tab bar's column (the mini player, the bar and the navigation bar beneath it),
+ * or on wide frames the navigation bar alone; start, the rail on wide frames; end, the system bars
+ * and cutout there; top, the status bar, until a pane's glass header gives its own height instead
+ * (the status bar's included, [dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane]). Lists take
+ * the top and the bottom as content padding, so they scroll under the glass at both ends and their
+ * first and last rows can still rest clear of it; fixed layouts (Keys, Now playing) take it all as
+ * padding, so the keyboard is never under glass. Provided by the nav host, measured, so it follows
+ * the mini player as it comes and goes, and by each header, measured, so it follows the header's text.
  */
 val LocalFloatingPadding = compositionLocalOf { PaddingValues(0.dp) }

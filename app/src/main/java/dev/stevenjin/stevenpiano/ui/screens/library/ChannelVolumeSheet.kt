@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.SliderRow
 import kotlinx.coroutines.launch
@@ -50,10 +50,9 @@ private const val VOLUME_NOTE =
 fun ChannelVolumeSheet(key: String, name: String, onDismiss: () -> Unit) {
     val graph = LocalContext.current.graph
     var volume by remember(key) { mutableIntStateOf(graph.settings.value.channelVolume(key)) }
-    ModalBottomSheet(
+    GlassSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(bottom = 24.dp)) {
             Eyebrow(ChannelCopy.CHANNEL, Modifier.padding(horizontal = 16.dp))

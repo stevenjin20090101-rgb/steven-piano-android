@@ -41,7 +41,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.player.RepeatMode
-import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
@@ -58,10 +57,9 @@ private val SIDE_ROOM = 16.dp
  * it gives the app's one haptic, a light tick, on play and on pause. Shuffle and Repeat sit at the
  * two ends: the tertiary grey when off, the content colour with a 4 dp dot beneath when on; Repeat
  * cycles off, all, one (a small "1" in its glyph). The gaps shrink to fit a narrow phone. On glass
- * ([LocalOnGlass], DESIGN.md › v1.5 — M16) play/pause is a frosted lens instead ([GlassLens]),
- * clearer than the glass around it ([GlassTokens.LensAlpha]) inside a hairline ring, its glyph the
- * content colour;
- * and Shuffle and Repeat when off take the secondary grey (nothing tertiary sits on glass).
+ * ([LocalOnGlass], DESIGN.md › v1.5 — M16) Shuffle and Repeat when off take the secondary grey
+ * (nothing tertiary sits on glass); play/pause stays the filled circle, the primary action sitting on
+ * the glass band, never glass on glass (DESIGN.md › v1.9).
  */
 @Composable
 fun TransportBar(
@@ -145,30 +143,17 @@ private fun PlayPauseButton(playing: Boolean, onClick: () -> Unit) {
         onClick()
     }
     val description = if (playing) "Pause" else "Play"
-    if (LocalOnGlass.current) {
-        // The lens: the bar's glass left clearer here, in a hairline ring (no second blur).
-        GlassLens(Modifier.size(PLAY_SIZE)) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clickable(role = Role.Button, onClick = press)
-                    .semantics { contentDescription = description },
-            ) {
-                PlayPauseGlyph(playing, MaterialTheme.colorScheme.onSurface)
-            }
-        }
-    } else {
-        Surface(
-            onClick = press,
-            modifier = Modifier
-                .size(PLAY_SIZE)
-                .semantics { contentDescription = description },
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.onSurface,
-            contentColor = MaterialTheme.colorScheme.surface,
-        ) {
-            PlayPauseGlyph(playing, MaterialTheme.colorScheme.surface)
-        }
+    // The filled circle wherever it stands, on the glass band or solid (DESIGN.md › v1.9).
+    Surface(
+        onClick = press,
+        modifier = Modifier
+            .size(PLAY_SIZE)
+            .semantics { contentDescription = description },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.onSurface,
+        contentColor = MaterialTheme.colorScheme.surface,
+    ) {
+        PlayPauseGlyph(playing, MaterialTheme.colorScheme.surface)
     }
 }
 

@@ -9,12 +9,12 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 
 /**
@@ -55,7 +55,7 @@ data class RowPlace(val index: Int, val count: Int) {
  */
 @Composable
 fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expanded: Boolean, onDismiss: () -> Unit) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    GlassDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         MenuItem("Play next", onDismiss) { actions.playNext(piece) }
         MenuItem("Add to queue", onDismiss) { actions.addToQueue(piece) }
         MenuItem("About this piece", onDismiss) { actions.about(piece) }

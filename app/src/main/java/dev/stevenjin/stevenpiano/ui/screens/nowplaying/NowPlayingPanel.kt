@@ -56,9 +56,11 @@ import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
+import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.Hairline
@@ -68,6 +70,7 @@ import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.RollStrip
 import dev.stevenjin.stevenpiano.ui.components.RollStripHeight
 import dev.stevenjin.stevenpiano.ui.components.glassAvailable
+import dev.stevenjin.stevenpiano.ui.components.screenHeaderHeight
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
@@ -97,7 +100,8 @@ private val StripPlan = NotesPlan(NotesLayout.ROLL, NoteDisplay.PAPER_ROLL)
  * on glass over the strip's history where it can hold them (the composition Now playing uses),
  * solid under the strip where it cannot; and at its foot, in a 40 dp row at the end edge, the
  * connection line Now playing shows ("● Sent to piano", or not connected: it opens the Piano tab,
- * [onOpenPiano]). With nothing loaded: "Choose a piece from the library."
+ * [onOpenPiano]). With nothing loaded: "Choose a piece from the library." Its NOW PLAYING row is the
+ * pane's glass header ([GlassHeaderPane], DESIGN.md › v1.9), as tall as the list's beside it.
  * It reuses Now playing's clock ([RollClock], [rememberFrameNanos]) and plays through [playback].
  * Its sheets' state lives where the panel is composed, apart from Now playing's.
  */
@@ -111,17 +115,21 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     val piece = state.piece
-    Column(modifier) {
+    // The NOW PLAYING row is the pane's glass header (DESIGN.md › v1.9), level with the list's beside it.
+    val header: @Composable () -> Unit = {
         Row(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 64.dp)
+                .heightIn(min = screenHeaderHeight())
                 .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Eyebrow("Now playing", Modifier.weight(1f), maxLines = 1)
             if (piece != null) GlyphButton(R.drawable.ic_queue, "Up next") { upNext = true }
         }
+    }
+    // Nothing scrolls beneath it: the panel's own column starts below it (and scrolls inside itself when short).
+    GlassHeaderPane(scroll = null, modifier = modifier, header = header) { Column(Modifier.fillMaxSize().padding(top = LocalFloatingPadding.current.calculateTopPadding())) {
         if (state.loading) ProgressHairline(null)
         state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -146,7 +154,7 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
                 }
             }
         }
-    }
+    } }
     if (upNext) UpNextSheet { upNext = false }
     about?.let { PieceDetailSheet(it) { about = null } }
 }

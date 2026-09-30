@@ -20,9 +20,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import dev.stevenjin.stevenpiano.Provenance
 import dev.stevenjin.stevenpiano.ui.HeldByline
 import dev.stevenjin.stevenpiano.ui.LocalBylineHold
@@ -59,4 +62,16 @@ fun ScreenHeader(
         }
         actions()
     }
+}
+
+/**
+ * A [ScreenHeader]'s height at the current text size, for a header beside it that must end level
+ * with it (the now-playing panel's, beside the Library's list): its 8 dp above and below, the title's
+ * line and the byline's, and never under 64 dp.
+ */
+@Composable
+fun screenHeaderHeight(): Dp {
+    val type = MaterialTheme.typography
+    val lines = with(LocalDensity.current) { type.titleLarge.lineHeight.toDp() + type.labelSmall.lineHeight.toDp() }
+    return max(64.dp, lines + 16.dp)
 }

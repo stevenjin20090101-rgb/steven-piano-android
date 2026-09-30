@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -46,6 +45,7 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.moved
@@ -82,10 +82,9 @@ fun UpNextSheet(onDismiss: () -> Unit) {
         if (drag.draggingKey == null && dragged == state.upNext.map { it.uid }) dragged = null
     }
 
-    ModalBottomSheet(
+    GlassSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Row(
             Modifier

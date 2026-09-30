@@ -14,6 +14,9 @@ import androidx.compose.ui.graphics.toArgb
 import dev.stevenjin.stevenpiano.ui.theme.CarbonPrimary
 import dev.stevenjin.stevenpiano.ui.theme.CarbonSecondary
 import dev.stevenjin.stevenpiano.ui.theme.CarbonTertiary
+import dev.stevenjin.stevenpiano.ui.theme.GlassEdgeDark
+import dev.stevenjin.stevenpiano.ui.theme.GlassEdgeLight
+import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.InkDisabledGlyph
 import dev.stevenjin.stevenpiano.ui.theme.InkElevated
 import dev.stevenjin.stevenpiano.ui.theme.InkHairline
@@ -32,6 +35,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /** The panel's static files (assets/web): the app's tokens, the policy's rules, the allow-list. */
 class WebAssetsTest {
@@ -56,6 +61,25 @@ class WebAssetsTest {
             val declared = Regex("${Regex.escape(name)}:\\s*(#[0-9A-Fa-f]{6});").find(css)?.groupValues?.get(1)
             assertEquals(name, hex(color), declared?.uppercase())
         }
+    }
+
+    @Test
+    fun `the panel's glass is the app's, value for value, and gives way to solid surfaces when asked`() {
+        val css = text("style.css")
+        fun declared(name: String) = Regex("${Regex.escape(name)}:\\s*([^;]+);").find(css)?.groupValues?.get(1)?.trim()
+        assertEquals("${(GlassTokens.ContainerAlpha * 100).roundToInt()}%", declared("--glass-bar"))
+        assertEquals("${(GlassTokens.SheetAlpha * 100).roundToInt()}%", declared("--glass-sheet"))
+        assertEquals("${GlassTokens.Blur.value.roundToInt()}px", declared("--glass-blur"))
+        assertEquals("${GlassTokens.EdgeBand.value.roundToInt()}px", declared("--glass-band"))
+        assertEquals("${GlassTokens.RailBand.value.roundToInt()}px", declared("--glass-rail-band"))
+        assertEquals("hsl(0 0% 100% / ${String.format(Locale.ROOT, "%.2f", GlassEdgeDark.alpha)})", declared("--ink-specular"))
+        assertEquals("hsl(0 0% 100% / ${String.format(Locale.ROOT, "%.2f", GlassEdgeLight.alpha)})", declared("--paper-specular"))
+        // Reduce transparency and more contrast: solid surfaces; reduced motion: no fading bands.
+        assertTrue(css.contains("@media (prefers-reduced-transparency: reduce), (prefers-contrast: more)"))
+        assertTrue(css.contains("@media (prefers-reduced-motion: reduce) {\n  .sections::after { transition: none; }"))
+        // The primary action is the filled circle, never glass.
+        assertTrue(css.contains(".play-circle {") && text("index.html").contains("class=\"play-circle\" id=\"now-play\""))
+        assertFalse(css.contains(".lens"))
     }
 
     @Test

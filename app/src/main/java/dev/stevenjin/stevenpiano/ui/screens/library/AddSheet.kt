@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -34,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 
 /** What the system pickers may offer. Some file managers call a .mid file octet-stream. */
@@ -82,11 +82,10 @@ class StudioEntry(val label: String, val detail: String, val onClick: () -> Unit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit, studio: List<StudioEntry> = emptyList()) {
-    ModalBottomSheet(
+    GlassSheet(
         onDismissRequest = onDismiss,
         // Open all the way: with Studio's entry the sheet is taller than half a phone's screen, where it would open half up and cut its last row.
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Text(
             "Add MIDI files",

@@ -5228,3 +5228,287 @@ of `releases/history.json` (`"draft": true`, tag `v1.8`, its notes; no hash or s
   app's sources. The greps above and every earlier section's: as stated. The release APK is 13,503,088
   bytes (versionCode 16, "1.8", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 28,066,776;
   staged as `../apk/steven-piano-1.8.apk` and `-debug.apk`.
+
+---
+
+# v1.9 — Liquid Glass across the functional layer
+
+Read `DESIGN.md › v1.9 — Liquid Glass across the functional layer` first. Steven's request
+(2026-09-30), designed by Fable with the `apple-design` skill; tablet first. Built on branch
+`glass-pass` from `main` at 1.7.1 (`5ceb03c`), concurrently with M25 in its own worktree. **Not a
+release here**: `versionCode`, `versionName`, `Provenance.text` and the provenance manifest are
+untouched; the integrator bumps and signs at the merge.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `M/ui/components/GlassHeader.kt`: `GlassHeaderPane(scroll, modifier, header, content)`, a
+  `SubcomposeLayout` that measures `header` (on its `HeaderBar` glass, padded by the incoming
+  `LocalFloatingPadding.top`, the status bar) and lays `content` out at full size under it with
+  `LocalFloatingPadding` whose top is the header's height; with a `scroll`, the content is the header's
+  own source (`graphicsLayer().hazeSource(source)`, its own layer). `scrolled` = `scroll.canScrollBackward`;
+  `presence` animates 0 ↔ 1 over `Motion.FastMs` (`snap()` under reduced motion) and drives the edge,
+  the band and the text: `LocalTertiary` and `LocalSecondaryText` lerp from today's greys to `onSurface`.
+  The header blurs only while `scrolled`. `PaneSlots` caches both slot lambdas by what they read, so a
+  header whose text changes (an import's count) measures the pane again without recomposing the list.
+- `M/ui/components/ScrollEdge.kt`: `Modifier.scrollEdges(state: ScrollableState)` (composable factory,
+  like the app's other glass readers): draws over its container, in the surface colour, the top band
+  (`EdgeBand`, from `EdgeFadeAlpha` at the header's edge to clear, while `canScrollBackward`), the bottom
+  band (phones only, above the tab bar's column, while `canScrollForward`) and the rail band (`RailBand`,
+  where `onGloballyPositioned` finds the container's start at the rail's edge, right to left too); each
+  top and bottom band fades in and out over `Motion.FastMs` (a cut under reduced motion); nothing while
+  `!glassAvailable()`.
+- `M/ui/components/GlassSheet.kt`: `GlassSheet(onDismissRequest, modifier, sheetState, content)`:
+  `ModalBottomSheet` with `containerColor = Transparent`, `tonalElevation = 0`, `dragHandle = null`,
+  `contentWindowInsets = { WindowInsets(0) }`; inside, `GlassSurface(shape =
+  BottomSheetDefaults.ExpandedShape, fill = Sheet, solid = surfaceVariant)` holding a `Column` padded by
+  `BottomSheetDefaults.windowInsets` (as Material pads its own), `SheetGrabber` (32 × 4 dp,
+  `onSurfaceVariant`, 22 dp above and below; semantics "Drag handle" with dismiss, and expand or collapse
+  as Material's) and the content.
+- `M/ui/components/GlassMenu.kt`: `GlassMenuContainer(modifier, shape = shapes.large, content)`;
+  `GlassDropdownMenu(expanded, onDismissRequest, modifier, offset, content)` (Material's `DropdownMenu`
+  with the glass as its column's modifier, which Material lays inside its surface, `containerColor =
+  Transparent`, its shadow kept); `GlassAlertDialog(onDismissRequest, confirmButton, modifier,
+  dismissButton, title, text, properties)` (Material's alert-dialog layout on `BasicAlertDialog`: 24 dp in,
+  the title in `titleLarge`/`onSurface` 16 dp above the text in `bodyLarge`/`onSurfaceVariant` with
+  `weight(1f, fill = false)`, the buttons in a `FlowRow` at the end, 8 dp apart);
+  `GlassDialogSurface(modifier, content)` (the dialog's corners); `GlassPopover(expanded,
+  onDismissRequest, modifier, offset = (0, 4 dp), content)` (a focusable `Popup` placed by
+  `PopoverPosition`: below the anchor, ends aligned, above it where there is no room, 8 dp inside the
+  window; `GlassMenuContainer` with 16 dp inside; a 120 ms fade, a cut under reduced motion). M25's
+  volume popover can adopt `GlassPopover` as it stands.
+- `M/ui/screens/keys/KeysPills.kt`: `KeysPills(sustain, onSustain, octaves, modifier)`,
+  `OctavePills(canGoDown, canGoUp, onShift)`, the 48 dp `OctavePill` (glass without a blur, ring in
+  `LocalTertiary`, `LocalHairline` when disabled).
+
+Changed:
+
+- `M/ui/theme/Glass.kt`: `GlassTokens` gains `SheetAlpha` 0.86, `WideInputScale` 0.2, `SpecularReach`
+  24 dp, `EdgeBand` 24 dp, `RailBand` 16 dp, `EdgeFadeAlpha` (= `SheetAlpha`), `BandAlpha` (= 1 − (1 −
+  0.86)/(1 − 0.72) = 0.5), `ContrastHairlineAlpha` 0.4, and loses `LensAlpha` and `LensVeilAlpha`;
+  `GlassAccessibility(reducedTransparency, increasedContrast)` and `rememberGlassAccessibility()` (the
+  High contrast text observer, the debug `noblur` property for reduced transparency alone);
+  `rememberReducedTransparency()` kept on top of it.
+- `M/ui/components/Glass.kt` (still the only file naming Haze): `GlassEdge.Bottom`; `enum GlassFill(alpha)
+  { Bar, Sheet }`; `GlassShown`/`GlassHidden`; `GlassSurface(modifier, shape, source, edge, fill, blur,
+  paused, solid, outline, edgeAlpha, band, content)`; `rememberGlassLook(...)` → `GlassLook(modifier,
+  glass)`, shared with the menu; `paused` (the transport yielding to a scrolling list): while true the
+  look drops its Haze node and is the glass without a blur (`background(surface)`), a cut; when it
+  turns false the node comes back under `glassVeil`, the surface drawn over the blur at an `Animatable`
+  going 1 → 0 over `Motion.FastMs` (`snapTo` under reduced motion); `LocalYieldBlur: State<Boolean>`
+  (false unless provided); `GlassText(glass, fill)` (`LocalOnGlass`; `LocalTertiary` → `onSurface` on a
+  bar, `onSurfaceVariant` on a sheet; `LocalSecondaryText` → `onSurface` on a bar); `LocalSecondaryText`,
+  `secondaryText()`; `glassBand` (inside a blurring `Top`/`Bottom` bar, `EdgeBand` of the surface from 0 to
+  `BandAlpha`); `glassEdge` draws with `edgeAlpha`, the outline's specular line over `SpecularReach` or
+  half the height. Every blur `expandLayerBounds = false`; headers and `Sheet` fills
+  `HazeInputScale.Fixed(WideInputScale)`, bars `Auto`. `GlassLens`, `LensVeil`, `GlassLensSlot`,
+  `LocalGlassLens` and the `lens` parameter are gone.
+- `M/ui/NavHost.kt`: `PianoNavHost(frame, requestedTab, onTabShown, content = rememberHazeState(),
+  onImport)`; the `NavHost` no longer pads the status bar (it still consumes it) and
+  `LocalFloatingPadding` carries it as `top`; `LocalReducedTransparency` and, with increased contrast,
+  `LocalHairline` = `onSurface` at 0.4 from `rememberGlassAccessibility()`; `BottomBar`'s glass has its
+  band while it blurs. `M/MainActivity.kt` hoists the navigation content's `HazeState` so the share sheet,
+  outside the nav host, blurs it. `M/ui/AdaptiveFrame.kt` (`LocalFloatingPadding`'s top, documented).
+- `M/ui/components/ReadingWidth.kt` (`readingPadding(available, top, bottom)`), `ScreenHeader.kt`
+  (`screenHeaderHeight()`: max(64 dp, 16 dp + the title's and the byline's line heights)),
+  `TransportBar.kt` (`PlayPauseButton` is always the filled `Surface`; the lens branch and its import
+  gone), `FloatingPlay.kt` (`FloatingPlayButton` a filled circle, no glass).
+- `M/ui/screens/library/LibraryScreen.kt` (the pane: the header with the import, artwork and Studio lines;
+  the banners as the list's first item; `readingPadding(maxWidth, top, bottom)`; `scrollEdges(listState)`;
+  `LibraryItems(…, banners)`; on two panes `LocalYieldBlur` provides `derivedStateOf {
+  listState.isScrollInProgress }` to `NowPlayingPanel`), `ImportBar.kt` (`secondaryText()`);
+  `M/ui/screens/piano/PianoScreen.kt` (the hub and `SettingsPageView` in panes, a top spacer,
+  `scrollEdges`);
+  `M/ui/screens/nowplaying/NowPlayingScreen.kt` (the pane, padded clear of the rail; the header moved out
+  of `NowPlayingContent`, whose `onUpNext` went with it; the short column scrolls beneath the header with a
+  top spacer, the `short` rule measured without the status bar as before), `NowPlayingPanel.kt` (the NOW
+  PLAYING row as the pane's header, `heightIn(min = screenHeaderHeight())`, `scroll = null`),
+  `NotePanel.kt` (`GlassTransportPanel` without the lens; its glass `paused` while `LocalYieldBlur` reads
+  true); `M/ui/screens/keys/KeysScreen.kt` (the pane, padded clear of the rail; the mini-map across the
+  width; `KeysPills` over the keys' top edge, the keys `weight(1f, fill = false)` under them; VELOCITY in
+  the bottom row), `SustainButton.kt` (the glass pill).
+- Sheets on `GlassSheet`: `UpNextSheet`, `PieceDetailSheet`, `AddSheet`, `PinSheet` (both PIN sheets),
+  `ChannelVolumeSheet`, `ScheduleEditorSheet` (its `TimeDialog` on `GlassDialogSurface`, the picker's
+  containers clear), `ComposeSheet`, `QrCode` (`QrSheet`), `ShareSheet`. Menus on `GlassDropdownMenu`:
+  `PieceActions` (`PieceMenu`), `LibraryRows` (`PlaylistTile`, `ComposerTile`), `PlaylistHeader`,
+  `ChannelCard`, `SchedulePage` (a schedule's). Dialogs on `GlassAlertDialog`: `LibraryDialogs` (four),
+  `SchedulePage` (delete).
+- `app/src/main/assets/web/style.css` (the glass tokens, `.sections` as the bar and the rail, the bands,
+  `.menu`, `.toast`, `.gate-card`, the editors, `.play-circle`, the accessibility queries), `index.html`
+  (`.gate-card`, `.play-circle`), `app.js` (`.scrolled` from a passive, frame-throttled scroll listener).
+- Tests: `T/ui/components/GlassTokensTest.kt` (rewritten), `T/web/WebAssetsTest.kt` (+1). Docs: DESIGN.md,
+  this file, README.
+
+Shared with M25's run: `TransportBar.kt` (the play control only; the tempo row is Now playing's),
+`NowPlayingScreen.kt` (the screen function's body and `NowPlayingContent`'s first lines; the tempo row in
+`PieceView` untouched), `NowPlayingPanel.kt` (the header row and the pane's opening and closing lines, the
+body's lines kept as they were), `KeysScreen.kt` (the pane's lines, the mini-map and keys, the bottom row's
+first item; the connection line untouched). `PlaybackPage.kt`, `Settings.kt` and `AppGraph.kt`: not touched.
+
+## Greps (v1.9)
+
+`dev.chrisbanes`: `Glass.kt` alone. `Color(0x` outside `ui/theme`: none. `hazeSource`/`HazeState`:
+`Glass.kt`, `GlassHeader.kt`, `GlassMenu.kt`, `NavHost.kt`, `NotePanel.kt`, `MainActivity.kt`.
+`Modifier.blur`: none. `LensAlpha`/`GlassLens`/`LensVeil`: none. `ModalBottomSheet(`, `DropdownMenu(`,
+`AlertDialog(` outside the glass wrappers: none (the time picker's `BasicAlertDialog` holds
+`GlassDialogSurface`).
+
+## Measured (September 2026, `steven_piano_glass`, API 34, Pixel 7 profile, arm64, 4 GB, debug build)
+
+The emulator runs headless and draws with SwiftShader (the GPU's work on the host's CPU), as M16's did.
+The library: `ALL-SONGS.zip` (1,726 pieces) uploaded through the panel's API (the debug build's loopback
+listener, the project's test-fixture PIN). Frames: `dumpsys gfxinfo` over 20 s of alternating flings of
+the Library list, deep in it (the header blurring throughout), after an unmeasured warm-up of the same
+flings, a fresh process each run, Clair de lune playing; runs interleaved with 1.7.1's debug build (the
+branch point, same data, same window) to cancel the host's drift (a second emulator from another session
+ran part of the time: every figure here is from interleaved pairs). The host is Steven's working
+machine, 16 cores; a video call ran on it through some rounds (noted), and where a run's load is given it
+is the 1-minute load average as the run began (the emulator alone keeps it near 10). **The emulator's CPU
+renderer inflates every figure and moves with the host's load; the real tablet's GPU is the deciding
+measurement**, not taken yet.
+
+- **Tablet on its side** (`wm size 2560x1600`, `wm density 240`; the list beside the now-playing panel,
+  its roll strip playing; the panel's transport stands under the strip there): **0 janky of 1,202 (0.00 %)
+  twice**, 50th / 90th / 99th percentiles 22 / 25 / 30 ms; 1.7.1 in the same runs 0 of 1,201 (0.00 %),
+  22 / 25 / 31 ms. Before the fixes below: 21 of 1,202 (1.75 %), 26 / 34 / 48 ms. With the transport
+  yielding (nothing changes on this side; 16:13–16:19, the call on): 1 of 1,200 (0.08 %, load 7.2) and
+  2 of 1,203 (0.17 %, load 14.8); 1.7.1 0 of 1,203 (load 10.3) and 0 of 1,199 (load 14.0).
+- **Tablet upright** (`wm size 1600x2560`; the panel's strip is tall, and the transport floats on its
+  glass over the strip's history). **With the transport yielding to the scrolling list** (DESIGN.md ›
+  v1.9): **0.58–0.99 % janky with the host quiet** (round A: 28 of 3,626, 0.77 %; 1.7.1 0.08–0.17 %),
+  under the 1.5 % target; with the video call on, 1.31–9.23 %, 1.7.1 0.33–5.53 % in the same rounds; the
+  build before the rule 16.65 % in round C. Every run (the rule's frames' 50th percentile 28–36 ms against
+  1.7.1's 23–34 ms, the GPU's 18–19 ms against 17–18 ms):
+
+  | Round, host | Build | Janky | Load |
+  |---|---|---|---|
+  | 15:02–15:08, a video call | the rule | 77 of 1,142 (6.74 %) | not logged (17.4 at the end) |
+  | | 1.7.1 | 9 of 1,145 (0.79 %) | not logged |
+  | | the rule | 76 of 1,142 (6.65 %) | not logged |
+  | | 1.7.1 | 64 of 1,158 (5.53 %) | not logged |
+  | A, 15:44–15:53, no call | 1.7.1 | 1 of 1,201 (0.08 %) | 6.2 |
+  | | the rule | 12 of 1,209 (0.99 %) | 13.0 |
+  | | 1.7.1 | 2 of 1,202 (0.17 %) | 12.1 |
+  | | the rule | 7 of 1,207 (0.58 %) | 11.8 |
+  | | 1.7.1 | 1 of 1,201 (0.08 %) | 14.5 |
+  | | the rule | 9 of 1,210 (0.74 %) | 13.3 |
+  | B, 16:18–16:24, a video call | the rule | 15 of 1,142 (1.31 %) | 9.5 |
+  | | 1.7.1 | 4 of 1,207 (0.33 %) | 12.4 |
+  | | the rule | 31 of 1,186 (2.61 %) | 12.1 |
+  | | 1.7.1 | 8 of 1,203 (0.67 %) | 14.4 |
+  | C, 16:40–16:45, the call, busiest | before the rule (`10b2760`) | 175 of 1,051 (16.65 %) | 14.9 |
+  | | the rule | 98 of 1,062 (9.23 %) | 19.2 |
+  | | 1.7.1 | 53 of 1,170 (4.53 %) | 18.2 |
+
+  The rule's builds carried the phone's fling pause as well (dropped at review, below), which acts only on
+  compact windows and so did nothing here; B and C also skip a no-op fade at a surface's first
+  composition, as committed. In the first session, before the rule: **8.45–11.1 % janky** (95–117 of
+  1,046–1,124 over four runs, loads not logged), against 1.85 % for 1.7.1, the frames late on the UI
+  thread's side (90–117 "slow UI thread"): the one layout where two blurs were live on every frame of a
+  scroll, the list's header and the panel's transport. Either alone was within budget: with the
+  transport's glass not blurring 1.00 % and 1.25 %; with the header's not blurring 1.68 %; with nothing
+  playing 0.59 % (1.7.1-like 0.34 % without the header's blur).
+- **Phone** (1080 × 2400 px, 420 dpi; the list under the header and under the tab bar with the mini
+  player): the header and the tab bar both blur a scrolling list, as they did before the transport's
+  rule. Pausing the header through a fling faster than 500 dp a second was built, measured and dropped at
+  review. In one round (16:31–16:40, the call on), without the pause 4.50 % (50 of 1,110, load 8.4) and
+  4.80 % (53 of 1,104, load 14.2), with it 5.09 % (58 of 1,140, load 12.0) and 4.73 % (54 of 1,142, load
+  12.6), 1.7.1 3.04 % (34 of 1,120, load 14.2) and 4.48 % (50 of 1,115, load 14.6). Its other runs, each
+  beside 1.7.1: 4.93 % and 4.72 % (14:50–14:56, loads not logged; 1.7.1 4.26 % and 4.73 %); 4.99 %,
+  5.00 % and 6.26 % (loads 11.8, 12.4, 15.8; 1.7.1 4.55 %, 5.95 %, 4.19 % at 9.3, 15.3, 13.4); 4.93 % and
+  8.43 % (loads 15.0, 11.6, the call on; 1.7.1 4.54 % and 4.09 % at 14.7 and 20.0). The GPU's 50th
+  percentile 17–18 ms in every run with and without the fling pause; 1.7.1's 10–11 ms (17 ms in two of
+  its nine). In the first session (loads not logged): 5.49–6.44 % janky against 3.02–4.61 % for 1.7.1
+  (whose tab bar already blurs every frame of a scroll); with the header's blur off 3.25–3.69 %; with the
+  header's on and the tab bar's off 4.26–4.53 %.
+- **The glass**: the Library, the Piano hub and a page, Now playing, the Up next sheet, a row menu, a
+  dialog, the PIN sheet and Keys, light and dark, the tablet on its side and upright, then the phone; High
+  contrast text (solid surfaces, hairlines at `onSurface` 0.4, no bands, the panel's transport under its
+  strip); font scale 2.0 on the tablet's headers and rail (the list's and the panel's headers end level;
+  the rail's labels cap at 1.5×) and the phone's header. Screenshots: the run's scratchpad, `glass-shots/`
+  (`T-land-*`, `T-port-*`, `P-*`, `w*`).
+- **The web panel** (headless Chrome over the DevTools protocol, the same fixture PIN): the gate's card,
+  the Library at 1280 px (the section list's glass, the page fading into it) and at 390 px (the strip's
+  glass and band once scrolled, no horizontal scroll), a row's menu, Now playing's filled circle, the
+  schedule editor's sheet, light and dark; `prefers-reduced-transparency: reduce` (solid) and
+  `prefers-contrast: more` (solid, `--hairline` at the content colour's 40 %).
+- Tests: 1,163 before (12 skipped), **1,167** after (12 skipped), none failing. `check`: lint 0 errors,
+  28 warnings (as 1.7.1, none in this run's files), the ONNX Runtime checks passing. The debug APK
+  28,664,812 bytes (the release APK is built at the merge).
+
+## Performance, what was changed on the way
+
+- **Each pane's content is a layer of its own** under its header (`graphicsLayer()` before
+  `hazeSource`), so a scrolling list re-records only itself.
+- **The wide surfaces blur a copy at a fifth of the resolution** (`WideInputScale`): a header is as wide
+  as its pane and blurs on every frame a list scrolls beneath it. With both, the tablet on its side went
+  from 1.75 % to 0.00 %.
+- **A header blurs only while content is scrolled beneath it**; at rest it is the surface, no Haze node at
+  all. The panel's header and Keys' never blur (nothing passes beneath them); Now playing's only on a
+  short screen, scrolled.
+- **The transport yields to a scrolling list** (decided at review; DESIGN.md › v1.9): on two panes the
+  Library provides `LocalYieldBlur` (its list's `isScrollInProgress`) and the panel's transport glass is
+  `paused` while it reads true: its look drops the Haze node for that while (one surface recomposed at
+  each end of a scroll) and takes it back under the fading veil. Upright, 16.65 % before it and 9.23 %
+  with it in the same round at the host's busiest, 0.58–0.99 % with the host quiet.
+- **Tried and not kept.** Pausing a compact window's header through a fling faster than 500 dp a second
+  (a `NestedScrollConnection` on the pane's body, the tab bar keeping its blur): no measurable gain on
+  the phone (above), dropped at review with its code. A pause that kept the Haze node and switched
+  Haze's `blurEnabled` off inside its block (no recomposition, the veil over Haze's unblurred scrim): its
+  phone runs spread 3.0–11.1 % with heavy tails. In a bisection on the phone, builds with the fling watch
+  but no header blur at all held the GPU's 50th percentile at 15–17 ms (seven runs) where builds with
+  neither sat at 10 ms (four runs of five): there, the pause's switching cost about what it saved.
+
+## Deviations from the brief, and why
+
+- **Sheets, menus and dialogs at 0.86, not 0.84**: at 0.84 the secondary grey on the paper reads 4.3:1
+  over the worst backdrop (a black portrait under a sheet); 0.86 is the least fill, in hundredths, at
+  which it reads 4.5:1 on both appearances (`GlassTokensTest`). The tertiary eyebrows on sheets take the
+  secondary grey. Kept at review: the contrast rule wins.
+- **A header's two appearances**: at rest no edge, no band and today's tertiary byline (the tabs look as
+  they always have; UIKit's scroll-edge appearance); the glass (blur, edge, band, text in the content
+  colour) shows once content is scrolled beneath it. The Library's fixed hairline under its header
+  becomes that edge. The brief asked only that the resting header show no band. Confirmed at review.
+- **"A slightly stronger blur band inside the glass edge" is a denser band**: the fill thickens from 0.72
+  to 0.86 over the last 24 dp, in the same blur pass. A second blur for the band, or Haze's progressive
+  blur (a variable-radius shader), would each cost a bar a second pass on every frame.
+- **The rail's band is 16 dp**, the content's own margin, not 24 dp: 24 dp would wash the first letters of
+  every row, inset 16 dp. The rail still never blurs: the panes keep clear of it.
+- **The Keys pills sit just above the keys' top edge**, never over it (every key's top is its soft end),
+  and their ring is the action outline's grey (a pill over the bare background needs a visible edge; the
+  hairline token reads 1.3:1). The mini-map spans the width; VELOCITY moved under the keys.
+- **The Library's banners scroll with the list** (its first lines) and **its progress lines joined the
+  header**, so the list can pass beneath the glass from its top.
+- **The now-playing panel's header never blurs**: its own column scrolls inside itself when short, so
+  nothing passes beneath the header (the panel's body kept as it was, for the merge with M25).
+- **Dialogs are laid out by the app on `BasicAlertDialog`** (Material's `AlertDialog` puts a modifier
+  outside its surface); **sheets draw their grabber inside the glass** with Material's accessibility
+  actions and keep Material's insets inside it.
+- **The web panel's schedule editor** is a sheet laid flat too, as the compose editor the brief named.
+- **The share sheet** blurs the navigation content too: `MainActivity` hoists its `HazeState`.
+- **No version, provenance or APK staging** (the run's instructions): the integrator's.
+
+## Residuals
+
+- **The emulator decides nothing final.** Its CPU renderer inflates every figure and moves with the host:
+  1.7.1's own upright runs span 0.08–5.53 % across these rounds. With the host quiet the tablet upright
+  holds the 1.5 % target (0.58–0.99 %), still above 1.7.1's 0.08–0.17 % in the same runs: the list's
+  header is the one live blur of a scroll there, where 1.7.1's was the transport's. The phone keeps two
+  live blurs on a scroll (the header and the tab bar): 4.50 % and 4.80 % against 1.7.1's 3.04 % and 4.48 %
+  in one round. On its side, the brief's window, 0.00–0.17 %.
+- At font scale 2.0 the hub's byline wraps to three lines in its 360 dp column, so a page's header beside
+  it ends higher (the titles stay level, as M15 designed); it shows only when both are scrolled. Accepted
+  at review.
+- Not measured on the school tablet: its GPU is the deciding measurement.
+
+## Tests added in v1.9
+
+`GlassTokensTest` rewritten (9, was 6: the two fills and the wide input scale; text on a bar; secondary
+glyphs and why nothing secondary or tertiary is text on a bar; text on a sheet, the secondary grey clearing
+4.5:1 and the tertiary not; 0.86 as the least such fill; the filled circle's glyph pair 17.2:1 and 16.3:1
+and the circle against the band; the band thickening a bar to a sheet over any backdrop, the 24 and 16 dp
+bands; the contrast hairline 3.5:1 and 2.5:1, stronger than the token; the specular whites. The lens's
+two tests went with it). `WebAssetsTest` +1 (the panel's glass tokens are the app's, value for value; the
+reduced-transparency and reduced-motion rules; the filled play circle, no `.lens`). 1,163 before,
+**1,167** after.

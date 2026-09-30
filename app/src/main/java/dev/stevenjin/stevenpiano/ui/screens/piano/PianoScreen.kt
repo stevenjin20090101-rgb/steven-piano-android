@@ -70,6 +70,7 @@ import dev.stevenjin.stevenpiano.ui.UpdateCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.NavRow
@@ -79,6 +80,7 @@ import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.ShareDiagnosticsRow
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
+import dev.stevenjin.stevenpiano.ui.components.scrollEdges
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.DisplayPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FeelPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
@@ -111,6 +113,7 @@ private val HubWidth = 360.dp
  * the piano saves its settings when the tab itself stops (another tab, the app in the background),
  * never when a page closes. The tab draws under the glass of the bar and the rail: it keeps clear of
  * the rail at its side, and each scrolling column ends with room for the bar ([LocalFloatingPadding]).
+ * The hub and each page scroll beneath their own glass headers (DESIGN.md › v1.9).
  * In kiosk mode the settings are locked (DESIGN.md › v1.6.1 — M20): the rows show a padlock, and a
  * page, a switch of the APP group, Check now and Disconnect wait for the kiosk PIN ([KioskGate]).
  */
@@ -243,13 +246,16 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         )
     }
 
-    Column(modifier) {
-        ScreenHeader("Piano", Modifier.readingWidth())
+    // The hub scrolls beneath its header's glass (DESIGN.md › v1.9); beside a page, each has its own.
+    GlassHeaderPane(scroll = scroll, modifier = modifier, header = { ScreenHeader("Piano", Modifier.readingWidth()) }) {
+        val floating = LocalFloatingPadding.current
         Column(
             Modifier
                 .fillMaxSize()
+                .scrollEdges(scroll)
                 .verticalScroll(scroll),
         ) {
+            Spacer(Modifier.height(floating.calculateTopPadding()))
             Column(Modifier.readingWidth()) {
                 ConnectionCard(
                     link,
@@ -277,7 +283,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
                     }
                 }
                 AboutRow(Modifier.padding(16.dp))
-                Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))
+                Spacer(Modifier.height(floating.calculateBottomPadding()))
             }
         }
     }
@@ -338,18 +344,22 @@ private fun UnsupportedRow(label: String, note: String) {
 }
 
 /**
- * A page: its header (the back glyph on phones, [onBack]; the title alone beside the hub), then
- * its sections in a column that scrolls from anywhere across the pane, at the reading width.
+ * A page: its header (the back glyph on phones, [onBack]; the title alone beside the hub), a glass
+ * navigation bar of its own (DESIGN.md › v1.9), then its sections in a column that scrolls from
+ * anywhere across the pane, at the reading width, beneath the header.
  */
 @Composable
 private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (() -> Unit)?, modifier: Modifier, gate: KioskGate, onListen: (Long) -> Unit) {
-    Column(modifier) {
-        PageHeader(page.title, onBack, Modifier.readingWidth())
+    val scroll = vm.scrollOf(page)
+    GlassHeaderPane(scroll = scroll, modifier = modifier, header = { PageHeader(page.title, onBack, Modifier.readingWidth()) }) {
+        val floating = LocalFloatingPadding.current
         Column(
             Modifier
                 .fillMaxSize()
-                .verticalScroll(vm.scrollOf(page)),
+                .scrollEdges(scroll)
+                .verticalScroll(scroll),
         ) {
+            Spacer(Modifier.height(floating.calculateTopPadding()))
             Column(Modifier.readingWidth()) {
                 // Settings locked in kiosk: the page's controls wait behind the PIN (the page beside the hub,
                 // or one left open when the five minutes ran out or the tablet rested). Firmware and status
@@ -372,7 +382,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Studio -> StudioPage(vm, onListen)
                 }
                 Spacer(Modifier.height(24.dp))
-                Spacer(Modifier.height(LocalFloatingPadding.current.calculateBottomPadding()))
+                Spacer(Modifier.height(floating.calculateBottomPadding()))
             }
         }
     }

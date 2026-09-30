@@ -26,13 +26,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -63,6 +62,8 @@ import dev.stevenjin.stevenpiano.schedule.ScheduleRules
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassDialogSurface
+import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.PieceSearch
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
@@ -112,10 +113,9 @@ fun ScheduleEditorSheet(initial: ScheduleDraft, onDismiss: () -> Unit) {
         failure = null
     }
 
-    ModalBottomSheet(
+    GlassSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(
             Modifier
@@ -347,8 +347,10 @@ private fun PieceChoices(draft: ScheduleDraft, onChoose: (Long) -> Unit) {
 
 /**
  * The time picker, on the 24-hour clock, in the app's ink: no colour but the content's, on the
- * elevated tone as the app's other dialogs. Its own dialog surface: Material's TimePickerDialog lays
- * the paper tinted by the ink's elevation overlay, a grey that is none of the app's tokens.
+ * dialogs' glass as the app's other dialogs (DESIGN.md › v1.9; the elevated tone where the glass
+ * cannot be drawn). Its own dialog surface: Material's TimePickerDialog lays the paper tinted by the
+ * ink's elevation overlay, a grey that is none of the app's tokens; the picker itself is clear, so
+ * the glass shows through it, and only its dial and its fields are drawn.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -360,10 +362,10 @@ private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDism
     )
     val ink = MaterialTheme.colorScheme.onSurface
     val paper = MaterialTheme.colorScheme.surface
-    val elevated = MaterialTheme.colorScheme.surfaceVariant
+    val clear = Color.Transparent
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     BasicAlertDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(shape = MaterialTheme.shapes.extraLarge, color = elevated, tonalElevation = 0.dp) {
+        GlassDialogSurface {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Eyebrow(
                     title,
@@ -379,10 +381,10 @@ private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDism
                         clockDialSelectedContentColor = paper,
                         clockDialUnselectedContentColor = ink,
                         selectorColor = ink,
-                        containerColor = elevated,
+                        containerColor = clear,
                         periodSelectorBorderColor = LocalTertiary.current,
                         periodSelectorSelectedContainerColor = ink,
-                        periodSelectorUnselectedContainerColor = elevated,
+                        periodSelectorUnselectedContainerColor = clear,
                         periodSelectorSelectedContentColor = paper,
                         periodSelectorUnselectedContentColor = secondary,
                         timeSelectorSelectedContainerColor = ink,

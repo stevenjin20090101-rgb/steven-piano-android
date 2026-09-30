@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onPlaced
@@ -55,11 +56,10 @@ val FloatingPlayMargin = 16.dp
 val FloatingPlayClearance = FloatingPlayMargin + FloatingPlaySize + FloatingPlayMargin
 
 /**
- * A playlist's Play (DESIGN.md › v1.5 — M16): a 56 dp glass circle floating at the bottom end of the
- * list, above the floating controls, the rows passing beneath it blurred. The list lies inside the
- * navigation content, which is the glass's source, and a glass surface must never be drawn inside
- * its own source; so the screen asks for the circle ([FloatingPlayRequest]) and the nav host draws
- * it over the content ([FloatingPlayLayer]), where the glass can see the list.
+ * A playlist's Play (DESIGN.md › v1.5 — M16, v1.9): a 56 dp filled circle floating at the bottom end
+ * of the list, above the floating controls, the rows passing beneath it: the primary action, solid,
+ * as the transport's play is. The screen asks for the circle ([FloatingPlayRequest]) and the nav host
+ * draws it over the content ([FloatingPlayLayer]), beside the navigation content and never in it.
  */
 @Stable
 class FloatingPlaySlot {
@@ -121,33 +121,30 @@ fun FloatingPlayLayer(slot: FloatingPlaySlot, shown: Boolean) {
 }
 
 /**
- * The circle: glass (the container over the blurred rows, a hairline ring and the specular line),
- * the play glyph in the content colour; on the solid fallback the filled circle it always was, the
- * glyph in the surface colour. Pressing it gives the play tick.
+ * The circle: filled in the content colour, the play glyph in the surface colour (the pair reads
+ * 17:1 and 16:1), with glass or without (DESIGN.md › v1.9: the primary action is never glass).
+ * Pressing it gives the play tick.
  */
 @Composable
 fun FloatingPlayButton(onPlay: () -> Unit, modifier: Modifier = Modifier) {
     val view = LocalView.current
-    GlassSurface(modifier.size(FloatingPlaySize), shape = CircleShape) {
-        val onGlass = LocalOnGlass.current
-        val ink = MaterialTheme.colorScheme.onSurface
-        Box(
-            Modifier
-                .fillMaxSize()
-                .then(if (onGlass) Modifier else Modifier.background(ink, CircleShape))
-                .clickable(role = Role.Button) {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    onPlay()
-                }
-                .semantics { contentDescription = "Play" },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painterResource(R.drawable.ic_play),
-                contentDescription = null,
-                tint = if (onGlass) ink else MaterialTheme.colorScheme.surface,
-                modifier = Modifier.size(28.dp),
-            )
-        }
+    Box(
+        modifier
+            .size(FloatingPlaySize)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.onSurface)
+            .clickable(role = Role.Button) {
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                onPlay()
+            }
+            .semantics { contentDescription = "Play" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_play),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.size(28.dp),
+        )
     }
 }

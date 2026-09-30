@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +41,7 @@ import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 
@@ -97,7 +97,7 @@ fun PlaylistTile(
         onLongPress = { menu = true },
         modifier = modifier,
     ) {
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             if (playlist.builtIn) {
                 MenuItem("Change photo", { menu = false }, onChangePhoto)
             } else {
@@ -134,7 +134,7 @@ fun ComposerTile(composer: ComposerGroup, onOpen: () -> Unit, onPlayAll: (shuffl
         onLongPress = { menu = true },
         modifier = modifier,
     ) {
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Play all", { menu = false }) { onPlayAll(false) }
             MenuItem("Shuffle", { menu = false }) { onPlayAll(true) }
         }

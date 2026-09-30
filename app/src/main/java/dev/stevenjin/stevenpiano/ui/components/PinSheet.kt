@@ -24,7 +24,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -251,10 +250,9 @@ private fun PinSheetFrame(eyebrow: String, title: String, line: String, onDismis
     val idle = LocalIdleState.current
     if (idle?.idle == true) LaunchedEffect(Unit) { onDismiss() }
     val touched = remember(idle) { { idle?.touch() ?: Unit } }
-    ModalBottomSheet(
+    GlassSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(
             Modifier

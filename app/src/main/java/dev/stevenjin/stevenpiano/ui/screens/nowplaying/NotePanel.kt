@@ -36,6 +36,7 @@ import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
+import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.TRACKER_FROM_BOTTOM
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
@@ -67,8 +68,10 @@ internal fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Un
  * the card ([panel]: the canvas, the hairline, the keyboard strip) is the glass's source, and the
  * glass is its sibling, laid across the card's width with its bottom on the strip's top edge
  * ([stripHeight] above the card's bottom), holding [controls]. So the controls never cover the
- * tracker bar or the keyboard strip; the notes just played pass under them, blurred. The glass
- * within the controls (the play circle) blurs the same card.
+ * tracker bar or the keyboard strip; the notes just played pass under them, blurred. The play
+ * control is the filled circle on that band (DESIGN.md › v1.9). Beside the Library's list, the band
+ * yields its blur while the list scrolls ([LocalYieldBlur]), so only the list's header blurs on every
+ * frame of a scroll.
  */
 @Composable
 internal fun GlassTransportPanel(
@@ -87,7 +90,8 @@ internal fun GlassTransportPanel(
                     .padding(bottom = stripHeight)
                     .fillMaxWidth(),
                 source = source,
-                lens = true,
+                // Beside a list scrolling under its own glass (the Library's panel), this glass yields its blur for that while.
+                paused = LocalYieldBlur.current.value,
             ) {
                 Column(content = controls)
             }
