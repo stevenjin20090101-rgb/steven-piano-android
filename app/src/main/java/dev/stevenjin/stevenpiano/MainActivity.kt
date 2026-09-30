@@ -26,6 +26,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,8 @@ import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.ui.AppFrame
 import dev.stevenjin.stevenpiano.ui.PianoNavHost
 import dev.stevenjin.stevenpiano.ui.Route
+import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
+import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.library.ShareSheet
 import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
 import kotlinx.coroutines.launch
@@ -92,10 +95,16 @@ class MainActivity : ComponentActivity() {
             val dark = appearance?.dark(isSystemInDarkTheme()) ?: return@setContent
             LaunchedEffect(dark) { systemBarsFor(dark) }
             PianoTheme(darkTheme = dark) {
-                PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }) { source ->
+                // The navigation content, the glass's source: the share sheet over it blurs it too (DESIGN.md › v1.9).
+                val content = rememberHazeState()
+                PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }, content = content) { source ->
                     ImportService.start(this, source, fromPicker = true)
                 }
-                if (pendingShare.isNotEmpty()) ShareSheet(pendingShare.size, onAdd = ::addShared, onCancel = { pendingShare = emptyList() })
+                if (pendingShare.isNotEmpty()) {
+                    CompositionLocalProvider(LocalHazeState provides content) {
+                        ShareSheet(pendingShare.size, onAdd = ::addShared, onCancel = { pendingShare = emptyList() })
+                    }
+                }
             }
         }
         lifecycleScope.launch {

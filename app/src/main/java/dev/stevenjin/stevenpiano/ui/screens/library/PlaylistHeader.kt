@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +38,7 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -69,7 +69,7 @@ fun PlaylistHeader(
             Spacer(Modifier.weight(1f))
             Box {
                 GlyphButton(R.drawable.ic_more, "Playlist options") { menu = true }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     if (summary.builtIn) {
                         MenuItem("Change photo", { menu = false }, onChangePhoto)
                     } else {

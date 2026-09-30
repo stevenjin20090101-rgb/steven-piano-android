@@ -67,8 +67,8 @@ internal fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Un
  * the card ([panel]: the canvas, the hairline, the keyboard strip) is the glass's source, and the
  * glass is its sibling, laid across the card's width with its bottom on the strip's top edge
  * ([stripHeight] above the card's bottom), holding [controls]. So the controls never cover the
- * tracker bar or the keyboard strip; the notes just played pass under them, blurred. The glass
- * within the controls (the play circle) blurs the same card.
+ * tracker bar or the keyboard strip; the notes just played pass under them, blurred. The play
+ * control is the filled circle on that band (DESIGN.md › v1.9).
  */
 @Composable
 internal fun GlassTransportPanel(
@@ -87,7 +87,6 @@ internal fun GlassTransportPanel(
                     .padding(bottom = stripHeight)
                     .fillMaxWidth(),
                 source = source,
-                lens = true,
             ) {
                 Column(content = controls)
             }

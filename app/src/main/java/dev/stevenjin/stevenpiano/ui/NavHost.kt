@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Icon
@@ -91,8 +90,11 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayLayer
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.GlassEdge
+import dev.stevenjin.stevenpiano.ui.components.GlassHidden
+import dev.stevenjin.stevenpiano.ui.components.GlassShown
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.HazeState
 import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
 import dev.stevenjin.stevenpiano.ui.components.LocalFloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
@@ -110,10 +112,12 @@ import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoPageScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoScreen
+import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
+import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
-import dev.stevenjin.stevenpiano.ui.theme.rememberReducedTransparency
+import dev.stevenjin.stevenpiano.ui.theme.rememberGlassAccessibility
 import kotlinx.coroutines.flow.first
 import kotlin.math.min
 
@@ -121,10 +125,13 @@ import kotlin.math.min
  * The app's frame: four destinations (Library, Now playing, Keys, Piano) in a bottom navigation
  * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
  * with a 240 ms fade-through between them, or a cut when motion is reduced. The bar and the rail
- * are glass (DESIGN.md › v1.5 — M16): the content keeps only the top inset and draws beneath them,
- * recorded as the glass's source ([hazeSource]), and each screen keeps clear of them through
- * [LocalFloatingPadding] (lists scroll under the bar, fixed layouts stop above it). The rail is a
- * sibling of the content, laid over its start edge, never inside its own source. The Piano tab is a
+ * are glass (DESIGN.md › v1.5 — M16, v1.9): the content fills the window and draws beneath them, the
+ * status bar included (each pane's glass header reaches up under it), recorded as the glass's source
+ * ([hazeSource], which [content] is: the sheets, menus and dialogs blur it too), and each screen keeps
+ * clear of them through [LocalFloatingPadding] (lists scroll under the bar, fixed layouts stop above
+ * it). The rail is a sibling of the content, laid over its start edge, never inside its own source.
+ * High contrast text stands for Reduce Transparency and Increase Contrast ([rememberGlassAccessibility]):
+ * solid surfaces, and every hairline stronger ([LocalHairline]). The Piano tab is a
  * graph of its own: its hub, and on phones its pages (`piano/{page}`), pushed over the hub with the
  * bar still there and popped by back; a tab keeps its place when another is chosen, and choosing
  * Piano again goes back to its hub. Artwork everywhere follows the Display page's black-and-white
@@ -138,7 +145,13 @@ import kotlin.math.min
  * sheet opens over whatever tab is showing.
  */
 @Composable
-fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, onImport: (ImportSource) -> Unit) {
+fun PianoNavHost(
+    frame: AppFrame,
+    requestedTab: Route?,
+    onTabShown: () -> Unit,
+    content: HazeState = rememberHazeState(),
+    onImport: (ImportSource) -> Unit,
+) {
     val nav = rememberNavController()
     val reduced = rememberReducedMotion()
     val playback = rememberPlaybackStarter()
@@ -149,8 +162,9 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
     // Studio's Listen (v1.7 — M23): the piece it made plays, and Now playing shows it (and asks Keep or Discard after a first listen).
     val listen: (Long) -> Unit = remember(playback, open) { { pieceId -> playback.play(pieceId, listOf(pieceId)); open(Route.NowPlaying) } }
     val settings by LocalContext.current.graph.settings.collectAsStateWithLifecycle()
-    val reducedTransparency = rememberReducedTransparency()
-    val content = rememberHazeState()
+    val glass = rememberGlassAccessibility()
+    // Increase contrast (DESIGN.md › v1.9): every hairline in the content colour at 0.4 instead of the hairline token.
+    val hairline = if (glass.increasedContrast) MaterialTheme.colorScheme.onSurface.copy(alpha = GlassTokens.ContrastHairlineAlpha) else LocalHairline.current
     val floatingPlay = remember { FloatingPlaySlot() }
     // Display mode (DESIGN.md › v1.5 — M17): every touch anywhere keeps it away, a minute without one brings it.
     // In kiosk mode it is always on (v1.6.1 — M20), and the byline's hold opens the kiosk's PIN sheet.
@@ -172,7 +186,8 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
         LocalAppFrame provides frame,
         LocalArtworkMonochrome provides settings.artworkMonochrome,
         LocalHandColours provides settings.handColours,
-        LocalReducedTransparency provides reducedTransparency,
+        LocalReducedTransparency provides glass.reducedTransparency,
+        LocalHairline provides hairline,
         LocalHazeState provides content,
         LocalFloatingPlaySlot provides floatingPlay,
         LocalBylineHold provides if (kiosk) openKioskSheet else null,
@@ -198,8 +213,11 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                 ) { padding ->
                     val direction = LocalLayoutDirection.current
                     val top = padding.calculateTopPadding()
+                    // The top is the status bar's until a pane's glass header takes it (GlassHeaderPane): the
+                    // headers reach up under the status bar, and each pane's content starts below its header.
                     val floating = PaddingValues(
                         start = max(padding.calculateStartPadding(direction), railWidth),
+                        top = top,
                         end = padding.calculateEndPadding(direction),
                         bottom = padding.calculateBottomPadding(),
                     )
@@ -209,7 +227,6 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
                                 navController = nav,
                                 startDestination = Route.Library.path,
                                 modifier = Modifier
-                                    .padding(top = top)
                                     .consumeWindowInsets(PaddingValues(top = top))
                                     .hazeSource(content),
                                 enterTransition = {
@@ -355,8 +372,10 @@ private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: Playb
     val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val reduced = rememberReducedMotion()
-    // Lists pass beneath the bar (the Library, the Piano tab); Now playing and Keys stop above it.
-    GlassSurface(Modifier.fillMaxWidth(), blur = current == Route.Library || current == Route.Piano) {
+    // Lists pass beneath the bar (the Library, the Piano tab), and the frost thickens along its top edge
+    // where they do (the scroll-edge effect); Now playing and Keys stop above it.
+    val lists = current == Route.Library || current == Route.Piano
+    GlassSurface(Modifier.fillMaxWidth(), blur = lists, band = if (lists) GlassShown else GlassHidden) {
         Column {
             AnimatedVisibility(
                 visible = !frame.twoPane && state.miniPlayerShown && current != Route.NowPlaying,

@@ -17,14 +17,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -50,14 +47,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
-import dev.stevenjin.stevenpiano.ui.components.GlyphButton
+import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -73,8 +69,9 @@ import kotlinx.coroutines.launch
  * and the pedal let go when the screen stops (another tab, the app in the background) and when
  * the link drops. While a key is held the screen keeps its orientation ([HoldOrientationWhileHeld]):
  * a rotation would end every touch; it turns once the keys are let go, from the same first key.
- * The keyboard is never under glass: the whole screen stops above the tab bar and beside the rail
- * ([LocalFloatingPadding]).
+ * The keyboard is never under glass: the whole screen stops above the tab bar, beside the rail and
+ * below the header's glass ([LocalFloatingPadding]), and the pedal and the octave buttons are glass
+ * pills floating just above the keys' top edge ([KeysPills], DESIGN.md › v1.9), never over them.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -98,46 +95,46 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     DisposableEffect(vm) { onDispose { vm.letGo() } }
     HoldOrientationWhileHeld(touches, pressed)
 
-    BoxWithConstraints(
+    // The status bar, before the header's glass takes the top: the keys' cap is measured as before.
+    val statusBar = LocalFloatingPadding.current.calculateTopPadding()
+    // The header is a glass navigation bar (DESIGN.md › v1.9); nothing scrolls beneath it here.
+    GlassHeaderPane(scroll = null, header = { ScreenHeader("Keys") }) { BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .padding(LocalFloatingPadding.current),
     ) {
-        val keysHeight = keysHeightCap(maxHeight)
+        val keysHeight = keysHeightCap(maxHeight + LocalFloatingPadding.current.calculateTopPadding() - statusBar)
         Column(Modifier.fillMaxSize()) {
-            ScreenHeader("Keys")
             // A piano runs low to high from the left in every language.
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 if (frame.keysScroll) {
-                    val first = firstWhite()
-                    Row(
-                        Modifier
+                    KeyMiniMap(
+                        touches,
+                        pressed,
+                        visible,
+                        firstWhite,
+                        onMove = { vm.moveTo(it, visible) },
+                        onSettle = { vm.settle(visible) },
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        GlyphButton(R.drawable.ic_chevron_left, "Octave down", enabled = first > 0f) { vm.shiftOctave(-1, visible) }
-                        KeyMiniMap(
-                            touches,
-                            pressed,
-                            visible,
-                            firstWhite,
-                            onMove = { vm.moveTo(it, visible) },
-                            onSettle = { vm.settle(visible) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        GlyphButton(R.drawable.ic_chevron_right, "Octave up", enabled = first < (KeyLayout.WHITE_KEYS - visible).toFloat()) {
-                            vm.shiftOctave(1, visible)
-                        }
-                    }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
                 }
-                // The keys at the bottom of the space between the mini-map and the row under them.
-                Box(
+                // The keys at the bottom of the space between the mini-map and the row under them, and just
+                // above their top edge the glass pills: the pedal, and where the keys scroll the octave buttons.
+                Column(
                     Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentAlignment = Alignment.BottomCenter,
+                    verticalArrangement = Arrangement.Bottom,
                 ) {
+                    val first = firstWhite()
+                    val octaves = if (!frame.keysScroll) {
+                        null
+                    } else {
+                        OctavePills(canGoDown = first > 0f, canGoUp = first < (KeyLayout.WHITE_KEYS - visible).toFloat()) { vm.shiftOctave(it, visible) }
+                    }
+                    KeysPills(sustain, vm::setSustain, octaves)
                     PlayableKeyboard(
                         touches,
                         pressed,
@@ -146,6 +143,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                         Modifier
                             .fillMaxWidth()
                             .padding(start = 16.dp, end = 16.dp, top = 8.dp)
+                            .weight(1f, fill = false)
                             .heightIn(max = keysHeight)
                             .fillMaxHeight()
                             .clip(MaterialTheme.shapes.medium),
@@ -159,11 +157,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SustainButton(sustain, vm::setSustain)
-                    Spacer(Modifier.width(16.dp))
-                    VelocityReadout(vm.velocity)
-                }
+                VelocityReadout(vm.velocity)
                 ConnectionLine(
                     connected = link is LinkState.Connected,
                     playing = playing,
@@ -172,7 +166,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                 )
             }
         }
-    }
+    } }
 }
 
 /**

@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -55,6 +58,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
@@ -75,6 +79,7 @@ import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.glassAvailable
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -90,6 +95,7 @@ import dev.stevenjin.stevenpiano.ui.components.ScorePages
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
+import dev.stevenjin.stevenpiano.ui.components.scrollEdges
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
 import dev.stevenjin.stevenpiano.ui.theme.Motion
@@ -118,7 +124,9 @@ private val SHORT_SCORE = 200.dp
  * the keyboard strip (DESIGN.md › v1.5 — M16), whenever that third can hold them; otherwise (falling
  * notes, the score alone, a phone on its side, and wherever glass is unavailable: below API 31 or
  * with transparency reduced) they stand below the views on the screen, as before.
- * The screen stops above the tab bar ([dev.stevenjin.stevenpiano.ui.LocalFloatingPadding]).
+ * The screen stops above the tab bar ([dev.stevenjin.stevenpiano.ui.LocalFloatingPadding]), and
+ * below its header, a glass navigation bar ([GlassHeaderPane], DESIGN.md › v1.9) that only a short
+ * screen's scrolling column passes beneath.
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
@@ -132,17 +140,33 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val plan = frame.notesPlan(settings.noteDisplay, settings.wideLayout)
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
-    BoxWithConstraints(
-        Modifier
-            .fillMaxSize()
-            .padding(LocalFloatingPadding.current),
+    // The status bar, before the header's glass takes the top: the short rule measures what is below it, as before.
+    val statusBar = LocalFloatingPadding.current.calculateTopPadding()
+    val column = rememberScrollState()
+    // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it.
+    GlassHeaderPane(
+        scroll = column,
+        header = {
+            ScreenHeader("Now playing") {
+                if (piece != null) GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
+            }
+        },
     ) {
-        // Too short for the note views to share the height (landscape, a small phone at a large
-        // font): the screen scrolls and the views keep fixed heights instead of collapsing.
-        val short = piece != null && maxHeight < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
-        Column(if (short) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()) {
-            val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
-            NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, { about = it }) { upNext = true }
+        val floating = LocalFloatingPadding.current
+        val top = floating.calculateTopPadding()
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .padding(floating.besidesTop()),
+        ) {
+            // Too short for the note views to share the height (landscape, a small phone at a large
+            // font): the screen scrolls and the views keep fixed heights instead of collapsing.
+            val short = piece != null && maxHeight - statusBar < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
+            Column(if (short) Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column) else Modifier.fillMaxSize().padding(top = top)) {
+                if (short) Spacer(Modifier.height(top))
+                val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
+                NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short) { about = it }
+            }
         }
     }
     if (upNext) UpNextSheet { upNext = false }
@@ -161,11 +185,7 @@ private fun ColumnScope.NowPlayingContent(
     onOpenPiano: () -> Unit,
     short: Boolean,
     onAbout: (Long) -> Unit,
-    onUpNext: () -> Unit,
 ) {
-    ScreenHeader("Now playing") {
-        if (piece != null) GlyphButton(R.drawable.ic_queue, "Up next", onClick = onUpNext)
-    }
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -388,6 +408,13 @@ internal fun StartingLine(starting: Boolean, modifier: Modifier = Modifier) {
 }
 
 private const val STARTING = "Starting"
+
+/** The floating padding at the sides and the bottom: the top is the header's, kept inside the column. */
+private fun PaddingValues.besidesTop(): PaddingValues = PaddingValues(
+    start = calculateStartPadding(LayoutDirection.Ltr),
+    end = calculateEndPadding(LayoutDirection.Ltr),
+    bottom = calculateBottomPadding(),
+)
 
 /** What the note views show beside the notes, as the Piano tab's switches say. */
 private data class Marks(val fingering: Boolean, val chordNames: Boolean)

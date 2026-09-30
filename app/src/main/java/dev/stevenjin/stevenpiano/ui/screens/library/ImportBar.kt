@@ -31,6 +31,7 @@ import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.secondaryText
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 
 /**
@@ -40,7 +41,8 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 @Composable
 fun ImportBar(progress: ImportProgress, dismissed: ImportProgress?, onDismiss: (ImportProgress) -> Unit) {
     val style = MaterialTheme.typography.bodyLarge.merge(Tabular)
-    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    // In the Library's header: the content colour while the list is scrolled beneath its glass.
+    val color = secondaryText()
     when {
         !progress.finished -> ProgressRow(ImportCopy.running(progress), if (progress.total == 0) null else progress.done.toFloat() / progress.total)
         progress.total > 0 && progress !== dismissed -> Column {
@@ -82,7 +84,7 @@ private fun ProgressRow(text: String, progress: Float?) {
             text,
             Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             style = MaterialTheme.typography.bodyLarge.merge(Tabular),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = secondaryText(),
         )
         ProgressHairline(progress)
     }

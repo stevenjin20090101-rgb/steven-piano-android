@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -50,6 +48,8 @@ import dev.stevenjin.stevenpiano.schedule.ScheduleRow
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
+import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
@@ -124,7 +124,7 @@ fun SchedulePage() {
     editing?.let { draft -> ScheduleEditorSheet(draft, onDismiss = { editing = null }) }
     deleting?.let { id ->
         val row = list?.firstOrNull { it.entry.id == id }
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("Delete this schedule?", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface) },
             text = {
@@ -189,7 +189,7 @@ private fun ScheduleRowView(row: ScheduleRow, onEdit: () -> Unit, onEnabled: (Bo
                 colors = switchColors(),
             )
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Edit", { menu = false }, onEdit)
             MenuItem("Delete", { menu = false }, onDelete)
         }
