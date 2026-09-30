@@ -190,7 +190,7 @@ class RelayClient(
                     return
                 }
                 end.code == RelayProtocol.CLOSE_DISABLED -> {
-                    log("Cloud: turned off in the console (4403)")
+                    log("Cloud: removed from the console (4403)")
                     _state.value = CloudStatus.Disabled
                     return
                 }

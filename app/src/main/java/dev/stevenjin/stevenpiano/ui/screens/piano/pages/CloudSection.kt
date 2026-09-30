@@ -109,14 +109,17 @@ fun CloudSection(settings: PianoSettings, vm: PianoViewModel) {
     )
     if (settings.cloudEnabled && settings.cloudEnrolled) {
         CloudLine(cloud)
-        vm.cloudLink(settings, cloud)?.let { link -> LinkRow(link, onShowLarge = { largeQr = true }) }
+        // The link while it can lead somewhere: not once the console has revoked or removed this tablet, or its key is gone.
+        if (cloud !is CloudStatus.Revoked && cloud !is CloudStatus.Disabled && cloud !is CloudStatus.NotEnrolled) {
+            vm.cloudLink(settings, cloud)?.let { link -> LinkRow(link, onShowLarge = { largeQr = true }) }
+        }
     }
     ReadingRow("Cloud address", settings.cloudHost ?: "Not set")
     ActionRow(note = if (settings.cloudEnrolled) "A new code enrols this tablet again" else GET_A_CODE) {
         ActionButton("Enrol with code", onClick = { enrolling = true })
     }
     if (settings.cloudEnrolled) {
-        ActionRow(note = "Remote access over the internet stops, and this tablet leaves the console's list") {
+        ActionRow(note = "Remote access stops and this tablet's key is deleted; its row in the console stays until removed there") {
             ActionButton("Forget this cloud", onClick = { forgetting = true })
         }
     }
