@@ -92,8 +92,10 @@
     "versionName": "1.8",
     "notes": "Piano sound on the tablet: real recordings of an upright piano play what the app plays, with a volume control on Now playing and under Piano › Playback › Tablet sound — by default only while the piano isn't connected, or always if you choose. The sound file (57 MB, CC0) downloads once. The resting screen credits Wikipedia under a piece's notes.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.8/steven-piano-1.8.apk",
+    "sha256": "4241b8733cdff0a2cee54710c2b38d25073a7ea922b1605d295972dd9c53e5c9",
+    "sizeBytes": 13503088,
     "minSdk": 26,
     "tag": "v1.8",
-    "draft": true
+    "publishedAt": "2026-09-30"
   }
 ]
