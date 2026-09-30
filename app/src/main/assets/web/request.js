@@ -16,6 +16,10 @@
 (function () {
   const $ = (id) => document.getElementById(id);
 
+  // Where the page lives (v1.10 — M26): '' on the tablet's own address, '/p/<id>' through Steven Piano
+  // Cloud's relay; the requests are built from it.
+  const ROOT = location.pathname.replace(/\/request$/, '');
+
   function h(tag, props, ...children) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(props || {})) {
@@ -58,7 +62,7 @@
     note('');
     let response;
     try {
-      response = await fetch('/api/public/request', {
+      response = await fetch(ROOT + '/api/public/request', {
         method: 'POST',
         credentials: 'same-origin',
         cache: 'no-store',
@@ -85,7 +89,8 @@
       return;
     }
     button.disabled = false;
-    if (response.status === 429) note(`One request every five minutes. Try again in ${wait(body.retryAfter || 300)}.`);
+    if (response.status === 503 && body.error === 'offline') note("The piano is offline just now. Try again in a moment.");
+    else if (response.status === 429) note(`One request every five minutes. Try again in ${wait(body.retryAfter || 300)}.`);
     else if (response.status === 403) showClosed();
     else if (response.status === 503) note('The list of requests is full for now. Try again later.');
     else note(body.message || 'That request did not go through.');
@@ -99,12 +104,18 @@
   async function load() {
     let data;
     try {
-      const response = await fetch('/api/public/catalogue', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await fetch(ROOT + '/api/public/catalogue', { credentials: 'same-origin', cache: 'no-store' });
       data = await response.json();
     } catch (e) {
       note("The piano can't be reached. Try again in a moment.", true);
       return;
     }
+    if (data.error === 'offline') {
+      note('The piano is offline just now. This page looks again in a moment.', true);
+      setTimeout(load, 10000);
+      return;
+    }
+    note('');
     if (!data.open) {
       showClosed();
       return;

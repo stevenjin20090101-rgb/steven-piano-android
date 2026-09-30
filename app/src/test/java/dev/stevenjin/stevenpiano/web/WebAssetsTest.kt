@@ -123,6 +123,29 @@ class WebAssetsTest {
     }
 
     @Test
+    fun `every request the panel builds starts from its ROOT, so the pages work under the relay's prefix (v1_10 M26)`() {
+        for (name in listOf("app.js", "request.js")) {
+            val js = text(name)
+            assertTrue("$name defines ROOT from where the page lives", Regex("const ROOT = location\\.pathname\\.replace\\(").containsMatchIn(js))
+            val quoted = Regex("'/api/").findAll(js).map { it.range.first }.toList()
+            assertTrue("$name builds requests", quoted.isNotEmpty())
+            for (at in quoted) assertTrue("$name: every '/api/ is ROOT + '/api/ (at $at)", js.substring(maxOf(0, at - 7), at) == "ROOT + ")
+            for (match in Regex("[`\"]/api/").findAll(js)) {
+                val at = match.range.first
+                val before = js.substring(maxOf(0, at - 7), at)
+                assertTrue("$name: a template or string starting /api/ starts from ROOT (at $at: …$before${match.value})", before == "ROOT + " || js.substring(at, at + 8) == "\"\${ROOT}")
+            }
+            assertFalse("$name: no absolute /api/ left in a template", Regex("[`\"]/api/").findAll(js).any { js.substring(maxOf(0, it.range.first - 7), it.range.first) != "ROOT + " })
+        }
+        val app = text("app.js")
+        assertTrue("the socket follows the page's scheme and ROOT", app.contains("new WebSocket(`\${location.protocol === 'https:' ? 'wss' : 'ws'}://\${location.host}\${ROOT}/ws`)"))
+        assertFalse("never a bare ws:// socket", app.contains("WebSocket(`ws://"))
+        assertTrue("the relay's offline answer shows the offline card, not the PIN gate", app.contains("data.error === 'offline'") && text("index.html").contains("id=\"offline\""))
+        assertTrue(text("index.html").contains("The piano is offline"))
+        assertTrue(text("request.js").contains("error === 'offline'"))
+    }
+
+    @Test
     fun `the pages say what the design says`() {
         val request = text("request.html")
         for (copy in listOf("Ask the piano", "Pick a piece. It joins the queue.", "One request every five minutes", "Thanks — it's in the queue.")) {
