@@ -100,6 +100,31 @@ class PianoVoiceTest {
     }
 
     @Test
+    fun `turning the font off fades what sounds, then lets it go`() {
+        val voice = voice()
+        voice.noteOn(60, 100)
+        val before = voice.run(4_800)
+        assertTrue(before.any { it != 0f })
+        voice.load(null)
+        assertFalse("off at once for the app", voice.loaded)
+        // The next block still renders: the fade, not a cut.
+        val fade = voice.run(64)
+        assertTrue("the fade's first block still sounds", fade.any { it != 0f })
+        voice.noteOn(64, 100)   // nothing new once it is going
+        voice.run(rate * Sampler.FADE_MS / 1000 + 256)
+        assertEquals(0, voice.voices())
+        assertFalse(voice.render(FloatArray(64), 64))
+        // A font loaded meanwhile is never the one let go of.
+        voice.load(piano)
+        voice.noteOn(60, 100)
+        voice.load(null)
+        voice.load(piano)
+        voice.noteOn(62, 100)
+        assertTrue(voice.render(FloatArray(256), 256))
+        assertTrue(voice.loaded)
+    }
+
+    @Test
     fun `each queued event wakes the output`() {
         val voice = voice()
         var woken = 0

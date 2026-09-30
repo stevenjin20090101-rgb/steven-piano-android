@@ -13,21 +13,29 @@ import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiSink
 import java.util.Arrays
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The tablet's piano (v1.8 — M25), the [Sampler]'s face to the rest of the app, safe to call from any
  * thread: the player's scheduler (a piece's notes, the Keys screen's), the main thread (the mode, the
  * volume). [noteOn], [noteOff], [sustain], [allOff] and [silence] are queued, in order, and reach the
  * sampler when its owner, the audio thread, next calls [drain] or [render]; [volume] is read there too;
- * [load] swaps the font (null: none, and nothing sounds). A call never blocks for longer than it takes
+ * [load] swaps the font; [load] null fades what sounds and lets the font go once the fade is over (on
+ * the audio thread, or at once when nothing sounds), so turning the sound off never clicks. A call never
+ * blocks for longer than it takes
  * to add one number to the queue, so the player's thread is never held up. [onPost] hears every event
  * queued, so the audio output can wake (it opens only once something sounds). A queue that fills while
  * nothing takes from it (the output refused) starts again from [silence]: nothing it held could be
  * heard any more.
  */
 class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYPHONY) {
+    /** The sampler playing; swapped by [load], let go by the audio thread once an unload's fade is over. */
+    private val current = AtomicReference<Sampler?>(null)
+    private val sampler: Sampler? get() = current.get()
+
+    /** A [load] of null waits for its fade: the sampler it lets go of. */
     @Volatile
-    private var sampler: Sampler? = null
+    private var leaving: Sampler? = null
 
     @Volatile
     private var volumePct = Sampler.DEFAULT_VOLUME
@@ -42,8 +50,8 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
     private var count = 0
     private val taken = IntArray(QUEUE)
 
-    /** Whether a font is loaded. */
-    val loaded: Boolean get() = sampler != null
+    /** Whether a font is loaded (one being let go of isn't). */
+    val loaded: Boolean get() = sampler.let { it != null && it !== leaving }
 
     /** The font playing, or null. */
     @Volatile
@@ -78,11 +86,25 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
 
     val volume: Int get() = volumePct
 
-    /** Plays [soundFont] from now on (the voices of the one before stop at once); null plays nothing. */
+    /**
+     * Plays [soundFont] from now on (the voices of a font before it stop at once); null fades what sounds
+     * and plays nothing after (the font goes once the fade is over).
+     */
     fun load(soundFont: SoundFont?) {
         font = soundFont
-        sampler = soundFont?.let { Sampler(it, outputRate, polyphony) }
+        if (soundFont == null) {
+            leaving = sampler
+            post(SILENCE, 0, 0)
+            return
+        }
+        leaving = null
+        current.set(Sampler(soundFont, outputRate, polyphony))
         onPost?.invoke()
+    }
+
+    /** The audio thread: a sampler being let go of goes once nothing sounds (never one [load] has put in its place). */
+    private fun letGoIfDone(s: Sampler) {
+        if (leaving === s && s.activeVoices == 0 && current.compareAndSet(s, null)) leaving = null
     }
 
     /** Whether events wait to be applied. */
@@ -98,7 +120,9 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
             count = 0
         }
         val s = sampler ?: return
-        for (i in 0 until n) apply(s, taken[i])
+        val going = leaving === s   // a font being let go of fades and plays nothing new
+        for (i in 0 until n) if (!going || taken[i] ushr 16 != NOTE_ON) apply(s, taken[i])
+        letGoIfDone(s)
     }
 
     /** The audio thread: whether any voice sounds. */
@@ -120,6 +144,7 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
         }
         s.volume(volumePct)
         s.render(out, frames)
+        letGoIfDone(s)
         return s.activeVoices > 0
     }
 

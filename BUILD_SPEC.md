@@ -4828,7 +4828,9 @@ everything but pan becomes one region with a `partner`: the pair plays as one vo
 
 - `PianoVoice(outputRate)`: `noteOn`, `noteOff`, `sustain`, `allOff`, `silence`, `reset` queue packed events
   (a 4,096-entry ring under a lock held for one store; a full queue nobody drains starts again from
-  `silence`); `volume` is a volatile read at each render; `load(font)` swaps the sampler. The audio thread's
+  `silence`); `volume` is a volatile read at each render; `load(font)` swaps the sampler, and `load(null)`
+  queues `silence` and lets the sampler go on the audio thread once nothing sounds (a compare-and-set, so a
+  font loaded meanwhile stays), playing nothing new meanwhile: turning the sound off never clicks. The audio thread's
   `drain()` and `render()` apply the queue in order, then mix. `onPost` hears each event (the output's
   unpark). `sink(active)` / `play(batch)` read the player's batches: Note On (velocity 0: Off), Note Off,
   CC64 (≥ 64 down), CC123 → `allOff`, CC120 → `silence`; the rest ignored, as the piano ignores it.
@@ -4899,7 +4901,7 @@ imports Android.
 
 ## Measured (2026-09-30)
 
-- **Tests**: **1,194**, none failing (1,147 before); 13 skipped without `-PpianoSound`
+- **Tests**: **1,195**, none failing (1,147 before); 13 skipped without `-PpianoSound`
   (`TabletSoundRenderTest` joins the 12). `check` passes: lint 0 errors, 28 warnings (as 1.7; none in the new
   code), `checkDebugOnnxTelemetry` and `checkReleaseOnnxTelemetry`.
 - **Clair de lune offline** (`TabletSoundRenderTest`, piano-midi.de's `deb_clai.mid`, the real SoundFont,
@@ -4983,8 +4985,8 @@ imports Android.
 
 ## Tests added in M25
 
-`Sf2ReaderTest` (10), `SamplerTest` (13), `PianoVoiceTest` (5), `OfflineRenderTest` (2),
+`Sf2ReaderTest` (10), `SamplerTest` (13), `PianoVoiceTest` (6), `OfflineRenderTest` (2),
 `TabletSoundRenderTest` (1, skipped without `-PpianoSound`), `TabletSoundTest` (7), `TabletSoundCopyTest`
 (4), `ModelManifestTest` +2, `ModelStoreTest` +1, `UpdateSourceTest` +1, `SettingsRepositoryTest` +1;
 `WebApiTest`, `WebServerTest`, `WebAssetsTest` and `DiagnosticsExporterTest` changed. 1,147 before,
-**1,194** after.
+**1,195** after.
