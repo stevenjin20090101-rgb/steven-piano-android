@@ -61,6 +61,9 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
     /** Every voice faded out within [Sampler.FADE_MS]. */
     fun silence() = post(SILENCE, 0, 0)
 
+    /** Every voice gone at once and the pedal up, for when the output has closed and nothing more will be heard. */
+    fun reset() = post(RESET, 0, 0)
+
     /** The volume, 0–100 %; the sampler follows at its next block. */
     fun volume(pct: Int) {
         volumePct = pct.coerceIn(0, 100)
@@ -136,6 +139,7 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
             SUSTAIN -> s.sustain(a != 0)
             ALL_OFF -> s.allOff()
             SILENCE -> s.silence()
+            RESET -> s.reset()
         }
     }
 
@@ -171,6 +175,7 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
         const val SUSTAIN = 3
         const val ALL_OFF = 4
         const val SILENCE = 5
+        const val RESET = 6
         const val SUSTAIN_CC = 64
         const val ALL_SOUND_OFF_CC = 120
         const val ALL_NOTES_OFF_CC = 123

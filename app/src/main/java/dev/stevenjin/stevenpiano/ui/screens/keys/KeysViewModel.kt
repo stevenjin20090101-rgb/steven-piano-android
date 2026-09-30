@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import kotlinx.coroutines.Job
@@ -37,6 +38,9 @@ import kotlin.math.roundToInt
 class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink {
     private val player = graph.player
     val link: StateFlow<LinkState> = graph.pianoLink.state
+
+    /** The tablet's piano sound (v1.8 — M25): whether it plays these keys while the piano isn't connected. */
+    val tabletSound: StateFlow<TabletSoundState> = graph.tabletSound.state
 
     /** The sustain as the piano was last told; a stop elsewhere lifts it. */
     val sustain: StateFlow<Boolean> = player.liveSustain
@@ -61,8 +65,9 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** The leftmost white key shown when [visibleWhites] fit across the screen: [first], clamped to that width. */
     fun firstWhite(visibleWhites: Int): Float = KeyboardGeometry.clampFirst(first, visibleWhites)
 
+    /** Sent while the piano is connected, or while the tablet plays the piano sound itself (v1.8 — M25). */
     override fun noteOn(key: Int, velocity: Int) {
-        if (link.value is LinkState.Connected) player.liveNoteOn(key, velocity)
+        if (link.value is LinkState.Connected || graph.tabletSound.active) player.liveNoteOn(key, velocity)
         showVelocity(velocity)
     }
 

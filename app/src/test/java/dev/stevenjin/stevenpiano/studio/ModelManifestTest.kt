@@ -156,6 +156,53 @@ class ModelManifestTest {
         error("releases/$name not found above ${System.getProperty("user.dir")}")
     }
 
+    /** A sound's entry (v1.8 — M25), as publish_models.py writes it. */
+    private fun sound(edit: JSONObject.() -> Unit = {}): JSONObject {
+        val pin = ModelCatalogue.pianoSound
+        return JSONObject()
+            .put("name", pin.name).put("version", pin.version).put("file", pin.file).put("url", pin.url)
+            .put("sizeBytes", pin.sizeBytes).put("sha256", pin.sha256).put("licence", pin.licence).put("attribution", pin.attribution)
+            .put("source", "https://freepats.zenvoid.org/…")
+            .apply(edit)
+    }
+
+    private fun withSounds(models: List<JSONObject>, sounds: List<JSONObject>): String =
+        JSONObject().put("models", JSONArray(models)).put("sounds", JSONArray(sounds)).toString()
+
+    @Test
+    fun `a sound is listed beside the models as an sf2, pinned like them, and found by its kind`() {
+        val manifest = ModelManifest.parse(withSounds(listOf(entry()), listOf(sound())), UpdateSource.models)
+        val piano = manifest.entryFor(ModelCatalogue.pianoSound)!!
+        assertEquals(ModelKind.Sound, piano.kind)
+        assertEquals("upright-piano-kw-v1.sf2", piano.file)
+        assertEquals(57_377_848L, piano.sizeBytes)
+        assertEquals(ModelKind.Model, manifest.entryFor(ModelCatalogue.transcription)!!.kind)
+        // A list without sounds is 1.7's, and still read.
+        assertNull(ModelManifest.parse(list(entry()), UpdateSource.models).entryFor(ModelCatalogue.pianoSound))
+        // What a sound may not be.
+        refused(withSounds(listOf(entry()), listOf(sound { put("file", "upright-piano-kw-v1.onnx") })))
+        refused(withSounds(listOf(entry()), listOf(sound { put("url", asset("upright-piano-kw-v1.onnx")) })))
+        refused(withSounds(listOf(entry()), listOf(sound { put("sha256", "00".repeat(32)) })))
+        refused(withSounds(listOf(entry()), listOf(sound { put("sizeBytes", UpdateSource.MAX_SOUND_BYTES + 1) })))
+        refused(JSONObject().put("models", JSONArray(listOf(entry()))).put("sounds", "none").toString())
+        // A model's slot never takes an sf2.
+        refused(list(sound()))
+    }
+
+    @Test
+    fun `the committed list's sound is the pinned SoundFont, and 1_7's reading of it sees only its models`() {
+        val text = releasesFile("models.json").readText()
+        val piano = ModelManifest.parse(text, UpdateSource.models).entryFor(ModelCatalogue.pianoSound) ?: error("models.json has no piano sound")
+        assertEquals(ModelCatalogue.pianoSound.url, piano.url)
+        assertEquals(ModelCatalogue.pianoSound.sha256, piano.sha256)
+        assertEquals(ModelCatalogue.pianoSound.sizeBytes, piano.sizeBytes)
+        assertEquals("CC0-1.0", piano.licence)
+        assertEquals(ModelCatalogue.pianoSound.attribution, piano.attribution)
+        // 1.7 reads "models" and nothing else: every entry there is still an .onnx.
+        val models = org.json.JSONObject(text).getJSONArray("models")
+        for (i in 0 until models.length()) assertTrue(models.getJSONObject(i).getString("file").endsWith(".onnx"))
+    }
+
     @Test
     fun `the catalogue's names are the files' own`() {
         for (model in ModelCatalogue.all) {
@@ -164,5 +211,10 @@ class ModelManifestTest {
             assertEquals(model, ModelCatalogue.named(model.name))
         }
         assertNull(ModelCatalogue.named("aria"))
+        val piano = ModelCatalogue.pianoSound
+        assertEquals("${piano.name}-v${piano.version}.sf2", piano.file)
+        assertTrue(UpdateSource.models.allowsModel(piano.url, ".sf2"))
+        assertNull("the piano sound isn't one of Studio's models", ModelCatalogue.named(piano.name))
+        assertEquals(ModelCatalogue.all + piano, ModelCatalogue.kept)
     }
 }

@@ -24,7 +24,8 @@ import kotlin.math.pow
  * amplitude of (velocity / 127)²). A stereo pair plays as one voice, its two channels mixed to mono
  * (pan is ignored; the output copies mono to both sides). A key let go releases its voices unless the
  * sustain pedal is down, which holds them until it comes up; a key struck again releases what it
- * still sounded.
+ * still sounded. A key let go sooner than [MIN_NOTE_MS] after it was struck releases then, as a real key
+ * struck briefly still sounds (a note on and off in one block would otherwise never be heard).
  *
  * [polyphony] voices at most sound together; one more steals the oldest, preferring a voice already
  * released, and the stolen voice fades out over [FADE_MS] in one of [FADE_SLOTS] extra slots rather
@@ -60,11 +61,14 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
     private val releaseRate = FloatArray(capacity)
     private val amp = FloatArray(capacity)
     private val fadeStep = FloatArray(capacity)
+    private val age = IntArray(capacity)                  // frames rendered since the voice started
+    private val releaseDue = BooleanArray(capacity)       // let go before its minimum: releases at [minNoteFrames]
 
     private val mix = FloatArray(BLOCK)
     private val limiter = Limiter(outputRate, ceiling)
     private val fadeFrames = maxOf(1, outputRate * FADE_MS / 1000)
     private val minReleaseFrames = maxOf(1, outputRate * MIN_RELEASE_MS / 1000)
+    private val minNoteFrames = outputRate * MIN_NOTE_MS / 1000
     private var clock = 0L
     private var pedal = false
     private var masterTarget = gainFor(DEFAULT_VOLUME)
@@ -108,19 +112,31 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
         }
     }
 
-    /** Key [key] let go: its voices release, or wait for the pedal to come up while it is down. */
+    /** Key [key] let go: its voices release (after [MIN_NOTE_MS] at the earliest), or wait for the pedal to come up while it is down. */
     fun noteOff(key: Int) {
         for (v in 0 until capacity) {
             if (keyOf[v] != key || state[v] != HELD) continue
-            if (pedal) state[v] = SUSTAINED else release(v)
+            when {
+                pedal -> state[v] = SUSTAINED
+                age[v] < minNoteFrames -> releaseDue[v] = true
+                else -> release(v)
+            }
         }
     }
 
-    /** The sustain pedal down or up; up releases every voice it held. */
+    /** The sustain pedal down or up; up releases every voice it held (and every key let go meanwhile). */
     fun sustain(down: Boolean) {
         pedal = down
         if (down) return
-        for (v in 0 until capacity) if (state[v] == SUSTAINED) release(v)
+        for (v in 0 until capacity) {
+            if (state[v] != SUSTAINED) continue
+            if (age[v] < minNoteFrames) {
+                state[v] = HELD
+                releaseDue[v] = true
+            } else {
+                release(v)
+            }
+        }
     }
 
     /** All notes off: the pedal comes up and every voice releases, as a key let go does. */
@@ -133,6 +149,12 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
     fun silence() {
         pedal = false
         for (v in 0 until capacity) if (state[v] != FREE && state[v] != FADING) fade(v)
+    }
+
+    /** Every voice gone at once, the pedal up: for when nothing more will be heard (the output closed). */
+    fun reset() {
+        pedal = false
+        for (v in 0 until capacity) if (state[v] != FREE) free(v)
     }
 
     /** The master volume, 0–100 % (0 is silent); it moves over the next block. */
@@ -182,6 +204,8 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
         state[v] = HELD
         started[v] = clock++
         position[v] = 0.0
+        age[v] = 0
+        releaseDue[v] = false
         step[v] = pitchStep(r, key, outputRate)
         noteGain[v] = velocityGain * centibelsToGain(r.attenuationCb) * (if (r.partner != null) 0.5f else 1f)
         amp[v] = 0f
@@ -205,6 +229,7 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
 
     private fun release(v: Int) {
         state[v] = RELEASING
+        releaseDue[v] = false
         // The envelope carries on down from where it is: an attack's amplitude becomes its decibel-domain value.
         env[v] = when (stage[v]) {
             DELAY -> 0f
@@ -280,6 +305,15 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
 
     private fun renderVoice(v: Int, n: Int) {
         val r = region[v] ?: return free(v)
+        if (releaseDue[v] && state[v] == HELD && age[v] >= minNoteFrames) {
+            if (pedal) {
+                state[v] = SUSTAINED
+                releaseDue[v] = false
+            } else {
+                release(v)
+            }
+        }
+        age[v] += n
         if (stage[v] == DELAY && state[v] != FADING) {
             envelopeAfter(v, n)   // the sample starts with the attack
             return
@@ -367,6 +401,9 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
 
         /** A release never shorter than this (a sample cut in one step clicks). */
         const val MIN_RELEASE_MS = 10
+
+        /** The shortest a note sounds before a key let go releases it. */
+        const val MIN_NOTE_MS = 50
 
         /** An envelope time never longer than 100 s. */
         private const val MAX_TC = 7_973

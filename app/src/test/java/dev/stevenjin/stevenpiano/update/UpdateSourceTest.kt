@@ -193,6 +193,24 @@ class UpdateSourceTest {
     }
 
     @Test
+    fun `the models' list may name sf2 sounds too, of the same release, and nothing else new`() {
+        val source = UpdateSource.models
+        val sound = "https://github.com/$appRepo/releases/download/models/upright-piano-kw-v1.sf2"
+        assertTrue(source.allowsModel(sound, ".sf2"))
+        assertTrue(UpdateSource.allowsModelFile(sound, ".sf2"))
+        assertFalse("a sound is never a model", source.allowsModel(sound))
+        assertFalse(source.allowsModel("https://github.com/$appRepo/releases/download/models/transcription-v1.onnx", ".sf2"))
+        assertFalse(source.allowsModel("https://github.com/$appRepo/releases/download/v1.8/upright-piano-kw-v1.sf2", ".sf2"))
+        assertFalse(source.allowsModel("https://github.com/$appRepo/releases/download/models/piano.zip", ".zip"))
+        assertFalse(source.allowsModel("http://github.com/$appRepo/releases/download/models/upright-piano-kw-v1.sf2", ".sf2"))
+        assertFalse(UpdateSource.production.allowsModel(sound, ".sf2"))
+        val local = UpdateSource.localModels("http://10.0.2.2:8766/models.json")!!
+        assertTrue(local.allowsModel("http://10.0.2.2:8766/upright-piano-kw-v1.sf2", ".sf2"))
+        assertFalse(local.allowsModel("http://10.0.2.2:8766/upright-piano-kw-v1.sf2"))
+        assertEquals("the SoundFont's cap", 200L * 1024 * 1024, UpdateSource.MAX_SOUND_BYTES)
+    }
+
+    @Test
     fun `a model has a cap of its own, 1 GB`() {
         assertEquals(1024L * 1024 * 1024, UpdateSource.MAX_MODEL_BYTES)
         assertTrue("the composer is 173 MB", 173_193_820L <= UpdateSource.MAX_MODEL_BYTES)

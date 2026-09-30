@@ -12,11 +12,23 @@ package dev.stevenjin.stevenpiano.studio
 import dev.stevenjin.stevenpiano.update.UpdateSource
 
 /**
+ * What an entry of the models' list is (v1.8 — M25): one of Studio's models (`.onnx`, in the list's
+ * `models` array, at most [UpdateSource.MAX_MODEL_BYTES]) or a sound the tablet plays with (`.sf2`, in its
+ * `sounds` array, at most [UpdateSource.MAX_SOUND_BYTES]). 1.7 reads the `models` array alone, so a sound
+ * listed beside the models never makes it refuse the list.
+ */
+enum class ModelKind(val extension: String, val listKey: String, val maxBytes: Long) {
+    Model(".onnx", "models", UpdateSource.MAX_MODEL_BYTES),
+    Sound(".sf2", "sounds", UpdateSource.MAX_SOUND_BYTES),
+}
+
+/**
  * One of Studio's models as this build knows it: [name] and [version] (the file is
  * `<name>-v<version>.onnx`, [file]), where it is published ([url], an asset of the release tagged
  * `models`), its exact [sizeBytes] and [sha256], pinned here in the source, its [licence] (SPDX) and
  * the one-line [attribution] About shows. [title] and [licenceLabel] are what the Studio page calls
- * it ("Transcription", "CC BY 4.0"); [use] says what it is for.
+ * it ("Transcription", "CC BY 4.0"); [use] says what it is for. Since v1.8 (M25) an entry may be a
+ * sound ([kind] [ModelKind.Sound], `<name>-v<version>.sf2`): the tablet's piano.
  */
 data class ModelEntry(
     val name: String,
@@ -30,6 +42,7 @@ data class ModelEntry(
     val title: String,
     val licenceLabel: String,
     val use: String,
+    val kind: ModelKind = ModelKind.Model,
 )
 
 /**
@@ -73,4 +86,30 @@ object ModelCatalogue {
     val all: List<ModelEntry> = listOf(transcription, composer)
 
     fun named(name: String): ModelEntry? = all.firstOrNull { it.name == name }
+
+    /**
+     * The tablet's piano sound (v1.8 — M25): FreePats' Upright Piano KW (2022-02-21), a Kawai upright
+     * recorded by Gonzalo and Roberto, published under CC0 1.0; the SoundFont exactly as FreePats
+     * publishes it (`UprightPianoKW-20220221.sf2` in `UprightPianoKW-SF2-20220221.7z`), 57.4 MB.
+     */
+    val pianoSound = ModelEntry(
+        name = "upright-piano-kw",
+        version = 1,
+        file = "upright-piano-kw-v1.sf2",
+        url = "https://github.com/${UpdateSource.REPOSITORY}/releases/download/${UpdateSource.MODELS_TAG}/upright-piano-kw-v1.sf2",
+        sizeBytes = 57_377_848L,
+        sha256 = "d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108",
+        licence = "CC0-1.0",
+        attribution = "Upright Piano KW — FreePats (Gonzalo and Roberto, 2022-02-21), CC0 1.0, freepats.zenvoid.org",
+        title = "Upright piano",
+        licenceLabel = "CC0",
+        use = "A Kawai upright, recorded note by note.",
+        kind = ModelKind.Sound,
+    )
+
+    /** Every file this build keeps in `filesDir/models/`: Studio's models and the piano sound (a sweep leaves these). */
+    val kept: List<ModelEntry> = all + pianoSound
+
+    /** Every entry this build pins, by list (the models' list checks each against its pin). */
+    val pinned: List<ModelEntry> = kept
 }

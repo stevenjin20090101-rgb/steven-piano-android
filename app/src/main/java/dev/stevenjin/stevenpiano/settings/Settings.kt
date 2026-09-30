@@ -20,6 +20,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.stevenjin.stevenpiano.audio.Sampler
+import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -137,6 +139,10 @@ data class PianoSettings(
     val kioskEnabled: Boolean = false,
     /** Whether a kiosk PIN is set. */
     val kioskPinSet: Boolean = false,
+    /** When the tablet plays the piano sound itself (Piano › Playback › TABLET SOUND, v1.8 — M25). */
+    val tabletSound: TabletSoundMode = TabletSoundMode.WHEN_NOT_CONNECTED,
+    /** The tablet's piano sound's volume, 0–100 % (Now playing's speaker, the Playback page, the web panel). */
+    val tabletVolume: Int = Sampler.DEFAULT_VOLUME,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -284,6 +290,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setKioskStayOnBefore(mask: Int?) = edit { if (mask == null) it.remove(KIOSK_STAY_ON_BEFORE) else it[KIOSK_STAY_ON_BEFORE] = mask }
 
+    /** When the tablet plays the piano sound (v1.8 — M25). */
+    suspend fun setTabletSound(mode: TabletSoundMode) = edit { it[TABLET_SOUND] = mode.name }
+
+    /** The tablet's piano sound's volume, held to 0-100 %. */
+    suspend fun setTabletVolume(pct: Int) = edit { it[TABLET_VOLUME] = pct.coerceIn(0, 100) }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -348,6 +360,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             webPinSet = this[WEB_PIN_SALT] != null && this[WEB_PIN_HASH] != null,
             kioskEnabled = this[KIOSK_ENABLED] ?: defaults.kioskEnabled,
             kioskPinSet = this[KIOSK_PIN_SALT] != null && this[KIOSK_PIN_HASH] != null,
+            tabletSound = TabletSoundMode.entries.firstOrNull { it.name == this[TABLET_SOUND] } ?: defaults.tabletSound,
+            tabletVolume = (this[TABLET_VOLUME] ?: defaults.tabletVolume).coerceIn(0, 100),
         )
     }
 
@@ -392,6 +406,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         const val MAX_HOST_NAME = 253
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
+        val TABLET_SOUND = stringPreferencesKey("tabletSound")
+        val TABLET_VOLUME = intPreferencesKey("tabletVolume")
     }
 }
 

@@ -85,6 +85,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     val link by vm.link.collectAsStateWithLifecycle()
     val sustain by vm.sustain.collectAsStateWithLifecycle()
     val playing by vm.playing.collectAsStateWithLifecycle()
+    val tablet by vm.tabletSound.collectAsStateWithLifecycle()
     val visible = frame.keysVisibleWhites
     val touches = remember(vm) { KeyTouches(vm) }
     val pressed = remember { mutableIntStateOf(0) }
@@ -168,7 +169,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                     connected = link is LinkState.Connected,
                     playing = playing,
                     onOpenPiano = onOpenPiano,
-                    notConnected = "Not connected. The piano won't play these keys.",
+                    notConnected = if (tablet.active) "Not connected. The tablet plays these keys." else "Not connected. The piano won't play these keys.",
                 )
             }
         }

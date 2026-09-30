@@ -142,6 +142,20 @@ class SamplerTest {
     }
 
     @Test
+    fun `a key let go at once still sounds for its minimum, then releases`() {
+        val s = sampler()
+        s.noteOn(72, 127)
+        s.noteOff(72)   // in the same block: a zero-length note
+        val out = s.run(0.5)
+        val top = 0.5f * full
+        assertEquals("full through its first 50 ms", top, peak(out, 0.02, 0.048), 0.003f)
+        // Then the 300 ms release from 50 ms: 20 dB down 60 ms later, silent by 350 ms.
+        assertEquals(top * 0.1f, peak(out, 0.108, 0.112), top * 0.02f)
+        assertEquals(0f, peak(out, 0.36, 0.5))
+        assertEquals(0, s.activeVoices)
+    }
+
+    @Test
     fun `the pedal holds released keys until it comes up`() {
         val s = sampler()
         s.sustain(true)

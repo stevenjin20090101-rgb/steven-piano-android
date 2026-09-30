@@ -28,6 +28,8 @@ import java.util.concurrent.ConcurrentHashMap
 class ModelStore(
     val dir: File,
     private val models: List<ModelEntry> = ModelCatalogue.all,
+    /** Files others keep in the same folder, which [sweep] leaves (v1.8 — M25: Studio's store and the piano sound's share it). */
+    private val alsoKept: List<ModelEntry> = ModelCatalogue.kept,
     private val sha256: (File) -> String? = VerifiedDownloader::sha256Of,
 ) {
     private val verified = ConcurrentHashMap.newKeySet<String>()
@@ -81,10 +83,11 @@ class ModelStore(
 
     /**
      * At the app's start: downloads a stopped process left half-way (`*.part`), and files no model of
-     * this build names (an older version's), are removed; then the folder is read.
+     * this build names (an older version's), are removed; then the folder is read. The files of
+     * [alsoKept] stay (the piano sound, which shares the folder).
      */
     fun sweep() {
-        val names = models.map { it.file }.toSet()
+        val names = (models + alsoKept).map { it.file }.toSet()
         dir.listFiles()?.forEach { if (it.isFile && it.name !in names) it.delete() }
         refresh()
     }

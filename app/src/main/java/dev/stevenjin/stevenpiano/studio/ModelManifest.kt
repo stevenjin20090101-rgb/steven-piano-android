@@ -34,6 +34,11 @@ import java.util.Locale
  * [MAX_ATTRIBUTION]; at most [MAX_MODELS] entries, no name and version twice. An entry for a version
  * this build knows ([ModelCatalogue]) must carry its pinned size and SHA-256, or the whole list is
  * refused: it is not what this build was made to trust. Anything wrong throws [InvalidModelManifest].
+ *
+ * Since v1.8 (M25) the list may also hold `"sounds"`, entries of the same shape whose file is
+ * `<name>-v<version>.sf2` ([ModelKind.Sound]: the tablet's piano), each at most
+ * [UpdateSource.MAX_SOUND_BYTES]; 1.7 reads `"models"` alone and never sees them. A name and version
+ * appear once across both.
  */
 class ModelManifest private constructor(val entries: List<Entry>) {
     data class Entry(
@@ -45,10 +50,11 @@ class ModelManifest private constructor(val entries: List<Entry>) {
         val sha256: String,
         val licence: String,
         val attribution: String,
+        val kind: ModelKind = ModelKind.Model,
     )
 
-    /** The list's entry for [model] (its name and version), or null when it offers none. */
-    fun entryFor(model: ModelEntry): Entry? = entries.firstOrNull { it.name == model.name && it.version == model.version }
+    /** The list's entry for [model] (its name, version and kind), or null when it offers none. */
+    fun entryFor(model: ModelEntry): Entry? = entries.firstOrNull { it.name == model.name && it.version == model.version && it.kind == model.kind }
 
     companion object {
         /** The list is about 14 KB (the models' input and output shapes); anything past this is not one. */
@@ -61,7 +67,7 @@ class ModelManifest private constructor(val entries: List<Entry>) {
         private val LICENCE = Regex("[A-Za-z0-9.+-]{1,40}")
 
         /** The list in [text], each entry checked against [source] and the [pinned] models. */
-        fun parse(text: String, source: UpdateSource, pinned: List<ModelEntry> = ModelCatalogue.all): ModelManifest {
+        fun parse(text: String, source: UpdateSource, pinned: List<ModelEntry> = ModelCatalogue.pinned): ModelManifest {
             val json = try {
                 JSONObject(text)
             } catch (e: JSONException) {
@@ -70,36 +76,43 @@ class ModelManifest private constructor(val entries: List<Entry>) {
                 throw InvalidModelManifest("nested too deeply")
             }
             val list = json.opt("models") as? JSONArray ?: throw InvalidModelManifest("models")
-            if (list.length() > MAX_MODELS) throw InvalidModelManifest("models")
-            val entries = (0 until list.length()).map { i ->
-                val item = list.opt(i) as? JSONObject ?: throw InvalidModelManifest("models[$i]")
-                entry(item, source)
+            val sounds = when (val raw = json.opt(ModelKind.Sound.listKey)) {
+                null -> JSONArray()
+                is JSONArray -> raw
+                else -> throw InvalidModelManifest(ModelKind.Sound.listKey)
+            }
+            val entries = listOf(ModelKind.Model to list, ModelKind.Sound to sounds).flatMap { (kind, items) ->
+                if (items.length() > MAX_MODELS) throw InvalidModelManifest(kind.listKey)
+                (0 until items.length()).map { i ->
+                    val item = items.opt(i) as? JSONObject ?: throw InvalidModelManifest("${kind.listKey}[$i]")
+                    entry(item, source, kind)
+                }
             }
             if (entries.map { it.name to it.version }.toSet().size != entries.size) throw InvalidModelManifest("the same model twice")
             for (entry in entries) {
-                val pin = pinned.firstOrNull { it.name == entry.name && it.version == entry.version } ?: continue
+                val pin = pinned.firstOrNull { it.name == entry.name && it.version == entry.version && it.kind == entry.kind } ?: continue
                 if (entry.sha256 != pin.sha256) throw InvalidModelManifest("${entry.file}: sha256 is not the pinned one")
                 if (entry.sizeBytes != pin.sizeBytes) throw InvalidModelManifest("${entry.file}: sizeBytes is not the pinned one")
             }
             return ModelManifest(entries)
         }
 
-        private fun entry(json: JSONObject, source: UpdateSource): Entry {
+        private fun entry(json: JSONObject, source: UpdateSource, kind: ModelKind): Entry {
             val name = string(json, "name")
             if (!NAME.matches(name)) throw InvalidModelManifest("name")
             val version = integer(json, "version", 1L..MAX_VERSION).toInt()
             val file = string(json, "file")
-            if (file != "$name-v$version.onnx") throw InvalidModelManifest("file")
+            if (file != "$name-v$version${kind.extension}") throw InvalidModelManifest("file")
             val url = string(json, "url")
-            if (!source.allowsModel(url) || url.substringAfterLast('/') != file) throw InvalidModelManifest("url")
-            val sizeBytes = integer(json, "sizeBytes", 1L..UpdateSource.MAX_MODEL_BYTES)
+            if (!source.allowsModel(url, kind.extension) || url.substringAfterLast('/') != file) throw InvalidModelManifest("url")
+            val sizeBytes = integer(json, "sizeBytes", 1L..kind.maxBytes)
             val sha256 = string(json, "sha256")
             if (!SHA256.matches(sha256)) throw InvalidModelManifest("sha256")
             val licence = string(json, "licence")
             if (!LICENCE.matches(licence)) throw InvalidModelManifest("licence")
             val attribution = string(json, "attribution").filter { !it.isISOControl() }.trim()
             if (attribution.isEmpty() || attribution.length > MAX_ATTRIBUTION) throw InvalidModelManifest("attribution")
-            return Entry(name, version, file, url, sizeBytes, sha256.lowercase(Locale.ROOT), licence, attribution)
+            return Entry(name, version, file, url, sizeBytes, sha256.lowercase(Locale.ROOT), licence, attribution, kind)
         }
 
         /** A whole number in [range]; a JSON number only (a string of digits is refused). */

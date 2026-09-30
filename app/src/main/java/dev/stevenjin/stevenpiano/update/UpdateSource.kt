@@ -85,15 +85,15 @@ class UpdateSource private constructor(
      * Whether a models' list may name [url] as a model's file: with [models], an `.onnx` asset of this
      * repository's release tagged [MODELS_TAG] on `github.com`, a plain name, no query or fragment
      * ([allowsModelFile]); with [localModels], an `.onnx` file on its origin. Never for the app's own
-     * or the firmware's source.
+     * or the firmware's source. [extension] is `.sf2` for a sound (v1.8 — M25); nothing else is allowed.
      */
-    fun allowsModel(url: String): Boolean {
-        if (kind != Kind.Models) return false
+    fun allowsModel(url: String, extension: String = MODEL_EXTENSION): Boolean {
+        if (kind != Kind.Models || extension !in MODEL_EXTENSIONS) return false
         val uri = parse(url) ?: return false
         if (uri.rawQuery != null || uri.rawFragment != null) return false
         val path = uri.rawPath.orEmpty()
-        if (origin != null) return originOf(uri) == origin && path.endsWith(".onnx") && safeSegments(path)
-        return allowsModelFile(url)
+        if (origin != null) return originOf(uri) == origin && path.endsWith(extension) && safeSegments(path)
+        return allowsModelFile(url, extension)
     }
 
     /** Whether this is the production source (the only one release builds have). */
@@ -157,6 +157,21 @@ class UpdateSource private constructor(
          */
         const val MAX_MODEL_BYTES = 1024L * 1024 * 1024
 
+        /**
+         * The largest sound the app downloads (v1.8 — M25): the piano's SoundFont is 57.4 MB. Its own cap,
+         * apart from the models'.
+         */
+        const val MAX_SOUND_BYTES = 200L * 1024 * 1024
+
+        /** A Studio model's file. */
+        const val MODEL_EXTENSION = ".onnx"
+
+        /** A sound's file (v1.8 — M25). */
+        const val SOUND_EXTENSION = ".sf2"
+
+        /** What the models' list may name: models and sounds, nothing else. */
+        private val MODEL_EXTENSIONS = setOf(MODEL_EXTENSION, SOUND_EXTENSION)
+
         /** Studio's models: their list, their files, and GitHub's asset hosts; nothing else. */
         val models = UpdateSource(MODELS_MANIFEST_URL, origin = null, kind = Kind.Models)
 
@@ -183,15 +198,16 @@ class UpdateSource private constructor(
         }
 
         /**
-         * Whether the models' list may name [url] as a model's file: an `.onnx` asset of the release
-         * tagged [MODELS_TAG] on `github.com`, no query or fragment. An asset host is never named
-         * directly (GitHub redirects there by itself).
+         * Whether the models' list may name [url] as a model's file: an `.onnx` asset (or with [extension]
+         * `.sf2`, a sound's: v1.8 — M25) of the release tagged [MODELS_TAG] on `github.com`, no query or
+         * fragment. An asset host is never named directly (GitHub redirects there by itself).
          */
-        fun allowsModelFile(url: String): Boolean {
+        fun allowsModelFile(url: String, extension: String = MODEL_EXTENSION): Boolean {
+            if (extension !in MODEL_EXTENSIONS) return false
             val uri = parse(url) ?: return false
             if (uri.rawQuery != null || uri.rawFragment != null || !secure(uri)) return false
             val path = uri.rawPath.orEmpty()
-            return uri.host.lowercase(Locale.ROOT) == DOWNLOAD_HOST && modelAsset(path) && path.endsWith(".onnx")
+            return uri.host.lowercase(Locale.ROOT) == DOWNLOAD_HOST && modelAsset(path) && path.endsWith(extension)
         }
 
         /**

@@ -150,11 +150,15 @@ class SoundFont(val name: String, val presetName: String, val samples: List<Sf2S
  * so a damaged file never reads outside itself. Pure: no Android.
  */
 object Sf2Reader {
-    /** Memory-maps [file] (read-only; nothing is copied to the heap) and reads it. */
-    fun read(file: File): SoundFont {
+    /**
+     * Memory-maps [file] (read-only; nothing is copied to the heap) and reads it; with [preload] every page
+     * is brought in now, off the audio thread, so a note never waits for storage.
+     */
+    fun read(file: File, preload: Boolean = true): SoundFont {
         val buffer = RandomAccessFile(file, "r").use { raf ->
             raf.channel.use { it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()) }
         }
+        if (preload) buffer.load()
         return read(buffer)
     }
 

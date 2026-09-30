@@ -614,5 +614,23 @@
         }
       ]
     }
+  ],
+  "sounds": [
+    {
+      "name": "upright-piano-kw",
+      "version": 1,
+      "file": "upright-piano-kw-v1.sf2",
+      "url": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/models/upright-piano-kw-v1.sf2",
+      "sizeBytes": 57377848,
+      "sha256": "d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108",
+      "licence": "CC0-1.0",
+      "source": "https://freepats.zenvoid.org/Piano/UprightPianoKW/UprightPianoKW-SF2-20220221.7z (UprightPianoKW-SF2-20220221/UprightPianoKW-20220221.sf2, unmodified; https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html#UprightKW)",
+      "attribution": "Upright Piano KW — FreePats (Gonzalo and Roberto, 2022-02-21), CC0 1.0, freepats.zenvoid.org",
+      "format": "SoundFont 2",
+      "soundfont": "Upright Piano KW",
+      "sampleRates": [
+        44100
+      ]
+    }
   ]
 }
