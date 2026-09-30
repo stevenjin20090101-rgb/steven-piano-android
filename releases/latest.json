@@ -1,9 +1,9 @@
 {
-  "versionCode": 14,
-  "versionName": "1.7",
-  "notes": "Studio: the tablet can transcribe a piano recording into a playable piece and compose new piano pieces by itself, both running on the tablet with no cloud service. Piano › Studio downloads the two models once (125 MB and 173 MB). Transcribe a recording… takes any audio the tablet plays; Compose a piece… takes a mood, key, tempo, length and a piece from your library to write in the manner of. Each result asks Keep or Discard after your first listen. Also: the app keeps its other device architectures, the security audit's hardening, and a denser composing budget.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.7/steven-piano-1.7.apk",
-  "sha256": "23f1195cd88fb3efb1fcc103c7f735214e791ba4904d7a1caf7e4df4f79beaf7",
-  "sizeBytes": 13471112,
+  "versionCode": 15,
+  "versionName": "1.7.1",
+  "notes": "The resting screen now shows the album art with the piece's title, composer and a few lines about it, and fades in and out slowly; Piano › Display › Standby shows lets you keep the paper roll instead.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.7.1/steven-piano-1.7.1.apk",
+  "sha256": "35f41b210f11c3f058dce194449e65c4a9a982f2defd3be5d4824794a9ba250a",
+  "sizeBytes": 13478096,
   "minSdk": 26
 }
