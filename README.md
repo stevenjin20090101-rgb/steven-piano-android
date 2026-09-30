@@ -18,14 +18,16 @@ playback. Phones and tablets alike. Sideloaded as an APK; no accounts, no
 analytics, and the network only for composers' portraits and short notes from
 Wikipedia (see *Artwork and notes* below), for the app's own updates from its
 GitHub repository (see *Updates*), for the piano's firmware releases from the
-firmware's (see *Updating the piano's firmware*) and for Studio's models when you
-download them (see *Studio*). With **Web control** on, it also
+firmware's (see *Updating the piano's firmware*) and for Studio's models and the
+piano sound when you download them (see *Studio*, *Piano sound on the tablet*). With
+**Web control** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
 page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself at set
 times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
-(see *Kiosk*), and **Studio** turns a piano recording into a piece, or composes a new one in the
-manner of a piece from the library, on the tablet itself (see *Studio*). Made by Steven Jin.
-Version 1.7.1.
+(see *Kiosk*), **Studio** turns a piano recording into a piece, or composes a new one in the
+manner of a piece from the library, on the tablet itself (see *Studio*), and the tablet can play
+the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
+on the tablet*). Made by Steven Jin. Version 1.8.
 
 ## What it does
 
@@ -211,7 +213,8 @@ Version 1.7.1.
 - **Piano**: one page of groups. The connection card on top, then **PIANO**
   (Feel · Lighting · Pedal · Firmware and status, the piano's settings above),
   **PLAYING** (**Playback**: the pause before each piece, default tempo,
-  transpose, velocity, folding, drum channel; **Display**: appearance (follow
+  transpose, velocity, folding, drum channel, and the tablet's own piano sound;
+  **Display**: appearance (follow
   the system, light or dark), note display, wide layout, fingering, chord names,
   hand colours, artwork in black and white, fetching artwork automatically, and
   standby: display mode after a minute, its canvas and what it shows; **Schedule**: timed play,
@@ -243,6 +246,11 @@ Version 1.7.1.
   tempo and a length: from the Library's **+**, **Piano › Studio** or the web
   panel's Studio page. Listen, then keep it or discard it. Each model (125 MB, 173 MB)
   downloads once, when you ask; nothing you record leaves the tablet (see *Studio*).
+- **Piano sound on the tablet**: recordings of a real upright piano play what the
+  app plays, on the tablet itself: while the piano isn't connected (the default), or
+  always, with a volume on Now playing's speaker and under Piano › Playback; the
+  Keys tab sounds too. The sound (57 MB, CC0) downloads once (see *Piano sound on the
+  tablet*).
 - **The piano's firmware**: Piano › Firmware and status shows the version the
   piano runs, looks for a new signed release and sends it over Bluetooth; the
   piano checks the signature, restarts on it, and rolls back by itself if it
@@ -351,7 +359,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.7.1.apk`.
+   `adb install ../apk/steven-piano-1.8.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -411,7 +419,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=15`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=17`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -929,6 +937,62 @@ models' download, when you ask for it.
       and under 1 GB is right). Play one and listen: every note should sound (none dropped for
       coming too soon).
 
+## Piano sound on the tablet
+
+The tablet can play the pieces itself, with **recordings of a real piano**: FreePats'
+**Upright Piano KW**, a Kawai upright recorded key by key at two strengths, played back
+note by note by the app's own sampler (nothing is synthesised). It plays exactly what
+the piano would be sent: pieces, channels, schedules, the **Keys** tab, and Studio's
+Listen. (From 1.8.)
+
+1. **Piano › Playback › TABLET SOUND › Upright piano › Download**, once: 57 MB from this
+   repository's GitHub release `models`, checked against the SHA-256 the app carries
+   before it is used (the same way as Studio's models). **Remove** frees the space. While
+   the tablet would play but has no sound yet, Now playing offers the same download in a
+   line under the tempo.
+2. **Piano sound on the tablet** chooses when it plays:
+   - **Off**: never.
+   - **When the piano isn't connected** (the default): only while the piano's Bluetooth
+     link isn't connected, so it never plays alongside the real piano. If the piano
+     connects in the middle of a piece, the tablet goes quiet at once and the piano
+     carries on.
+   - **Always**: alongside the piano too. It may sound slightly early or late compared
+     with the piano: the tablet's own delay (some 20–40 ms) and the piano's are not the
+     same.
+3. **Volume**: the speaker at the end of Now playing's tempo row (and at the foot of the
+   now-playing panel on a tablet) opens it; so does the Playback page, and the web
+   panel's Now playing has the same slider while the sound is on. The speaker is bright
+   while the tablet plays and grey while it doesn't. The tablet's media volume applies
+   on top, as for any music. In kiosk mode the volume stays free; the choice of when it
+   plays is a setting, behind the PIN.
+
+On the **Keys** tab the keys sound on the tablet while it plays the piano sound (the
+line under the keys says "Not connected. The tablet plays these keys.").
+
+When another app takes the sound (a call, a video), the piece pauses; **Play** resumes
+it. A notification only lowers the tablet for its moment.
+
+**The licence.** The Upright Piano KW is dedicated to the public domain under **CC0 1.0**
+by the FreePats project (https://freepats.zenvoid.org, version 2022-02-21); the app
+downloads it unmodified. It is credited all the same, in About, in `AUTHORS` and in
+`third_party/upright-piano-kw/`.
+
+**On the emulator and the Mac.** Point the download at a server on this Mac as for
+Studio: `adb shell setprop debug.stevenpiano.modelsurl
+http://10.0.2.2:8766/models.json` (a `models.json` with the sound's entry under
+`"sounds"` and its `url` on that server), then start the app. The emulator has no
+speaker to record, so the sound can be heard as a file instead:
+`./gradlew testDebugUnitTest --tests '*TabletSoundRenderTest'
+-PpianoSound=<upright-piano-kw-v1.sf2> -PpianoRender=<out.wav>` plays Clair de lune
+(`../midi/piano-midi.de/debussy/deb_clai.mid`, or `-PpianoRenderMidi=<file.mid>`)
+through the app's own engine and sampler into a 48 kHz WAV.
+
+**Publishing the sound** (done once, for 1.8): `python tools/studio/publish_models.py
+--work <dir> --models upright-piano-kw --upload` fetches the archive from FreePats,
+checks its hash and the SoundFont's, writes the entry into `releases/models.json`
+(under `"sounds"`, which 1.7 never reads, so older tablets keep working) and uploads the
+file to the release `models`.
+
 ## Test it on the piano
 
 - [ ] Sideload `app-release.apk` (uninstall a debug build first). The app launches
@@ -1041,7 +1105,7 @@ The full audit, every finding and what was done about it, is in
 - **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
   `upload.wikimedia.org`, carrying page titles and searches made from the library's
   own names, and, for updates of the app and of the piano's firmware and for Studio's
-  models (only when you download one), to `raw.githubusercontent.com` (the three
+  models and the piano sound (only when you download one), to `raw.githubusercontent.com` (the three
   lists: the app's `latest.json`, the firmware's, and `models.json`), `github.com` (the
   release downloads of this repository, its release `models` among them, and of the
   firmware's, `stevenjin20090101-rgb/Steven-Jin-Player-Piano`, only) and
@@ -1122,6 +1186,9 @@ The full audit, every finding and what was done about it, is in
   bundled (notices in `AUTHORS`, what changed in `third_party/`). They run on
   **ONNX Runtime** by Microsoft (MIT), linked unmodified from Maven Central
   (licence and its third-party notices in `third_party/onnxruntime/`).
+- The tablet's piano sound is FreePats' **Upright Piano KW** (2022-02-21), dedicated
+  to the public domain under CC0 1.0 by the FreePats project, downloaded on demand and
+  unmodified (credited in About, `AUTHORS` and `third_party/upright-piano-kw/`).
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
   domain); those files are not part of this repository.
@@ -1131,59 +1198,3 @@ The full audit, every finding and what was done about it, is in
 MIT licensed with attribution preserved: see `LICENSE` and `AUTHORS`. Every
 source file is covered by an Ed25519-signed manifest; `python3
 provenance/verify.py` checks it (see `PROVENANCE.md`).
-
-## Piano sound on the tablet
-
-The tablet can play the pieces itself, with **recordings of a real piano**: FreePats'
-**Upright Piano KW**, a Kawai upright recorded key by key at two strengths, played back
-note by note by the app's own sampler (nothing is synthesised). It plays exactly what
-the piano would be sent: pieces, channels, schedules, the **Keys** tab, and Studio's
-Listen. (It comes with 1.8.)
-
-1. **Piano › Playback › TABLET SOUND › Upright piano › Download**, once: 57 MB from this
-   repository's GitHub release `models`, checked against the SHA-256 the app carries
-   before it is used (the same way as Studio's models). **Remove** frees the space. While
-   the tablet would play but has no sound yet, Now playing offers the same download in a
-   line under the tempo.
-2. **Piano sound on the tablet** chooses when it plays:
-   - **Off**: never.
-   - **When the piano isn't connected** (the default): only while the piano's Bluetooth
-     link isn't connected, so it never plays alongside the real piano. If the piano
-     connects in the middle of a piece, the tablet goes quiet at once and the piano
-     carries on.
-   - **Always**: alongside the piano too. It may sound slightly early or late compared
-     with the piano: the tablet's own delay (some 20–40 ms) and the piano's are not the
-     same.
-3. **Volume**: the speaker at the end of Now playing's tempo row (and at the foot of the
-   now-playing panel on a tablet) opens it; so does the Playback page, and the web
-   panel's Now playing has the same slider while the sound is on. The speaker is bright
-   while the tablet plays and grey while it doesn't. The tablet's media volume applies
-   on top, as for any music. In kiosk mode the volume stays free; the choice of when it
-   plays is a setting, behind the PIN.
-
-On the **Keys** tab the keys sound on the tablet while it plays the piano sound (the
-line under the keys says "Not connected. The tablet plays these keys.").
-
-When another app takes the sound (a call, a video), the piece pauses; **Play** resumes
-it. A notification only lowers the tablet for its moment.
-
-**The licence.** The Upright Piano KW is dedicated to the public domain under **CC0 1.0**
-by the FreePats project (https://freepats.zenvoid.org, version 2022-02-21); the app
-downloads it unmodified. It is credited all the same, in About, in `AUTHORS` and in
-`third_party/upright-piano-kw/`.
-
-**On the emulator and the Mac.** Point the download at a server on this Mac as for
-Studio: `adb shell setprop debug.stevenpiano.modelsurl
-http://10.0.2.2:8766/models.json` (a `models.json` with the sound's entry under
-`"sounds"` and its `url` on that server), then start the app. The emulator has no
-speaker to record, so the sound can be heard as a file instead:
-`./gradlew testDebugUnitTest --tests '*TabletSoundRenderTest'
--PpianoSound=<upright-piano-kw-v1.sf2> -PpianoRender=<out.wav>` plays Clair de lune
-(`../midi/piano-midi.de/debussy/deb_clai.mid`, or `-PpianoRenderMidi=<file.mid>`)
-through the app's own engine and sampler into a 48 kHz WAV.
-
-**Publishing the sound** (done once, for 1.8): `python tools/studio/publish_models.py
---work <dir> --models upright-piano-kw --upload` fetches the archive from FreePats,
-checks its hash and the SoundFont's, writes the entry into `releases/models.json`
-(under `"sounds"`, which 1.7 never reads, so older tablets keep working) and uploads the
-file to the release `models`.

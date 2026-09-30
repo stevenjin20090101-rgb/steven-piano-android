@@ -4880,12 +4880,13 @@ changed. 1,147 before, **1,163** after.
 
 ---
 
-# v1.8 — M25: the tablet's piano sound
+# v1.8 — M25: the tablet's piano sound; release 1.8 (versionCode 16)
 
 Read `DESIGN.md › v1.8 — M25` first. Built on the branch `m25-sound` from the 1.7 release commit
 (`1768655`), beside another run on `main`; commits a step each. **No version bump, no `Provenance.text`
-change, no provenance signing, no APK here**: the integrator's, at the merge. The SoundFont is published
-(below); `releases/models.json` on `main` names it once this branch is merged and pushed.
+change, no provenance signing, no APK here**: the integrator's, at the merge (1.8, `versionCode` 16: see
+*The merge* at the end of this section). The SoundFont is published (below); `releases/models.json` on
+`main` names it once this branch is merged and pushed.
 
 ## Files
 
@@ -5172,3 +5173,58 @@ imports Android.
 (4), `ModelManifestTest` +2, `ModelStoreTest` +1, `UpdateSourceTest` +1, `SettingsRepositoryTest` +1;
 `WebApiTest`, `WebServerTest`, `WebAssetsTest` and `DiagnosticsExporterTest` changed. 1,147 before,
 **1,195** after.
+
+## The merge: release 1.8 (versionCode 16)
+
+Merged into `main` after 1.7.1 (`5ceb03c`) as `6f33800`, and released as **1.8**: `versionCode` 16,
+`versionName` "1.8" (`-PversionCodeOverride`'s example now 17, the README's too, which 1.7.1 had left
+at 15), `Provenance.text` "Made by Steven Jin · v1.8 · eab16a502f679465", the entry drafted at the end
+of `releases/history.json` (`"draft": true`, tag `v1.8`, its notes; no hash or size until
+`tools/publish-release.sh` builds it); `latest.json` still names 1.7.1. Pushing `main` publishes
+`releases/models.json` with its `sounds`, and from then the real download works.
+
+- **Conflicts**: `DiagnosticsExporterTest` (`settings.txt` has 1.7.1's `standbyShows` and this run's
+  `tabletSound` and `tabletVolume`: 35 lines); DESIGN.md and this file (main's text with 1.7.1's section,
+  then this one after a separator). `Settings.kt`, `PianoViewModel.kt`, `DiagnosticsExporter.kt`,
+  `SettingsRepositoryTest`, the build file and README merged by themselves.
+- **The resting screen's credit** (`6100734`, Fable's 1.7.1 review): Art and notes sets "From Wikipedia
+  · CC BY-SA 4.0" (`StandbyText.WIKIPEDIA_CREDIT`) one line under the description, in the eyebrow and
+  sentence case, when the row that gave the text has a source (its page's address or title, as the
+  piece's sheet decides: a page whose address failed the link check keeps its title); a piece made in
+  Studio (a row with no source) none. `StandbyText.notes(piece, composer)` gives the text with its
+  credit. `StandbyTextTest` +1.
+- **The piece's own notes, asked for from the resting screen** (`d5fba13`, the same review): a piece
+  with no `piece:<id>` row at all, while Fetch artwork automatically is on
+  (`StandbyText.asksForOwnNotes`), has `ArtworkRepository.request(ArtKey.Piece(id, title, composer),
+  priority = false)` once per piece shown, judged on the table as read (the repository's flow, not the
+  first frame's guess); the composer's notes show meanwhile. `StandbyTextTest` +1.
+- **Measured at the merge** (`steven_piano_int`, API 34, Pixel 7 profile, 4 GB, `-no-audio`, the run's
+  own AVD, removed after; `integrate-m25-shots/emulator-evidence.txt` in the session scratchpad):
+  - Piano › Playback › TABLET SOUND: the three chips, "The tablet plays pieces and the Keys tab itself
+    while the piano isn't connected.", the volume at 60 %, Upright piano "57 MB · CC0 · FreePats · A
+    Kawai upright, recorded note by note." with Download.
+  - The real path: Download read `main`'s `models.json` on GitHub (no `sounds` yet): "The piano sound
+    isn't offered right now." From the Mac the public asset answered 200 with 57,377,848 bytes of the
+    pinned SHA-256. Then a local server with the merged list (`debug.stevenpiano.modelsurl`): 57 MB in
+    7.1 s, "downloaded and verified", checked, read in 33 ms, 132 regions; the row read "Installed · 57 MB
+    · CC0" with Remove.
+  - Clair de lune with the piano disconnected: the output opened as it started, 48 kHz, 2,176 frames of
+    buffer (the burst 1,088), writing 240 at a time. `dumpsys audio`: an `android.media.AudioTrack` of
+    the app, `state:started`, `USAGE_MEDIA`/`CONTENT_TYPE_MUSIC`, stereo, 48,000 Hz, and the app holding
+    `GAIN_TRANSIENT`; `dumpsys media.audio_flinger`: the track active, PCM float, stereo, the music
+    stream at −33 dB, **0 underruns**. It played on through the resting screen and closed 3 s after
+    Pause: "closed (0 underruns, at most 23 voices)".
+  - The speaker on Now playing's tempo row: "Tablet sound, volume 60%"; its popover: TABLET SOUND,
+    "Playing on this tablet while the piano isn't connected.", Volume 60 % and its slider.
+  - The resting screen (Display mode after a minute, the idle time shortened): Debussy's portrait, the
+    title, CLAUDE DEBUSSY, and the piece's own notes, fetched because the screen asked ("piece:3: found"
+    in the Artwork log 22 s after it came to rest), four lines, then "From Wikipedia · CC BY-SA 4.0".
+  - Installed fresh: no 1.7.x debug APK is staged, and the release APKs are signed with the release key;
+    1.8 adds two settings with defaults and no schema change.
+- Tests: 1,213 (1.7.1's 1,163, this run's 48, the merge's 2), 13 skipped: the corpus and library
+  fixture tests without `-Pcorpus` (7), Studio's `TranscriberTest` and `ComposerTest` without their
+  models (4), `PinnedKeyTest`'s header case (1) and `TabletSoundRenderTest` without `-PpianoSound` (1). `check` passes: `lint` 0 errors, 28 warnings (as 1.7
+  and 1.7.1), `checkDebugOnnxTelemetry` and `checkReleaseOnnxTelemetry`. No compiler warnings in the
+  app's sources. The greps above and every earlier section's: as stated. The release APK is 13,503,088
+  bytes (versionCode 16, "1.8", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 28,066,776;
+  staged as `../apk/steven-piano-1.8.apk` and `-debug.apk`.
