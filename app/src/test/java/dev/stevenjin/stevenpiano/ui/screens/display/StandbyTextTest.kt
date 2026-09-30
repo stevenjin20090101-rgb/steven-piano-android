@@ -12,7 +12,9 @@ package dev.stevenjin.stevenpiano.ui.screens.display
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The lines about the piece on the resting screen (DESIGN.md › v1.7.1): whose notes, as one paragraph, and how many lines. */
@@ -81,6 +83,19 @@ class StandbyTextTest {
         assertEquals(StandbyText.Notes("Made in Studio · Sep 28, 2026", credit = null), StandbyText.notes(studio, debussy))
         assertNull("no text, no credit", StandbyText.notes(null, null))
         assertNull(StandbyText.notes(clairDeLune.copy(status = ArtworkStatus.NOT_FOUND), debussy.copy(description = null)))
+    }
+
+    @Test
+    fun `a piece never looked up has its own notes asked for, while artwork is fetched by itself`() {
+        assertTrue("no row at all: never looked up", StandbyText.asksForOwnNotes(null, fetchAutomatically = true))
+        assertFalse("the person fetches artwork by hand", StandbyText.asksForOwnNotes(null, fetchAutomatically = false))
+        val lookedUp = listOf(
+            clairDeLune,
+            clairDeLune.copy(description = null, status = ArtworkStatus.NOT_FOUND),
+            clairDeLune.copy(description = null, status = ArtworkStatus.FAILED),   // retried after a day, by the worker's rule
+            ArtworkEntity("piece:8", description = "Made in Studio · Sep 28, 2026", fetchedAt = 1, status = ArtworkStatus.OK),
+        )
+        for (row in lookedUp) assertFalse(row.toString(), StandbyText.asksForOwnNotes(row, fetchAutomatically = true))
     }
 
     @Test

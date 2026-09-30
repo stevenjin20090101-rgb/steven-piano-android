@@ -70,6 +70,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.Provenance
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.data.art.ArtKey
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.graph
@@ -97,6 +98,7 @@ import dev.stevenjin.stevenpiano.ui.theme.EyebrowLarge
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 /** The portrait behind the paper roll: this faint. */
 private const val BACKDROP_ALPHA = 0.25f
@@ -295,10 +297,23 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
  * ([RestingLayout]); the title (Display Large on wide frames, [twoPane], Display on phones), the
  * composer and the channel as an eyebrow, and the description ([StandbyText]) in Body and the
  * secondary ink, six lines at most on wide frames and four on phones, with "From Wikipedia · CC BY-SA
- * 4.0" one line under it when the text is Wikipedia's.
+ * 4.0" one line under it when the text is Wikipedia's. A piece whose own notes were never looked up
+ * has them asked for once, at low priority, while artwork is fetched by itself ([StandbyText.asksForOwnNotes]):
+ * the composer's show meanwhile, and the piece's take their place when they come.
  */
 @Composable
 private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, window: DpSize, room: DpSize) {
+    val graph = LocalContext.current.graph
+    val settings by graph.settings.collectAsStateWithLifecycle()
+    val fetchAutomatically = settings.fetchArtworkAutomatically
+    LaunchedEffect(piece.pieceId, fetchAutomatically) {
+        if (!fetchAutomatically) return@LaunchedEffect
+        // The table as it is read (not the first frame's empty guess), so a piece already looked up is never asked for.
+        val row = graph.artwork.artwork(ArtworkEntity.forPiece(piece.pieceId)).first()
+        if (StandbyText.asksForOwnNotes(row, fetchAutomatically)) {
+            graph.artwork.request(ArtKey.Piece(piece.pieceId, piece.title, piece.composer), priority = false)
+        }
+    }
     val own = rememberArtworkRow(ArtworkEntity.forPiece(piece.pieceId))
     val composer = rememberArtworkRow(ArtworkEntity.forComposer(piece.composerKey))
     val notes = StandbyText.notes(own, composer)

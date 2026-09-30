@@ -1727,7 +1727,10 @@ On the chosen canvas (true black, or the app's own ink or paper), and nothing el
   beside Display Large, as display mode had it), with " · CALM · CHANNEL" while a channel plays.
 - **The description**, in Body and the secondary ink, at most **six lines on wide frames and four on
   phones**, cut with an ellipsis, and set as one paragraph: the piece's own notes when it has any (its
-  Wikipedia extract, kept once its sheet has fetched it), else the composer's blurb, else nothing at all.
+  Wikipedia extract, kept once its sheet has fetched it; from v1.8 the resting screen asks for them
+  itself, once and behind everything else, when they were never looked up and *Fetch artwork
+  automatically* is on, and they take the composer's place when they come), else the composer's
+  blurb, else nothing at all.
   The screen never says that nothing was found. A piece made in Studio shows its own line, "Made in
   Studio · in the manner of Clair de lune (Claude Debussy)". Where the room runs short (a large font, a
   phone on its side) the description gives way first.
