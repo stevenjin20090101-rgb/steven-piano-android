@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "file": "library-v1.zip",
+  "url": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/library/library-v1.zip",
+  "sizeBytes": 61237277,
+  "sha256": "358cc000dd00edaf6c683517e3f4f0cfc935bdf98f2b7880126a9e30607c7e2f",
+  "pieces": 1726,
+  "notes": "Steven's library: 1,726 piano pieces from MAESTRO v3.0.0 (Google Magenta), piano-midi.de (Bernd Krüger) and the Mutopia Project. For non-commercial use.",
+  "licences": [
+    "MAESTRO CC BY-NC-SA 4.0",
+    "piano-midi.de CC BY-SA 3.0 DE",
+    "Mutopia public domain"
+  ]
+}
