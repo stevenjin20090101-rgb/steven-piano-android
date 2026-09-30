@@ -11,10 +11,31 @@ Steven Jin  <stevenjin20090101@gmail.com>
 
 Music library
 -------------
-The MIDI files the app plays are not part of this repository. The library
-it was built for draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
+The MIDI files the app plays are not part of this repository's source. The
+library it was built for draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
 piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
 domain); their licences govern those files.
+
+Steven's library (library-v<n>.zip, an asset of this repository's GitHub
+release "library"; downloaded by the app on demand, never bundled) holds
+those files, each once, with the library's INDEX.csv, its README and
+MAESTRO's licence. Its credits, as the collections' licences ask:
+  - MAESTRO v3.0.0, Google Magenta: Curtis Hawthorne et al., "Enabling
+    Factorized Piano Music Modeling and Generation with the MAESTRO
+    Dataset", ICLR 2019.
+    https://magenta.tensorflow.org/datasets/maestro. Licensed under the
+    Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+    licence (CC BY-NC-SA 4.0,
+    https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use
+    only; the licence's text travels in the pack
+    (_maestro-metadata/LICENSE).
+  - piano-midi.de: Name: Bernd Krueger, Source: http://www.piano-midi.de.
+    Licensed under the Creative Commons Attribution-ShareAlike 3.0 Germany
+    licence (CC BY-SA 3.0 DE,
+    https://creativecommons.org/licenses/by-sa/3.0/de/).
+  - The Mutopia Project (https://www.mutopiaproject.org): the pieces chosen
+    are in the public domain.
+Neither the files nor the pack are covered by this project's MIT licence.
 
 Third-party
 -----------

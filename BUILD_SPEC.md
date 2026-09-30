@@ -5554,3 +5554,268 @@ at the end of `releases/history.json` (`"draft": true`, tag `v1.9`, its notes; n
   The greps above, M25's and every earlier section's: as stated. The release APK is 13,514,380 bytes
   (versionCode 17, "1.9", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 28,122,664; staged
   as `../apk/steven-piano-1.9.apk` and `-debug.apk`.
+
+---
+
+# v1.10 — M27: Steven's library from GitHub
+
+Read `DESIGN.md › v1.10 — M27` first. The plan's R2b (`~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
+› *Steven Piano Cloud — relay, console, library pack (1.10)*), built on the branch `m27-library` from `main`
+at `5640288` (1.9 and the merged `cloud/`), beside M26 (the relay client) in its own worktree; commits a
+step each. **No version bump, no `Provenance.text` change, no provenance signing, no APK staging**: the
+integrator's, at 1.10. The pack itself **is published** (below); `releases/library.json` on `main` names
+it once this branch is merged and pushed, and until then tablets are offered nothing (the manifest's
+address answers 404: a check fails quietly, a Load says "Couldn't reach the download server.").
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `tools/publish_library.py` (builds, checks, publishes); `releases/library.json` (version 1).
+- `M/library/LibraryManifest.kt` (`LibraryManifest`, `InvalidLibraryManifest`), `M/library/LibraryPack.kt`
+  (`PackState`, `LibraryFailures`, `OfferedPacks`, `LibraryPack`), `M/library/LibraryOverride.kt`.
+- `M/service/LibraryService.kt`.
+- `M/ui/LibraryCopy.kt`; `M/ui/screens/library/LibraryLicenceSheet.kt`.
+- Tests: `T/library/LibraryManifestTest` (6), `T/library/LibraryPackTest` (16), `T/data/imports/LocalZipTest`
+  (5), `T/ui/LibraryCopyTest` (4).
+
+Changed (each addition small and marked v1.10 — M27): `M/update/UpdateSource.kt` (`Kind.Library` and its
+addresses); `M/data/imports/ImportSource.kt` (`ImportSource.LocalZip`, `openLocalZip`); `M/data/imports/
+IndexCsv.kt` (`Row.sha256`, `sha256s()`); `M/service/ImportService.kt` (`start` refuses a `LocalZip`: one
+line, see *Deviations*); `M/settings/Settings.kt` (`libraryPackVersion`, `setLibraryPackVersion`);
+`M/AppGraph.kt` (`libraryPack`, `importLibraryPack`, the schedule beside the updater's, the sweep at start);
+`app/src/main/AndroidManifest.xml` (`LibraryService`, dataSync); `M/ui/screens/library/LibraryScreen.kt`
+(`EmptyLibrary`'s Load, the + sheet's row, the licence sheet, `LibraryBar` in the header), `AddSheet.kt`
+(`LibraryEntry`, `library` parameter, `SheetOption(enabled)`), `ImportBar.kt` (`LibraryBar`); tests
+`CsvReaderTest.kt`'s `IndexCsvTest` (+4), `UpdateSourceTest` (+4), `SettingsRepositoryTest` (+1); `AUTHORS`,
+`DESIGN.md`, `README.md`, `docs/SECURITY_AUDIT.md`.
+
+## The pack and its publishing (`tools/publish_library.py`)
+
+- **Built from** `--midi` (default `../midi`): the rows of its INDEX.csv (read as CSV, UTF-8, header
+  `collection,composer,title,size_kb,path`; a `sha256` column already there is recomputed), each path plain
+  and relative (no leading slash, backslash, `.`/`..` or hidden segment), a `.mid`/`.midi` file that exists,
+  at most 8 MiB (the importer's cap). Each file once: a file whose SHA-256 an earlier row's file has is left
+  out and named. Beside them `INDEX.csv` (the kept rows, their columns as they were plus `sha256`),
+  `README.md` and `_maestro-metadata/LICENSE` (MAESTRO's CC BY-NC-SA 4.0). Nothing else of the folder.
+- **Deterministic**: the index's order, `ZipInfo` date 1980-01-01, mode 0644, deflate level 9, UTF-8 names
+  (the flag set for non-ASCII): the same folder builds the same bytes (checked: two builds, one hash).
+- **Checked before anything is written**: the zip at most 200 MiB (`UpdateSource.MAX_LIBRARY_BYTES`), at most
+  20,000 entries (`ImportLimits.ZIP_ENTRIES`), INDEX.csv at most 2 MiB (`ImportLimits.INDEX_BYTES`); then the
+  written zip is read back (no name twice, every name plain, every row's `sha256` its file's own) and the
+  manifest held to 4 KB. A version below the manifest's refused ("a pack's version only rises").
+- **The manifest** `{version, file, url, sizeBytes, sha256, pieces, notes, licences}` is written to
+  `--manifest` (default `releases/library.json`) and beside the zip (`--work`, default `build/library/`,
+  ignored by git). `--url-base` builds a test pack served elsewhere (the emulator's).
+- **`--upload`**: `gh release upload library --clobber` when the release exists, else `gh release create
+  library --title "Steven's library" --target main --latest=false` with a body naming what it is; both assets
+  (the zip, `library.json`) read back through `gh release download` and compared; the public URL fetched as a
+  tablet would (200, the pack's bytes, where GitHub redirected).
+- **Run on 2026-09-30** (`python3 tools/publish_library.py --version 1 --upload`): release **`library`**
+  created (22:14:55Z), not Latest (v1.9 stays Latest), assets `library-v1.zip` (**61,237,277 bytes, SHA-256
+  `358cc000dd00edaf6c683517e3f4f0cfc935bdf98f2b7880126a9e30607c7e2f`**, **1,726 pieces**, 1,729 entries,
+  92,865,812 bytes of MIDI, INDEX.csv 378,843 bytes; left out: `piano-midi.de/borodin/bor_ps1_format5.mid`,
+  the same bytes as `bor_ps1_format4.mid`) and `library.json` (570 bytes); "round trip OK" for both; the
+  public URL answered with the pack's bytes via `release-assets.githubusercontent.com`. Log:
+  `…/scratchpad/m27/publish-library-v1.log`.
+
+## Where the app may reach (`UpdateSource`, `Kind.Library`)
+
+- `LIBRARY_MANIFEST_URL` = `https://raw.githubusercontent.com/stevenjin20090101-rgb/steven-piano-android/main/releases/library.json`,
+  exactly (`allowsLibraryManifest`: HTTPS on 443, that path, no query or fragment).
+- What the manifest may name (`allowsLibrary`, `allowsLibraryFile`): a `.zip` asset of this repository's
+  release tagged **`library`** on `github.com` (`LIBRARY_DOWNLOAD_PREFIX` + a plain name), no query or fragment;
+  never a version tag or `models`, and an asset host is never named directly.
+- Every hop, redirects included (`allowsHop` → `allowsLibraryManifest || allowsLibraryBinary`): the manifest,
+  such an asset, or GitHub's two asset hosts. The app's, the firmware's and the models' sources refuse the
+  pack's addresses, and the library's refuses theirs (`UpdateSourceTest`).
+- `MAX_LIBRARY_BYTES` = 200 MiB, its own cap (the models' 1 GiB, the sound's 200 MiB, the APK's 50 MB).
+- `localLibrary(url)` (debug builds on an emulator only, `LibraryOverride`: `debug.stevenpiano.libraryurl`):
+  its origin (HTTP allowed; the debug network config allows cleartext to 10.0.2.2 alone) **and** everything
+  `library` reaches, so a manifest served from the Mac can name the published pack (how the first load's
+  evidence reached the real GitHub URL before `library.json` is on `main`).
+
+## The manifest (`LibraryManifest.parse`)
+
+`org.json`, the text at most 4 KB (UTF-8 bytes); `version` a JSON integer 1..10,000; `file` exactly
+`library-v<version>.zip`; `url` allowed by the source and ending in `file`; `sizeBytes` 1..200 MiB; `sha256`
+64 hex digits (kept lower-case); `pieces` 1..20,000; `notes` optional plain text (control characters but line
+breaks dropped, cut to 1,000 on a code point); `licences` optional, at most 8 lines of plain text of at most 120.
+Unknown fields ignored. No pin: the manifest's trust is its address (this repository's `main`), as for the
+app's own updates; the zip's is the manifest's size and hash. `LibraryManifestTest` also reads the committed
+`releases/library.json` as the app does.
+
+## The pack in the app (`LibraryPack`)
+
+- **`state: StateFlow<PackState>`**: `Idle` (nothing newer known) · `Checking` (a load asking for the
+  manifest) · `Offered(version, pieces, sizeBytes, newPieces)` · `Downloading(done, total)` · `Importing` ·
+  `Done(added)` · `Failed(line)`. `busy` = Checking, Downloading or Importing: a check never replaces it, a
+  second load is refused. **`offer: StateFlow<Offered?>`**: the pack on offer as last found (the rows'
+  numbers whatever the load is doing); null when nothing newer is known. **`newerAvailable:
+  StateFlow<Boolean>`**: the newest manifest read names a version above the one loaded (on a fresh tablet,
+  any pack once asked).
+- **`check(maxAgeMs = 0)`**: unless a load runs, the device is offline, or the last ask is younger than
+  `maxAgeMs`: the manifest, then `Offered` when newer than `settings.libraryPackVersion`, else `Idle`. A failure
+  is logged and changes nothing on screen. Asked by **`runSchedule(switch)`** (launched in
+  `AppGraph.runUpdateSchedule` beside the app's and the firmware's: at once when the activity starts, then every
+  24 h, while Check for updates is on and the device online; a skipped check retries after a minute) and on
+  demand (the empty Library shown, the + sheet opened: 10 minutes' age).
+- **`newPieces`** = the pack's `pieces` less the distinct SHA-256s every earlier pack offered this tablet
+  (`OfferedPacks.all()`), at least 0: exact while packs only grow (a pack is each file once, so its `pieces` are
+  distinct hashes); a pack that replaced files would undercount, and the row then drops the count.
+- **`load(everything = false): Boolean`**: moves `state` to `Checking` (atomically; false when a load is under
+  way) and calls `start(everything)` = `LibraryService.start(app, everything)`; a start that throws ends in
+  `Failed("The library couldn't start loading; try again.")` and false.
+- **`run(everything)`** (the service's work, one at a time): offline → `Failed(OFFLINE)`; the manifest (a 404,
+  a dead network → `UNREACHABLE`; a manifest the parser refuses → `UNREADABLE`); not newer than the one loaded
+  and not `everything` → `Idle` (up to date, nothing downloaded); the zip through `VerifiedDownloader` into
+  `cacheDir/library/library-v<n>.zip` (at most the cap and the manifest's size, the part hashed as it arrives,
+  `2 × size + 64 MB` kept free beside it for the pieces unpacked, progress every 256 KB; its problems →
+  `MISMATCH`/`STOPPED`/`UNREACHABLE`/`NO_ROOM`); `Importing`: the pack's hashes read from its INDEX.csv
+  (`ZipSource.readIndex().sha256s()`), then the importer with `ImportSource.LocalZip(file, skip)`, `skip` =
+  every hash an earlier pack offered (none with `everything`); an import that read no piece (every file failed,
+  or the zip would not open) → `Failed(NOT_READ)`, nothing recorded; else `offered-v<n>.txt` written (the
+  pack's hashes, sorted, one per line; a part file renamed over), `settings.libraryPackVersion` = n, `Done(added)`.
+  The zip is deleted by the import's close and again in a `finally` (a stop before the import opened it). A
+  cancel puts `state` back to the offer, records nothing, leaves no file.
+- **`OfferedPacks(filesDir/library)`**: `offered-v<n>.txt` files, each read only up to 2 MB and only lines
+  of 64 hex digits; `all()` their union. **`LibraryPack.sweep(cacheDir/library, before)`** at start removes what
+  a stopped load left (a zip, a part).
+- The import (`AppGraph.importLibraryPack`): `importer.import(app, source)`, then, when pieces arrived, the
+  built-in playlists refreshed and composers' artwork started (`ArtworkService.start`, which falls back to the
+  app's process when refused), as `ImportService` does after its imports.
+
+## The service (`LibraryService`)
+
+A dataSync foreground service (manifest: not exported) holding the **whole** load: it calls `run(everything)`
+(the `EXTRA_EVERYTHING` extra) and shows one notification on the **imports** channel (id 9): title "Loading
+Steven's library", text "Asking for the library…" / "23 of 61 MB" / "Imported 204 of 1,726", a determinate bar
+(bytes, then files), **Cancel** (cancels the job), at most every 400 ms; the Library's tab on tap. `onTimeout`
+(Android 15's six hours) cancels. `start()` falls back to `appScope.launch { run(everything) }` when Android
+refuses a foreground service (`ForegroundServiceStartNotAllowedException`, the console's command with the app
+in the background), and so does `onStartCommand` when `startForeground` itself is refused.
+
+## `ImportSource.LocalZip` and INDEX.csv's `sha256`
+
+- `LocalZip(file, skipShas)`: a zip the app saved in its own storage; `openLocalZip` reads it where it lies
+  (never copied) with every zip's caps (`ZipSource`: 20,000 entries, the index to 2 MiB, hidden paths and
+  `__MACOSX` skipped), its MIDI files less those whose row's `sha256` is in `skipShas` (a file with no row or
+  no hash is always read; the importer's own hash keeps one copy of each piece), and deletes the zip when the
+  import closes it. A file that is not a zip is refused and left to the caller. `ImportService.start` refuses a
+  `LocalZip` (`IllegalArgumentException`): the library's own service imports it.
+- `IndexCsv.Row.sha256: String?`: the column found by its header name `sha256` (the sixth without a header),
+  kept when it is 64 hex digits, lower-cased; otherwise null. An index without it reads as before.
+  `IndexCsv.sha256s()`: every row's.
+
+## The UI (`LibraryScreen`, `AddSheet`, `ImportBar`, `LibraryLicenceSheet`, `LibraryCopy`)
+
+As DESIGN.md describes. `LibraryScreen` collects `libraryPack.state`, `offer`, `newerAvailable` and
+`settings.libraryPackVersion`; `loadLibrary(everything)` runs through the kiosk gate and opens the licence sheet
+while the version loaded is 0, else calls `load(everything)`. The empty Library's Load passes `everything = true`,
+the + sheet's row `false`. The + sheet's row: `LibraryEntry(LOAD …)` while the version is 0; `LibraryEntry(
+updateLabel(newPieces) …)` while `newerAvailable` or a load is busy; none otherwise. `LibraryBar` sits under
+`ImportBar` in the glass header (`LibraryCopy.bar`: Checking and Downloading over `ProgressRow`; Failed with
+Dismiss → `LibraryPack.dismiss()`).
+
+## For M26: the console's `library.load`
+
+The stable surface, for `RelayCommands` and the status report:
+
+```kotlin
+graph.libraryPack.load(everything = false): Boolean   // starts a load; false while one runs (or it could not start)
+graph.libraryPack.state: StateFlow<PackState>          // Idle · Checking · Offered(version, pieces, sizeBytes, newPieces)
+                                                       // · Downloading(done, total) · Importing · Done(added) · Failed(line)
+graph.libraryPack.newerAvailable: StateFlow<Boolean>   // a pack newer than the one loaded is known
+graph.libraryPack.offer: StateFlow<PackState.Offered?> // the newest pack's numbers, when newer than the one loaded
+graph.settings.value.libraryPackVersion               // the version loaded, 0: none
+```
+
+`library.load` should call `load()` (not `everything`): on a tablet with a pack loaded it brings a newer one's
+new pieces only, and pieces a teacher deleted stay deleted; on a fresh tablet it is the first load (no licence
+sheet: the owner's command). Any thread. From the background it runs without the notification. The
+command can answer from the Boolean ("Loading Steven's library" / "A load is under way already"); the outcome
+follows in `state` (`Idle` after a load that found nothing newer). The status's "pack version" is
+`settings.libraryPackVersion`.
+
+## Greps (v1.10 — M27)
+
+`Color(0x` outside `ui/theme`: none. `Modifier.blur`: none. `0.0.0.0`: none. `LocalLive`/`LocalNoteSounding`:
+their painters and the theme, as before. None in this run's files.
+
+## Measured (2026-09-30, `steven_piano_m27`: API 34, `medium_tablet` 2560 × 1600 at 320 dpi, 3 GB, debug build)
+
+Screenshots in the session scratchpad, `m27/shots/`.
+
+- **A fresh install, version 1 from GitHub.** The manifest from a local copy of `releases/library.json`
+  (`debug.stevenpiano.libraryurl http://10.0.2.2:8767/library.json`: the zip's URL the real release's).
+  The empty Library with both buttons and "1,726 pieces · 61 MB · …" (`00`); **Load Steven's library** → the
+  licence sheet (`01`) → **Load · 61 MB** → "Loading Steven's library · 0 of 61 MB" (`02`), `LibraryService` in
+  the foreground (id 9, channel imports) → the 61 MB from `github.com` via `release-assets.githubusercontent.com`
+  in a few seconds → "Imported 1,280 of 1,726" in the notification with Cancel (`03`) → **"Imported 1,726
+  pieces."** (`04`), the log "Import: 1726 new, 0 already there, 0 failed" (one file's trailing bytes skipped,
+  `bor_ps5.mid`, as before) and "Library: version 1 loaded, 1726 pieces added"; artwork fetching after it;
+  about 15 s from the tap to the tally (1,068 pieces in within about 8 s). `cache/library` empty;
+  `files/library/offered-v1.txt` 112,190 bytes (1,726 × 65). The + sheet then has no library row (`05`).
+- **The update, version 2 from the Mac.** `publish_library.py --midi <a copy with two generated pieces>
+  --version 2 --work … --manifest <the served library.json> --url-base http://10.0.2.2:8767/` (61,237,906 bytes,
+  1,728 pieces; never published), served at 5 MB/s. "12 Etudes, Op. 25 [2]" deleted first (`06`, `07`). After
+  a restart (the start-up check): **"Update the library · 2 new pieces"** with "1,728 pieces · 61 MB · …"
+  (`08`) → "Loading Steven's library · 14 of 61 MB" (`09`) and the notification "20 of 61 MB" with Cancel
+  (`10`) → **"Imported 2 pieces."** (`11`): "Import: 2 new, 0 already there, 0 failed" (the import read the two
+  files alone), "version 2 loaded, 2 pieces added"; both evidence pieces in the Library (`12`) and the deleted
+  étude still gone (`13`); `offered-v2.txt` 112,320 bytes (1,728 × 65), `offered-v1.txt` kept, `cache/library`
+  empty.
+- **Dark, and offline.** A fresh state in dark: the empty Library (`14`), the + sheet's Load row (`15`), the
+  licence sheet (`16`); in airplane mode, Load → "Loading Steven's library needs an internet connection." with
+  Dismiss, Load available again (`17`).
+- **Tests**: 1,219 before, **1,259** after (13 skipped, as before), none failing. `lintDebug`: 0 errors, 29
+  warnings (1.9's 28 and `LibraryService`'s `InlinedApi` on `FOREGROUND_SERVICE_TYPE_DATA_SYNC`, the line every
+  data-sync service carries). No compiler warnings in the app's sources. The debug APK 28,178,132 bytes.
+
+## Deviations from the brief, and why
+
+- **The import runs in `LibraryService`, not handed to `ImportService.start(LocalZip)`.** Android 12+ refuses
+  a foreground service started from the background, and a 61 MB download often ends with the app left or the
+  screen off; one service holding the foreground from the tap to the last piece avoids that hand-over, and the
+  pack's bookkeeping (`offered-v<n>.txt`, the version) follows the import's own result in one place. The import
+  is still the importer's (`importer.import(app, LocalZip)`), with `ImportService`'s after-steps (built-ins,
+  artwork). `ImportService.start` refuses a `LocalZip` rather than half-support it (its intent cannot carry the
+  skip list).
+- **1,726 pieces, not 1,727**: the pack holds each file once; one INDEX row names a byte-for-byte copy.
+- **`PackState.Offered` also carries `newPieces`; `offer`, `dismiss()` and `load(everything)` added**: the rows
+  need the numbers while a load runs or after it failed; the empty Library's Load brings everything so a library
+  emptied by hand can be filled again.
+- **The daily check follows Check for updates' switch**; the on-demand ones (the + sheet, the empty Library) ask
+  whatever the switch says, at most every 10 minutes, since the person is looking at the offer.
+- **`LibraryOverride` lives in `M/library/`** (not `UpdateOverride.kt`), and the emulator's source also reaches
+  the published pack, so the first load's evidence used the real GitHub URL before the manifest is on `main`.
+- **The licence sheet shows while `libraryPackVersion` is 0**: a first load that did not finish shows it again.
+- **The notification uses the imports channel** (no new channel); **`libraryPackVersion` is not in Share
+  diagnostics' `settings.txt`** (`DiagnosticsExporter` untouched, to keep the merge with M26's settings simple).
+
+## Residuals
+
+- **Nothing is offered until `releases/library.json` is on `main`** (merge and push); the release and its zip are
+  already public.
+- **The console's `library.load` path from the background** (the in-process fallback) is written and unit-level
+  only; M26's integration exercises it.
+- **`newPieces` undercounts a pack that replaced files** (the row then says "Update the library"); the import
+  itself is exact (by hash).
+- **The pack is trusted as the app's updates are**: the manifest's address and the zip's hash, no signature. A
+  pack is only MIDI files through the importer's caps (8 MB each, 20,000 entries, the parser), so the worst a
+  bad pack could do is add unwanted pieces.
+- **MAESTRO's performances are for non-commercial use only**: the school's use is; the sheet and README say so.
+- Not run on the school tablet.
+
+## Tests added in M27
+
+`LibraryManifestTest` (6: the committed manifest; a good one field by field; each field's check; not a manifest,
+the 4 KB edge; notes and licences as plain text; the emulator's manifest). `LibraryPackTest` (16: the offer and
+the version compare; online and the check's age; a failed check; the first load recorded; an update that skips
+every hash offered before and never brings back a deleted piece; everything; up to date; a failed download
+(stopped, mismatch, no room, 404) leaving no part and recording nothing, the offer back on Dismiss; the manifest's
+failures in words; an import that reads nothing; a cancel; one load at a time and a refused start; a check never
+replacing a load; the schedule's due time; `OfferedPacks`; the sweep). `LocalZipTest` (5: read in place and
+deleted; the skip list; an index without the column; not a zip; the importer bringing only the new pieces).
+`LibraryCopyTest` (4). `IndexCsvTest` +4 (in `CsvReaderTest.kt`), `UpdateSourceTest` +4, `SettingsRepositoryTest`
++1. 1,219 before, **1,259** after.

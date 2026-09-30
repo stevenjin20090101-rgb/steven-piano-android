@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.update.FakeUpdateServer
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -44,6 +45,7 @@ import java.util.zip.ZipOutputStream
  * the pack's bookkeeping, a failed or cancelled load that leaves no file and records nothing, and the
  * start of a load.
  */
+@OptIn(ExperimentalCoroutinesApi::class)   // runCurrent
 class LibraryPackTest {
     @get:Rule
     val tmp = TemporaryFolder()

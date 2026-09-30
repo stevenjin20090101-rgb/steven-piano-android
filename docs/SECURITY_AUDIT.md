@@ -1369,3 +1369,58 @@ Transcripts are kept with the run's evidence (`…/audit2/`); tests are JVM unit
 Nothing new beyond 1.7's release: make the repository public for the models to download, run README's
 Studio checklist on the school tablet, and keep the audit's two new lines in mind ("Studio has 8 jobs to
 do already…" on the panel; "More notes were heard in this recording than a piece can hold.").
+
+## 1.10 — Steven's library pack (notes, M27)
+
+2026-09-30, notes written with M27, not an audit (BUILD_SPEC.md › v1.10 — M27). The app can now download a
+61 MB zip of MIDI files from this repository's release `library` and import it: a new source of files that
+arrives without the person picking them. What may reach the app, and what the pack can do once it has, are
+held at these places:
+
+- **Where the pack may come from** (`update/UpdateSource.kt`, `Kind.Library`). Its list from one address
+  only, `https://raw.githubusercontent.com/stevenjin20090101-rgb/steven-piano-android/main/releases/library.json`
+  (HTTPS on 443, the path exactly, no query or fragment: `allowsLibraryManifest`); what the list may name, a
+  `.zip` asset of this repository's release tagged `library` on `github.com`, a plain name (`allowsLibraryFile`:
+  never a version tag or `models`); every hop of either request, redirects included, one of those or GitHub's
+  two asset hosts (`allowsLibraryBinary`). The app's, the firmware's and the models' sources refuse the
+  pack's addresses, and its source refuses theirs (`UpdateSourceTest`). The emulator's server
+  (`debug.stevenpiano.libraryurl`, HTTP to 10.0.2.2) exists only in debug builds on an emulator, as the
+  updater's does; that source may also reach the production addresses above (so a manifest from the Mac can
+  name the published pack), nothing else.
+- **The list** is read to 64 KB by the transport and refused past 4 KB by `LibraryManifest.parse`; every field
+  checked (a JSON integer version 1..10,000; the file exactly `library-v<version>.zip` and the URL's last
+  segment; the size 1 byte..200 MiB; 64 hex digits; pieces 1..20,000; notes and licence lines plain text,
+  capped). It is not pinned: its trust is its address (this repository's `main`), as for the app's own updates.
+- **The zip** is streamed to at most its declared size and `MAX_LIBRARY_BYTES` (200 MiB, its own cap), hashed
+  as it is written to `cacheDir/library/<file>.part`, and renamed into place only at exactly the list's size
+  and SHA-256 (`VerifiedDownloader`); any failure, a cancel, or an exception from below deletes the part. It
+  starts only with room for itself and, beside it, twice its size and 64 MB more (its pieces once unpacked). A
+  load that stopped leaves at most a file there, swept at the next start (`LibraryPack.sweep`).
+- **The import's caps still apply.** The pack goes through the importer like any zip the person picks
+  (`ImportSource.LocalZip` → `openLocalZip` → `ZipSource`): at most 20,000 entries (counted before any is
+  listed), INDEX.csv read to 2 MiB, hidden and `__MACOSX` entries skipped, each MIDI file read to 8 MB and
+  parsed with the parser's own bounds, text cut to the library's limits. It is read where it lies, never
+  copied, and deleted when the import closes it. Entry names are lookup keys and display names only: a piece
+  is saved as `filesDir/pieces/<sha256>.mid`, so no path in the zip ever becomes a path on disk.
+- **The index's `sha256` column decides nothing about trust.** It is read only to leave out pieces an earlier
+  pack offered (`skipShas`) and to record what this pack offered (`filesDir/library/offered-v<n>.txt`, app
+  private, read back to 2 MB each and only as 64-hex lines). The importer hashes every file itself and dedups
+  by that hash; a column that lied could at most make an update skip a piece or offer one again.
+- **Nothing is deleted, and nothing runs.** An update adds pieces and never removes one; a pack is MIDI files,
+  a CSV, a README and a licence text, and only MIDI files and the index are read.
+- **Entry points.** `LibraryService` is not exported; its intent carries one Boolean. `ImportService.start`
+  refuses a `LocalZip`. On the tablet, loading waits for the kiosk PIN in kiosk mode, as adding music does;
+  the console's `library.load` (M26) is the owner's command and starts the same load.
+- **What leaves the device**: the list's request (daily while the app is open and online with Check for updates
+  on, and when the empty Library or the + sheet shows, at most every 10 minutes) and, on Load or Update, the
+  zip's request; each with the app's User-Agent and nothing else, as the updater's.
+
+### Residuals (stated honestly)
+
+- **The pack is not signed**: a pack published by whoever controls the repository's `main` and its releases is
+  loaded. Its reach is the importer's (pieces added to the library, bounded as above).
+- **MAESTRO's licence is non-commercial** (CC BY-NC-SA 4.0): the licence sheet says so before the first load,
+  and README and AUTHORS carry the credits; the school's use is non-commercial.
+- **The console's command with the app in the background** runs the load in the app's process without the
+  notification (Android refuses the foreground service there); exercised at M26's integration.
+- Not run on the school tablet yet.

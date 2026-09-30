@@ -33,7 +33,8 @@ on the tablet*). Made by Steven Jin. Version 1.9.
 
 - **Library**: search; **Playlists** and **Composers** as grids of tiles with
   art; favorites and recent pieces. Import single files, a whole folder (with
-  its `INDEX.csv`, whose sets arrive as playlists) or a zip. A piece's menu
+  its `INDEX.csv`, whose sets arrive as playlists) or a zip, or load **Steven's
+  library** from GitHub in one tap, and its updates later. A piece's menu
   plays it next, adds it to the queue or to a playlist, favorites, renames or
   deletes it, and opens *About this piece*.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
@@ -293,7 +294,7 @@ Composers get their Wikipedia portrait and a two-sentence blurb; a piece's sheet
 composer's. For this the app talks to **two hosts and no others**: `en.wikipedia.org`
 (page summaries and search) and `upload.wikimedia.org` (the portraits); a redirect
 anywhere else is refused. (The only other network use is the app's own updates and the piano's firmware
-releases, below, and Studio's models when you download them, *Studio*.) What it sends is a page title or a search made from the library's own
+releases, below, Studio's models when you download them, *Studio*, and Steven's library, *Steven's library*.) What it sends is a page title or a search made from the library's own
 composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),
 with the app's User-Agent. **Nothing about you is sent**: no account, no identifier, no
 location, nothing about what you play.
@@ -479,7 +480,10 @@ public repository.
 
 ## Bring in the music
 
-Copy the library to the phone first, for example
+The quickest way, from 1.10: **Load Steven's library** on the empty Library (or Library › +)
+brings the whole library from GitHub, no copying needed; see *Steven's library* below.
+
+Or copy the library to the phone first, for example
 `adb push "Player Piano/midi/ALL-SONGS.zip" /sdcard/Download/`, or copy the
 whole `midi` folder over USB.
 
@@ -495,6 +499,55 @@ whole `midi` folder over USB.
 
 Imports continue with the screen off and show their progress in the Library and
 in a notification. A full import takes about a minute.
+
+## Steven's library
+
+A new tablet can load Steven's library straight from GitHub (from 1.10):
+
+1. **Load Steven's library**, beside **Add MIDI files** on the empty Library (or first in
+   **Library › +**). Its line says what it is: "1,726 pieces · 61 MB · MAESTRO,
+   piano-midi.de, Mutopia · for non-commercial use".
+2. The first time, a sheet shows the three collections' credits and "For non-commercial
+   use". **Load · 61 MB** starts it; **Not now** leaves it.
+3. It downloads from this repository's GitHub release `library` (never bundled in the
+   app), is checked against its SHA-256 before a byte of it is read, then imports as
+   *Add folder* does: playlists by collection, composers named. The Library shows
+   "Loading Steven's library · 23 of 61 MB", then "Imported 1,204 of 1,726"; a
+   notification with **Cancel** keeps it going with the screen off.
+
+- **Updates.** When Steven publishes a newer version, **Library › +** offers **Update the
+  library · 2 new pieces**. An update brings only pieces no earlier version brought and
+  never deletes anything: a piece you deleted stays deleted, and your own pieces are
+  untouched. On an emptied Library, **Load Steven's library** brings the whole library
+  back.
+- **When the app asks GitHub**: one small file, `releases/library.json`, once a day while
+  the app is open with **Check for updates** on, and when the empty Library or the + sheet
+  shows (at most every 10 minutes). The 61 MB only when you tap Load or Update. Offline,
+  it says so ("Loading Steven's library needs an internet connection.").
+- **Kiosk mode**: loading and updating wait for the kiosk PIN, as adding music does.
+- **From the console** (Steven Piano Cloud): **Load Steven's library** on a piano's page
+  does the same on that tablet.
+- **The licences.** **MAESTRO v3.0.0** (Google Magenta; Curtis Hawthorne et al., "Enabling
+  Factorized Piano Music Modeling and Generation with the MAESTRO Dataset", ICLR 2019):
+  CC BY-NC-SA 4.0, **non-commercial use only**. **piano-midi.de** (Bernd Krueger,
+  www.piano-midi.de): CC BY-SA 3.0 Germany. **The Mutopia Project**: public domain. The pack
+  carries the library's README with these credit lines, and MAESTRO's licence.
+
+**Publishing a new version** (from the Mac, `gh` signed in): put the files in
+`Player Piano/midi/` and their rows in its `INDEX.csv`, then
+`python3 tools/publish_library.py --upload` (the next version; `--version N` to choose). It
+builds `library-v<n>.zip` from the files the index lists (each file once, the index with a
+`sha256` column added, the README and MAESTRO's licence beside them), checks it against the
+app's limits, uploads it to the release `library` (never "Latest") and writes
+`releases/library.json`. Commit and push that file: tablets offer the new version once it is
+on `main`. Versions only go up.
+
+**On the emulator**: `adb shell setprop debug.stevenpiano.libraryurl
+http://10.0.2.2:8767/library.json`, before the app starts, points the pack's list at a server
+on the Mac (`python3 -m http.server 8767` in a folder holding a `library.json`); the zip it
+names may be on that server or the published one. `python3 tools/publish_library.py --midi
+<dir> --version 2 --work <dir> --manifest <dir>/library.json --url-base
+http://10.0.2.2:8767/` builds such a test pack without publishing it.
 
 ## Connect to the piano
 
@@ -1113,9 +1166,9 @@ The full audit, every finding and what was done about it, is in
 - **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
   `upload.wikimedia.org`, carrying page titles and searches made from the library's
   own names, and, for updates of the app and of the piano's firmware and for Studio's
-  models and the piano sound (only when you download one), to `raw.githubusercontent.com` (the three
-  lists: the app's `latest.json`, the firmware's, and `models.json`), `github.com` (the
-  release downloads of this repository, its release `models` among them, and of the
+  models, the piano sound and Steven's library (only when you download one), to `raw.githubusercontent.com` (the four
+  lists: the app's `latest.json`, the firmware's, `models.json` and `library.json`), `github.com` (the
+  release downloads of this repository, its releases `models` and `library` among them, and of the
   firmware's, `stevenjin20090101-rgb/Steven-Jin-Player-Piano`, only) and
   `objects.githubusercontent.com` / `release-assets.githubusercontent.com` (where
   GitHub hands the file over), carrying nothing but the app's User-Agent and, as with
@@ -1154,7 +1207,9 @@ The full audit, every finding and what was done about it, is in
   and 4,096 key signatures; titles and names
   are stored cut to 200 and 120 characters. A zip is refused over 512 MB or 20,000
   entries, a folder is read 16 levels deep and at most 20,000 files, an `INDEX.csv`
-  up to 2 MB. Files from other apps wait for **Add**. A file past a limit is skipped
+  up to 2 MB. Steven's library's list is read up to 4 KB and its zip up to 200 MiB,
+  checked against its SHA-256 before it is opened; then a zip's limits apply. Files from
+  other apps wait for **Add**. A file past a limit is skipped
   with a plain reason; it never takes the app down.
 - **The release key** lives outside this repository, in the home folder:
   `~/steven-piano-release.jks` and `~/steven-piano-keystore.properties` (its
@@ -1199,7 +1254,9 @@ The full audit, every finding and what was done about it, is in
   unmodified (credited in About, `AUTHORS` and `third_party/upright-piano-kw/`).
 - The music library draws on MAESTRO (Google Magenta, CC BY-NC-SA 4.0),
   piano-midi.de (Bernd Krüger, CC BY-SA) and the Mutopia Project (public
-  domain); those files are not part of this repository.
+  domain); those files are not part of this repository's source. Steven's library,
+  built from them, is an asset of its GitHub release `library`, downloaded on demand
+  and never bundled (credit lines in *Steven's library* and `AUTHORS`).
 
 ## Authorship
 
