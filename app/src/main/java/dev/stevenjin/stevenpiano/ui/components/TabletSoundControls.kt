@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
+import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import kotlin.math.roundToInt
@@ -56,7 +58,7 @@ import kotlin.math.roundToInt
  * The speaker: the content colour while the tablet sounds, the tertiary grey while it doesn't (off, the
  * piano connected, or no SoundFont yet), as Shuffle and Repeat show off and on. A tap opens the popover:
  * the TABLET SOUND eyebrow, what the sound is doing, the Volume slider with its value, and the download
- * when the sound waits for it. The app's standard popover (the elevated tone), not glass. The volume is
+ * when the sound waits for it. The app's standard popover (the elevated tone, a hairline edge), not glass. The volume is
  * never locked in kiosk mode; the mode is a setting, on the Playback page.
  */
 @Composable
@@ -76,7 +78,8 @@ fun TabletSoundButton(
         ) {
             Icon(painterResource(R.drawable.ic_speaker), contentDescription = TabletSoundCopy.glyphDescription(state))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // A hairline edge: over the score's panel (the same elevated tone) the menu's shadow alone doesn't show in the dark.
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, border = BorderStroke(Hairline, LocalHairline.current)) {
             TabletSoundPopover(state, onVolume, onDownload)
         }
     }
@@ -121,6 +124,7 @@ private fun TabletSoundPopover(state: TabletSoundState, onVolume: (Int) -> Unit,
             },
             contentDescription = "Tablet sound volume",
             stateDescription = Format.percent(shown),
+            modifier = Modifier.fillMaxWidth(),
         )
         if (state.needsDownload) {
             val progress = TabletSoundCopy.progress(state)

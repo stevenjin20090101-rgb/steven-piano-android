@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.audio
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiSink
 import java.util.Arrays
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * The tablet's piano (v1.8 — M25), the [Sampler]'s face to the rest of the app, safe to call from any
@@ -49,7 +50,13 @@ class PianoVoice(val outputRate: Int, private val polyphony: Int = Sampler.POLYP
     var font: SoundFont? = null
         private set
 
-    fun noteOn(key: Int, velocity: Int) = post(NOTE_ON, key, velocity)
+    fun noteOn(key: Int, velocity: Int) {
+        notesPosted.incrementAndGet()
+        post(NOTE_ON, key, velocity)
+    }
+
+    /** Keys struck through this voice since it was made (for the log). */
+    val notesPosted = AtomicLong()
 
     fun noteOff(key: Int) = post(NOTE_OFF, key, 0)
 

@@ -47,8 +47,11 @@ class AudioOut(
 
     /** The device's own output rate (what the voice renders at): 48 kHz unless the device says 44.1. */
     val rate: Int = nativeRate(audio)
-    private val burst: Int = (audio?.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 0)
-        .takeIf { it in 32..2048 } ?: (rate * DEFAULT_BURST_MS / 1000)
+    private val deviceBurst: Int = (audio.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 0)
+        .takeIf { it in 32..4096 } ?: (rate * DEFAULT_BURST_MS / 1000)
+
+    /** What is rendered and written at a time: the device's burst, at most [MAX_CHUNK_MS] (a note waits no longer to be heard). */
+    private val burst: Int = minOf(deviceBurst, rate * MAX_CHUNK_MS / 1000)
 
     @Volatile
     private var running = true
@@ -130,7 +133,7 @@ class AudioOut(
         val startUnderruns = track.underrunCount
         var seenUnderruns = startUnderruns
         open = true
-        log("Tablet sound: open at $rate Hz, ${track.bufferSizeInFrames} frames of buffer, bursts of $burst")
+        log("Tablet sound: open at $rate Hz, ${track.bufferSizeInFrames} frames of buffer (the device's burst $deviceBurst), writing $burst at a time")
         try {
             track.play()
             while (running && !focusLost) {
@@ -184,7 +187,7 @@ class AudioOut(
             .build()
         val minBytes = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
         val wantFrames = rate * BUFFER_MS / 1000
-        val bytes = maxOf(minBytes, wantFrames * BYTES_PER_FRAME * 2)   // room to grow after an underrun
+        val bytes = maxOf(minBytes, maxOf(wantFrames, deviceBurst * 2) * BYTES_PER_FRAME * 2)   // room to grow after an underrun
         val track = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(format)
@@ -192,8 +195,8 @@ class AudioOut(
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .build()
-        // About 20 ms, never less than two bursts, never more than the track holds.
-        track.bufferSizeInFrames = maxOf(wantFrames, burst * 2).coerceAtMost(track.bufferCapacityInFrames)
+        // About 20 ms, never less than two of the device's bursts, never more than the track holds.
+        track.bufferSizeInFrames = maxOf(wantFrames, deviceBurst * 2).coerceAtMost(track.bufferCapacityInFrames)
         return track
     }
 
@@ -222,6 +225,9 @@ class AudioOut(
 
         /** A burst when the device doesn't say its own. */
         private const val DEFAULT_BURST_MS = 5
+
+        /** The most rendered at a time. */
+        private const val MAX_CHUNK_MS = 5
 
         /** Silence this long closes the output (and gives the focus back). */
         const val IDLE_MS = 3_000L

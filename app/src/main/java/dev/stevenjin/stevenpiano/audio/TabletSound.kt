@@ -217,6 +217,15 @@ class TabletSound(
         val s = _state.value
         val nowActive = s.active && voice.loaded
         if (active && !nowActive) voice.silence()
+        if (active != nowActive) {
+            val why = when {
+                nowActive -> "sounding (${s.mode.name.lowercase()}, ${if (s.connected) "the piano connected" else "no piano"})"
+                s.mode == TabletSoundMode.OFF -> "silent (off)"
+                s.connected && s.mode == TabletSoundMode.WHEN_NOT_CONNECTED -> "silent (the piano is connected)"
+                else -> "silent (no SoundFont)"
+            }
+            log("Tablet sound: $why after ${voice.notesPosted.get()} notes")
+        }
         active = nowActive
         poke()
         when {
@@ -229,9 +238,13 @@ class TabletSound(
         loadJob = scope.launch {
             val font = withContext(io) {
                 try {
-                    val file = store.open(model) ?: return@withContext null   // the hash, once per process
                     val started = System.nanoTime()
-                    read(file).also { log("Tablet sound: ${it.name} read in ${(System.nanoTime() - started) / 1_000_000} ms, ${it.regions.size} regions") } to file
+                    val file = store.open(model) ?: return@withContext null   // the hash, once per process
+                    val checked = System.nanoTime()
+                    read(file).also {
+                        val ms = { from: Long, to: Long -> (to - from) / 1_000_000 }
+                        log("Tablet sound: ${it.name} checked in ${ms(started, checked)} ms, read in ${ms(checked, System.nanoTime())} ms, ${it.regions.size} regions")
+                    } to file
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
