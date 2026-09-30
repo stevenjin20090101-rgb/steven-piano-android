@@ -32,8 +32,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -106,7 +104,7 @@ private const val BACKDROP_ALPHA = 0.25f
 /** Where the backdrop has faded fully into the canvas, as a share of the screen's height. */
 private const val BACKDROP_FADED = 0.72f
 
-/** The resting screen's margins, inside the system bars' and the cutout's: the title's, and the byline's opposite it. */
+/** The resting screen's margins, inside the display's cutout: the title's, and the byline's opposite it. */
 private val MARGIN_SIDE = 24.dp
 private val MARGIN_END = 16.dp
 
@@ -205,13 +203,14 @@ private fun Modifier.leaveOnTouch(title: String?, onLeave: () -> Unit): Modifier
     }
 
 /**
- * The system bars' and the cutout's insets, as padding: while resting the bars have stepped aside,
- * so mostly none; once it fades away ([resting] false) the ones it had, so nothing on it moves as the
- * bars come back over it.
+ * What the resting screen keeps clear of, as padding: the display's cutout. The system bars step
+ * aside while it rests (a swipe brings them over it for a moment), so it never follows them, and
+ * nothing on it moves as they slide away when it comes or back when it goes; once it fades away
+ * ([resting] false) it holds what it had.
  */
 @Composable
 private fun restingInsets(resting: Boolean): PaddingValues {
-    val insets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+    val insets = WindowInsets.displayCutout
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
     val now = with(density) {
