@@ -19,9 +19,16 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
  * "Made in Studio · …" line of a piece Studio made), else its composer's, else nothing at all: the
  * screen never says that nothing was found. It is set as one paragraph and cut with an ellipsis
  * after [WIDE_LINES] lines on wide frames (a tablet on the piano, read from a step away) and
- * [PHONE_LINES] on phones.
+ * [PHONE_LINES] on phones. Wikipedia's text carries its credit, [WIKIPEDIA_CREDIT], one line under it
+ * (v1.8); the app's own line (a piece made in Studio: a row with no source) none.
  */
 object StandbyText {
+    /** The description and, when it is Wikipedia's, the [credit] under it. */
+    data class Notes(val text: String, val credit: String?)
+
+    /** The one line under Wikipedia's text on the resting screen, as CC BY-SA 4.0 asks. */
+    const val WIKIPEDIA_CREDIT = "From Wikipedia · CC BY-SA 4.0"
+
     /** At most this many lines of the description on wide frames. */
     const val WIDE_LINES = 6
 
@@ -31,15 +38,26 @@ object StandbyText {
     /** The description's line cap: [wide] is the frame's two panes (a tablet, or a phone on its side). */
     fun maxLines(wide: Boolean): Int = if (wide) WIDE_LINES else PHONE_LINES
 
-    /** The piece's notes ([piece], its `piece:<id>` row), else the composer's ([composer]), else null. */
-    fun description(piece: ArtworkEntity?, composer: ArtworkEntity?): String? = notes(piece) ?: notes(composer)
+    /**
+     * The piece's notes ([piece], its `piece:<id>` row), else the composer's ([composer]), else null;
+     * credited to Wikipedia when the row that gave them has a source (its page's address or title,
+     * as the piece's sheet decides), and never the app's own line.
+     */
+    fun notes(piece: ArtworkEntity?, composer: ArtworkEntity?): Notes? = found(piece) ?: found(composer)
+
+    /** The description alone ([notes]'s text). */
+    fun description(piece: ArtworkEntity?, composer: ArtworkEntity?): String? = notes(piece, composer)?.text
 
     /** [text] as one paragraph: line breaks and runs of spaces become one space, so no line of the few is spent on a break. */
     fun oneParagraph(text: String): String = text.trim().replace(WHITESPACE, " ")
 
-    /** A row's text when it was found and says something. */
-    private fun notes(row: ArtworkEntity?): String? =
-        row?.takeIf { it.status == ArtworkStatus.OK }?.description?.let(::oneParagraph)?.takeIf { it.isNotEmpty() }
+    /** A row's text when it was found and says something, with Wikipedia's credit when the row has a source. */
+    private fun found(row: ArtworkEntity?): Notes? {
+        val ok = row?.takeIf { it.status == ArtworkStatus.OK } ?: return null
+        val text = ok.description?.let(::oneParagraph)?.takeIf { it.isNotEmpty() } ?: return null
+        val fromWikipedia = ok.sourceUrl != null || ok.sourceTitle != null
+        return Notes(text, credit = if (fromWikipedia) WIKIPEDIA_CREDIT else null)
+    }
 
     private val WHITESPACE = Regex("\\s+")
 }

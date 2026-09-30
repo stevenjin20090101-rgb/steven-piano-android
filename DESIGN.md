@@ -1731,6 +1731,9 @@ On the chosen canvas (true black, or the app's own ink or paper), and nothing el
   The screen never says that nothing was found. A piece made in Studio shows its own line, "Made in
   Studio · in the manner of Clair de lune (Claude Debussy)". Where the room runs short (a large font, a
   phone on its side) the description gives way first.
+- **Its credit** (v1.8): under Wikipedia's text, one line in the eyebrow, sentence case, **"From
+  Wikipedia · CC BY-SA 4.0"** (the piece's own extract or the composer's blurb alike; there is no link
+  to follow on a screen any touch dismisses). The app's own line (a piece made in Studio) has none.
 - **Where they stand: the window's shape decides**, whatever the device. In a window wider than it is
   tall (a tablet on the piano, a phone on its side) the art stands at the left, a square 55 % of the
   window's height, vertically centred, and the words to its right at reading width (720 dp at most),

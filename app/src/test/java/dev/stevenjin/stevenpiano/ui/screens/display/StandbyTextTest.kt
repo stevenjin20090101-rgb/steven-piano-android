@@ -71,6 +71,19 @@ class StandbyTextTest {
     }
 
     @Test
+    fun `Wikipedia's text carries its credit, one line, and the app's own line none`() {
+        assertEquals("From Wikipedia · CC BY-SA 4.0", StandbyText.WIKIPEDIA_CREDIT)
+        val withPage = clairDeLune.copy(sourceUrl = "https://en.wikipedia.org/wiki/Suite_bergamasque")
+        assertEquals(StandbyText.Notes(clairDeLune.description!!, StandbyText.WIKIPEDIA_CREDIT), StandbyText.notes(withPage, debussy))
+        assertEquals("a page whose address was refused keeps its title: still Wikipedia's", StandbyText.WIKIPEDIA_CREDIT, StandbyText.notes(clairDeLune, null)?.credit)
+        assertEquals("the composer's blurb, when the piece has none", StandbyText.WIKIPEDIA_CREDIT, StandbyText.notes(null, debussy)?.credit)
+        val studio = ArtworkEntity("piece:8", description = "Made in Studio · Sep 28, 2026", fetchedAt = 1, status = ArtworkStatus.OK)
+        assertEquals(StandbyText.Notes("Made in Studio · Sep 28, 2026", credit = null), StandbyText.notes(studio, debussy))
+        assertNull("no text, no credit", StandbyText.notes(null, null))
+        assertNull(StandbyText.notes(clairDeLune.copy(status = ArtworkStatus.NOT_FOUND), debussy.copy(description = null)))
+    }
+
+    @Test
     fun `the notes are one paragraph, so no line is spent on a break`() {
         val two = debussy.copy(description = "  Claude Debussy was a French composer.\n\nHe is seen as the first Impressionist\tcomposer.  ")
         assertEquals("Claude Debussy was a French composer. He is seen as the first Impressionist composer.", StandbyText.description(null, two))

@@ -294,13 +294,14 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
  * the words in a window wider than it is tall, over them in one taller than it is wide
  * ([RestingLayout]); the title (Display Large on wide frames, [twoPane], Display on phones), the
  * composer and the channel as an eyebrow, and the description ([StandbyText]) in Body and the
- * secondary ink, six lines at most on wide frames and four on phones.
+ * secondary ink, six lines at most on wide frames and four on phones, with "From Wikipedia · CC BY-SA
+ * 4.0" one line under it when the text is Wikipedia's.
  */
 @Composable
 private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, window: DpSize, room: DpSize) {
     val own = rememberArtworkRow(ArtworkEntity.forPiece(piece.pieceId))
     val composer = rememberArtworkRow(ArtworkEntity.forComposer(piece.composerKey))
-    val notes = StandbyText.description(own, composer)
+    val notes = StandbyText.notes(own, composer)
     val eyebrow = ChannelCopy.eyebrow(piece.composer, channel)
     val beside = RestingLayout.sideBySide(window)
     val art = RestingLayout.artSide(beside, window, room)
@@ -329,9 +330,12 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
     }
 }
 
-/** The title, the eyebrow and the description; the description gives way first when the room runs short (a large font). */
+/**
+ * The title, the eyebrow, the description and its credit (one line, kept); the description gives way
+ * first when the room runs short (a large font).
+ */
 @Composable
-private fun ColumnScope.Words(title: String, eyebrow: String, notes: String?, wide: Boolean, align: TextAlign) {
+private fun ColumnScope.Words(title: String, eyebrow: String, notes: StandbyText.Notes?, wide: Boolean, align: TextAlign) {
     Text(
         title,
         style = if (wide) MaterialTheme.typography.displayLarge else MaterialTheme.typography.displayMedium,
@@ -350,7 +354,7 @@ private fun ColumnScope.Words(title: String, eyebrow: String, notes: String?, wi
     }
     if (notes != null) {
         Text(
-            notes,
+            notes.text,
             Modifier
                 .padding(top = if (wide) 16.dp else 12.dp)
                 .weight(1f, fill = false),
@@ -360,6 +364,15 @@ private fun ColumnScope.Words(title: String, eyebrow: String, notes: String?, wi
             overflow = TextOverflow.Ellipsis,
             textAlign = align,
         )
+        notes.credit?.let { credit ->
+            Eyebrow(
+                credit,
+                Modifier.padding(top = if (wide) 12.dp else 8.dp),
+                uppercase = false,
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall.merge(textAlign = align),
+            )
+        }
     }
 }
 
