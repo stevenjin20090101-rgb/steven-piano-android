@@ -46,6 +46,8 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareActions
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.PosterPrint
 import dev.stevenjin.stevenpiano.web.WebStatus
+import dev.stevenjin.stevenpiano.web.relay.CloudStatus
+import dev.stevenjin.stevenpiano.web.relay.EnrolResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -261,6 +263,22 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setWebPin(pin: String) {
         graph.appScope.launch { graph.web.setPin(pin) }
     }
+
+    /** Where the connection to Steven Piano Cloud stands (Remote control's CLOUD section, v1.10 — M26). */
+    val cloud: StateFlow<CloudStatus> = graph.web.cloud
+
+    fun setCloudEnabled(on: Boolean) = graph.setCloudEnabled(on)
+
+    /** The panel's public link through the relay, while remote access is on and the tablet enrolled. */
+    fun cloudLink(settings: PianoSettings, status: CloudStatus): String? = graph.web.cloudLink(settings, status)
+
+    /** Enrol with a code from the console: in the app's scope (leaving the page doesn't stop it); [onDone] hears how it went. */
+    fun enrol(host: String, code: String, onDone: (EnrolResult) -> Unit) {
+        graph.appScope.launch { onDone(graph.enrol(host, code)) }
+    }
+
+    /** Forget this cloud: remote access off, the enrolment and its key gone. */
+    fun forgetCloud() = graph.forgetCloud()
 
     /** Print the request poster: Android's print dialog, over [activity], for the guests' [url]. */
     fun printPoster(activity: Activity, url: String) {

@@ -130,8 +130,9 @@ class PlainSealer : SecretSealer {
 /**
  * The relay's secret as the app keeps it: sealed ([sealer]) in the settings ([read], [write], the
  * DataStore's `cloudSecret`, read on its own like the PIN). [secret] is null unless the kept text
- * opens to a secret of the relay's form; [keep] seals a new one (enrolment, rotation) and is false
- * when it can't; [forget] drops the text and the key.
+ * opens to a secret of the relay's form; [seal] gives a new one's sealed text (for an enrolment,
+ * written with the piano's id at once) and [keep] puts a rotated one in place of the old, each
+ * null or false when it can't; [forget] drops the text and the key.
  */
 class CloudSecrets(
     private val sealer: SecretSealer,
@@ -140,10 +141,15 @@ class CloudSecrets(
 ) {
     suspend fun secret(): String? = read()?.let(sealer::open)?.takeIf(RelayProtocol.SECRET::matches)
 
+    /** [secret] sealed, once it is of the relay's form and what was sealed opens again; null otherwise. */
+    fun seal(secret: String): String? {
+        if (!RelayProtocol.SECRET.matches(secret)) return null
+        val sealed = sealer.seal(secret) ?: return null
+        return sealed.takeIf { sealer.open(it) == secret }
+    }
+
     suspend fun keep(secret: String): Boolean {
-        if (!RelayProtocol.SECRET.matches(secret)) return false
-        val sealed = sealer.seal(secret) ?: return false
-        if (sealer.open(sealed) != secret) return false   // what was sealed must open again before it replaces the old one
+        val sealed = seal(secret) ?: return false
         write(sealed)
         return true
     }

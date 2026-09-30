@@ -336,8 +336,12 @@ data class WebPiano(val state: WebPianoState, val statusText: String?, val statu
 /** Artwork fetched in the background: [done] of [total] while [running]. */
 data class WebArtwork(val running: Boolean, val done: Int, val total: Int)
 
-/** Where the panel and the request page are reached: `http://100.101.2.3:8737`, and the guests' `…/request`. */
-data class WebAddresses(val panel: String?, val guest: String?)
+/**
+ * Where the panel and the request page are reached: `http://100.101.2.3:8737`, and the guests'
+ * `…/request`; and (v1.10 — M26) the panel's public link through Steven Piano Cloud,
+ * `https://<relay>/p/<id>/`, while remote access over the internet is on.
+ */
+data class WebAddresses(val panel: String?, val guest: String?, val cloud: String? = null)
 
 /** Guests: whether they may ask, and whether a request waits for approval. */
 data class GuestSettings(val open: Boolean, val approveFirst: Boolean)

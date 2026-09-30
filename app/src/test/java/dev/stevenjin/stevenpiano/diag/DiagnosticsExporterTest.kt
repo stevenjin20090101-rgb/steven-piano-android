@@ -33,7 +33,10 @@ class DiagnosticsExporterTest {
     private val facts = DiagnosticsText.Facts("1.4", 8, "release", "Google", "Pixel Tablet", "14", 34)
     private val linkLog = LinkLog(clock = { now }, zone = ZoneOffset.UTC)
     private val crashes by lazy { CrashReports(File(tmp.root, "files/diagnostics"), { DiagnosticsText.header(facts) }, { linkLog.tail(50) }, { now }, ZoneOffset.UTC) }
-    private val settings = PianoSettings(lastDeviceAddress = "C8:2E:18:00:11:22", lastDeviceName = "Steven Piano", transpose = -2, webEnabled = true, webPinSet = true)
+    private val settings = PianoSettings(
+        lastDeviceAddress = "C8:2E:18:00:11:22", lastDeviceName = "Steven Piano", transpose = -2, webEnabled = true, webPinSet = true,
+        cloudEnabled = true, cloudHost = "relay.example.dev", cloudPianoId = "abcdefgh2345", cloudSecretSet = true,
+    )
 
     private fun exporter() = DiagnosticsExporter(
         File(tmp.root, "cache/diagnostics"),
@@ -78,7 +81,10 @@ class DiagnosticsExporterTest {
         assertTrue("kioskEnabled = false\nkioskPinSet = false\n" in prefs)
         assertFalse("the PINs' hashes and salts never travel", "Pin" in prefs.replace("webPinSet", "").replace("kioskPinSet", ""))
         assertTrue("tabletSound = WHEN_NOT_CONNECTED\ntabletVolume = 60\n" in prefs)
-        assertEquals(35, prefs.lines().count { it.isNotEmpty() })
+        assertTrue("cloudEnabled = true\ncloudHost = relay.example.dev\ncloudEnrolled = true\n" in prefs)
+        assertFalse("the cloud's piano id never travels (v1.10 — M26)", "abcdefgh2345" in prefs)
+        assertFalse("nor anything of its secret", "cloudSecret" in prefs)
+        assertEquals("35 lines, and the cloud's three (v1.10 — M26)", 38, prefs.lines().count { it.isNotEmpty() })
 
         assertTrue(entries.getValue("link.log").endsWith("with its console\n"))
         assertTrue("IllegalStateException: second" in entries.getValue("crash-${now}.txt"))

@@ -157,6 +157,11 @@ class WebApiTest {
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
         assertEquals(setOf("player", "link", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio"), json.keys().asSequence().toSet())
+        // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
+        assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
+        assertTrue(json.getJSONObject("web").isNull("cloud"))
+        val clouded = WebApi.state(state.copy(web = WebAddresses(null, null, "https://relay.example.dev/p/abcdefgh2345/")), pending = 0)
+        assertEquals("https://relay.example.dev/p/abcdefgh2345/", clouded.getJSONObject("web").getString("cloud"))
         // Studio (v1.7 — M23): whether it runs here, its models and its jobs, the progress null when not running.
         val studio = WebApi.studio(
             WebStudio(

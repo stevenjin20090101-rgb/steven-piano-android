@@ -458,14 +458,17 @@ class RelayClient(
             if (member == null) send(RelayMessage.WsClose(open.id, TRY_AGAIN_LATER, "Too many panels are open.")) else members[open.id] = member
         }
 
-        /** A hub message for a bridged browser; one too large for the protocol's frame is dropped (the next state follows). */
+        /**
+         * A hub message for a bridged browser, fitted to one frame ([RelayProtocol.wsText]: a long Up
+         * next gives up rows); one that still doesn't fit is dropped (the next state follows).
+         */
         private fun sendText(id: Long, text: String) {
-            val message = RelayMessage.WsText(id, text).encode()
-            if (RelayProtocol.utf8Length(message) > RelayProtocol.MAX_TEXT) {
+            val message = RelayProtocol.wsText(id, text)
+            if (message == null) {
                 log("Cloud: a panel message too large for the relay was dropped")
                 return
             }
-            socket.send(message)
+            if (::socket.isInitialized) socket.send(message)
         }
 
         private fun onCmd(cmd: RelayMessage.Cmd) {

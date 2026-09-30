@@ -405,7 +405,11 @@ object WebApi {
             .put("import", import(s.import))
             .put("artwork", JSONObject().put("running", s.artwork.running).put("done", s.artwork.done).put("total", s.artwork.total))
             .put("requests", JSONObject().put("pending", pending).put("guests", s.guests.open).put("approveFirst", s.guests.approveFirst))
-            .put("web", JSONObject().put("address", s.web.panel ?: JSONObject.NULL).put("guestAddress", s.web.guest ?: JSONObject.NULL).put("guests", s.guests.open))
+            .put(
+                "web",
+                JSONObject().put("address", s.web.panel ?: JSONObject.NULL).put("guestAddress", s.web.guest ?: JSONObject.NULL).put("guests", s.guests.open)
+                    .put("cloud", s.web.cloud ?: JSONObject.NULL),
+            )
             .put("monochrome", s.monochrome)
             .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))

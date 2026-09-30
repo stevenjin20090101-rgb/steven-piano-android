@@ -154,6 +154,35 @@ class RelayProtocolTest {
     }
 
     @Test
+    fun `a state message too long for one frame gives up Up next's last rows, and keeps the queue's count`() {
+        val pieces = (1..100).map { i ->
+            dev.stevenjin.stevenpiano.web.WebQueueItem(
+                uid = 1_000L + i,
+                piece = dev.stevenjin.stevenpiano.web.WebPiece(i.toLong(), "Étude \"$i\" in a very long title that goes on ".repeat(4), "Frédéric Chopin", "chopin", 200_000, composerShort = "Chopin"),
+            )
+        }
+        val queue = dev.stevenjin.stevenpiano.player.QueueSnapshot((1L..3_000L).toList(), (1_001L..4_000L).toList(), 0)
+        val state = dev.stevenjin.stevenpiano.web.WebApi.state(
+            dev.stevenjin.stevenpiano.web.WebState(player = dev.stevenjin.stevenpiano.web.WebPlayer(queue = queue, items = pieces)),
+            0,
+            type = "state",
+        ).toString()
+        assertTrue("too long as it is", RelayProtocol.utf8Length(RelayMessage.WsText(3, state).encode()) > RelayProtocol.MAX_TEXT)
+        val fitted = RelayProtocol.wsText(3, state)!!
+        assertTrue(RelayProtocol.utf8Length(fitted) <= RelayProtocol.MAX_TEXT)
+        val sent = JSONObject((RelayProtocol.decode(fitted) as RelayMessage.WsText).data)
+        val q = sent.getJSONObject("player").getJSONObject("queue")
+        val items = q.getJSONArray("items")
+        assertTrue("some rows stay: ${items.length()}", items.length() in 1 until 100)
+        assertEquals("from the top, in order", (1..items.length()).map { 1_000L + it }, (0 until items.length()).map { items.getJSONObject(it).getLong("uid") })
+        assertEquals("the count stays whole", 3_000, q.getJSONArray("ids").length())
+        assertEquals(0, q.getInt("index"))
+        val small = """{"type":"progress","positionMs":1,"at":2}"""
+        assertEquals(RelayMessage.WsText(3, small).encode(), RelayProtocol.wsText(3, small))
+        assertEquals("not a state: nothing to give up", null, RelayProtocol.wsText(3, """{"type":"other","x":"${"y".repeat(RelayProtocol.MAX_TEXT)}"}"""))
+    }
+
+    @Test
     fun `UTF-8 lengths are counted as the encoder would`() {
         for (text in listOf("", "abc", "é", "日本", "🎹", "a🎹é日")) assertEquals(text, text.toByteArray(Charsets.UTF_8).size, RelayProtocol.utf8Length(text))
         assertFalse(RelayProtocol.HOST.matches("relay.example.dev:"))

@@ -88,7 +88,9 @@ enum class StandbyShows { ART_AND_NOTES, PAPER_ROLL }
  * display mode, the web panel (Piano › Remote control) and kiosk mode (Piano › Kiosk). Of the
  * panel's PIN only [webPinSet] is here, and of the kiosk's only [kioskPinSet]: their salts and
  * hashes are read on their own ([SettingsRepository.webPin], [SettingsRepository.kioskPin]), so
- * nothing that passes these settings around (the screens, Share diagnostics) ever holds them.
+ * nothing that passes these settings around (the screens, Share diagnostics) ever holds them. So
+ * with Steven Piano Cloud (v1.10 — M26): only [cloudSecretSet] is here, the sealed secret is read
+ * on its own ([SettingsRepository.cloudSecret]).
  */
 data class PianoSettings(
     val autoConnect: Boolean = true,
@@ -151,9 +153,20 @@ data class PianoSettings(
     val tabletSound: TabletSoundMode = TabletSoundMode.WHEN_NOT_CONNECTED,
     /** The tablet's piano sound's volume, 0–100 % (Now playing's speaker, the Playback page, the web panel). */
     val tabletVolume: Int = Sampler.DEFAULT_VOLUME,
+    /** Remote access over the internet (Piano › Remote control › CLOUD, v1.10 — M26): the tablet keeps its connection to the relay. */
+    val cloudEnabled: Boolean = false,
+    /** The relay's address as the person typed it for enrolling ("steven-piano-relay.you.workers.dev"), remembered; null: never typed. */
+    val cloudHost: String? = null,
+    /** This tablet's piano on the relay (12 letters of base32), once enrolled. */
+    val cloudPianoId: String? = null,
+    /** Whether a sealed relay secret is kept (whether it still opens is the relay client's to find). */
+    val cloudSecretSet: Boolean = false,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
+
+    /** Enrolled with a relay: an address, a piano's id and a secret kept. */
+    val cloudEnrolled: Boolean get() = cloudHost != null && cloudPianoId != null && cloudSecretSet
 
     companion object {
         /** A channel's volume until the person sets it (DESIGN.md › v1.5 — M17). */
@@ -300,6 +313,35 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setKioskStayOnBefore(mask: Int?) = edit { if (mask == null) it.remove(KIOSK_STAY_ON_BEFORE) else it[KIOSK_STAY_ON_BEFORE] = mask }
 
+    /** Remote access over the internet on or off (v1.10 — M26); it connects only once enrolled, with a PIN set. */
+    suspend fun setCloudEnabled(on: Boolean) = edit { it[CLOUD_ENABLED] = on }
+
+    /** The relay's address as typed (already read into its one form, `CloudAddress.host`), remembered for the next enrolment. */
+    suspend fun setCloudHost(host: String) = edit { it[CLOUD_HOST] = host.take(MAX_HOST_NAME) }
+
+    /**
+     * An enrolment, all at once: the relay's [host], this tablet's [pianoId] and its secret [sealed]
+     * (`CloudSecrets.seal`), so the relay client never sees a new id with an old secret.
+     */
+    suspend fun setCloudEnrolment(host: String, pianoId: String, sealed: String) = edit {
+        it[CLOUD_HOST] = host.take(MAX_HOST_NAME)
+        it[CLOUD_PIANO_ID] = pianoId
+        it[CLOUD_SECRET] = sealed
+    }
+
+    /** The relay's secret as kept (sealed), or null. Read on its own, never with [settings]. */
+    suspend fun cloudSecret(): String? = current()[CLOUD_SECRET]
+
+    /** A rotated secret (sealed) in place of the old one; null removes it. */
+    suspend fun setCloudSecret(sealed: String?) = edit { if (sealed == null) it.remove(CLOUD_SECRET) else it[CLOUD_SECRET] = sealed }
+
+    /** Forget this cloud: the enrolment (the piano's id and its secret) goes and remote access turns off; the typed address stays for next time. */
+    suspend fun forgetCloud() = edit {
+        it.remove(CLOUD_PIANO_ID)
+        it.remove(CLOUD_SECRET)
+        it[CLOUD_ENABLED] = false
+    }
+
     /** When the tablet plays the piano sound (v1.8 — M25). */
     suspend fun setTabletSound(mode: TabletSoundMode) = edit { it[TABLET_SOUND] = mode.name }
 
@@ -373,6 +415,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             kioskPinSet = this[KIOSK_PIN_SALT] != null && this[KIOSK_PIN_HASH] != null,
             tabletSound = TabletSoundMode.entries.firstOrNull { it.name == this[TABLET_SOUND] } ?: defaults.tabletSound,
             tabletVolume = (this[TABLET_VOLUME] ?: defaults.tabletVolume).coerceIn(0, 100),
+            cloudEnabled = this[CLOUD_ENABLED] ?: defaults.cloudEnabled,
+            cloudHost = this[CLOUD_HOST],
+            cloudPianoId = this[CLOUD_PIANO_ID]?.takeIf { PIANO_ID.matches(it) },
+            cloudSecretSet = this[CLOUD_SECRET] != null,
         )
     }
 
@@ -420,6 +466,13 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
         val TABLET_SOUND = stringPreferencesKey("tabletSound")
         val TABLET_VOLUME = intPreferencesKey("tabletVolume")
+        val CLOUD_ENABLED = booleanPreferencesKey("cloudEnabled")
+        val CLOUD_HOST = stringPreferencesKey("cloudHost")
+        val CLOUD_PIANO_ID = stringPreferencesKey("cloudPianoId")
+        val CLOUD_SECRET = stringPreferencesKey("cloudSecret")
+
+        /** A piano's id on the relay (`web.relay.RelayProtocol.PIANO_ID`, kept here so the settings need nothing from the web). */
+        val PIANO_ID = Regex("[a-z2-7]{12}")
     }
 }
 

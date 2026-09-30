@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.web.relay
 
 import dev.stevenjin.stevenpiano.web.WebApi
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.math.BigInteger
@@ -229,6 +230,37 @@ object RelayProtocol {
     private fun text(value: Any?, max: Int): String? = (value as? String)?.takeIf { it.length <= max && !hasBreak(it) }
 
     private fun hasBreak(value: String): Boolean = value.any { it == '\r' || it == '\n' || it == '\u0000' }
+
+    /**
+     * The hub's message [text] for bridged browser [id] as one `ws.text` frame within [MAX_TEXT]
+     * (the relay drops a larger one). A state message too large for it (a long Up next: its rows carry
+     * titles, and the whole queue's ids) gives up rows from the end of `player.queue.items` (the
+     * piece playing and the next ones stay; the queue's `ids` and `index`, which the page counts
+     * from, stay whole), then the queue's `uids` (which the page doesn't read). Null when it still
+     * doesn't fit, or it is not a state message.
+     */
+    fun wsText(id: Long, text: String): String? {
+        val whole = RelayMessage.WsText(id, text).encode()
+        if (utf8Length(whole) <= MAX_TEXT) return whole
+        val json = try {
+            JSONObject(text)
+        } catch (e: JSONException) {
+            return null
+        }
+        if (json.opt("type") != "state") return null
+        val queue = (json.opt("player") as? JSONObject)?.opt("queue") as? JSONObject ?: return null
+        fun fits(): String? = RelayMessage.WsText(id, json.toString()).encode().takeIf { utf8Length(it) <= MAX_TEXT }
+        var items = queue.opt("items") as? JSONArray ?: JSONArray()
+        while (items.length() > 1) {
+            val kept = JSONArray()
+            for (i in 0 until items.length() / 2) kept.put(items.get(i))
+            queue.put("items", kept)
+            items = kept
+            fits()?.let { return it }
+        }
+        queue.put("uids", JSONArray())
+        return fits()
+    }
 
     /** A JSON number that is a whole number fitting a Long, or null (a fraction, text, a boolean). */
     fun whole(value: Any?): Long? = when (value) {
