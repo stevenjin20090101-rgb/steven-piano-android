@@ -6145,7 +6145,8 @@ Screenshots in the session scratchpad, `m27/shots/`.
 - **Nothing is offered until `releases/library.json` is on `main`** (merge and push); the release and its zip are
   already public.
 - **The console's `library.load` path from the background** (the in-process fallback) is written and unit-level
-  only; M26's integration exercises it.
+  only; M26's integration exercises it. (At the merge Android allowed the service from the background, the web
+  service holding the foreground, so the fallback itself stayed unexercised: *The merge*.)
 - **`newPieces` undercounts a pack that replaced files** (the row then says "Update the library"); the import
   itself is exact (by hash).
 - **The pack is trusted as the app's updates are**: the manifest's address and the zip's hash, no signature. A
@@ -6167,3 +6168,67 @@ replacing a load; the schedule's due time; the schedule on its switch and the ne
 deleted; the skip list; an index without the column; not a zip; the importer bringing only the new pieces).
 `LibraryCopyTest` (4). `IndexCsvTest` +4 (in `CsvReaderTest.kt`), `UpdateSourceTest` +4, `SettingsRepositoryTest`
 +1. 1,219 before, **1,260** after.
+
+## The merge: into `main`, before 1.10 (still 1.9, versionCode 17)
+
+Merged into `main` after M26's merge (`c234895`) as `d4e60c6`. Not a release: the audit runs next, then 1.10
+is cut; the version stays 1.9 (versionCode 17), no entry is drafted in `releases/history.json` and no APK is
+staged.
+
+- **Conflicts**: `Settings.kt` (the last fields of `PianoSettings`, their reading and the keys: M26's cloud
+  settings, then `libraryPackVersion`, its key with the others before the relay's piano-id pattern);
+  `SettingsRepositoryTest` (both tests kept); the tails of DESIGN.md and this file (M26's section, this file's
+  with its merge notes, then this one, each after a "---", M26's missing since its merge) and of
+  `docs/SECURITY_AUDIT.md` (the cloud's notes, then the pack's). README, AUTHORS, `AppGraph`, the manifest,
+  `UpdateSource` (M26 had not touched it), `ImportSource`, `IndexCsv`, `ImportService` and the Library's screens
+  merged by themselves.
+- **The two runs wired** (`5c5e1e4`):
+  - The console's `library.load`: `WebService` gives `RelayCommands` its `libraryLoad` (M26 had left it null),
+    `RelayCommands.libraryLoad(online, state, load)`: the pack's `load(everything = false)`, as *For M26* above
+    asks, answered at once: "Loading Steven's library."; a load under way, "Steven's library is loading
+    already."; the tablet offline, `LibraryFailures.OFFLINE` (nothing started, no failure left on the tablet's
+    screen); a start that failed, its line.
+  - The status: `RelayStatus.report(…, settings, …)`, the panel's switch and `library.pack` from the settings
+    (`libraryPackVersion`, 0 for none, which the console leaves out; "pack 1" once loaded). A pack loaded counts
+    as a change, so the console hears it within 2 s.
+  - `settings.txt` in Share diagnostics gains `libraryPackVersion` (39 lines).
+  - README: the Cloud section reads once (the pointer line kept at M26's merge, which repeated the section's
+    first paragraph, goes); the console's list names **Load Steven's library** and the pack's version;
+    Security names the relay (what leaves the device, what comes in). M27's own security lines were already
+    inside the list's bullets.
+  - Tests: `LibraryPackTest` +1 (the console's command against a real pack: offline, started with
+    `everything = false`, busy, a refused start), `RelayStatusTest` +1 (the pack and the switch from the
+    settings), `DiagnosticsExporterTest` (the line, 39 lines).
+- **Measured at the merge** (`steven_piano_int`, API 34, Pixel 7 profile, 4 GB, `wm size 2560x1600`,
+  `wm density 240`, the integrator's own AVD, removed after; shots in the session's `integrate-m27-shots/`):
+  the merged debug build on a fresh install, the manifest from a local copy of `releases/library.json`
+  (`LibraryOverride`, the zip's URL the release's), `CloudOverride` `http://10.0.2.2:8787`.
+  - The empty Library: "No pieces yet.", "Load Steven's library, or add MIDI files of your own.", **Load
+    Steven's library** and **Add MIDI files**, "1,726 pieces · 61 MB · MAESTRO, piano-midi.de, Mutopia · for
+    non-commercial use". Load → the licence sheet ("1,726 piano pieces from three open collections, a 61 MB
+    download from Steven Piano's releases on GitHub.", the three credits, the non-commercial note, Not now ·
+    Load · 61 MB) → **Load · 61 MB** → "Loading Steven's library · 6 of 61 MB" a second later, 32 of 61 at 6 s
+    (from `github.com` by `release-assets.githubusercontent.com`) → "Imported 124 of 1,726" at 10 s →
+    **"Imported 1,726 pieces."** at 23 s (the log: 18.5 s from the manifest to "version 1 loaded, 1726 pieces
+    added, 0 there already, 0 failed"); `cache/library` empty, `offered-v1.txt` 112,190 bytes.
+  - The console's command: the app's data cleared; a PIN set (generated, not recorded); `cloud/` under
+    `wrangler dev` (at `72592f4`, the relay on :8787, the console on :8788 with its local bypass); a code from
+    the console's `POST /api/enrol-codes`; CLOUD › Enrol with code (`10.0.2.2:8787`) → Remote access over the
+    internet → **Connected**; the console's status: pieces 0, pack 0. The app sent home (the launcher on top),
+    `POST /api/pianos/<id>/command {"name":"library.load"}` → `{"ok":true,"message":"Loading Steven's
+    library."}`; 1.5 s later the same → `{"ok":false,"message":"Steven's library is loading already."}`; the
+    link's trail "Cloud: the console sent library.load: done", then "…: not done". Android allowed
+    `LibraryService` from the background ("Background started FGS: Allowed", the process in the
+    foreground-service state for the web service), so the notification showed ("Loading Steven's library",
+    "Imported 786 of 1,726"); the same download from GitHub; "version 1 loaded, 1726 pieces added" 17.4 s after
+    the command; the console's status then **pieces 1,726, pack 1**, its audit both commands with their
+    answers; the Library on return, the pieces. No crash.
+- Tests: **1,324** (M26's merge's 1,281, M27's 41, the wiring's 2), 13 skipped. `check` passes: `lint` 0 errors,
+  30 warnings (1.9's 28, M26's OkHttp notice, M27's `InlinedApi` on `LibraryService`, the line every data-sync
+  service carries; nothing from the merge), the ONNX Runtime checks. No compiler warnings in the app's sources.
+  The greps above and every earlier section's: as stated; the pack's manifest address only in `UpdateSource`.
+- **The release build**, R8: no warnings; 13,710,983 bytes (+18,928 on M26's merge), versionCode 17, "1.9",
+  signed `CN=Steven Piano, O=Steven Jin, C=US`. Not staged. The debug APK is 29,607,042 bytes.
+- Seen in the Library, the pack's data: 111 Mutopia rows of `INDEX.csv` carry no composer, and some a file's
+  name as their title ("a-breeze-from-alabama"); for the next pack.
+- The provenance manifest re-signed last.

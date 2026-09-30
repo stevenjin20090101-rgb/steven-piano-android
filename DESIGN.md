@@ -2200,7 +2200,8 @@ Everything above still holds; Library › + keeps its three ways in (files, a fo
   music does (the + is locked already).
 - **The console** (Steven Piano Cloud, M26): **Load Steven's library** on a piano's page starts the same
   load on the tablet (an update when one is loaded; pieces a teacher deleted stay deleted). With the app
-  in the background the load runs without its notification.
+  in the background the load keeps its notification: the web service, holding the relay's connection,
+  keeps the app allowed to start it (seen at the merge); were Android to refuse, it would run without it.
 
 ## When the app asks GitHub
 

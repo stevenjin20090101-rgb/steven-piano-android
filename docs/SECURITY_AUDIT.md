@@ -1539,6 +1539,8 @@ held at these places:
   loaded. Its reach is the importer's (pieces added to the library, bounded as above).
 - **MAESTRO's licence is non-commercial** (CC BY-NC-SA 4.0): the licence sheet says so before the first load,
   and README and AUTHORS carry the credits; the school's use is non-commercial.
-- **The console's command with the app in the background** runs the load in the app's process without the
-  notification (Android refuses the foreground service there); exercised at M26's integration.
+- **The console's command with the app in the background** starts the load's own foreground service: the web
+  service, which holds the relay's connection, keeps the app's process in the foreground-service state, and
+  Android allowed the start (seen at the merge, BUILD_SPEC.md › v1.10 — M27 › *The merge*); were it refused,
+  the load would run in the app's process without the notification.
 - Not run on the school tablet yet.
