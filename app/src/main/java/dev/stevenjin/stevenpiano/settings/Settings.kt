@@ -161,6 +161,8 @@ data class PianoSettings(
     val cloudPianoId: String? = null,
     /** Whether a sealed relay secret is kept (whether it still opens is the relay client's to find). */
     val cloudSecretSet: Boolean = false,
+    /** The version of Steven's library pack last loaded in full (v1.10 — M27); 0: never loaded. */
+    val libraryPackVersion: Int = 0,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -348,6 +350,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The tablet's piano sound's volume, held to 0-100 %. */
     suspend fun setTabletVolume(pct: Int) = edit { it[TABLET_VOLUME] = pct.coerceIn(0, 100) }
 
+    /** Steven's library pack [version] has been loaded (v1.10 — M27): the Library offers a later one as an update. */
+    suspend fun setLibraryPackVersion(version: Int) = edit { it[LIBRARY_PACK_VERSION] = version.coerceAtLeast(0) }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -419,6 +424,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             cloudHost = this[CLOUD_HOST],
             cloudPianoId = this[CLOUD_PIANO_ID]?.takeIf { PIANO_ID.matches(it) },
             cloudSecretSet = this[CLOUD_SECRET] != null,
+            libraryPackVersion = (this[LIBRARY_PACK_VERSION] ?: defaults.libraryPackVersion).coerceAtLeast(0),
         )
     }
 
@@ -470,6 +476,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CLOUD_HOST = stringPreferencesKey("cloudHost")
         val CLOUD_PIANO_ID = stringPreferencesKey("cloudPianoId")
         val CLOUD_SECRET = stringPreferencesKey("cloudSecret")
+        val LIBRARY_PACK_VERSION = intPreferencesKey("libraryPackVersion")
 
         /** A piano's id on the relay (`web.relay.RelayProtocol.PIANO_ID`, kept here so the settings need nothing from the web). */
         val PIANO_ID = Regex("[a-z2-7]{12}")

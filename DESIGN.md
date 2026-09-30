@@ -2056,6 +2056,8 @@ scrolled beneath it. The wide surfaces (headers, sheets, menus, dialogs) blur a 
 resolution; the bars keep M16's third. And beside a scrolling list the transport yields its blur
 (above).
 
+---
+
 # v1.10 — M26: Steven Piano Cloud, the tablet's side
 
 Steven asked (2026-09-30) for the web panel from anywhere, over HTTPS, without Tailscale, on his own
@@ -2136,3 +2138,74 @@ request, the panel's own address on the tablet's networks, the library's size, t
 a device identifier: no Bluetooth address, no piano name, no serial, no Android id; the enrolment sends
 the code alone. The PIN is checked on the tablet, as always; the relay never holds it. The tablet's key to
 the relay is sealed by Android's keystore and never shown.
+
+---
+
+# v1.10 — M27: Steven's library from GitHub
+
+Steven asked (2026-09-30) that a new tablet can load the song library from GitHub, and that tablets
+which have it can update it. The library he built (`Player Piano/midi/`, 1,727 files in its INDEX.csv)
+becomes a **versioned pack**, `library-v<n>.zip`, on this repository's GitHub release `library`, named by
+`releases/library.json` on `main`. The app downloads it on demand only; it is never bundled in the APK.
+Everything above still holds; Library › + keeps its three ways in (files, a folder, a zip).
+
+## The pack
+
+- **What is in it**: the MIDI files the library's INDEX.csv lists, each once (INDEX.csv lists 1,727
+  files; one, piano-midi.de's `bor_ps1_format5.mid`, is `bor_ps1_format4.mid` byte for byte, so version 1
+  holds **1,726 pieces**), their INDEX.csv with a new last column `sha256`, the library's README (its
+  collections and their credit lines) and MAESTRO's licence. Nothing else of the folder: not
+  `pop-shopping-list/`, not `ALL SONGS/` or `ALL-SONGS.zip`. Version 1 is **61 MB** (92.9 MB of MIDI).
+- **The three collections**, credited as their licences ask: **MAESTRO v3.0.0** (Google Magenta;
+  Curtis Hawthorne et al., "Enabling Factorized Piano Music Modeling and Generation with the MAESTRO
+  Dataset", ICLR 2019; CC BY-NC-SA 4.0: **non-commercial use only**), **piano-midi.de** (Bernd Krueger,
+  CC BY-SA 3.0 Germany), **the Mutopia Project** (public domain).
+- **Versions only rise.** A tablet offers a pack whose version is above the one it loaded. An update
+  brings **only the pieces no earlier pack offered this tablet**, and **never deletes one**: a piece the
+  person deleted stays deleted, and a piece the pack no longer holds stays in the library.
+
+## Load Steven's library
+
+- **The empty Library**: "No pieces yet." then "Load Steven's library, or add MIDI files of your own.",
+  and side by side the two outlined actions **Load Steven's library** and **＋ Add MIDI files**; under
+  them, in the eyebrow's size, sentence case, secondary: "1,726 pieces · 61 MB · MAESTRO, piano-midi.de,
+  Mutopia · for non-commercial use" (before the pack is known: "MAESTRO, piano-midi.de, Mutopia · for
+  non-commercial use"). Load is dimmed while a load runs. Here Load brings every piece of the pack, even
+  ones an earlier pack offered: a library emptied by hand can be filled again.
+- **Library › +**: first, above a hairline, **Load Steven's library** with the same line, until a pack
+  has been loaded on this tablet. After that the row shows only while a newer pack is on offer (or
+  loading): **Update the library · 2 new pieces** ("Update the library" when the count is not known),
+  with the pack's line. While a load runs the row says what it is doing and does nothing when tapped.
+- **The licence sheet**, before the first load (from either place): the sheet's glass, **Steven's
+  library** in the title's size, "1,726 piano pieces from three open collections, a 61 MB download from
+  Steven Piano's releases on GitHub.", the eyebrow **CREDITS**, each collection's name in Body with its
+  credit under it in the eyebrow's size ("Curtis Hawthorne et al., “Enabling Factorized Piano Music
+  Modeling and Generation with the MAESTRO Dataset”, ICLR 2019. CC BY-NC-SA 4.0.", "Bernd Krueger,
+  www.piano-midi.de. CC BY-SA 3.0 Germany.", "www.mutopiaproject.org. Public domain."), then "For
+  non-commercial use: MAESTRO's performances may not be sold or used for profit. The credits stay with
+  the pieces, in the pack's README.", then **Not now** and the filled **Load · 61 MB**. Updates don't
+  show it again; a first load that did not finish shows it again next time.
+- **While it loads**: under the Library's header, where imports show, "Loading Steven's library · 23 of
+  61 MB" over the progress hairline; then the import's own line, "Imported 1,204 of 1,726", and at the
+  end "Imported 1,726 pieces." with Dismiss, as any import. Composers' artwork follows, as after any
+  import. The notification: **Loading Steven's library**, "23 of 61 MB", then "Imported 204 of 1,726",
+  with the progress bar and **Cancel**; it goes on with the screen off or the app left.
+- **When it stops**, one line in words where the progress was, with Dismiss, and Load available again:
+  "Loading Steven's library needs an internet connection.", "Couldn't reach the download server.",
+  "The library's list couldn't be read.", "The download didn't match the library; try again.", "The
+  download stopped; try again.", "There isn't enough free space for the library.", "The library's
+  pieces couldn't be read.". Cancel, or a stop part-way, keeps what arrived (the next load brings the
+  rest) and leaves no file behind.
+- **Kiosk mode**: loading and updating the library change it, so they wait for the kiosk PIN, as adding
+  music does (the + is locked already).
+- **The console** (Steven Piano Cloud, M26): **Load Steven's library** on a piano's page starts the same
+  load on the tablet (an update when one is loaded; pieces a teacher deleted stay deleted). With the app
+  in the background the load runs without its notification.
+
+## When the app asks GitHub
+
+The pack's list (about 600 bytes, `releases/library.json` from raw.githubusercontent.com) is asked for:
+once a day while the app is open and online with **Check for updates** on (the app's own update check's
+switch); and when the empty Library or the + sheet shows, at most once every 10 minutes, since the
+person is looking at the offer. The 61 MB zip only on Load or Update. Nothing about the person or the
+tablet is sent.

@@ -216,6 +216,102 @@ class UpdateSourceTest {
         assertTrue("the composer is 173 MB", 173_193_820L <= UpdateSource.MAX_MODEL_BYTES)
     }
 
+    private val library = "https://raw.githubusercontent.com/$appRepo/main/releases/library.json"
+    private val pack = "https://github.com/$appRepo/releases/download/library/library-v1.zip"
+
+    @Test
+    fun `the library's manifest is one address exactly, and names only zip assets of the release tagged library`() {
+        assertEquals(library, UpdateSource.LIBRARY_MANIFEST_URL)
+        assertTrue(UpdateSource.allowsLibraryManifest(library))
+        assertTrue(UpdateSource.allowsLibraryManifest("https://RAW.githubusercontent.com:443/$appRepo/main/releases/library.json"))
+        for (refused in listOf(
+            "http://raw.githubusercontent.com/$appRepo/main/releases/library.json",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/models.json",
+            "https://raw.githubusercontent.com/$appRepo/dev/releases/library.json",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/library.json?x=1",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/library.json#top",
+            "https://raw.githubusercontent.com/$appRepo/main/releases/../releases/library.json",
+            "https://raw.githubusercontent.com/$repo/main/releases/library.json",
+            "https://evil.example@raw.githubusercontent.com/$appRepo/main/releases/library.json",
+            "https://raw.githubusercontent.com.evil.example/$appRepo/main/releases/library.json",
+        )) {
+            assertFalse(refused, UpdateSource.allowsLibraryManifest(refused))
+        }
+        val source = UpdateSource.library
+        assertTrue(source.allowsLibrary(pack))
+        assertTrue(UpdateSource.allowsLibraryFile("https://github.com/$appRepo/releases/download/library/library-v12.zip"))
+        for (refused in listOf(
+            "https://github.com/$appRepo/releases/download/models/library-v1.zip",
+            "https://github.com/$appRepo/releases/download/v1.10/library-v1.zip",
+            "https://github.com/$appRepo/releases/download/library/steven-piano-1.10.apk",
+            "https://github.com/$appRepo/releases/download/library/composer-v1.onnx",
+            "https://github.com/$appRepo/releases/download/library/library-v1.zip?download=1",
+            "https://github.com/$appRepo/releases/download/library/library-v1.zip#x",
+            "https://github.com/$appRepo/releases/download/library/sub/library-v1.zip",
+            "https://github.com/$appRepo/releases/download/library/..",
+            "https://github.com/someone-else/steven-piano-android/releases/download/library/library-v1.zip",
+            "https://github.com/$repo/releases/download/library/library-v1.zip",
+            "https://release-assets.githubusercontent.com/github-production-release-asset/1.zip",
+            "http://github.com/$appRepo/releases/download/library/library-v1.zip",
+            "https://github.com:8443/$appRepo/releases/download/library/library-v1.zip",
+        )) {
+            assertFalse(refused, source.allowsLibrary(refused))
+        }
+    }
+
+    @Test
+    fun `the library's source reaches its manifest, its zips and the asset hosts, and nothing of the others'`() {
+        val source = UpdateSource.library
+        assertEquals(library, source.manifestUrl)
+        assertTrue(source.isProduction)
+        assertTrue(source.allowsHop(library))
+        assertTrue(source.allowsHop(pack))
+        assertTrue(source.allowsHop("https://objects.githubusercontent.com/any/path?sig=1"))
+        assertTrue(source.allowsHop("https://release-assets.githubusercontent.com/github-production-release-asset/2/3?sp=r"))
+        assertFalse(source.allowsHop(UpdateSource.MANIFEST_URL))
+        assertFalse(source.allowsHop(models))
+        assertFalse(source.allowsHop(model))
+        assertFalse(source.allowsHop("https://github.com/$appRepo/releases/download/v1.9/steven-piano-1.9.apk"))
+        assertFalse(source.allowsHop(manifest))
+        assertFalse(source.allowsHop(binary))
+        assertFalse(source.allowsHop("http://10.0.2.2:8767/library.json"))
+        assertFalse(source.allowsApk(pack))
+        assertFalse(source.allowsModel(pack, ".zip"))
+        assertFalse("the app's own source never names the pack as its APK", UpdateSource.production.allowsApk(pack))
+        assertFalse("nor do the models' or the firmware's reach it", UpdateSource.models.allowsHop(pack) || UpdateSource.firmware.allowsHop(pack))
+        assertFalse(UpdateSource.production.allowsLibrary(pack))
+        assertFalse(UpdateSource.models.allowsLibrary(pack))
+        assertFalse(UpdateSource.firmware.allowsLibrary(pack))
+    }
+
+    @Test
+    fun `the emulator's library server is one origin, zips only, beside what the library reaches`() {
+        val local = UpdateSource.localLibrary("http://10.0.2.2:8767/library.json")!!
+        assertFalse(local.isProduction)
+        assertEquals("http://10.0.2.2:8767/library.json", local.manifestUrl)
+        assertTrue(local.allowsHop("http://10.0.2.2:8767/library.json"))
+        assertTrue(local.allowsHop("http://10.0.2.2:8767/library-v2.zip"))
+        assertTrue("the published pack, so a manifest from the Mac can name it", local.allowsHop(pack))
+        assertTrue(local.allowsHop("https://release-assets.githubusercontent.com/github-production-release-asset/2/3?sp=r"))
+        assertFalse(local.allowsHop("http://10.0.2.2:8766/models.json"))
+        assertFalse(local.allowsHop(model))
+        assertTrue(local.allowsLibrary("http://10.0.2.2:8767/library-v2.zip"))
+        assertTrue(local.allowsLibrary(pack))
+        assertFalse(local.allowsLibrary("http://10.0.2.2:8767/app.apk"))
+        assertFalse(local.allowsLibrary("http://10.0.2.2:8768/library-v2.zip"))
+        assertFalse(local.allowsLibrary("http://10.0.2.2:8767/library-v2.zip?x=1"))
+        assertFalse(local.allowsApk("http://10.0.2.2:8767/app.apk"))
+        assertFalse(local.allowsModel("http://10.0.2.2:8767/library-v2.zip", ".zip"))
+        assertEquals(null, UpdateSource.localLibrary("not a url"))
+        assertEquals(null, UpdateSource.localLibrary("ftp://10.0.2.2/library.json"))
+    }
+
+    @Test
+    fun `the library pack has a cap of its own, 200 MiB`() {
+        assertEquals(200L * 1024 * 1024, UpdateSource.MAX_LIBRARY_BYTES)
+        assertTrue("version 1 is 61.2 MB", 61_237_277L <= UpdateSource.MAX_LIBRARY_BYTES)
+    }
+
     @Test
     fun `a firmware binary has a cap of its own, apart from the APK's`() {
         assertEquals(4L * 1024 * 1024, UpdateSource.MAX_FIRMWARE_BYTES)

@@ -39,22 +39,30 @@ import java.util.Locale
  * names: `.onnx` assets of this repository's release tagged [MODELS_TAG] on `github.com`
  * ([allowsModel]), with GitHub's two asset hosts for the redirect; its own cap ([MAX_MODEL_BYTES]).
  * [localModels] is its emulator stand-in (debug builds only, as [local]).
+ *
+ * [library] (v1.10 — M27, Steven's library): the pack's manifest at [LIBRARY_MANIFEST_URL] exactly, and
+ * the zip it names: a `.zip` asset of this repository's release tagged [LIBRARY_TAG] on `github.com`
+ * ([allowsLibrary]), with GitHub's two asset hosts for the redirect; its own cap ([MAX_LIBRARY_BYTES]).
+ * [localLibrary] is its emulator stand-in (debug builds only, as [local]), which may also reach what
+ * [library] reaches, so a manifest served from the Mac can name the published pack.
  */
 class UpdateSource private constructor(
     /** The manifest's address. */
     val manifestUrl: String,
     private val origin: Origin?,
-    /** Whose releases: the app's own, the piano's firmware ([firmware]) or Studio's models ([models]). */
+    /** Whose releases: the app's own, the piano's firmware ([firmware]), Studio's models ([models]) or the library pack ([library]). */
     private val kind: Kind = Kind.App,
 ) {
     private data class Origin(val scheme: String, val host: String, val port: Int)
 
-    private enum class Kind { App, Firmware, Models }
+    private enum class Kind { App, Firmware, Models, Library }
 
     /** Whether a request, or a redirect of one, may go to [url]. */
     fun allowsHop(url: String): Boolean {
         if (kind == Kind.Firmware) return allowsFirmwareManifest(url) || allowsFirmwareBinary(url)
         val uri = parse(url) ?: return false
+        // v1.10 — M27: the library pack's manifest and zip; with a local source, its origin as well.
+        if (kind == Kind.Library) return (origin != null && originOf(uri) == origin) || allowsLibraryManifest(url) || allowsLibraryBinary(url)
         if (origin != null) return originOf(uri) == origin
         if (kind == Kind.Models) return allowsModelManifest(url) || allowsModelBinary(url)
         if (!secure(uri)) return false
@@ -94,6 +102,21 @@ class UpdateSource private constructor(
         val path = uri.rawPath.orEmpty()
         if (origin != null) return originOf(uri) == origin && path.endsWith(extension) && safeSegments(path)
         return allowsModelFile(url, extension)
+    }
+
+    /**
+     * Whether the library pack's manifest may name [url] as the pack's zip (v1.10 — M27): with [library],
+     * a `.zip` asset of this repository's release tagged [LIBRARY_TAG] on `github.com`, a plain name, no
+     * query or fragment ([allowsLibraryFile]); with [localLibrary], a `.zip` on its origin too. Never for
+     * any other source.
+     */
+    fun allowsLibrary(url: String): Boolean {
+        if (kind != Kind.Library) return false
+        val uri = parse(url) ?: return false
+        if (uri.rawQuery != null || uri.rawFragment != null) return false
+        val path = uri.rawPath.orEmpty()
+        if (origin != null && originOf(uri) == origin) return path.endsWith(LIBRARY_EXTENSION) && safeSegments(path)
+        return allowsLibraryFile(url)
     }
 
     /** Whether this is the production source (the only one release builds have). */
@@ -221,6 +244,76 @@ class UpdateSource private constructor(
             if (origin.scheme != "http" && origin.scheme != "https") return null
             return UpdateSource(manifestUrl.trim(), origin, Kind.Models)
         }
+
+        /** Steven's library (v1.10 — M27): the pack's zips are assets of this repository's release with this tag. */
+        const val LIBRARY_TAG = "library"
+
+        /** The pack's manifest, `releases/library.json` on `main`: this address exactly. */
+        const val LIBRARY_MANIFEST_URL = "https://$MANIFEST_HOST/$REPOSITORY/main/releases/library.json"
+
+        /** The pack's zips: `/<owner>/<repo>/releases/download/library/<file>.zip`. */
+        const val LIBRARY_DOWNLOAD_PREFIX = "$DOWNLOAD_PREFIX$LIBRARY_TAG/"
+
+        /** The pack's file. */
+        const val LIBRARY_EXTENSION = ".zip"
+
+        /**
+         * The largest pack the app downloads: version 1 is 61.2 MB (1,726 pieces). Its own cap, apart from
+         * the models' and the sound's.
+         */
+        const val MAX_LIBRARY_BYTES = 200L * 1024 * 1024
+
+        /** The library pack: its manifest, its zips and GitHub's asset hosts; nothing else. */
+        val library = UpdateSource(LIBRARY_MANIFEST_URL, origin = null, kind = Kind.Library)
+
+        /** Whether [url] is the pack's manifest: [LIBRARY_MANIFEST_URL] exactly (HTTPS on 443, no query or fragment). */
+        fun allowsLibraryManifest(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (!secure(uri) || uri.rawQuery != null || uri.rawFragment != null) return false
+            return uri.host.lowercase(Locale.ROOT) == MANIFEST_HOST && uri.rawPath == "/$REPOSITORY/main/releases/library.json"
+        }
+
+        /**
+         * Whether the pack's download, or a redirect of one, may go to [url]: an asset of the release tagged
+         * [LIBRARY_TAG] on `github.com`, or one of GitHub's two asset hosts (signed, expiring addresses).
+         * HTTPS on port 443 only.
+         */
+        fun allowsLibraryBinary(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (!secure(uri)) return false
+            return when (uri.host.lowercase(Locale.ROOT)) {
+                DOWNLOAD_HOST -> libraryAsset(uri.rawPath.orEmpty())
+                in ASSET_HOSTS -> true
+                else -> false
+            }
+        }
+
+        /**
+         * Whether the pack's manifest may name [url] as its zip: a `.zip` asset of the release tagged
+         * [LIBRARY_TAG] on `github.com`, no query or fragment. An asset host is never named directly.
+         */
+        fun allowsLibraryFile(url: String): Boolean {
+            val uri = parse(url) ?: return false
+            if (uri.rawQuery != null || uri.rawFragment != null || !secure(uri)) return false
+            val path = uri.rawPath.orEmpty()
+            return uri.host.lowercase(Locale.ROOT) == DOWNLOAD_HOST && libraryAsset(path) && path.endsWith(LIBRARY_EXTENSION)
+        }
+
+        /**
+         * The pack's manifest at [manifestUrl], for the emulator (debug builds only, as [local]): the manifest
+         * and zips on its origin (scheme, host and port; HTTP allowed), and everything [library] reaches, so
+         * a manifest served from the Mac may name the published pack. Null when [manifestUrl] is not an
+         * absolute http(s) address.
+         */
+        fun localLibrary(manifestUrl: String): UpdateSource? {
+            val uri = parse(manifestUrl.trim()) ?: return null
+            val origin = originOf(uri) ?: return null
+            if (origin.scheme != "http" && origin.scheme != "https") return null
+            return UpdateSource(manifestUrl.trim(), origin, Kind.Library)
+        }
+
+        /** `/<owner>/<repo>/releases/download/library/<file>`, the file a plain name. */
+        private fun libraryAsset(path: String): Boolean = releaseAsset(path) && path.startsWith(LIBRARY_DOWNLOAD_PREFIX)
 
         /** `/<owner>/<repo>/releases/download/models/<file>`, the file a plain name. */
         private fun modelAsset(path: String): Boolean = releaseAsset(path) && path.startsWith(MODELS_DOWNLOAD_PREFIX)

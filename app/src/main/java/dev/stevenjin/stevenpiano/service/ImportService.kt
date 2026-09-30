@@ -206,6 +206,9 @@ class ImportService : Service() {
                 is ImportSource.Uris -> KIND_FILES to source.uris
                 is ImportSource.Tree -> KIND_FOLDER to listOf(source.treeUri)
                 is ImportSource.Zip -> KIND_ZIP to listOf(source.uri)
+                // v1.10 — M27: a zip the app saved itself (Steven's library) is imported by the service that saved it,
+                // LibraryService, which already holds the foreground (Android may refuse a second one from the background).
+                is ImportSource.LocalZip -> throw IllegalArgumentException("A zip the app saved is imported by LibraryService")
             }
             if (uris.isEmpty()) return
             if (fromPicker) {

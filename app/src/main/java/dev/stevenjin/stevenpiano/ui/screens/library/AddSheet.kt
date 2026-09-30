@@ -74,14 +74,28 @@ fun rememberImportPickers(onChosen: (ImportSource) -> Unit): ImportPickers {
 class StudioEntry(val label: String, val detail: String, val onClick: () -> Unit)
 
 /**
- * The `+` sheet: Add files, Add folder, Add zip; then, set apart by a hairline, Fetch artwork and
+ * Steven's library on the `+` sheet (v1.10 — M27): [label] ("Load Steven's library", or "Update the library ·
+ * 2 new pieces"), its line ("1,726 pieces · 61 MB · MAESTRO, piano-midi.de, Mutopia · for non-commercial use",
+ * or what the load is doing), and whether a tap does anything now ([enabled]: not while a load runs).
+ */
+class LibraryEntry(val label: String, val detail: String, val enabled: Boolean, val onClick: () -> Unit)
+
+/**
+ * The `+` sheet: first, when there is one, Steven's library ([library], v1.10 — M27) above a hairline;
+ * then Add files, Add folder, Add zip; then, set apart by a hairline, Fetch artwork and
  * notes for every composer ([onFetchArtwork]), which asks again even for composers not found
  * before; then, below another hairline, Studio's entries ([studio]: Transcribe a recording… and
  * Compose a piece…; none on a device Studio can't run on).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -> Unit, studio: List<StudioEntry> = emptyList()) {
+fun AddSheet(
+    pickers: ImportPickers,
+    onFetchArtwork: () -> Unit,
+    onDismiss: () -> Unit,
+    studio: List<StudioEntry> = emptyList(),
+    library: LibraryEntry? = null,
+) {
     GlassSheet(
         onDismissRequest = onDismiss,
         // Open all the way: with Studio's entry the sheet is taller than half a phone's screen, where it would open half up and cut its last row.
@@ -96,6 +110,13 @@ fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        if (library != null) {
+            SheetOption(library.label, library.detail, enabled = library.enabled) {
+                onDismiss()
+                library.onClick()
+            }
+            HairlineDivider(Modifier.padding(vertical = 8.dp))
+        }
         SheetOption("Add files", "One or more MIDI files.") {
             onDismiss()
             pickers.addFiles()
@@ -125,16 +146,16 @@ fun AddSheet(pickers: ImportPickers, onFetchArtwork: () -> Unit, onDismiss: () -
 }
 
 @Composable
-private fun SheetOption(label: String, detail: String, onClick: () -> Unit) {
+private fun SheetOption(label: String, detail: String, enabled: Boolean = true, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
         Eyebrow(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
     }
 }

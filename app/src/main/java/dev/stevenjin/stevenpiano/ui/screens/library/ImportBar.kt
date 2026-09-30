@@ -22,11 +22,13 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.art.ArtworkProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.library.PackState
 import dev.stevenjin.stevenpiano.studio.JobState
 import dev.stevenjin.stevenpiano.studio.JobStep
 import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.ImportCopy
+import dev.stevenjin.stevenpiano.ui.LibraryCopy
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -49,6 +51,26 @@ fun ImportBar(progress: ImportProgress, dismissed: ImportProgress?, onDismiss: (
             Row(Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(ImportCopy.summary(progress), Modifier.weight(1f), style = style, color = color)
                 GlyphButton(R.drawable.ic_close, "Dismiss") { onDismiss(progress) }
+            }
+            HairlineDivider()
+        }
+    }
+}
+
+/**
+ * Steven's library arriving (v1.10 — M27): "Loading Steven's library · 23 of 61 MB" over the same hairline
+ * progress line imports use while the pack downloads (its pieces then show in [ImportBar] as any import's
+ * do); a load that stopped says why, with Dismiss ([onDismiss]). Nothing otherwise.
+ */
+@Composable
+fun LibraryBar(state: PackState, onDismiss: () -> Unit) {
+    val line = LibraryCopy.bar(state)
+    when {
+        line != null -> ProgressRow(line, LibraryCopy.progress(state))
+        state is PackState.Failed -> Column {
+            Row(Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(state.line, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.merge(Tabular), color = secondaryText())
+                GlyphButton(R.drawable.ic_close, "Dismiss") { onDismiss() }
             }
             HairlineDivider()
         }
