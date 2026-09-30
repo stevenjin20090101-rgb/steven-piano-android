@@ -1,0 +1,9 @@
+# Steven Piano Cloud: what never goes into the repository.
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+# The fake tablet's own credentials (tools/fake-tablet.mjs).
+tools/.fake-tablet*.json

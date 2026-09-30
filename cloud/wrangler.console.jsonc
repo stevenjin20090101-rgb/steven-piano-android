@@ -1,0 +1,54 @@
+// ============================================================================
+//  Steven Piano - Android player for the self-playing acoustic piano
+//  Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+//  Original author & creator: Steven Jin.
+//  Licensed under the MIT License (see LICENSE). This copyright and attribution
+//  notice MUST be preserved in all copies or substantial portions of the work.
+//  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+// ============================================================================
+//
+// The console: the owner's Worker, behind Cloudflare Access (enabled on its workers.dev route in the
+// dashboard), which also checks every request's Cf-Access-Jwt-Assertion itself. It reaches each
+// piano's PianoRoom in the relay through the ROOMS binding, and shares the relay's D1.
+// Deploy with `npm run deploy:console`, after the relay (README.md).
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "steven-piano-console",
+  "main": "src/console/index.ts",
+  "compatibility_date": "2026-08-15",
+  "workers_dev": true,
+  "preview_urls": false,
+
+  // The page, its script and its stylesheet. Every request runs the Worker first, which checks Access.
+  "assets": {
+    "directory": "./console/static",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "PianoRoom", "script_name": "steven-piano-relay" }]
+  },
+
+  // The same database as the relay: paste the same id.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "steven-piano",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "vars": {
+    // Your Zero Trust team name: the <team> in https://<team>.cloudflareaccess.com.
+    "ACCESS_TEAM_DOMAIN": "",
+    // The relay's address, as `npm run deploy:relay` printed it.
+    "RELAY_URL": ""
+  },
+  // The secret ACCESS_AUD (the Access application's audience tag): `npx wrangler secret put ACCESS_AUD -c wrangler.console.jsonc`.
+
+  "dev": { "ip": "127.0.0.1", "port": 8788 }
+}
