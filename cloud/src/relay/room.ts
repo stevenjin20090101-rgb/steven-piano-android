@@ -550,45 +550,66 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     }
   }
 
-  /** Sends a request's body in chunks, never more than the tablet's credit ahead; then `req.end`. */
+  /**
+   * Sends a request's body as `req.chunk`s of up to 64 KB (what the browser sends in smaller pieces
+   * is gathered first), never more than the tablet's credit ahead; then `req.end`. The body must be
+   * exactly its declared length. It may sit still (no bytes from the browser, no credit from the
+   * tablet) for [timing.idle] at most, and take [timing.upload] in all.
+   */
   private async pump(p: Pending, body: ReadableStream<Uint8Array>, length: number): Promise<void> {
     const reader = body.getReader();
     p.reader = reader;
     const started = this.now();
     const stalled = () => this.fail(p, 408, 'timeout', 'The upload stalled.');
+    const over = () => p.finished || p.writer !== null || p.discard; // failed, or the tablet has answered
+    const buffer = new Uint8Array(CHUNK);
+    let piece: Uint8Array | null = null;
+    let used = 0;
     let sent = 0;
     try {
       this.arm(p, this.timing.idle, stalled);
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (p.finished || p.writer || p.discard) return; // over, or answered already
-        if (done) break;
-        let offset = 0;
-        while (offset < value.byteLength) {
-          while (p.credit <= 0) {
-            await new Promise<void>((resolve) => {
-              p.creditWaiter = resolve;
-            });
-            if (p.finished || p.writer || p.discard) return;
-          }
-          if (this.now() - started > this.timing.upload) {
-            this.fail(p, 408, 'timeout', 'An upload can take 10 minutes at most.');
-            return;
-          }
-          const n = Math.min(value.byteLength - offset, CHUNK, p.credit);
-          p.tablet.send(encodeFrame(p.id, Kind.ReqChunk, value.subarray(offset, offset + n)));
-          p.credit -= n;
-          offset += n;
-          sent += n;
-          this.arm(p, this.timing.idle, stalled);
+      while (sent < length) {
+        while (p.credit <= 0) {
+          await new Promise<void>((resolve) => {
+            p.creditWaiter = resolve;
+          });
+          if (over()) return;
         }
+        const target = Math.min(CHUNK, p.credit, length - sent);
+        let filled = 0;
+        while (filled < target) {
+          if (piece === null || used >= piece.byteLength) {
+            const { done, value } = await reader.read();
+            if (over()) return;
+            if (done) break;
+            piece = value;
+            used = 0;
+            this.arm(p, this.timing.idle, stalled);
+          }
+          const take = Math.min(target - filled, piece.byteLength - used);
+          buffer.set(piece.subarray(used, used + take), filled);
+          filled += take;
+          used += take;
+        }
+        if (filled === 0) break; // the browser's body ended early
+        if (this.now() - started > this.timing.upload) {
+          this.fail(p, 408, 'timeout', 'An upload can take 10 minutes at most.');
+          return;
+        }
+        p.tablet.send(encodeFrame(p.id, Kind.ReqChunk, buffer.subarray(0, filled)));
+        p.credit -= filled;
+        sent += filled;
       }
-      if (sent !== length) {
-        this.fail(p, 400, 'short', 'The upload ended early.');
+      // Exactly its length: nothing short, nothing more.
+      const extra = piece !== null && used < piece.byteLength;
+      const last = extra ? { done: false } : await reader.read();
+      if (over()) return;
+      if (sent !== length || !last.done) {
+        this.fail(p, 400, 'short', sent < length ? 'The upload ended early.' : 'The upload was longer than it said.');
         return;
       }
-      p.tablet.send(encodeFrame(p.id, Kind.ReqEnd));
       p.reader = null;
+      p.tablet.send(encodeFrame(p.id, Kind.ReqEnd));
       this.arm(p, this.timing.res, () => this.fail(p, 504, 'timeout', "The piano didn't answer in time."));
     } catch {
       // The browser went away mid-body (or the socket to the tablet did).

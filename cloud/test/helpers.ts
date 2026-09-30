@@ -56,6 +56,8 @@ class Inbox {
   readonly raw: string[] = [];
   readonly frames: Frame[] = [];
   closedWith: { code: number; reason: string } | null = null;
+  /** When set, binary frames go here instead of [frames] (a large body is never held whole). */
+  onFrame: ((frame: Frame) => void) | null = null;
   private wakers: Array<() => void> = [];
 
   constructor(readonly ws: WebSocket) {
@@ -70,7 +72,8 @@ class Inbox {
         }
       } else {
         const frame = decodeFrame(event.data as ArrayBuffer);
-        if (frame) this.frames.push({ ...frame, payload: frame.payload.slice() });
+        if (frame && this.onFrame) this.onFrame(frame);
+        else if (frame) this.frames.push({ ...frame, payload: frame.payload.slice() });
       }
       this.wake();
     });
