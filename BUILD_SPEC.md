@@ -5554,3 +5554,294 @@ at the end of `releases/history.json` (`"draft": true`, tag `v1.9`, its notes; n
   The greps above, M25's and every earlier section's: as stated. The release APK is 13,514,380 bytes
   (versionCode 17, "1.9", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 28,122,664; staged
   as `../apk/steven-piano-1.9.apk` and `-debug.apk`.
+
+# v1.10 — M26: Steven Piano Cloud, the relay client
+
+Read `DESIGN.md › v1.10 — M26` first, and the plan's "Steven Piano Cloud" section (the decisions, the
+protocol). Built on the branch `m26-relay` from the 1.9 release commit (`ec7dedc`), beside R1 (the relay
+and the console, `cloud/`, branch `cloud-r1`), a commit a step. **No version bump, no `Provenance.text`
+change, no provenance signing, no APK here**: the integrator's.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `M/web/relay/`: `RelayProtocol.kt` (`RelayProtocol`, `Caps`, `RelayMessage` and its fifteen messages,
+  `Frame`), `BodyPipe.kt`, `RelayedSession.kt` (`RelayedSession`, `RelayedResponse`), `RelayClient.kt`
+  (`CloudStatus`, `RelayConfig`, `StatusSource`, `RelayClient`), `RelayCommands.kt` (`CommandResult`,
+  `CommandHandler`, `RelayCommands`), `SealedSecret.kt` (`SecretSealer`, `KeystoreSealer`, `PlainSealer`,
+  `CloudSecrets`), `Enrolment.kt` (`EnrolResult`, `CloudAddress`, `Enrolment`), `RelayStatus.kt`.
+- `M/net/HttpPost.kt` (`PostAnswer`, `PostTransport`, `UrlConnectionPost`, `HttpPost`), beside `HttpFetch`.
+- `M/ui/screens/piano/pages/CloudSection.kt` (`CloudSection`, `EnrolSheet`, `CloudCopy`).
+- `third_party/okhttp/LICENSE.txt` (OkHttp's own, at `parent-4.12.0`).
+- Tests: `T/web/relay/` `RelayProtocolTest`, `BodyPipeTest`, `WebServerRelayTest`, `FakeRelay` (the relay's
+  side over `ws://`, NanoWSD), `RelayClientTest`, `RelayCommandsTest`, `EnrolmentTest`, `SealedSecretTest`,
+  `RelayStatusTest`; `T/ui/screens/piano/pages/CloudCopyTest`.
+
+Changed (each addition small and marked v1.10 — M26): `gradle/libs.versions.toml`, `app/build.gradle.kts`
+(OkHttp); `AUTHORS`; `M/web/WebServer.kt` (the seams below), `WebSocketHub.kt` (relayed members),
+`WebBackend.kt` (`WebAddresses.cloud`), `WebApi.kt` (`web.cloud`), `WebPanel.kt` (`cloud`, `enrolments`,
+`cloudSecrets`, `cloudOverride`, `cloudLink`); `M/service/WebService.kt`; `M/settings/Settings.kt`;
+`M/diag/DiagnosticsExporter.kt`; `M/update/UpdateOverride.kt` (`CloudOverride`); `M/AppGraph.kt`
+(`setCloudEnabled`, `enrol`, `forgetCloud`, `startWebIfOn`); `M/ui/screens/piano/GroupSummaries.kt`,
+`PianoViewModel.kt`, `pages/RemotePage.kt` (one line: the section); `AndroidManifest.xml` (the web
+service's comment and its special-use subtype, which now names the relay); `assets/web/app.js`,
+`request.js`, `index.html` (the offline card), `style.css` (one rule); tests `WebSocketHubTest`,
+`WebAssetsTest`, `WebApiTest`, `SettingsRepositoryTest`, `GroupSummariesTest`, `DiagnosticsExporterTest`;
+`DESIGN.md`, `README.md`, `docs/SECURITY_AUDIT.md`.
+
+## The dependency
+
+OkHttp 4.12.0 (Apache-2.0), named only under `M/web/relay/` (`grep -rln "okhttp3\|import okio"
+app/src/main/java` lists only `web/relay/`); its consumer R8 rules come inside its jar. Okio was already
+in the app through AndroidX DataStore: OkHttp's 3.6.0 resolves to that 3.9.1. `HttpFetch` (GitHub,
+Wikipedia) stays `HttpURLConnection`, and so is the enrolment's `HttpPost`. The debug APK grows by
+491,180 bytes (28,122,664 → 28,613,844); the release APK is the integrator's to measure. `lint`: 0
+errors, 29 warnings (1.9's 28, and "a newer OkHttp than 4.12.0 is available: 5.5.0", the pin the plan
+chose).
+
+## The seams: one route table for both edges (`WebServer`)
+
+The transport-agnostic seam is a synthetic `IHTTPSession` fed to the audited server:
+
+- `serve(session)` is now `answer(session, "http", allowedHosts(), cookiePath = "/")`, byte for byte what
+  it was (WebServerTest's 29 unchanged and green).
+- `serveRelayed(session, host, prefix, scheme = "https")`: a method NanoHTTPD doesn't know → 501, an
+  address that doesn't decode → 400 (what `RequestHead` refuses on a listener), with the security headers;
+  else `answer(session, scheme, setOf(host), "$prefix/", relayed = true)`.
+- `answer(...)` carries an `Edge(scheme, cookiePath, relayed)` into the dispatch and every `Call`: the
+  `Host` must be one of the allowed (the relay's host exactly, lower-cased, no port added); an `Origin`, when
+  sent, must be `<scheme>://<host>`; the cookies (`WebCookies.session`, `endSession`, `guest`, each now with
+  `path` and `secure`, their listener output unchanged) are `Secure` over HTTPS and live under
+  `<prefix>/`; the policy's socket is `wss://<host>` over HTTPS (`securityHeaders(host, scheme)`); a relayed
+  request that asks to upgrade is 404 (the relay bridges sockets itself); the guests' pages and API
+  (`/request`, `/request.js`, `/poster`, `/api/public/*`) are 404 while Guests can request is off.
+  `/style.css` stays: the panel's own page needs it.
+- `admitSocket(cookies, origin, expectedOrigin): Int`: 401 without a valid session, 403 unless the origin
+  is exactly the expected one, else `SOCKET_ADMITTED` (101). `/ws` on a listener asks it, and so do the
+  relay's bridged sockets.
+- `RelayedSession(method, rawPath, query, headers, address, body)`: the path and the query decoded exactly
+  as NanoHTTPD 2.3.1's `decodeHeader`/`decodeParms` do (`URLDecoder`, a name without `=` taking ""); a path
+  not starting `/`, anything outside printable ASCII, or a bad escape reads as no `uri`; only the forwarded
+  headers kept, their names lower-cased; the cookies from `cookie` (NanoHTTPD's own `CookieHandler`, made by
+  a never-started server); the address the relay's `CF-Connecting-IP` when it looks like one, else
+  "unknown"; `execute` and `parseBody` unsupported.
+- `RelayedResponse.write(response)`: the status, `Content-Type` from the answer, the headers the server
+  ever sets (the five security headers, `Cache-Control`, `Set-Cookie`, `Retry-After`, `Allow`) by their
+  values, `Content-Length` from the body read whole (every route answers at a fixed length; at most 16 MB).
+  `WebServerRelayTest` proves every route of the table, the pages, the refusals and the login lock answer
+  the relay with the listener's status and headers (read over `RawHttp`), but for the policy's socket and
+  the cookie's path and `Secure`, and that every header a listener sends but `Date` and `Connection` is one
+  the relay is given.
+
+## The protocol, as the tablet speaks it (`RelayProtocol`)
+
+The relay's `cloud/src/shared/protocol.ts` at `72592f4`, matched field for field and byte for byte on the
+frames:
+
+- **Frames**: `id: u32 big-endian | kind: u8 | payload ≤ 64 KB`; kinds 1 `req.chunk`, 2 `req.end`,
+  3 `res.chunk`, 4 `res.end`. `Frame.decode` refuses less than the 5-byte head or more than a chunk.
+- **Text**: JSON of at most 64 KB counted in UTF-8 bytes (stricter than the relay's UTF-16 count), at most
+  six deep (`WebApi.depthOf`, before `org.json` parses it), every id a whole number from 0 to 2³² − 1, every
+  field of its type and length; anything else is no message and is dropped. A `hello` must name a piano's id
+  of the relay's form, a host of the relay's form, and the prefix `/p/<id>`; its caps are taken within
+  bounds (a chunk of 1 B–64 KB, a window from a chunk to 16 MB) or the defaults (64 KB, 1 MB, 100 MB).
+- **The tablet's messages**: `status`, `req.credit {id, bytes}`, `res {id, status, headers, length}`,
+  `ws.accept`, `ws.refuse {status}`, `ws.text {data}`, `ws.close {code, reason}`, `cmd.result {ok, message}`,
+  `secret.ack`.
+- **The status** (`RelayStatus`): `app {version, code}`, `firmware` (the piano's report's `fw`), `link` (the
+  state's name), `player {status, title, composer, positionMs, durationMs, channel {key, name}}`, `guests
+  {open, approveFirst}`, `panel {web, host}`, `library {pieces, pack}` (`pack` null until M27), `channels`
+  (at most 32 `{key, name}`: the console lists them), `at`; texts cut to 200 characters. On hello, every
+  30 s, and at most 2 s after a change (the changes conflated, then 2 s for more to join them).
+
+## The client (`RelayClient`)
+
+- **The connection**: OkHttp's WebSocket to `wss://<host>/tablet` (`CloudAddress.socketUrl`),
+  `Authorization: Bearer <pianoId>.<secret>`, `Sec-WebSocket-Protocol: steven-piano-relay-1` (the 101 must
+  echo it, else the tablet closes 1002), the app's user agent; pings every 30 s, 15 s to connect, no
+  redirects followed, no retries of OkHttp's own; a hello within 15 s or it closes (1002); a hello for
+  another piano's id closes it (1008). `config()` is read before every try (the sealed secret opened
+  then), so a rotated secret takes effect at the next connection; null: not enrolled.
+- **Requests**: at most 8 at once (the relay's cap mirrored): past it, `res 503 {"error":"busy"}` at once,
+  as is a pool that refuses. Each runs `serveRelayed` on a pool of 4 threads (4 more waiting); its body is a
+  `BodyPipe` of the hello's window: the relay's chunks queue there (never more than the window: a chunk past
+  it is the relay's breach and ends the request's body), the server reads it as any body, and what it reads
+  goes back as `req.credit` in 64 KB steps and whatever is owed before a read waits (so the relay is never
+  starved); a read waits at most 30 s for the next chunk. The answer: `res` (the known headers, `length`),
+  the body in chunks of the hello's size, `res.end` (also after a 204); before each chunk the socket's queue
+  must be under 1 MB (OkHttp closes a socket past 16 MB). `req.abort`: the pipe fails at its next read and
+  nothing is answered. A request whose answer throws is answered 500 by the client itself
+  (`RelayedResponse.refusal`, the security headers included).
+- **Browsers' sockets**: `ws.open`'s `host` must be the hello's; then `admitSocket(cookies, origin,
+  "<scheme>://<host>")` (401, 403: `ws.refuse`), at most 4 (`ws.refuse 503`), then `ws.accept` and
+  `WebSocketHub.attach`: the hub's state, each change and the progress go out as `ws.text`
+  (`RelayProtocol.wsText`: a state message too long for one frame gives up rows from the end of Up next,
+  the queue's `ids` and `index` whole, then its unused `uids`; one that still doesn't fit is dropped, the
+  next state following); `ws.close` from the relay detaches it; a session that ends closes it (4000) at the
+  hub's next ping; a hub that stops closes it (1001). Relayed members are never pinged (the relay answers the
+  browsers' "ping" itself).
+- **Commands**: `cmd` → `RelayCommands` → `cmd.result`; after `status`, a status report at once.
+- **Rotation**: `secret` → `CloudSecrets.keep` (sealed, and only once what was sealed opens again) →
+  `secret.ack`; nothing is acknowledged that wasn't kept.
+- **Tries**: 4401, or a handshake answered 401 (a revoked or refused secret), stops as **Revoked**; 4403 as
+  **Disabled** (the console forgot the piano); 4409 waits 60 s; anything else waits 1 s × 2ⁿ (at most
+  300 s, ±20 %, the count starting again after a connection that had its hello). `nudge()` (the web
+  service's network callback and its 30 s look) ends a wait at once while the device is online. The wait's
+  reason: "Waiting for a network" when offline, "Another tablet connected with this enrolment" after 4409,
+  else "The relay can't be reached".
+- Nothing it logs holds a secret, a cookie or a request's content: the trail (`LinkLog`) gets "Cloud:
+  connected to <host>", the ends and waits, the console's commands by name and outcome.
+
+## Secrets, enrolment, commands
+
+- `KeystoreSealer`: an AES-256-GCM key in the AndroidKeyStore, alias `steven-piano-cloud`, made at the first
+  seal, purpose encrypt/decrypt, randomized encryption required; each seal a fresh 12-byte IV the Keystore
+  picks; `v1:` + base64(IV ‖ ciphertext ‖ tag) in DataStore's `cloudSecret`. A key that has vanished, or a
+  text that isn't one it sealed or was changed, opens to nothing: the tablet reads as not enrolled.
+  `forget()` deletes the key. No `security-crypto`. `PlainSealer` stands in on the JVM.
+- `Enrolment.enrol(host, code)`: `CloudAddress.host` (lower case; an `https://` and a trailing slash
+  forgiven; the relay's host form; a port 1–65535) and `CloudAddress.code` (`XXXX-XXXX` from the relay's
+  32-letter alphabet, any case, spaces or dashes); one `POST https://<host>/api/enrol` of `{"code": …}`
+  alone (no name, no model: nothing that names the device) through `HttpPost` with its allow-list: `https`,
+  the typed host and port exactly, the path `/api/enrol`, no user info, query or fragment, no backslash;
+  never a redirect followed; 16 KB of answer at most. `{pianoId, secret}` must be of the relay's forms. The
+  refusals in plain words (404 the code, 429 a minute, 400/411/413/415 not a code, a failed connection).
+  `AppGraph.enrol` remembers the typed address first, then seals the secret (`CloudSecrets.seal`) and writes
+  the address, the piano's id and the sealed secret in **one** DataStore edit (`setCloudEnrolment`), so the
+  client never sees a new id with an old secret; `WebPanel.enrolled()` makes the web service start the
+  client again for it.
+- `RelayCommands`: the allow-list `transport {action}`, `play {pieceId}`, `playChannel {key}`,
+  `stopChannel`, `guests {open?, approveFirst?}`, `library.load` (through a `libraryLoad` the library pack
+  will pass in M27; until then "Loading Steven's library isn't available on this tablet yet."), `status` (a
+  line of what plays); exactly those arguments, of their types, refused otherwise with the reason (the relay
+  checks them first too); acted on through `WebBackend` as the panel's own routes act; a trail line for
+  each, its name and outcome only.
+
+## Settings, the service, the UI, the pages
+
+- `PianoSettings`: `cloudEnabled` (off), `cloudHost` (typed, remembered after Forget), `cloudPianoId` (read
+  only when of the relay's form), `cloudSecretSet`; `cloudEnrolled` = all three. The sealed secret is read
+  on its own (`cloudSecret()`), like the PIN's hash, never in `settings`; `settings.txt` in diagnostics says
+  `cloudEnabled`, `cloudHost`, `cloudEnrolled`, never the id or the secret. `forgetCloud()` drops the id and
+  the secret and turns the switch off in one edit; `AppGraph.forgetCloud` then deletes the key.
+- `WebService` runs while `(webEnabled || cloudEnabled) && webPinSet`. With Web control off it listens
+  nowhere (and reports so); it keeps the hub for the relay's members. It makes the relay's `WebServer`
+  (host "relay", port 0, never started; the process's sessions, guard, requests, backend, assets, hub and
+  poster) and the `RelayClient` once the tablet is enrolled and the switch is on, again for a new
+  enrolment (the key: the host, the id and `enrolments`), and stops it otherwise; the client's state goes to
+  `WebPanel.cloud`; `nudge()` from the network callback and the 30 s look; "· Cloud" in the notification
+  while connected, "Remote access on" with the cloud alone. `stopNow()` and `onDestroy()` stop it.
+- `WebPanel.cloudLink()`: `<scheme>://<host>/p/<id>/`, the hello's host once connected, the typed one
+  before, while on and enrolled; in the state as `web.cloud`. `GroupSummaries.remote`: "On · host · Cloud",
+  "Cloud", "Off".
+- `CloudSection` on the Remote page after GUESTS (DESIGN.md › v1.10 — M26): its rows, the `EnrolSheet` on
+  `GlassSheet`, the QR as `QrTile`/`QrSheet`, Forget's `GlassAlertDialog`; `CloudCopy` words the status line.
+- `app.js`: `const ROOT = location.pathname.replace(/\/(index\.html)?$/, '')` and every request built as
+  `ROOT + '/api/…'` (48 of them, one inside a CSS `url()` as `${ROOT}/api/…`; `WebAssetsTest` greps that every `'/api/` is `ROOT + '/api/` and that no
+  template starts a bare `/api/`); the socket `wss:` when the page is `https:`; `{"error":"offline"}` (503)
+  shows the offline card in place of the gate before the panel has its state (a look again every 10 s),
+  after it a line at the head of the window (`.toast.offline`), until any answer comes. `request.js`: its
+  `ROOT` (the page's path without `/request`), and the relay's offline answer in its words.
+- `CloudOverride` (debug builds on an emulator only, beside `UpdateOverride`): `adb shell setprop
+  debug.stevenpiano.cloudurl http://10.0.2.2:8787` before the app starts makes that origin the relay
+  (enrolment to its `/api/enrol`, the client to its `ws://…/tablet`, the panel's scheme `http`); the debug
+  network security config already allows plain HTTP to 10.0.2.2 and nowhere else. The relay's own
+  `PUBLIC_HOST` (`npm run dev` sets `localhost:8787`) names the host browsers use in its hello, so the
+  tablet needs no host of its own for it.
+
+## Measured (2026-09-30, `wrangler dev` of `cloud/` at `72592f4`, the run's AVD `steven_piano_m26`, API 34, `wm size 2560x1600`, `wm density 240`, the debug build)
+
+`cloud/` from R1's commit, extracted to the run's scratch and started with `npm run dev` (the relay on
+:8787, the console on :8788); the tablet enrolled with a code from the console's `POST /api/enrol-codes`.
+
+- **The CLOUD section**, every state it has: no PIN ("Set a PIN first"), a PIN and no enrolment ("Enrol this
+  tablet first"), the enrol sheet empty, filled, and with the relay's 404 ("That code isn't right, or it has
+  expired…"), enrolled and off, on and **Connected** within a second with the link and its QR ("Remote
+  control · Cloud" on the hub), the large QR sheet, **"The relay can't be reached · retrying in 7 s"** with
+  the relay stopped, **"Waiting for a network · retrying in 2 min"** with the emulator's Wi-Fi and data off,
+  back to Connected on the 30 s look once the relay was up again, **"Revoked in the console. Enrol again."**
+  after the console's revoke (4401; after an app restart one try, 401, no more), enrolled again with a new
+  code (Connected at once), **"Removed from the console. Enrol again."** after the console forgot the piano
+  (4403), Forget's dialog, and forgotten (the address kept). Web control on too: "On · Cloud" on the hub
+  and the notification "Guests: http://10.0.2.16:8737/request · Cloud"; the connected section in dark.
+  "Connecting…" lasts under a second against a local relay (the words are `CloudCopyTest`'s).
+- **The console** saw the tablet online with its status (1.9, build 17, the link, the player, 28 pieces,
+  the eight channels); its commands answered: status "Idle", transport pause "Paused.", play "Playing.",
+  playChannel nocturnes "Playing the channel.", stopChannel, guests open "Guests can request; each waits
+  for approval." (the Remote page's switches followed), library.load "…isn't available on this tablet
+  yet.", a transport "eject" refused by the relay itself; **rotate** "committed": the tablet kept the new
+  secret, acknowledged it, and came back with it after the relay's restart.
+- **The panel in headless Chrome** at `http://localhost:8787/p/<id>/`: the gate; the PIN; the panel
+  "Connected · localhost:8787" over the bridged socket; a zip of 28 pieces (872,183 bytes) sent through Add
+  with the upload held to ~120 KB/s: "Sending 36%" with its bar, then "Sent to the tablet", "Imported 28
+  pieces"; the Library through the relay with the composers' portraits; a Chopin nocturne played from it,
+  Now playing following live (0:03, six seconds later 0:09); `adb shell am force-stop`: the line "The piano
+  is offline. The panel comes back when its tablet does.", the connection "Offline"; a fresh page then: the
+  relay's offline page; the app started again: the panel came back by itself, to the gate (the sessions went
+  with the process). A guest's request page through the relay at 390 px, Guests on: "Thanks — it joins the
+  queue once it's approved."
+- **`relay-checks.txt`** (raw sockets through the relay): 401 without a session (a read, a change); 403
+  without the panel's header, from another site's origin, from the tablet's LAN origin; 411 for a chunked
+  body (the relay's edge); 413 over 100 MB (the relay Worker; `wrangler dev` reads the body before the
+  answer, where Cloudflare's edge refuses on the length alone), over the tablet's 64 MB for a zip (no byte
+  read), a JSON body over 64 KB; 415 for a `.txt`; 404 for the guests' page while guests were off; 204 for
+  the panel's own change; 200 with `Strict-Transport-Security` (the relay's), the tablet's policy naming the
+  relay's socket, `Set-Cookie` with `Path=/p/<id>/`; the panel's socket without a session: open, then
+  closed 1008 "Enter the PIN first." (the tablet's `ws.refuse 401`); offline: 503 `{"error":"offline"}` for
+  the API and the relay's page for a page.
+
+## Deviations from the brief, and why
+
+- **`serveRelayed(session, host, prefix, scheme = "https")`**: a fourth parameter, so the debug build's
+  local relay (plain `http` at `localhost:8787`) works end to end; release builds only ever reach
+  `wss://`/`https://` at the typed host. **`admitSocket`** answers `SOCKET_ADMITTED` (101) when it admits.
+- **`CloudStatus.Waiting(reason, retryInMs, since)`**: `since` added, for the countdown.
+- **`RelayClient`'s parameters**: `commands` is a `CommandHandler`, `status` a `StatusSource` (the report and
+  its changes), `secrets` `suspend (String) -> Boolean`; `online`, `random`, `sleep` (the waits: the tests
+  record them), `statusSettleMs` and `userAgent` injected besides the brief's clock and log. The brief's
+  "backoff with an injected clock" is the injected waits and jitter (the clock stamps the states).
+- **The relay's contract as R1 fixed it** (the coordinator's list): `link` as a string, `player.channel` as
+  `{key, name}`, `channels` in the status; a state message fitted to one `ws.text` frame; cookies under
+  `/p/<id>/` with no `Domain`; 4403 read as "removed from the console".
+- **No public-host override**: the relay's hello names the host browsers use (`PUBLIC_HOST`), so
+  `CloudOverride` stands in for the relay's origin only.
+- **The enrolment sends the code alone** (the relay would take a name and a model): nothing that names the
+  device leaves the tablet.
+- **The switch never turns itself on** after an enrolment; enrolling and going online are two decisions.
+  **Forget keeps the typed address** for the next enrolment.
+- **The public link hides** once revoked, removed or keyless (seen on the emulator: it led nowhere).
+- **The offline card** is static markup in `index.html` (the page's CSP forbids building it from a string)
+  and one CSS rule places the offline line at the head of the window; a page opened while the piano is away
+  is the relay's own offline page.
+- **Relayed browsers' sockets close with 4000** when their session ends (a private code; the relay passes
+  1000 and 3000–4999 through).
+- **No `tools/relay-stub/`**: R1's relay was ready (`72592f4`), so the evidence ran against it; the JVM tests
+  keep `FakeRelay`.
+- **The web service's special-use subtype** now names the relay as well as the person's own network.
+
+## Residuals
+
+- **Sessions live in the app's memory**: an app restart signs relayed browsers out, as it does the
+  listeners' (seen: the panel came back to the gate).
+- **The login guard is shared** by the listeners and the relay: wrong PINs from the internet count against
+  the global gentle lock (W1) too; the relay's own 10 a minute per address and the guard's per-address lock
+  come first.
+- **TLS is the platform's**, with OkHttp's hostname check; no certificate pinning (Cloudflare rotates its
+  certificates).
+- **Doze**: the tablet on its charger stays reachable; a tablet asleep off power drops the connection until
+  Android's maintenance windows or the app coming back (the wait's "nudge" on the network's return).
+- **A state message too long even with Up next's rows given up** (a queue of thousands of pieces) is dropped
+  for relayed browsers; the next one that fits follows.
+- **The Keystore sealer** is exercised on the emulator (enrol, rotate, reconnect), not on the JVM.
+- **Not yet on the real tablet or on Cloudflare**: Steven's deploy (`cloud/README.md`), then the school
+  tablet, a phone on mobile data, a guest's request. The release build (R8 with OkHttp's rules) is the
+  integrator's.
+- `web.cloud` is in the panel's state but the panel doesn't show it yet.
+
+## Tests added in M26
+
+`RelayProtocolTest` (9), `BodyPipeTest` (6), `WebServerRelayTest` (8), `RelayClientTest` (10),
+`RelayCommandsTest` (4), `EnrolmentTest` (4), `SealedSecretTest` (3), `RelayStatusTest` (2), `CloudCopyTest`
+(1), `WebSocketHubTest` +4, `WebAssetsTest` +1, `SettingsRepositoryTest` +1, `GroupSummariesTest` +1;
+`WebApiTest` and `DiagnosticsExporterTest` changed. 1,219 before, **1,273** after (13 skipped, as before).

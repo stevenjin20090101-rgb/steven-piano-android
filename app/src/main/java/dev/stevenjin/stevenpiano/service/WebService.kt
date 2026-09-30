@@ -37,7 +37,9 @@ import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
+import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.net.HttpFetch
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.Route
@@ -50,20 +52,30 @@ import dev.stevenjin.stevenpiano.web.WebAssets
 import dev.stevenjin.stevenpiano.web.WebServer
 import dev.stevenjin.stevenpiano.web.WebSocketHub
 import dev.stevenjin.stevenpiano.web.WebStatus
+import dev.stevenjin.stevenpiano.web.relay.CloudAddress
+import dev.stevenjin.stevenpiano.web.relay.CloudStatus
+import dev.stevenjin.stevenpiano.web.relay.RelayClient
+import dev.stevenjin.stevenpiano.web.relay.RelayCommands
+import dev.stevenjin.stevenpiano.web.relay.RelayConfig
+import dev.stevenjin.stevenpiano.web.relay.RelayStatus
+import dev.stevenjin.stevenpiano.web.relay.StatusSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
@@ -86,6 +98,14 @@ import java.io.IOException
  * tablet's screen off keeps its time even when Android kept the playback service from starting in
  * the background. Debug builds on an emulator also listen on 127.0.0.1, so
  * `adb forward tcp:8737 tcp:8737` reaches the panel from the Mac.
+ *
+ * Steven Piano Cloud (v1.10 — M26): the service also runs while remote access over the internet is
+ * on (with the PIN set), Web control on or not, and then holds the relay client ([RelayClient]) and
+ * the panel's server for relayed requests (host "relay", never listening), sharing the hub, the
+ * sessions and the guard with the listeners. The client starts once the tablet is enrolled, again
+ * for each new enrolment, and is nudged when a network comes and at each look; its state goes to the
+ * Remote page ([dev.stevenjin.stevenpiano.web.WebPanel.cloud]) and adds "· Cloud" to the notification
+ * while connected.
  */
 class WebService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -96,6 +116,10 @@ class WebService : Service() {
     private var callback: ConnectivityManager.NetworkCallback? = null
     private val networkChanged = MutableStateFlow(0)
     private lateinit var wakeLock: PowerManager.WakeLock
+    private var relay: RelayClient? = null
+    private var relayFor: Triple<String?, String?, Int>? = null
+    private var relayState: Job? = null
+    private var relayServer: WebServer? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -122,6 +146,7 @@ class WebService : Service() {
 
     override fun onDestroy() {
         stopListening()
+        stopRelay()
         hub?.stop()
         hub = null
         callback?.let { runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) } }
@@ -143,16 +168,120 @@ class WebService : Service() {
             while (isActive) {
                 delay(LOOK_AGAIN_MS)
                 networkChanged.value++
+                relay?.nudge()
                 if (wakeLock.isHeld) wakeLock.acquire(WAKE_LOCK_MS)   // still playing: renewed, so a channel's hours keep it
             }
         }
-        combine(graph.settingsRepository.settings, networkChanged) { settings, _ -> settings }.collect { settings ->
-            if (!settings.webEnabled || !settings.webPinSet) {
-                stopNow()
-                return@collect
-            }
-            listen(settings)
+        scope.launch {
+            graph.web.cloud.collect { post(graph.web.status.value) }   // "· Cloud" while connected
         }
+        combine(graph.settingsRepository.settings, networkChanged, graph.web.enrolments) { settings, _, enrolments -> settings to enrolments }
+            .collect { (settings, enrolments) ->
+                if (!(settings.webEnabled || settings.cloudEnabled) || !settings.webPinSet) {
+                    stopNow()
+                    return@collect
+                }
+                if (settings.webEnabled) {
+                    listen(settings)
+                } else if (servers.isNotEmpty() || graph.web.status.value.running) {
+                    stopListening()   // remote access alone: no listener on the tablet's networks
+                    graph.web.report(WebStatus())
+                    post(WebStatus())
+                }
+                followCloud(settings, enrolments)
+            }
+    }
+
+    /**
+     * The relay client while remote access is on and the tablet is enrolled (v1.10 — M26): made
+     * for this enrolment (the address, the piano's id, [enrolments]) and started; stopped otherwise.
+     */
+    private fun followCloud(settings: PianoSettings, enrolments: Int) {
+        if (!settings.cloudEnabled || !settings.cloudEnrolled) {
+            stopRelay()
+            if (settings.cloudEnabled) graph.web.reportCloud(CloudStatus.NotEnrolled)
+            return
+        }
+        val key = Triple(settings.cloudHost, settings.cloudPianoId, enrolments)
+        if (relay != null && relayFor == key) return
+        stopRelay()
+        val client = relayClient() ?: return
+        relay = client
+        relayFor = key
+        relayState = scope.launch { client.state.collect { graph.web.reportCloud(it) } }
+        client.start()
+    }
+
+    private fun stopRelay() {
+        relayState?.cancel()
+        relayState = null
+        relay?.stop()
+        relay = null
+        relayFor = null
+        graph.web.reportCloud(CloudStatus.Off)
+    }
+
+    /** The relay client, with the panel's server for relayed requests (made once: never listening), the hub, the console's commands and the status. */
+    private fun relayClient(): RelayClient? {
+        val panel = graph.web
+        val sockets = hub ?: return null
+        val server = relayServer ?: WebServer(
+            WebServer.Config(host = RELAY_SERVER, port = 0, tempDir = File(cacheDir, ImportLimits.WEB_DIR)),
+            panel.backend,
+            panel.sessions,
+            panel.guard,
+            panel.requests,
+            AndroidAssets(this),
+            sockets,
+            posterPage = { url -> Poster.page(AndroidAssets(this).read(WebAssets.POSTER.name), url) },
+        ).also { relayServer = it }
+        return RelayClient(
+            config = config@{
+                val s = graph.settingsRepository.settings.first()
+                val host = s.cloudHost ?: return@config null
+                val pianoId = s.cloudPianoId ?: return@config null
+                val secret = withContext(Dispatchers.IO) { panel.cloudSecrets.secret() } ?: return@config null
+                val origin = CloudAddress.origin(host, panel.cloudOverride)
+                RelayConfig(CloudAddress.socketUrl(origin), pianoId, secret, CloudAddress.scheme(origin))
+            },
+            server = server,
+            hub = sockets,
+            commands = RelayCommands(panel.backend, libraryLoad = null, trail = LinkLog::warn),
+            status = cloudStatus(),
+            secrets = { secret -> withContext(Dispatchers.IO) { panel.cloudSecrets.keep(secret) } },
+            scope = CoroutineScope(scope.coroutineContext + Dispatchers.IO),
+            log = LinkLog::warn,
+            online = { graph.network.isOnline() },
+            userAgent = HttpFetch.USER_AGENT,
+        )
+    }
+
+    /** The tablet's status for the relay: what the panel shows, the library's size, the channels ([RelayStatus]). */
+    private fun cloudStatus(): StatusSource = object : StatusSource {
+        override suspend fun report(): JSONObject {
+            val panel = graph.web
+            val settings = graph.settings.value
+            return RelayStatus.report(
+                appVersion = BuildConfig.VERSION_NAME,
+                appCode = BuildConfig.VERSION_CODE,
+                state = panel.backend.state(),
+                webEnabled = settings.webEnabled,
+                panelHost = panel.status.value.panelHost,
+                libraryPieces = runCatching { graph.library.count().first() }.getOrNull(),
+                pack = null,
+                channels = panel.backend.channels(),
+                at = System.currentTimeMillis(),
+            )
+        }
+
+        override val changes: Flow<Unit> = merge(
+            graph.player.state.map { it.status to it.piece?.pieceId },
+            graph.player.state.map { it.channel },
+            graph.pianoLink.state.map { },
+            graph.pianoSettings.state.map { },
+            graph.settings.map { Triple(it.webGuests, it.webApproveFirst, it.webEnabled) },
+            graph.web.status.map { it.panelHost },
+        ).map { }
     }
 
     /**
@@ -253,6 +382,8 @@ class WebService : Service() {
             graph.studio.availability.support.map { },
             // The tablet's piano sound (v1.8 — M25): whether it sounds, and its SoundFont.
             graph.tabletSound.state.map { },
+            // Steven Piano Cloud (v1.10 — M26): the public link in the state follows the connection.
+            panel.cloud.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes)
         hub = created
@@ -273,7 +404,10 @@ class WebService : Service() {
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) = nudge()
 
             private fun nudge() {
-                scope.launch { networkChanged.value++ }
+                scope.launch {
+                    networkChanged.value++
+                    relay?.nudge()
+                }
             }
         }
         try {
@@ -288,9 +422,10 @@ class WebService : Service() {
         if (playing) wakeLock.acquire(WAKE_LOCK_MS) else if (wakeLock.isHeld) wakeLock.release()
     }
 
-    /** Off: the listeners, the sockets, the sessions, the notification, the service. */
+    /** Off: the listeners, the relay, the sockets, the sessions, the notification, the service. */
     private fun stopNow() {
         stopListening()
+        stopRelay()
         hub?.stop()
         hub = null
         graph.web.turnedOff()
@@ -323,12 +458,27 @@ class WebService : Service() {
         if (allowed) NotificationManagerCompat.from(this).notify(ID, notificationFor(status))
     }
 
-    /** "Web control on", and where: the panel's address, the guests' when only they are served, or that no network has an address yet. */
+    /**
+     * "Web control on", and where: the panel's address, the guests' when only they are served, or that
+     * no network has an address yet; "· Cloud" after it while the relay is connected (v1.10 — M26).
+     * With remote access alone, "Remote access on" and the relay's state.
+     */
     private fun notificationFor(status: WebStatus): Notification {
-        val text = status.panelUrl ?: status.guestUrl?.let { "Guests: $it" } ?: "Waiting for a network"
+        val cloud = graph.web.cloud.value
+        val connected = cloud is CloudStatus.Connected
+        val web = graph.settings.value.webEnabled
+        val local = status.panelUrl ?: status.guestUrl?.let { "Guests: $it" } ?: "Waiting for a network"
+        val text = when {
+            web && connected -> "$local · Cloud"
+            web -> local
+            cloud is CloudStatus.Connected -> "Cloud · ${cloud.host}"
+            cloud is CloudStatus.Waiting -> "Cloud · ${cloud.reason}"
+            cloud is CloudStatus.Revoked || cloud is CloudStatus.Disabled || cloud is CloudStatus.NotEnrolled -> "Cloud · enrol this tablet again"
+            else -> "Cloud · connecting"
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_piano)
-            .setContentTitle("Web control on")
+            .setContentTitle(if (web) "Web control on" else "Remote access on")
             .setContentText(text)
             .setContentIntent(openPiano())
             .setOngoing(true)
@@ -357,6 +507,9 @@ class WebService : Service() {
         private const val WAKE_LOCK_TAG = "StevenPiano:web"
         private const val WAKE_LOCK_MS = 10 * 60_000L
         private const val REFUSED = "Android refused to start the web service."
+
+        /** The relayed requests' server's name for itself: it never listens anywhere. */
+        private const val RELAY_SERVER = "relay"
 
         /**
          * `ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE` (API 34) and `…_CONNECTED_DEVICE` (API 29):

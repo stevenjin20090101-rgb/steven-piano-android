@@ -463,6 +463,9 @@ button, input, select { font: inherit; color: inherit; }
   .toast { left: 16px; right: 16px; }
 }
 
+/* The piano offline through the relay (v1.10 — M26): the same glass line, at the head of the window, until it answers. */
+.toast.offline { top: 16px; bottom: auto; }
+
 /* ---- Art ----------------------------------------------------------------------------------- */
 
 .art {

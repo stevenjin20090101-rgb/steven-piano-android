@@ -341,4 +341,39 @@ class SettingsRepositoryTest {
         assertEquals(dev.stevenjin.stevenpiano.audio.TabletSoundMode.OFF, repository.settings.first().tabletSound)
         scope.cancel()
     }
+
+    @Test
+    fun `the cloud starts off and unenrolled, an enrolment is kept at once with its sealed secret apart, and forgetting keeps the address`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "cloud.preferences_pb") }
+        val repository = SettingsRepository(store)
+        val fresh = repository.settings.first()
+        assertEquals(false, fresh.cloudEnabled)
+        assertEquals(false, fresh.cloudEnrolled)
+        assertEquals(null, repository.cloudSecret())
+        repository.setCloudHost("relay.example.dev")
+        assertEquals("relay.example.dev", repository.settings.first().cloudHost)
+        assertEquals("an address alone is no enrolment", false, repository.settings.first().cloudEnrolled)
+        repository.setCloudEnrolment("relay.example.dev", "abcdefgh2345", "v1:c2VhbGVk")
+        repository.setCloudEnabled(true)
+        val enrolled = repository.settings.first()
+        assertEquals(true, enrolled.cloudEnabled)
+        assertEquals("abcdefgh2345", enrolled.cloudPianoId)
+        assertEquals(true, enrolled.cloudSecretSet)
+        assertEquals(true, enrolled.cloudEnrolled)
+        assertEquals("v1:c2VhbGVk", repository.cloudSecret())
+        assertEquals("the settings never carry the sealed secret", false, "c2VhbGVk" in enrolled.toString())
+        repository.setCloudSecret("v1:cm90YXRlZA==")
+        assertEquals("v1:cm90YXRlZA==", repository.cloudSecret())
+        repository.forgetCloud()
+        val forgotten = repository.settings.first()
+        assertEquals(false, forgotten.cloudEnabled)
+        assertEquals(null, forgotten.cloudPianoId)
+        assertEquals(false, forgotten.cloudSecretSet)
+        assertEquals(null, repository.cloudSecret())
+        assertEquals("the typed address stays for next time", "relay.example.dev", forgotten.cloudHost)
+        store.edit { it[stringPreferencesKey("cloudPianoId")] = "NOT AN ID" }
+        assertEquals("an id not of the relay's form reads as none", null, repository.settings.first().cloudPianoId)
+        scope.cancel()
+    }
 }

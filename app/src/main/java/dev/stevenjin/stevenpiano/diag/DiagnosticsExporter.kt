@@ -157,6 +157,10 @@ object DiagnosticsText {
         line("kioskPinSet", s.kioskPinSet)
         line("tabletSound", s.tabletSound)
         line("tabletVolume", s.tabletVolume)
+        // Steven Piano Cloud (v1.10 — M26): on or off, the relay's address, whether enrolled; never the piano's id or its secret.
+        line("cloudEnabled", s.cloudEnabled)
+        line("cloudHost", s.cloudHost)
+        line("cloudEnrolled", s.cloudEnrolled)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

@@ -178,6 +178,92 @@ class WebSocketHubTest {
     }
 
     @Test
+    fun `a relayed browser hears the state as it attaches, then each change and the progress (v1_10 M26)`() {
+        val member = Recorder()
+        assertTrue(hub.attach(sessions.open(), member::send, member::close) != null)
+        member.waitFor { it.size >= 1 }
+        assertEquals("state", JSONObject(member.texts.first()).getString("type"))
+        changes.tryEmit(Unit)
+        member.waitFor { it.size >= 2 }
+        assertEquals("state", JSONObject(member.texts[1]).getString("type"))
+        playing.set(WebApi.progress(9_000, 1).toString())
+        member.waitFor { list -> list.any { JSONObject(it).getString("type") == "progress" } }
+        playing.set(null)
+        assertEquals("never pinged, never closed", emptyList<String>(), member.closes.toList())
+    }
+
+    @Test
+    fun `four relayed browsers at most, apart from the listeners' two sockets`() {
+        val members = (1..WebSocketHub.MAX_MEMBERS).map { Recorder().also { r -> assertTrue(hub.attach(sessions.open(), r::send, r::close) != null) } }
+        assertEquals(4, hub.memberCount)
+        assertTrue(!hub.hasMemberRoom())
+        val fifth = Recorder()
+        assertEquals(null, hub.attach(sessions.open(), fifth::send, fifth::close))
+        assertTrue("the listeners' sockets keep their own room", hub.hasRoom())
+        Client(server.listeningPort, sessions.open()).use { client ->
+            assertEquals(101, client.handshake())
+            assertEquals("state", JSONObject(client.text()).getString("type"))
+            // A change reaches the listener's socket and every member alike.
+            changes.tryEmit(Unit)
+            assertEquals("state", JSONObject(client.text()).getString("type"))
+        }
+        for (member in members) member.waitFor { it.size >= 2 }
+    }
+
+    @Test
+    fun `a relayed browser whose session ends is closed at the next ping, and a detached one hears nothing more`() {
+        val token = sessions.open()
+        val ending = Recorder()
+        hub.attach(token, ending::send, ending::close)
+        val leaving = Recorder()
+        val member = hub.attach(sessions.open(), leaving::send, leaving::close)!!
+        ending.waitFor { it.isNotEmpty() }
+        leaving.waitFor { it.isNotEmpty() }
+        member.detach()
+        sessions.close(token)
+        val deadline = System.currentTimeMillis() + 2_000
+        while (ending.closes.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals(listOf("4000 The session has ended."), ending.closes.toList())
+        assertEquals(0, hub.memberCount)
+        val heard = leaving.texts.size
+        changes.tryEmit(Unit)
+        Thread.sleep(400)
+        assertEquals("detached: nothing more", heard, leaving.texts.size)
+        assertEquals("and never told to close", emptyList<String>(), leaving.closes.toList())
+    }
+
+    @Test
+    fun `stopping the hub closes the relayed browsers too`() {
+        val member = Recorder()
+        hub.attach(sessions.open(), member::send, member::close)
+        hub.stop()
+        assertEquals(listOf("1001 The panel is off."), member.closes.toList())
+        assertEquals(0, hub.memberCount)
+    }
+
+    /** A relayed browser's side as the relay client keeps it: what the hub sends and why it closes. */
+    private class Recorder {
+        val texts: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        val closes: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+
+        fun send(text: String) {
+            texts += text
+        }
+
+        fun close(code: Int, reason: String) {
+            closes += "$code $reason"
+        }
+
+        fun waitFor(condition: (List<String>) -> Boolean) {
+            val end = System.currentTimeMillis() + 3_000
+            while (!condition(texts.toList())) {
+                if (System.currentTimeMillis() > end) throw AssertionError("Timed out: $texts")
+                Thread.sleep(20)
+            }
+        }
+    }
+
+    @Test
     fun `the guard passes a masked frame and refuses large, unmasked or endlessly fragmented ones`() {
         val ok = NanoWSD.WebSocketFrame.read(FrameGuard(ByteArrayInputStream(frame(0x81, "ping".toByteArray()))))
         assertEquals("ping", ok.textPayload)

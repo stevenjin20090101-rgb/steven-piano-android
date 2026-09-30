@@ -2052,3 +2052,84 @@ the note panel for the transport. A header blurs only its own bounds, and only w
 scrolled beneath it. The wide surfaces (headers, sheets, menus, dialogs) blur a copy at a fifth of the
 resolution; the bars keep M16's third. And beside a scrolling list the transport yields its blur
 (above).
+
+# v1.10 — M26: Steven Piano Cloud, the tablet's side
+
+Steven asked (2026-09-30) for the web panel from anywhere, over HTTPS, without Tailscale, on his own
+Cloudflare account, for many pianos, with a console of his own. The relay and the console are `cloud/`
+(R1); this section is the tablet's side: it keeps **one outbound connection** to the relay, answers the
+browsers the relay carries through **the same web panel** it serves on its own networks (the same routes,
+the same PIN, the same pages), and gains a **CLOUD** section on the Remote page. Nothing above changes:
+Web control on the tablet's own addresses works as before, with or without the cloud.
+
+## What a browser sees
+
+- The panel at **`https://<relay>/p/<piano>/`** (a short random id per piano): the gate, the PIN, then the
+  panel exactly as on the tablet's address, its live updates included. The relay adds only the lock of
+  HTTPS. Guests' request page (`…/request`) exists there only while **Guests can request** is on.
+- **When the tablet isn't there** (off, asleep without a network, the app stopped): a page opened then is
+  the relay's own "The piano is offline" page, which looks again every 30 seconds; a panel already open
+  keeps what it showed and says, at the head of the window, "The piano is offline. The panel comes back
+  when its tablet does.", its connection line "Offline"; it comes back by itself when the tablet does
+  (to the gate, if the app restarted meanwhile: sessions live in the app's memory). A panel whose page
+  loads but whose piano has gone shows an offline card in place of the gate, and looks again every 10 s.
+- Every address the panel builds starts from where the page lives (its path), so the same files work on
+  the tablet's own address and under the relay's `/p/<piano>/`; its socket is `wss:` when the page is
+  `https:`.
+
+## Piano › Remote control › CLOUD
+
+After GUESTS, under the eyebrow **CLOUD**:
+
+- **Remote access over the internet**, a switch, off at first. Disabled, with the reason under it in the
+  eyebrow's size, until it can work: "Set a PIN first" (the panel's PIN guards the cloud too), then
+  "Enrol this tablet first".
+- While it is on, a line saying how the connection stands, read out as it changes: "Connected",
+  "Connecting…", "Waiting for a network · retrying in 30 s" or "The relay can't be reached · retrying in
+  2 min" (counted down), "Another tablet connected with this enrolment · retrying in 1 min", "Revoked in
+  the console. Enrol again.", "Removed from the console. Enrol again." (the console forgot this piano),
+  "This tablet's key is gone. Enrol again.".
+- Under it, while the link can lead somewhere (not once revoked, removed or keyless), the panel's public
+  link in Body, tabular, "The panel from anywhere, behind the same PIN" under it, and its QR code at
+  96 dp on its paper card beside it; a tap shows it large on the sheet ("Scan to open the panel from
+  anywhere"), as the tablet's own address is shown.
+- **Cloud address**: the relay's host as typed ("steven-piano-relay.you.workers.dev"), or "Not set".
+- **Enrol with code**: an outlined button; its note "Get a code from the console", or "A new code enrols
+  this tablet again" once enrolled.
+- Once enrolled, **Forget this cloud**: its note "Remote access stops and this tablet's key is deleted;
+  its row in the console stays until removed there", then a dialog on the dialogs' glass: "Forget this
+  cloud?" · "The tablet stops using <host> and deletes its key. To come back, enrol again with a new code
+  from the console." · Cancel · Forget. The typed address stays for the next enrolment.
+
+The hub's row reads "On · 100.101.2.3 · Cloud" with Web control on as well, "Cloud" with the cloud alone,
+"Off" with neither. In kiosk mode the page, and so the section, waits behind the kiosk's PIN, as every
+settings page does.
+
+## Enrol with code
+
+A sheet on the sheets' glass with its grabber, as the PIN sheet: the eyebrow CLOUD, the title "Enrol with
+code", a line ("Get a code from the console", then what the relay answered), and two fields in the app's
+outlined style: **Relay address** (a URL keyboard; remembered from the last time; "https://" and a
+trailing slash are forgiven) and **Code** (capitals, tabular; any case, a dash or spaces or none:
+`ABCD-EFGH`). **Enrol** is enabled while both read as what they must be; while it asks the relay it reads
+"Enrolling…". On success the sheet closes and the switch can be turned on (the tablet never goes online by
+itself). The relay's refusals, in plain words: "That code isn't right, or it has expired. Make a new one
+in the console.", "Too many tries. Try again in a minute.", "The relay can't be reached. Check its address
+and the network.", "That isn't a code. Codes look like ABCD-EFGH.".
+
+## The notification
+
+While the relay is connected, the web service's notification adds "· Cloud" to what it says ("Web control
+on" · "http://100.101.2.3:8737 · Cloud"). With the cloud alone it reads "Remote access on" and the relay's
+state ("Cloud · steven-piano-relay.you.workers.dev", "Cloud · connecting", "Cloud · Waiting for a network").
+
+## What the relay sees, and what it doesn't
+
+Off by default. When on, the relay (Steven's own Cloudflare account) carries what the panel shows and is
+sent, as any HTTPS site's server does: the pages, the library's lists, a piece being played. The tablet
+reports every 30 s and soon after a change: the app's version, the piano's firmware version, whether the
+piano is connected, what plays (its title, composer, position and length, the channel), whether guests may
+request, the panel's own address on the tablet's networks, the library's size, the channels' names. Never
+a device identifier: no Bluetooth address, no piano name, no serial, no Android id; the enrolment sends
+the code alone. The PIN is checked on the tablet, as always; the relay never holds it. The tablet's key to
+the relay is sealed by Android's keystore and never shown.

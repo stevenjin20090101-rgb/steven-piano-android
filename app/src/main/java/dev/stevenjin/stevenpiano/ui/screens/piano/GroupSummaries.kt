@@ -93,10 +93,16 @@ data class GroupSummaries(
         /** When the next schedule starts, "Next Wed 12:30", or "None". */
         fun schedule(next: ZonedDateTime?): String = ScheduleCopy.hub(next)
 
-        /** "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"). */
+        /**
+         * "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"), and "· Cloud"
+         * while remote access over the internet is on and the tablet enrolled (v1.10 — M26): "On ·
+         * 100.101.2.3 · Cloud", or "Cloud" alone with Web control off.
+         */
         fun remote(settings: PianoSettings, web: WebStatus): String {
-            if (!settings.webEnabled) return OFF
-            return web.panelHost?.let { "On · $it" } ?: "On"
+            val cloud = settings.cloudEnabled && settings.cloudEnrolled
+            if (!settings.webEnabled) return if (cloud) CLOUD else OFF
+            val local = web.panelHost?.let { "On · $it" } ?: "On"
+            return if (cloud) "$local · $CLOUD" else local
         }
 
         /** Kiosk mode: "On" or "Off" ("On" while unlocked for now too: it locks again). */
@@ -152,6 +158,7 @@ data class GroupSummaries(
             (if (wide) settings.noteDisplay.rollStyle else settings.noteDisplay).label
 
         private const val OFF = "Off"
+        private const val CLOUD = "Cloud"
 
         private fun on(wire: String): Boolean = wire.trim() != "0"
     }

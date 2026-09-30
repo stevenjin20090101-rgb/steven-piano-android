@@ -71,6 +71,16 @@ unmodified from Maven Central), which runs Studio's models on the tablet:
   code it carries in third_party/onnxruntime/ThirdPartyNotices.txt. The
   library keeps its own licence.
 
+OkHttp (com.squareup.okhttp3:okhttp 4.12.0, linked unmodified from Maven
+Central), the WebSocket client that carries the tablet's one outbound
+connection to Steven Piano Cloud, with Okio (com.squareup.okio, which the
+app already carries through AndroidX DataStore):
+  Copyright 2019 Square, Inc.
+  Licensed under the Apache License, Version 2.0; the full licence is in
+  third_party/okhttp/LICENSE.txt and at
+  https://www.apache.org/licenses/LICENSE-2.0. The library keeps its own
+  licence; the MIT licence of this project does not apply to it.
+
 Piano transcription model (Studio's transcription model; downloaded by the
 app on demand, never bundled): "High-resolution Piano Transcription with
 Pedals by Regressing Onsets and Offsets Times", trained model by Qiuqiang

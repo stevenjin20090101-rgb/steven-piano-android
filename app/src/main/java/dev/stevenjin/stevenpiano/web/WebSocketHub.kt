@@ -36,6 +36,14 @@ import java.util.concurrent.CopyOnWriteArrayList
  * pinged (its pong keeps the socket's read alive under the server's read timeout) and closed if its
  * session has ended ([sessionValid]: logged out, the PIN changed, the panel turned off). At most
  * [maxSockets] are open at once: each holds one of the server's four threads while it is open.
+ *
+ * Browsers that reach the panel through the relay (v1.10 — M26) are [Member]s ([attach]): their
+ * sockets end at the relay, which bridges them over the tablet's one connection, so the hub hands
+ * each message to the relay ([Member]'s `send`) rather than to a socket of its own. They hear what
+ * the listeners' sockets hear, the state as they attach included; at most [maxMembers] of them,
+ * apart from the listeners' [maxSockets]; they are not pinged (the relay keeps the browsers awake
+ * and the tablet's connection has its own pings), but checked at every ping all the same and
+ * closed once their session has ended; the relay's side ends one with [Member.detach].
  */
 class WebSocketHub(
     private val stateMessage: suspend () -> String,
@@ -45,34 +53,70 @@ class WebSocketHub(
     private val minGapMs: Long = MIN_GAP_MS,
     private val pingMs: Long = PING_MS,
     private val progressMs: Long = PROGRESS_MS,
+    private val maxMembers: Int = MAX_MEMBERS,
 ) : WebSockets {
     private val open = CopyOnWriteArrayList<HubSocket>()
+    private val members = CopyOnWriteArrayList<Member>()
     private var jobs: List<Job> = emptyList()
+
+    @Volatile
+    private var scope: CoroutineScope? = null
 
     /** Sockets open now. */
     val count: Int get() = open.size
 
+    /** Relayed browsers attached now. */
+    val memberCount: Int get() = members.size
+
     override fun hasRoom(): Boolean = open.size < maxSockets
+
+    /** Whether another relayed browser may attach. */
+    fun hasMemberRoom(): Boolean = members.size < maxMembers
 
     override fun open(handshake: NanoHTTPD.IHTTPSession): NanoWSD.WebSocket {
         val token = WebCookies.parse(handshake.headers["cookie"])[WebCookies.SESSION]
         return HubSocket(GuardedHandshake(handshake), token)
     }
 
+    /**
+     * A browser's socket bridged by the relay, whose session ([token]) and origin were checked
+     * ([WebServer.admitSocket]): the hub's messages go to [send], and [close] ends it (its code and
+     * reason, for the relay to pass on). Null when [maxMembers] are attached already. The whole state
+     * follows at once, as a listener's socket gets it on opening.
+     */
+    fun attach(token: String?, send: (String) -> Unit, close: (Int, String) -> Unit): Member? {
+        val member = synchronized(members) {
+            if (members.size >= maxMembers) return null
+            Member(token, send, close).also { members += it }
+        }
+        scope?.launch {
+            val first = try {
+                stateMessage()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (first != null && member in members) member.sendQuietly(first)
+        }
+        return member
+    }
+
     /** Starts the hub's three loops in [scope]: the coalesced state messages, the progress, the pings. */
     fun start(scope: CoroutineScope, changes: Flow<Unit>) {
         stop()
+        this.scope = scope
         jobs = listOf(
             scope.launch {
                 changes.conflate().collect {
-                    if (open.isNotEmpty()) broadcast(stateMessage())
+                    if (open.isNotEmpty() || members.isNotEmpty()) broadcast(stateMessage())
                     delay(minGapMs)   // what changes meanwhile is folded into the next message
                 }
             },
             scope.launch {
                 while (isActive) {
                     delay(progressMs)
-                    if (open.isEmpty()) continue
+                    if (open.isEmpty() && members.isEmpty()) continue
                     progressMessage()?.let { broadcast(it) }
                 }
             },
@@ -80,21 +124,59 @@ class WebSocketHub(
                 while (isActive) {
                     delay(pingMs)
                     for (socket in open) socket.keepAlive()
+                    for (member in members) if (!sessionValid(member.token)) member.end(CLOSE_SESSION_ENDED, "The session has ended.")
                 }
             },
         )
     }
 
-    /** Stops the loops and closes every socket (the server is stopping, or the panel turned off). */
+    /** Stops the loops and closes every socket and member (the server is stopping, or the panel turned off). */
     fun stop() {
         jobs.forEach { it.cancel() }
         jobs = emptyList()
+        scope = null
         for (socket in open) socket.closeQuietly(NanoWSD.WebSocketFrame.CloseCode.GoingAway, "The panel is off.")
         open.clear()
+        for (member in members) member.end(NanoWSD.WebSocketFrame.CloseCode.GoingAway.value, "The panel is off.")
+        members.clear()
     }
 
     private fun broadcast(text: String) {
         for (socket in open) socket.sendQuietly(text)
+        for (member in members) member.sendQuietly(text)
+    }
+
+    /**
+     * A browser attached through the relay ([attach]). [detach] when the browser's side has gone (the
+     * relay said so, or the tablet's connection to it dropped): nothing more is sent, and there is
+     * nothing to close.
+     */
+    inner class Member internal constructor(internal val token: String?, private val send: (String) -> Unit, private val close: (Int, String) -> Unit) {
+        fun detach() {
+            members -= this
+        }
+
+        internal fun sendQuietly(text: String) {
+            try {
+                send(text)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                detach()
+            }
+        }
+
+        /** Ended from this side: the relay is told why. */
+        internal fun end(code: Int, reason: String) {
+            if (!members.remove(this)) return
+            try {
+                close(code, reason)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The relay's connection is gone already.
+            }
+        }
     }
 
     private inner class HubSocket(handshake: NanoHTTPD.IHTTPSession, private val token: String?) : NanoWSD.WebSocket(handshake) {
@@ -162,6 +244,12 @@ class WebSocketHub(
 
     companion object {
         const val MAX_SOCKETS = 2
+
+        /** Relayed browsers at once (the relay's own cap is the same). */
+        const val MAX_MEMBERS = 4
+
+        /** How a relayed browser's socket ends when its session has (a private code: the page just opens the gate). */
+        const val CLOSE_SESSION_ENDED = 4000
         const val MIN_GAP_MS = 100L
         const val PING_MS = 4_000L
         const val PROGRESS_MS = 1_000L

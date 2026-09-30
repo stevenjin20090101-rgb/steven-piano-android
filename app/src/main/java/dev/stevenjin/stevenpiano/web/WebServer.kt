@@ -90,6 +90,11 @@ interface WebSockets {
  *   itself rather than spin ([SteadyServerSocket]).
  * - **The socket** (`/ws`, [WebSockets]) opens only for a session, from the panel's own origin, on a
  *   listener that serves the panel.
+ * - **Relayed requests** (v1.10 — M26, Steven Piano Cloud) come in through [serveRelayed] as
+ *   synthetic sessions and meet the same route table and checks ([answer]), with the relay's edge in
+ *   place of the listener's: `https`, the relay's host alone, `Secure` cookies under the piano's
+ *   prefix, the socket's `wss:`; the guests' pages and API only while Guests can request is on.
+ *   Such a server is never started as a listener.
  */
 class WebServer(
     private val config: Config,
@@ -147,11 +152,41 @@ class WebServer(
 
     // ---- Every request -----------------------------------------------------------------------
 
-    override fun serve(session: IHTTPSession): Response {
+    override fun serve(session: IHTTPSession): Response = answer(session, HTTP, allowedHosts(), cookiePath = "/")
+
+    /**
+     * A request that came through the relay (BUILD_SPEC.md › v1.10 — M26): [session] is a
+     * [dev.stevenjin.stevenpiano.web.relay.RelayedSession], [host] the relay's host as browsers name
+     * it (`relay.example.workers.dev`, no port added), [prefix] the piano's path there (`/p/<id>`).
+     * It meets the same routes and checks as a listener's request ([answer]) on the relay's edge:
+     * [scheme] (`https`; `http` only for the debug build's local relay), `Host` exactly [host], an
+     * `Origin` of `<scheme>://<host>`, cookies `Secure` under `<prefix>/`, the socket's `wss:` in the
+     * policy. What NanoHTTPD would have refused before a route saw it is refused here the same way
+     * ([RequestHead]): a method it doesn't know (501), an address that doesn't decode (400).
+     */
+    fun serveRelayed(session: IHTTPSession, host: String, prefix: String, scheme: String = HTTPS): Response {
+        val relayHost = host.lowercase()
+        val refused = when {
+            session.method == null -> refuse(501, "method", "The panel doesn't answer that kind of request.")
+            session.uri == null -> refuse(400, "request", "The address holds a broken escape.")
+            else -> return answer(session, scheme, setOf(relayHost), cookiePath = "$prefix/", relayed = true)
+        }
+        return secure(refused, relayHost, scheme)
+    }
+
+    /**
+     * Every request, a listener's ([serve]) or the relay's ([serveRelayed]): its `Host` must be one
+     * of [allowed] (403 otherwise, before anything else); then its route, with the edge's [scheme]
+     * for the `Origin` it must come from and the socket's scheme in the policy, and [cookiePath] for
+     * the cookies it sets (`Secure` over HTTPS). [relayed]: the guests' pages and API answer 404
+     * while Guests can request is off, and no socket is opened here.
+     */
+    internal fun answer(session: IHTTPSession, scheme: String, allowed: Set<String>, cookiePath: String, relayed: Boolean = false): Response {
+        val edge = Edge(scheme, cookiePath, relayed)
         val host = session.headers[HOST]?.trim()?.lowercase()
-        val allowed = host != null && host in allowedHosts()
+        val known = host != null && host in allowed
         val response = try {
-            if (!allowed) refuse(403, "host", "This address isn't the panel's.") else dispatch(session, host)
+            if (!known) refuse(403, "host", "This address isn't the panel's.") else dispatch(session, host, edge)
         } catch (e: ApiError) {
             error(e)
         } catch (e: TimeoutCancellationException) {
@@ -161,15 +196,21 @@ class WebServer(
         } catch (e: OutOfMemoryError) {
             refuse(503, "memory", "The tablet is short of memory.")
         }
-        return secure(response, if (allowed) host else "${config.host}:$listeningPort")
+        val shown = when {
+            known -> host
+            relayed -> allowed.firstOrNull() ?: config.host
+            else -> "${config.host}:$listeningPort"
+        }
+        return secure(response, shown, scheme)
     }
 
-    private fun dispatch(session: IHTTPSession, host: String): Response {
-        if (isWebsocketRequested(session)) return socket(session, host)
+    private fun dispatch(session: IHTTPSession, host: String, edge: Edge): Response {
+        if (isWebsocketRequested(session)) return if (edge.relayed) notFound() else socket(session, host)
         val path = session.uri ?: return notFound()
         val method = session.method
         val matching = routes.filter { (!config.guestOnly || it.access == Access.PUBLIC) && it.pattern.matches(path) }
-        if (matching.isEmpty()) return asset(session, path)
+        if (matching.isEmpty()) return asset(session, path, edge)
+        if (edge.relayed && matching.any { it.access == Access.PUBLIC } && guestsClosed()) return notFound()
         val route = matching.firstOrNull { it.method == method }
             ?: return refuse(405, "method", "Not allowed here.").also { r -> r.addHeader("Allow", matching.joinToString(", ") { it.method.name }) }
         val cookies = WebCookies.parse(session.headers[COOKIE])
@@ -178,38 +219,44 @@ class WebServer(
             Access.READ -> if (!sessions.isValid(token)) return refuse(401, "session", "Enter the PIN first.")
             Access.WRITE -> {
                 if (!sessions.isValid(token)) return refuse(401, "session", "Enter the PIN first.")
-                checkHeaderAndOrigin(session, host)?.let { return it }
+                checkHeaderAndOrigin(session, host, edge)?.let { return it }
             }
-            Access.LOGIN -> checkHeaderAndOrigin(session, host)?.let { return it }
-            Access.PUBLIC -> if (method != Method.GET) checkOrigin(session, host)?.let { return it }
+            Access.LOGIN -> checkHeaderAndOrigin(session, host, edge)?.let { return it }
+            Access.PUBLIC -> if (method != Method.GET) checkOrigin(session, host, edge)?.let { return it }
         }
-        val call = Call(session, route.pattern.matchEntire(path)!!.groupValues.drop(1), host, token, cookies, connection.get())
+        val call = Call(session, route.pattern.matchEntire(path)!!.groupValues.drop(1), host, token, cookies, connection.get(), edge)
         return runBlocking {
             if (route.timed) withTimeout(CALL_TIMEOUT_MS) { route.handle(call) } else route.handle(call)
         }
     }
 
     /** The custom header (no other site's page can send it) and, when the request says where it came from, the panel's own origin. */
-    private fun checkHeaderAndOrigin(session: IHTTPSession, host: String): Response? {
+    private fun checkHeaderAndOrigin(session: IHTTPSession, host: String, edge: Edge): Response? {
         if (session.headers[PANEL_HEADER] != PANEL_HEADER_VALUE) return refuse(403, "header", "This request didn't come from the panel.")
-        return checkOrigin(session, host)
+        return checkOrigin(session, host, edge)
     }
 
-    private fun checkOrigin(session: IHTTPSession, host: String): Response? {
+    private fun checkOrigin(session: IHTTPSession, host: String, edge: Edge): Response? {
         val origin = session.headers[ORIGIN] ?: return null
-        return if (origin == "http://$host") null else refuse(403, "origin", "This request came from another site.")
+        return if (origin == edge.origin(host)) null else refuse(403, "origin", "This request came from another site.")
     }
+
+    /** Over the relay, the guests' pages and API exist only while Guests can request is on (v1.10 — M26). */
+    private fun guestsClosed(): Boolean = !runBlocking { withTimeout(CALL_TIMEOUT_MS) { backend.guestSettings().open } }
 
     // ---- Static files --------------------------------------------------------------------------
 
-    private fun asset(session: IHTTPSession, path: String): Response {
+    private fun asset(session: IHTTPSession, path: String, edge: Edge): Response {
+        if (edge.relayed && path in GUEST_PAGES && guestsClosed()) return notFound()
         if (path == POSTER_PATH) return poster(session)
         val asset = WebAssets.PUBLIC[path] ?: (if (config.guestOnly) null else WebAssets.PANEL[path]) ?: return notFound()
         if (session.method != Method.GET) return refuse(405, "method", "Not allowed here.").also { it.addHeader("Allow", "GET") }
         val bytes = assets.read(asset.name) ?: return notFound()
         val response = bytesResponse(Response.Status.OK, asset.contentType, bytes)
         response.addHeader("Cache-Control", "no-cache")
-        if (path == REQUEST_PAGE) guestCookie(WebCookies.parse(session.headers[COOKIE]))?.let { response.addHeader("Set-Cookie", WebCookies.guest(it)) }
+        if (path == REQUEST_PAGE) {
+            guestCookie(WebCookies.parse(session.headers[COOKIE]))?.let { response.addHeader("Set-Cookie", WebCookies.guest(it, edge.cookiePath, edge.secure)) }
+        }
         return response
     }
 
@@ -224,11 +271,24 @@ class WebServer(
 
     private fun socket(session: IHTTPSession, host: String): Response {
         if (session.method != Method.GET || session.uri != SOCKET_PATH || config.guestOnly) return notFound()
-        if (!sessions.isValid(WebCookies.parse(session.headers[COOKIE])[WebCookies.SESSION])) return refuse(401, "session", "Enter the PIN first.")
-        if (session.headers[ORIGIN] != "http://$host") return refuse(403, "origin", "This request came from another site.")
+        when (admitSocket(WebCookies.parse(session.headers[COOKIE]), session.headers[ORIGIN], "$HTTP://$host")) {
+            401 -> return refuse(401, "session", "Enter the PIN first.")
+            403 -> return refuse(403, "origin", "This request came from another site.")
+        }
         if (!sockets.hasRoom()) return refuse(503, "sockets", "Too many panels are open.")
         connection.get()?.lift()   // a socket lives long by design: its reads keep the per-read timeout, which the pings feed
         return super.serve(session)   // the handshake; its version and key are checked there
+    }
+
+    /**
+     * Whether a socket may open for a page with [cookies] that says it came from [origin]: 401 without a
+     * valid session, 403 unless [origin] is exactly [expectedOrigin] (the panel's own page), else
+     * [SOCKET_ADMITTED]. The listeners' `/ws` asks it, and the relay's bridged sockets (v1.10 — M26).
+     */
+    fun admitSocket(cookies: Map<String, String>, origin: String?, expectedOrigin: String): Int = when {
+        !sessions.isValid(cookies[WebCookies.SESSION]) -> 401
+        origin != expectedOrigin -> 403
+        else -> SOCKET_ADMITTED
     }
 
     override fun openWebSocket(handshake: IHTTPSession): WebSocket = sockets.open(handshake)
@@ -259,6 +319,7 @@ class WebServer(
         val token: String?,
         val cookies: Map<String, String>,
         internal val connection: DeadlineInput? = null,
+        internal val edge: Edge = Edge(HTTP, "/", relayed = false),
     ) {
         val address: String get() = session.remoteIpAddress ?: "unknown"
 
@@ -422,7 +483,7 @@ class WebServer(
         Route(Method.POST, Regex("/api/studio/compose"), Access.WRITE, "/api/studio/compose") { call -> studioCompose(call) },
         Route(Method.POST, Regex("/api/logout"), Access.WRITE, "/api/logout") { call ->
             sessions.close(call.token)
-            noContent().also { it.addHeader("Set-Cookie", WebCookies.endSession()) }
+            noContent().also { it.addHeader("Set-Cookie", WebCookies.endSession(call.edge.cookiePath, call.edge.secure)) }
         },
 
         // Logging in.
@@ -478,7 +539,7 @@ class WebServer(
             is LoginGuard.Attempt.Wait -> waitResponse(attempt.ms)
             is LoginGuard.Attempt.Wrong ->
                 json(WebApi.error("wrong", "That PIN isn't right.").put("retryAfter", seconds(attempt.waitMs)), Response.Status.UNAUTHORIZED)
-            LoginGuard.Attempt.Right -> noContent().also { it.addHeader("Set-Cookie", WebCookies.session(sessions.open())) }
+            LoginGuard.Attempt.Right -> noContent().also { it.addHeader("Set-Cookie", WebCookies.session(sessions.open(), call.edge.cookiePath, call.edge.secure)) }
         }
     }
 
@@ -502,7 +563,7 @@ class WebServer(
                 json(JSONObject().put("status", "queued"), Response.Status.ACCEPTED)
             }
         }
-        cookie?.let { response.addHeader("Set-Cookie", WebCookies.guest(it)) }
+        cookie?.let { response.addHeader("Set-Cookie", WebCookies.guest(it, call.edge.cookiePath, call.edge.secure)) }
         return response
     }
 
@@ -689,18 +750,40 @@ class WebServer(
 
     /**
      * The headers on every response: no sniffing, no framing, no referrer, the content security
-     * policy (this origin only, the socket at [host], no frames, no base, no forms), resources for
-     * this origin only; and the connection closes after it, but for a socket's handshake.
+     * policy (this origin only, the socket at [host] over [scheme]'s socket scheme, no frames, no
+     * base, no forms), resources for this origin only; and the connection closes after it, but for a
+     * socket's handshake.
      */
-    private fun secure(response: Response, host: String): Response {
-        for ((name, value) in securityHeaders(host)) response.addHeader(name, value)
+    private fun secure(response: Response, host: String, scheme: String = HTTP): Response {
+        for ((name, value) in securityHeaders(host, scheme)) response.addHeader(name, value)
         if (response.status.requestStatus != SWITCHING_PROTOCOLS) response.closeConnection(true)
         return response
     }
 
-    private companion object {
+    /**
+     * Where a request came in (v1.10 — M26): a listener (`http`, cookies at `/`) or the relay
+     * (`https`, cookies under the piano's prefix, [relayed]).
+     */
+    internal class Edge(val scheme: String, val cookiePath: String, val relayed: Boolean) {
+        /** Cookies are `Secure` wherever the page is HTTPS. */
+        val secure: Boolean get() = scheme == HTTPS
+
+        /** The panel's own origin at [host]: what a request from its page says in `Origin`. */
+        fun origin(host: String): String = "$scheme://$host"
+    }
+
+    companion object {
         /** The piano's actions the panel may send: All keys off, Save now, Read status (no strike or LED tests from afar). */
-        val PANEL_ACTIONS = mapOf("off" to PianoAction.AllKeysOff, "save" to PianoAction.Save, "status" to PianoAction.Status)
+        private val PANEL_ACTIONS = mapOf("off" to PianoAction.AllKeysOff, "save" to PianoAction.Save, "status" to PianoAction.Status)
+
+        /** [admitSocket]'s answer when the socket may open. */
+        const val SOCKET_ADMITTED = 101
+
+        const val HTTP = "http"
+        const val HTTPS = "https"
+
+        /** The guests' pages: over the relay, only while Guests can request is on. */
+        private val GUEST_PAGES = setOf(POSTER_PATH, REQUEST_PAGE, "/request.js")
     }
 
     /** What kinds of file may be uploaded, and how large. */
@@ -1119,24 +1202,36 @@ object WebCookies {
         return cookies
     }
 
-    /** The session cookie: never readable by scripts, never sent with another site's request, for the whole panel. */
-    fun session(token: String): String = "$SESSION=$token; HttpOnly; SameSite=Strict; Path=/"
+    /**
+     * The session cookie: never readable by scripts, never sent with another site's request, for the
+     * whole panel at [path] (`/` on a listener, `/p/<id>/` through the relay), and only over HTTPS when
+     * [secure] (the relay).
+     */
+    fun session(token: String, path: String = "/", secure: Boolean = false): String =
+        "$SESSION=$token; HttpOnly; SameSite=Strict; Path=$path" + secureFlag(secure)
 
-    fun endSession(): String = "$SESSION=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+    fun endSession(path: String = "/", secure: Boolean = false): String =
+        "$SESSION=; HttpOnly; SameSite=Strict; Path=$path; Max-Age=0" + secureFlag(secure)
 
-    /** A guest's id for the request limit, kept a year. */
-    fun guest(id: String): String = "$GUEST=$id; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000"
+    /** A guest's id for the request limit, kept a year, at [path] as the session is. */
+    fun guest(id: String, path: String = "/", secure: Boolean = false): String =
+        "$GUEST=$id; HttpOnly; SameSite=Strict; Path=$path; Max-Age=31536000" + secureFlag(secure)
+
+    private fun secureFlag(secure: Boolean): String = if (secure) "; Secure" else ""
 
     private const val MAX_COOKIES = 32
 }
 
-/** The headers every response carries (CSP with the socket's [host], `host:port`). */
-fun securityHeaders(host: String): List<Pair<String, String>> = listOf(
+/**
+ * The headers every response carries (CSP with the socket's [host], `host:port` on a listener): the
+ * socket is `ws:` for a page served over [scheme] `http`, `wss:` over `https` (the relay, v1.10 — M26).
+ */
+fun securityHeaders(host: String, scheme: String = "http"): List<Pair<String, String>> = listOf(
     "X-Content-Type-Options" to "nosniff",
     "X-Frame-Options" to "DENY",
     "Referrer-Policy" to "no-referrer",
     "Content-Security-Policy" to
-        "default-src 'self'; img-src 'self' data:; connect-src 'self' ws://$host; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+        "default-src 'self'; img-src 'self' data:; connect-src 'self' ${if (scheme == "https") "wss" else "ws"}://$host; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
     "Cross-Origin-Resource-Policy" to "same-origin",
 )
 

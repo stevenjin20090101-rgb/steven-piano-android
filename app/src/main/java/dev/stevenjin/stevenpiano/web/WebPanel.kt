@@ -11,7 +11,13 @@ package dev.stevenjin.stevenpiano.web
 
 import android.content.Context
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.StoredPin
+import dev.stevenjin.stevenpiano.update.CloudOverride
+import dev.stevenjin.stevenpiano.web.relay.CloudAddress
+import dev.stevenjin.stevenpiano.web.relay.CloudSecrets
+import dev.stevenjin.stevenpiano.web.relay.CloudStatus
+import dev.stevenjin.stevenpiano.web.relay.KeystoreSealer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +54,9 @@ data class WebStatus(
  * sessions and the login guard (shared by the tailnet and Wi-Fi listeners, so a PIN guessed on one
  * is counted on both), the guests' requests (the panel's Requests page and the tablet's Library
  * banner act on the same list), the [backend] the listeners serve, and the [status] the web
- * service reports. Changing the PIN here ends every session.
+ * service reports. Changing the PIN here ends every session. Steven Piano Cloud (v1.10 — M26)
+ * shares all of it: its [cloud] status as the web service reports it, the relay's secret sealed in
+ * the settings ([cloudSecrets]), the enrolments made here ([enrolments]), the public link ([cloudLink]).
  */
 class WebPanel(private val app: Context, private val graph: AppGraph) {
     val sessions = Sessions()
@@ -58,11 +66,29 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
     private val _status = MutableStateFlow(WebStatus())
     val status: StateFlow<WebStatus> = _status.asStateFlow()
 
+    private val _cloud = MutableStateFlow<CloudStatus>(CloudStatus.Off)
+
+    /** Where the tablet's connection to Steven Piano Cloud stands (Off while the web service or remote access is off). */
+    val cloud: StateFlow<CloudStatus> = _cloud.asStateFlow()
+
+    private val _enrolments = MutableStateFlow(0)
+
+    /** How many enrolments this process has made: the relay client starts again for each, even for the same piano. */
+    val enrolments: StateFlow<Int> = _enrolments.asStateFlow()
+
+    /** The relay's bearer secret, sealed by the Keystore in the settings. */
+    val cloudSecrets: CloudSecrets by lazy {
+        CloudSecrets(KeystoreSealer(), read = { graph.settingsRepository.cloudSecret() }, write = { graph.settingsRepository.setCloudSecret(it) })
+    }
+
+    /** The debug build's local relay on the emulator, read once ([CloudOverride]); null everywhere else. */
+    val cloudOverride: String? by lazy { CloudOverride.origin() }
+
     val backend: AppWebBackend by lazy {
         AppWebBackend(
             app,
             graph,
-            addresses = { status.value.let { WebAddresses(it.panelUrl, it.guestUrl) } },
+            addresses = { status.value.let { WebAddresses(it.panelUrl, it.guestUrl, cloudLink()) } },
             guests = { graph.settings.value.let { GuestSettings(open = it.webGuests, approveFirst = it.webApproveFirst) } },
             requested = { requests.requested.value },
             applyWebSettings = ::applyWebSettings,
@@ -79,6 +105,28 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
     /** The web service says where it listens now, or that it stopped. */
     fun report(status: WebStatus) {
         _status.value = status
+    }
+
+    /** The web service says where the connection to the relay stands. */
+    fun reportCloud(status: CloudStatus) {
+        _cloud.value = status
+    }
+
+    /** An enrolment was made: the relay client starts again for it. */
+    fun enrolled() {
+        _enrolments.value++
+    }
+
+    /**
+     * The panel's public link through the relay, `https://<relay>/p/<id>/` (`http://localhost:8787/…`
+     * with the debug build's local relay), while remote access over the internet is on and the tablet
+     * is enrolled: the host the relay's hello names once connected, the typed one before.
+     */
+    fun cloudLink(settings: PianoSettings = graph.settings.value, status: CloudStatus = cloud.value): String? {
+        if (!settings.cloudEnabled || !settings.cloudEnrolled) return null
+        val typed = settings.cloudHost ?: return null
+        val host = (status as? CloudStatus.Connected)?.host ?: typed
+        return "${CloudAddress.scheme(CloudAddress.origin(typed, cloudOverride))}://$host/p/${settings.cloudPianoId}/"
     }
 
     /** A new six-digit PIN, hashed off the main thread; every session ends (open sockets close at their next ping). */

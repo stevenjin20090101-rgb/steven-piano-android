@@ -20,6 +20,10 @@
   const $ = (id) => document.getElementById(id);
   const SVG = 'http://www.w3.org/2000/svg';
 
+  // Where the panel lives (v1.10 — M26): '' on the tablet's own address, '/p/<id>' through Steven Piano
+  // Cloud's relay. Every request and the socket are built from it; the page's own files are relative.
+  const ROOT = location.pathname.replace(/\/(index\.html)?$/, '');
+
   /** An element with its properties (class, text, on…, aria and data attributes) and children. */
   function h(tag, props, ...children) {
     const node = document.createElement(tag);
@@ -110,12 +114,46 @@
         data = null;
       }
     }
-    if (response.status === 401 && path !== '/api/login') {
+    if (response.status === 503 && data && data.error === 'offline') {
+      offline(true);
+      throw new ApiError(503, data);
+    }
+    offline(false);
+    if (response.status === 401 && path !== ROOT + '/api/login') {
       showGate();
       throw new ApiError(401, data);
     }
     if (!response.ok) throw new ApiError(response.status, data);
     return data;
+  }
+
+  /**
+   * The relay's answer while the piano's tablet isn't connected (v1.10 — M26, `{"error":"offline"}`,
+   * 503): before the panel has its state, the offline card in place of the PIN gate (start() looks
+   * again every few seconds); after, a line at the head of the window until the tablet answers again.
+   */
+  function offline(on) {
+    if (state === null) {
+      $('offline').hidden = !on;
+      if (on) {
+        $('gate').hidden = true;
+        $('panel').hidden = true;
+      }
+      return;
+    }
+    let node = $('offline-note');
+    if (!on) {
+      if (node) node.hidden = true;
+      return;
+    }
+    if (!node) {
+      node = h('p', { id: 'offline-note', class: 'banner toast offline', role: 'status', 'aria-live': 'polite' });
+      document.body.append(node);
+    }
+    node.textContent = 'The piano is offline. The panel comes back when its tablet does.';
+    node.hidden = false;
+    $('conn-dot').classList.remove('live');
+    $('conn-text').textContent = 'Offline';
   }
 
   const get = (path) => call('GET', path);
@@ -235,7 +273,7 @@
     }
     $('gate-open').disabled = true;
     try {
-      await call('POST', '/api/login', { pin });
+      await call('POST', ROOT + '/api/login', { pin });
       $('gate-note').textContent = '';
       $('gate').hidden = true;
       await start();
@@ -263,6 +301,9 @@
   let socketTimer = null;
   let pingTimer = null;
   let retryMs = 1000;
+
+  /** How often a page that opened while the piano was offline looks again (v1.10 — M26). */
+  const OFFLINE_LOOK_MS = 10000;
 
   /** The position the page shows between the tablet's messages: where it was, when (this page's clock), and how fast it runs. */
   const clockBase = { ms: 0, at: 0, running: false, tempo: 100, duration: 0 };
@@ -293,7 +334,7 @@
 
   function openSocket() {
     closeSocket();
-    const ws = new WebSocket(`ws://${location.host}/ws`);
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${ROOT}/ws`);
     socket = ws;
     ws.addEventListener('open', () => {
       retryMs = 1000;
@@ -326,7 +367,7 @@
   /** Back after a drop: the state is asked for first, which also says when the session has ended (the gate then shows). */
   async function reconnect() {
     try {
-      onState(await get('/api/state'));
+      onState(await get(ROOT + '/api/state'));
       openSocket();
     } catch (e) {
       if (e.status !== 401) {
@@ -435,7 +476,7 @@
 
   function loadArt(box) {
     if (box.dataset.kind === 'portrait') {
-      const img = h('img', { alt: '', decoding: 'async', src: `/api/art/composer/${encodeURIComponent(box.dataset.key)}?size=${box.dataset.size}` });
+      const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/composer/${encodeURIComponent(box.dataset.key)}?size=${box.dataset.size}` });
       img.addEventListener('error', () => {
         box.dataset.kind = 'roll';
         loadArt(box);
@@ -443,7 +484,7 @@
       box.replaceChildren(img);
     } else if (box.dataset.kind === 'roll') {
       const roll = h('span', { class: 'roll' });
-      const url = `url("/api/art/piece/${encodeURIComponent(box.dataset.id)}")`;
+      const url = `url("${ROOT}/api/art/piece/${encodeURIComponent(box.dataset.id)}")`;
       roll.style.webkitMaskImage = url;
       roll.style.maskImage = url;
       box.replaceChildren(roll);
@@ -549,7 +590,7 @@
     clockBase.at = performance.now();
     seeking = false;
     try {
-      await post('/api/seek', { ms });
+      await post(ROOT + '/api/seek', { ms });
     } catch (e) {
       failed(e);
     }
@@ -558,7 +599,7 @@
   function transport(action) {
     return async () => {
       try {
-        await post('/api/transport', { action });
+        await post(ROOT + '/api/transport', { action });
       } catch (e) {
         failed(e);
       }
@@ -570,7 +611,7 @@
   $('now-next').addEventListener('click', transport('next'));
   $('now-shuffle').addEventListener('click', async () => {
     try {
-      await post('/api/shuffle', { on: !state.player.queue.shuffle });
+      await post(ROOT + '/api/shuffle', { on: !state.player.queue.shuffle });
     } catch (e) {
       failed(e);
     }
@@ -578,7 +619,7 @@
   $('now-repeat').addEventListener('click', async () => {
     const next = { off: 'all', all: 'one', one: 'off' }[state.player.queue.repeat];
     try {
-      await post('/api/repeat', { mode: next });
+      await post(ROOT + '/api/repeat', { mode: next });
     } catch (e) {
       failed(e);
     }
@@ -588,7 +629,7 @@
     return async () => {
       const pct = Math.min(200, Math.max(25, state.player.tempoPct + delta));
       try {
-        await post('/api/tempo', { pct });
+        await post(ROOT + '/api/tempo', { pct });
       } catch (e) {
         failed(e);
       }
@@ -601,7 +642,7 @@
   let volumeDragging = false;
   const sendVolume = debounce(async (key, pct) => {
     try {
-      await put(`/api/channels/${encodeURIComponent(key)}/volume`, { pct });
+      await put(ROOT + `/api/channels/${encodeURIComponent(key)}/volume`, { pct });
     } catch (e) {
       failed(e);
     }
@@ -618,7 +659,7 @@
   let tabletDragging = false;
   const sendTabletVolume = debounce(async (pct) => {
     try {
-      await put('/api/settings', { tabletVolume: pct });
+      await put(ROOT + '/api/settings', { tabletVolume: pct });
     } catch (e) {
       failed(e);
     }
@@ -647,7 +688,7 @@
 
   async function queueCommand(body) {
     try {
-      await post('/api/queue', body);
+      await post(ROOT + '/api/queue', body);
     } catch (e) {
       failed(e);
     }
@@ -751,7 +792,7 @@
     const params = new URLSearchParams({ category: library.query ? 'all' : library.category, offset: String(offset), limit: String(PAGE) });
     if (library.query) params.set('q', library.query);
     try {
-      const page = await get(`/api/library?${params}`);
+      const page = await get(ROOT + `/api/library?${params}`);
       library.pieces = offset === 0 ? page.pieces : library.pieces.concat(page.pieces);
       library.total = page.total;
       library.offset = offset + page.pieces.length;
@@ -784,7 +825,7 @@
 
   async function play(pieceId, queue) {
     try {
-      await post('/api/play', { pieceId, queue: queue && queue.length <= 5000 ? queue : undefined });
+      await post(ROOT + '/api/play', { pieceId, queue: queue && queue.length <= 5000 ? queue : undefined });
       toast('Playing on the piano.');
     } catch (e) {
       failed(e);
@@ -829,7 +870,7 @@
 
   async function playlistsLoad() {
     try {
-      const { playlists } = await get('/api/playlists');
+      const { playlists } = await get(ROOT + '/api/playlists');
       $('lib-more').hidden = true;
       $('lib-rows').replaceChildren(...playlists.map((list) => {
         const row = h('li', { class: 'row clickable' },
@@ -850,9 +891,9 @@
 
   async function openPlaylist(list) {
     try {
-      const detail = await get(`/api/playlists/${list.id}`);
+      const detail = await get(ROOT + `/api/playlists/${list.id}`);
       showGroup(detail.playlist.name, [detail.playlist.builtIn ? 'Built in' : null, plural(detail.pieces.length, 'piece', 'pieces')].filter(Boolean).join(' · '), detail.pieces,
-        (shuffle) => post('/api/play-all', { playlistId: list.id, shuffle }));
+        (shuffle) => post(ROOT + '/api/play-all', { playlistId: list.id, shuffle }));
     } catch (e) {
       failed(e);
     }
@@ -860,7 +901,7 @@
 
   async function composersLoad() {
     try {
-      const { composers } = await get('/api/composers');
+      const { composers } = await get(ROOT + '/api/composers');
       $('lib-more').hidden = true;
       $('lib-rows').replaceChildren(...composers.map((composer) => {
         const box = h('div', { class: 'art' });
@@ -884,10 +925,10 @@
 
   async function openComposer(composer) {
     try {
-      const detail = await get(`/api/composers/${encodeURIComponent(composer.key)}`);
+      const detail = await get(ROOT + `/api/composers/${encodeURIComponent(composer.key)}`);
       const ids = detail.pieces.map((p) => p.id);
       showGroup(detail.composer.name || 'Unknown composer', plural(detail.pieces.length, 'piece', 'pieces'), detail.pieces,
-        (shuffle) => post('/api/play-all', { ids, shuffle }));
+        (shuffle) => post(ROOT + '/api/play-all', { ids, shuffle }));
     } catch (e) {
       failed(e);
     }
@@ -918,7 +959,7 @@
 
   async function channelsLoad() {
     try {
-      const { channels, playing } = await get('/api/channels');
+      const { channels, playing } = await get(ROOT + '/api/channels');
       $('channel-stop').hidden = !playing;
       $('channels-empty').hidden = channels.length > 0;
       $('channel-tiles').replaceChildren(...channels.map(channelTile));
@@ -934,7 +975,7 @@
     if (cells.length === 0) mosaic.append(monogram(channel.name));
     for (const composer of cells.length === 3 ? cells.concat(cells[0]) : cells) {
       mosaic.append(composer.portrait
-        ? h('img', { alt: '', loading: 'lazy', src: `/api/art/composer/${encodeURIComponent(composer.key)}?size=tile` })
+        ? h('img', { alt: '', loading: 'lazy', src: ROOT + `/api/art/composer/${encodeURIComponent(composer.key)}?size=tile` })
         : monogram(composer.name));
     }
     const meta = channel.playing
@@ -948,7 +989,7 @@
         return;
       }
       try {
-        await post(`/api/channels/${encodeURIComponent(channel.key)}/play`);
+        await post(ROOT + `/api/channels/${encodeURIComponent(channel.key)}/play`);
         toast(`${channel.name} is playing.`);
         channelsLoad();
       } catch (e) {
@@ -960,7 +1001,7 @@
 
   $('channel-stop').addEventListener('click', async () => {
     try {
-      await post('/api/channels/stop');
+      await post(ROOT + '/api/channels/stop');
       channelsLoad();
     } catch (e) {
       failed(e);
@@ -980,7 +1021,7 @@
 
   async function scheduleLoad() {
     try {
-      scheduling.data = await get('/api/schedules');
+      scheduling.data = await get(ROOT + '/api/schedules');
       renderSchedule();
     } catch (e) {
       failed(e);
@@ -1181,14 +1222,14 @@
     if (scheduling.tab === 'channel') {
       const show = () => fillRows(scheduling.channels.map((c) => row('channel', c.key, c.name, c.playable ? plural(c.size, 'piece', 'pieces') : 'Add more pieces', c.playable)), 'The channels are being worked out from the library.');
       if (scheduling.channels) show();
-      else get('/api/channels').then((r) => { scheduling.channels = r.channels; show(); }).catch(failed);
+      else get(ROOT + '/api/channels').then((r) => { scheduling.channels = r.channels; show(); }).catch(failed);
       wrap.append(list);
     } else if (scheduling.tab === 'playlist') {
       const show = () => fillRows(scheduling.playlists
         .slice().sort((a, b) => Number(b.builtIn) - Number(a.builtIn))
         .map((p) => row('playlist', p.id, p.name, [p.builtIn ? 'Built in' : null, plural(p.pieceCount, 'piece', 'pieces')].filter(Boolean).join(' · '), true)), 'No playlists yet.');
       if (scheduling.playlists) show();
-      else get('/api/playlists').then((r) => { scheduling.playlists = r.playlists; show(); }).catch(failed);
+      else get(ROOT + '/api/playlists').then((r) => { scheduling.playlists = r.playlists; show(); }).catch(failed);
       wrap.append(list);
     } else {
       const search = h('input', { class: 'field', type: 'search', placeholder: 'Search titles and composers', 'aria-label': 'Search pieces', autocomplete: 'off', maxlength: '200' });
@@ -1203,7 +1244,7 @@
         const params = new URLSearchParams({ limit: '30' });
         if (scheduling.query) params.set('q', scheduling.query);
         else params.set('category', 'recent');
-        get(`/api/library?${params}`).then((page) => show(page.pieces)).catch(failed);
+        get(ROOT + `/api/library?${params}`).then((page) => show(page.pieces)).catch(failed);
       };
       search.addEventListener('input', debounce(() => {
         scheduling.query = search.value.trim();
@@ -1218,8 +1259,8 @@
   /** Saves a schedule: a new one (POST) or [id]'s (PUT); the tablet's refusal comes back in its own words. */
   async function sendSchedule(body, id, fromEditor) {
     try {
-      if (id) await put(`/api/schedules/${id}`, body);
-      else await post('/api/schedules', body);
+      if (id) await put(ROOT + `/api/schedules/${id}`, body);
+      else await post(ROOT + '/api/schedules', body);
       if (fromEditor) {
         scheduling.editing = null;
         toast('Saved. The tablet starts it on time.');
@@ -1239,7 +1280,7 @@
   async function deleteSchedule(s) {
     scheduling.deleting = null;
     try {
-      await del(`/api/schedules/${s.id}`);
+      await del(ROOT + `/api/schedules/${s.id}`);
       toast('Schedule deleted.');
     } catch (e) {
       failed(e);
@@ -1257,7 +1298,7 @@
 
   async function requestsLoad() {
     try {
-      const data = await get('/api/requests');
+      const data = await get(ROOT + '/api/requests');
       $('requests-empty').hidden = data.pending.length > 0;
       $('requests-rows').replaceChildren(...data.pending.map((request) => h('li', { class: 'row' },
         h('div', { class: 'text' },
@@ -1273,7 +1314,7 @@
 
   async function answer(id, action) {
     try {
-      await post(`/api/requests/${id}/${action}`);
+      await post(ROOT + `/api/requests/${id}/${action}`);
       requestsLoad();
     } catch (e) {
       failed(e);
@@ -1295,7 +1336,7 @@
 
   $('guests-open').addEventListener('click', async () => {
     try {
-      await put('/api/settings', { webGuests: !state.requests.guests });
+      await put(ROOT + '/api/settings', { webGuests: !state.requests.guests });
     } catch (e) {
       failed(e);
     }
@@ -1303,7 +1344,7 @@
 
   $('guests-approve').addEventListener('click', async () => {
     try {
-      await put('/api/settings', { webApproveFirst: !state.requests.approveFirst });
+      await put(ROOT + '/api/settings', { webApproveFirst: !state.requests.approveFirst });
     } catch (e) {
       failed(e);
     }
@@ -1367,7 +1408,7 @@
       const lower = name.toLowerCase();
       const isMidi = lower.endsWith('.mid') || lower.endsWith('.midi');
       const isZip = lower.endsWith('.zip');
-      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0, route: '/api/upload', list: 'upload-rows', sent: 'Sent to the tablet', refused: 'Not added' };
+      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0, route: ROOT + '/api/upload', list: 'upload-rows', sent: 'Sent to the tablet', refused: 'Not added' };
       if (!isMidi && !isZip) upload.status = 'Not added: only .mid, .midi and .zip files';
       else if (isMidi && file.size > MIDI_BYTES) upload.status = 'Not added: a MIDI file can be 8 MB at most';
       else if (isZip && file.size > ZIP_BYTES) upload.status = 'Not added: a zip can be 64 MB at most';
@@ -1512,7 +1553,7 @@
     for (const file of Array.from(files)) {
       const name = file.name;
       const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
-      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0, route: '/api/studio/audio', list: 'studio-upload-rows', sent: 'Sent to the tablet · transcribing there', refused: 'Not sent' };
+      const upload = { file, name, size: file.size, status: 'Waiting', progress: 0, route: ROOT + '/api/studio/audio', list: 'studio-upload-rows', sent: 'Sent to the tablet · transcribing there', refused: 'Not sent' };
       if (!AUDIO_EXTENSIONS.includes(extension)) upload.status = 'Not sent: only recordings (.wav, .mp3, .m4a, .flac, .ogg…)';
       else if (file.size > AUDIO_BYTES) upload.status = 'Not sent: a recording can be 200 MB at most';
       else if (file.size === 0) upload.status = 'Not sent: the file is empty';
@@ -1559,7 +1600,7 @@
 
   async function cancelJob(id) {
     try {
-      await post(`/api/studio/jobs/${id}/cancel`);
+      await post(ROOT + `/api/studio/jobs/${id}/cancel`);
     } catch (e) {
       failed(e);
     }
@@ -1621,7 +1662,7 @@
     const c = composing;
     c.reading = true;
     try {
-      const seed = await get(pieceId ? `/api/studio/seed?piece=${pieceId}` : '/api/studio/seed');
+      const seed = await get(pieceId ? ROOT + `/api/studio/seed?piece=${pieceId}` : ROOT + '/api/studio/seed');
       if (composing !== c) return;
       c.seed = seed;
       c.key = null;
@@ -1776,7 +1817,7 @@
       const params = new URLSearchParams({ limit: '30' });
       if (c.query) params.set('q', c.query);
       else params.set('category', 'recent');
-      get(`/api/library?${params}`).then((page) => { if (composing === c) show(page.pieces); }).catch(failed);
+      get(ROOT + `/api/library?${params}`).then((page) => { if (composing === c) show(page.pieces); }).catch(failed);
     };
     search.addEventListener('input', debounce(() => {
       c.query = search.value.trim();
@@ -1794,7 +1835,7 @@
     c.sending = true;
     renderCompose();
     try {
-      await post('/api/studio/compose', { pieceId: c.seed.pieceId, mood: c.mood, key: { tonic: key.tonic, minor: key.minor }, bpm: composeBpm(c), minutes: c.minutes });
+      await post(ROOT + '/api/studio/compose', { pieceId: c.seed.pieceId, mood: c.mood, key: { tonic: key.tonic, minor: key.minor }, bpm: composeBpm(c), minutes: c.minutes });
       if (composing === c) composing = null;
       renderCompose();
       toast('Composing on the tablet. It shows under Jobs.');
@@ -1818,7 +1859,7 @@
 
   async function pianoLoad() {
     try {
-      pianoTable = await get('/api/piano');
+      pianoTable = await get(ROOT + '/api/piano');
       renderPiano();
     } catch (e) {
       failed(e);
@@ -1844,7 +1885,7 @@
 
   const sendSetting = debounce(async (name, value) => {
     try {
-      await put(`/api/piano/${encodeURIComponent(name)}`, { value });
+      await put(ROOT + `/api/piano/${encodeURIComponent(name)}`, { value });
     } catch (e) {
       failed(e);
     }
@@ -1932,7 +1973,7 @@
             h('div', { class: 'actions' }, h('div', { class: 'chips', role: 'group', 'aria-label': 'Presets' },
               pianoTable.presets.map((preset) => chip(preset.label, false, async () => {
                 try {
-                  await post('/api/piano/preset', { name: preset.command });
+                  await post(ROOT + '/api/piano/preset', { name: preset.command });
                   toast(`${preset.label} applied on the piano.`);
                 } catch (e) {
                   failed(e);
@@ -1949,7 +1990,7 @@
     }
     const act = (name, label) => h('button', { class: 'outlined', type: 'button', disabled: !ready, onclick: async () => {
       try {
-        await post('/api/piano/action', { name });
+        await post(ROOT + '/api/piano/action', { name });
         if (name === 'status') setTimeout(pianoLoad, 2500);
         else toast(name === 'off' ? 'Every key let go.' : 'Saved on the piano.');
       } catch (e) {
@@ -1966,12 +2007,17 @@
   async function start() {
     renderAppearance();
     try {
-      onState(await get('/api/state'));
+      onState(await get(ROOT + '/api/state'));
     } catch (e) {
+      if (e.status === 503 && e.body.error === 'offline') {
+        setTimeout(start, OFFLINE_LOOK_MS);   // the offline card shows meanwhile
+        return;
+      }
       if (e.status !== 401) $('gate-note').textContent = e.message;
       if (e.status !== 401) showGate();
       return;
     }
+    $('offline').hidden = true;
     $('gate').hidden = true;
     $('panel').hidden = false;
     show(location.hash.slice(1) || 'now');

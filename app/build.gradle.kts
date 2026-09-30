@@ -258,6 +258,7 @@ dependencies {
     implementation(libs.qrcode.kotlin)
     implementation(libs.eddsa)
     implementation(libs.onnxruntime.android)
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

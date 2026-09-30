@@ -674,7 +674,52 @@ Leave it off on any Wi-Fi that is not your own; Tailscale encrypts everything. S
 school networks keep devices from reaching each other (client isolation): guests'
 phones then cannot reach the request page, and only Tailscale works.
 
-**From anywhere without Tailscale**, over HTTPS: Steven Piano Cloud, a relay and a console on your own Cloudflare account; see [`cloud/README.md`](cloud/README.md).
+## Cloud
+
+**From anywhere without Tailscale**, over HTTPS: Steven Piano Cloud, a relay and a console on your own
+Cloudflare account; see [`cloud/README.md`](cloud/README.md).
+
+From version 1.10 the panel can also be reached from anywhere, over HTTPS, without Tailscale, through
+**Steven Piano Cloud**: a small relay and a console that run on **your own Cloudflare account** (free
+plan). The tablet keeps one connection out to the relay; a browser opens
+`https://<your relay>/p/<piano>/` and gets the same panel, behind the same PIN. Nothing is set up or sent
+anywhere until you do it; it is off by default.
+
+**Once, to set it up:** deploy the relay and the console with the steps in
+[`cloud/README.md`](cloud/README.md) (about fifteen minutes; Cloudflare Access keeps the console to your
+own email). Then, for each tablet:
+
+1. In the console, **Enrol a tablet**: it shows a code such as `QUUT-9Q3H` (it works once, for
+   15 minutes) and the relay's address.
+2. On the tablet: set the panel's PIN first (Piano › Remote control › **Set a PIN**), then
+   **CLOUD › Enrol with code**: type the relay's address (for example
+   `steven-piano-relay.you.workers.dev`; the tablet remembers it) and the code.
+3. Turn on **Remote access over the internet**. The line under it says "Connected", and the panel's
+   public link appears with its QR code (tap it to show it large). Open it on any phone or laptop and
+   enter the PIN.
+
+The hub's row reads "Cloud" (or "On · 100.101.2.3 · Cloud" with Web control too), and the notification
+adds "· Cloud" while connected. If the tablet loses its network, the line says so and counts down to the
+next try; it reconnects by itself. A panel already open says "The piano is offline" at the top until the
+tablet is back; a page opened meanwhile is the relay's own offline page.
+
+**From the console** you can see each piano (online, what plays, versions), pause or skip, play a piece or
+a channel, open or close guests' requests, and **Rotate secret** (the tablet takes its new key by itself),
+**Revoke** (the tablet shows "Revoked in the console. Enrol again." and stops trying) or **Forget** a
+piano ("Removed from the console. Enrol again."). On the tablet, **Forget this cloud** turns remote access
+off and deletes the tablet's key; remove its row in the console too.
+
+**Guests** can use the relay too: with **Guests can request** on, `https://<relay>/p/<piano>/request` is
+the request page (the Wi-Fi poster still prints the tablet's own address). While it is off, the relay's
+request page doesn't exist.
+
+**What the relay sees:** it is your own Cloudflare Worker, and it carries what the panel shows and is sent,
+as any HTTPS site's server does: pages, lists, the piece playing, requests. The tablet reports every
+30 seconds: the app's and the piano's versions, whether the piano is connected, what plays, whether guests
+may request, the library's size and the channels' names. Never a device identifier (no Bluetooth address,
+no serial, no Android id); enrolling sends the code alone. The PIN is checked on the tablet, never by the
+relay. The tablet's key to the relay is sealed by Android's keystore and never shown or included in Share
+diagnostics.
 
 ## Updating the piano's firmware
 

@@ -58,7 +58,8 @@ private const val SCAN_NOTE = "Scan it with your phone, or tap it to show it lar
  * QR code beside it at 96 dp (a tap shows it large); Set a PIN / Change PIN (six digits, twice);
  * Panel on Wi-Fi too with what it costs. GUESTS: Guests can request, Approve requests first, and
  * Print the request poster (Android's print dialog, the poster of the guests' address). The hub's
- * row reads "On · 100.101.2.3" or "Off".
+ * row reads "On · 100.101.2.3" or "Off". CLOUD (v1.10 — M26): Steven Piano Cloud ([CloudSection]),
+ * which adds "· Cloud" to the row.
  */
 @Composable
 fun RemotePage(settings: PianoSettings, web: WebStatus, vm: PianoViewModel) {
@@ -91,6 +92,8 @@ fun RemotePage(settings: PianoSettings, web: WebStatus, vm: PianoViewModel) {
             enabled = settings.webEnabled && guestUrl != null && activity != null,
         )
     }
+
+    CloudSection(settings, vm)
 
     if (pinSheet) {
         PinSheet(
