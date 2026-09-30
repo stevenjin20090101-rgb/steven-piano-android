@@ -29,6 +29,7 @@ import dev.stevenjin.stevenpiano.schedule.NextSchedule
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
+import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.WideLayout
@@ -230,6 +231,8 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setDisplayModeAfterMinute(on: Boolean) = edit { setDisplayModeAfterMinute(on) }
 
     fun setStandbyCanvas(canvas: StandbyCanvas) = edit { setStandbyCanvas(canvas) }
+
+    fun setStandbyShows(shows: StandbyShows) = edit { setStandbyShows(shows) }
 
     fun setWebEnabled(on: Boolean) = graph.setWebEnabled(on)
 

@@ -237,6 +237,21 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `the resting screen shows the art and notes at first, the paper roll once chosen, and a choice it does not know as the art`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "standby.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(StandbyShows.ART_AND_NOTES, repository.settings.first().standbyShows)
+        repository.setStandbyShows(StandbyShows.PAPER_ROLL)
+        assertEquals(PianoSettings(standbyShows = StandbyShows.PAPER_ROLL), repository.settings.first())
+        repository.setStandbyShows(StandbyShows.ART_AND_NOTES)
+        assertEquals(PianoSettings(), repository.settings.first())
+        store.edit { it[stringPreferencesKey("standbyShows")] = "SLIDESHOW" }
+        assertEquals(StandbyShows.ART_AND_NOTES, repository.settings.first().standbyShows)
+        scope.cancel()
+    }
+
+    @Test
     fun `the web panel starts off with guests closed and approval first, and every switch is remembered`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "web.preferences_pb") }

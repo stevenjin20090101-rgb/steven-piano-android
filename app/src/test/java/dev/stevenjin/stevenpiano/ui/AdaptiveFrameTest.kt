@@ -18,6 +18,8 @@ import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.settings.NoteDisplay.FALLING
 import dev.stevenjin.stevenpiano.settings.NoteDisplay.PAPER_ROLL
 import dev.stevenjin.stevenpiano.settings.NoteDisplay.STAFF
+import dev.stevenjin.stevenpiano.settings.StandbyCanvas
+import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.WideLayout.NOTES_ONLY
 import dev.stevenjin.stevenpiano.settings.WideLayout.STAFF_AND_NOTES
 import dev.stevenjin.stevenpiano.settings.WideLayout.STAFF_ONLY
@@ -124,6 +126,12 @@ class AdaptiveFrameTest {
         assertEquals(listOf("Score and notes", "Notes only", "Score only"), listOf(STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY).map { it.label })
         assertEquals(listOf("STAFF_AND_NOTES", "NOTES_ONLY", "STAFF_ONLY"), listOf(STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY).map { it.name })
         assertEquals("STAFF", STAFF.name)   // saved choices carry over
+    }
+
+    @Test
+    fun `the Display page's standby chips, in their order`() {
+        assertEquals(listOf("Black", "Same as the app"), StandbyCanvas.entries.map { it.label })
+        assertEquals(listOf("Art and notes", "Paper roll"), StandbyShows.entries.map { it.label })
     }
 
     @Test

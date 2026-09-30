@@ -73,6 +73,12 @@ enum class Appearance {
 enum class StandbyCanvas { BLACK, INK }
 
 /**
+ * What the resting screen shows with a piece loaded (DESIGN.md › v1.7.1): the piece's art with its title,
+ * composer and a few lines about it (the default), or v1.5's paper roll over its keyboard.
+ */
+enum class StandbyShows { ART_AND_NOTES, PAPER_ROLL }
+
+/**
  * The Piano tab's preferences, plus the last piano connected, where the Keys screen was, the
  * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
  * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
@@ -121,6 +127,8 @@ data class PianoSettings(
     val appearance: Appearance = Appearance.SYSTEM,
     /** Display mode's canvas: black, or the app's own (Piano › Display › STANDBY). */
     val standbyCanvas: StandbyCanvas = StandbyCanvas.BLACK,
+    /** What the resting screen shows: the art and notes, or the paper roll (Piano › Display › STANDBY). */
+    val standbyShows: StandbyShows = StandbyShows.ART_AND_NOTES,
     /** The web panel is on (Piano › Remote control › Web control); it can be only once a PIN is set. */
     val webEnabled: Boolean = false,
     /** Guests may ask for pieces from the request page (Guests can request). */
@@ -215,6 +223,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setAppearance(appearance: Appearance) = edit { it[APPEARANCE] = appearance.name }
 
     suspend fun setStandbyCanvas(canvas: StandbyCanvas) = edit { it[STANDBY_CANVAS] = canvas.name }
+
+    suspend fun setStandbyShows(shows: StandbyShows) = edit { it[STANDBY_SHOWS] = shows.name }
 
     suspend fun setWebEnabled(on: Boolean) = edit { it[WEB_ENABLED] = on }
 
@@ -340,6 +350,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             displayModeAfterMinute = this[DISPLAY_MODE_AFTER_MINUTE] ?: defaults.displayModeAfterMinute,
             appearance = Appearance.entries.firstOrNull { it.name == this[APPEARANCE] } ?: defaults.appearance,
             standbyCanvas = StandbyCanvas.entries.firstOrNull { it.name == this[STANDBY_CANVAS] } ?: defaults.standbyCanvas,
+            standbyShows = StandbyShows.entries.firstOrNull { it.name == this[STANDBY_SHOWS] } ?: defaults.standbyShows,
             webEnabled = this[WEB_ENABLED] ?: defaults.webEnabled,
             webGuests = this[WEB_GUESTS] ?: defaults.webGuests,
             webApproveFirst = this[WEB_APPROVE_FIRST] ?: defaults.webApproveFirst,
@@ -376,6 +387,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val DISPLAY_MODE_AFTER_MINUTE = booleanPreferencesKey("displayModeAfterMinute")
         val APPEARANCE = stringPreferencesKey("appearance")
         val STANDBY_CANVAS = stringPreferencesKey("standbyCanvas")
+        val STANDBY_SHOWS = stringPreferencesKey("standbyShows")
         val WEB_ENABLED = booleanPreferencesKey("webEnabled")
         val WEB_GUESTS = booleanPreferencesKey("webGuests")
         val WEB_APPROVE_FIRST = booleanPreferencesKey("webApproveFirst")

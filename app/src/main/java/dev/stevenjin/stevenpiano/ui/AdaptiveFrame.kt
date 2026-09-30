@@ -20,6 +20,7 @@ import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
+import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.WideLayout
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
 
@@ -70,6 +71,13 @@ val StandbyCanvas.label: String
     get() = when (this) {
         StandbyCanvas.BLACK -> "Black"
         StandbyCanvas.INK -> "Same as the app"
+    }
+
+/** What the Display page calls each Standby shows choice. */
+val StandbyShows.label: String
+    get() = when (this) {
+        StandbyShows.ART_AND_NOTES -> "Art and notes"
+        StandbyShows.PAPER_ROLL -> "Paper roll"
     }
 
 /** Now playing's note views: their arrangement and the roll's style (paper roll or falling notes). */

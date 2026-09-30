@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
+import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.WideLayout
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
@@ -25,16 +26,17 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 /** Under the Hand colours switch: what it colours, and what it leaves alone. */
 private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall and the keyboard strip"
 
-/** Under Display mode after a minute: what it is, and for whom. */
-private const val DISPLAY_MODE_NOTE = "The portrait, the title and the roll fill the screen for passers-by"
+/** Under Display mode after a minute: what it is, and for whom (the art and the notes, or the roll: Standby shows). */
+private const val DISPLAY_MODE_NOTE = "The piece's art and title fill the screen for passers-by"
 
 /**
  * Display: how the app and Now playing look. APPEARANCE (Follow system, Light, Dark: the app's
  * whole look, at once) · NOTES (Note display as chips: Paper roll, Falling notes, and Score on
  * phones; on wide screens, where the score has its own place, the roll's style, with Wide layout
  * under it; Fingering, Chord names, Hand colours) · ARTWORK (black and white, and fetching it
- * automatically, with what that sends) · STANDBY (display mode after a minute without a touch, and
- * its canvas: black, or the app's own). The hub's row reads the note display's name.
+ * automatically, with what that sends) · STANDBY (display mode after a minute without a touch, its
+ * canvas: black, or the app's own, and what it shows: the art and notes, or the paper roll). The hub's
+ * row reads the note display's name.
  */
 @Composable
 fun DisplayPage(settings: PianoSettings, vm: PianoViewModel) {
@@ -58,4 +60,5 @@ fun DisplayPage(settings: PianoSettings, vm: PianoViewModel) {
     SectionEyebrow("Standby")
     SwitchRow("Display mode after a minute", settings.displayModeAfterMinute, vm::setDisplayModeAfterMinute, note = DISPLAY_MODE_NOTE)
     ChoiceRow("Standby canvas", StandbyCanvas.entries.map { it.label }, settings.standbyCanvas.ordinal, { vm.setStandbyCanvas(StandbyCanvas.entries[it]) })
+    ChoiceRow("Standby shows", StandbyShows.entries.map { it.label }, settings.standbyShows.ordinal, { vm.setStandbyShows(StandbyShows.entries[it]) })
 }
