@@ -104,9 +104,9 @@ private const val BACKDROP_ALPHA = 0.25f
 /** Where the backdrop has faded fully into the canvas, as a share of the screen's height. */
 private const val BACKDROP_FADED = 0.72f
 
-/** The resting screen's margins, inside the display's cutout: the title's, and the byline's opposite it. */
+/** The resting screen's margins inside the display's cutout, at the sides and at the top and the foot: the title's, and the byline's opposite it. */
 private val MARGIN_SIDE = 24.dp
-private val MARGIN_END = 16.dp
+private val MARGIN_TOP_AND_FOOT = 16.dp
 
 /**
  * Display mode, the resting screen (DESIGN.md › v1.5 — M17, v1.7.1): for passers-by, after a minute
@@ -245,14 +245,14 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
     val reduced = rememberReducedMotion()
     val twoPane = LocalAppFrame.current.twoPane
     // The byline's two lines and a gap, kept clear above the piece and, so it stands in the middle, below it.
-    val band = with(LocalDensity.current) { (MaterialTheme.typography.labelSmall.lineHeight * 2).toDp() } + MARGIN_END
+    val band = with(LocalDensity.current) { (MaterialTheme.typography.labelSmall.lineHeight * 2).toDp() } + MARGIN_TOP_AND_FOOT
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val window = DpSize(maxWidth, maxHeight)
         Box(
             Modifier
                 .fillMaxSize()
                 .padding(insets)
-                .padding(horizontal = MARGIN_SIDE, vertical = MARGIN_END)
+                .padding(horizontal = MARGIN_SIDE, vertical = MARGIN_TOP_AND_FOOT)
                 .offset { drift.value },
         ) {
             AnimatedContent(
@@ -485,7 +485,7 @@ private fun PaperRoll(
         Modifier
             .fillMaxSize()
             .padding(insets)
-            .padding(horizontal = MARGIN_SIDE, vertical = MARGIN_END)
+            .padding(horizontal = MARGIN_SIDE, vertical = MARGIN_TOP_AND_FOOT)
             .offset { drift.value },
     ) {
         Row(Modifier.fillMaxWidth()) {

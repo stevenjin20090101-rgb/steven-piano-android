@@ -4873,7 +4873,7 @@ changed. 1,147 before, **1,163** after.
 - **Tests**: 1,163, none failing, 12 skipped (as 1.7: the corpus's seven, `PinnedKeyTest`'s firmware
   header, and the real-model cases without `-PstudioModels`). `check` passes: lint 0 errors, 28
   warnings (as 1.7), and both ONNX Runtime telemetry checks. No compiler warnings in the app's sources.
-- **APKs**: the release APK is **13,478,104 bytes**, `versionCode` 15, `versionName` 1.7.1, signed with
+- **APKs**: the release APK is **13,478,096 bytes**, `versionCode` 15, `versionName` 1.7.1, signed with
   Steven Piano's release key (`CN=Steven Piano, O=Steven Jin, C=US`; v2 and v3), the provenance string in
   `classes.dex`; the debug APK 27,987,251 bytes. Not staged in `../apk/`.
 - **Provenance** re-signed after this commit.
