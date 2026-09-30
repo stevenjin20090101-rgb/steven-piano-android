@@ -541,7 +541,13 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       });
       this.pending.set(id, p);
       handedOver = true;
-      current.send(frame);
+      try {
+        current.send(frame);
+      } catch {
+        // The socket closed just now: its close will be seen, this request is over.
+        this.fail(p, 502, 'offline', 'The piano went offline.', false);
+        return await answer;
+      }
       if (hasBody) void this.pump(p, request.body!, length);
       else this.arm(p, this.timing.res, () => this.fail(p, 504, 'timeout', "The piano didn't answer in time."));
       return await answer;
