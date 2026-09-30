@@ -5576,7 +5576,7 @@ Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
   (`PackState`, `LibraryFailures`, `OfferedPacks`, `LibraryPack`), `M/library/LibraryOverride.kt`.
 - `M/service/LibraryService.kt`.
 - `M/ui/LibraryCopy.kt`; `M/ui/screens/library/LibraryLicenceSheet.kt`.
-- Tests: `T/library/LibraryManifestTest` (6), `T/library/LibraryPackTest` (16), `T/data/imports/LocalZipTest`
+- Tests: `T/library/LibraryManifestTest` (6), `T/library/LibraryPackTest` (17), `T/data/imports/LocalZipTest`
   (5), `T/ui/LibraryCopyTest` (4).
 
 Changed (each addition small and marked v1.10 — M27): `M/update/UpdateSource.kt` (`Kind.Library` and its
@@ -5658,8 +5658,9 @@ app's own updates; the zip's is the manifest's size and hash. `LibraryManifestTe
   `maxAgeMs`: the manifest, then `Offered` when newer than `settings.libraryPackVersion`, else `Idle`. A failure
   is logged and changes nothing on screen. Asked by **`runSchedule(switch)`** (launched in
   `AppGraph.runUpdateSchedule` beside the app's and the firmware's: at once when the activity starts, then every
-  24 h, while Check for updates is on and the device online; a skipped check retries after a minute) and on
-  demand (the empty Library shown, the + sheet opened: 10 minutes' age).
+  24 h, while Check for updates is on and the device online, an on-demand ask counting as one (its check's age
+  is the interval: one request at launch, measured); a skipped check retries after a minute) and on demand (the
+  empty Library shown, the + sheet opened: 10 minutes' age).
 - **`newPieces`** = the pack's `pieces` less the distinct SHA-256s every earlier pack offered this tablet
   (`OfferedPacks.all()`), at least 0: exact while packs only grow (a pack is each file once, so its `pieces` are
   distinct hashes); a pack that replaced files would undercount, and the row then drops the count.
@@ -5768,9 +5769,9 @@ Screenshots in the session scratchpad, `m27/shots/`.
 - **Dark, and offline.** A fresh state in dark: the empty Library (`14`), the + sheet's Load row (`15`), the
   licence sheet (`16`); in airplane mode, Load → "Loading Steven's library needs an internet connection." with
   Dismiss, Load available again (`17`).
-- **Tests**: 1,219 before, **1,259** after (13 skipped, as before), none failing. `lintDebug`: 0 errors, 29
+- **Tests**: 1,219 before, **1,260** after (13 skipped, as before), none failing. `lintDebug`: 0 errors, 29
   warnings (1.9's 28 and `LibraryService`'s `InlinedApi` on `FOREGROUND_SERVICE_TYPE_DATA_SYNC`, the line every
-  data-sync service carries). No compiler warnings in the app's sources. The debug APK 28,178,132 bytes.
+  data-sync service carries). No compiler warnings in the app's sources. The debug APK 28,459,243 bytes.
 
 ## Deviations from the brief, and why
 
@@ -5810,12 +5811,13 @@ Screenshots in the session scratchpad, `m27/shots/`.
 ## Tests added in M27
 
 `LibraryManifestTest` (6: the committed manifest; a good one field by field; each field's check; not a manifest,
-the 4 KB edge; notes and licences as plain text; the emulator's manifest). `LibraryPackTest` (16: the offer and
+the 4 KB edge; notes and licences as plain text; the emulator's manifest). `LibraryPackTest` (17: the offer and
 the version compare; online and the check's age; a failed check; the first load recorded; an update that skips
 every hash offered before and never brings back a deleted piece; everything; up to date; a failed download
 (stopped, mismatch, no room, 404) leaving no part and recording nothing, the offer back on Dismiss; the manifest's
 failures in words; an import that reads nothing; a cancel; one load at a time and a refused start; a check never
-replacing a load; the schedule's due time; `OfferedPacks`; the sweep). `LocalZipTest` (5: read in place and
+replacing a load; the schedule's due time; the schedule on its switch and the network, counting an on-demand ask;
+`OfferedPacks`; the sweep). `LocalZipTest` (5: read in place and
 deleted; the skip list; an index without the column; not a zip; the importer bringing only the new pieces).
 `LibraryCopyTest` (4). `IndexCsvTest` +4 (in `CsvReaderTest.kt`), `UpdateSourceTest` +4, `SettingsRepositoryTest`
-+1. 1,219 before, **1,259** after.
++1. 1,219 before, **1,260** after.

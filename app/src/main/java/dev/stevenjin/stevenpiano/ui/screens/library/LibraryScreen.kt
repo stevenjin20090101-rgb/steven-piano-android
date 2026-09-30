@@ -349,12 +349,8 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val studioSupport by graph.studio.availability.support.collectAsStateWithLifecycle()
     val studioModels by graph.studio.models.installed.collectAsStateWithLifecycle()
     var composing by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(adding) {
-        if (adding) {
-            graph.studio.availability.check()
-            pack.check(maxAgeMs = LIBRARY_CHECK_AGE_MS)   // the library's row shows the pack's numbers
-        }
-    }
+    LaunchedEffect(adding) { if (adding) graph.studio.availability.check() }
+    LaunchedEffect(adding) { if (adding) pack.check(maxAgeMs = LIBRARY_CHECK_AGE_MS) }   // the library's row shows the pack's numbers
     val pickRecording = rememberRecordingPicker { uri ->
         runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         graph.studio.transcribe(AudioSource.Document(uri))

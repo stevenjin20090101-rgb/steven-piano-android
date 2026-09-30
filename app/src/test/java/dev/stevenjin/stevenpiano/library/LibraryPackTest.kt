@@ -22,6 +22,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
@@ -423,6 +424,33 @@ class LibraryPackTest {
         assertEquals(LibraryPack.INTERVAL_MS - 3_600_000, pack.untilDue())
         clock -= 7_200_000   // the clock went back
         assertEquals(0L, pack.untilDue())
+    }
+
+    @Test
+    fun `the schedule asks while switched on and online, counting an ask made on demand`() = runTest {
+        publish(1, v1Pieces)
+        val pack = pack()
+        val switch = MutableStateFlow(false)
+        backgroundScope.launch { pack.runSchedule(switch) }
+        runCurrent()
+        assertEquals("switched off, nothing is asked", 0, server.manifestCalls)
+        pack.check()   // the + sheet opened
+        assertEquals(1, server.manifestCalls)
+        switch.value = true
+        runCurrent()
+        assertEquals("asked a moment ago: the schedule waits a day", 1, server.manifestCalls)
+        clock += LibraryPack.INTERVAL_MS
+        advanceTimeBy(LibraryPack.INTERVAL_MS + 1)
+        runCurrent()
+        assertEquals("a day later", 2, server.manifestCalls)
+        online.value = false
+        clock += LibraryPack.INTERVAL_MS
+        advanceTimeBy(LibraryPack.INTERVAL_MS + 1)
+        runCurrent()
+        assertEquals("offline, nothing is asked", 2, server.manifestCalls)
+        online.value = true
+        runCurrent()
+        assertEquals("back online and due: asked at once", 3, server.manifestCalls)
     }
 
     @Test

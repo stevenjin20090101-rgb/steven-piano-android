@@ -234,7 +234,7 @@ class LibraryPack(
                 if (!ready) return@collectLatest
                 while (true) {
                     delay(untilDue())
-                    check()
+                    check(maxAgeMs = INTERVAL_MS)   // an on-demand check that just asked counts
                     if (untilDue() == 0L) delay(RETRY_MS)
                 }
             }
