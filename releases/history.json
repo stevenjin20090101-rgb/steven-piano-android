@@ -75,5 +75,14 @@
     "minSdk": 26,
     "tag": "v1.7",
     "publishedAt": "2026-09-29"
+  },
+  {
+    "versionCode": 15,
+    "versionName": "1.7.1",
+    "notes": "The resting screen now shows the album art with the piece's title, composer and a few lines about it, and fades in and out slowly; Piano › Display › Standby shows lets you keep the paper roll instead.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.7.1/steven-piano-1.7.1.apk",
+    "minSdk": 26,
+    "tag": "v1.7.1",
+    "draft": true
   }
 ]

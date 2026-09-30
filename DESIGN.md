@@ -1695,3 +1695,76 @@ A sheet with its drag handle, on the elevated tone, laid out as the schedule edi
 
 M23 made the whole app arm64-only; now only ONNX Runtime's library is, and the app installs
 wherever 1.6.2 did. Where the runtime isn't there, Studio hides as on any device it can't run on.
+
+---
+
+# v1.7.1 — the resting screen
+
+Steven asked (2026-09-30) for the resting screen to show the piece's album art and a few lines about
+it instead of the roll and the keys, and to come and go slowly. During the run he placed the byline
+at the top right, on two lines, and let the window's shape decide where the art stands. Everything
+above still holds except where this section says otherwise; the paper roll stays, as a choice. This
+is release 1.7.1.
+
+## Standby shows
+
+- **Piano › Display › STANDBY › Standby shows**, after Standby canvas: chips **Art and notes** (the
+  default) · **Paper roll**. Display mode's note reads **"The piece's art and title fill the screen for
+  passers-by"**, true of either.
+- **Paper roll** is v1.5 — M17's display as it was (the portrait faint behind the title, the roll
+  across the whole width over its keyboard, "● Sent to piano" at the foot), but for the byline, which
+  moves to the top right with every resting screen's (below).
+
+## Art and notes
+
+On the chosen canvas (true black, or the app's own ink or paper), and nothing else on it:
+
+- **The art**, large and sharp, never a faded backdrop: the composer's portrait, else the piece's roll
+  card, mounted as every art surface is (the elevated surface inside a hairline, the card corners); in
+  black and white when Artwork in black and white is on.
+- **The title** in **Display Large** (45 sp) on wide frames (a tablet, a phone on its side) and
+  **Display** (34 sp) on phones, three lines at most; under it **the composer** in the eyebrow (16 sp
+  beside Display Large, as display mode had it), with " · CALM · CHANNEL" while a channel plays.
+- **The description**, in Body and the secondary ink, at most **six lines on wide frames and four on
+  phones**, cut with an ellipsis, and set as one paragraph: the piece's own notes when it has any (its
+  Wikipedia extract, kept once its sheet has fetched it), else the composer's blurb, else nothing at all.
+  The screen never says that nothing was found. A piece made in Studio shows its own line, "Made in
+  Studio · in the manner of Clair de lune (Claude Debussy)". Where the room runs short (a large font, a
+  phone on its side) the description gives way first.
+- **Where they stand: the window's shape decides**, whatever the device. In a window wider than it is
+  tall (a tablet on the piano, a phone on its side) the art stands at the left, a square 55 % of the
+  window's height, vertically centred, and the words to its right at reading width (720 dp at most),
+  the two centred as one across the screen with a tenth of the art between them (32–64 dp). Only a
+  window taller than it is wide stacks them: the art centred on top, 45 % of the window's width, and
+  the words centred under it. The art never takes the words' room; the piece stands in the middle,
+  clear of the byline above and the dot below.
+- **The live dot alone** at the foot on the left, without its words; TalkBack still reads "Sent to
+  piano" or "Not connected", and the filled dot and the hollow ring still differ by shape as well as
+  colour. No roll, no keyboard strip, no controls.
+
+## The byline at rest
+
+On every resting screen (Art and notes, Paper roll, and kiosk mode's rest with nothing loaded, its
+request code or not): at the **top right**, on **two lines**, right-aligned, in the eyebrow:
+**PLAYER PIANO** over **MADE BY STEVEN JIN** ("made by", where the tabs' byline says "by"), inside the
+margins the title keeps at the top left: 16 dp from the top and the title's 24 dp from the side. It
+fades with the screen and takes part in its shift. The tabs keep their one-line byline under the title.
+
+## Burn-in
+
+Every resting screen, whatever it shows, steps 4 dp round a small square once a minute, never
+animated, as only kiosk mode's rest did before; the byline, the art, the words and the dot step
+together.
+
+## Motion
+
+| Moment | Motion | Duration / easing |
+|---|---|---|
+| Coming to rest | The resting screen cross-fades in over the app. | 1,500 ms, standard easing |
+| A touch | It fades away. The touch does nothing else, as before, but the app beneath is live at once: a second touch, Back and TalkBack reach it while it fades. | 600 ms, standard easing |
+| A new piece while resting (Art and notes) | The art, the title, the composer and the description cross-fade together, old and new at once. | 1,200 ms, standard easing |
+
+Nothing on the screen moves while it comes or goes: it keeps clear of the display's cutout alone (the
+system bars step aside while it rests and come back as it leaves), and holds its piece and its margins
+once it starts to go. **Reduced motion**: all three are cuts. The idle timer (a minute without a touch,
+the same touches) and the screen staying on are as before.

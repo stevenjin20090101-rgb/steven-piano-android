@@ -4698,3 +4698,182 @@ keeps the app's other ABIs) and the audit's eight fixes, with one change of its 
   111,648, deflated) and androidx's two small libraries for all four ABIs.
 - **Provenance** re-signed after this commit.
 
+
+---
+
+# v1.7.1 — resting screen; release 1.7.1 (versionCode 15)
+
+Read `DESIGN.md › v1.7.1 — the resting screen` first. Steven's request (2026-09-30), with his two
+additions during the run: the byline at the top right on two lines, and the window's shape deciding
+where the art stands. Built on `main` after 1.7 (`1768655`) and released as **1.7.1**: `versionCode`
+15, `versionName` "1.7.1" (`-PversionCodeOverride`'s example now 16), `Provenance.text` "Made by
+Steven Jin · v1.7.1 · eab16a502f679465", the entry drafted at the end of `releases/history.json`
+(`"draft": true`, tag `v1.7.1`, its notes; no hash or size until `tools/publish-release.sh` builds it,
+which was not run); `latest.json` still names 1.7.
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `M/ui/screens/display/StandbyText.kt` (pure): `WIDE_LINES` 6, `PHONE_LINES` 4, `maxLines(wide)`;
+  `description(piece, composer)`: the `piece:<id>` row's text when the row is `OK` and says something,
+  else the `composer:<key>` row's, else null; `oneParagraph(text)` (runs of whitespace become one space).
+- `M/ui/screens/display/RestingLayout.kt` (pure): `sideBySide(window)` = width ≥ height;
+  `artSide(sideBySide, window, room)`: beside, min(55 % of the window's height, the room's height, 45 %
+  of the room's width); on top, min(45 % of the window's width, the room's width, 40 % of the room's
+  height); `sideGap(art)` a tenth of the art within 32–64 dp; `wordsWidth(sideBySide, roomWidth, art)`
+  at most `ReadingWidth` (720 dp). The room is the window inside the cutout, the 24/16 dp margins and
+  the byline's band above and below.
+- `M/ui/screens/display/RestingMotion.kt`: `ENTER_MS` 1,500, `LEAVE_MS` 600, `PIECE_MS` 1,200;
+  `enter(reduced)` / `leave(reduced)` (`fadeIn`/`fadeOut` with `tween(…, Motion.Standard)`, or
+  `EnterTransition.None` / `ExitTransition.None`); `pieceChange(reduced)`, a `ContentTransform` of both
+  fades at once, or of both `None`.
+- Tests: `T/ui/screens/display/StandbyTextTest.kt`, `RestingLayoutTest.kt`, `RestingMotionTest.kt`.
+
+Changed: `settings/Settings.kt` (`StandbyShows`); `ui/AdaptiveFrame.kt` (`StandbyShows.label`);
+`ui/screens/piano/PianoViewModel.kt` (`setStandbyShows`); `ui/screens/piano/pages/DisplayPage.kt` (the
+row, the note); `diag/DiagnosticsExporter.kt` (`standbyShows`); `ui/NavHost.kt` (`DisplayOverlay`);
+`ui/screens/display/DisplayScreen.kt`; `Provenance.kt` (`restingByline`, the version);
+`app/build.gradle.kts`; `releases/history.json`; tests `SettingsRepositoryTest`, `AdaptiveFrameTest`,
+`DiagnosticsExporterTest`, `GroupSummariesTest`; DESIGN.md, this file, README.
+
+## Settings
+
+`enum class StandbyShows { ART_AND_NOTES, PAPER_ROLL }`, key "standbyShows", default `ART_AND_NOTES`; a
+stored name this version doesn't know reads as the default. `SettingsRepository.setStandbyShows`. The
+Display page's STANDBY: `ChoiceRow("Standby shows")` "Art and notes" · "Paper roll" after "Standby
+canvas"; `DISPLAY_MODE_NOTE` "The piece's art and title fill the screen for passers-by". The hub's
+Display value is unchanged. `settings.txt` in Share diagnostics lists `standbyShows` (33 lines).
+
+## The overlay (`ui/NavHost.kt`)
+
+`DisplayOverlay` derives `loaded` (`derivedStateOf { player.value.piece != null }` over the collected
+player state, so it recomposes only when that flips) and wraps `DisplayScreen` in
+`AnimatedVisibility(visible = idle.idle && DisplayRule.shows(loaded, kiosk), enter =
+RestingMotion.enter(reduced), exit = RestingMotion.leave(reduced))`, passing `resting =
+transition.targetState == EnterExitState.Visible`. Kiosk mode's `relock()` as before, as it enters.
+`IdleTimer`, `rememberIdle` and `DisplayModeTimeout` are untouched.
+
+## The screen (`ui/screens/display/DisplayScreen.kt`)
+
+- `DisplayScreen(onLeave, resting = true)`. While `resting`: `leaveOnTouch` (the semantics, and the
+  `pointerInput` that consumes each whole gesture and calls `onLeave`, as before), `BackHandler(enabled
+  = resting)`, `keepScreenOn` while a piece is loaded, the system bars hidden. Once it fades away, none
+  of them: the pointer node leaves the tree, so the next touch hits the app beneath (the gesture that
+  left stays the overlay's, and nothing beneath receives its rest), the bars come back at once, and
+  `heldWhile(!resting, …)` keeps the piece it showed and its padding.
+- `restingInsets(resting)`: the display cutout's insets, read in composition as
+  `PaddingValues.Absolute` and held once it goes. The system bars' are not followed: they are hidden
+  while it rests, and following them moved its words as they slid away and back.
+- `rememberDrift()` (4 dp round a square once a minute) for every variant; before, `DisplayRest` only.
+- **Art and notes** (`ArtAndNotes`, also kiosk mode's rest with nothing loaded): `BoxWithConstraints`
+  (the window) → the frame `Box` (cutout, 24/16 dp, the drift) → `AnimatedContent(targetState = piece,
+  contentKey = { it?.pieceId }, transitionSpec = { RestingMotion.pieceChange(reduced) })`, padded above
+  and below by the byline's band (two eyebrow lines and 16 dp) → `PieceAtRest`, or with nothing loaded
+  `RequestAtRest` (the request code as M20 had it, or nothing); `RestingByline` at `TopEnd`; the
+  `LiveDot` at `BottomStart` in an `AnimatedVisibility(piece != null)` with the piece's fades, described
+  "Sent to piano" / "Not connected".
+- `PieceAtRest`: `rememberArtworkRow` of `piece:<id>` and `composer:<key>` → `StandbyText`;
+  `RestingLayout` → the `Row` (art, gap, words at their width, centred as one) or the `Column` (art,
+  24 dp or 32 dp on wide frames, words); `PieceArt(…, ArtSize.Full, Modifier.size(art))`, framed.
+  `Words`: the title (`displayLarge` on `frame.twoPane`, else `displayMedium`, 3 lines), the
+  `ChannelCopy.eyebrow` (`EyebrowLarge` on `twoPane`), the description (`bodyLarge`,
+  `onSurfaceVariant`, `maxLines = StandbyText.maxLines(twoPane)`, `weight(1f, fill = false)` so it gives
+  way first and is ellipsized by the height left too); start-aligned beside the art, centred under it.
+- **Paper roll** (`PaperRoll`): v1.5's `DisplayContent`, the title and its eyebrow in a `Row` with
+  `RestingByline` (16 dp between), the foot's `FlowRow` now the dot and its words alone.
+- `RestingByline`: a `Column(horizontalAlignment = End)` of `Eyebrow(line, maxLines = 1)` over
+  `Provenance.restingByline` ("Player piano", "Made by Steven Jin"), merged for TalkBack.
+
+## Greps (v1.7.1)
+
+`Color(0x` outside `ui/theme`: none. `DisplayBlack`: `Color.kt`, `Theme.kt`. `LocalLive`: `LiveDot.kt`,
+`Theme.kt`. `LocalNoteSounding`: `Theme.kt`, `ScorePages.kt`. `hazeSource`/`HazeState`: `Glass.kt`,
+`NavHost.kt`, `NotePanel.kt`. `Modifier.blur`, `0.0.0.0`: none.
+
+## Measured (September 2026, `steven_piano`, API 34, debug build, the emulated piano)
+
+Phone 1080 × 2400 px at 420 dpi; tablet frame `wm size 2560x1600`, `wm density 240` (1,707 × 1,067 dp);
+`debug.stevenpiano.idlesecs` 8, then 20; Clair de lune's own notes fetched by opening its sheet ("Suite
+bergamasque is a piano suite by Claude Debussy…"). Screenshots in the run's scratchpad (`evidence/`).
+
+- **Art and notes**: the tablet frame sets the art at the left, 880 px (587 dp, 55 % of 1,067) and the
+  words at 720 dp, the two centred; the phone upright centres the art on top at 185 dp (45 % of 411) with
+  four lines ending "The popularity of t…"; a phone on its side (`wm size 2400x1080`) sets the art beside
+  the words. Black and "Same as the app" (paper) on both. A piece with no notes of its own (Chopin's
+  Nocturne in C-sharp minor, Op. posth.) shows Chopin's blurb; Rachmaninoff's was cut at six lines with
+  an ellipsis on the tablet. At font scale 2.0 the phone upright keeps four lines, and on its side the
+  description gives way to three.
+- **The byline** stands at the top right on both variants, 16 dp from the top and 24 dp from the side,
+  opposite the Paper roll's title; the live dot alone at the foot on Art and notes, "● Sent to piano"
+  on Paper roll.
+- **Fading in** (the tablet frame, raw frames from `screencap`, opacity from the pixels where the
+  app's paper, 244, meets the black canvas): a frame at opacity 0.152, i.e. 315 ms on the standard
+  easing (0.134 at 300 ms), and one at 0.889, 927 ms (0.876 at 900 ms). Aimed by the time since the
+  last touch, the captures landed within about ±250 ms of their aim (`screencap`'s own start varies),
+  so several were taken and these two kept.
+- **Leaving**: a tap on the spot of Now playing's Pause left the resting screen and did nothing else
+  (still playing); a second tap there 150 ms later, while it faded, paused (the media session read
+  PAUSED): the app beneath is live at once. Before `restingInsets`, the byline and the dot slid by the
+  status bar's height as the bars came back during the fade (the 250 ms frame); after it, they hold.
+- **A new piece while resting**: with Clair de lune queued after Rachmaninoff's Prelude Op. 32 No. 1,
+  the prelude ended while resting; the frame about 0.25 s after the media session named Clair de lune
+  shows both, the new at about 0.76 of its opacity (≈ 590 ms of 1,200). Media keys (`input keyevent
+  KEYCODE_MEDIA_NEXT`, `cmd media_session dispatch next`) never reach the app's session on the emulator
+  ("Media button session is null": nothing plays audio), so the piece was left to end.
+- **Reduced motion** (animator, transition and window scales 0, the app restarted): the first frame
+  after the rest began was the whole resting screen; 120 ms after a touch the app was back whole.
+- The emulator was put back as it was: `wm size` and `wm density` reset, `debug.stevenpiano.idlesecs`
+  cleared, the three animation scales 1, font scale 1.0, the app's `settings.preferences_pb` restored
+  byte for byte from a copy taken first; then stopped. It keeps the 1.7.1 debug build (it had 1.6.2's).
+
+## Deviations from the brief, and why
+
+- **The window's shape decides the layout**, not `frame.twoPane` (Steven, during the run): wider than
+  tall, the art beside the words on any device; only taller than wide stacks them (a square window
+  sets them side by side). The title's size and the six or four lines still follow `twoPane`.
+- **The byline at the top right on two lines** on every resting screen, the kiosk rest included
+  (Steven, during the run), where the brief had kept it bottom-right. "The same 16 dp margins as the
+  title": it sits inside the title's own margins, 16 dp from the top and, as the title, 24 dp from the
+  side; the resting screen's margins were not changed to 16 dp all round.
+- **The 4 dp shift on every resting screen**, Paper roll included (the byline takes part in it, as
+  asked); only kiosk mode's rest had it before. Paper roll is otherwise v1.5's screen, with no
+  cross-fade between pieces.
+- **The resting screen keeps clear of the cutout alone, and holds its padding while it goes**: following
+  the system bars' insets moved its words while it was visible, as they slid away and came back.
+- **Display mode's note** no longer names the roll: "The piece's art and title fill the screen for
+  passers-by", true of either choice.
+- **The dot without its words** is described for TalkBack ("Sent to piano" / "Not connected").
+- **The description is set as one paragraph** (a line break would spend one of four lines), and gives
+  way first when the room runs short (large fonts, a phone on its side).
+- **The resting screen asks for nothing**: a piece's own notes appear once its sheet has fetched them,
+  as the fetching policy has it (DESIGN.md › v1.2); until then the composer's.
+
+## Residuals
+
+- **Kiosk mode's rest** (the byline at the top right over the request code) was not seen on the
+  emulator: it needs the app as device owner. It is the same frame as Art and notes with nothing loaded.
+- **Wikipedia's text on the resting screen carries no credit line** (CC BY-SA 4.0); the piece sheet and
+  the About area carry it, as with the portraits display mode has always shown. For Fable to weigh.
+- **Not measured on the school tablet.**
+
+## Tests added in v1.7.1
+
+`SettingsRepositoryTest` +1 (the default, remembered, an unknown name read as the default),
+`AdaptiveFrameTest` +1 (the standby chips), `StandbyTextTest` (6: the piece's notes first; the
+composer's when the piece has none, is not found, failed or blank; nothing, never a placeholder; a Studio
+piece's line; one paragraph; the line caps), `RestingLayoutTest` (5: a tablet on its side; a phone
+upright; a phone on its side; the window's shape decides, a square window beside; the art never takes
+the words' room), `RestingMotionTest` (3: the durations; every one a cut under reduced motion; fades
+otherwise); `DiagnosticsExporterTest` (33 lines) and `GroupSummariesTest` (Display unchanged by it)
+changed. 1,147 before, **1,163** after.
+
+## The release: 1.7.1 (versionCode 15)
+
+- **Tests**: 1,163, none failing, 12 skipped (as 1.7: the corpus's seven, `PinnedKeyTest`'s firmware
+  header, and the real-model cases without `-PstudioModels`). `check` passes: lint 0 errors, 28
+  warnings (as 1.7), and both ONNX Runtime telemetry checks. No compiler warnings in the app's sources.
+- **APKs**: the release APK is **13,478,104 bytes**, `versionCode` 15, `versionName` 1.7.1, signed with
+  Steven Piano's release key (`CN=Steven Piano, O=Steven Jin, C=US`; v2 and v3), the provenance string in
+  `classes.dex`; the debug APK 27,987,251 bytes. Not staged in `../apk/`.
+- **Provenance** re-signed after this commit.

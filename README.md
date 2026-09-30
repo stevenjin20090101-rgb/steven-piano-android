@@ -25,7 +25,7 @@ page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself 
 times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
 (see *Kiosk*), and **Studio** turns a piano recording into a piece, or composes a new one in the
 manner of a piece from the library, on the tablet itself (see *Studio*). Made by Steven Jin.
-Version 1.7.
+Version 1.7.1.
 
 ## What it does
 
@@ -86,12 +86,18 @@ Version 1.7.
   playing.
 - **Display mode** (**Piano › Display › Display mode after a minute**, off at
   first): after a minute without a touch while a piece is loaded, the screen
-  becomes a display for passers-by: the composer's portrait faint behind the
-  title, the composer and the channel, the paper roll across the whole width
-  over its keyboard, "● Sent to piano" and the byline, on true black (or on the
-  app's own ink or paper: **Standby canvas**). No controls: any touch, or Back,
-  brings the app back as it was, and does nothing else. The screen stays on and
-  the system bars step aside while it shows.
+  fades slowly into a display for passers-by: the piece's art large (the
+  composer's portrait, else its roll card), its title, the composer and the
+  channel, and a few lines about it (the piece's own Wikipedia notes, else the
+  composer's), the art beside the words when the screen is wider than tall and
+  above them when it is taller; the live dot at the foot and the byline, "Player
+  piano" over "Made by Steven Jin", at the top right; on true black (or on the
+  app's own ink or paper: **Standby canvas**). **Standby shows › Paper roll**
+  keeps the earlier display instead: the portrait faint behind the title and the
+  paper roll over its keyboard. A new piece cross-fades in. No controls: any
+  touch, or Back, fades it away and brings the app back as it was, and does
+  nothing else. The screen stays on and the system bars step aside while it
+  shows.
 - **Glass**: the tab bar, the rail, the mini player, the transport and a
   playlist's Play are frosted glass over the content, monochrome. With *High
   contrast text* on (Android's accessibility setting), or on Android 11 and
@@ -208,7 +214,7 @@ Version 1.7.
   transpose, velocity, folding, drum channel; **Display**: appearance (follow
   the system, light or dark), note display, wide layout, fingering, chord names,
   hand colours, artwork in black and white, fetching artwork automatically, and
-  standby: display mode after a minute and its canvas; **Schedule**: timed play,
+  standby: display mode after a minute, its canvas and what it shows; **Schedule**: timed play,
   see *Schedules*), **CONTROL** (**Remote
   control**: the web panel, its PIN, guests and the poster; **Kiosk**: kiosk
   mode and its PIN) and
@@ -345,7 +351,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.7.apk`.
+   `adb install ../apk/steven-piano-1.7.1.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -716,8 +722,9 @@ Kiosk mode (v1.6.1) locks the school tablet to the app: no Home, no Recents, no
 notifications, no other apps. The app is the tablet's home screen, so a restart lands
 back in it; the lock screen is off, so the power button wakes straight into it; and the
 screen stays on while the tablet is plugged in. With nobody touching it for a minute the
-tablet rests in display mode: the piece playing, or with nothing loaded the byline and,
-while Web control and **Guests can request** are on, the request page's QR code.
+tablet rests in display mode: the piece playing (its art and a few lines about it), or
+with nothing loaded the byline at the top right and, while Web control and **Guests can
+request** are on, the request page's QR code.
 
 **Turning it on**
 
@@ -1021,8 +1028,10 @@ models' download, when you ask for it.
       Velocity comes back when it ends.
 - [ ] Display mode on the school tablet: Piano › Display › Display mode after a
       minute on, play a channel and leave the tablet: a minute later the black
-      display shows (portrait, title, roll) and the tablet does not sleep; a touch
-      brings the app back without pressing what was under the finger.
+      display fades in (the art, the title and a few lines about the piece; the
+      roll with Standby shows › Paper roll), the next piece cross-fades in, and the
+      tablet does not sleep; a touch fades it away and brings the app back without
+      pressing what was under the finger.
 
 ## Security
 
