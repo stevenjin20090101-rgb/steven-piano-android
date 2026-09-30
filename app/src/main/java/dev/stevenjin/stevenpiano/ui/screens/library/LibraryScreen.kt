@@ -92,6 +92,7 @@ import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
 import dev.stevenjin.stevenpiano.ui.KioskLockCopy
+import dev.stevenjin.stevenpiano.ui.LibraryCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
@@ -169,6 +170,12 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val studioJobs by graph.studio.jobs.jobs.collectAsStateWithLifecycle()
     val crashed by graph.crashNotice.collectAsStateWithLifecycle()
     val requests by graph.web.requests.pending.collectAsStateWithLifecycle()
+    // Steven's library (v1.10 — M27): the pack's load, the offer, and the version this tablet has loaded.
+    val pack = graph.libraryPack
+    val packState by pack.state.collectAsStateWithLifecycle()
+    val packOffer by pack.offer.collectAsStateWithLifecycle()
+    val newerPack by pack.newerAvailable.collectAsStateWithLifecycle()
+    val appSettings by graph.settings.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var adding by rememberSaveable { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
@@ -193,6 +200,12 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     // Every dialog changes the library (add to a playlist, rename, delete): in kiosk mode each waits for the PIN.
     val openDialog: (LibraryDialog) -> Unit = { next -> gate.run { dialog = next } }
     val addMusic: () -> Unit = { gate.run { adding = true } }
+    // Loading Steven's library adds music too; before the first load its licence sheet comes first, and its Load
+    // brings [everything] as asked (the empty Library's button: every piece, even ones deleted since).
+    var licenceFor by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val loadLibrary: (Boolean) -> Unit = { everything ->
+        gate.run { if (appSettings.libraryPackVersion == 0) licenceFor = everything else pack.load(everything) }
+    }
     val actions = remember(vm, playback, gate) {
         PieceActions(
             playNext = { playback.playNext(listOf(it.id)) },
@@ -230,6 +243,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                     }
                     // What runs in the background stays in sight in the bar: an import, artwork arriving, a Studio job.
                     ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
+                    LibraryBar(packState, onDismiss = pack::dismiss)
                     ArtworkBar(artworkProgress)
                     StudioBar(studioJobs)
                 }
@@ -265,7 +279,13 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                             .padding(top = top),
                     ) {
                         banners()
-                        EmptyLibrary(onAdd = addMusic)
+                        EmptyLibrary(
+                            onAdd = addMusic,
+                            onLoadLibrary = { loadLibrary(true) },
+                            libraryLine = LibraryCopy.facts(packOffer),
+                            loading = packState.busy,
+                            onShown = { pack.check(maxAgeMs = LIBRARY_CHECK_AGE_MS) },
+                        )
                     }
                     else -> {
                         var listBounds by remember { mutableStateOf<Rect?>(null) }
@@ -329,7 +349,12 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val studioSupport by graph.studio.availability.support.collectAsStateWithLifecycle()
     val studioModels by graph.studio.models.installed.collectAsStateWithLifecycle()
     var composing by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(adding) { if (adding) graph.studio.availability.check() }
+    LaunchedEffect(adding) {
+        if (adding) {
+            graph.studio.availability.check()
+            pack.check(maxAgeMs = LIBRARY_CHECK_AGE_MS)   // the library's row shows the pack's numbers
+        }
+    }
     val pickRecording = rememberRecordingPicker { uri ->
         runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         graph.studio.transcribe(AudioSource.Document(uri))
@@ -342,7 +367,25 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             StudioEntry(StudioCopy.COMPOSE, StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, studioModels)) { composing = true },
         )
     }
-    if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }, onDismiss = { adding = false }, studio = studioEntries)
+    // Steven's library's row: Load until a pack has been loaded; then Update while a newer one is on offer (or loading).
+    val libraryEntry = when {
+        appSettings.libraryPackVersion == 0 ->
+            LibraryEntry(LibraryCopy.LOAD, LibraryCopy.line(packState, packOffer), enabled = !packState.busy) { loadLibrary(false) }
+        newerPack || packState.busy ->
+            LibraryEntry(LibraryCopy.updateLabel(packOffer?.newPieces), LibraryCopy.line(packState, packOffer), enabled = !packState.busy) { loadLibrary(false) }
+        else -> null
+    }
+    if (adding) AddSheet(pickers, onFetchArtwork = { ArtworkService.start(context, force = true) }, onDismiss = { adding = false }, studio = studioEntries, library = libraryEntry)
+    licenceFor?.let { everything ->
+        LibraryLicenceSheet(
+            packOffer,
+            onLoad = {
+                licenceFor = null
+                pack.load(everything)
+            },
+            onDismiss = { licenceFor = null },
+        )
+    }
     if (composing) ComposeSheet(onDismiss = { composing = false })
     dialog?.let { LibraryDialogs(it, vm) { dialog = null } }
     about?.let { PieceDetailSheet(it) { about = null } }
@@ -356,6 +399,9 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
 
 /** The list's share of a wide frame; the now-playing panel has the rest. */
 private const val LIST_SHARE = 0.55f
+
+/** Where the library pack's offer shows (the `+` sheet, the empty Library), its manifest is asked for again when older than this. */
+private const val LIBRARY_CHECK_AGE_MS = 10 * 60_000L
 
 /** Playing from the library: the playback service starts, and Now playing is shown ([onPlaying]; not on wide frames, whose panel shows the piece). */
 private class LibraryPlay(private val playback: PlaybackStarter, private val onPlaying: () -> Unit) {
@@ -612,14 +658,38 @@ private fun CategoryChips(selected: Category, onSelect: (Category) -> Unit) {
     }
 }
 
+/**
+ * No pieces yet: **Load Steven's library** ([onLoadLibrary], v1.10 — M27; not while a load runs, [loading])
+ * beside **Add MIDI files** ([onAdd]), and under them the pack's line ([libraryLine]). Shown, it asks for the
+ * pack's manifest ([onShown]) so the line can give its numbers.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EmptyLibrary(onAdd: () -> Unit) {
-    EmptyMessage("No pieces yet.", "Add a MIDI file to begin.") {
-        OutlinedButton(onClick = onAdd, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
-            Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Add MIDI files")
+private fun EmptyLibrary(onAdd: () -> Unit, onLoadLibrary: () -> Unit, libraryLine: String, loading: Boolean, onShown: suspend () -> Unit) {
+    LaunchedEffect(Unit) { onShown() }
+    EmptyMessage("No pieces yet.", "Load Steven's library, or add MIDI files of your own.") {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = onLoadLibrary,
+                enabled = !loading,
+                border = BorderStroke(Hairline, if (loading) LocalHairline.current else LocalTertiary.current),
+                colors = actionButtonColors(),
+            ) {
+                Text(LibraryCopy.LOAD)
+            }
+            OutlinedButton(onClick = onAdd, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
+                Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Add MIDI files")
+            }
         }
+        Text(
+            libraryLine,
+            Modifier.padding(top = 16.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
