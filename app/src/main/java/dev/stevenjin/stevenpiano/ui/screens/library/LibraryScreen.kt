@@ -133,6 +133,7 @@ import dev.stevenjin.stevenpiano.studio.StudioSupport
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 
@@ -682,7 +683,7 @@ private fun EmptyLibrary(onAdd: () -> Unit, onLoadLibrary: () -> Unit, libraryLi
         Text(
             libraryLine,
             Modifier.padding(top = 16.dp),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.merge(Tabular),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
