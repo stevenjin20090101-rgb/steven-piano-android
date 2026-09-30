@@ -20,6 +20,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,7 +35,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -170,10 +171,11 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
                 .then(if (resting) Modifier.leaveOnTouch(piece?.title, onLeave) else Modifier),
         ) {
             val drift = rememberDrift()
+            val insets = restingInsets(resting)
             if (piece != null && settings.standbyShows == StandbyShows.PAPER_ROLL) {
-                PaperRoll(piece, state, connected, playing, channel, drift)
+                PaperRoll(piece, state, connected, playing, channel, insets, drift)
             } else {
-                ArtAndNotes(piece, connected, playing, channel, drift)
+                ArtAndNotes(piece, connected, playing, channel, insets, drift)
             }
         }
     }
@@ -202,6 +204,27 @@ private fun Modifier.leaveOnTouch(title: String?, onLeave: () -> Unit): Modifier
         }
     }
 
+/**
+ * The system bars' and the cutout's insets, as padding: while resting the bars have stepped aside,
+ * so mostly none; once it fades away ([resting] false) the ones it had, so nothing on it moves as the
+ * bars come back over it.
+ */
+@Composable
+private fun restingInsets(resting: Boolean): PaddingValues {
+    val insets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    val now = with(density) {
+        PaddingValues.Absolute(
+            left = insets.getLeft(density, direction).toDp(),
+            top = insets.getTop(density).toDp(),
+            right = insets.getRight(density, direction).toDp(),
+            bottom = insets.getBottom(density).toDp(),
+        )
+    }
+    return heldWhile(!resting, now)
+}
+
 /** [value], or while [hold] the value it had when the hold began. */
 @Composable
 private fun <T> heldWhile(hold: Boolean, value: T): T {
@@ -219,7 +242,7 @@ private class Held<T>(var value: T)
  * kiosk mode with nothing loaded, the request page's code there instead, or nothing.
  */
 @Composable
-private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean, channel: String?, drift: State<IntOffset>) {
+private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean, channel: String?, insets: PaddingValues, drift: State<IntOffset>) {
     val reduced = rememberReducedMotion()
     val twoPane = LocalAppFrame.current.twoPane
     // The byline's two lines and a gap, kept clear above the piece and, so it stands in the middle, below it.
@@ -229,7 +252,7 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
         Box(
             Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+                .padding(insets)
                 .padding(horizontal = MARGIN_SIDE, vertical = MARGIN_END)
                 .offset { drift.value },
         ) {
@@ -269,9 +292,10 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
 
 /**
  * The piece at rest: the art (the composer's portrait, else the piece's roll card) at the left of
- * the words on a wide frame lying on its side, over them on phones and tall windows
- * ([RestingLayout]); the title (Display Large on wide frames, Display on phones), the composer and
- * the channel as an eyebrow, and the description ([StandbyText]) in Body and the secondary ink.
+ * the words in a window wider than it is tall, over them in one taller than it is wide
+ * ([RestingLayout]); the title (Display Large on wide frames, [twoPane], Display on phones), the
+ * composer and the channel as an eyebrow, and the description ([StandbyText]) in Body and the
+ * secondary ink, six lines at most on wide frames and four on phones.
  */
 @Composable
 private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, window: DpSize, room: DpSize) {
@@ -279,7 +303,7 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
     val composer = rememberArtworkRow(ArtworkEntity.forComposer(piece.composerKey))
     val notes = StandbyText.description(own, composer)
     val eyebrow = ChannelCopy.eyebrow(piece.composer, channel)
-    val beside = RestingLayout.sideBySide(twoPane, window)
+    val beside = RestingLayout.sideBySide(window)
     val art = RestingLayout.artSide(beside, window, room)
     val words = RestingLayout.wordsWidth(beside, room.width, art)
     if (beside) {
@@ -429,7 +453,15 @@ private fun rememberDrift(): State<IntOffset> {
  * whole width over its keyboard strip; the live dot with "Sent to piano" at the foot.
  */
 @Composable
-private fun PaperRoll(piece: NowPlaying, state: PlayerState, connected: Boolean, playing: Boolean, channel: String?, drift: State<IntOffset>) {
+private fun PaperRoll(
+    piece: NowPlaying,
+    state: PlayerState,
+    connected: Boolean,
+    playing: Boolean,
+    channel: String?,
+    insets: PaddingValues,
+    drift: State<IntOffset>,
+) {
     val canvas = MaterialTheme.colorScheme.surface
     PieceArt(
         piece.pieceId,
@@ -453,7 +485,7 @@ private fun PaperRoll(piece: NowPlaying, state: PlayerState, connected: Boolean,
     Column(
         Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+            .padding(insets)
             .padding(horizontal = MARGIN_SIDE, vertical = MARGIN_END)
             .offset { drift.value },
     ) {

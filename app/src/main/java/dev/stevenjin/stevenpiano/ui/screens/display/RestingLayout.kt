@@ -18,9 +18,10 @@ import dev.stevenjin.stevenpiano.ui.components.ReadingWidth
 /**
  * Where the art and the words stand on the resting screen, Art and notes (DESIGN.md › v1.7.1). Pure.
  *
- * A wide frame lying on its side (a tablet on the piano, a phone on its side) sets the art at the
- * left, a square about [SIDE_ART_OF_HEIGHT] of the window's height, and the words to its right at
- * reading width; phones and tall windows set the art on top, about [TOP_ART_OF_WIDTH] of the
+ * The window's shape decides, whatever the device: a window wider than it is tall (a tablet on the
+ * piano, a phone on its side) sets the art at the left, a square about [SIDE_ART_OF_HEIGHT] of the
+ * window's height, and the words to its right at reading width; only a window taller than it is
+ * wide (a phone upright, a tablet stood on end) sets the art on top, about [TOP_ART_OF_WIDTH] of the
  * window's width, and the words under it. The art never takes more than the room the words leave.
  */
 object RestingLayout {
@@ -40,8 +41,8 @@ object RestingLayout {
     val SIDE_GAP_MIN: Dp = 32.dp
     val SIDE_GAP_MAX: Dp = 64.dp
 
-    /** The art at the left of the words: a wide frame ([twoPane]) wider than it is tall. */
-    fun sideBySide(twoPane: Boolean, window: DpSize): Boolean = twoPane && window.width > window.height
+    /** The art at the left of the words: any window but one taller than it is wide (a square one too). */
+    fun sideBySide(window: DpSize): Boolean = window.width >= window.height
 
     /**
      * The art's side, for the [window] and the [room] the art and the words share (the window

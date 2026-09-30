@@ -26,7 +26,7 @@ class RestingLayoutTest {
     @Test
     fun `a tablet on its side sets the art at the left, 55 percent of its height, the words beside it at reading width`() {
         val window = DpSize(1_707.dp, 1_067.dp)   // 2560 x 1600 px at 240 dpi
-        assertTrue(RestingLayout.sideBySide(twoPane = true, window = window))
+        assertTrue(RestingLayout.sideBySide(window))
         val art = RestingLayout.artSide(true, window, room(window))
         assertEquals(586.85f, art.value, 0.01f)
         assertEquals(58.685f, RestingLayout.sideGap(art).value, 0.01f)
@@ -36,16 +36,16 @@ class RestingLayoutTest {
     @Test
     fun `a phone upright sets the art on top, 45 percent of its width, the words under it`() {
         val window = DpSize(411.dp, 914.dp)   // 1080 x 2400 px at 420 dpi
-        assertFalse(RestingLayout.sideBySide(twoPane = false, window = window))
+        assertFalse(RestingLayout.sideBySide(window))
         val art = RestingLayout.artSide(false, window, room(window))
         assertEquals(184.95f, art.value, 0.01f)
         assertEquals(363.dp, RestingLayout.wordsWidth(false, room(window).width, art))
     }
 
     @Test
-    fun `a phone on its side is a wide frame, the art at the left and the words in what is left`() {
+    fun `a phone on its side sets the art at the left too, the words in what is left`() {
         val window = DpSize(914.dp, 411.dp)
-        assertTrue(RestingLayout.sideBySide(twoPane = true, window = window))
+        assertTrue(RestingLayout.sideBySide(window))
         val art = RestingLayout.artSide(true, window, room(window))
         assertEquals(226.05f, art.value, 0.01f)
         assertEquals(32.dp, RestingLayout.sideGap(art))   // a tenth would be 22.6 dp
@@ -53,11 +53,13 @@ class RestingLayoutTest {
     }
 
     @Test
-    fun `a tall window keeps the art on top, even on a tablet`() {
-        val window = DpSize(1_067.dp, 1_707.dp)
-        assertFalse(RestingLayout.sideBySide(twoPane = true, window = window))
-        assertEquals(480.15f, RestingLayout.artSide(false, window, room(window)).value, 0.01f)
-        assertFalse("a square window too", RestingLayout.sideBySide(twoPane = true, window = DpSize(900.dp, 900.dp)))
+    fun `the window's shape decides, not the device, and only a window taller than wide stacks`() {
+        val upright = DpSize(1_067.dp, 1_707.dp)   // a tablet stood on end
+        assertFalse(RestingLayout.sideBySide(upright))
+        assertEquals(480.15f, RestingLayout.artSide(false, upright, room(upright)).value, 0.01f)
+        assertTrue("a small phone on its side, a compact width", RestingLayout.sideBySide(DpSize(592.dp, 360.dp)))
+        assertTrue("a square window", RestingLayout.sideBySide(DpSize(900.dp, 900.dp)))
+        assertFalse(RestingLayout.sideBySide(DpSize(900.dp, 901.dp)))
     }
 
     @Test
