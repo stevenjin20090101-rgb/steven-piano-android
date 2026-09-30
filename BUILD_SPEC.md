@@ -5233,13 +5233,14 @@ of `releases/history.json` (`"draft": true`, tag `v1.8`, its notes; no hash or s
 
 ---
 
-# v1.9 — Liquid Glass across the functional layer
+# v1.9 — Liquid Glass across the functional layer; release 1.9 (versionCode 17)
 
 Read `DESIGN.md › v1.9 — Liquid Glass across the functional layer` first. Steven's request
 (2026-09-30), designed by Fable with the `apple-design` skill; tablet first. Built on branch
 `glass-pass` from `main` at 1.7.1 (`5ceb03c`), concurrently with M25 in its own worktree. **Not a
 release here**: `versionCode`, `versionName`, `Provenance.text` and the provenance manifest are
-untouched; the integrator bumps and signs at the merge.
+untouched; the integrator bumps and signs at the merge (1.9, `versionCode` 17: *The merge*, at the end
+of this section).
 
 ## Files
 
@@ -5514,3 +5515,42 @@ bands; the contrast hairline 3.5:1 and 2.5:1, stronger than the token; the specu
 two tests went with it). `WebAssetsTest` +1 (the panel's glass tokens are the app's, value for value; the
 reduced-transparency and reduced-motion rules; the filled play circle, no `.lens`). 1,163 before,
 **1,167** after.
+
+## The merge: release 1.9 (versionCode 17)
+
+Merged into `main` after 1.8 (`342870a`: M25's tablet sound and the resting screen's credit) as
+`fd7bb42`, and released as **1.9**: `versionCode` 17, `versionName` "1.9" (`-PversionCodeOverride`'s
+example now 18), `Provenance.text` "Made by Steven Jin · v1.9 · eab16a502f679465", the entry drafted
+at the end of `releases/history.json` (`"draft": true`, tag `v1.9`, its notes; no hash or size until
+`tools/publish-release.sh` builds it); `latest.json` still names 1.8.
+
+- **One conflict**: DESIGN.md and this file (main's text with 1.7.1's and M25's sections, then this one
+  after a separator). `NowPlayingScreen`, `NowPlayingPanel`, `KeysScreen`, the web panel's `app.js` and
+  `index.html` and `WebAssetsTest` merged by themselves: M25's speaker stays at the end of Now playing's
+  tempo row and at the start of the panel's foot row (now below the pane's glass header), the Keys line
+  still says "The tablet plays these keys." while it does, and the panel's tablet volume row sits under
+  the channel's volume, its classes the glass pass left as they were.
+- **M25's volume popover on glass** (`e08a537`, the merge's first rule): `TabletSoundButton` opened
+  Material's `DropdownMenu` with a hand-drawn hairline, the one solid menu left; it now opens
+  `GlassPopover` (the menus' glass, below the speaker with the ends aligned, above it where there is no
+  room, a 120 ms fade), its content 268 dp inside the glass's 16 dp so the popover keeps its 300 dp. The
+  speaker glyph stays where M25 put it (the second rule): the tempo row and the panel's foot row carry no
+  glass. `GlassContainersTest` (2): Material's sheets, menus, dialogs and popups are called only inside
+  the glass wrappers (the time picker's hand-laid dialog, on `GlassDialogSurface`, the one exception),
+  and the speaker's popover is `GlassPopover` with no hand-drawn edge; the section's grep, made a test.
+- **Measured at the merge** (`steven_piano_int`, API 34, Pixel 7 profile, 4 GB, `wm size 2560x1600`,
+  `wm density 240` as the run measured, the run's own AVD, removed after): 1.9's debug build installed
+  over 1.8's; piano-midi.de's 340 pieces added through Add folder (339 imported); a Beethoven sonata
+  movement playing, the Library scrolled beneath its header (the glass with its edge and band, the list
+  fading under it, the header's text in the content colour) beside the now-playing panel (the filled
+  play circle over its transport, the speaker at the foot's start); the Up next sheet on the sheets'
+  glass, its grabber inside (Back first takes an expanded sheet to half, as Material's sheets do, then
+  closes it); the speaker's popover on glass in light and dark, opening above the speaker (no room below
+  it at the panel's foot) with its end at the speaker's end, so on the panel it reaches left over the
+  list's pane: "TABLET SOUND", "Silent while the piano is connected.", Volume 60 % and its slider. No
+  crash. Frames were not measured again (the run's figures stand; the tablet's GPU decides).
+- Tests: 1,219 (1.8's 1,213, this run's 4, the merge's 2), 13 skipped (as 1.8). `check` passes: `lint`
+  0 errors, 28 warnings (as 1.8), the ONNX Runtime checks. No compiler warnings in the app's sources.
+  The greps above, M25's and every earlier section's: as stated. The release APK is 13,514,380 bytes
+  (versionCode 17, "1.9", signed `CN=Steven Piano, O=Steven Jin, C=US`), the debug APK 28,122,664; staged
+  as `../apk/steven-piano-1.9.apk` and `-debug.apk`.

@@ -97,5 +97,14 @@
     "minSdk": 26,
     "tag": "v1.8",
     "publishedAt": "2026-09-30"
+  },
+  {
+    "versionCode": 17,
+    "versionName": "1.9",
+    "notes": "Liquid Glass across the app: the headers, the tab bar and rail, the mini player, the transport, sheets, menus and dialogs are frosted surfaces the content scrolls under, with a soft fade where content meets a bar; the play control is a solid circle again; on the tablet the transport yields its blur while the library scrolls. Reduce transparency or high contrast text gives solid surfaces.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.9/steven-piano-1.9.apk",
+    "minSdk": 26,
+    "tag": "v1.9",
+    "draft": true
   }
 ]
