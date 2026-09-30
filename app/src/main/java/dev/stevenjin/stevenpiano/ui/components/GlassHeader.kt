@@ -29,6 +29,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -131,7 +132,8 @@ private fun PaddingValues.withTop(top: Dp, direction: LayoutDirection): PaddingV
 @Composable
 private fun PaneBody(source: HazeState, sourced: Boolean, padding: PaddingValues, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalFloatingPadding provides padding) {
-        Box(if (sourced) Modifier.fillMaxSize().hazeSource(source) else Modifier.fillMaxSize()) { content() }
+        // Its own layer: a list scrolling redraws only itself, never the header's glass beside it.
+        Box(if (sourced) Modifier.fillMaxSize().graphicsLayer().hazeSource(source) else Modifier.fillMaxSize()) { content() }
     }
 }
 

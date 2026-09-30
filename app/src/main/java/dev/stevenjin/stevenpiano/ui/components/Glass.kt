@@ -145,7 +145,9 @@ val GlassHidden: () -> Float = { 0f }
  *
  * Cost: the blur is worked out only inside the surface's own bounds, drawn clipped to its shape,
  * and from a copy of that content at a third of its resolution ([HazeInputScale.Auto]), a ninth of
- * the pixels, which a 24 dp blur hides. A blurring surface is redrawn whenever anything in its
+ * the pixels, which a 24 dp blur hides; a header, as wide as its pane, and the sheets, menus and
+ * dialogs, through whose 0.86 fill a seventh of the blur shows, from a copy at a fifth
+ * ([GlassTokens.WideInputScale]), a twenty-fifth of the pixels. A blurring surface is redrawn whenever anything in its
  * source changes; so where nothing can pass beneath a surface ([blur] false: the rail, beside screens
  * that keep clear of it; the tab bar over the fixed layouts of Now playing and Keys; a header with
  * nothing scrolled beneath it; the Keys pills) it draws the glass's look without blurring: the
@@ -214,7 +216,12 @@ internal fun rememberGlassLook(
             when {
                 blurring -> Modifier
                     .hazeEffect(source, style) {
-                        inputScale = HazeInputScale.Auto
+                        // A header (as wide as its pane) and the sheets, menus and dialogs blur a fifth-resolution copy.
+                        inputScale = if (edge == GlassEdge.Bottom || fill == GlassFill.Sheet) {
+                            HazeInputScale.Fixed(GlassTokens.WideInputScale)
+                        } else {
+                            HazeInputScale.Auto
+                        }
                         expandLayerBounds = false
                     }
                     .glassBand(edge, surface, band)

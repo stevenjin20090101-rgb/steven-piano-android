@@ -50,6 +50,8 @@ class GlassTokensTest {
         assertEquals(GlassTokens.SheetAlpha, GlassFill.Sheet.alpha, 0f)
         assertEquals(24.dp, GlassTokens.Blur)
         assertEquals(1.dp, GlassTokens.Edge)
+        // The wide surfaces (a header, a sheet, a menu, a dialog) blur a fifth-resolution copy of what lies beneath.
+        assertEquals(0.2f, GlassTokens.WideInputScale, 0f)
     }
 
     @Test

@@ -49,6 +49,14 @@ object GlassTokens {
     /** How far the content beneath is blurred. */
     val Blur = 24.dp
 
+    /**
+     * The wide surfaces blur a copy of what lies beneath at a fifth of its resolution: a header, as wide
+     * as its pane and blurring on every frame a list scrolls beneath it, and the sheets, menus and
+     * dialogs, through whose 0.86 fill a seventh of the blur shows. The bars keep a third (Haze's
+     * automatic scale, as M16 measured them). The difference does not show under a 24 dp blur.
+     */
+    const val WideInputScale = 0.2f
+
     /** The edge (the hairline token) and the specular line along it, 1 dp each. */
     val Edge = 1.dp
 
