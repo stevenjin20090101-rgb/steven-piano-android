@@ -268,9 +268,11 @@ private fun ColumnScope.PieceView(
             Eyebrow("Tempo")
             Spacer(Modifier.width(4.dp))
             StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo)
+            TabletSoundSpeaker()   // v1.8 — M25: the tablet's piano sound and its volume
         }
         ConnectionLine(connected, playing, onOpenPiano)
     }
+    TabletSoundDownloadNote(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
 }
 
 /** The fixed height the note views take when the screen scrolls: one system of the score. */

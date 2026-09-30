@@ -255,7 +255,8 @@ fun SliderRow(
 
 /**
  * One of a few named [options], as a row of chips under the label; the chosen one carries a check.
- * [selected] null: none known yet. TalkBack reads each chip as "label, option".
+ * [selected] null: none known yet. TalkBack reads each chip as "label, option". [note], when there is
+ * one, says under the chips what the choice does (the eyebrow's size, sentence case, secondary).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -266,6 +267,7 @@ fun ChoiceRow(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    note: String? = null,
 ) {
     Column(
         modifier
@@ -304,6 +306,14 @@ fun ChoiceRow(
                     ),
                 )
             }
+        }
+        if (note != null) {
+            Eyebrow(
+                note,
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                uppercase = false,
+            )
         }
     }
     HairlineDivider(startInset = RowInset)

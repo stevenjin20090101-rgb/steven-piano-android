@@ -24,6 +24,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import android.util.LruCache
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtSize
@@ -107,6 +108,7 @@ class AppWebBackend(
                 velocityPct = player.velocityPct,
                 preRollMs = settings.preRollMs,
                 channel = channel,
+                tablet = tablet(),
                 queue = queue,
                 items = items,
                 problem = player.problem,
@@ -329,8 +331,23 @@ class AppWebBackend(
 
     override suspend fun pianoAction(action: PianoAction) = onMain { graph.pianoSettings.action(action) }
 
+    /** The tablet's piano sound as the panel shows it (v1.8 — M25). */
+    private fun tablet(): WebTablet = graph.tabletSound.state.value.let { t ->
+        WebTablet(
+            mode = when (t.mode) {
+                TabletSoundMode.OFF -> "off"
+                TabletSoundMode.WHEN_NOT_CONNECTED -> "whenNotConnected"
+                TabletSoundMode.ALWAYS -> "always"
+            },
+            volume = t.volume,
+            active = t.active,
+            installed = t.installed,
+        )
+    }
+
     override suspend fun applySettings(change: SettingsChange) {
         val settings = graph.settingsRepository
+        change.tabletVolume?.let { settings.setTabletVolume(it) }
         change.preRollMs?.let { settings.setPreRoll(it) }
         change.defaultTempoPct?.let { settings.setDefaultTempo(it) }
         change.transpose?.let { settings.setTranspose(it) }
