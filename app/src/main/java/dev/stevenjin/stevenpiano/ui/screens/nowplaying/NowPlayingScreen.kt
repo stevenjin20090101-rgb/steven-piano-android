@@ -141,11 +141,14 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     // The status bar, before the header's glass takes the top: the short rule measures what is below it, as before.
-    val statusBar = LocalFloatingPadding.current.calculateTopPadding()
+    val outer = LocalFloatingPadding.current
+    val statusBar = outer.calculateTopPadding()
     val column = rememberScrollState()
     // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it.
+    // The whole pane keeps clear of the rail, its header too.
     GlassHeaderPane(
         scroll = column,
+        modifier = Modifier.padding(outer.sides()),
         header = {
             ScreenHeader("Now playing") {
                 if (piece != null) GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
@@ -157,7 +160,7 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .padding(floating.besidesTop()),
+                .padding(bottom = floating.calculateBottomPadding()),
         ) {
             // Too short for the note views to share the height (landscape, a small phone at a large
             // font): the screen scrolls and the views keep fixed heights instead of collapsing.
@@ -409,11 +412,10 @@ internal fun StartingLine(starting: Boolean, modifier: Modifier = Modifier) {
 
 private const val STARTING = "Starting"
 
-/** The floating padding at the sides and the bottom: the top is the header's, kept inside the column. */
-private fun PaddingValues.besidesTop(): PaddingValues = PaddingValues(
+/** The floating padding at the sides alone (the rail's, the cutout's): the pane keeps clear of them. */
+private fun PaddingValues.sides(): PaddingValues = PaddingValues(
     start = calculateStartPadding(LayoutDirection.Ltr),
     end = calculateEndPadding(LayoutDirection.Ltr),
-    bottom = calculateBottomPadding(),
 )
 
 /** What the note views show beside the notes, as the Piano tab's switches say. */

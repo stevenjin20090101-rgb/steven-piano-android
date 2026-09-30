@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -96,12 +99,16 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     HoldOrientationWhileHeld(touches, pressed)
 
     // The status bar, before the header's glass takes the top: the keys' cap is measured as before.
-    val statusBar = LocalFloatingPadding.current.calculateTopPadding()
-    // The header is a glass navigation bar (DESIGN.md › v1.9); nothing scrolls beneath it here.
-    GlassHeaderPane(scroll = null, header = { ScreenHeader("Keys") }) { BoxWithConstraints(
+    val outer = LocalFloatingPadding.current
+    val statusBar = outer.calculateTopPadding()
+    val direction = LocalLayoutDirection.current
+    val sides = PaddingValues(start = outer.calculateStartPadding(direction), end = outer.calculateEndPadding(direction))
+    // The header is a glass navigation bar (DESIGN.md › v1.9); nothing scrolls beneath it here. The whole pane keeps
+    // clear of the rail, its header too.
+    GlassHeaderPane(scroll = null, modifier = Modifier.padding(sides), header = { ScreenHeader("Keys") }) { BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .padding(LocalFloatingPadding.current),
+            .padding(top = LocalFloatingPadding.current.calculateTopPadding(), bottom = LocalFloatingPadding.current.calculateBottomPadding()),
     ) {
         val keysHeight = keysHeightCap(maxHeight + LocalFloatingPadding.current.calculateTopPadding() - statusBar)
         Column(Modifier.fillMaxSize()) {
