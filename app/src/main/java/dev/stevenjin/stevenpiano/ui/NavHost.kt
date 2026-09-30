@@ -54,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,9 +114,7 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedTransparency
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlin.math.min
 
 /**
@@ -304,8 +303,8 @@ fun PianoNavHost(frame: AppFrame, requestedTab: Route?, onTabShown: () -> Unit, 
 @Composable
 private fun DisplayOverlay(idle: IdleState, kiosk: Boolean, onLeave: () -> Unit) {
     val graph = LocalContext.current.graph
-    val loaded by remember(graph) { graph.player.state.map { it.piece != null }.distinctUntilChanged() }
-        .collectAsStateWithLifecycle(initialValue = graph.player.state.value.piece != null)
+    val player = graph.player.state.collectAsStateWithLifecycle()
+    val loaded by remember(player) { derivedStateOf { player.value.piece != null } }
     val reduced = rememberReducedMotion()
     AnimatedVisibility(
         visible = idle.idle && DisplayRule.shows(loaded, kiosk),
