@@ -148,7 +148,8 @@ configuration file). Then:
   `localhost:8787`).
 - **The daily cron**, by hand: `curl "http://localhost:8787/cdn-cgi/local/scheduled"`.
 - **Tests and types:** `npm test` (the Workers runtime itself, through Miniflare) and
-  `npm run typecheck`.
+  `npm run typecheck`. The runtime notes "read end of pipe was aborted" once: that is the test
+  whose body the relay refuses (411) without reading it.
 
 ## How it works
 

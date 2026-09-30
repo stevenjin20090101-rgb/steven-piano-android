@@ -88,7 +88,9 @@ describe('forwarding a browser request to the tablet', () => {
     expect(req.address).toBe('203.0.113.9');
     expect(req.headers.host).toBe('relay.test');
     answerJson(tablet, req.id, 200, {});
-    expect((await pending).status).toBe(200);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
     tablet.close();
   });
 
@@ -101,6 +103,7 @@ describe('forwarding a browser request to the tablet', () => {
       answerJson(tablet, req.id, 204 === 204 ? 200 : 200, {}, { 'Set-Cookie': cookie });
       const response = await pending;
       expect(response.headers.get('Set-Cookie'), cookie).toBeNull();
+      await response.arrayBuffer();
     }
     tablet.close();
   });
@@ -109,6 +112,7 @@ describe('forwarding a browser request to the tablet', () => {
     const { pianoId, secret } = await seedPiano();
     const redirect = await panel(pianoId, '?a=1', { redirect: 'manual' });
     expect(redirect.status).toBe(308);
+    await redirect.arrayBuffer();
     expect(redirect.headers.get('Location')).toBe(`/p/${pianoId}/?a=1`);
 
     const tablet = await FakeTablet.connect(pianoId, secret);
@@ -175,6 +179,7 @@ describe('forwarding a browser request to the tablet', () => {
     }
     const all = await Promise.all(pending);
     expect(all.map((r) => r.status)).toEqual(new Array(40).fill(200));
+    await Promise.all(all.map((r) => r.arrayBuffer()));
     tablet.close();
   });
 });
