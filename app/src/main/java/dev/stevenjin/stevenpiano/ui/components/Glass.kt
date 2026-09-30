@@ -9,12 +9,19 @@
 
 package dev.stevenjin.stevenpiano.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -40,6 +47,8 @@ import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalGlassEdge
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlin.math.min
 import dev.chrisbanes.haze.HazeState as LibraryHazeState
 import dev.chrisbanes.haze.hazeSource as libraryHazeSource
@@ -123,6 +132,14 @@ enum class GlassFill(val alpha: Float) {
     Sheet(GlassTokens.SheetAlpha),
 }
 
+/**
+ * The transport yields to a scrolling list (DESIGN.md › v1.9): while this reads true, the glass that
+ * yields pauses its blur ([GlassSurface]'s `paused`). The Library provides it to the now-playing panel
+ * beside its list on two panes, true while the list scrolls, so the panel's transport draws its glass
+ * without a blur for that while and the list's header is the one blur drawn on every frame.
+ */
+val LocalYieldBlur = staticCompositionLocalOf<State<Boolean>> { mutableStateOf(false) }
+
 /** Always shown: a surface's edge that is always there. */
 val GlassShown: () -> Float = { 1f }
 
@@ -143,6 +160,11 @@ val GlassHidden: () -> Float = { 0f }
  * [band] is the scroll-edge effect inside the content-facing edge: while the glass blurs, the frost
  * thickens over the last [GlassTokens.EdgeBand] towards the edge, from the bar's fill to a sheet's.
  *
+ * [paused]: the glass yields its blur to another's (the panel's transport while the list beside it
+ * scrolls, [LocalYieldBlur]). While true the surface draws the glass's look without its blur (the
+ * surface, as where nothing passes beneath), at once; when it turns false the blur comes back under a
+ * veil of the surface that fades away over 120 ms (a cut when motion is reduced).
+ *
  * Cost: the blur is worked out only inside the surface's own bounds, drawn clipped to its shape,
  * and from a copy of that content at a third of its resolution ([HazeInputScale.Auto]), a ninth of
  * the pixels, which a 24 dp blur hides; a header, as wide as its pane, and the sheets, menus and
@@ -162,13 +184,14 @@ fun GlassSurface(
     edge: GlassEdge = if (shape == RectangleShape) GlassEdge.Top else GlassEdge.Outline,
     fill: GlassFill = GlassFill.Bar,
     blur: Boolean = true,
+    paused: Boolean = false,
     solid: Color = MaterialTheme.colorScheme.surface,
     outline: Color = LocalHairline.current,
     edgeAlpha: () -> Float = GlassShown,
     band: () -> Float = GlassHidden,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val look = rememberGlassLook(shape, source, edge, fill, blur, solid, outline, edgeAlpha, band)
+    val look = rememberGlassLook(shape, source, edge, fill, blur, solid, outline, edgeAlpha, band, paused)
     Box(modifier.then(look.modifier)) {
         GlassText(look.glass, fill) { content() }
     }
@@ -193,14 +216,26 @@ internal fun rememberGlassLook(
     outline: Color,
     edgeAlpha: () -> Float,
     band: () -> Float,
+    paused: Boolean = false,
 ): GlassLook {
     val surface = MaterialTheme.colorScheme.surface
     val specular = LocalGlassEdge.current
     val available = glassAvailable()
+    // A pause is a cut to the glass without its blur; the blur comes back under a veil that fades away.
+    val reduced = rememberReducedMotion()
+    val veil = remember { Animatable(if (paused) 1f else 0f) }
+    LaunchedEffect(paused, reduced) {
+        when {
+            paused -> veil.snapTo(1f)
+            reduced -> veil.snapTo(0f)
+            veil.value > 0f -> veil.animateTo(0f, tween(Motion.FastMs))
+        }
+    }
+    val veiled by remember { derivedStateOf { veil.value >= 1f } }
     // The glass's look (its edge, and what sits on it); blurring only where content can pass beneath.
     val hasSource = source.areas.isNotEmpty()
     val glass = available && (!blur || hasSource)
-    val blurring = available && blur && hasSource
+    val blurring = available && blur && hasSource && !veiled
     val style = remember(surface, fill) {
         HazeStyle(
             backgroundColor = surface,
@@ -225,6 +260,7 @@ internal fun rememberGlassLook(
                         expandLayerBounds = false
                     }
                     .glassBand(edge, surface, band)
+                    .glassVeil(surface) { veil.value }
                 glass -> Modifier.background(surface)
                 else -> Modifier.background(solid)
             },
@@ -277,6 +313,12 @@ private fun Modifier.glassBand(edge: GlassEdge, surface: Color, band: () -> Floa
             }
         }
     }
+
+/** The surface over a resuming blur, at [amount] (1 at the pause's end, fading to nothing). */
+private fun Modifier.glassVeil(surface: Color, amount: () -> Float): Modifier = drawBehind {
+    val shown = amount()
+    if (shown > 0f) drawRect(surface.copy(alpha = shown.coerceAtMost(1f)))
+}
 
 /**
  * The surface's edge, over everything it holds: a 1 dp hairline, and inside it a 1 dp [specular]

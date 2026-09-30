@@ -1912,6 +1912,23 @@ editors are sheets laid flat. The play control is the filled circle. *prefers-re
 and *prefers-contrast: more* give solid surfaces (and more contrast, hairlines in the content colour
 at 40 %); *prefers-reduced-motion* drops the bands' fade.
 
+## The transport yields to a scrolling list
+
+A blur is live while what lies beneath it moves: it is drawn again on every frame. Held upright, the
+tablet had two live blurs on every frame of a scroll: the Library list's header, and beside it the
+now-playing panel's transport, over the roll strip playing beneath it. So the transport yields
+(decided at review, 2026-09-30):
+
+- **While the list scrolls**, the panel's transport band stops blurring. For that while it is glass
+  without a blur (the surface itself, as the rail and a resting header are, with its edge, the filled
+  circle and the glyphs; the fill tokens unchanged), and the list's header keeps its blur. When the
+  list comes to rest the band's blur comes back, fading in over 120 ms (a cut with reduced motion). A
+  pause changes nothing but the blur: what sits on the glass keeps its colours.
+- **The tablet on its side**: nothing changes. The transport stands under the strip there, so the
+  list's header is already the only glass over a scroll.
+- **Phones keep both**: the header and the tab bar blur a scrolling list together. Pausing the header
+  through a fling was built and measured, made no measurable difference, and was dropped at review.
+
 ## Performance
 
 One source per glass surface: the navigation content for the tab bar, the mini player and every sheet,
@@ -1919,4 +1936,5 @@ menu and dialog; each pane's own content for its header (recorded in a layer of 
 playing in the other pane, or a list scrolling beside it, never re-blurs a header it is not under);
 the note panel for the transport. A header blurs only its own bounds, and only while content is
 scrolled beneath it. The wide surfaces (headers, sheets, menus, dialogs) blur a copy at a fifth of the
-resolution; the bars keep M16's third.
+resolution; the bars keep M16's third. And beside a scrolling list the transport yields its blur
+(above).

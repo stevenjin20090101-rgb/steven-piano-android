@@ -53,7 +53,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,6 +104,7 @@ import dev.stevenjin.stevenpiano.ui.components.DragHandle
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayRequest
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
+import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.CrashBanner
@@ -294,6 +297,9 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             }
         }
     }
+    // The transport yields to a scrolling list (DESIGN.md › v1.9): while the list scrolls beneath its header's
+    // glass, the panel's transport beside it draws its glass without a blur.
+    val listScrolling = remember(listState) { derivedStateOf { listState.isScrollInProgress } }
     if (frame.twoPane) {
         // The list (55 %, its 720 dp reading width inside it) and the now-playing panel (45 %), a hairline between.
         Row(
@@ -303,14 +309,16 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
         ) {
             library(Modifier.weight(LIST_SHARE).fillMaxHeight())
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
-            NowPlayingPanel(
-                playback,
-                onOpenPiano,
-                Modifier
-                    .weight(1f - LIST_SHARE)
-                    .fillMaxHeight()
-                    .padding(bottom = floating.calculateBottomPadding()),
-            )
+            CompositionLocalProvider(LocalYieldBlur provides listScrolling) {
+                NowPlayingPanel(
+                    playback,
+                    onOpenPiano,
+                    Modifier
+                        .weight(1f - LIST_SHARE)
+                        .fillMaxHeight()
+                        .padding(bottom = floating.calculateBottomPadding()),
+                )
+            }
         }
     } else {
         library(Modifier.fillMaxSize().then(sides))
