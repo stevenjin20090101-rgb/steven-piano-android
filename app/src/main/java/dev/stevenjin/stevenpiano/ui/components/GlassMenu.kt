@@ -184,17 +184,20 @@ fun GlassDialogSurface(modifier: Modifier = Modifier, content: @Composable BoxSc
 
 /**
  * A small popover anchored to the control it is composed beside (as Material's menus are): the
- * menus' glass with 16 dp of room inside, below the anchor with its end at the anchor's end (above it
- * where there is no room below), kept 8 dp inside the window; it takes the room its [content] asks for
- * (a slider row gives itself a width). Outside taps and Back close it ([onDismissRequest]). It fades in
- * and out over 120 ms, a cut when motion is reduced. For a control's small settings, such as a
- * volume, in the place it is used.
+ * menus' glass with 16 dp of room inside, below the anchor (above it where there is no room below),
+ * kept 8 dp inside the window; it takes the room its [content] asks for (a slider row gives itself a
+ * width). Its end is at the anchor's end; [alignment] [Alignment.Start] puts its start at the anchor's
+ * start instead, for a control at the start of a pane, so the popover opens within the pane rather
+ * than across its edge (both mirror in right to left). Outside taps and Back close it
+ * ([onDismissRequest]). It fades in and out over 120 ms, a cut when motion is reduced. For a control's
+ * small settings, such as a volume, in the place it is used.
  */
 @Composable
 fun GlassPopover(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    alignment: Alignment.Horizontal = Alignment.End,
     offset: DpOffset = DpOffset(0.dp, 4.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -203,7 +206,7 @@ fun GlassPopover(
     if (!state.currentState && !state.targetState) return
     val reduced = rememberReducedMotion()
     val density = LocalDensity.current
-    val provider = remember(offset, density) { PopoverPosition(offset, density) }
+    val provider = remember(alignment, offset, density) { PopoverPosition(alignment, offset, density) }
     Popup(popupPositionProvider = provider, onDismissRequest = onDismissRequest, properties = PopupProperties(focusable = true)) {
         AnimatedVisibility(
             visibleState = state,
@@ -217,20 +220,42 @@ fun GlassPopover(
     }
 }
 
-/** Below the anchor, ends aligned (starts in right to left), above it where the window has no room below; 8 dp inside the window. */
-private class PopoverPosition(private val offset: DpOffset, private val density: Density) : PopupPositionProvider {
+/** [GlassPopover]'s place, in the window's pixels: [popoverPosition] with its offset and margin in pixels. */
+private class PopoverPosition(
+    private val alignment: Alignment.Horizontal,
+    private val offset: DpOffset,
+    private val density: Density,
+) : PopupPositionProvider {
     override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
         val margin = with(density) { WINDOW_MARGIN.roundToPx() }
-        val dx = with(density) { offset.x.roundToPx() }
-        val dy = with(density) { offset.y.roundToPx() }
-        val x = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.right - popupContentSize.width + dx else anchorBounds.left - dx
-        val below = anchorBounds.bottom + dy
-        val above = anchorBounds.top - dy - popupContentSize.height
-        val y = if (below + popupContentSize.height <= windowSize.height - margin || above < margin) below else above
-        val maxX = (windowSize.width - margin - popupContentSize.width).coerceAtLeast(margin)
-        val maxY = (windowSize.height - margin - popupContentSize.height).coerceAtLeast(margin)
-        return IntOffset(x.coerceIn(margin, maxX), y.coerceIn(margin, maxY))
+        val shift = with(density) { IntOffset(offset.x.roundToPx(), offset.y.roundToPx()) }
+        return popoverPosition(anchorBounds, windowSize, popupContentSize, layoutDirection, alignment, shift, margin)
     }
+}
+
+/**
+ * Where a popover of [content]'s size goes beside [anchor], in pixels: below it, or above it where the
+ * [window] has no room below (and has room above); its [alignment] against the anchor ([Alignment.End]:
+ * the ends aligned, [Alignment.Start]: the starts, each mirrored in right to left), then moved by
+ * [offset] (its x toward the end); then kept [margin] inside the window.
+ */
+internal fun popoverPosition(
+    anchor: IntRect,
+    window: IntSize,
+    content: IntSize,
+    layoutDirection: LayoutDirection,
+    alignment: Alignment.Horizontal,
+    offset: IntOffset,
+    margin: Int,
+): IntOffset {
+    val dx = if (layoutDirection == LayoutDirection.Ltr) offset.x else -offset.x
+    val x = anchor.left + alignment.align(content.width, anchor.width, layoutDirection) + dx
+    val below = anchor.bottom + offset.y
+    val above = anchor.top - offset.y - content.height
+    val y = if (below + content.height <= window.height - margin || above < margin) below else above
+    val maxX = (window.width - margin - content.width).coerceAtLeast(margin)
+    val maxY = (window.height - margin - content.height).coerceAtLeast(margin)
+    return IntOffset(x.coerceIn(margin, maxX), y.coerceIn(margin, maxY))
 }
 
 private val WINDOW_MARGIN = 8.dp

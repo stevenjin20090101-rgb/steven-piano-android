@@ -232,7 +232,8 @@ private fun ColumnScope.PanelPiece(
                 controls()
             }
             // Where the piece goes, as Now playing says it at its bottom right: "● Sent to piano"; and at the
-            // start the tablet's speaker (v1.8 — M25), as at the end of Now playing's tempo row.
+            // start the tablet's speaker (v1.8 — M25), as at the end of Now playing's tempo row. Its popover's
+            // start is at the speaker's start, so it opens within the panel, never across the panes' divider.
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -240,7 +241,7 @@ private fun ColumnScope.PanelPiece(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TabletSoundSpeaker(Modifier.wrapContentHeight(unbounded = true))
+                TabletSoundSpeaker(Modifier.wrapContentHeight(unbounded = true), popoverAlignment = Alignment.Start)
                 // Its 48 dp target (it opens the Piano tab when not connected) reaches past the 40 dp row.
                 ConnectionLine(connected, state.status == PlaybackStatus.Playing, onOpenPiano, Modifier.wrapContentHeight(unbounded = true))
             }

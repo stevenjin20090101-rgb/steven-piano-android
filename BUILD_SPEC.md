@@ -5059,7 +5059,8 @@ everything but pan becomes one region with a `partner`: the pair plays as one vo
 `PlaybackPage`: after its rows, `SectionEyebrow("Tablet sound")`, `ChoiceRow` with the new `note`,
 `SliderRow` (the value shown at once, the setting written as it moves), `SoundFontRow`.
 `NowPlayingScreen`: `TabletSoundSpeaker()` at the end of the tempo row and `TabletSoundDownloadNote` under
-it; `NowPlayingPanel`: `TabletSoundSpeaker()` at the start of its foot row. `TabletSoundButton`: an
+it; `NowPlayingPanel`: `TabletSoundSpeaker()` at the start of its foot row (from 1.10 with
+`popoverAlignment = Alignment.Start`). `TabletSoundButton`: an
 `IconButton` tinted `onSurface` when active and `LocalTertiary` otherwise; a `DropdownMenu` with a
 `LocalHairline` border (from 1.9 `GlassPopover`, its content 268 dp inside the glass's 16 dp), 300 dp wide,
 the eyebrow, the status, Volume and its value, `HairlineSlider` (full width), and the download while it
@@ -5279,8 +5280,9 @@ Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
   `GlassDialogSurface(modifier, content)` (the dialog's corners); `GlassPopover(expanded,
   onDismissRequest, modifier, offset = (0, 4 dp), content)` (a focusable `Popup` placed by
   `PopoverPosition`: below the anchor, ends aligned, above it where there is no room, 8 dp inside the
-  window; `GlassMenuContainer` with 16 dp inside; a 120 ms fade, a cut under reduced motion). M25's
-  volume popover can adopt `GlassPopover` as it stands.
+  window; `GlassMenuContainer` with 16 dp inside; a 120 ms fade, a cut under reduced motion; from 1.10
+  also `alignment = Alignment.End`, or `Alignment.Start`: v1.10 › *The merge*). M25's volume popover
+  can adopt `GlassPopover` as it stands.
 - `M/ui/screens/keys/KeysPills.kt`: `KeysPills(sustain, onSustain, octaves, modifier)`,
   `OctavePills(canGoDown, canGoUp, onShift)`, the 48 dp `OctavePill` (glass without a blur, ring in
   `LocalTertiary`, `LocalHairline` when disabled).
@@ -5845,3 +5847,25 @@ frames:
 `RelayCommandsTest` (4), `EnrolmentTest` (4), `SealedSecretTest` (3), `RelayStatusTest` (2), `CloudCopyTest`
 (1), `WebSocketHubTest` +4, `WebAssetsTest` +1, `SettingsRepositoryTest` +1, `GroupSummariesTest` +1;
 `WebApiTest` and `DiagnosticsExporterTest` changed. 1,219 before, **1,273** after (13 skipped, as before).
+
+## The merge: into `main`, before 1.10 (still 1.9, versionCode 17)
+
+Merged into `main` after 1.9 and the cloud (`5640288`: 1.9, R1's `cloud/` folder, the signer's change) as
+`ebdc4aa`. Not a release: 1.10 is cut after M27 and the audit, so the version stays 1.9 (versionCode 17),
+no entry is drafted in `releases/history.json` and no APK is staged.
+
+- **One conflict**: the README, where main's one line at the end of Web control pointing at
+  `cloud/README.md` (added with the cloud's merge) met this run's Cloud section in the same place: both
+  kept, the line now leading the Cloud section. Everything else merged by itself: `WebServer`,
+  `WebService`, `Settings`, `DiagnosticsExporter` and its test, `GroupSummaries`, `PianoViewModel`,
+  `AppGraph`, the web panel's assets, the manifest. `CloudSection` is on the glass (`GlassSheet`,
+  `GlassAlertDialog`), as `GlassContainersTest` requires.
+- **The panel's speaker opens its popover within the panel** (the 1.9 review): `GlassPopover` gains
+  `alignment`: `Alignment.End` as before, or `Alignment.Start`, the popover's start at the anchor's start
+  (each mirrored in right to left). Its placement is now `popoverPosition`, a pure function that
+  `PopoverPosition` calls with the offset and the margin in pixels. `TabletSoundButton` and
+  `TabletSoundSpeaker` pass `popoverAlignment` through; the panel's foot row passes `Alignment.Start`, so
+  the popover opens above the speaker and to its end, inside the panel, where ends aligned it reached back
+  over the divider onto the list's pane; Now playing's tempo row keeps the ends. `GlassPopoverTest` (8):
+  ends and starts aligned, right to left, the offset, above where there is no room below, the window's
+  margin, the panel's case against its divider, and the two call sites.

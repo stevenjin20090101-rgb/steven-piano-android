@@ -1847,8 +1847,9 @@ The hub's Playback row keeps its value ("2 s pause · 100%").
   sound, off here, volume 60%".
 - A tap opens a **popover**, the app's standard one (the elevated tone, with a hairline edge so it holds
   its shape over the score's panel in the dark; not glass; from v1.9 the menus' glass, **GlassPopover**,
-  below the speaker with its end at the speaker's end): the eyebrow **TABLET SOUND**, what the sound is
-  doing in Body, secondary ("Playing on this tablet while the piano isn't connected.", "Playing on this
+  below the speaker with its end at the speaker's end; from v1.10, in the panel, with its start at the
+  speaker's start, so it opens within the panel instead of across the divider over the list): the eyebrow
+  **TABLET SOUND**, what the sound is doing in Body, secondary ("Playing on this tablet while the piano isn't connected.", "Playing on this
   tablet with the piano.", "Silent while the piano is connected.", "The piano sound isn't on this tablet
   yet.", "Off. Piano › Playback turns it on."), then **Volume** with its value and the hairline slider, which
   is heard as it moves. While the sound waits for its download, the download's line and **Download** (or
@@ -1977,7 +1978,9 @@ One material for all of them (0.86), their scrim or dim behind as before. Sheets
 inside the glass (32 × 4 dp, the secondary grey), with Material's sheet actions for TalkBack (close,
 expand, collapse); dialogs keep the 24 dp corners, menus theirs and their shadow. The blur runs only
 while one is open. A small popover (for a control's setting in place, such as a volume) is the same
-glass, anchored below its control, 16 dp inside.
+glass, anchored below its control, 16 dp inside, its end at the control's end (from v1.10, for a
+control at the start of a pane, such as the panel's speaker, its start at the control's start, so it
+opens within the pane).
 
 ## Keys
 

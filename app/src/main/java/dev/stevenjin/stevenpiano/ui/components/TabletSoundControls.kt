@@ -56,8 +56,9 @@ import kotlin.math.roundToInt
  * piano connected, or no SoundFont yet), as Shuffle and Repeat show off and on. A tap opens the popover:
  * the TABLET SOUND eyebrow, what the sound is doing, the Volume slider with its value, and the download
  * when the sound waits for it, on the menus' glass ([GlassPopover], DESIGN.md › v1.9): below the speaker, ends
- * aligned, above it where there is no room. The volume is never locked in kiosk mode; the mode is a setting,
- * on the Playback page.
+ * aligned, above it where there is no room; [popoverAlignment] [Alignment.Start] aligns the starts instead,
+ * for the speaker at the start of the tablet's now-playing panel, so the popover opens within the panel. The
+ * volume is never locked in kiosk mode; the mode is a setting, on the Playback page.
  */
 @Composable
 fun TabletSoundButton(
@@ -65,6 +66,7 @@ fun TabletSoundButton(
     onVolume: (Int) -> Unit,
     onDownload: () -> Unit,
     modifier: Modifier = Modifier,
+    popoverAlignment: Alignment.Horizontal = Alignment.End,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     Box(modifier) {
@@ -77,7 +79,7 @@ fun TabletSoundButton(
             Icon(painterResource(R.drawable.ic_speaker), contentDescription = TabletSoundCopy.glyphDescription(state))
         }
         // The glass's own outline and specular line mark its edge over the score's panel, in either appearance.
-        GlassPopover(expanded = open, onDismissRequest = { open = false }) {
+        GlassPopover(expanded = open, onDismissRequest = { open = false }, alignment = popoverAlignment) {
             TabletSoundPopover(state, onVolume, onDownload)
         }
     }
