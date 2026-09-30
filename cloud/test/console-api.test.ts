@@ -71,6 +71,7 @@ describe("the console's API", () => {
     expect(audit.entries.map((a) => a.action)).toEqual(['rename', 'enrol', 'enrol-code']);
     expect((await call('/api/audit?piano=nope')).status).toBe(400);
     expect((await call('/api/audit')).status).toBe(200);
+    expect(await (await call('/api/me')).json()).toMatchObject({ email: 'steven@example.com', relay: { host: 'relay.test' } });
     tablet.close();
   });
 

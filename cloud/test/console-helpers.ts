@@ -8,7 +8,7 @@
    ============================================================================ */
 
 import { env } from 'cloudflare:workers';
-import { handle } from '../src/console/index';
+import { handle } from '../src/console/routes';
 import type { ConsoleEnv } from '../src/env';
 import { base64url } from '../src/shared/ids';
 

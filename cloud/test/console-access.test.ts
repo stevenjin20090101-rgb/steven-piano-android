@@ -76,7 +76,7 @@ describe("the console's own Access check", () => {
   it('lets DEV_BYPASS through only for localhost', async () => {
     const env = consoleEnv({ DEV_BYPASS: '1' });
     expect((await consoleCall('/api/pianos', { env })).status).toBe(401);
-    const { handle } = await import('../src/console/index');
+    const { handle } = await import('../src/console/routes');
     const local = await handle(new Request('http://localhost:8788/api/pianos', { headers: { 'X-Steven-Piano': '1' } }), env);
     expect(local.status).toBe(200);
     const noBypass = await handle(new Request('http://localhost:8788/api/pianos', { headers: { 'X-Steven-Piano': '1' } }), consoleEnv());

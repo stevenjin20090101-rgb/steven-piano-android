@@ -1,0 +1,49 @@
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Steven Piano Cloud</title>
+<link rel="stylesheet" href="/console.css">
+<script src="/console.js" defer></script>
+</head>
+<body>
+<!-- The app's own glyphs, drawn in the content colour. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8,5L19,12L8,19Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7,5h3.5v14H7z M13.5,5H17v14h-3.5z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6,6l8.5,6L6,18z M16,6h2v12h-2z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><path d="M7,7h10v10H7z"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M11,5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19,11H8.4l5.3,-5.3L12.3,4.3L4.6,12l7.7,7.7l1.4,-1.4L8.4,13H19z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M8.59,16.59L10,18l6,-6 -6,-6 -1.41,1.41L13.17,12z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9.5,16.2L5.3,12L3.9,13.4L9.5,19L20.1,8.4L18.7,7Z"/></symbol>
+</svg>
+
+<div class="frame">
+  <header class="bar">
+    <div class="identity">
+      <p class="eyebrow">Steven Piano</p>
+      <p class="product">Cloud console</p>
+    </div>
+    <p class="meta who" id="who"></p>
+  </header>
+  <main id="main" aria-live="polite">
+    <p class="empty">Loading…</p>
+  </main>
+</div>
+
+<dialog id="sheet" class="sheet" aria-labelledby="sheet-title"></dialog>
+<p id="toast" class="banner toast" role="status" aria-live="polite" hidden></p>
+</body>
+</html>
