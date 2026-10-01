@@ -61,6 +61,10 @@ object ComposerNames {
     private val ROMAN_NUMERALS = setOf("II", "III", "IV", "VI", "VII", "VIII", "IX")
     private val SUFFIXES = setOf("jr", "jr.", "sr", "sr.")
     private val NOT_KEY_CHARS = Regex("[^\\p{L}\\p{N} \\-]")
+    private val SPACES = Regex(" {2,}")
+
+    /** Given names written as initials ("W.", "J.S.", "JS"): each letter must begin one of the composer's given names. */
+    private val GIVEN_INITIALS = Regex("^(?:\\p{L}\\.?){1,3}$")
 
     /**
      * The full name of a well-known composer from their [key] (a folded surname, or another
@@ -92,6 +96,58 @@ object ComposerNames {
             canonical != null && TextKeys.fold(text) == TextKeys.fold(canonical) -> canonicalName(canonical)
             else -> Name(if (text == text.lowercase()) titleCase(text) else text, titleCase(parsed.surname), key)
         }
+    }
+
+    /**
+     * An artist's name (v1.10.1 — M28, D3): the folder an upload keeps an artist's pieces in, or the known
+     * side of a `Title - Artist` file name. A canonical composer's name is that composer ([canonicalOf]:
+     * "Claude Debussy" and "Erik Satie" join Debussy and Satie). Anyone else keeps the name as written
+     * (mojibake repaired, NFC, trimmed, spaces collapsed) with no surname logic: the key is the whole
+     * folded name ([artistKey]: "ed sheeran", "louis armstrong" apart from "craig armstrong", "coldplay",
+     * "c418") and so is the short name rows show ("Ed Sheeran · 3:54", as "Made in Studio · 3:05"), so
+     * "Twenty One Pilots", "The Weeknd" and "Lady Gaga & Bradley Cooper" stay whole.
+     */
+    fun artist(raw: String): Name {
+        val text = TitleHeuristics.cleanText(raw)
+        if (text.isEmpty()) return Name.Unknown
+        if (TextKeys.fold(text) == STUDIO_KEY) return Name(STUDIO, STUDIO, STUDIO_KEY)
+        canonicalOf(text)?.let { return it }
+        return Name(text, text, artistKey(text))
+    }
+
+    /**
+     * The key an artist's name groups by ([artist]): the whole name folded, without punctuation, its
+     * spaces collapsed ("Lady Gaga & Bradley Cooper" is "lady gaga bradley cooper"); a name of
+     * punctuation alone keeps its folded self rather than no key.
+     */
+    fun artistKey(raw: String): String {
+        val text = TitleHeuristics.cleanText(raw)
+        return keyOf(text).replace(SPACES, " ").ifEmpty { TextKeys.fold(text) }
+    }
+
+    /**
+     * The canonical composer [raw] names, as [normalize] gives them, or null when it names someone else:
+     * the full name ("Claude Debussy"), a short form ("Debussy", "Chopin, F", "Bach JS"), or the surname
+     * (or another spelling of it) after given names of the composer's own or their initials ("Pyotr
+     * Tchaikovsky", "W. A. Mozart", "Sergei Rachmaninov"). "Andrew Berg" and "Janis Joplin" are not
+     * Alban Berg and Scott Joplin, though [normalize] groups them by surname.
+     */
+    fun canonicalOf(raw: String): Name? {
+        val text = TitleHeuristics.cleanText(raw)
+        if (text.isEmpty()) return null
+        val name = normalize(text)
+        val full = CANONICAL[name.key] ?: return null
+        if (name.display == full) return name
+        val tokens = text.split(' ')
+        if (tokens.size < 2) return null
+        val surname = keyOf(tokens.last())
+        if ((VARIANTS[surname] ?: surname) != name.key) return null   // "Franz Schubert Franz Liszt": the last word is not the composer
+        val given = TextKeys.fold(full).split(' ').dropLast(1)
+        val fits = tokens.dropLast(1).all { token ->
+            val folded = TextKeys.fold(token)
+            folded in given || (GIVEN_INITIALS.matches(token) && folded.filter(Char::isLetter).all { letter -> given.any { it.first() == letter } })
+        }
+        return if (fits) canonicalName(full) else null
     }
 
     private class Parsed(val surname: String, val initials: String, val shortForm: Boolean)

@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.data.imports
 
 import dev.stevenjin.stevenpiano.data.TextKeys
+import dev.stevenjin.stevenpiano.data.builtin.LibraryFixture
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames.Name
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -117,5 +118,86 @@ class ComposerNamesTest {
         assertEquals("dvorak", TextKeys.fold("Dvořák"))
         assertEquals("lodz", TextKeys.fold("Łódź"))
         assertEquals("nocturne frederic chopin", TextKeys.searchText("Nocturne", "Frédéric Chopin"))
+    }
+
+    // v1.10.1 — M28, D3: artists' names.
+
+    private fun a(raw: String) = ComposerNames.artist(raw)
+
+    @Test
+    fun `an artist who is a canonical composer joins that composer's group`() {
+        assertEquals(Name("Claude Debussy", "Debussy", "debussy"), a("Claude Debussy"))
+        assertEquals(Name("Erik Satie", "Satie", "satie"), a("Erik Satie"))
+        assertEquals("a short form, as normalize reads it", Name("Claude Debussy", "Debussy", "debussy"), a("Debussy"))
+        assertEquals(Name("Johann Sebastian Bach", "Bach", "bach"), a("Bach JS"))
+        assertEquals("rachmaninoff", a("Rachmaninow").key)
+        assertEquals("the surname after given names of the composer's own", Name("Pyotr Ilyich Tchaikovsky", "Tchaikovsky", "tchaikovsky"), a("Pyotr Tchaikovsky"))
+        assertEquals("or their initials", Name("Wolfgang Amadeus Mozart", "Mozart", "mozart"), a("W. A. Mozart"))
+        assertEquals("another spelling of the surname", "Sergei Rachmaninoff", a("Sergei Rachmaninov").display)
+        assertEquals(Name("Traditional", "Traditional", "traditional"), a("Traditional"))
+        // Namesakes are not the composer, though normalize groups them by surname.
+        assertEquals(Name("Andrew Berg", "Andrew Berg", "andrew berg"), a("Andrew Berg"))
+        assertEquals("berg", n("Andrew Berg").key)
+        assertEquals(Name("Janis Joplin", "Janis Joplin", "janis joplin"), a("Janis Joplin"))
+        assertEquals("C. P. E. Bach is not J. S. Bach", "bach cpe", a("Bach CPE").key)
+        assertEquals(null, ComposerNames.canonicalOf("Franz Schubert Franz Liszt"))
+        assertEquals(null, ComposerNames.canonicalOf("Johann Strauss II"))
+        assertEquals(null, ComposerNames.canonicalOf(""))
+    }
+
+    @Test
+    fun `anyone else keeps the name as written, keyed and shown by the whole name`() {
+        assertEquals(Name("Ed Sheeran", "Ed Sheeran", "ed sheeran"), a("Ed Sheeran"))
+        assertEquals("normalize would group by the surname", "sheeran", n("Ed Sheeran").key)
+        assertEquals(Name("Hans Zimmer", "Hans Zimmer", "hans zimmer"), a("Hans Zimmer"))
+        assertEquals(Name("The Weeknd", "The Weeknd", "the weeknd"), a("The Weeknd"))
+        assertEquals(Name("Twenty One Pilots", "Twenty One Pilots", "twenty one pilots"), a("  Twenty  One   Pilots "))
+        assertEquals(Name("d4vd", "d4vd", "d4vd"), a("d4vd"))
+        assertEquals("as written, never title-cased", "coldplay", a("coldplay").display)
+        // A name that arrives decomposed (macOS writes zip names in NFD) is composed; the key folds the accent away.
+        assertEquals(Name("Beyoncé", "Beyoncé", "beyonce"), a("Beyoncé"))
+        assertEquals(Name("Yann Tiersen", "Yann Tiersen", "yann tiersen"), a("Yann Tiersen"))
+        assertEquals("Made in Studio stays the app's own", Name("Made in Studio", "Made in Studio", "made in studio"), a("made in studio"))
+        assertEquals(Name.Unknown, a("   "))
+        assertEquals("a name of punctuation alone still has a key", "!!!", a("!!!").key)
+    }
+
+    @Test
+    fun `the two Armstrongs are two artists`() {
+        val louis = a("Louis Armstrong")
+        val craig = a("Craig Armstrong")
+        assertEquals("louis armstrong", louis.key)
+        assertEquals("craig armstrong", craig.key)
+        assertEquals("Louis Armstrong", louis.short)
+        assertEquals("normalize would have made them one", n("Louis Armstrong").key, n("Craig Armstrong").key)
+    }
+
+    @Test
+    fun `one word is the whole name, key and short name alike`() {
+        assertEquals(Name("Coldplay", "Coldplay", "coldplay"), a("Coldplay"))
+        assertEquals(Name("Adele", "Adele", "adele"), a("Adele"))
+        assertEquals(Name("C418", "C418", "c418"), a("C418"))
+        assertEquals(Name("SZA", "SZA", "sza"), a("SZA"))
+    }
+
+    @Test
+    fun `a joint name stays whole and apart from either artist`() {
+        val joint = a("Lady Gaga & Bradley Cooper")
+        assertEquals(Name("Lady Gaga & Bradley Cooper", "Lady Gaga & Bradley Cooper", "lady gaga bradley cooper"), joint)
+        assertEquals("lady gaga", a("Lady Gaga").key)
+        assertEquals("guns n roses", ComposerNames.artistKey("Guns N' Roses"))
+    }
+
+    @Test
+    fun `a 1_10 library's composers keep the keys, names and short names they had`() {
+        // Every composer of Steven's library as 1.10 imported it (its INDEX.csv, ALL-SONGS.zip's file names, the
+        // Epic zip), with what normalize gave each one then: normalize is unchanged, so no key moves and no
+        // artwork row is orphaned (composer_keys_1_10.csv was written by 1.10's code, at 5d4fc80).
+        val rows = LibraryFixture.rows("composer_keys_1_10.csv")
+        assertEquals(125, rows.size)
+        for (row in rows) {
+            val composer = row["composer"]!!
+            assertEquals(composer, Name(row["display"]!!, row["short"]!!, row["key"]!!), n(composer))
+        }
     }
 }
