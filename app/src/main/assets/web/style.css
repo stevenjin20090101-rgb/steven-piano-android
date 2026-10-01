@@ -820,6 +820,9 @@ button, input, select { font: inherit; color: inherit; }
 
 .uploads .row .meta { white-space: normal; }
 
+/* Where the last upload went (v1.10.1 — M28): "In the playlist MIDI", then Open the playlist, wrapping as they must. */
+.import-playlist { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+
 .progress { height: 2px; margin-top: 6px; background: var(--hairline); }
 
 .progress > span { display: block; height: 100%; width: var(--fill, 0%); background: var(--primary); }

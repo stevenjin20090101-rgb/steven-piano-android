@@ -1413,7 +1413,11 @@
   }
 
   function renderAdd() {
-    $('add-body').replaceChildren(dropZone(), h('ul', { class: 'rows uploads', id: 'upload-rows' }), h('p', { class: 'note inset', id: 'import-tally' }));
+    $('add-body').replaceChildren(
+      dropZone(),
+      h('ul', { class: 'rows uploads', id: 'upload-rows' }),
+      h('p', { class: 'note inset', id: 'import-tally' }),
+      h('div', { class: 'import-playlist inset', id: 'import-playlist', hidden: true }));
     renderUploads();
     renderTally();
   }
@@ -1515,7 +1519,10 @@
     request.send(upload.file);
   }
 
-  /** The import on the tablet: its progress while it runs, then its tally. */
+  /**
+   * The import on the tablet: its progress while it runs, then its tally; and under it, when a zip or a loose
+   * file was put in a playlist (v1.10.1 — M28), "In the playlist MIDI" with Open the playlist.
+   */
   function renderTally() {
     const node = $('import-tally');
     if (!node || !state) return;
@@ -1531,6 +1538,35 @@
     } else {
       node.textContent = '';
     }
+    renderImportedPlaylist(!run.running && run.total > 0 ? run.playlist : null);
+  }
+
+  let shownPlaylist = null;
+
+  /** "In the playlist MIDI" and Open the playlist, for the playlist the last import filled; nothing without one. */
+  function renderImportedPlaylist(playlist) {
+    const node = $('import-playlist');
+    if (!node) return;
+    const key = playlist ? `${playlist.id}:${playlist.name}` : null;
+    if (key === shownPlaylist && node.childElementCount === (playlist ? 2 : 0)) return;
+    shownPlaylist = key;
+    node.hidden = !playlist;
+    node.replaceChildren(...(playlist ? [
+      h('p', { class: 'note', text: `In the playlist ${playlist.name}` }),
+      h('button', { class: 'outlined', type: 'button', onclick: () => openImported(playlist) }, 'Open the playlist'),
+    ] : []));
+  }
+
+  /** The Library section with the imported playlist open, as if chosen from its Playlists. */
+  function openImported(playlist) {
+    library.category = 'playlists';
+    library.query = '';
+    library.view = null;
+    library.loaded = true;   // the playlist itself shows, not the list beneath it first
+    $('lib-search').value = '';
+    show('library');
+    renderChips();
+    openPlaylist(playlist);
   }
 
   // ---- Studio (v1.7 — M23) ---------------------------------------------------------------------------------

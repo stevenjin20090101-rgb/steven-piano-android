@@ -21,6 +21,9 @@ import dev.stevenjin.stevenpiano.web.Sessions
 import dev.stevenjin.stevenpiano.web.WebAssets
 import dev.stevenjin.stevenpiano.web.WebServer
 import dev.stevenjin.stevenpiano.web.WebSockets
+import dev.stevenjin.stevenpiano.web.WebState
+import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import org.json.JSONObject
@@ -196,6 +199,10 @@ class WebServerRelayTest {
         assertTrue(cookie, Regex("sp_session=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Secure").matches(cookie))
         val token = cookie.substringAfter('=').substringBefore(';')
         assertEquals(200, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$token")).status)
+        // v1.10.1 — M28: the panel's Add tab hears where an upload went through the relay as on the tablet's own address.
+        backend.state = WebState(import = ImportProgress(done = 3, total = 3, imported = 3, playlist = ImportedPlaylist(14, "MIDI")))
+        val state = JSONObject(String(relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$token")).body, Charsets.UTF_8))
+        assertEquals("MIDI", state.getJSONObject("import").getJSONObject("playlist").getString("name"))
         val out = relayed("POST", "/api/logout", "{}".toByteArray(), panelHeaders(token))
         assertEquals("sp_session=; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Max-Age=0; Secure", out.headers["Set-Cookie"])
         assertEquals(401, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$token")).status)

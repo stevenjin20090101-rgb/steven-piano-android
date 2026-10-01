@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -39,6 +40,20 @@ class ImportCopyTest {
         assertEquals("2 files couldn't be read.", ImportCopy.summary(ImportProgress(done = 2, total = 2, failed = 2)))
         assertEquals("That piece is already in the library.", ImportCopy.summary(ImportProgress(done = 1, total = 1, duplicates = 1)))
         assertEquals("Those pieces are already in the library.", ImportCopy.summary(ImportProgress(done = 3, total = 3, duplicates = 3)))
+    }
+
+    @Test
+    fun `a zip's, a folder's or a loose upload's summary says which playlist its pieces went into`() {
+        val midi = ImportedPlaylist(14, "MIDI")
+        assertEquals("Imported 265 pieces · in the playlist MIDI.", ImportCopy.summary(ImportProgress(done = 266, total = 266, imported = 265, duplicates = 1, playlist = midi)))
+        assertEquals(
+            "Imported 3 pieces · in the playlist MIDI. 1 file couldn't be read.",
+            ImportCopy.summary(ImportProgress(done = 4, total = 4, imported = 3, failed = 1, playlist = midi)),
+        )
+        assertEquals("Those pieces are already in the library · in the playlist MIDI.", ImportCopy.summary(ImportProgress(done = 2, total = 2, duplicates = 2, playlist = midi)))
+        assertEquals("In the playlist MIDI. 1 file couldn't be read.", ImportCopy.summary(ImportProgress(done = 2, total = 2, duplicates = 1, failed = 1, playlist = midi)))
+        assertEquals("Imported 1 piece · in the playlist Uploads.", ImportCopy.summary(ImportProgress(done = 1, total = 1, imported = 1, playlist = ImportedPlaylist(15, "Uploads"))))
+        assertEquals("In the playlist MIDI", ImportCopy.inPlaylist("MIDI"))
     }
 
     @Test

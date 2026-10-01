@@ -16,6 +16,7 @@ import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
@@ -186,6 +187,13 @@ class WebApiTest {
         assertEquals(2, json.getJSONObject("requests").getInt("pending"))
         assertEquals("http://100.101.2.3:8737", json.getJSONObject("web").getString("address"))
         assertTrue(json.getJSONObject("import").getBoolean("running"))
+        // v1.10.1 — M28 (D7): the playlist the last finished import filled, null while one runs or when it filled none.
+        assertEquals(setOf("running", "done", "total", "imported", "duplicates", "failed", "current", "playlist"), json.getJSONObject("import").keys().asSequence().toSet())
+        assertTrue(json.getJSONObject("import").isNull("playlist"))
+        val finished = WebApi.import(ImportProgress(done = 266, total = 266, imported = 265, duplicates = 1, playlist = ImportedPlaylist(14, "MIDI")))
+        assertEquals(14, finished.getJSONObject("playlist").getLong("id"))
+        assertEquals("MIDI", finished.getJSONObject("playlist").getString("name"))
+        assertTrue("a run under way shows none yet", WebApi.import(ImportProgress(done = 3, total = 9, finished = false, playlist = ImportedPlaylist(14, "MIDI"))).isNull("playlist"))
         assertEquals("1.4.0", json.getJSONObject("piano").getJSONObject("facts").getString("fw"))
         assertEquals("state", WebApi.state(state, 0, type = "state").getString("type"))
         assertTrue("no piece: null, not missing", WebApi.state(WebState(), 0).getJSONObject("player").isNull("piece"))
