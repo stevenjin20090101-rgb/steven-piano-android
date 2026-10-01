@@ -141,13 +141,15 @@ class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) 
     /**
      * Whether this page is about a band or a performer (D5): its description names one ("British rock band",
      * "German film score composer", "American singer-songwriter"); else, a description naming a work (an
-     * album, a song, a film, a company) is not; else the extract's first sentence decides. So a soundtrack's
-     * page whose extract names a singer never stands for the singer.
+     * album, a song, a film, a company) and no person's years is not; else the extract's first sentence
+     * decides ("American indie game developer (born 1991)": "… is an American indie game developer and
+     * composer."). So a soundtrack's page whose extract names a singer never stands for the singer.
      */
     private fun WikiSummary.aboutPerformer(): Boolean {
-        val described = words(description.orEmpty())
+        val description = description.orEmpty()
+        val described = words(description)
         if (names(described, PERFORMERS)) return true
-        if (WORKS.any { it in described }) return false
+        if (!PERSON.containsMatchIn(description) && WORKS.any { it in described }) return false
         return names(words(firstSentence(extract.orEmpty())), PERFORMERS)
     }
 
@@ -206,10 +208,29 @@ class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) 
             return terms.any { " $it " in line }
         }
 
-        /** The extract's first sentence: up to the first full stop, question or exclamation mark followed by a space. */
-        private fun firstSentence(text: String): String {
-            val end = Regex("[.!?]\\s").find(text)?.range?.first ?: return text
-            return text.substring(0, end + 1)
+        /** A person's years in a description: "(born 1991)", "(1862–1918)", "(c. 1690 – 1750)". */
+        private val PERSON = Regex("\\bborn\\b|\\b\\d{3,4}\\s*[–—-]\\s*\\d{2,4}\\b", RegexOption.IGNORE_CASE)
+
+        /** Where a sentence may end: a full stop, question or exclamation mark before a space. */
+        private val SENTENCE_END = Regex("[.!?](?=\\s)")
+
+        /** Words a full stop follows without ending the sentence. */
+        private val ABBREVIATIONS = setOf("mr", "mrs", "ms", "dr", "st", "jr", "sr", "mt", "no", "op", "vol", "co", "ltd", "inc", "vs", "etc")
+
+        /**
+         * The extract's first sentence: up to the first full stop, question or exclamation mark followed by a
+         * space, past initials and abbreviations ("Robert F. "Toby" Fox is …", "Nintendo Co., Ltd. is …").
+         */
+        fun firstSentence(text: String): String {
+            for (end in SENTENCE_END.findAll(text)) {
+                val at = end.range.first
+                if (text[at] == '.') {
+                    val word = text.substring(0, at).takeLastWhile { it.isLetter() }
+                    if (word.length == 1 || word.lowercase() in ABBREVIATIONS) continue
+                }
+                return text.substring(0, at + 1)
+            }
+            return text
         }
     }
 }

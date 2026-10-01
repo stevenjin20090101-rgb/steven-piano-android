@@ -147,6 +147,22 @@ class ArtworkFetcherTest {
     }
 
     @Test
+    fun `a person whose description names a game is still read from the extract, past an initial`() = runTest {
+        // Wikipedia's own words for Toby Fox (2026-10-01): the description names no instrument, the extract does.
+        wiki.page(
+            "Toby Fox",
+            "Robert F. \"Toby\" Fox is an American indie game developer and composer. He is best known for creating Undertale.",
+            description = "American indie game developer (born 1991)",
+            image = photo,
+        )
+        assertEquals("Toby Fox", (fetcher.fetch(ArtKey.Composer("toby fox", "Toby Fox")) as Fetched.Found).sourceTitle)
+        assertEquals(listOf("summary Toby Fox", "download $photo"), wiki.kinds)
+        assertEquals("Robert F. \"Toby\" Fox is an American indie game developer and composer.", ArtworkFetcher.firstSentence(wiki.pages.getValue("Toby Fox").extract!!))
+        assertEquals("Nintendo Co., Ltd. is a company in Kyoto.", ArtworkFetcher.firstSentence("Nintendo Co., Ltd. is a company in Kyoto. It makes games."))
+        assertEquals("No full stop", ArtworkFetcher.firstSentence("No full stop"))
+    }
+
+    @Test
     fun `a company is not found and costs at most five lookups`() = runTest {
         wiki.page("Nintendo", "Nintendo Co., Ltd. is a Japanese multinational video game company headquartered in Kyoto.", description = "Japanese video game company")
         assertEquals(Fetched.NotFound, fetcher.fetch(ArtKey.Composer("nintendo", "Nintendo")))
