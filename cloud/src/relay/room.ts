@@ -322,11 +322,14 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     // Revoked or forgotten while this was checked: the tablet asks again, and is refused then.
     if (epoch !== this.authEpoch) return error(503, 'busy', 'Try again.');
 
-    const older = this.ctx.getWebSockets('tablet');
-    if (older.some((ws) => ws.readyState === OPEN)) {
+    if (this.ctx.getWebSockets('tablet').some((ws) => ws.readyState === OPEN)) {
       await auditStatement(this.env.DB, { at: now, actor: 'tablet', pianoId, action: 'replaced', detail: { address: h.get('x-relay-address') } }).run();
+      // Audit delta 3: a revoke or a forget may have come while the note was written (D1 is I/O: the room
+      // takes other events meanwhile). Looked at again here, and no await from here to the accept.
+      if (epoch !== this.authEpoch) return error(503, 'busy', 'Try again.');
     }
-    for (const ws of older) {
+    // Every older connection gives way, one accepted while this one waited included: the newest stays.
+    for (const ws of this.ctx.getWebSockets('tablet')) {
       this.dropSession(tabletAttachment(ws).session, 1012, 'The piano reconnected.');
       closeQuietly(ws, Close.Replaced, 'Replaced by a newer connection.');
     }
@@ -349,7 +352,9 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       at: now,
     };
     server.send(JSON.stringify(hello));
-    await this.env.DB.prepare('UPDATE pianos SET online = 1, last_seen = ? WHERE id = ?').bind(now, pianoId).run();
+    // Only a piano that still has a secret is marked online: a revoke landing from here on closes this socket
+    // (it is accepted now), and its "online = 0" is not undone by this write arriving after it (audit delta 3).
+    await this.env.DB.prepare('UPDATE pianos SET online = 1, last_seen = ? WHERE id = ? AND secret_hash IS NOT NULL').bind(now, pianoId).run();
     return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': SUBPROTOCOL } });
   }
 
@@ -438,7 +443,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       this.stored.lastD1Write = now; // before the write: a status arriving meanwhile is not due
       this.d1StatusWrites++;
       await this.env.DB.prepare(
-        'UPDATE pianos SET last_seen = ?, online = 1, app_version = ?, app_code = ?, firmware = ?, guests = ?, approve_first = ?, status_json = ? WHERE id = ?',
+        'UPDATE pianos SET last_seen = ?, online = 1, app_version = ?, app_code = ?, firmware = ?, guests = ?, approve_first = ?, status_json = ? WHERE id = ? AND secret_hash IS NOT NULL',
       )
         .bind(
           now,

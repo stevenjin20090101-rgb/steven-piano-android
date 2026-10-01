@@ -31,6 +31,23 @@ describe("a tablet's connection", () => {
     }
   });
 
+  it("leaves the connected tablet alone when another comes with a wrong secret (audit delta 3)", async () => {
+    const { pianoId, secret } = await seedPiano();
+    const tablet = await FakeTablet.connect(pianoId, secret);
+    await tablet.next('hello');
+    for (const wrong of [newSecret(), secret.slice(0, 42) + (secret.endsWith('A') ? 'B' : 'A')]) {
+      const impostor = await tabletRequest(pianoId, wrong);
+      expect(impostor.status).toBe(401);
+      expect(impostor.webSocket).toBeNull();
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    expect(tablet.closedWith).toBeNull();
+    expect((await env.ROOMS.getByName(pianoId).status(pianoId)).online).toBe(true);
+    const replaced = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE piano_id = ? AND action = 'replaced'").bind(pianoId).first<{ n: number }>();
+    expect(replaced!.n).toBe(0);
+    tablet.close();
+  });
+
   it('must speak the protocol, over a WebSocket', async () => {
     const { pianoId, secret } = await seedPiano();
     expect((await tabletRequest(pianoId, secret, { protocol: null })).status).toBe(400);
