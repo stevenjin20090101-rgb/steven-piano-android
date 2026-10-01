@@ -194,7 +194,7 @@ export function checkCommand(name: unknown, rawArgs: unknown): CommandCheck {
 
 // ---- The tablet's status ------------------------------------------------------------------------
 
-/** What the relay keeps of a tablet's `status`: known fields only, strings cut, numbers bounded; no device ids. */
+/** What the relay keeps of a tablet's `status`: known fields only, strings cut, numbers bounded; no device ids, no address. */
 export interface TabletStatus {
   app: { version: string | null; code: number | null } | null;
   firmware: string | null;
@@ -208,7 +208,8 @@ export interface TabletStatus {
     channel: { key: string | null; name: string | null } | null;
   } | null;
   guests: { open: boolean; approveFirst: boolean } | null;
-  panel: { web: boolean; host: string | null } | null;
+  /** Whether the tablet's own Web control is on. Never its address there (audit delta 3: the relay has no use for it). */
+  panel: { web: boolean } | null;
   library: { pieces: number | null; pack: number | null } | null;
   /** The tablet's channels, when it names them (the console's Channels list). */
   channels: Array<{ key: string; name: string }> | null;
@@ -239,7 +240,7 @@ export function sanitizeStatus(raw: unknown): TabletStatus | null {
     };
   }
   const guests = isObject(raw.guests) ? { open: raw.guests.open === true, approveFirst: raw.guests.approveFirst === true } : null;
-  const panel = isObject(raw.panel) ? { web: raw.panel.web === true, host: text(raw.panel.host, 120) } : null;
+  const panel = isObject(raw.panel) ? { web: raw.panel.web === true } : null;
   const library = isObject(raw.library) ? { pieces: whole(raw.library.pieces), pack: whole(raw.library.pack) } : null;
   let channels: TabletStatus['channels'] = null;
   if (Array.isArray(raw.channels)) {

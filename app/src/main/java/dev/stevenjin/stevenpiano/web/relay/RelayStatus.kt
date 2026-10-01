@@ -21,10 +21,11 @@ import java.util.Locale
  * what the web panel already shows: the app's version and build, the piano's firmware (its report's
  * `fw`), the piano link's state, the player (playing, paused or stopped; the piece's title and
  * composer; where it is and how long it lasts; the channel), whether guests may request and wait for
- * approval, whether the panel is on and where on the tablet's own networks, the library's size and
- * the version of Steven's library pack loaded (v1.10 — M27; 0: none yet), and the channels' keys and names for
- * the console's list. Nothing that names the device: no Bluetooth address, no piano name, no serial,
- * no Android id. Texts are cut to [MAX_TEXT] characters.
+ * approval, whether the tablet's own Web control is on, the library's size and the version of Steven's
+ * library pack loaded (v1.10 — M27; 0: none yet), and the channels' keys and names for the console's list.
+ * Nothing that names the device: no Bluetooth address, no piano name, no serial, no Android id; and not
+ * the tablet's address on its own networks (audit delta 3: the panel's Tailscale or Wi-Fi address went
+ * with every report, and the console never used it). Texts are cut to [MAX_TEXT] characters.
  */
 object RelayStatus {
     const val MAX_TEXT = 200
@@ -36,18 +37,16 @@ object RelayStatus {
         appCode: Int,
         state: WebState,
         settings: PianoSettings,
-        panelHost: String?,
         libraryPieces: Int?,
         channels: List<WebChannel>,
         at: Long,
-    ): JSONObject = report(appVersion, appCode, state, settings.webEnabled, panelHost, libraryPieces, settings.libraryPackVersion, channels, at)
+    ): JSONObject = report(appVersion, appCode, state, settings.webEnabled, libraryPieces, settings.libraryPackVersion, channels, at)
 
     fun report(
         appVersion: String,
         appCode: Int,
         state: WebState,
         webEnabled: Boolean,
-        panelHost: String?,
         libraryPieces: Int?,
         pack: Int?,
         channels: List<WebChannel>,
@@ -68,7 +67,7 @@ object RelayStatus {
             .put("link", state.link.state)
             .put("player", playing)
             .put("guests", JSONObject().put("open", state.guests.open).put("approveFirst", state.guests.approveFirst))
-            .put("panel", JSONObject().put("web", webEnabled).put("host", panelHost ?: JSONObject.NULL))
+            .put("panel", JSONObject().put("web", webEnabled))
             .put("library", JSONObject().put("pieces", libraryPieces ?: JSONObject.NULL).put("pack", pack ?: JSONObject.NULL))
             .put("channels", JSONArray().apply { channels.take(MAX_CHANNELS).forEach { put(JSONObject().put("key", it.key).put("name", it.name.take(MAX_TEXT))) } })
             .put("at", at)

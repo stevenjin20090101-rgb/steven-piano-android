@@ -173,7 +173,7 @@ function status() {
       channel: piano.channel,
     },
     guests: { open: piano.guests, approveFirst: piano.approveFirst },
-    panel: { web: false, host: null },
+    panel: { web: false },
     library: { pieces: PIECES.length, pack: piano.libraryPack },
     channels: CHANNELS,
     at: Date.now(),

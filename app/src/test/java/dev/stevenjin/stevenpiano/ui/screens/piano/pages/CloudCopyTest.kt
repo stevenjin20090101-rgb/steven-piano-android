@@ -11,6 +11,8 @@ package dev.stevenjin.stevenpiano.ui.screens.piano.pages
 
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The CLOUD section's status line (DESIGN.md › v1.10 — M26). */
@@ -27,5 +29,20 @@ class CloudCopyTest {
         assertEquals("Revoked in the console. Enrol again.", CloudCopy.line(CloudStatus.Revoked, 0))
         assertEquals("4403: the console forgot this piano", "Removed from the console. Enrol again.", CloudCopy.line(CloudStatus.Disabled, 0))
         assertEquals("This tablet's key is gone. Enrol again.", CloudCopy.line(CloudStatus.NotEnrolled, 0))
+    }
+
+    /**
+     * Audit delta 3: About says that remote access is off unless turned on, and what the relay then sees, the
+     * very fields the status carries (RelayStatus), and that no device identifier goes.
+     */
+    @Test
+    fun `About says remote access is off by default and what the relay sees`() {
+        val about = CloudCopy.ABOUT
+        assertTrue(about.startsWith("Remote access over the internet is off unless you turn it on."))
+        for (seen in listOf("pages", "requests", "versions", "whether the piano is connected", "what plays", "guests'", "Web control", "library's size", "channels' names")) {
+            assertTrue("About names $seen", seen in about)
+        }
+        assertTrue("Never a device identifier." in about)
+        assertFalse("no address on the tablet's networks goes (the status no longer carries one)", "address" in about)
     }
 }

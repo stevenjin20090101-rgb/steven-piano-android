@@ -277,7 +277,6 @@ class WebService : Service() {
                 appCode = BuildConfig.VERSION_CODE,
                 state = panel.backend.state(),
                 settings = settings,
-                panelHost = panel.status.value.panelHost,
                 libraryPieces = runCatching { graph.library.count().first() }.getOrNull(),
                 channels = panel.backend.channels(),
                 at = System.currentTimeMillis(),
@@ -290,7 +289,6 @@ class WebService : Service() {
             graph.pianoLink.state.map { },
             graph.pianoSettings.state.map { },
             graph.settings.map { listOf(it.webGuests, it.webApproveFirst, it.webEnabled, it.libraryPackVersion) },   // a pack loaded: the console's line at once
-            graph.web.status.map { it.panelHost },
         ).map { }
     }
 

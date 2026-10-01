@@ -315,6 +315,14 @@ private fun EnrolField(
 
 /** The CLOUD section's words, worked out without Compose (tested). */
 object CloudCopy {
+    /**
+     * About's line on Steven Piano Cloud (audit delta 3: About said nothing of it): off unless turned on,
+     * and then exactly what the relay sees, as README › Cloud › What the relay sees says it.
+     */
+    const val ABOUT = "Remote access over the internet is off unless you turn it on. Then your own relay carries the panel's pages " +
+        "and requests, and every 30 s the app's and the piano's versions, whether the piano is connected, what plays, the guests' " +
+        "switches, whether Web control is on, the library's size and the channels' names. Never a device identifier."
+
     /** The status line under the switch; [now] counts a wait down. */
     fun line(status: CloudStatus, now: Long): String = when (status) {
         CloudStatus.Off -> "Starting…"

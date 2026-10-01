@@ -40,7 +40,7 @@ class RelayStatusTest {
             guests = GuestSettings(open = true, approveFirst = false),
         )
         val channels = listOf(WebChannel("calm", "Calm", 30, playable = true, playing = true, volume = 70, composers = emptyList()))
-        val status = RelayStatus.report("1.10", 18, state, webEnabled = true, panelHost = "100.101.2.3", libraryPieces = 1_727, pack = null, channels = channels, at = 5)
+        val status = RelayStatus.report("1.10", 18, state, webEnabled = true, libraryPieces = 1_727, pack = null, channels = channels, at = 5)
         assertEquals(setOf("app", "firmware", "link", "player", "guests", "panel", "library", "channels", "at"), status.keys().asSequence().toSet())
         assertEquals("1.10", status.getJSONObject("app").getString("version"))
         assertEquals(18, status.getJSONObject("app").getInt("code"))
@@ -55,7 +55,8 @@ class RelayStatusTest {
         assertEquals("calm", player.getJSONObject("channel").getString("key"))
         assertTrue(status.getJSONObject("guests").getBoolean("open"))
         assertFalse(status.getJSONObject("guests").getBoolean("approveFirst"))
-        assertEquals("100.101.2.3", status.getJSONObject("panel").getString("host"))
+        assertTrue(status.getJSONObject("panel").getBoolean("web"))
+        assertEquals("never the tablet's address on its own networks (audit delta 3)", setOf("web"), status.getJSONObject("panel").keys().asSequence().toSet())
         assertEquals(1_727, status.getJSONObject("library").getInt("pieces"))
         assertTrue("no pack until M27 brings one", status.getJSONObject("library").isNull("pack"))
         assertEquals("Calm", status.getJSONArray("channels").getJSONObject(0).getString("name"))
@@ -67,7 +68,7 @@ class RelayStatusTest {
     @Test
     fun `the web service's report reads the panel's switch and the library pack loaded from the settings`() {
         val state = WebState(piano = WebPianoState("unknown"))
-        fun sent(settings: PianoSettings) = RelayStatus.report("1.10", 18, state, settings, panelHost = null, libraryPieces = 1_726, channels = emptyList(), at = 5)
+        fun sent(settings: PianoSettings) = RelayStatus.report("1.10", 18, state, settings, libraryPieces = 1_726, channels = emptyList(), at = 5)
         val loaded = sent(PianoSettings(webEnabled = true, libraryPackVersion = 1))
         assertEquals("Steven's library, version 1 (v1.10 — M27)", 1, loaded.getJSONObject("library").getInt("pack"))
         assertTrue(loaded.getJSONObject("panel").getBoolean("web"))
@@ -80,14 +81,14 @@ class RelayStatusTest {
     @Test
     fun `an idle tablet reports no piece, and long texts and many channels are cut`() {
         val many = (1..40).map { WebChannel("c$it", "C".repeat(300), 3, playable = true, playing = false, volume = 70, composers = emptyList()) }
-        val idle = RelayStatus.report("1.10", 18, WebState(piano = WebPianoState("unknown")), webEnabled = false, panelHost = null, libraryPieces = null, pack = 2, channels = many, at = 5)
+        val idle = RelayStatus.report("1.10", 18, WebState(piano = WebPianoState("unknown")), webEnabled = false, libraryPieces = null, pack = 2, channels = many, at = 5)
         val player = idle.getJSONObject("player")
         assertEquals("stopped", player.getString("status"))
         assertTrue(player.isNull("title") && player.isNull("composer") && player.isNull("channel"))
         assertEquals(0L, player.getLong("positionMs"))
         assertTrue(idle.isNull("firmware"))
         assertEquals("disconnected", idle.getString("link"))
-        assertTrue(idle.getJSONObject("panel").isNull("host"))
+        assertFalse(idle.getJSONObject("panel").has("host"))
         assertEquals(2, idle.getJSONObject("library").getInt("pack"))
         assertEquals(RelayStatus.MAX_CHANNELS, idle.getJSONArray("channels").length())
         assertEquals(RelayStatus.MAX_TEXT, idle.getJSONArray("channels").getJSONObject(0).getString("name").length)
