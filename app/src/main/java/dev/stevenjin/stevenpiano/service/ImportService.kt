@@ -84,7 +84,7 @@ class ImportService : Service() {
                     stopped(e)
                     null
                 }
-                if (result != null && result.imported > 0) {
+                if (result != null && result.piecesChanged) {
                     // The built-in playlists take in what arrived (while the foreground holds the process).
                     graph.refreshBuiltIns()
                     // Started now, while this service still holds the foreground: Android 12+ refuses

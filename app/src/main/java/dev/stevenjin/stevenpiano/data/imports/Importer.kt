@@ -42,6 +42,13 @@ interface ImportStore {
 
     /** Whether some piece of the library is grouped under [composerKey] (D3: a composer read from a file name asks first). */
     suspend fun hasComposerKey(composerKey: String): Boolean
+
+    /**
+     * The pieces with [shas] (those the library holds), in that order, at the end of the playlist called
+     * [name], found by name or made ([imported]: an import named it), ≤ 500 to a transaction; a piece in it
+     * already stays where it is. Returns the playlist, or null when none of the pieces is in the library.
+     */
+    suspend fun linkToPlaylist(name: String, imported: Boolean, shas: List<String>): ImportedPlaylist?
 }
 
 /**
@@ -116,11 +123,16 @@ class Importer(
         // What a Mac adds beside the music is neither a piece nor a failure: it is not counted at all (D1).
         val listed = source.items.filterNot { isMacMetadata(it.relativePath) }
         val items = listed.sortedByDescending { source.rowFor(it) != null }
-        val names = BatchNames(store, ImportFolders(listed.map { it.relativePath }))
+        val folders = ImportFolders(listed.map { it.relativePath })
+        val names = BatchNames(store, folders)
         var state = ImportProgress(total = items.size, finished = false)
         progress.value = state
         val seen = HashSet<String>()
         val batch = ArrayList<PieceEntity>(BATCH_SIZE)
+        // D2: every piece of a zip, a folder or a loose upload goes into its playlist, those already there too,
+        // unless an INDEX.csv row of the batch places it (in its own collection, as before).
+        val found = ArrayList<Pair<String, String>>()   // (path, SHA-256)
+        val placed = HashSet<String>()
 
         suspend fun flush() {
             if (batch.isEmpty()) return
@@ -153,19 +165,52 @@ class Importer(
             }
             when (outcome) {
                 is Outcome.Ready -> batch += outcome.piece
-                Outcome.Duplicate -> state = state.copy(duplicates = state.duplicates + 1)
+                is Outcome.Duplicate -> state = state.copy(duplicates = state.duplicates + 1, filled = state.filled + if (outcome.filled) 1 else 0)
                 Outcome.Failed -> state = state.copy(failed = state.failed + 1)
+            }
+            outcome.sha?.let { sha ->
+                if (source.rowFor(item)?.collection.isNullOrBlank()) found += item.relativePath to sha else placed += sha
             }
             state = state.copy(done = state.done + 1)
             if (batch.size == BATCH_SIZE) flush()
             progress.value = state
         }
         flush()
-        state = state.copy(current = null, finished = true)
+        val playlist = link(source.batch, folders.root, found, placed)
+        state = state.copy(current = null, finished = true, playlist = playlist)
         progress.value = state
-        log("Import: ${state.imported} new, ${state.duplicates} already there, ${state.failed} failed")
+        log("Import: ${state.imported} new, ${state.duplicates} already there, ${state.failed} failed" + (playlist?.let { ", in a playlist" + named(it.name) } ?: ""))
         return state
     }
+
+    /**
+     * The batch's pieces ([found], less those an INDEX row of the batch [placed]) at the end of its
+     * playlist (DESIGN.md › v1.10.1, D2), in path order ([PathOrder]): a zip's or a folder's, named after
+     * its [root] folder, else the zip or the folder itself; a loose upload's, Uploads. The name is cut to
+     * [TextLimits.COLLECTION]; a playlist of that name is found or made ([ImportStore.linkToPlaylist]).
+     * Null when the batch has no playlist or nothing to put in it, or when the library refused.
+     */
+    private suspend fun link(batch: ImportBatch, root: String?, found: List<Pair<String, String>>, placed: Set<String>): ImportedPlaylist? {
+        val (name, imported) = when (batch) {
+            ImportBatch.None -> return null
+            is ImportBatch.Named -> (root ?: batch.name) to true
+            ImportBatch.Uploads -> ImportBatch.UPLOADS to false
+        }
+        val shas = found.filter { it.second !in placed }.sortedWith(compareBy(PathOrder) { it.first }).map { it.second }.distinct()
+        if (shas.isEmpty()) return null
+        val kept = TextLimits.clip(TitleHeuristics.cleanText(name), TextLimits.COLLECTION).ifEmpty { ImportBatch.UPLOADS }
+        return try {
+            store.linkToPlaylist(kept, imported, shas)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {   // the pieces stay in the library; only their playlist is missing
+            log("Couldn't put the pieces in their playlist" + detail(e))
+            null
+        }
+    }
+
+    /** " called <name>" in debug builds; nothing in release builds, whose log never names the person's folders. */
+    private fun named(name: String): String = if (BuildConfig.DEBUG) " called $name" else ""
 
     /**
      * A file's trouble in the log. Debug builds name the file; release builds (whose warnings stay
@@ -179,9 +224,19 @@ class Importer(
     private fun detail(e: Throwable): String = if (BuildConfig.DEBUG) ": ${e.message}" else ""
 
     private sealed interface Outcome {
-        class Ready(val piece: PieceEntity) : Outcome
-        data object Duplicate : Outcome
-        data object Failed : Outcome
+        /** The piece's SHA-256, when its bytes were read. */
+        val sha: String?
+
+        class Ready(val piece: PieceEntity) : Outcome {
+            override val sha: String get() = piece.sha256
+        }
+
+        /** Already in the library, or earlier in this batch; [filled]: its blank composer was filled in. */
+        class Duplicate(override val sha: String, val filled: Boolean = false) : Outcome
+
+        data object Failed : Outcome {
+            override val sha: String? get() = null
+        }
     }
 
     private suspend fun prepare(item: ImportItem, row: IndexCsv.Row?, seen: MutableSet<String>, names: BatchNames): Outcome {
@@ -195,13 +250,16 @@ class Importer(
             return Outcome.Failed
         }
         val sha = sha256(bytes)
-        if (!seen.add(sha)) return Outcome.Duplicate
+        if (!seen.add(sha)) return Outcome.Duplicate(sha)
         store.findBySha(sha)?.let { existing ->
             if (existing.composer.isBlank()) {
                 val meta = names.metadata(item, row, emptyList())
-                if (meta.composer.isNotEmpty()) store.fillComposer(existing, names.composer(meta))
+                if (meta.composer.isNotEmpty()) {
+                    store.fillComposer(existing, names.composer(meta))
+                    return Outcome.Duplicate(sha, filled = true)
+                }
             }
-            return Outcome.Duplicate
+            return Outcome.Duplicate(sha)
         }
         val midi = try {
             SmfParser.parse(bytes)

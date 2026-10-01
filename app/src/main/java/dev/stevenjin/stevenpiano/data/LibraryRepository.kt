@@ -22,7 +22,9 @@ import dev.stevenjin.stevenpiano.data.db.PlaylistPieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.data.imports.ImportBatch
 import dev.stevenjin.stevenpiano.data.imports.ImportStore
+import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
 import dev.stevenjin.stevenpiano.midi.SmfParser
 import dev.stevenjin.stevenpiano.player.PieceSource
 import dev.stevenjin.stevenpiano.player.PlayablePiece
@@ -264,6 +266,28 @@ class LibraryRepository(
         pieces.update(piece.named(piece.title, composer))
 
     override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.hasComposerKey(composerKey)
+
+    /**
+     * An import's pieces into its playlist (v1.10.1 — M28, D2): the pieces among [shas] the library holds,
+     * in that order, after the playlist's last one; the playlist called [name] (as names compare, a
+     * built-in one stepping aside) found or made, in the first transaction that has a piece for it; at most
+     * [SQL_CHUNK] pieces a transaction. A piece in it already keeps its place.
+     */
+    override suspend fun linkToPlaylist(name: String, imported: Boolean, shas: List<String>): ImportedPlaylist? {
+        var target: PlaylistEntity? = null
+        for (chunk in shas.distinct().chunked(SQL_CHUNK)) {
+            db.withTransaction {
+                val ids = pieces.idsBySha(chunk).associate { it.sha256 to it.id }
+                val ordered = chunk.mapNotNull { ids[it] }
+                if (ordered.isEmpty()) return@withTransaction
+                val playlist = target ?: playlists.byId(playlistId(playlistName(name).ifEmpty { ImportBatch.UPLOADS }, imported))
+                    ?: return@withTransaction
+                target = playlist
+                ordered.forEach { link(playlist.id, it) }
+            }
+        }
+        return target?.let { ImportedPlaylist(it.id, it.name) }
+    }
 
     override suspend fun insertAll(pieces: List<PieceEntity>): Int = db.withTransaction {
         var inserted = 0

@@ -159,5 +159,8 @@ class LocalZipTest {
         }
 
         override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.any { it.composerKey == composerKey }
+
+        override suspend fun linkToPlaylist(name: String, imported: Boolean, shas: List<String>): ImportedPlaylist? =
+            throw AssertionError("Steven's library makes no playlist of its own")
     }
 }

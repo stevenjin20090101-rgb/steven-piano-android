@@ -31,6 +31,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
+import dev.stevenjin.stevenpiano.data.imports.ImportBatch
 import dev.stevenjin.stevenpiano.data.imports.ImportItem
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.OpenedSource
@@ -357,8 +358,9 @@ class AppWebBackend(
         applyWebSettings(change)
     }
 
+    /** A loose MIDI file: its piece goes into the standing playlist Uploads (DESIGN.md › v1.10.1, D2). */
     override suspend fun importMidi(name: String, bytes: ByteArray) {
-        importInBackground(OpenedSource(listOf(ImportItem(name, name) { ByteArrayInputStream(bytes) })))
+        importInBackground(OpenedSource(listOf(ImportItem(name, name) { ByteArrayInputStream(bytes) }), batch = ImportBatch.Uploads))
     }
 
     override suspend fun importZip(name: String, file: File) {
@@ -372,8 +374,9 @@ class AppWebBackend(
             graph.reportFailedImport()
             return
         }
+        // The zip's pieces go into its own playlist, named after its root folder or the zip (v1.10.1, D2).
         val source = try {
-            OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close)
+            OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close, batch = ImportBatch.zip(name))
         } catch (e: CancellationException) {
             zip.close()
             throw e
@@ -515,7 +518,7 @@ class AppWebBackend(
                 if (BuildConfig.DEBUG) Log.w(TAG, "An upload's import stopped", e) else Log.w(TAG, "An upload's import stopped")
                 null
             }
-            if (result != null && result.imported > 0) {
+            if (result != null && result.piecesChanged) {
                 graph.refreshBuiltIns()
                 if (graph.settingsRepository.settings.first().fetchArtworkAutomatically) graph.artwork.requestComposers(force = false)
             }

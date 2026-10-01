@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.data.imports
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import dev.stevenjin.stevenpiano.data.TextLimits
 import java.io.Closeable
@@ -43,9 +44,35 @@ sealed interface ImportSource {
 class ImportItem(val name: String, val relativePath: String, val open: () -> InputStream)
 
 /**
+ * Where an import puts its pieces besides the playlists its INDEX.csv names (DESIGN.md › v1.10.1, D2):
+ * every piece of the batch that no INDEX row places, those already there included, in path order.
+ */
+sealed interface ImportBatch {
+    /** Files picked one by one on the tablet, a piece kept from Studio, Steven's library: no playlist. */
+    data object None : ImportBatch
+
+    /** A zip or a folder: the playlist named after its root folder ([ImportFolders.root]), else [name], the zip's or the folder's own. */
+    data class Named(val name: String) : ImportBatch
+
+    /** A loose MIDI file sent through the web panel: the standing playlist [UPLOADS], made when first needed. */
+    data object Uploads : ImportBatch
+
+    companion object {
+        /** The standing playlist of loose uploads, a playlist of the person's like any other (renamed or deleted, it is made again). */
+        const val UPLOADS = "Uploads"
+
+        private val ZIP_EXTENSION = Regex("\\.zip$", RegexOption.IGNORE_CASE)
+
+        /** The batch of a zip called [fileName]: named after the zip without its extension (or its root folder). */
+        fun zip(fileName: String): Named = Named(fileName.trim().replace(ZIP_EXTENSION, ""))
+    }
+}
+
+/**
  * A source opened for reading: its MIDI files, and its INDEX.csv when it has one. [indexBase]
  * is the folder the index sits in; the index lists paths relative to it. [limited] says what cut
- * a folder's listing short, when a cap did (see [TreeWalk]). Close when done.
+ * a folder's listing short, when a cap did (see [TreeWalk]). [batch] says which playlist the pieces
+ * go to (v1.10.1). Close when done.
  */
 class OpenedSource(
     val items: List<ImportItem>,
@@ -53,6 +80,7 @@ class OpenedSource(
     private val indexBase: String = "",
     private val release: () -> Unit = {},
     val limited: String? = null,
+    val batch: ImportBatch = ImportBatch.None,
 ) : Closeable {
     fun rowFor(item: ImportItem): IndexCsv.Row? {
         val csv = index ?: return null
@@ -109,12 +137,14 @@ fun openSource(context: Context, source: ImportSource, cancelled: () -> Boolean 
                 index = index,
                 indexBase = listing.index?.relativePath?.let(::folderOf).orEmpty(),
                 limited = listing.limited?.let { "The folder holds $it; the rest was left out." },
+                batch = ImportBatch.Named(treeName(resolver, source.treeUri)),
             )
         }
         is ImportSource.Zip -> {
+            val name = displayName(resolver, source.uri)
             val zip = ZipSource(ZipSource.copyToCache(resolver, source.uri, context.cacheDir), deleteWhenClosed = true)
             try {
-                OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close)
+                OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close, batch = ImportBatch.zip(name))
             } catch (e: Exception) {
                 zip.close()
                 throw e
@@ -149,6 +179,23 @@ fun openLocalZip(source: ImportSource.LocalZip): OpenedSource {
 
 private fun ContentResolver.openStream(uri: Uri): InputStream =
     openInputStream(uri) ?: throw FileNotFoundException("Can't open $uri")
+
+/**
+ * The name of the folder [treeUri] chose, as its provider gives it, else the last part of its document id
+ * ("primary:Music/MIDI" is "MIDI"); cut to [TextLimits.DISPLAY_NAME] characters. A folder import's playlist
+ * takes it when its files share no root folder (v1.10.1, D2).
+ */
+private fun treeName(resolver: ContentResolver, treeUri: Uri): String {
+    val id = DocumentsContract.getTreeDocumentId(treeUri)
+    val named = try {
+        resolver.query(DocumentsContract.buildDocumentUriUsingTree(treeUri, id), arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
+        }
+    } catch (e: RuntimeException) {   // a provider that cannot answer: the id's last part will do
+        null
+    }
+    return TextLimits.clip(named ?: id.substringAfterLast(':').substringAfterLast('/'), TextLimits.DISPLAY_NAME)
+}
 
 /** The name the sending app gives the file, cut to [TextLimits.DISPLAY_NAME] characters (another app chose it). */
 private fun displayName(resolver: ContentResolver, uri: Uri): String {

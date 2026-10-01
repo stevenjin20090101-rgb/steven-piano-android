@@ -92,6 +92,10 @@ interface PieceDao {
     @Query("SELECT EXISTS(SELECT 1 FROM pieces WHERE composerKey = :composerKey)")
     suspend fun hasComposerKey(composerKey: String): Boolean
 
+    /** The ids of the pieces among [shas] (at most 500 at a time), in no particular order (v1.10.1 — M28, D2). */
+    @Query("SELECT id, sha256 FROM pieces WHERE sha256 IN (:shas)")
+    suspend fun idsBySha(shas: List<String>): List<PieceSha>
+
     /** Returns the new id, or -1 when a piece with the same bytes is already there. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(piece: PieceEntity): Long

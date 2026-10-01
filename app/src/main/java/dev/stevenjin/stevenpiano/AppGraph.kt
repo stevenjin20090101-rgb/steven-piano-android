@@ -269,7 +269,7 @@ class AppGraph(private val app: Application) {
     /** The pack's pieces through the importer; then, as after the app's own imports, the built-in playlists and artwork. */
     private suspend fun importLibraryPack(source: ImportSource.LocalZip): ImportProgress {
         val result = importer.import(app, source)
-        if (result.imported > 0) {
+        if (result.piecesChanged) {
             refreshBuiltIns()
             if (settingsRepository.settings.first().fetchArtworkAutomatically) ArtworkService.start(app, force = false)
         }

@@ -175,6 +175,7 @@ class ImporterTest {
             override suspend fun fillComposer(piece: PieceEntity, composer: ComposerNames.Name) = Unit
             override suspend fun insertAll(pieces: List<PieceEntity>): Int = pieces.size
             override suspend fun hasComposerKey(composerKey: String): Boolean = false
+            override suspend fun linkToPlaylist(name: String, imported: Boolean, shas: List<String>): ImportedPlaylist? = null
         }
         val again = Importer(broken, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it })
             .run(OpenedSource(listOf(item("a.mid", midi(60)), item("b.mid", midi(61)))))
@@ -283,6 +284,104 @@ class ImporterTest {
         assertEquals(listOf("Coldplay", "coldplay"), store.pieces.first().let { listOf(it.composer, it.composerKey) })
     }
 
+    // v1.10.1 — M28, D2: uploads become playlists.
+
+    private fun titles(playlist: String) = store.playlists.getValue(playlist).map { id -> store.pieces.single { it.id == id }.title }
+
+    @Test
+    fun `a zip with a root folder becomes a playlist named after it, its pieces in path order`() = runTest {
+        val source = OpenedSource(
+            listOf(
+                item("MIDI/Hans Zimmer/Time.mid", midi(60)),
+                item("MIDI/Coldplay/Yellow.mid", midi(61)),
+                item("MIDI/Cornfield Chase - Hans Zimmer.mid", midi(62)),
+                item("MIDI/Coldplay/Clocks.mid", midi(63)),
+                item("MIDI/adele/Hello.mid", midi(64)),
+                item("MIDI/.DS_Store.mid", "not music".toByteArray()),
+            ),
+            batch = ImportBatch.zip("Steven's upload.zip"),
+        )
+        val result = importer.run(source)
+        assertEquals(ImportedPlaylist(1, "MIDI"), result.playlist)
+        assertEquals("folder by folder, then by title, case ignored", listOf("Hello", "Clocks", "Yellow", "Cornfield Chase", "Time"), titles("MIDI"))
+        assertEquals(true, store.imported["MIDI"])
+        assertTrue(logs.any { it.startsWith("Import: 5 new, 0 already there, 1 failed, in a playlist") })
+    }
+
+    @Test
+    fun `path order goes folder by folder, numbers by their value, a name before the longer ones it begins`() {
+        val paths = listOf(
+            "MIDI/Erik Satie/Gymnopedie No. 10.mid", "MIDI/Coldplay/Fix You (Live).mid", "MIDI/Erik Satie/Gymnopedie No. 2.mid",
+            "MIDI/Coldplay/Fix You.mid", "MIDI/Lady Gaga/Shallow.mid", "MIDI/Lady Gaga & Bradley Cooper/I'll Never Love Again.mid",
+            "MIDI/Cornfield Chase - Hans Zimmer.mid", "MIDI/Émile/Étude.mid",
+        )
+        assertEquals(
+            listOf(
+                "MIDI/Coldplay/Fix You.mid", "MIDI/Coldplay/Fix You (Live).mid", "MIDI/Cornfield Chase - Hans Zimmer.mid", "MIDI/Émile/Étude.mid",
+                "MIDI/Erik Satie/Gymnopedie No. 2.mid", "MIDI/Erik Satie/Gymnopedie No. 10.mid", "MIDI/Lady Gaga/Shallow.mid",
+                "MIDI/Lady Gaga & Bradley Cooper/I'll Never Love Again.mid",
+            ),
+            paths.sortedWith(PathOrder),
+        )
+    }
+
+    @Test
+    fun `a zip without a root folder is named after the zip, and that name is cut to a playlist's`() = runTest {
+        val mixed = OpenedSource(listOf(item("Coldplay/Yellow.mid", midi(61)), item("Adele/Hello.mid", midi(62)), item("Loose.mid", midi(63))), batch = ImportBatch.zip("Mixed Bag.ZIP"))
+        assertEquals("Mixed Bag", importer.run(mixed).playlist?.name)
+        assertEquals(listOf("Hello", "Yellow", "Loose"), titles("Mixed Bag"))
+        val long = "L".repeat(300) + ".zip"
+        assertEquals(120, importer.run(OpenedSource(listOf(item("x/a.mid", midi(64)), item("y/b.mid", midi(65))), batch = ImportBatch.zip(long))).playlist?.name?.length)
+        assertEquals("the same zip again finds its playlist", "Mixed Bag", importer.run(OpenedSource(listOf(item("Adele/Skyfall.mid", midi(66)), item("Z/z.mid", midi(67))), batch = ImportBatch.zip("mixed bag.zip"))).playlist?.name)
+        assertEquals(listOf("Hello", "Yellow", "Loose", "Skyfall", "z"), titles("Mixed Bag"))
+    }
+
+    @Test
+    fun `pieces already there are linked too, their blank composers filled`() = runTest {
+        val sparks = midi(60)
+        importer.run(OpenedSource(listOf(item("Sparks.mid", sparks))))
+        assertTrue("picked one by one: no playlist", store.playlists.isEmpty())
+        val result = importer.run(OpenedSource(listOf(item("MIDI/Coldplay/Yellow.mid", midi(61)), item("MIDI/Coldplay/Sparks.mid", sparks), item("MIDI/Coldplay/Sparks (copy).mid", sparks)), batch = ImportBatch.zip("MIDI.zip")))
+        assertEquals(ImportProgress(done = 3, total = 3, imported = 1, duplicates = 2, filled = 1, finished = true, playlist = ImportedPlaylist(1, "MIDI")), result)
+        assertTrue(result.piecesChanged)
+        assertEquals("each piece once, at its first place in path order", listOf("Sparks", "Yellow"), titles("MIDI"))
+        assertEquals("coldplay", store.pieces.single { it.title == "Sparks" }.composerKey)
+    }
+
+    @Test
+    fun `a piece an INDEX csv row places stays out of the zip's playlist, whatever copy of it the zip holds`() = runTest {
+        val index = IndexCsv.parse("collection,composer,title,size_kb,path\npiano-midi.de,debussy,deb_clai,1,piano-midi.de/debussy/deb_clai.mid\n,Satie,Gnossienne 1,1,mutopia/gnossienne.mid\n")
+        val clair = midi(60)
+        val source = OpenedSource(
+            listOf(
+                item("ALL SONGS/Debussy - Clair de lune.mid", clair),
+                item("piano-midi.de/debussy/deb_clai.mid", clair),
+                item("ALL SONGS/Satie - Gymnopedie 1.mid", midi(61)),
+                item("mutopia/gnossienne.mid", midi(62)),
+            ),
+            index,
+            batch = ImportBatch.Named("midi"),
+        )
+        val result = importer.run(source)
+        assertEquals(3, result.imported)
+        assertEquals("piano-midi.de", store.pieces.single { it.composerKey == "debussy" }.collection)
+        assertEquals("a row without a collection places nothing", listOf("Gymnopedie 1", "Gnossienne 1"), titles("midi"))
+    }
+
+    @Test
+    fun `a loose file sent through the panel goes into Uploads, files picked one by one into no playlist`() = runTest {
+        val first = importer.run(OpenedSource(listOf(item("Song.mid", midi(60))), batch = ImportBatch.Uploads))
+        assertEquals(ImportedPlaylist(1, "Uploads"), first.playlist)
+        assertEquals(false, store.imported["Uploads"])
+        importer.run(OpenedSource(listOf(item("Another.mid", midi(61))), batch = ImportBatch.Uploads))
+        assertEquals(listOf("Song", "Another"), titles("Uploads"))
+        val picked = importer.run(OpenedSource(listOf(item("a.mid", midi(62)), item("b.mid", midi(63)))))
+        assertEquals(null, picked.playlist)
+        assertEquals(setOf("Uploads"), store.playlists.keys)
+        val failed = importer.run(OpenedSource(listOf(item("broken.mid", "no".toByteArray())), batch = ImportBatch.Uploads))
+        assertEquals("nothing arrived: no playlist", null, failed.playlist)
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()
@@ -300,5 +399,18 @@ class ImporterTest {
         }
 
         override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.any { it.composerKey == composerKey }
+
+        /** Playlists by name (names compare ignoring case, as the library's do): their pieces' ids in order. */
+        val playlists = LinkedHashMap<String, MutableList<Long>>()
+        val imported = HashMap<String, Boolean>()
+
+        override suspend fun linkToPlaylist(name: String, imported: Boolean, shas: List<String>): ImportedPlaylist? {
+            val ids = shas.mapNotNull { sha -> pieces.firstOrNull { it.sha256 == sha }?.id }
+            if (ids.isEmpty()) return null
+            val key = playlists.keys.firstOrNull { it.equals(name, ignoreCase = true) } ?: name.also { this.imported[it] = imported }
+            val list = playlists.getOrPut(key) { mutableListOf() }
+            ids.forEach { if (it !in list) list += it }
+            return ImportedPlaylist(playlists.keys.indexOf(key) + 1L, key)
+        }
     }
 }
