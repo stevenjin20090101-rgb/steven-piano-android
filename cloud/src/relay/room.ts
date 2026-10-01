@@ -684,7 +684,6 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     const headers = responseHeaders(msg.headers, attachment.pianoId);
     withSecurity(headers, headers.get('content-type')?.includes('json') ? API_CSP : PAGE_CSP);
     const noBody = p.method === 'HEAD' || status === 204 || status === 205 || status === 304;
-    const encodeBody = headers.has('content-encoding') ? 'manual' : 'automatic';
     // The tablet has decided: the rest of a body not yet sent is not wanted.
     this.stopBody(p);
     if (noBody) {
@@ -701,7 +700,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
         // The browser went away (or the stream was ended short): tell the tablet.
         if (!p.finished) this.fail(p, 502, 'relay', 'The answer was cut short.');
       });
-      this.give(p, new Response(stream.readable, { status, headers, encodeBody }));
+      this.give(p, new Response(stream.readable, { status, headers }));
     }
     this.arm(p, this.timing.idle, () => this.fail(p, 504, 'timeout', 'The piano stopped answering.'));
   }
@@ -988,16 +987,32 @@ function statusKey(status: TabletStatus | null): string {
 /** For an answer the tablet sent without a policy of its own (it sends its own for its pages). */
 const PAGE_CSP = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
-const TOKEN = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
-const DROPPED_HEADERS = new Set([
-  'connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'proxy-connection', 'proxy-authenticate', 'proxy-authorization',
-  'te', 'trailer', 'content-length', 'strict-transport-security', 'alt-svc', 'server', 'date',
+/**
+ * The tablet's response headers a browser may be given: exactly those the app's panel sends
+ * (`RelayedResponse.HEADERS` and its Content-Type; the relay sets Content-Length itself). Audit delta 3:
+ * this was a deny-list, and every piano's panel shares the relay's origin, so a header under one
+ * piano's path could reach the others': `Service-Worker-Allowed` let an answer under /p/<id>/ register a
+ * service worker for the whole origin (every piano's panel, every PIN typed there, from then on);
+ * `Clear-Site-Data`, `Refresh`, `Link`, `Location` and the reporting headers are no part of the panel either.
+ */
+export const RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  'content-type',
+  'cache-control',
+  'set-cookie',
+  'retry-after',
+  'allow',
+  'x-content-type-options',
+  'x-frame-options',
+  'referrer-policy',
+  'content-security-policy',
+  'cross-origin-resource-policy',
 ]);
 
 /**
- * The tablet's response headers the browser may see: well-formed, not hop-by-hop, never CORS, never
- * the relay's own, and a cookie only when it stays under this piano's prefix (no Domain, and a
- * Path, when given, of /p/<id>/…). At most 64 values and 16 KB.
+ * The tablet's response headers the browser may see: only [RESPONSE_HEADERS] (so never CORS, never
+ * hop-by-hop, never the relay's own), values without line breaks, and a cookie only when it stays
+ * under this piano's prefix (no Domain, and a Path, when given, of /p/<id>/…). At most 64 values and
+ * 16 KB.
  */
 export function responseHeaders(raw: unknown, pianoId: string): Headers {
   const out = new Headers();
@@ -1006,7 +1021,7 @@ export function responseHeaders(raw: unknown, pianoId: string): Headers {
   let size = 0;
   for (const [rawName, rawValue] of Object.entries(raw)) {
     const name = rawName.toLowerCase();
-    if (!TOKEN.test(name) || DROPPED_HEADERS.has(name) || name.startsWith('access-control-') || name.startsWith('x-relay-') || name.startsWith('cf-')) continue;
+    if (!RESPONSE_HEADERS.has(name)) continue;
     const values = Array.isArray(rawValue) ? rawValue : [rawValue];
     for (const v of values) {
       if (typeof v !== 'string' && typeof v !== 'number') continue;

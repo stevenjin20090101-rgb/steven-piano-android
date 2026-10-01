@@ -108,6 +108,65 @@ describe('forwarding a browser request to the tablet', () => {
     tablet.close();
   });
 
+  // Audit delta 3: every piano's panel shares the relay's origin, so a header one tablet's answer carries
+  // can reach the others'. Service-Worker-Allowed let an answer under /p/<id>/ install a service worker for
+  // the whole origin (every piano's panel, and every PIN typed there); Clear-Site-Data, Refresh, Link,
+  // Location and the reporting headers are no more the panel's. Only the headers the app sends pass.
+  it("passes on only the headers the app's panel sends", async () => {
+    const { pianoId, secret } = await seedPiano();
+    const tablet = await FakeTablet.connect(pianoId, secret);
+    await tablet.next('hello');
+    const pending = panel(pianoId, '/sw.js');
+    const req = await tablet.next('req');
+    const script = new TextEncoder().encode('self.addEventListener("fetch", () => {});');
+    tablet.send({
+      t: 'res',
+      id: req.id,
+      status: 200,
+      headers: {
+        // What the app sends (RelayedResponse.HEADERS and its Content-Type): kept.
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Set-Cookie': `sp_guest=${'G'.repeat(22)}; HttpOnly; SameSite=Strict; Path=/p/${pianoId}/; Secure`,
+        'Retry-After': '30',
+        Allow: 'GET',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': "default-src 'self'",
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        // Anything else: dropped.
+        'Service-Worker-Allowed': '/',
+        'Clear-Site-Data': '"cookies", "storage"',
+        Refresh: '0; url=https://evil.example/',
+        Link: '<https://evil.example/x.js>; rel=preload; as=script',
+        Location: 'https://evil.example/',
+        'Content-Disposition': 'attachment; filename="panel.html"',
+        'Report-To': '{"group":"x","max_age":86400,"endpoints":[{"url":"https://evil.example/r"}]}',
+        'Reporting-Endpoints': 'x="https://evil.example/r"',
+        NEL: '{"report_to":"x","max_age":86400}',
+        'Permissions-Policy': 'camera=*',
+        'Origin-Agent-Cluster': '?0',
+        'Cross-Origin-Opener-Policy': 'unsafe-none',
+        'Content-Encoding': 'identity',
+        'X-Anything': 'else',
+      },
+      length: script.byteLength,
+    });
+    tablet.sendFrame(req.id, Kind.ResChunk, script);
+    tablet.sendFrame(req.id, Kind.ResEnd);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('self.addEventListener("fetch", () => {});');
+    const names = [...response.headers.keys()].sort();
+    expect(names).toEqual([
+      'allow', 'cache-control', 'content-length', 'content-security-policy', 'content-type', 'cross-origin-resource-policy',
+      'referrer-policy', 'retry-after', 'set-cookie', 'strict-transport-security', 'x-content-type-options', 'x-frame-options',
+    ]);
+    expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'self'");
+    tablet.close();
+  });
+
   it('strips the prefix, redirects the bare piano path, and answers a HEAD and a 204 without a body', async () => {
     const { pianoId, secret } = await seedPiano();
     const redirect = await panel(pianoId, '?a=1', { redirect: 'manual' });
