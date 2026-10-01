@@ -137,17 +137,24 @@ class RelayCommands(
         const val LIBRARY_STARTED = "Loading Steven's library."
         const val LIBRARY_BUSY = "Steven's library is loading already."
 
+        /** `library.load` on a tablet that never loaded the pack: its first load is the tablet's, after the licence sheet (audit delta 3). */
+        const val LIBRARY_FIRST_ON_TABLET =
+            "Steven's library loads the first time on the tablet, where its licence is shown. After that, the console can bring its updates."
+
         /**
          * The console's `library.load` on this tablet (v1.10: M26's command, M27's pack): the pack's [load]
          * as the + sheet's Update calls it (`everything = false`: a newer pack's new pieces, pieces a teacher
-         * deleted staying deleted; on a tablet with none, the whole pack, without the licence sheet: the
-         * owner's command), answered at once. A load under way ([state] busy): [LIBRARY_BUSY], nothing new
-         * started; the tablet offline ([online] false): the library's own [LibraryFailures.OFFLINE], nothing
-         * started (and no failure left on the tablet's screen); a load that could not start: its line. What
-         * the load does then follows in the pack's state, and the version it brings in the status report.
+         * deleted staying deleted), answered at once. A load under way ([state] busy): [LIBRARY_BUSY], nothing
+         * new started; a tablet that never loaded a pack ([loaded] 0): [LIBRARY_FIRST_ON_TABLET], nothing
+         * started (audit delta 3: the first load waits for the licence sheet on the tablet, which the console's
+         * command used to skip); the tablet offline ([online] false): the library's own
+         * [LibraryFailures.OFFLINE], nothing started (and no failure left on the tablet's screen); a load that
+         * could not start: its line. What the load does then follows in the pack's state, and the version it
+         * brings in the status report.
          */
-        fun libraryLoad(online: Boolean, state: () -> PackState, load: () -> Boolean): CommandResult = when {
+        fun libraryLoad(online: Boolean, loaded: Int, state: () -> PackState, load: () -> Boolean): CommandResult = when {
             state().busy -> CommandResult(false, LIBRARY_BUSY)
+            loaded <= 0 -> CommandResult(false, LIBRARY_FIRST_ON_TABLET)
             !online -> CommandResult(false, LibraryFailures.OFFLINE)
             load() -> CommandResult(true, LIBRARY_STARTED)
             else -> CommandResult(false, (state() as? PackState.Failed)?.line ?: LIBRARY_BUSY)

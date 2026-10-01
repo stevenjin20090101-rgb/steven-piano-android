@@ -410,11 +410,23 @@ class LibraryPackTest {
         publish(1, v1Pieces)
         val pack = pack()
         // As the web service answers the console's library.load (v1.10: M26's command, this pack).
-        fun console() = RelayCommands.libraryLoad(online.value, { pack.state.value }) { pack.load(everything = false) }
+        fun console() = RelayCommands.libraryLoad(online.value, loaded.value, { pack.state.value }) { pack.load(everything = false) }
+        // Audit delta 3: on a tablet that never loaded the pack, the first load is the tablet's, after its
+        // licence sheet; the console's command used to start it without the sheet ever showing.
+        assertEquals(CommandResult(false, RelayCommands.LIBRARY_FIRST_ON_TABLET), console())
+        assertTrue("nothing starts before the tablet's own first load", starts.isEmpty())
+        assertEquals("and no failure is left on the tablet's screen", PackState.Idle, pack.state.value)
+        // The first load on the tablet (the empty Library's button, after the licence sheet).
+        assertTrue(pack.load(everything = true))
+        pack.run(everything = true)
+        assertEquals(PackState.Done(5), pack.state.value)
+        assertEquals(1, loaded.value)
+        starts.clear()
+
+        publish(2, v2Pieces)
         online.value = false
         assertEquals(CommandResult(false, LibraryFailures.OFFLINE), console())
         assertTrue("nothing starts offline", starts.isEmpty())
-        assertEquals("and no failure is left on the tablet's screen", PackState.Idle, pack.state.value)
         online.value = true
         assertEquals(CommandResult(true, RelayCommands.LIBRARY_STARTED), console())
         assertEquals("the + sheet's load, not everything", listOf(false), starts)
@@ -424,11 +436,11 @@ class LibraryPackTest {
         assertEquals(listOf(false), starts)
         online.value = true
         pack.run(everything = false)
-        assertEquals(PackState.Done(5), pack.state.value)
-        assertEquals(1, loaded.value)
+        assertEquals(PackState.Done(2), pack.state.value)
+        assertEquals(2, loaded.value)
 
         val refused = pack { throw IllegalStateException("not allowed") }
-        assertEquals(CommandResult(false, LibraryFailures.NOT_STARTED), RelayCommands.libraryLoad(true, { refused.state.value }) { refused.load() })
+        assertEquals(CommandResult(false, LibraryFailures.NOT_STARTED), RelayCommands.libraryLoad(true, 2, { refused.state.value }) { refused.load() })
     }
 
     @Test

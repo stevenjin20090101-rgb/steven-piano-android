@@ -247,12 +247,14 @@ class WebService : Service() {
             },
             server = server,
             hub = sockets,
-            // The console's "Load Steven's library" (v1.10: M27's pack): the + sheet's load, answered at once.
+            // The console's "Load Steven's library" (v1.10: M27's pack): the + sheet's load, answered at once; never
+            // the first load, which waits for the licence sheet on the tablet (audit delta 3).
             commands = RelayCommands(
                 panel.backend,
                 libraryLoad = {
                     val pack = graph.libraryPack
-                    RelayCommands.libraryLoad(graph.network.online.value, { pack.state.value }) { pack.load(everything = false) }
+                    val loaded = graph.settingsRepository.settings.first().libraryPackVersion
+                    RelayCommands.libraryLoad(graph.network.online.value, loaded, { pack.state.value }) { pack.load(everything = false) }
                 },
                 trail = LinkLog::warn,
             ),
