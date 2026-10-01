@@ -125,8 +125,10 @@
     "versionName": "1.10.1",
     "notes": "Uploads become playlists. A zip or a folder is now a playlist named after it, its artist folders become the pieces' artists, and it lists first: Playlists sort newest first, with a button to switch to by name. Artists get their photographs from Wikipedia, bands and singers included, and a piece without one keeps its roll card. Songs uploaded before this update are repaired on the first launch: grouped into a playlist, with their artists filled in. Loose files dropped on the web panel go into Uploads, and the panel's Add tab says which playlist an upload went to, with a button to open it.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.10.1/steven-piano-1.10.1.apk",
+    "sha256": "4f4d28f3a1e724fb790aa3fb50e23a7f6992a2ecf02128512975890b4c783389",
+    "sizeBytes": 13728551,
     "minSdk": 26,
     "tag": "v1.10.1",
-    "draft": true
+    "publishedAt": "2026-10-01"
   }
 ]

@@ -1,9 +1,9 @@
 {
-  "versionCode": 18,
-  "versionName": "1.10",
-  "notes": "Steven Piano Cloud: the web panel from anywhere over HTTPS, without Tailscale. Piano › Remote control › CLOUD enrols the tablet with a code from the console, and the panel then lives at https://<relay>/p/<piano>/ behind the same PIN as before; the console (on Steven's own Cloudflare account, behind Cloudflare Access) lists every piano with its live dot and what it plays, and offers play, pause, next, stop, channels, the guest switches, Load the library, Rotate secret, Revoke and Forget, with an audit log. Steven's library: Load Steven's library on the empty Library and in the + sheet downloads 1,726 pieces (60 MB) from GitHub, checked against its hash, after a note on the licences; Update the library later adds only pieces never offered before. On the tablet, glass menus now stay inside their pane.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.10/steven-piano-1.10.apk",
-  "sha256": "c660b10dd363592babeb3cbd5bef6975dfaa3deacae2055c1a81e6374abc0589",
-  "sizeBytes": 13711043,
+  "versionCode": 19,
+  "versionName": "1.10.1",
+  "notes": "Uploads become playlists. A zip or a folder is now a playlist named after it, its artist folders become the pieces' artists, and it lists first: Playlists sort newest first, with a button to switch to by name. Artists get their photographs from Wikipedia, bands and singers included, and a piece without one keeps its roll card. Songs uploaded before this update are repaired on the first launch: grouped into a playlist, with their artists filled in. Loose files dropped on the web panel go into Uploads, and the panel's Add tab says which playlist an upload went to, with a button to open it.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.10.1/steven-piano-1.10.1.apk",
+  "sha256": "4f4d28f3a1e724fb790aa3fb50e23a7f6992a2ecf02128512975890b4c783389",
+  "sizeBytes": 13728551,
   "minSdk": 26
 }
