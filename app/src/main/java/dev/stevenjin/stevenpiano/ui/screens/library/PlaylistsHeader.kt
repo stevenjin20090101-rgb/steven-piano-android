@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ui.screens.library
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -68,7 +69,8 @@ fun PlaylistsHeader(sort: PlaylistSort, onSort: (PlaylistSort) -> Unit) {
         Box {
             SortButton(sort) { open = true }
             GlassPopover(expanded = open, onDismissRequest = { open = false }, alignment = Alignment.End) {
-                Column(Modifier.widthIn(min = SORT_MENU_MIN_WIDTH).selectableGroup()) {
+                // As wide as its widest order (a popup offers the whole window): its end at the button's, inside the list's pane.
+                Column(Modifier.width(IntrinsicSize.Max).widthIn(min = SORT_MENU_MIN_WIDTH).selectableGroup()) {
                     PlaylistSort.entries.forEach { option ->
                         SortOption(option, selected = option == sort) {
                             open = false
