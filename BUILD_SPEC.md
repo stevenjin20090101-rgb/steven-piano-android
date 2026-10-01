@@ -6283,3 +6283,13 @@ build now differs from the notes above (M26's, M27's and R1's):
   and a truncated one refused with nothing kept, the licence sheet before each try, the good one imported; Forget.
 - README (*Steven's library*, *Cloud*, *Security*), `cloud/README.md` (*Security*, *What the relay sees*) and
   DESIGN.md carry the new lines.
+
+## The release: 1.10 (versionCode 18)
+
+Cut from `main` after the audit (`464c709`): `versionCode` 18, `versionName` "1.10" (`-PversionCodeOverride`'s
+example now 19), `Provenance.text` "Made by Steven Jin · v1.10 · eab16a502f679465", README's version lines, and the
+entry drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.10`, its notes; no hash or size until
+`tools/publish-release.sh` builds it). Nothing else changes: the audit's tests (1,328 app, 79 cloud) are the
+release's. The push that publishes it also makes `releases/library.json` (M27, `d13f93a`) live on `main`, so a
+tablet on 1.10 can load Steven's library the moment it has the build. Steven's side after this release:
+`cloud/README.md` › *Deploy it (once)*, then enrol the school tablet and open its panel from a phone on mobile data.

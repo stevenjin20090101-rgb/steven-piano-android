@@ -27,7 +27,7 @@ times (see *Schedules*), on the school tablet it can be locked to the app as a k
 (see *Kiosk*), **Studio** turns a piano recording into a piece, or composes a new one in the
 manner of a piece from the library, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
-on the tablet*). Made by Steven Jin. Version 1.9.
+on the tablet*). Made by Steven Jin. Version 1.10.
 
 ## What it does
 
@@ -366,7 +366,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.9.apk`.
+   `adb install ../apk/steven-piano-1.10.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -426,7 +426,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=18`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=19`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
