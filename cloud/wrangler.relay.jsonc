@@ -28,7 +28,7 @@
     {
       "binding": "DB",
       "database_name": "steven-piano",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "9f271e87-90f7-445a-a8b2-7cfa1deeff3a",
       "migrations_dir": "migrations"
     }
   ],
