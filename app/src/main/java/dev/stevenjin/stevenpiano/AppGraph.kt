@@ -14,6 +14,8 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
@@ -27,6 +29,7 @@ import dev.stevenjin.stevenpiano.audio.PianoVoice
 import dev.stevenjin.stevenpiano.audio.TabletSound
 import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
+import dev.stevenjin.stevenpiano.ble.HandlerLinkExecutor
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
@@ -61,6 +64,13 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
 import dev.stevenjin.stevenpiano.firmware.FirmwarePlayer
 import dev.stevenjin.stevenpiano.firmware.FirmwareUpdater
 import dev.stevenjin.stevenpiano.firmware.batteryState
+import dev.stevenjin.stevenpiano.instruments.AndroidMidiBluetooth
+import dev.stevenjin.stevenpiano.instruments.AndroidMidiPorts
+import dev.stevenjin.stevenpiano.instruments.CombinedMidiPorts
+import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.MidiDevices
+import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.library.LibraryOverride
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
@@ -222,9 +232,52 @@ class AppGraph(private val app: Application) {
                 app,
                 onConnected = { address, name -> appScope.launch { settingsRepository.rememberDevice(address, name) } },
                 shouldReconnect = { settings.value.autoConnect },
+                isForeign = { address -> midiDevices.isForeign(address) },
                 throttle = scanThrottle,
             )
         }
+    }
+
+    /** The MIDI devices' own thread (v1.11 — M29): Android's MIDI callbacks, the keyboard's and the instrument's state and timers. */
+    private val midiThread: HandlerThread by lazy { HandlerThread("steven-piano-midi").apply { start() } }
+
+    /**
+     * The emulator's MIDI keyboard and MIDI piano (debug builds on an emulator only, as [LoggingPianoLink]; v1.11 — M29):
+     * the activity feeds the keyboard the bytes adb gives it.
+     */
+    val emulatedMidi: EmulatedMidiPorts? by lazy { if (EmulatedMidiPorts.isWanted()) EmulatedMidiPorts(Handler(midiThread.looper)) else null }
+
+    /**
+     * Every MIDI device but Steven Piano (v1.11 — M29): Android's MIDI service (another app's ports only in debug builds,
+     * for the emulator's test device), the picker's Bluetooth search on the shared scan budget, and the addresses the
+     * piano's link must never take.
+     */
+    val midiDevices: MidiDevices by lazy {
+        val handler = Handler(midiThread.looper)
+        val android = AndroidMidiPorts(app, handler, allowVirtual = BuildConfig.DEBUG)
+        val emulated = emulatedMidi
+        MidiDevices(
+            ports = if (emulated != null) CombinedMidiPorts(android, emulated) else android,
+            bluetooth = midiBluetooth,
+            executor = HandlerLinkExecutor(midiThread.looper),
+            throttle = scanThrottle,
+            log = LinkLog::warn,
+            nowMs = SystemClock::elapsedRealtime,
+            pianoAddress = { settings.value.lastDeviceAddress },
+        )
+    }
+
+    private val midiBluetooth: AndroidMidiBluetooth by lazy { AndroidMidiBluetooth(app) }
+
+    /** The MIDI keyboard the person chose (Piano › Keyboard, v1.11 — M29): what it holds lights the Keys tab. */
+    val keyboard: MidiKeyboard by lazy {
+        MidiKeyboard(
+            devices = midiDevices,
+            bluetooth = midiBluetooth,
+            executor = HandlerLinkExecutor(midiThread.looper),
+            log = LinkLog::warn,
+            remember = { chosen -> appScope.launch { settingsRepository.setKeyboard(chosen?.key, chosen?.name) } },
+        )
     }
 
     /** The Bluetooth link; on an emulator in debug builds, a stand-in that logs what it would send. */
@@ -655,6 +708,9 @@ class AppGraph(private val app: Application) {
         studio.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
+            // The keyboard first (v1.11 — M29): its address is foreign to the piano's link before that link scans.
+            midiDevices.start()
+            keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
             if (s.autoConnect && BlePermissions.missing(app).isEmpty()) pianoLink.connect(s.lastDeviceAddress)
         }

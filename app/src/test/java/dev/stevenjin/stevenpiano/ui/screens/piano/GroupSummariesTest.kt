@@ -13,6 +13,9 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareFailures
 import dev.stevenjin.stevenpiano.firmware.FirmwareManifest
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.OtaExample
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.MidiNames
+import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
@@ -118,8 +121,19 @@ class GroupSummariesTest {
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off", "No models"),
+            listOf("None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off", "No models"),
             SettingsPage.entries.map { rows.of(it) },
+        )
+    }
+
+    @Test
+    fun `Keyboard reads None, the keyboard's name, or its name not connected (v1_11 M29)`() {
+        val chosen = KeyboardState.Chosen(MidiNames.usbKey("Roland", "FP-30X", "1"), "FP-30X", MidiTransport.USB)
+        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).of(SettingsPage.Keyboard))
+        assertEquals("FP-30X", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false, keyboard = KeyboardState(chosen, KeyboardState.Phase.Connected)).of(SettingsPage.Keyboard))
+        assertEquals(
+            "FP-30X · not connected",
+            GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false, keyboard = KeyboardState(chosen, KeyboardState.Phase.NotConnected)).of(SettingsPage.Keyboard),
         )
     }
 

@@ -29,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -41,7 +43,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -52,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
@@ -86,6 +92,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     val sustain by vm.sustain.collectAsStateWithLifecycle()
     val playing by vm.playing.collectAsStateWithLifecycle()
     val tablet by vm.tabletSound.collectAsStateWithLifecycle()
+    val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     val visible = frame.keysVisibleWhites
     val touches = remember(vm) { KeyTouches(vm) }
     val pressed = remember { mutableIntStateOf(0) }
@@ -98,6 +105,21 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     }
     DisposableEffect(vm) { onDispose { vm.letGo() } }
     HoldOrientationWhileHeld(touches, pressed)
+    // What a MIDI keyboard holds lights the keys too (v1.11 — M29): looked at once a frame while one is chosen.
+    if (keyboard.chosen != null) {
+        LaunchedEffect(vm) {
+            var seen = vm.external.changes.get()
+            while (true) {
+                withFrameNanos { }
+                val now = vm.external.changes.get()
+                if (now != seen) {
+                    seen = now
+                    pressed.intValue++
+                }
+            }
+        }
+    }
+    val held = remember(vm) { { key: Int -> vm.external.isHeld(key) } }
 
     // The status bar, before the header's glass takes the top: the keys' cap is measured as before.
     val outer = LocalFloatingPadding.current
@@ -113,6 +135,16 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     ) {
         val keysHeight = keysHeightCap(maxHeight + LocalFloatingPadding.current.calculateTopPadding() - statusBar)
         Column(Modifier.fillMaxSize()) {
+            // The keyboard, while one is set (v1.11 — M29): "KEYBOARD · ROLAND FP-30X", its state in words when not connected.
+            InstrumentCopy.keysEyebrow(keyboard)?.let { line ->
+                Eyebrow(
+                    line,
+                    Modifier
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             // A piano runs low to high from the left in every language.
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 if (frame.keysScroll) {
@@ -126,6 +158,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
+                        held = held,
                     )
                 }
                 // The keys at the bottom of the space between the mini-map and the row under them, and just
@@ -155,6 +188,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                             .heightIn(max = keysHeight)
                             .fillMaxHeight()
                             .clip(MaterialTheme.shapes.medium),
+                        held = held,
                     )
                 }
             }

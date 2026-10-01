@@ -12,11 +12,13 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.label
@@ -43,9 +45,12 @@ data class GroupSummaries(
     val kiosk: String,
     val schedule: String = ScheduleCopy.NONE,
     val studio: String = StudioCopy.hub(0, emptyList()),
+    /** The MIDI keyboard (v1.11 — M29): "None", its name, or its name and "not connected". */
+    val keyboard: String = InstrumentCopy.NONE,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
+        SettingsPage.Keyboard -> keyboard
         SettingsPage.Feel -> feel
         SettingsPage.Lighting -> lighting
         SettingsPage.Pedal -> pedal
@@ -66,7 +71,8 @@ data class GroupSummaries(
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
          * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
          * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule]
-         * when the next schedule starts; [studio] Studio's own value ([StudioCopy.hub], v1.7 — M23).
+         * when the next schedule starts; [studio] Studio's own value ([StudioCopy.hub], v1.7 — M23); [keyboard] the MIDI
+         * keyboard's state (v1.11 — M29).
          */
         fun from(
             piano: PianoState,
@@ -77,6 +83,7 @@ data class GroupSummaries(
             firmwareVersion: String? = null,
             nextSchedule: ZonedDateTime? = null,
             studio: String = StudioCopy.hub(0, emptyList()),
+            keyboard: KeyboardState = KeyboardState(),
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -88,6 +95,7 @@ data class GroupSummaries(
             kiosk = kiosk(settings),
             schedule = schedule(nextSchedule),
             studio = studio,
+            keyboard = InstrumentCopy.keyboardValue(keyboard),
         )
 
         /** When the next schedule starts, "Next Wed 12:30", or "None". */

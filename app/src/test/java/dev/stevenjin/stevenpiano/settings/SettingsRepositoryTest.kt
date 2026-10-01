@@ -420,4 +420,23 @@ class SettingsRepositoryTest {
         assertEquals("nothing a preference: Share diagnostics never sees it", PianoSettings(), repository.settings.first())
         scope.cancel()
     }
+
+    @Test
+    fun `no keyboard at first, one chosen is kept with its name, and forgetting it forgets both (v1_11 M29)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "keyboard.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(null, repository.settings.first().keyboardId)
+        repository.setKeyboard("ble:11:22:33:44:55:66", "Roland FP-30X")
+        assertEquals("ble:11:22:33:44:55:66", repository.settings.first().keyboardId)
+        assertEquals("Roland FP-30X", SettingsRepository(store).settings.first().keyboardName)
+        repository.setKeyboard("usb:" + "x".repeat(400), "y".repeat(100))
+        assertEquals(256, repository.settings.first().keyboardId?.length)
+        assertEquals(64, repository.settings.first().keyboardName?.length)
+        repository.setKeyboard(null, "ignored")
+        assertEquals(PianoSettings(), repository.settings.first())
+        store.edit { it[stringPreferencesKey("keyboardName")] = "a name without its keyboard" }
+        assertEquals("a name alone is no keyboard", null, repository.settings.first().keyboardName)
+        scope.cancel()
+    }
 }

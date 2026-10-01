@@ -7,7 +7,21 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- Debug builds only: the emulator's update server may be plain HTTP (res/xml/network_security_config.xml). -->
+<!-- Debug builds only: the emulator's update server may be plain HTTP (res/xml/network_security_config.xml).
+     v1.11 — M29: the test MIDI device (debugmidi.TestMidiDeviceService), so the emulator exercises Android's own MIDI
+     service end to end. It never reaches a release build: any app could send to it. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/network_security_config" />
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <service
+            android:name=".debugmidi.TestMidiDeviceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_MIDI_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.media.midi.MidiDeviceService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.media.midi.MidiDeviceService"
+                android:resource="@xml/test_midi_device" />
+        </service>
+    </application>
 </manifest>

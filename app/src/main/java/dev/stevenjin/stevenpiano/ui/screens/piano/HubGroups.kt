@@ -36,12 +36,14 @@ sealed interface HubRow {
 data class HubGroup(val title: String, val rows: List<HubRow>)
 
 /**
- * The hub's groups, in order (DESIGN.md › v1.5): PIANO (the piano's own settings), PLAYING (how the
- * app plays and shows pieces), CONTROL (ways to run the piano from elsewhere), APP (the app itself).
- * A later feature adds its page to [SettingsPage] and its row here, nowhere else.
+ * The hub's groups, in order (DESIGN.md › v1.5): INSTRUMENTS (v1.11 — M29: what plays and what is played
+ * from, under the connection card), PIANO (the piano's own settings), PLAYING (how the app plays and shows
+ * pieces), CONTROL (ways to run the piano from elsewhere), APP (the app itself). A later feature adds its
+ * page to [SettingsPage] and its row here, nowhere else.
  */
 object HubGroups {
     val all: List<HubGroup> = listOf(
+        HubGroup("Instruments", pages(SettingsPage.Keyboard)),
         HubGroup("Piano", pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.Display, SettingsPage.Schedule)),
         HubGroup("Control", pages(SettingsPage.Remote, SettingsPage.Kiosk, SettingsPage.Studio)),

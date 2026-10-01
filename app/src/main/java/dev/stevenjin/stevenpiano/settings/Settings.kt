@@ -166,6 +166,13 @@ data class PianoSettings(
     val libraryPackVersion: Int = 0,
     /** The Playlists listing's order (v1.10.1 — M28, D6): newest first, or by name as before. */
     val playlistSort: PlaylistSort = PlaylistSort.NEWEST,
+    /**
+     * The MIDI keyboard chosen (Piano › Keyboard, v1.11 — M29), by what identifies it across plugging in again
+     * (`ble:<address>`, `usb:<manufacturer>|<product>|<serial>`); null: none.
+     */
+    val keyboardId: String? = null,
+    /** The chosen keyboard's name as shown (cleaned when chosen), with [keyboardId]. */
+    val keyboardName: String? = null,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -359,6 +366,17 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The Playlists listing's order (v1.10.1 — M28). */
     suspend fun setPlaylistSort(sort: PlaylistSort) = edit { it[PLAYLIST_SORT] = sort.name }
 
+    /** The MIDI keyboard chosen (v1.11 — M29): its identity and name, both at once; null forgets it. */
+    suspend fun setKeyboard(id: String?, name: String?) = edit {
+        if (id == null) {
+            it.remove(KEYBOARD_ID)
+            it.remove(KEYBOARD_NAME)
+        } else {
+            it[KEYBOARD_ID] = id.take(MAX_DEVICE_ID)
+            it[KEYBOARD_NAME] = (name ?: "").take(MAX_DEVICE_NAME)
+        }
+    }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -440,6 +458,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             cloudSecretSet = this[CLOUD_SECRET] != null,
             libraryPackVersion = (this[LIBRARY_PACK_VERSION] ?: defaults.libraryPackVersion).coerceAtLeast(0),
             playlistSort = PlaylistSort.entries.firstOrNull { it.name == this[PLAYLIST_SORT] } ?: defaults.playlistSort,
+            keyboardId = this[KEYBOARD_ID],
+            keyboardName = this[KEYBOARD_ID]?.let { this[KEYBOARD_NAME] },
         )
     }
 
@@ -494,6 +514,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CLOUD_SECRET = stringPreferencesKey("cloudSecret")
         val LIBRARY_PACK_VERSION = intPreferencesKey("libraryPackVersion")
         val PLAYLIST_SORT = stringPreferencesKey("playlistSort")
+        val KEYBOARD_ID = stringPreferencesKey("keyboardId")
+        val KEYBOARD_NAME = stringPreferencesKey("keyboardName")
+
+        /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
+        const val MAX_DEVICE_ID = 256
+        const val MAX_DEVICE_NAME = 64
 
         /** A piano's id on the relay (`web.relay.RelayProtocol.PIANO_ID`, kept here so the settings need nothing from the web). */
         val PIANO_ID = Regex("[a-z2-7]{12}")

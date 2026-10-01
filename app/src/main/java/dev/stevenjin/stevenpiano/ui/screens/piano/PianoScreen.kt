@@ -85,6 +85,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.DisplayPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FeelPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareReport
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KeyboardPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KioskPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LockedFirmwareUpdate
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
@@ -225,6 +226,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val studioSupport by vm.studioSupport.collectAsStateWithLifecycle()
     val studioModels by vm.studioModels.collectAsStateWithLifecycle()
     val studioJobs by vm.studioJobs.collectAsStateWithLifecycle()
+    val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.checkStudio() }
     val frame = LocalAppFrame.current
     val context = LocalContext.current
@@ -233,7 +235,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, studioModels, studioJobs) {
+    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, studioModels, studioJobs, keyboard) {
         GroupSummaries.from(
             piano,
             settings,
@@ -243,6 +245,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
             (firmwarePiano as? FirmwarePiano.Connected)?.text,
             nextSchedule?.occurrence?.at,
             StudioCopy.hub(studioModels.size, studioJobs),
+            keyboard,
         )
     }
 
@@ -370,6 +373,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     if (update) LockedFirmwareUpdate(firmware, onCancel = { gate.run(vm::cancelFirmware) })
                     LockedPage(gate, rule = !update)
                 } else when (page) {
+                    SettingsPage.Keyboard -> KeyboardPage(vm)
                     SettingsPage.Feel -> FeelPage(pianoReport(vm), vm)
                     SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)
                     SettingsPage.Pedal -> PedalPage(pianoReport(vm), vm)

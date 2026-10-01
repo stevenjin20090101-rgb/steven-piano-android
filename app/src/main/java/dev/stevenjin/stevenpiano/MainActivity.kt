@@ -41,6 +41,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
+import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
+import dev.stevenjin.stevenpiano.instruments.MidiDebugHooks
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.ui.AppFrame
 import dev.stevenjin.stevenpiano.ui.PianoNavHost
@@ -210,6 +212,7 @@ class MainActivity : ComponentActivity() {
         try {
             emulatorSet(intent)
             emulatorCrash(intent)
+            emulatorMidi(intent)
             val shared = sharedMidi(intent)
             if (shared.isNotEmpty()) {
                 pendingShare = shared
@@ -266,9 +269,26 @@ class MainActivity : ComponentActivity() {
         Handler(Looper.getMainLooper()).post { throw IllegalStateException("A crash asked for on the emulator (debug build)") }
     }
 
+    /**
+     * The emulator only (a debug build, as [emulatorSet]; v1.11 — M29): MIDI keyboards without a keyboard.
+     * `--es dev.stevenjin.stevenpiano.EMULATOR_MIDI "90 3C 64 80 3C 00"` plays those bytes (malformed ones
+     * too, as they are) from the emulated keyboard ([EmulatedMidiPorts]); `--ez …EMULATOR_MIDI_PLUG false`
+     * unplugs it and `true` plugs it in again; `--es …EMULATOR_MIDI_SERVICE "…"` plays bytes from the debug
+     * build's test device through Android's own MIDI service. Inert on a phone or tablet.
+     */
+    private fun emulatorMidi(intent: Intent) {
+        if (!EmulatedMidiPorts.isWanted()) return
+        stringExtra(intent, EXTRA_EMULATOR_MIDI)?.let { graph.emulatedMidi?.feed(EmulatedMidiPorts.hex(it)) }
+        stringExtra(intent, EXTRA_EMULATOR_MIDI_SERVICE)?.let { text -> MidiDebugHooks.testDeviceOutput?.invoke(EmulatedMidiPorts.hex(text)) }
+        if (intent.hasExtra(EXTRA_EMULATOR_MIDI_PLUG)) graph.emulatedMidi?.plug(booleanExtra(intent, EXTRA_EMULATOR_MIDI_PLUG))
+    }
+
     companion object {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
+        private const val EXTRA_EMULATOR_MIDI = "dev.stevenjin.stevenpiano.EMULATOR_MIDI"
+        private const val EXTRA_EMULATOR_MIDI_SERVICE = "dev.stevenjin.stevenpiano.EMULATOR_MIDI_SERVICE"
+        private const val EXTRA_EMULATOR_MIDI_PLUG = "dev.stevenjin.stevenpiano.EMULATOR_MIDI_PLUG"
         private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
         private const val EXTRA_EMULATOR_CRASH = "dev.stevenjin.stevenpiano.EMULATOR_CRASH"
         private const val TAG = "MainActivity"

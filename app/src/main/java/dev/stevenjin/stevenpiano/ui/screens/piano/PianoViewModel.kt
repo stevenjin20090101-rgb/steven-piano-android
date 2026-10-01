@@ -24,6 +24,12 @@ import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.MidiChoice
+import dev.stevenjin.stevenpiano.instruments.MidiDeviceRef
+import dev.stevenjin.stevenpiano.instruments.MidiPicker
+import dev.stevenjin.stevenpiano.instruments.MidiPurpose
+import dev.stevenjin.stevenpiano.instruments.MidiScan
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -142,6 +148,29 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun cancelTabletSound() = graph.tabletSound.cancelDownload()
 
     fun removeTabletSound() = graph.tabletSound.remove()
+
+    /** The MIDI keyboard (Piano › Keyboard, v1.11 — M29). */
+    val keyboard: StateFlow<KeyboardState> = graph.keyboard.state
+
+    /** What Android's MIDI service lists, and the picker's Bluetooth search. */
+    val midiDevices: StateFlow<List<MidiDeviceRef>> = graph.midiDevices.devices
+    val midiScan: StateFlow<MidiScan> = graph.midiDevices.scan
+
+    /** The picker's rows for [purpose] (never Steven Piano, nor the remembered piano's address). */
+    fun pickerRows(purpose: MidiPurpose, listed: List<MidiDeviceRef>, scan: MidiScan): List<MidiChoice> =
+        MidiPicker.rows(purpose, listed, scan.found, graph.settings.value.lastDeviceAddress)
+
+    /** The picker opened, or Look again: Bluetooth MIDI devices are looked for (12 s, on the shared scan budget). */
+    fun startMidiScan() = graph.midiDevices.startScan()
+
+    /** The picker closed. */
+    fun stopMidiScan() = graph.midiDevices.stopScan()
+
+    /** The person chose [choice] as the keyboard: remembered and connected (the one before lets go first). */
+    fun chooseKeyboard(choice: MidiChoice) = graph.keyboard.choose(choice)
+
+    /** Forget the keyboard: what it holds lets go, and none is remembered. */
+    fun forgetKeyboard() = graph.keyboard.forget()
 
     fun connect() = graph.pianoLink.connect(graph.settings.value.lastDeviceAddress)
 

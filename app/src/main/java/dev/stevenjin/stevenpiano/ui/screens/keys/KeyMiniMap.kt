@@ -43,7 +43,8 @@ private const val BLACK_KEY_HEIGHT = 0.62f
  * The whole 84-key keyboard in miniature, with the part the playable keyboard shows framed by a
  * rectangle in the content colour. Dragging moves the frame ([onMove], in white keys, as the
  * finger goes; [onSettle] when it lifts); touching outside the frame brings it there first. Keys
- * a finger holds invert here too. The ‹ › octave buttons beside it are the way in for TalkBack.
+ * a finger holds invert here too, and those a MIDI keyboard holds ([held], v1.11 — M29). The ‹ › octave
+ * buttons beside it are the way in for TalkBack.
  */
 @Composable
 fun KeyMiniMap(
@@ -54,6 +55,7 @@ fun KeyMiniMap(
     onMove: (firstWhite: Float) -> Unit,
     onSettle: () -> Unit,
     modifier: Modifier = Modifier,
+    held: (Int) -> Boolean = { false },
 ) {
     val body = MaterialTheme.colorScheme.surfaceVariant
     val ink = MaterialTheme.colorScheme.onSurface
@@ -98,7 +100,7 @@ fun KeyMiniMap(
                     pressedVersion.intValue   // a touch changed what is held
                     drawRect(body)
                     for (i in 0 until KeyMap.KEY_COUNT) {
-                        if (!keys.isBlack(i) && touches.isPressed(KeyMap.LOWEST + i)) {
+                        if (!keys.isBlack(i) && (touches.isPressed(KeyMap.LOWEST + i) || held(KeyMap.LOWEST + i))) {
                             drawRect(ink, Offset(keys.left(i), 0f), Size(keys.width(i), size.height))
                         }
                     }
@@ -108,7 +110,8 @@ fun KeyMiniMap(
                     for (i in 0 until KeyMap.KEY_COUNT) {
                         if (!keys.isBlack(i)) continue
                         drawRect(body, Offset(keys.left(i) - sep, 0f), Size(keys.width(i) + 2 * sep, blackHeight + sep))
-                        drawRect(if (touches.isPressed(KeyMap.LOWEST + i)) ink else blackKey, Offset(keys.left(i), 0f), Size(keys.width(i), blackHeight))
+                        val down = touches.isPressed(KeyMap.LOWEST + i) || held(KeyMap.LOWEST + i)
+                        drawRect(if (down) ink else blackKey, Offset(keys.left(i), 0f), Size(keys.width(i), blackHeight))
                     }
                     val left = firstWhite() * keys.whiteWidth
                     drawRect(

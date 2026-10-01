@@ -18,6 +18,8 @@ import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -41,6 +43,10 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
 
     /** The tablet's piano sound (v1.8 — M25): whether it plays these keys while the piano isn't connected. */
     val tabletSound: StateFlow<TabletSoundState> = graph.tabletSound.state
+
+    /** The MIDI keyboard (v1.11 — M29): its state for the eyebrow, and what it holds for the keys to show. */
+    val keyboard: StateFlow<KeyboardState> = graph.keyboard.state
+    val external: MidiKeyboard = graph.keyboard
 
     /** The sustain as the piano was last told; a stop elsewhere lifts it. */
     val sustain: StateFlow<Boolean> = player.liveSustain

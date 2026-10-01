@@ -67,6 +67,14 @@
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
+    <!-- v1.11 — M29: MIDI keyboards and MIDI pianos through Android's MIDI service, by Bluetooth or by a USB cable
+         (the tablet as USB host). Neither is required: without them the app plays Steven Piano as before. -->
+    <uses-feature
+        android:name="android.software.midi"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
 
     <!-- No backup, and (Android 12+) no device-to-device transfer: the library stays on this device. -->
     <application

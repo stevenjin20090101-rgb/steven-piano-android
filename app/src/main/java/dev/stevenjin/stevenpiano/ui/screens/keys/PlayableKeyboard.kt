@@ -55,7 +55,8 @@ private const val LABEL_FILL = 0.9f
  * [firstWhite] (read at draw and touch time, so scrolling never restarts a touch). White keys on
  * the elevated surface with hairline gaps, black keys in the tertiary grey at 60 % height, the
  * octave letters (C1 … C7) in the eyebrow style at the bottom of each C. A key a finger holds
- * inverts to the content colour for as long as the finger is down; [touches] turns fingers into
+ * inverts to the content colour for as long as the finger is down, and so does one a MIDI keyboard
+ * holds ([held], v1.11 — M29; the screen bumps [pressedVersion] as it changes); [touches] turns fingers into
  * notes, several at once for chords, and sliding plays a glissando. Where a key is touched sets
  * its loudness: the top is soft, the bottom loud. Drawing reads [pressedVersion], bumped after
  * every touch, so it redraws without recomposing. No haptics: this is a frequent interaction.
@@ -67,6 +68,7 @@ fun PlayableKeyboard(
     visibleWhites: Int,
     firstWhite: () -> Float,
     modifier: Modifier = Modifier,
+    held: (Int) -> Boolean = { false },
 ) {
     val body = MaterialTheme.colorScheme.surfaceVariant
     val pressed = MaterialTheme.colorScheme.onSurface
@@ -132,7 +134,7 @@ fun PlayableKeyboard(
                     translate(left = -offset) {
                         for (i in 0 until KeyMap.KEY_COUNT) {
                             if (layout.isBlack(i) || layout.right(i) < offset || layout.left(i) > right) continue
-                            val down = touches.isPressed(KeyMap.LOWEST + i)
+                            val down = touches.isPressed(KeyMap.LOWEST + i) || held(KeyMap.LOWEST + i)
                             if (down) drawRect(pressed, Offset(layout.left(i), 0f), Size(layout.width(i), size.height))
                             if ((KeyMap.LOWEST + i) % 12 == 0) {
                                 val label = labels[(KeyMap.LOWEST + i) / 12 - 2]
@@ -147,7 +149,7 @@ fun PlayableKeyboard(
                         for (i in 0 until KeyMap.KEY_COUNT) {
                             if (!layout.isBlack(i) || layout.right(i) < offset || layout.left(i) > right) continue
                             drawRect(body, Offset(layout.left(i) - sep, 0f), Size(layout.width(i) + 2 * sep, keys.blackHeight + sep))
-                            val down = touches.isPressed(KeyMap.LOWEST + i)
+                            val down = touches.isPressed(KeyMap.LOWEST + i) || held(KeyMap.LOWEST + i)
                             drawRect(if (down) pressed else blackKey, Offset(layout.left(i), 0f), Size(layout.width(i), keys.blackHeight))
                         }
                     }
