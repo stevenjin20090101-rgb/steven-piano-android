@@ -2220,3 +2220,103 @@ once a day while the app is open and online with **Check for updates** on (the a
 switch); and when the empty Library or the + sheet shows, at most once every 10 minutes, since the
 person is looking at the offer. The 61 MB zip only on Load or Update. Nothing about the person or the
 tablet is sent.
+
+---
+
+# v1.10.1 — uploads become playlists
+
+On 2026-10-01 Steven dropped a zip of his own on the school tablet's web panel: 266 MIDI files as
+`MIDI/<Artist>/<Title>.mid` (107 artist folders) and five at the root named `Title - Artist`. 1.10 read a
+composer only from a `Composer - Title` file name, so they arrived as titles without artists, in no playlist,
+with no photographs, lost among the rest. He asked: "place them into a playlist, make sure every one of them
+will have artwork, make it appear first." Designed with the `apple-design` lenses, tablet first; nothing above
+changes except where this section says so.
+
+## A piece's artist (D1)
+
+Without an INDEX.csv row, a piece's artist comes from, in this order:
+
+1. **A `Composer - Title` file name**, read as always, but **the other way round when only its right side is
+   known**: known = a canonical composer of the app's list, or an artist folder of the same import. A trailing
+   parenthetical on that side goes to the title: "Cornfield Chase - Hans Zimmer (version 2)" is *Cornfield Chase
+   (version 2)* by Hans Zimmer. Both sides known, or neither ("Stay - Interstellar"), it reads as it always has:
+   the left side is the composer.
+2. **The artist folder**: the folder that holds the file, when it lies below the import's root. `MIDI/Coldplay/
+   Sparks.mid` is *Sparks* by Coldplay; a file in the root itself has none.
+3. Otherwise no composer, as before.
+
+INDEX.csv rows win, as they always have. What a Mac adds beside the music, anything in `__MACOSX/` and the `._`
+files, is skipped before anything is counted: never a piece, never a failure.
+
+## A zip or a folder is a playlist (D2)
+
+- **Its name**: the root, the one top-level folder every file of the zip or folder shares ("MIDI"), else the zip
+  or the folder itself without its extension ("Spring Recital.zip" is *Spring Recital*). Names are cut as every
+  playlist's are; a name a built-in list holds moves the built-in aside, as before ("Popular · built in").
+- **What goes in**: every piece of the upload that no INDEX.csv row places, in path order (folder by folder, then
+  by title, numbers by value), **pieces already in the library included**: such a piece is linked too, and its blank
+  composer filled from the upload. A playlist of that name already there is filled further, at its end.
+- **A loose MIDI file sent through the web panel** goes into the standing playlist **Uploads**, made when first
+  needed. It is a playlist of the person's like any other: renamed or deleted, the next loose upload makes it again.
+- **Files picked one by one** on the tablet (Library › + › Add files, Open with, Share) go into no playlist, as
+  before; a folder or a zip picked on the tablet follows the rules above. Steven's library keeps its three
+  collections and makes no playlist of its own.
+
+## Artists' names (D3)
+
+The app's canonical composers stay as they are: "Claude Debussy" and "Erik Satie" from a folder join Debussy and
+Satie. Anyone else, read from a folder or from the known side of a reversed name, keeps **the whole name** as
+written: grouped by the whole name folded (*Ed Sheeran*, *Louis Armstrong* apart from *Craig Armstrong*,
+*Coldplay*, *C418*), and rows show the whole name ("Ed Sheeran · 3:54", as "Made in Studio · 3:05" does). No surname
+logic for artists: *Twenty One Pilots*, *The Weeknd* and *Lady Gaga & Bradley Cooper* stay whole. So that one artist
+never gets two groups, a composer read from a `Composer - Title` name, or typed in Rename, joins an artist the
+library (or the same upload) already has by that whole name. Nothing already in the library is re-keyed otherwise:
+the classical library's composers and their portraits stay exactly where they were.
+
+## What was already imported (D4)
+
+The first start of 1.10.1 repairs, once, what earlier uploads left loose: the pieces with no collection, in no
+playlist, that came from a folder in a zip or a folder, none of Studio's. Grouped by the first folder of their path
+(the zip's root), a group of two or more is read as an upload now would be: blank artists filled from their folders,
+a reversed name that 1.10 read the wrong way round corrected (its title too), and all of them put into the playlist
+named after the root, in path order. On the school tablet that is the playlist **MIDI**, 265 pieces. Then the
+built-in lists refresh and the new artists' photographs are fetched. Nothing in a playlist or a collection is
+touched, and it never runs again.
+
+## Artwork for every piece (D5)
+
+A piece shows its artist's photograph, else its roll card (its first 20 seconds as perforations). **No frame stands
+empty**: where a roll card can't be drawn (a file gone or unreadable), the piece's title's monogram stands in, in the
+now-playing panel, the mini player, the resting screen and the piece sheet, and in the web panel's rows, Now playing
+and channel cards.
+
+An artist is looked up on Wikipedia by their name; past a disambiguation page or a page about something else, as
+"*name* (band)", "(singer)", "(musician)", then "(composer)"; the first page about a band or a performer wins (its
+description, else its first sentence, names one: band, duo, group, singer, songwriter, musician, rapper, DJ, record
+producer, composer, pianist…). *Queen* is the band, *Passenger* the singer. A joint name ("A & B", "A and B", "A feat.
+B", "A, B") whose own page finds nothing is looked up as A: *Lady Gaga & Bradley Cooper* shows Lady Gaga. Five
+lookups an artist at most; a company or anything else not about music (*Nintendo*) keeps its roll cards. Only
+Wikipedia's free photographs: no album covers. "Fetch artwork automatically" still decides.
+
+## The Playlists' order (D6)
+
+- **Newest first** (the default): the person's playlists by when they were made, newest first, so an upload's
+  playlist appears first; the built-in lists after them in their fixed order (Popular, Recognisable, Epic on piano).
+  **Name**: the order before 1.10.1 (the built-in lists first, then by name).
+- **The pop-up button**, at the end of the Playlists' own header row, below the channels: the eyebrow **PLAYLISTS** at
+  its start, the order chosen ("Newest first") in the label style and the content colour, a chevron down in the
+  secondary grey, 48 dp tall; TalkBack reads "Sort playlists, Newest first". A tap opens the two orders on the menus'
+  glass, the current one checked, the menu's end at the button's end, so on the tablet it opens within the list's
+  pane and never across the divider. At font scale 2.0 the button stays on one line; the eyebrow may wrap beside it.
+  `pop-up-buttons.md › Best practices`: *"Use a pop-up button to present a flat list of mutually exclusive options or
+  states"*, *"Provide a useful default selection"*; `settings.md › Task-specific options`: ordering a collection belongs
+  on the screen it orders, not in settings.
+- The choice is remembered, and the web panel lists the playlists in the same order.
+
+## Where an upload went (D7)
+
+- **The panel's Add tab**, when an import has finished: its tally ("Imported 265 pieces · 1 already there"), and under
+  it **In the playlist MIDI** with the outlined button **Open the playlist** (the Library section, that playlist open).
+  A loose file reads "In the playlist Uploads". Sentence case, no exclamation marks.
+- **The tablet's import bar**: "Imported 265 pieces · in the playlist MIDI."; pieces that were all there already, "Those
+  pieces are already in the library · in the playlist MIDI.".

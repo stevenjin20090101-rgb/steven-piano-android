@@ -34,23 +34,26 @@ on the tablet*). Made by Steven Jin. Version 1.10.
 - **Library**: search; **Playlists** and **Composers** as grids of tiles with
   art; favorites and recent pieces. Import single files, a whole folder (with
   its `INDEX.csv`, whose sets arrive as playlists) or a zip, or load **Steven's
-  library** from GitHub in one tap, and its updates later. A piece's menu
-  plays it next, adds it to the queue or to a playlist, favorites, renames or
-  deletes it, and opens *About this piece*.
+  library** from GitHub in one tap, and its updates later. A zip or a folder
+  arrives as a playlist of its own, and its artist folders name the artists
+  (see *Importing*). A piece's menu plays it next, adds it to the queue or to a
+  playlist, favorites, renames or deletes it, and opens *About this piece*.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
   composer's portrait), **Shuffle**, and its pieces in the order you give them:
   drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**
   floats as a filled circle at the bottom of the list, wherever it is scrolled.
-  Rename, change the photo or delete it from its menu.
+  Rename, change the photo or delete it from its menu. The playlists are listed
+  **Newest first** (so an upload's playlist is on top) or by **Name**: the
+  pop-up at the end of the PLAYLISTS row chooses, and the web panel follows.
 - **Built-in playlists**: **Popular**, **Recognisable** and **Epic on piano** fill
   themselves from the library: the pieces everyone knows (Für Elise, the
   Moonlight, Clair de lune…), the concert warhorses (the Hungarian Rhapsody No. 2,
   the Heroic Polonaise, La Campanella…), and the 45 pieces of the Epic on piano
-  set, however they came in. They come first among the playlists with a *BUILT
-  IN* eyebrow, fill again after every import, hold only what the library has
-  (each piece in at most four recordings), and can't be renamed, reordered or
-  deleted; Change photo still works. A list that finds nothing is not shown.
-  From Steven's `midi` folder they hold 17, 29 and 49 pieces.
+  set, however they came in. They follow your own playlists (sorted by Name,
+  they come first) with a *BUILT IN* eyebrow, fill again after every import,
+  hold only what the library has (each piece in at most four recordings), and
+  can't be renamed, reordered or deleted; Change photo still works. A list that
+  finds nothing is not shown. From Steven's `midi` folder they hold 17, 29 and 49 pieces.
 - **Channels**: a row of wide cards above the playlists (**See all** shows them
   all as a grid): Calm, Epic, Baroque, Romantic, Impressionist, Nocturnes,
   Études and Everything, each faced with its four most frequent composers. A tap
@@ -291,9 +294,16 @@ the app is swiped away.
 
 Composers get their Wikipedia portrait and a two-sentence blurb; a piece's sheet
 (*About this piece*) shows its Wikipedia notes when it has a page, otherwise its
-composer's. For this the app talks to **two hosts and no others**: `en.wikipedia.org`
-(page summaries and search) and `upload.wikimedia.org` (the portraits); a redirect
-anywhere else is refused. (The only other network use is the app's own updates and the piano's firmware
+composer's. Artists who are not among the app's classical composers (Coldplay, Ed
+Sheeran, Hans Zimmer…) are looked up by their name, then as "*name* (band)",
+"(singer)", "(musician)" and "(composer)": only a page about a band or a performer
+is taken, so a namesake's photograph never appears. A joint name ("Lady Gaga &
+Bradley Cooper") whose own page finds nothing is looked up by its first name; five
+lookups an artist at most. No album covers (they are not free): an artist without a
+free photograph, or a company, keeps the roll cards below. For all this the app talks
+to **two hosts and no others**: `en.wikipedia.org` (page summaries and search) and
+`upload.wikimedia.org` (the portraits); a redirect anywhere else is refused.
+(The only other network use is the app's own updates and the piano's firmware
 releases, below, Studio's models when you download them, *Studio*, and Steven's library, *Steven's library*.) What it sends is a page title or a search made from the library's own
 composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),
 with the app's User-Agent. **Nothing about you is sent**: no account, no identifier, no
@@ -306,7 +316,8 @@ location, nothing about what you play.
   piece's sheet asks Wikipedia only when you tap **Fetch notes**.
 - One request at a time, at most four a second. Offline nothing is fetched and nothing
   is recorded; a failed fetch is retried a day later. Without a portrait a composer
-  shows a mosaic of their pieces' first seconds drawn as a paper roll.
+  shows a mosaic of their pieces' first seconds drawn as a paper roll, and a piece its
+  own; a piece whose file can't be drawn shows its title's first letter.
 - **Piano › Display › Artwork in black and white** shows the portraits in black and white.
 
 ## Updates
@@ -492,13 +503,43 @@ whole `midi` folder over USB.
   (MAESTRO, piano-midi.de, Mutopia) and names the composers, so the 1,727 pieces
   arrive grouped. Copies of the same file are skipped.
 - **Library › + › Add zip**, then `ALL-SONGS.zip`: the same 1,727 pieces, named
-  from their file names (no playlists).
+  from their file names, in one playlist of their own, **ALL SONGS** (the zip's
+  folder).
 - **Library › + › Add files** for a few pieces, or send `.mid` files to Steven
   Piano from any file manager (*Open with* or *Share*); the app asks "Add 3 files to
   the library?" before it copies anything.
 
 Imports continue with the screen off and show their progress in the Library and
 in a notification. A full import takes about a minute.
+
+### Importing: artists and playlists
+
+From 1.10.1 an upload of your own music arrives with its artists and in a playlist:
+
+- **Folders are artists.** A file in a folder inside the zip's or the folder's top
+  folder takes that folder as its artist: `MIDI/Coldplay/Sparks.mid` is *Sparks* by
+  Coldplay. A file named `Composer - Title` reads as before, but the other way round,
+  `Title - Artist`, when only its right side is a known name (a classical composer
+  the app knows, or an artist folder of the same upload): `Cornfield Chase - Hans
+  Zimmer (version 2).mid` is *Cornfield Chase (version 2)* by Hans Zimmer. An
+  `INDEX.csv` row still wins. What a Mac adds (`__MACOSX`, `._` files) is skipped.
+- **Artists keep their whole name** (*Ed Sheeran*, *Twenty One Pilots*; *Louis
+  Armstrong* apart from *Craig Armstrong*), and the app's classical composers keep
+  theirs: a *Claude Debussy* folder joins Debussy.
+- **A zip or a folder is a playlist**, named after its one top folder (`MIDI`), else
+  after the zip or the folder itself (`Spring Recital.zip` is *Spring Recital*):
+  every piece in it that `INDEX.csv` doesn't place, folder by folder and by title,
+  pieces already in the library included (a blank artist is filled in). Newest
+  first, it is on top of the playlists.
+- **Uploads**: a `.mid` or `.midi` file sent on its own through the web panel goes
+  into the playlist **Uploads**, made when first needed; rename or delete it as you
+  like, and the next one makes it again. Files picked one by one on the tablet (**Add
+  files**, *Open with*, *Share*) go into no playlist, as before.
+- **What came in before 1.10.1**: the first start of 1.10.1, once, puts the pieces an
+  earlier zip or folder left loose (in folders, in no playlist, with no `INDEX.csv`
+  set) into a playlist named after the top folder they came in, filling in their
+  artists and turning `Title - Artist` names the right way round. On the school
+  tablet that is **MIDI**, 265 pieces.
 
 ## Steven's library
 
@@ -693,9 +734,11 @@ tempo, a channel's volume), Up next (reorder, remove, clear), the Library (searc
 playlists, composers; Play, Play next, Add to queue), Channels, Schedule (see
 *Schedules*), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
 to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
-tally) and **Piano** (the piano's Feel, Lighting and Pedal settings, Read status, All
-keys off, Save now). It updates as things change on the tablet, and it follows the
-browser's light or dark, or its own **Appearance** chips. A session lasts until it has
+tally; a zip becomes a playlist and loose files go into **Uploads**, and under the
+tally "In the playlist MIDI" with **Open the playlist**) and **Piano** (the piano's
+Feel, Lighting and Pedal settings, Read status, All keys off, Save now). It updates as
+things change on the tablet, and it follows the browser's light or dark, or its own
+**Appearance** chips. A session lasts until it has
 gone a day unused; a new PIN, turning Web control off or restarting the app signs every
 browser out. Five wrong PINs close the gate for 30 seconds, then longer each time, up
 to ten minutes.

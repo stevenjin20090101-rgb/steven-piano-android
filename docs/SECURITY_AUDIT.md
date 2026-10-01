@@ -1841,3 +1841,66 @@ Nothing new beyond the cloud's own steps (`cloud/README.md`): keep Cloudflare Ac
 account's sign-in strong (two-factor), and revoke a lost tablet in the console at once. Load Steven's library on a new
 tablet from the tablet itself (its licence sheet first); the console brings the updates after that. If someone keeps
 the relay's sign-in shut with wrong PINs, use the tailnet or the tablet; a browser already signed in keeps working.
+
+## 1.10.1 — uploads become playlists (pre-audit notes, M28)
+
+2026-10-01, notes written with M28 for the next audit, not an audit (BUILD_SPEC.md › v1.10.1 — M28). Nothing new
+listens, and no new host is reached: what changes is what the app makes of names it already read (folder names in
+a zip's or a folder's paths, file names), one more write at start (the repair), and more Wikipedia lookups per
+name. Where each is held:
+
+- **Names are text only.** An artist folder's name, the known side of a reversed `Title - Artist` name, a zip's
+  name less `.zip` and a folder's display name become a composer or a playlist name, never a path: pieces are still
+  saved as `filesDir/pieces/<sha256>.mid`, and an entry's path is kept only as the piece's `sourceName` (cut to
+  512). Each passes `TitleHeuristics.cleanText` (mojibake repaired, NFC, whitespace collapsed) and `TextLimits`
+  before it is stored: a composer cut to 120 (`COMPOSER`), a playlist's name to 120 (`COLLECTION`, blank: "Uploads"),
+  a file or folder name to 255 (`DISPLAY_NAME`) as before. On the tablet they are Compose text; on the panel they
+  reach the page as JSON and are set with `textContent` (`h(…, { text })`, a monogram's one letter, the
+  `data-title` attribute): never markup. A name a built-in list holds moves the built-in aside, as an INDEX.csv's
+  always did.
+- **The log never names them in release builds.** The link's trail ("Library: 265 pieces put in the playlist, 264
+  artists filled") and the importer's line ("Import: …, in a playlist") leave the playlist's name out unless
+  `BuildConfig.DEBUG`; file names stay out of release logs as before (the v1.2 audit's F17). Share diagnostics
+  gains one preference, `playlistSort`; the repair's flag is housekeeping and not listed.
+- **Limits.** The importer's caps are unchanged (20,000 entries a zip, INDEX.csv to 2 MiB, 8 MB a MIDI file, 64 MB a
+  zip and 8 MB a file through the panel). An import's playlist links at most 500 pieces a transaction
+  (`SQL_CHUNK`, SQLite's variable limit), each SHA-256 once; the paths and hashes it keeps for that are the
+  import's own items, already bounded by the entry cap. `isMacMetadata` drops `__MACOSX` folders (anywhere in a
+  path) and AppleDouble `._` files before anything is read or counted, from every source, a loose panel upload or a
+  file picked on the tablet included.
+- **The repair's bounds** (`UploadRepair`, at start): **once** (`libraryUploadRepairDone`, set after a run that
+  finished; a failure leaves it due and what was done stays); only **loose pieces** (no collection, in no playlist, a
+  folder in `sourceName`, not Studio's: `PieceDao.loose`, checked again in code); a root needs two such pieces. For
+  each piece it may write only its title, composer, composer key, short name, search text and title key
+  (`PieceDao.setNames`), and only where the composer is blank (an artist folder fills it) or is still what 1.10 read
+  from a reversed name's left side; a composer the person set stays. It links pieces into the playlist named after
+  their root (found by name, so a playlist of the person's with that name gains them at its end; never reordered,
+  never emptied), 500 a transaction. Pieces with a collection, in any playlist, made in Studio or without a folder in
+  their path are never touched, nothing is deleted, no file is read or written, and no other piece is re-keyed.
+- **Wikipedia, more lookups, the same reach.** An artist (a name that is no canonical composer's) costs at most five
+  summaries (`ArtworkFetcher.MAX_LOOKUPS`): its name, then "(band)", "(singer)", "(musician)", "(composer)", or a joint
+  name and its first name. The same `WikipediaClient`: `en.wikipedia.org` and `upload.wikimedia.org` only, a redirect
+  elsewhere refused, the image capped, one request at a time, the same wait and retry; nothing runs offline or with
+  Fetch artwork automatically off. A page is taken only when it is about a band or a performer (`aboutPerformer`), so
+  a namesake's photograph is not shown for an artist. What leaves the device is new only in kind of name: **a folder
+  name in an upload is sent to Wikipedia as a page title** (with those suffixes), as composer names from file names and
+  INDEX.csv always were; a folder named after a person or a class would be looked up as written. No album covers or
+  other non-free images.
+- **The panel.** `/api/state`'s `import.playlist` is `{id, name}` of the playlist the last finished import filled,
+  behind the same session as everything else (both listeners and the relay); the panel already lists that playlist.
+  **Open the playlist** fetches it by that id through the existing playlist endpoint. A loose upload goes into
+  "Uploads", a playlist of the person's. The sort order changes no data and needs no kiosk PIN.
+- **Evidence tooling.** The M28 emulator run drove the forwarded loopback panel from the Mac through a scratchpad
+  proxy that set the panel's own Host and Origin and the session's cookie; nothing of it is in this repository, and
+  the panel's Host, Origin and header checks are unchanged.
+
+### Residuals (stated honestly)
+
+- **Folder names reach Wikipedia** when Fetch artwork automatically is on (above); turning it off keeps every name on
+  the tablet.
+- **A joint name falls back to its first name**, whose page could be a namesake's band; the performer check and the
+  five-lookup cap bound what can be shown.
+- **The repair trusts `sourceName`'s first folder as the root**: an older import whose zip had no single top folder
+  becomes a playlist per top folder (BUILD_SPEC.md › v1.10.1 — M28 › *Residuals*); its reach is names and links, as
+  above.
+- Not run on the school tablet yet.

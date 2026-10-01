@@ -6293,3 +6293,329 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.10
 release's. The push that publishes it also makes `releases/library.json` (M27, `d13f93a`) live on `main`, so a
 tablet on 1.10 can load Steven's library the moment it has the build. Steven's side after this release:
 `cloud/README.md` › *Deploy it (once)*, then enrol the school tablet and open its panel from a phone on mobile data.
+
+---
+
+# v1.10.1 — M28: uploads become playlists, with artists and artwork
+
+Read `DESIGN.md › v1.10.1 — uploads become playlists` first. Fable's brief (the session scratchpad's
+`m28-uploads-brief.md`), built by Opus on `main` from `5d4fc80` (1.10, versionCode 18), a commit a decision in the
+brief's order (D3, D1, D2, D4, D5, D6, D7), then two fixes the emulator found. **No version bump, no
+`Provenance.text` change, no provenance signing, no release build, no push**: the integrator's, at 1.10.1 (build
+19). Steven's uploaded zip is his own and this repository is public: neither the zip nor any file or byte of it is
+committed. The tests use synthetic MIDI bytes under its 266 path names (`m28_zip_paths.txt`, the names alone); the
+emulator run used the zip itself, and its evidence stays in the session scratchpad (`m28/`).
+
+## Files
+
+Added (`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests):
+
+- `M/data/imports/ImportFolders.kt` (`ImportFolders`: an import's root and artist folders; `PathOrder`).
+- `M/data/db/UploadRepair.kt` (the one-time repair, beside `TextRepair`).
+- `M/ui/screens/library/PlaylistsHeader.kt` (the Playlists header row and its pop-up button);
+  `app/src/main/res/drawable/ic_chevron_down.xml` (black, tinted where it is used, as every icon).
+- Tests: `T/data/db/UploadRepairTest` (7); resources `composer_keys_1_10.csv` (the 125 composers of Steven's
+  library as 1.10 imported them, with the display, short name and key 1.10's code gave each, written at
+  `5d4fc80`) and `m28_zip_paths.txt` (the zip's 266 MIDI paths as the zip spells them: names only).
+
+Changed (each addition marked v1.10.1 — M28): `M/data/imports/ComposerNames.kt` (`artist`, `resolve`, `artistKey`,
+`canonicalOf`; `normalize` untouched); `TitleHeuristics.kt` (`Source`, `Metadata.source`, `metadata(…, folder,
+artistNamed)`, `baseName`, `trailingParentheticals`); `ImportSource.kt` (`ImportBatch`, `OpenedSource.batch`,
+`isMacMetadata`, `isHiddenPath` also a nested `__MACOSX`, `treeName`); `Importer.kt` (`ImportStore.hasComposerKey`
+and `linkToPlaylist`, the Mac's files skipped, `BatchNames`, the batch's playlist, `Outcome.Duplicate.filled`);
+`ImportProgress.kt` (`filled`, `playlist`, `piecesChanged`, `ImportedPlaylist`); `M/data/LibraryRepository.kt`
+(`UploadRepair.Store`; `rename` through `resolve`; `hasComposerKey`, `linkToPlaylist`, `loosePieces`,
+`repairChunk`); `M/data/db/PieceDao.kt` (`hasComposerKey`, `loose`, `setNames`, `idsBySha`) and `PieceEntity.kt`
+(`PieceSha`); `M/AppGraph.kt` (`repairUploadsOnce` at start; a library load's after-steps on `piecesChanged`);
+`M/service/ImportService.kt` (`piecesChanged`); `M/web/AppWebBackend.kt` (the batches, `piecesChanged`, the
+playlists' order); `M/web/WebApi.kt` (`import.playlist`); `M/settings/Settings.kt` (`playlistSort`,
+`setPlaylistSort`, `uploadRepairDone`, `markUploadRepairDone`); `M/diag/DiagnosticsExporter.kt` (`playlistSort`);
+`M/data/PlaylistOrder.kt` (`PlaylistSort`, `listing`); `M/data/art/ArtworkFetcher.kt` (artists);
+`M/ui/components/Artwork.kt` (`RollCardImage`'s and `PieceArt`'s `title`) and its callers `NowPlayingPanel.kt`,
+`DisplayScreen.kt`, `MiniPlayer.kt`, `PieceDetailSheet.kt`; `M/ui/screens/library/LibraryScreen.kt` and
+`LibraryViewModel.kt` (the header row, the order); `M/ui/ImportCopy.kt`; `app/src/main/assets/web/app.js` and
+`style.css`; the tests below; `DESIGN.md`, `README.md`, `docs/SECURITY_AUDIT.md`. No schema change (the database
+stays at version 3): the repair and the links use the tables as they are.
+
+## D3 — artists' names (`ComposerNames`)
+
+- **`artist(raw)`** (an artist folder's name, or the known side of a reversed name): `cleanText` (mojibake
+  repaired, NFC, spaces collapsed, trimmed); blank: no composer; "Made in Studio": Studio's; a canonical
+  composer's name (`canonicalOf`): that composer as `normalize` gives them ("Claude Debussy": key `debussy`, "Erik
+  Satie": `satie`); anyone else `Name(text, text, artistKey(text))`: shown as written, the short name the whole
+  name, the key the whole name folded without punctuation, spaces collapsed ("ed sheeran", "louis armstrong",
+  "craig armstrong", "lady gaga bradley cooper", "c418").
+- **`canonicalOf(raw)`**: the canonical composer a name names, or null: the full name, a short form `normalize`
+  already reads as theirs ("Debussy", "Chopin, F", "Bach JS"), or the surname (or a spelling of it) after given
+  names of the composer's own or their initials ("Pyotr Tchaikovsky", "W. A. Mozart"). "Andrew Berg" and "Janis
+  Joplin" are not Alban Berg and Scott Joplin, though `normalize` keys them by surname.
+- **`resolve(raw, isKey)`** (a `Composer - Title` name's left side, and Rename): `normalize(raw)`, unless the name
+  is no canonical composer's, its whole key differs from `normalize`'s, and `isKey(whole)` holds (an artist folder
+  of the same import, else `PieceDao.hasComposerKey`, asked once a key an import): then `artist(raw)`. So "Ed
+  Sheeran - Perfect.mid" joins an "Ed Sheeran" folder's pieces instead of starting `sheeran`.
+- `normalize` is unchanged. `ComposerNamesTest` reads `composer_keys_1_10.csv` and finds each of a 1.10 library's
+  125 composers with the display, short name and key it had: no key moves, no artwork row is orphaned. Nothing
+  already in the library is re-keyed (the repair touches only the loose pieces, D4).
+
+## D1 — where a piece's artist comes from (`TitleHeuristics.metadata`, `ImportFolders`, `Importer`)
+
+- **The Mac's files**: `isMacMetadata(path)` (a `__MACOSX` segment anywhere, or a last segment starting `._`)
+  drops them from `source.items` before anything is counted or read. 1.10 already left them out of zips and folder
+  walks (`isHiddenPath`: a top-level `__MACOSX/`, any segment starting with a dot), so the zip's 115 were never
+  counted; it missed a nested `__MACOSX/` folder's files and a loose `._name.mid` picked on the tablet or sent
+  through the panel. `isHiddenPath` names a nested `__MACOSX` too now.
+- **`ImportFolders(paths)`**: `root`, the one top-level folder every path shares (null when they share none, or a
+  file lies at the top); `artistFolderOf(path)`, the folder that directly holds the file when it lies below the
+  root (with no root, any folder that holds it), cleaned; `artistNamed(name)`, the import's artist folder whose
+  `artistKey` is the name's, spelt as the folder is; `artistKeys`, the keys `artist` gives its folders.
+- **`metadata(fileName, row, sequenceNames, folder, artistNamed)`**, in order: an INDEX.csv row (`INDEX`); a
+  `Composer - Title` split whose right side, less its trailing parentheticals (`trailingParentheticals`), is known
+  (`canonicalOf`, or `artistNamed`) and whose left side is not: `REVERSED`, the composer the right side as the
+  folder spells it, the title the left side with the parentheticals after it; else the split as always,
+  `FILE_NAME`; else the artist folder, `FOLDER`, the title the file's base name; else `NONE`. A stub title still
+  gives way to Track 0's name.
+- **The importer** (`BatchNames`) reads the composer by its source: `INDEX` and `NONE` through `normalize` (as 1.10),
+  `REVERSED` and `FOLDER` through `artist`, `FILE_NAME` through `resolve` (D3); cut to `TextLimits.COMPOSER` first,
+  as before.
+
+## D2 — an import's playlist (`ImportBatch`, `Importer.link`, `LibraryRepository.linkToPlaylist`)
+
+- **`OpenedSource.batch`**: `None` for files picked one by one (`ImportSource.Uris`), Steven's library (`LocalZip`)
+  and Studio's pieces; `Named(name)` for a zip (the tablet's `ImportSource.Zip` and the panel's `importZip`:
+  `ImportBatch.zip(name)`, the name less `.zip`) and a folder (`ImportSource.Tree`: `treeName`, the provider's
+  display name of the folder chosen, else its document id's last part, cut to 255); `Uploads` for a loose
+  `.mid`/`.midi` sent through the panel (`importMidi`).
+- **What goes in** (`Importer.link`, after the last item): every item read whose INDEX.csv row names no collection,
+  new or already there (`found`: its path and SHA-256), less any SHA-256 an INDEX row of the batch placed
+  (`placed`), in `PathOrder` of the paths, each SHA-256 once. `Named`: the root, else the batch's name; `Uploads`:
+  "Uploads". The name `cleanText`ed and cut to `TextLimits.COLLECTION` (120); blank, "Uploads".
+- **`PathOrder`**: segment by segment, folded (case and accents ignored), the last without its MIDI extension, runs
+  of digits by value ("No. 2" before "No. 10"), a name before the longer ones it begins ("Fix You" before "Fix You
+  (Live)").
+- **`linkToPlaylist(name, imported, shas)`**: chunks of 500 (`SQL_CHUNK`), a transaction each: the pieces among the
+  chunk's SHA-256s (`idsBySha`) in the chunk's order; the playlist found by name (as names compare) or made
+  (`playlistId`: a built-in of that name moves aside, "Popular · built in") in the first transaction that has a
+  piece for it; each piece after the playlist's last (`addPiece` ignores a piece already in it, which keeps its
+  place). A zip's or a folder's playlist is marked `imported`, as an INDEX.csv's; Uploads is not. A failure is
+  logged and leaves the pieces in the library without their playlist.
+- **Duplicates**: a duplicate whose library copy has a blank composer takes the upload's, as `fillComposer` always
+  did, now from D1's sources (`Outcome.Duplicate(sha, filled = true)`); `ImportProgress.filled` counts them, and
+  `piecesChanged` (`imported > 0 || filled > 0`) decides the after-steps (the built-ins, artwork) in
+  `ImportService`, the panel's imports and Steven's library's load.
+- **`ImportProgress.playlist`** (`ImportedPlaylist(id, name)`), set when the import finishes. The log: "Import:
+  3 new, 0 already there, 0 failed, in a playlist called Spring Recital" (the name in debug builds only).
+
+## D4 — the one-time repair (`UploadRepair`, `AppGraph.repairUploadsOnce`)
+
+- **When**: at start, first in the launch that refreshes the built-ins, on `Dispatchers.IO`, unless
+  `settingsRepository.uploadRepairDone()` (the key `libraryUploadRepairDone`, housekeeping like `textRepairDone`:
+  not in `PianoSettings`, not in Share diagnostics). Marked done once a run finishes; a failure is logged and leaves
+  it due (what it did stays, and a second run finds those pieces in their playlist). Then the built-ins refresh,
+  and, when it named an artist and **Fetch artwork automatically** is on, `artwork.requestComposers(force = false)`.
+- **Which pieces** (`PieceDao.loose`, checked again by `UploadRepair` over what it is given): no collection, in no
+  playlist (no `collection_pieces` row), a `/` in `sourceName` after its first character, a composer that is not
+  "Made in Studio".
+- **`plan(pieces)`**: grouped by `sourceName`'s first segment, the roots in `PathOrder`; a root with two pieces or
+  more and a name (`cleanText`, cut to 120) is a `Plan`: its pieces in `PathOrder`, and those whose names change.
+  `ImportFolders` over the root's paths gives its artist folders.
+- **`repaired(piece, folders)`**: `metadata` as an import now reads the file's name. `FOLDER`: a blank composer
+  takes the folder (`artist`). `REVERSED`: when the composer is blank or still what 1.10 read from the left side
+  (`normalize(left).display`), the reversed reading's title and artist. Anything else stays. Through
+  `PieceEntity.named`, so `searchText`, `titleKey` and `composerShort` follow; `PieceDao.setNames` writes those six
+  columns and nothing else.
+- **`run(store, log, named)`**: a plan's pieces in chunks of 500 (`CHUNK`), a transaction each (`repairChunk`: the
+  names, then the links after the playlist's last, the playlist found or made as D2's); then a line in the link's
+  trail: "Library: 265 pieces put in the playlist MIDI, 264 artists filled" (release builds: "… put in the playlist,
+  264 artists filled").
+
+## D5 — artwork for every piece (`ArtworkFetcher`, `Artwork.kt`, the panel)
+
+- **An artist** (a composer key `ComposerNames.canonical` doesn't know; the canonical path is unchanged):
+  `artistPage(display)`. Its own summary, taken when it is no disambiguation page and `aboutPerformer`; else, for a
+  single name, "(band)", "(singer)", "(musician)", "(composer)" in turn, the first such page winning. A joint name
+  (`firstOfJoint`: "&", ",", "and", "feat", "feat.", "ft.", "featuring") tries its own page alone, then its first
+  name the same way, suffixes included. At most `MAX_LOOKUPS` = 5 summaries an artist; a page that doesn't exist ends
+  that name's tries. Then the page's image, as a composer's (`WikipediaClient.IMAGE_CAP`): the same client, the same
+  two hosts, the same retry and wait.
+- **`aboutPerformer`**: the description names a performer (`PERFORMERS`, whole words or phrases: band, duo, trio,
+  quartet, group, girl group, boy band, singer, songwriter, singer-songwriter, musician, multi-instrumentalist,
+  rapper, DJ, disc jockey, record producer, music producer, composer, pianist, guitarist, drummer, bassist,
+  vocalist, violinist, cellist, organist, harpsichordist, conductor, orchestra, ensemble, choir, recording artist,
+  musical artist); else a description naming a work or a company (`WORKS`: album, song, single, soundtrack, EP,
+  film, game, company, label, series…) and no person's years (`PERSON`: "born", "1862–1918") is not; else the
+  extract's first sentence decides (`firstSentence`, past initials and abbreviations: "Robert F. "Toby" Fox is an
+  American … composer."). So a soundtrack's page whose extract names a singer never stands for the singer.
+- **No empty frame**: `RollCardImage(…, title)` shows the title's `MonogramTile` where the roll card is `Missing`
+  (the piece's file gone, unreadable, or too large for the memory left), and `PieceArt(…, title)` passes it on;
+  the now-playing panel, the mini player, the resting screen's framed art (its backdrop stays a backdrop) and the
+  piece sheet give it. Library rows and tiles (`ComposerArt`: the portrait, else the composer's mosaic, else the
+  monogram) and playlist covers are as they were. The panel: `/api/art/piece/{id}` and `/api/art/composer/{key}`
+  answer as before (the image, or 404); its `art()` keeps a piece's title (`data-title`), and a roll card that
+  cannot come (no id, or the probe image's error) becomes the title's monogram, as does a channel tile's portrait
+  that fails to load.
+- Artwork is asked for after an import (`piecesChanged`) and after the repair (`requestComposers(false)`); Fetch
+  artwork automatically still decides. No piece images (album covers are not free): unchanged.
+
+## D6 — the Playlists' order (`PlaylistOrder`, `PlaylistsHeader`, the panel)
+
+- **`PlaylistSort`**: `NEWEST` ("Newest first", the default) and `NAME` ("Name"); `PianoSettings.playlistSort`
+  (`setPlaylistSort`, the key `playlistSort`; a value this version doesn't know reads as the default), in Share
+  diagnostics' `settings.txt` (40 lines).
+- **`PlaylistOrder.listing(all, sort, builtInOrder)`** over the library's list (by name, case ignored): `NEWEST`,
+  the playlists not built in by id, descending (ids only grow: creation order), then the built-ins in the
+  catalogue's key order (`graph.builtIns.keys`: Popular, Recognisable, Epic on piano; a key it doesn't name after
+  them by id); `NAME`, exactly the order before 1.10.1: the built-ins by id, then the rest as the library lists
+  them. `PlaylistShelf.shown` still hides an empty built-in; the Library's Playlists listing combines the
+  playlists, the channels and the order off the main thread (`flowOn(Dispatchers.Default)`);
+  `AppWebBackend.playlists()` gives the panel the same order.
+- **`PlaylistsHeader(sort, onSort)`**, the list item `playlists-head` after the channels' row (a spacer, as before,
+  when there are no playlists): a row at least 48 dp tall, 16 dp in at the start and 4 dp at the end; the
+  `Eyebrow("Playlists")` with `weight(1f)` and heading semantics (it may wrap); the pop-up button: the order's label
+  in `labelLarge`, `onSurface`, one line without soft wrap, then `ic_chevron_down` (20 dp, `onSurfaceVariant`); at
+  least 48 dp tall, `clickable(role = DropdownList, onClickLabel = "Change")`, its semantics "Sort playlists, Newest
+  first". The menu: `GlassPopover(alignment = Alignment.End)`, its column as wide as its widest row
+  (`IntrinsicSize.Max`, at least 168 dp), a `selectableGroup`; each row 48 dp, `selectable(role = RadioButton)`, a
+  24 dp place for the check (`ic_check`, `onSurface`), the label in `bodyLarge`. A choice closes the menu and is
+  saved; it needs no kiosk PIN (it changes how the list reads, not the library).
+
+## D7 — where an upload went (`ImportProgress.playlist`, the panel, `ImportCopy`)
+
+- `WebApi.import`: `playlist` `{id, name}` once the import has finished and filled one, else `null` (a run under way
+  shows none); in `/api/state` on both listeners and through the relay.
+- The Add tab (`renderTally` → `renderImportedPlaylist`): under the tally, "In the playlist MIDI" and the outlined
+  button **Open the playlist** (`openImported`: the Library section, its Playlists chip, that playlist open), a
+  wrapping row (`.import-playlist`); nothing when no playlist was filled.
+- `ImportCopy.summary`: " · in the playlist MIDI" before the full stop of "Imported 265 pieces" and of "Those
+  pieces are already in the library"; failures alone with a playlist, "In the playlist MIDI."; the tablet's import
+  bar reads it. `ImportCopy.inPlaylist(name)`.
+
+## Greps (v1.10.1 — M28)
+
+`Color(0x` outside `ui/theme`: none. `Modifier.blur`: none. `0.0.0.0`: none. `dev.chrisbanes`: `Glass.kt` alone.
+`hazeSource`/`HazeState`: `Glass.kt`, `GlassHeader.kt`, `GlassMenu.kt`, `NavHost.kt`, `NotePanel.kt`,
+`MainActivity.kt`. `LocalLive`: `LiveDot.kt` and the theme; `LocalNoteSounding`: `ScorePages.kt` and the theme.
+`LensAlpha`/`GlassLens`/`LensVeil`: none. `ModalBottomSheet(`, `DropdownMenu(`, `AlertDialog(`, `Popup(` outside
+the glass wrappers: none (the time picker's `BasicAlertDialog` holds `GlassDialogSurface`). M28's only glass is
+`PlaylistsHeader`'s `GlassPopover`; no colour added (`m28/greps-final.txt`, at `123be97`).
+
+## Measured (2026-10-01, `steven_piano_audit`: API 34, `medium_tablet` 2560 × 1600 at 320 dpi, 4 GB, debug builds)
+
+The audit's AVD, tablet-sized as it is (no `wm` change), booted headless as `emulator-5560`, stopped at the end,
+the AVD kept; Steven's demo (`steven_piano_tablet`) never touched. The panel forwarded to the host's 8738 (`adb
+forward tcp:8738 tcp:8737`; 8737 is the demo's); its PIN generated and kept in a scratchpad file (mode 600),
+never shown. The panel's API driven with curl (its own Host, Origin and `X-Steven-Piano`); its pages in the Claude
+browser pane through a local proxy that gave the forwarded panel its own Host and Origin and the session's cookie
+(scratchpad only, nothing of it in the repository; the panel's checks unchanged). Screenshots in the session
+scratchpad, `m28/shots/` (`00`–`25`); a first round, before the two fixes, in `m28/shots-round1/`.
+
+- **The school tablet's state, reproduced.** 1.10's debug build (`Player Piano/apk/steven-piano-1.10-debug.apk`) on
+  a fresh install: a PIN, Web control on (`00`), `~/Downloads/MIDI.zip` (266 MIDI files and 115 `__MACOSX/._*`
+  entries) through the loopback panel's upload: 266 of 266, **265 imported, 1 already there**, 0 failed; no
+  playlist; composers blank × 260, "Cornfield Chase" × 2, "Day One (Interstellar)", "Time (Inception)", "Stay"
+  (`01`, `m28/transcript-1.10.txt`), as on the school tablet. The one already there:
+  `MIDI/Mitski/My Love Mine All Mine.mid` has the same bytes as `MIDI/Tom Odell/Another Love.mid`.
+- **The repair.** This build installed over it (`adb install -r`, the data kept) and opened: about 2 s later
+  "Library: 265 pieces put in the playlist MIDI, 264 artists filled" (`m28/import-log-lines.txt`): the 260 folder
+  pieces, and the four Hans Zimmer names read the right way round ("Cornfield Chase", "Cornfield Chase (version
+  2)", "Day One (Interstellar)", "Time (Inception)": Hans Zimmer's group now 11 pieces); "Stay - Interstellar"
+  (neither side known) kept 1.10's reading. Library › All (`02`), the artwork arriving (`03`, `04`): 106 artists
+  looked up in 59 s (Debussy and Satie by the canonical path), **102 with a photograph** (`m28/artwork-log.txt`,
+  `m28/photograph-count.txt`).
+- **Playlists**: MIDI first under Newest first, its cover Adele's (its first piece in path order), then Popular and
+  Epic on piano (`05`), the panel the same (`m28/playlists-after.json`); the sort pop-up open, the menu within the
+  list's pane with its end at the button's (`07`); Name puts the built-ins first, as before (`08`). MIDI's page: 265
+  pieces in path order, the artists on the rows, their photographs (`09`, `10`); Now playing's panel on a Coldplay
+  piece (`06`).
+- **Composers**: 107 groups (the 106 artists with pieces, and "Stay"); Claude Debussy and Erik Satie in `debussy`
+  and `satie`; Louis Armstrong and Craig Armstrong apart (`11`, `12`, `m28/composers-after.json`). A piece whose
+  artist has no photograph shows its roll card (Bruno Major's "Nothing", `13`).
+- **Dark** (`14`–`16`); **font scale 2.0** on the header row (landscape `17`: the button on one line beside the
+  eyebrow; portrait `18`, the menu open within the pane `19`).
+- **A new upload.** `Spring Recital.zip`, made in the scratchpad (three synthetic files in two artist folders,
+  "Paper Roll Trio" and "Tracker Bar Duo", no root folder), through the panel: the Add tab "Imported 3 pieces", "In
+  the playlist Spring Recital" and **Open the playlist** (`20`), which opens the Library section on it (`21`); the
+  tablet's import bar "Imported 3 pieces · in the playlist Spring Recital." with the playlist first (`22`). A loose
+  synthetic `Lullaby for the Hall.mid`: "In the playlist Uploads" (`23`), Uploads first in the panel's list and the
+  tablet's (`24`, `25`). The log: "Import: 3 new, 0 already there, 0 failed, in a playlist called Spring Recital",
+  then "…, in a playlist called Uploads".
+- **No crash** in the run's log (`m28/logcat-final.txt`).
+- **Tests**: 1,328 before, **1,372** after, none failing; 12 skipped (13 before: `PinnedKeyTest`'s header check runs
+  now that `firmware/include/ota_pubkey.h` exists beside this repository, written there on 2026-10-01 outside this
+  run). `lintDebug`: 0 errors, 30 warnings, the same 30 as at `5d4fc80` (`m28/lint-final.txt`). The debug APK
+  29,465,278 bytes.
+
+## Deviations from the brief, and why
+
+- **The sort menu is `GlassPopover(alignment = Alignment.End)`, not Material's dropdown (`GlassDropdownMenu`).** The
+  brief names a `GlassMenu`; both wear the menus' glass (`GlassMenuContainer`, `GlassMenu.kt`), but Material's
+  dropdown places itself by the window, its start at the anchor's start wherever the window has room, so from a
+  button at the end of the list's pane it would open across the divider over Now playing. The popover's alignment
+  is the rule `GlassPopoverTest` holds (+1 test for this menu, and a check of its call). Its rows are radio-button
+  selectables in a `selectableGroup`, the current one checked. As first built, its rows filled the window's width
+  (a popup offers its content the whole window); its column now takes its widest row's width (`123be97`, seen on
+  the emulator).
+- **`resolve` also reads a composer typed in Rename** (the brief names the `Composer - Title` path): typing "Ed
+  Sheeran" joins the Ed Sheeran folder's group rather than starting `sheeran`, D3's own reason.
+- **A reversed name's artist is spelt as its folder is** (`artistNamed`): "Cornfield Chase - hans zimmer.mid" beside a
+  "Hans Zimmer" folder is by Hans Zimmer, one group.
+- **Release builds leave the playlist's name out of the log** ("Library: 265 pieces put in the playlist, 264
+  artists filled"; "Import: …, in a playlist"): the link's trail and the importer's warnings travel in Share
+  diagnostics and Send a log, and in release builds they never name the person's folders or files (the v1.2
+  audit's F17). Debug builds name it, as the brief's line does.
+- **An import that only filled artists counts** (`ImportProgress.filled`, `piecesChanged`): the built-ins refresh and
+  artwork is asked for after it, as after one that added pieces.
+- **`aboutPerformer` reads on past a person's description that names a work**: "American indie game developer (born
+  1991)" (Toby Fox) was first refused as a game's; a description with a person's years now goes on to the extract's
+  first sentence, which runs past initials ("Robert F. "Toby" Fox is …") (`366a7d8`; the emulator's first round, where
+  Toby Fox had no photograph).
+- **The repair asks for artwork only when it named an artist and Fetch artwork automatically is on**: the brief's
+  "then `artwork.requestComposers(false)`" with D5's "Fetch artwork automatically still decides".
+
+## Residuals
+
+- **Not run on the school tablet.** The emulator reproduced its state from the same zip; there the repair runs at
+  the first start of 1.10.1.
+- **An older upload's zip name was never kept**: an upload from before 1.10.1 whose zip had no single top folder
+  becomes a playlist per top folder (of two pieces or more), named after it, and its artists stay blank (its files
+  lie in that folder itself). A folder picked on the tablet before 1.10.1 is the same, its paths starting inside
+  it. Steven's zip has its `MIDI` folder, so it comes out whole.
+- **A tablet that imported `ALL-SONGS.zip` itself** (not Steven's library, whose pieces have collections) gets a
+  playlist **ALL SONGS** of those pieces at the first start, as importing the zip now does (one top folder, `ALL
+  SONGS`, and no INDEX.csv).
+- **One artist, two groups, across versions**: pieces already grouped by a surname key (`zimmer`, from a `Hans Zimmer
+  - Time.mid` imported before 1.10.1) stay apart from a later "Hans Zimmer" folder's (`hans zimmer`), both shown as
+  Hans Zimmer: nothing in the library is re-keyed (D3). Renaming the older pieces' composer joins them (`resolve`).
+- **A canonical composer named in a form `canonicalOf` doesn't read** (a folder "Chopin, Frédéric") is an artist of
+  its own, keyed by the whole name.
+- **No photograph for three artists** whose Wikipedia pages have no free image (Bruno Major, Hiroyuki Sawano, Shoji
+  Meguro), nor for a company (Nintendo): roll cards, by design. A joint name whose own page is not a performer's is
+  looked up as its first name, which could find a namesake's band; five lookups bound it.
+- **A composer's mosaic whose pieces' files are all gone** shows its frame with empty cells, as before 1.10.1 (a roll
+  card is missing only when the file is gone, unreadable, or too large for the memory left).
+- **"Stay - Interstellar"** (neither side known) reads as it always has: the composer "Stay". Rename fixes it.
+- **Mitski's file** in the zip has Tom Odell's "Another Love"'s bytes: the library keeps one piece (Tom Odell's, the
+  first in the zip), so Mitski has no group; one of the two files is probably the wrong song.
+
+## Tests added in M28
+
+`ComposerNamesTest` +6 (a canonical composer's folder joins the group; anyone else whole, as written; the two
+Armstrongs apart; one word; a joint name whole and apart; a 1.10 library's 125 composers unchanged).
+`TitleHeuristicsTest` +6 (the folder's artist; reversed when only the right side is known; the parenthetical;
+neither or both sides known, as before; the root and the artist folders; the Mac's files). `ImporterTest` +9 (a
+zip's artist folders, a reversed name, the Mac's extras uncounted; a file name's composer joining the library's
+artist; a duplicate's blank composer filled; a zip with a root folder → its playlist in path order; `PathOrder`; a
+zip without one → the zip's name, cut to a playlist's; pieces already there linked and filled; an INDEX row's piece
+kept out of the zip's playlist; a loose panel file → Uploads, files picked one by one → none). `UploadRepairTest` 7
+(the zip's 266 paths over synthetic pieces, imported the 1.10 way → one playlist MIDI of 265 in path order, the
+artists, the five root files; a second run changes nothing; collections, playlists, Studio's and folderless pieces
+untouched, a root of one left alone; a composer of the person's own and a reversed name corrected by hand kept;
+names already read left to right kept; 500 a transaction; release builds' line). `ArtworkFetcherTest` +9 (Queen →
+"Queen (band)", Passenger → "(singer)"; the description, else the first sentence; Toby Fox; Nintendo not found
+within five lookups; a work's page never the singer's; Lady Gaga & Bradley Cooper → Lady Gaga; the five-lookup cap;
+the canonical path unchanged). `PlaylistOrderTest` +2 and `LibraryStatesTest` +1 (newest first, the built-ins after
+in their order, an empty one hidden; Name as before). `SettingsRepositoryTest` +2 (`playlistSort`; `uploadRepairDone`
+housekeeping, not a preference). `ImportCopyTest` +1. `GlassPopoverTest` +1 (the sort menu within the list's pane,
+its end at the button's; the call's alignment). Assertions added: `WebApiTest` (`import.playlist`), `WebServerTest`
+(the panel's playlists in the backend's order), `WebServerRelayTest` (the playlist through the relay),
+`DiagnosticsExporterTest` (40 lines, `playlistSort`, no repair flag), `LocalZipTest` (Steven's library makes no
+playlist). `GlassContainersTest` and the rest unchanged and passing. **1,328 → 1,372.**
