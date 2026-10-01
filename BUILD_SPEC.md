@@ -6619,3 +6619,12 @@ its end at the button's; the call's alignment). Assertions added: `WebApiTest` (
 (the panel's playlists in the backend's order), `WebServerRelayTest` (the playlist through the relay),
 `DiagnosticsExporterTest` (40 lines, `playlistSort`, no repair flag), `LocalZipTest` (Steven's library makes no
 playlist). `GlassContainersTest` and the rest unchanged and passing. **1,328 → 1,372.**
+
+## The release: 1.10.1 (versionCode 19)
+
+Cut from `main` after M28 (`d05fbc2`): `versionCode` 19, `versionName` "1.10.1" (`-PversionCodeOverride`'s example
+now 20), `Provenance.text` "Made by Steven Jin · v1.10.1 · eab16a502f679465", README's version lines, and the entry
+drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.10.1`). The designer's review of the
+tablet-size screens found the run as designed; one note for a later pass: at font scale 2.0 a playlist tile's meta
+line is cut ("265 PIEC…") where it should wrap. The push that publishes it also carries the deployed Cloudflare
+values of `cloud/wrangler.*.jsonc` (`ad10e07`).
