@@ -130,7 +130,7 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState, fetching: Boo
             .padding(horizontal = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ArtworkImage(ArtworkEntity.forComposer(piece.composerKey), ArtSize.Full, Modifier.size(ART)) { RollCardImage(piece.id, it) }
+            ArtworkImage(ArtworkEntity.forComposer(piece.composerKey), ArtSize.Full, Modifier.size(ART)) { RollCardImage(piece.id, it, title = piece.title) }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(

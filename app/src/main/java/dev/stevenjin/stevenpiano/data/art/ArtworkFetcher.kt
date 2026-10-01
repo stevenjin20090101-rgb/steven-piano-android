@@ -38,13 +38,19 @@ sealed interface Fetched {
  * Finds a composer's portrait and blurb, or a piece's notes, on English Wikipedia through [api]
  * (every call one paced request). Pure: no Android, so it is tested against a fake Wikipedia.
  *
- * - A composer is looked up by the full name the library knows for their key
- *   ([ComposerNames.canonical]), else by the name as shown. No name, or "Traditional" and the
- *   like, is not a person: not found, without a request. A disambiguation page is retried once as
- *   "{name} (composer)". For names outside the library's list of composers, a page is only taken
- *   when its description or text is about music, so a namesake's photograph never appears.
+ * - A composer the library knows by name ([ComposerNames.canonical]) is looked up by that full name.
+ *   No name, or "Traditional" and the like, is not a person: not found, without a request. A
+ *   disambiguation page is retried once as "{name} (composer)".
+ * - Anyone else, an artist (v1.10.1 — M28, D5), by the name as shown; a page is only taken when it is
+ *   about a band or a performer ([aboutPerformer]), so a namesake's photograph never appears. On a
+ *   disambiguation page or a page about something else, "{name} (band)", "{name} (singer)", "{name}
+ *   (musician)", then "{name} (composer)": the first page about music wins ("Queen" is "Queen (band)",
+ *   "Passenger" "Passenger (singer)"). A joint name ("A & B", "A and B", "A feat. B", "A, B") whose own
+ *   page finds nothing is looked up as A, the same way. At most [MAX_LOOKUPS] pages an artist; a
+ *   company or anything else not about music ("Nintendo") is not found, and keeps its roll cards.
  * - A piece is searched for as "title composer"; the first hit that is not the composer's own
- *   page and whose extract names the composer's surname is its page. Text only: no piece images.
+ *   page and whose extract names the composer's surname is its page. Text only: no piece images
+ *   (album covers are not free).
  * - A failed request is a failure. Asked to wait (HTTP 429/503), the fetch waits as asked, once
  *   (up to [MAX_WAIT_MS]), then leaves the key for later ([Fetched.Busy]).
  */
@@ -64,14 +70,43 @@ class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) 
 
     private suspend fun composer(key: ArtKey.Composer): Fetched {
         val known = ComposerNames.canonical(key.composerKey)
-        val name = pageName(known ?: key.display) ?: return Fetched.NotFound
-        var summary = call { api.summary(name) } ?: return Fetched.NotFound
-        if (summary.isDisambiguation) {
-            summary = call { api.summary("$name (composer)") }?.takeUnless { it.isDisambiguation } ?: return Fetched.NotFound
+        val summary = if (known != null) {
+            val name = pageName(known) ?: return Fetched.NotFound
+            val page = call { api.summary(name) } ?: return Fetched.NotFound
+            if (page.isDisambiguation) call { api.summary("$name (composer)") }?.takeUnless { it.isDisambiguation } ?: return Fetched.NotFound else page
+        } else {
+            artistPage(pageName(key.display) ?: return Fetched.NotFound) ?: return Fetched.NotFound
         }
-        if (known == null && !summary.aboutMusic()) return Fetched.NotFound
         val image = summary.imageUrl?.let { url -> call { api.download(url, WikipediaClient.IMAGE_CAP) } }
         return Fetched.Found(summary.extract, summary.pageUrl, summary.title, image)
+    }
+
+    /**
+     * An artist's page (D5): [name]'s own, when it is about a band or a performer; else, past a
+     * disambiguation page or a page about something else, the first of its [SUFFIXES] that is. A joint
+     * name whose own page finds nothing is looked up as its first name ([firstOfJoint]), the same way. At
+     * most [MAX_LOOKUPS] summaries in all; null when none of them is about music.
+     */
+    private suspend fun artistPage(name: String): WikiSummary? {
+        var left = MAX_LOOKUPS
+        suspend fun lookup(title: String): WikiSummary? {
+            if (left <= 0) return null
+            left--
+            return call { api.summary(title) }
+        }
+        suspend fun find(name: String, suffixed: Boolean): WikiSummary? {
+            val page = lookup(name) ?: return null   // no such page: nothing more to try under this name
+            if (!page.isDisambiguation && page.aboutPerformer()) return page
+            if (!suffixed) return null
+            for (suffix in SUFFIXES) {
+                if (left <= 0) return null
+                val other = lookup("$name ($suffix)") ?: continue
+                if (!other.isDisambiguation && other.aboutPerformer()) return other
+            }
+            return null
+        }
+        val first = firstOfJoint(name)
+        return find(name, suffixed = first == null) ?: first?.let { find(it, suffixed = true) }
     }
 
     private suspend fun piece(key: ArtKey.Piece): Fetched {
@@ -103,10 +138,17 @@ class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) 
         request()
     }
 
-    /** Whether this page is about music: a composer's page always is; a namesake's is not. */
-    private fun WikiSummary.aboutMusic(): Boolean {
-        val text = TextKeys.fold("${description.orEmpty()} ${extract.orEmpty()}")
-        return MUSIC_WORDS.any { it in text }
+    /**
+     * Whether this page is about a band or a performer (D5): its description names one ("British rock band",
+     * "German film score composer", "American singer-songwriter"); else, a description naming a work (an
+     * album, a song, a film, a company) is not; else the extract's first sentence decides. So a soundtrack's
+     * page whose extract names a singer never stands for the singer.
+     */
+    private fun WikiSummary.aboutPerformer(): Boolean {
+        val described = words(description.orEmpty())
+        if (names(described, PERFORMERS)) return true
+        if (WORKS.any { it in described }) return false
+        return names(words(firstSentence(extract.orEmpty())), PERFORMERS)
     }
 
     companion object {
@@ -119,14 +161,55 @@ class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) 
         /** Composer names that are not a person with a page; "Made in Studio" is the app's own (v1.7 — M23). */
         private val NOT_PEOPLE = setOf("traditional", "anonymous", "anon", "unknown", "unknown composer", "various", "made in studio")
 
-        private val MUSIC_WORDS = listOf(
-            "compos", "music", "pianist", "songwriter", "conductor", "organist", "harpsichord", "violinist", "cellist", "singer",
+        /** Summaries one artist may cost at most (D5): the name and its four suffixes, or a joint name, then its first. */
+        const val MAX_LOOKUPS = 5
+
+        /** What an artist's page may be called besides their name, in the order they are tried. */
+        val SUFFIXES = listOf("band", "singer", "musician", "composer")
+
+        /** Words and phrases (folded) that make a page a band's or a performer's. */
+        private val PERFORMERS = listOf(
+            "band", "duo", "trio", "quartet", "group", "girl group", "boy band", "singer", "songwriter", "singer-songwriter", "musician",
+            "multi-instrumentalist", "rapper", "dj", "disc jockey", "record producer", "music producer", "composer", "pianist", "guitarist",
+            "drummer", "bassist", "vocalist", "violinist", "cellist", "organist", "harpsichordist", "conductor", "orchestra", "ensemble",
+            "choir", "recording artist", "musical artist",
         )
+
+        /** Words (folded) that make a page a work's or a company's, unless a performer is named too. */
+        private val WORKS = setOf(
+            "album", "song", "single", "soundtrack", "ep", "film", "movie", "musical", "opera", "video", "game", "franchise", "company",
+            "corporation", "label", "television", "series", "episode", "novel", "book", "character", "brand",
+        )
+
+        private val NOT_WORD = Regex("[^\\p{L}\\p{N}\\-]+")
+        private val JOINT = Regex("\\s*(?:&|,|\\band\\b|\\bfeat\\b\\.?|\\bft\\.|\\bfeaturing\\b)\\s*", RegexOption.IGNORE_CASE)
 
         /** The page name to ask for, or null when [name] is blank or not a person. */
         fun pageName(name: String): String? {
             val trimmed = name.trim()
             return trimmed.takeUnless { it.isEmpty() || TextKeys.fold(it) in NOT_PEOPLE }
+        }
+
+        /** The first name of a joint name ("Lady Gaga" of "Lady Gaga & Bradley Cooper", "A and B", "A feat. B", "A, B"), or null for one name. */
+        fun firstOfJoint(name: String): String? {
+            val at = JOINT.find(name) ?: return null
+            return name.substring(0, at.range.first).trim().takeIf { it.isNotEmpty() }
+        }
+
+        /** [text]'s words, folded; hyphenated ones also as their parts ("singer-songwriter", "singer", "songwriter"). */
+        private fun words(text: String): List<String> =
+            TextKeys.fold(text).split(NOT_WORD).filter { it.isNotEmpty() }.flatMap { word -> if ('-' in word) listOf(word) + word.split('-') else listOf(word) }
+
+        /** Whether [words] hold one of [terms], a phrase as its words in a row. */
+        private fun names(words: List<String>, terms: List<String>): Boolean {
+            val line = words.joinToString(" ", prefix = " ", postfix = " ")
+            return terms.any { " $it " in line }
+        }
+
+        /** The extract's first sentence: up to the first full stop, question or exclamation mark followed by a space. */
+        private fun firstSentence(text: String): String {
+            val end = Regex("[.!?]\\s").find(text)?.range?.first ?: return text
+            return text.substring(0, end + 1)
         }
     }
 }

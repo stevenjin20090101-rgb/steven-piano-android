@@ -206,6 +206,7 @@ private fun ColumnScope.PanelPiece(
                 Modifier
                     .align(Alignment.CenterHorizontally)
                     .size(art),
+                title = piece.title,
             )
             Spacer(Modifier.height(16.dp))
             PanelTitle(piece, rememberChannelName(state.channel), starting, onAbout)

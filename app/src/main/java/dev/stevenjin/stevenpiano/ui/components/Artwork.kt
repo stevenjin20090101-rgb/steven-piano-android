@@ -165,10 +165,19 @@ fun ArtworkImage(key: String, size: ArtSize, modifier: Modifier = Modifier, fram
     }
 }
 
-/** A piece's roll card in an [ArtFrame] (or unframed): its first 20 seconds as perforations. */
+/**
+ * A piece's roll card in an [ArtFrame] (or unframed): its first 20 seconds as perforations. Where the card
+ * can't be drawn (the piece's file gone or unreadable) and the piece is named ([title]), the monogram of its
+ * title takes its place, so no frame stands empty (v1.10.1 — M28, D5).
+ */
 @Composable
-fun RollCardImage(pieceId: Long, modifier: Modifier = Modifier, framed: Boolean = true) {
-    ArtSurface(modifier, framed) { RollCard(pieceId, Modifier.fillMaxSize()) }
+fun RollCardImage(pieceId: Long, modifier: Modifier = Modifier, framed: Boolean = true, title: String? = null) {
+    val card = rememberRollCard(pieceId)
+    if (card is RollCardState.Missing && title != null) {
+        MonogramTile(title, modifier, framed)
+        return
+    }
+    ArtSurface(modifier, framed) { RollCardPicture(card, Modifier.fillMaxSize()) }
 }
 
 /**
@@ -236,12 +245,12 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
 /**
  * A piece's art where it stands for the piece itself (the mini player, the now-playing panel,
  * display mode's backdrop, as the piece sheet): its composer's portrait, else its own roll card,
- * which is never mistaken for another piece's. [composerKey] is the library's ("" when the composer
- * is unknown). Unframed ([framed] false) it fills [modifier]'s box, cropped.
+ * which is never mistaken for another piece's, else ([title] given) its title's monogram. [composerKey] is
+ * the library's ("" when the composer is unknown). Unframed ([framed] false) it fills [modifier]'s box, cropped.
  */
 @Composable
-fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true) {
-    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { RollCardImage(pieceId, it, framed) }
+fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, title: String? = null) {
+    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { RollCardImage(pieceId, it, framed, title) }
 }
 
 /**
@@ -266,17 +275,37 @@ fun PlaylistCover(playlistId: Long, name: String, size: ArtSize, modifier: Modif
 /** Loaded: the composer of a playlist's first piece, or null for an empty playlist. */
 private class FirstComposer(val key: String?)
 
+/** A roll card as it comes: being drawn, [Drawn], or [Missing] (the piece's file gone or unreadable: there will be none). */
+private sealed interface RollCardState {
+    data object Drawing : RollCardState
+
+    class Drawn(val image: ImageBitmap) : RollCardState
+
+    data object Missing : RollCardState
+}
+
+/** Piece [pieceId]'s roll card: from memory at once when it is there, else drawn (or read from disk) off the main thread. */
+@Composable
+private fun rememberRollCard(pieceId: Long): RollCardState {
+    val artwork = LocalContext.current.graph.artwork
+    val card by produceState<RollCardState>(artwork.cachedRollCard(pieceId)?.let { RollCardState.Drawn(it.asImageBitmap()) } ?: RollCardState.Drawing, pieceId) {
+        value = artwork.rollCard(pieceId)?.let { RollCardState.Drawn(it.asImageBitmap()) } ?: RollCardState.Missing
+    }
+    return card
+}
+
 /** The bare roll card, tinted with the secondary content colour on whatever is behind it. */
 @Composable
 private fun RollCard(pieceId: Long, modifier: Modifier) {
-    val artwork = LocalContext.current.graph.artwork
-    val card by produceState(artwork.cachedRollCard(pieceId)?.asImageBitmap(), pieceId) {
-        value = artwork.rollCard(pieceId)?.asImageBitmap()
-    }
+    RollCardPicture(rememberRollCard(pieceId), modifier)
+}
+
+@Composable
+private fun RollCardPicture(card: RollCardState, modifier: Modifier) {
     val tint = MaterialTheme.colorScheme.onSurfaceVariant
     Box(modifier) {
-        card?.let {
-            Image(it, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds, colorFilter = ColorFilter.tint(tint))
+        if (card is RollCardState.Drawn) {
+            Image(card.image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds, colorFilter = ColorFilter.tint(tint))
         }
     }
 }

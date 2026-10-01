@@ -459,7 +459,8 @@
 
   /**
    * Fills an .art box for [piece]: the composer's portrait, else the piece's own roll card tinted as
-   * the app tints it. [lazy]: only once the box is in sight (the library's long lists).
+   * the app tints it, else (no card to be had) the monogram of its title, so no frame stands empty
+   * (v1.10.1). [lazy]: only once the box is in sight (the library's long lists).
    */
   function art(box, piece, size, lazy) {
     box.replaceChildren();
@@ -469,6 +470,7 @@
     box.dataset.key = piece.composerKey;
     box.dataset.id = String(piece.id);
     box.dataset.size = size;
+    box.dataset.title = piece.title || '';
     if (lazy && lazyArt) lazyArt.observe(box);
     else loadArt(box);
     return box;
@@ -483,11 +485,21 @@
       });
       box.replaceChildren(img);
     } else if (box.dataset.kind === 'roll') {
+      if (!Number(box.dataset.id)) {
+        box.replaceChildren(monogram(box.dataset.title));
+        return;
+      }
+      const src = ROOT + `/api/art/piece/${encodeURIComponent(box.dataset.id)}`;
       const roll = h('span', { class: 'roll' });
-      const url = `url("${ROOT}/api/art/piece/${encodeURIComponent(box.dataset.id)}")`;
-      roll.style.webkitMaskImage = url;
-      roll.style.maskImage = url;
+      roll.style.webkitMaskImage = `url("${src}")`;
+      roll.style.maskImage = `url("${src}")`;
       box.replaceChildren(roll);
+      // A mask that fails to load draws nothing: the same address (from the cache) says whether the card came.
+      const probe = new Image();
+      probe.addEventListener('error', () => {
+        if (roll.parentNode === box) box.replaceChildren(monogram(box.dataset.title));
+      });
+      probe.src = src;
     }
   }
 
@@ -905,7 +917,7 @@
       $('lib-more').hidden = true;
       $('lib-rows').replaceChildren(...composers.map((composer) => {
         const box = h('div', { class: 'art' });
-        if (composer.portrait) art(box, { art: 'portrait', composerKey: composer.key, id: 0 }, 'row');
+        if (composer.portrait) art(box, { art: 'portrait', composerKey: composer.key, id: 0, title: composer.name }, 'row');
         else box.append(monogram(composer.name));
         const row = h('li', { class: 'row clickable' },
           box,
@@ -974,9 +986,13 @@
     const mosaic = h('div', { class: cells.length > 1 ? 'mosaic' : 'mosaic one' });
     if (cells.length === 0) mosaic.append(monogram(channel.name));
     for (const composer of cells.length === 3 ? cells.concat(cells[0]) : cells) {
-      mosaic.append(composer.portrait
-        ? h('img', { alt: '', loading: 'lazy', src: ROOT + `/api/art/composer/${encodeURIComponent(composer.key)}?size=tile` })
-        : monogram(composer.name));
+      if (!composer.portrait) {
+        mosaic.append(monogram(composer.name));
+        continue;
+      }
+      const img = h('img', { alt: '', loading: 'lazy', src: ROOT + `/api/art/composer/${encodeURIComponent(composer.key)}?size=tile` });
+      img.addEventListener('error', () => img.replaceWith(monogram(composer.name)));
+      mosaic.append(img);
     }
     const meta = channel.playing
       ? h('p', { class: 'eyebrow' }, h('span', { class: 'dot live' }), 'Playing')

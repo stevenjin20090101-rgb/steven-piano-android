@@ -323,7 +323,7 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
     val words = RestingLayout.wordsWidth(beside, room.width, art)
     if (beside) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PieceArt(piece.pieceId, piece.composerKey, ArtSize.Full, Modifier.size(art))
+            PieceArt(piece.pieceId, piece.composerKey, ArtSize.Full, Modifier.size(art), title = piece.title)
             Spacer(Modifier.width(RestingLayout.sideGap(art)))
             Column(Modifier.width(words)) {
                 Words(piece.title, eyebrow, notes, twoPane, TextAlign.Start)
@@ -331,7 +331,7 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
         }
     } else {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            PieceArt(piece.pieceId, piece.composerKey, ArtSize.Full, Modifier.size(art))
+            PieceArt(piece.pieceId, piece.composerKey, ArtSize.Full, Modifier.size(art), title = piece.title)
             Spacer(Modifier.height(if (twoPane) 32.dp else 24.dp))
             Column(
                 Modifier

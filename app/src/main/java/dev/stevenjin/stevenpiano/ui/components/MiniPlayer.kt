@@ -63,7 +63,7 @@ fun MiniPlayer(
             .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (piece != null) PieceArt(piece.pieceId, piece.composerKey, ArtSize.Row, Modifier.size(ArtSizeDp)) else ArtFrame(Modifier.size(ArtSizeDp))
+        if (piece != null) PieceArt(piece.pieceId, piece.composerKey, ArtSize.Row, Modifier.size(ArtSizeDp), title = piece.title) else ArtFrame(Modifier.size(ArtSizeDp))
         Spacer(Modifier.width(12.dp))
         Column(
             Modifier
