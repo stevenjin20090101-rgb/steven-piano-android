@@ -174,6 +174,7 @@ class ImporterTest {
             override suspend fun findBySha(sha256: String): PieceEntity? = throw IllegalStateException("database disk image is malformed")
             override suspend fun fillComposer(piece: PieceEntity, composer: ComposerNames.Name) = Unit
             override suspend fun insertAll(pieces: List<PieceEntity>): Int = pieces.size
+            override suspend fun hasComposerKey(composerKey: String): Boolean = false
         }
         val again = Importer(broken, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it })
             .run(OpenedSource(listOf(item("a.mid", midi(60)), item("b.mid", midi(61)))))
@@ -229,6 +230,59 @@ class ImporterTest {
         assertTrue("the upload's copy is gone once read", !zip.exists())
     }
 
+    // v1.10.1 — M28, D1 and D3.
+
+    @Test
+    fun `a zip's artist folders name its pieces, a reversed name reads the right way, and a Mac's extras are not counted`() = runTest {
+        val source = OpenedSource(
+            listOf(
+                item("MIDI/Coldplay/Sparks.mid", midi(60)),
+                item("MIDI/Hans Zimmer/Time.mid", midi(61)),
+                item("MIDI/Cornfield Chase - Hans Zimmer (version 2).mid", midi(62)),
+                item("MIDI/Claude Debussy/Clair de Lune.mid", midi(63)),
+                item("MIDI/Stay - Interstellar.mid", midi(64)),
+                item("MIDI/Lady Gaga & Bradley Cooper/I'll Never Love Again.mid", midi(65)),
+                item("__MACOSX/MIDI/Coldplay/._Sparks.mid", "a resource fork".toByteArray()),
+                item("MIDI/Coldplay/._Sparks.mid", "a resource fork".toByteArray()),
+            ),
+        )
+        val result = importer.run(source)
+        assertEquals("the Mac's two files are neither pieces nor failures", ImportProgress(done = 6, total = 6, imported = 6, finished = true), result)
+        fun piece(title: String) = store.pieces.single { it.title == title }
+        assertEquals(listOf("Coldplay", "Coldplay", "coldplay"), piece("Sparks").let { listOf(it.composer, it.composerShort, it.composerKey) })
+        assertEquals("sparks coldplay", piece("Sparks").searchText)
+        assertEquals("hans zimmer", piece("Time").composerKey)
+        assertEquals("reversed, the parenthetical in the title", "Hans Zimmer", piece("Cornfield Chase (version 2)").composer)
+        assertEquals("hans zimmer", piece("Cornfield Chase (version 2)").composerKey)
+        assertEquals("a canonical composer's folder joins the composer", "debussy", piece("Clair de Lune").composerKey)
+        assertEquals("neither side known: as before", "Stay", piece("Interstellar").composer)
+        assertEquals("Lady Gaga & Bradley Cooper", piece("I'll Never Love Again").composerShort)
+        assertTrue(logs.none { "._Sparks" in it })
+    }
+
+    @Test
+    fun `a composer read from a file name joins an artist the library already has by the whole name`() = runTest {
+        importer.run(OpenedSource(listOf(item("MIDI/Ed Sheeran/Perfect.mid", midi(60)), item("MIDI/Coldplay/Yellow.mid", midi(64)))))
+        importer.run(OpenedSource(listOf(item("Ed Sheeran - Shivers.mid", midi(61)), item("John Smith - Song.mid", midi(62)), item("Chopin - Nocturne.mid", midi(63)))))
+        val shivers = store.pieces.single { it.title == "Shivers" }
+        assertEquals(listOf("Ed Sheeran", "Ed Sheeran", "ed sheeran"), listOf(shivers.composer, shivers.composerShort, shivers.composerKey))
+        assertEquals("no artist of that name: as before", "smith", store.pieces.single { it.title == "Song" }.composerKey)
+        assertEquals("chopin", store.pieces.single { it.title == "Nocturne" }.composerKey)
+        // The same import's folders count as the library: an Ed Sheeran folder beside a dash name.
+        importer.run(OpenedSource(listOf(item("Pop/Adele/Hello.mid", midi(65)), item("Pop/Adele - Skyfall.mid", midi(66)))))
+        assertEquals("adele", store.pieces.single { it.title == "Skyfall" }.composerKey)
+    }
+
+    @Test
+    fun `a duplicate's blank composer is filled from its artist folder`() = runTest {
+        val bytes = midi(60)
+        importer.run(OpenedSource(listOf(item("Sparks.mid", bytes))))
+        assertEquals("", store.pieces.single().composer)
+        val again = importer.run(OpenedSource(listOf(item("MIDI/Coldplay/Sparks.mid", bytes), item("MIDI/Adele/Hello.mid", midi(61)))))
+        assertEquals(1, again.duplicates)
+        assertEquals(listOf("Coldplay", "coldplay"), store.pieces.first().let { listOf(it.composer, it.composerKey) })
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()
@@ -244,5 +298,7 @@ class ImporterTest {
             pieces.forEach { this.pieces += it.copy(id = this.pieces.size + 1L) }
             return pieces.size
         }
+
+        override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.any { it.composerKey == composerKey }
     }
 }

@@ -105,10 +105,15 @@ class LibraryRepository(
 
     suspend fun setFavorite(id: Long, favorite: Boolean) = pieces.setFavorite(id, favorite)
 
-    /** New title and composer; the composer is normalized as on import. A blank title is ignored. Both are cut as on import. */
+    /**
+     * New title and composer; the composer is read as a file name's is on import ([ComposerNames.resolve]:
+     * an artist the library already has by their whole name keeps that one key, v1.10.1 — M28). A blank
+     * title is ignored. Both are cut as on import.
+     */
     suspend fun rename(id: Long, title: String, composer: String) {
         val piece = pieces.byId(id) ?: return
-        pieces.update(piece.named(title.trim().ifEmpty { piece.title }, ComposerNames.normalize(TextLimits.clip(composer, TextLimits.COMPOSER))))
+        val name = ComposerNames.resolve(TextLimits.clip(composer, TextLimits.COMPOSER)) { key -> pieces.hasComposerKey(key) }
+        pieces.update(piece.named(title.trim().ifEmpty { piece.title }, name))
         renamed.tryEmit(Unit)
     }
 
@@ -257,6 +262,8 @@ class LibraryRepository(
 
     override suspend fun fillComposer(piece: PieceEntity, composer: ComposerNames.Name) =
         pieces.update(piece.named(piece.title, composer))
+
+    override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.hasComposerKey(composerKey)
 
     override suspend fun insertAll(pieces: List<PieceEntity>): Int = db.withTransaction {
         var inserted = 0

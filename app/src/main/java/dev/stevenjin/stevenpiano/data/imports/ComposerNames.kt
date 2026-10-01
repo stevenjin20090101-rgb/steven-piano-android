@@ -116,6 +116,21 @@ object ComposerNames {
     }
 
     /**
+     * A composer named by a `Composer - Title` file name or typed in Rename (D3): [normalize]'s name as
+     * always, unless it is no canonical composer's and its whole folded name ([artistKey]) is already a key
+     * ([isKey]: in the library, or among the artist folders of the same import), when it is that artist's
+     * ([artist]): so one artist never gets two keys ("Ed Sheeran - Perfect.mid" joins the pieces from an
+     * "Ed Sheeran" folder rather than starting a "sheeran" of its own). A name whose whole key is its
+     * surname key anyway ("Anonymous") is [normalize]'s, so no 1.10 library reads differently.
+     */
+    suspend fun resolve(raw: String, isKey: suspend (String) -> Boolean): Name {
+        val name = normalize(raw)
+        if (name.key.isEmpty() || canonicalOf(raw) != null) return name
+        val whole = artistKey(raw)
+        return if (whole != name.key && isKey(whole)) artist(raw) else name
+    }
+
+    /**
      * The key an artist's name groups by ([artist]): the whole name folded, without punctuation, its
      * spaces collapsed ("Lady Gaga & Bradley Cooper" is "lady gaga bradley cooper"); a name of
      * punctuation alone keeps its folded self rather than no key.

@@ -157,5 +157,7 @@ class LocalZipTest {
             pieces.forEach { this.pieces += it.copy(id = this.pieces.size + 1L) }
             return pieces.size
         }
+
+        override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.any { it.composerKey == composerKey }
     }
 }

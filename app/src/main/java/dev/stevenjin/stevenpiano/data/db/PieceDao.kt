@@ -88,6 +88,10 @@ interface PieceDao {
     @Query("SELECT * FROM pieces WHERE sha256 = :sha256")
     suspend fun bySha(sha256: String): PieceEntity?
 
+    /** Whether any piece is grouped under [composerKey] (v1.10.1 — M28, D3). */
+    @Query("SELECT EXISTS(SELECT 1 FROM pieces WHERE composerKey = :composerKey)")
+    suspend fun hasComposerKey(composerKey: String): Boolean
+
     /** Returns the new id, or -1 when a piece with the same bytes is already there. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(piece: PieceEntity): Long

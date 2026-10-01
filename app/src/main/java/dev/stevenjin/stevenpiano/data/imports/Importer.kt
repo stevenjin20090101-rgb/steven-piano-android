@@ -39,13 +39,19 @@ interface ImportStore {
 
     /** Inserts in one transaction, adding each piece to the playlist its INDEX.csv row names (at the end); returns how many were new. */
     suspend fun insertAll(pieces: List<PieceEntity>): Int
+
+    /** Whether some piece of the library is grouped under [composerKey] (D3: a composer read from a file name asks first). */
+    suspend fun hasComposerKey(composerKey: String): Boolean
 }
 
 /**
  * Brings MIDI files into the library. Per file: read (8 MB cap), SHA-256, skip duplicates
  * (filling in a blank composer when this copy knows one), parse, name (INDEX.csv row, else
- * the file name, else Track 0's name for stub titles), save, then insert 25 per transaction.
- * Files listed in INDEX.csv go first, so its names win over copies elsewhere in the tree.
+ * the file name, read the other way round when only its right side is a known artist, else the
+ * artist folder that holds it, else Track 0's name for stub titles: [TitleHeuristics], DESIGN.md ›
+ * v1.10.1), save, then insert 25 per transaction. What a Mac adds beside the music (`__MACOSX/`,
+ * `._name`) is skipped before anything is counted. Files listed in INDEX.csv go first, so its names
+ * win over copies elsewhere in the tree.
  * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
  * (an [OutOfMemoryError]) counts as failed, and so does a file whose sender or database throws
  * anything else: one bad file never ends the import, nor the app. One import runs at a time;
@@ -107,7 +113,10 @@ class Importer(
     /** Imports everything [source] lists and returns the final tally. */
     suspend fun run(source: OpenedSource): ImportProgress {
         source.limited?.let(log)
-        val items = source.items.sortedByDescending { source.rowFor(it) != null }
+        // What a Mac adds beside the music is neither a piece nor a failure: it is not counted at all (D1).
+        val listed = source.items.filterNot { isMacMetadata(it.relativePath) }
+        val items = listed.sortedByDescending { source.rowFor(it) != null }
+        val names = BatchNames(store, ImportFolders(listed.map { it.relativePath }))
         var state = ImportProgress(total = items.size, finished = false)
         progress.value = state
         val seen = HashSet<String>()
@@ -132,7 +141,7 @@ class Importer(
             state = state.copy(current = item.name)
             progress.value = state
             val outcome = try {
-                prepare(item, source.rowFor(item), seen)
+                prepare(item, source.rowFor(item), seen, names)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RuntimeException) {   // a sender's provider or the database threw: this file fails, the rest go on
@@ -175,7 +184,7 @@ class Importer(
         data object Failed : Outcome
     }
 
-    private suspend fun prepare(item: ImportItem, row: IndexCsv.Row?, seen: MutableSet<String>): Outcome {
+    private suspend fun prepare(item: ImportItem, row: IndexCsv.Row?, seen: MutableSet<String>, names: BatchNames): Outcome {
         val bytes = try {
             item.open().use { ImportLimits.readCapped(it, MAX_BYTES) }
         } catch (e: IOException) {
@@ -189,8 +198,8 @@ class Importer(
         if (!seen.add(sha)) return Outcome.Duplicate
         store.findBySha(sha)?.let { existing ->
             if (existing.composer.isBlank()) {
-                val composer = TextLimits.clip(TitleHeuristics.metadata(item.name, row, emptyList()).composer, TextLimits.COMPOSER)
-                if (composer.isNotEmpty()) store.fillComposer(existing, ComposerNames.normalize(composer))
+                val meta = names.metadata(item, row, emptyList())
+                if (meta.composer.isNotEmpty()) store.fillComposer(existing, names.composer(meta))
             }
             return Outcome.Duplicate
         }
@@ -207,7 +216,7 @@ class Importer(
             logFile(item, "couldn't be saved" + detail(e))
             return Outcome.Failed
         }
-        val meta = TitleHeuristics.metadata(item.name, row, midi.sequenceNames)
+        val meta = names.metadata(item, row, midi.sequenceNames)
         val piece = PieceEntity(
             title = meta.title,
             composer = "",
@@ -223,8 +232,32 @@ class Importer(
             addedAt = clock(),
             searchText = "",
             titleKey = "",
-        ).named(meta.title, ComposerNames.normalize(TextLimits.clip(meta.composer, TextLimits.COMPOSER)))   // named() cuts the title
+        ).named(meta.title, names.composer(meta))   // named() cuts the title
         return Outcome.Ready(piece)
+    }
+
+    /**
+     * How one import reads its pieces' names (DESIGN.md › v1.10.1, D1 and D3): its own [folders] (the
+     * artist folders below its root, and so the names a reversed file name may end with), and what the
+     * library says about a composer's whole-name key, asked once each.
+     */
+    private class BatchNames(private val store: ImportStore, private val folders: ImportFolders) {
+        private val keys = HashMap<String, Boolean>()
+
+        fun metadata(item: ImportItem, row: IndexCsv.Row?, sequenceNames: List<String>): TitleHeuristics.Metadata =
+            TitleHeuristics.metadata(item.name, row, sequenceNames, folders.artistFolderOf(item.relativePath), folders::artistNamed)
+
+        /** [meta]'s composer, read as its source asks (cut to [TextLimits.COMPOSER] first). */
+        suspend fun composer(meta: TitleHeuristics.Metadata): ComposerNames.Name {
+            val raw = TextLimits.clip(meta.composer, TextLimits.COMPOSER)
+            return when (meta.source) {
+                TitleHeuristics.Source.INDEX, TitleHeuristics.Source.NONE -> ComposerNames.normalize(raw)
+                TitleHeuristics.Source.REVERSED, TitleHeuristics.Source.FOLDER -> ComposerNames.artist(raw)
+                TitleHeuristics.Source.FILE_NAME -> ComposerNames.resolve(raw) { key ->
+                    key in folders.artistKeys || keys.getOrPut(key) { store.hasComposerKey(key) }
+                }
+            }
+        }
     }
 
     private companion object {

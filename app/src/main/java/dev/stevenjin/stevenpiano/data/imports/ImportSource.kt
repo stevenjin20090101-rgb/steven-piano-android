@@ -67,7 +67,20 @@ fun isMidiName(name: String): Boolean = name.endsWith(".mid", ignoreCase = true)
 
 /** True for macOS resource forks and other hidden files that zips and folders carry along. */
 fun isHiddenPath(path: String): Boolean =
-    path.startsWith("__MACOSX/") || path.split('/').any { it.startsWith('.') }
+    path.startsWith("__MACOSX/") || path.split('/').any { it.startsWith('.') || it == MAC_FOLDER }
+
+/**
+ * True for what a Mac adds to a zip or a folder beside the music (DESIGN.md › v1.10.1, D1): anything
+ * in a `__MACOSX` folder, and the AppleDouble `._name` files that copy a file's resource fork. The
+ * importer skips them before it counts anything, wherever they come from (a zip, a folder, files
+ * picked or sent through the web panel): never a piece, never a failure.
+ */
+fun isMacMetadata(path: String): Boolean {
+    val segments = path.split('/')
+    return segments.any { it == MAC_FOLDER } || segments.last().startsWith("._")
+}
+
+private const val MAC_FOLDER = "__MACOSX"
 
 /** The folder part of [path] with its trailing slash, "" at the root. */
 fun folderOf(path: String): String = path.substringBeforeLast('/', "").let { if (it.isEmpty()) "" else "$it/" }
