@@ -7,6 +7,7 @@
    Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
    ============================================================================ */
 
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { forgetKeys } from '../src/console/access';
 import { AUD, CONSOLE, TEAM, certs, claims, consoleCall, consoleEnv, newSigner } from './console-helpers';
@@ -81,6 +82,24 @@ describe("the console's own Access check", () => {
     expect(local.status).toBe(200);
     const noBypass = await handle(new Request('http://localhost:8788/api/pianos', { headers: { 'X-Steven-Piano': '1' } }), consoleEnv());
     expect(noBypass.status).toBe(401);
+  });
+
+  it('makes an enrolment code only for a signed-in owner, from its own page (audit delta 3)', async () => {
+    const signer = await newSigner();
+    const { fetch } = certs(signer);
+    const token = await signer.sign(claims());
+    const count = async () => (await env.DB.prepare('SELECT COUNT(*) AS n FROM enrol_codes').first<{ n: number }>())!.n;
+    const before = await count();
+    expect((await consoleCall('/api/enrol-codes', { method: 'POST', token: null, fetch })).status).toBe(401);
+    expect((await consoleCall('/api/enrol-codes', { method: 'POST', token: await signer.sign(claims({ aud: ['another-app'] })), fetch })).status).toBe(401);
+    expect((await consoleCall('/api/enrol-codes', { method: 'POST', token, fetch, header: false })).status).toBe(403);
+    expect((await consoleCall('/api/enrol-codes', { method: 'POST', token, fetch, origin: 'https://evil.test' })).status).toBe(403);
+    expect((await consoleCall('/api/enrol-codes', { token, fetch })).status).toBe(405);
+    expect(await count()).toBe(before);
+    const made = await consoleCall('/api/enrol-codes', { method: 'POST', token, fetch, origin: CONSOLE });
+    expect(made.status).toBe(201);
+    expect(await made.json()).toMatchObject({ code: expect.stringMatching(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/), pianoId: expect.stringMatching(/^[a-z2-7]{12}$/) });
+    expect(await count()).toBe(before + 1);
   });
 
   it("wants the console's header and its own origin on the API", async () => {
