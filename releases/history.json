@@ -114,8 +114,10 @@
     "versionName": "1.10",
     "notes": "Steven Piano Cloud: the web panel from anywhere over HTTPS, without Tailscale. Piano › Remote control › CLOUD enrols the tablet with a code from the console, and the panel then lives at https://<relay>/p/<piano>/ behind the same PIN as before; the console (on Steven's own Cloudflare account, behind Cloudflare Access) lists every piano with its live dot and what it plays, and offers play, pause, next, stop, channels, the guest switches, Load the library, Rotate secret, Revoke and Forget, with an audit log. Steven's library: Load Steven's library on the empty Library and in the + sheet downloads 1,726 pieces (60 MB) from GitHub, checked against its hash, after a note on the licences; Update the library later adds only pieces never offered before. On the tablet, glass menus now stay inside their pane.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.10/steven-piano-1.10.apk",
+    "sha256": "c660b10dd363592babeb3cbd5bef6975dfaa3deacae2055c1a81e6374abc0589",
+    "sizeBytes": 13711043,
     "minSdk": 26,
     "tag": "v1.10",
-    "draft": true
+    "publishedAt": "2026-10-01"
   }
 ]

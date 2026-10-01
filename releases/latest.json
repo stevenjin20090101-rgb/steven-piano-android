@@ -1,9 +1,9 @@
 {
-  "versionCode": 17,
-  "versionName": "1.9",
-  "notes": "Liquid Glass across the app: the headers, the tab bar and rail, the mini player, the transport, sheets, menus and dialogs are frosted surfaces the content scrolls under, with a soft fade where content meets a bar; the play control is a solid circle again; on the tablet the transport yields its blur while the library scrolls. Reduce transparency or high contrast text gives solid surfaces.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.9/steven-piano-1.9.apk",
-  "sha256": "e00195eab96f3fce1e2484161f5f858a5f9651b78481093fe69fb1d487e8f582",
-  "sizeBytes": 13514380,
+  "versionCode": 18,
+  "versionName": "1.10",
+  "notes": "Steven Piano Cloud: the web panel from anywhere over HTTPS, without Tailscale. Piano › Remote control › CLOUD enrols the tablet with a code from the console, and the panel then lives at https://<relay>/p/<piano>/ behind the same PIN as before; the console (on Steven's own Cloudflare account, behind Cloudflare Access) lists every piano with its live dot and what it plays, and offers play, pause, next, stop, channels, the guest switches, Load the library, Rotate secret, Revoke and Forget, with an audit log. Steven's library: Load Steven's library on the empty Library and in the + sheet downloads 1,726 pieces (60 MB) from GitHub, checked against its hash, after a note on the licences; Update the library later adds only pieces never offered before. On the tablet, glass menus now stay inside their pane.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.10/steven-piano-1.10.apk",
+  "sha256": "c660b10dd363592babeb3cbd5bef6975dfaa3deacae2055c1a81e6374abc0589",
+  "sizeBytes": 13711043,
   "minSdk": 26
 }
