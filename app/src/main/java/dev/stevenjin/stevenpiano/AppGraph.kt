@@ -44,6 +44,7 @@ import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.TextRepair
+import dev.stevenjin.stevenpiano.data.db.UploadRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
@@ -171,6 +172,26 @@ class AppGraph(private val app: Application) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "The built-in playlists couldn't be refreshed", e)
+        }
+    }
+
+    /**
+     * The one-time repair of uploads imported before 1.10.1 ([UploadRepair], v1.10.1 — M28, D4), off the main
+     * thread, unless it has run already (`uploadRepairDone`); its lines go to the link's trail, naming the
+     * playlists in debug builds only. True when it named some artist. A failure is logged and leaves it due, so
+     * the next start tries again (what it did by then stays: those pieces are in their playlist).
+     */
+    private suspend fun repairUploadsOnce(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (settingsRepository.uploadRepairDone()) return@withContext false
+            val done = UploadRepair.run(library, log = LinkLog::warn, named = { name -> if (BuildConfig.DEBUG) " $name" else "" })
+            settingsRepository.markUploadRepairDone()
+            done.any { it.filled > 0 }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "The repair of older uploads failed; it runs again at the next start", e)
+            false
         }
     }
 
@@ -573,9 +594,14 @@ class AppGraph(private val app: Application) {
             runCatching { LibraryPack.sweep(File(app.cacheDir, LibraryPack.CACHE_DIR), before = startedAt) }
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
         }
-        // The built-in playlists follow the library: now (the first query opens the database), and
-        // two seconds after a run of renames ends (imports refresh them from ImportService).
-        appScope.launch { refreshBuiltIns() }
+        // First, once, uploads imported before 1.10.1 become playlists, their artists filled (v1.10.1 — M28, D4). Then the
+        // built-in playlists follow the library: now (the first query opens the database), and two seconds after a run of
+        // renames ends (imports refresh them from ImportService). Then artwork for the artists the repair named.
+        appScope.launch {
+            val named = repairUploadsOnce()
+            refreshBuiltIns()
+            if (named && settingsRepository.settings.first().fetchArtworkAutomatically) artwork.requestComposers(force = false)
+        }
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         pianoSettings.start()
         appScope.launch {

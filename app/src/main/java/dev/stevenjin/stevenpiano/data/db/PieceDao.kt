@@ -92,6 +92,23 @@ interface PieceDao {
     @Query("SELECT EXISTS(SELECT 1 FROM pieces WHERE composerKey = :composerKey)")
     suspend fun hasComposerKey(composerKey: String): Boolean
 
+    /**
+     * The pieces an upload before 1.10.1 left loose (v1.10.1 — M28, D4, `UploadRepair`): no collection, in no
+     * playlist, a folder in their path (`sourceName`), and none made in Studio ([studio], its composer).
+     */
+    @Query(
+        "SELECT * FROM pieces p WHERE (p.collection IS NULL OR p.collection = '') AND instr(p.sourceName, '/') > 1 " +
+            "AND p.composer != :studio AND NOT EXISTS (SELECT 1 FROM collection_pieces cp WHERE cp.pieceId = p.id)",
+    )
+    suspend fun loose(studio: String): List<PieceEntity>
+
+    /** A piece's names and the keys made from them, and nothing else of it (the repair of older uploads). */
+    @Query(
+        "UPDATE pieces SET title = :title, composer = :composer, composerKey = :composerKey, composerShort = :composerShort, " +
+            "searchText = :searchText, titleKey = :titleKey WHERE id = :id",
+    )
+    suspend fun setNames(id: Long, title: String, composer: String, composerKey: String, composerShort: String, searchText: String, titleKey: String)
+
     /** The ids of the pieces among [shas] (at most 500 at a time), in no particular order (v1.10.1 — M28, D2). */
     @Query("SELECT id, sha256 FROM pieces WHERE sha256 IN (:shas)")
     suspend fun idsBySha(shas: List<String>): List<PieceSha>

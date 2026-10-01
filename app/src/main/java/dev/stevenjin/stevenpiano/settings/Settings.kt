@@ -365,6 +365,14 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun markTextRepairDone() = edit { it[TEXT_REPAIR_DONE] = true }
 
     /**
+     * Whether the one-time repair of uploads imported before 1.10.1 (`UploadRepair`, v1.10.1 — M28) has run.
+     * Housekeeping, not a preference: never in [PianoSettings], so never in Share diagnostics.
+     */
+    suspend fun uploadRepairDone(): Boolean = current()[UPLOAD_REPAIR_DONE] == true
+
+    suspend fun markUploadRepairDone() = edit { it[UPLOAD_REPAIR_DONE] = true }
+
+    /**
      * The newest crash report the person has answered (shared or dismissed), as its epoch ms; 0
      * when none. A newer report brings back the Library's "The app crashed last time" banner.
      * Housekeeping, not a preference.
@@ -469,6 +477,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KIOSK_STAY_ON_BEFORE = intPreferencesKey("kioskStayOnBefore")
         const val MAX_HOST_NAME = 253
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
+        val UPLOAD_REPAIR_DONE = booleanPreferencesKey("libraryUploadRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
         val TABLET_SOUND = stringPreferencesKey("tabletSound")
         val TABLET_VOLUME = intPreferencesKey("tabletVolume")

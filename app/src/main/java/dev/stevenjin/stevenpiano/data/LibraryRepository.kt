@@ -20,6 +20,7 @@ import dev.stevenjin.stevenpiano.data.db.PieceSummary
 import dev.stevenjin.stevenpiano.data.db.PlaylistEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistPieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
+import dev.stevenjin.stevenpiano.data.db.UploadRepair
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.imports.ImportBatch
@@ -55,7 +56,7 @@ class LibraryRepository(
     private val files: PieceFiles,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
-) : PieceSource, ImportStore, BuiltInStore {
+) : PieceSource, ImportStore, BuiltInStore, UploadRepair.Store {
     private val pieces = db.pieces()
     private val playlists = db.playlists()
     private val renamed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -298,6 +299,19 @@ class LibraryRepository(
             piece.collection?.let { name -> link(playlistId(name, imported = true), id) }
         }
         inserted
+    }
+
+    override suspend fun loosePieces(): List<PieceEntity> = pieces.loose(ComposerNames.STUDIO)
+
+    /**
+     * One transaction of the repair of older uploads (v1.10.1 — M28, D4): [renamed]'s names and keys (and
+     * nothing else of them), then [ids] after the last piece of the playlist called [name], found or made.
+     */
+    override suspend fun repairChunk(name: String, renamed: List<PieceEntity>, ids: List<Long>): ImportedPlaylist? = db.withTransaction {
+        renamed.forEach { pieces.setNames(it.id, it.title, it.composer, it.composerKey, it.composerShort, it.searchText, it.titleKey) }
+        val playlist = playlists.byId(playlistId(playlistName(name), imported = true)) ?: return@withTransaction null
+        ids.forEach { link(playlist.id, it) }
+        ImportedPlaylist(playlist.id, playlist.name)
     }
 
     /**

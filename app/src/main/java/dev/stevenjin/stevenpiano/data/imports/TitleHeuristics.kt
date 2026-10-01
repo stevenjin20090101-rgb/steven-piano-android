@@ -75,7 +75,7 @@ object TitleHeuristics {
         folder: String? = null,
         artistNamed: (String) -> String? = { null },
     ): Metadata {
-        val base = cleanText(TextLimits.clip(fileName.replace(MIDI_EXTENSION, ""), TextLimits.DISPLAY_NAME))
+        val base = baseName(fileName)
         val split = if (row == null) splitComposer(base) else null
         val artistFolder = folder?.let(::cleanText)?.ifEmpty { null }
         val (composer, title, source) = when {
@@ -100,6 +100,9 @@ object TitleHeuristics {
             source = source,
         )
     }
+
+    /** [fileName] as the title is read from it: its MIDI extension gone, cut to [TextLimits.DISPLAY_NAME], cleaned ([cleanText]). */
+    fun baseName(fileName: String): String = cleanText(TextLimits.clip(fileName.replace(MIDI_EXTENSION, ""), TextLimits.DISPLAY_NAME))
 
     /**
      * [text] without the parentheticals at its end, and those ("Hans Zimmer (version 2)" is "Hans
