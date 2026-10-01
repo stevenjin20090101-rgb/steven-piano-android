@@ -182,6 +182,58 @@ class WebAuthTest {
         assertEquals(0L, guard.waitMs("10.9.9.9"))
     }
 
+    /**
+     * Audit delta 3: tries spread over rotating addresses, one as soon as the wait allows, for a day. The
+     * listeners' gate (W1's, chosen behind the tailnet) weighs ~1,440 of them: half the million PINs in about
+     * a year. The relay's, which the whole internet reaches, ~40 the first day and 24 a day from then on: half
+     * the PINs in some 57 years.
+     */
+    @Test
+    fun `the relay's gate lets a distributed brute force some 24 tries a day, the listeners' some 1,440 (audit delta 3)`() {
+        fun triesInADay(guard: LoginGuard, clock: LongArray): Int {
+            var tries = 0
+            var fresh = 0
+            val day = 24 * 60 * 60 * 1000L
+            while (clock[0] < day) {
+                val wait = guard.waitMs("10.200.0.1")
+                if (wait > 0) {
+                    clock[0] += wait
+                    continue
+                }
+                guard.failed("10.${fresh / 65_000}.${fresh / 250 % 260}.${fresh % 250}")   // a new address each time: no per-address lock
+                fresh++
+                tries++
+                clock[0] += 1_000   // a second a try, far faster than the gate lets any through
+            }
+            return tries
+        }
+        val lanClock = LongArray(1)
+        val lan = triesInADay(LoginGuard(clock = { lanClock[0] }, maxKeys = 1_000_000), lanClock)
+        val relayClock = LongArray(1)
+        val relay = triesInADay(LoginGuard.forRelay(clock = { relayClock[0] }), relayClock)
+        assertTrue("the listeners' gate: about 1,440 a day ($lan)", lan in 1_400..1_500)
+        assertTrue("the relay's gate: its first tries, then 24 a day at its cap ($relay)", relay in 30..45)
+        // Its schedule: ten wrong in a row, then a minute, doubling to an hour.
+        var now = 0L
+        val guard = LoginGuard.forRelay(clock = { now })
+        repeat(LoginGuard.RELAY_GLOBAL_THRESHOLD - 1) { guard.failed("10.1.0.$it") }
+        assertEquals(0L, guard.waitMs("10.9.9.9"))
+        assertEquals(60_000L, guard.failed("10.1.1.1"))
+        val waits = mutableListOf<Long>()
+        repeat(8) {
+            now += guard.waitMs("10.9.9.9")
+            waits += guard.failed("10.2.0.$it")
+        }
+        assertEquals(listOf(120_000L, 240_000L, 480_000L, 960_000L, 1_920_000L, 3_600_000L, 3_600_000L, 3_600_000L), waits)
+        // The per-address gate is the listeners' own (five, then 30 s); a right PIN still clears everyone's count.
+        val one = LoginGuard.forRelay(clock = { 0L })
+        repeat(LoginGuard.THRESHOLD) { one.failed("10.3.3.3") }
+        assertEquals(30_000L, one.waitMs("10.3.3.3"))
+        assertEquals("under the global ten, nobody else waits", 0L, one.waitMs("10.4.4.4"))
+        guard.succeeded("10.9.9.9")
+        assertEquals(0L, guard.waitMs("10.9.9.9"))
+    }
+
     @Test
     fun `tries sent at once are weighed one at a time, and only until the lock (audit W2)`() {
         val guard = LoginGuard(clock = { 0L })

@@ -138,6 +138,35 @@ class WebServerRelayTest {
         assertEquals("30", relayWait.headers["Retry-After"])
     }
 
+    /**
+     * Audit delta 3: as the web service makes it, the relay's server weighs PIN tries with a guard of its own
+     * ([LoginGuard.forRelay]). Wrong PINs from many internet addresses close the relay's sign-in after ten,
+     * for a minute and longer, and never the listeners' (the tailnet's and the Wi-Fi's owner still signs in);
+     * the listeners' W1 gate would have let twenty through before even five seconds.
+     */
+    @Test
+    fun `the relay's PIN tries have a stricter gate of their own, and never close the listeners' (audit delta 3)`() {
+        backend.pin = PIN
+        val relayGuard = LoginGuard.forRelay(clock = { now })
+        val server = WebServer(WebServer.Config(RELAY_CONFIG_HOST, 0, tempDir = tmp.newFolder()), backend, sessions, relayGuard, requests, assets, sockets)
+        fun login(pin: String, address: String): RelayedResponse {
+            val body = """{"pin":"$pin"}""".toByteArray()
+            val headers = panelHeaders(null) + mapOf("host" to RELAY_HOST, "content-length" to body.size.toString())
+            return RelayedResponse.write(server.serveRelayed(RelayedSession("POST", "/api/login", "", headers, address, ByteArrayInputStream(body)), RELAY_HOST, PREFIX))
+        }
+        // Ten wrong PINs, each from an address of its own (none reaches its own five), then the gate is shut for everyone.
+        repeat(LoginGuard.RELAY_GLOBAL_THRESHOLD) { assertEquals(401, login("000000", "198.51.100.${it + 1}").status) }
+        val shut = login("482913", "203.0.113.200")
+        assertEquals("even the right PIN waits: the relay's gate is shut", 429, shut.status)
+        assertEquals("60", shut.headers["Retry-After"])
+        // The listeners' gate is untouched: the owner on the tailnet signs in.
+        assertEquals(204, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
+        // A minute on, the right PIN over the relay opens it again (and clears the relay's count).
+        now += 60_000
+        assertEquals(204, login("482913", "203.0.113.200").status)
+        assertEquals(401, login("000000", "198.51.100.99").status)
+    }
+
     @Test
     fun `only the relay's own host, and its own https origin, are answered`() {
         val token = sessions.open()

@@ -101,8 +101,9 @@ import java.io.IOException
  *
  * Steven Piano Cloud (v1.10 — M26): the service also runs while remote access over the internet is
  * on (with the PIN set), Web control on or not, and then holds the relay client ([RelayClient]) and
- * the panel's server for relayed requests (host "relay", never listening), sharing the hub, the
- * sessions and the guard with the listeners. The client starts once the tablet is enrolled, again
+ * the panel's server for relayed requests (host "relay", never listening), sharing the hub and the
+ * sessions with the listeners; its PIN tries have a guard of their own, far stricter
+ * ([dev.stevenjin.stevenpiano.web.WebPanel.relayGuard], audit delta 3). The client starts once the tablet is enrolled, again
  * for each new enrolment, and is nudged when a network comes and at each look; its state goes to the
  * Remote page ([dev.stevenjin.stevenpiano.web.WebPanel.cloud]) and adds "· Cloud" to the notification
  * while connected.
@@ -229,7 +230,7 @@ class WebService : Service() {
             WebServer.Config(host = RELAY_SERVER, port = 0, tempDir = File(cacheDir, ImportLimits.WEB_DIR)),
             panel.backend,
             panel.sessions,
-            panel.guard,
+            panel.relayGuard,   // audit delta 3: the internet's PIN tries have a gate of their own, far stricter than the listeners'
             panel.requests,
             AndroidAssets(this),
             sockets,

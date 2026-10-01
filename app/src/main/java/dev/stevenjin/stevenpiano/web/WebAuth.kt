@@ -180,6 +180,11 @@ class Sessions(
  * A right PIN from a key clears that key's count and the global one. While a wait runs nothing is
  * weighed: a try then is refused without being counted, so hammering never lengthens it. At most
  * [maxKeys] keys are remembered (the oldest forgotten first). Thread-safe.
+ *
+ * The relay's requests (v1.10, audit delta 3) are weighed by a guard of their own, [forRelay]: the
+ * internet reaches that gate, not only the tailnet, so its ceiling for everyone is far lower (10 wrong in
+ * a row, then 1 min doubling to an hour: some 24 tries a day, where the listeners' gate allows ~1,440),
+ * and an internet caller can no longer close the listeners' gate (it has its own).
  */
 class LoginGuard(
     private val clock: () -> Long = System::currentTimeMillis,
@@ -277,5 +282,26 @@ class LoginGuard(
         const val GLOBAL_MAX_LOCK_MS = 60_000L
 
         const val MAX_KEYS = 256
+
+        /**
+         * The relay's gate for everyone together (audit delta 3). The listeners' gentle one (W1: ~1,440 tries a
+         * day at its one-minute cap) was chosen behind the tailnet; through the relay the whole internet can
+         * spread its tries over any number of addresses, and at ~1,440 a day a random six-digit PIN falls within
+         * a year about one time in two. Here: 10 wrong in a row, then a minute, doubling to an hour, so about 24
+         * a day at the cap (under 1 % of the PINs in a year). Its cost is the lever W1 took away, on the relay
+         * alone: someone who keeps sending wrong PINs can keep its sign-in shut for up to an hour at a time;
+         * the tablet, the tailnet and every session already open are untouched.
+         */
+        const val RELAY_GLOBAL_THRESHOLD = 10
+        const val RELAY_GLOBAL_FIRST_LOCK_MS = 60_000L
+        const val RELAY_GLOBAL_MAX_LOCK_MS = 60 * 60_000L
+
+        /** The guard for requests that came through the relay: the per-address gate as the listeners', the global one far lower. */
+        fun forRelay(clock: () -> Long = System::currentTimeMillis): LoginGuard = LoginGuard(
+            clock = clock,
+            globalThreshold = RELAY_GLOBAL_THRESHOLD,
+            globalFirstLockMs = RELAY_GLOBAL_FIRST_LOCK_MS,
+            globalMaxLockMs = RELAY_GLOBAL_MAX_LOCK_MS,
+        )
     }
 }

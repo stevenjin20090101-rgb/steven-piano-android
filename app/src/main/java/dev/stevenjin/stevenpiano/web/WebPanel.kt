@@ -55,12 +55,16 @@ data class WebStatus(
  * is counted on both), the guests' requests (the panel's Requests page and the tablet's Library
  * banner act on the same list), the [backend] the listeners serve, and the [status] the web
  * service reports. Changing the PIN here ends every session. Steven Piano Cloud (v1.10 — M26)
- * shares all of it: its [cloud] status as the web service reports it, the relay's secret sealed in
- * the settings ([cloudSecrets]), the enrolments made here ([enrolments]), the public link ([cloudLink]).
+ * shares all of it but the login guard: its [cloud] status as the web service reports it, the relay's
+ * secret sealed in the settings ([cloudSecrets]), the enrolments made here ([enrolments]), the public
+ * link ([cloudLink]); the relay's requests are weighed by [relayGuard] (audit delta 3).
  */
 class WebPanel(private val app: Context, private val graph: AppGraph) {
     val sessions = Sessions()
     val guard = LoginGuard()
+
+    /** The PIN tries that come through the relay, from the internet: a gate of their own, far stricter (audit delta 3). */
+    val relayGuard = LoginGuard.forRelay()
     val requests = GuestRequests()
 
     private val _status = MutableStateFlow(WebStatus())
