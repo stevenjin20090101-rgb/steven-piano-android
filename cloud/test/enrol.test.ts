@@ -11,8 +11,8 @@ import { SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { enrol } from '../src/relay/enrol';
-import { newEnrolCode, newPianoId } from '../src/shared/ids';
-import { FakeTablet, RELAY, newAddress, pianoRow } from './helpers';
+import { CODE_ALPHABET, ENROL_CODE, PIANO_ID, SECRET, newEnrolCode, newPianoId, newSecret } from '../src/shared/ids';
+import { FakeTablet, RELAY, newAddress, pianoRow, seedPiano } from './helpers';
 
 /** A piano made by the console's "Enrol a tablet", and its code. */
 async function seedCode(options: { expiresIn?: number; name?: string } = {}): Promise<{ pianoId: string; code: string }> {
@@ -83,6 +83,47 @@ describe('enrolment', () => {
     expect((await post({ code: orphan.code })).status).toBe(404);
     const used = await env.DB.prepare('SELECT used_at FROM enrol_codes WHERE code = ?').bind(orphan.code).first<{ used_at: number | null }>();
     expect(used!.used_at).toBeNull();
+  });
+
+  // Audit delta 3: the console makes every code with a new piano, so a code never names one already
+  // enrolled; the claim itself now holds that too. A code row naming an enrolled (or a revoked) piano, as a
+  // later console feature or a hand-edited database might make, re-keyed it and cleared its revoke.
+  it("never re-keys a piano that was enrolled already, revoked or not (audit delta 3)", async () => {
+    for (const revoked of [false, true]) {
+      const { pianoId, secret } = await seedPiano();
+      if (revoked) await env.DB.prepare('UPDATE pianos SET secret_hash = NULL, revoked_at = ? WHERE id = ?').bind(Date.now(), pianoId).run();
+      const before = await pianoRow(pianoId);
+      const code = newEnrolCode();
+      await env.DB.prepare('INSERT INTO enrol_codes (code, piano_id, created_at, expires_at) VALUES (?, ?, ?, ?)').bind(code, pianoId, Date.now(), Date.now() + 60_000).run();
+      const response = await post({ code });
+      expect(response.status, `revoked: ${revoked}`).toBe(404);
+      expect(await response.json()).toMatchObject({ error: 'code' });
+      expect(await pianoRow(pianoId)).toEqual(before);
+      const used = await env.DB.prepare('SELECT used_at FROM enrol_codes WHERE code = ?').bind(code).first<{ used_at: number | null }>();
+      expect(used!.used_at).toBeNull();
+      const notes = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE piano_id = ? AND action = 'enrol'").bind(pianoId).first<{ n: number }>();
+      expect(notes!.n).toBe(0);
+      if (!revoked) {
+        const tablet = await FakeTablet.connect(pianoId, secret);
+        await tablet.next('hello');
+        tablet.close();
+      }
+    }
+  });
+
+  it('makes codes of 8 symbols from the 32 (40 bits), each symbol as likely as the others (audit delta 3)', () => {
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 4_000; i++) {
+      const code = newEnrolCode();
+      expect(code).toMatch(ENROL_CODE);
+      for (const c of code.replace('-', '')) counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    expect(CODE_ALPHABET.length).toBe(32);
+    expect([...counts.keys()].sort().join('')).toBe([...CODE_ALPHABET].sort().join(''));
+    // 32,000 symbols: 1,000 each expected, a standard deviation of about 31.
+    for (const [c, n] of counts) expect(Math.abs(n - 1_000), c).toBeLessThan(250);
+    expect(newPianoId()).toMatch(PIANO_ID);
+    expect(newSecret()).toMatch(SECRET);
   });
 
   it('takes five tries a minute from an address, then 429', async () => {

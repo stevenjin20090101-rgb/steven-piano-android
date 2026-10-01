@@ -22,10 +22,12 @@ const NO_CODE = '----';
  * piano's id and a bearer secret, shown once and kept only as its hash.
  *
  * At most [ENROL_LIMIT] a minute per address. The code is claimed in one D1 transaction: it must be
- * unused and unexpired and its piano must still exist; the piano takes the new secret's hash (and
- * the tablet's name, while it still has the default one), an audit row is written, and the code is
- * marked used. A wrong, expired, used or malformed code gets the same 404 after the same work: a
- * secret made and hashed, the same three statements run.
+ * unused and unexpired, and its piano must still exist and never have been enrolled (audit delta 3:
+ * a code can make a new piano's first secret, never re-key or un-revoke one); the piano takes the new
+ * secret's hash (and the tablet's name, while it still has the default one), then the audit row and the
+ * code's use follow that very write (the piano holds this hash). A wrong, expired, used or malformed
+ * code, or one naming an enrolled piano, gets the same 404 after the same work: a secret made and
+ * hashed, the same three statements run.
  */
 export async function enrol(request: Request, env: RelayEnv, now: () => number = Date.now): Promise<Response> {
   const address = clientAddress(request);
@@ -47,28 +49,31 @@ export async function enrol(request: Request, env: RelayEnv, now: () => number =
   const detail = JSON.stringify({ name, model, address });
   const db = env.DB;
   const valid = 'code = ? AND used_at IS NULL AND expires_at > ?';
+  // The first statement claims a piano never enrolled; the other two act only when it did (the piano now
+  // holds this request's hash, which no other request can have).
+  const claimed = 'EXISTS (SELECT 1 FROM pianos WHERE pianos.id = enrol_codes.piano_id AND pianos.secret_hash = ?)';
   const results = await db.batch<{ piano_id: string }>([
     db
       .prepare(
         `UPDATE pianos SET secret_hash = ?, pending_secret_hash = NULL, pending_until = NULL, enrolled_at = ?, revoked_at = NULL, online = 0,
            name = CASE WHEN name = ? AND ? IS NOT NULL THEN ? ELSE name END
-         WHERE id = (SELECT piano_id FROM enrol_codes WHERE ${valid})`,
+         WHERE id = (SELECT piano_id FROM enrol_codes WHERE ${valid}) AND enrolled_at IS NULL AND secret_hash IS NULL`,
       )
       .bind(hash, at, DEFAULT_NAME, name, name, probe, at),
     db
       .prepare(
         `INSERT INTO audit_log (at, actor, piano_id, action, detail)
          SELECT ?, 'tablet', piano_id, 'enrol', ? FROM enrol_codes
-         WHERE ${valid} AND EXISTS (SELECT 1 FROM pianos WHERE pianos.id = enrol_codes.piano_id)`,
+         WHERE ${valid} AND ${claimed}`,
       )
-      .bind(at, detail, probe, at),
+      .bind(at, detail, probe, at, hash),
     db
       .prepare(
         `UPDATE enrol_codes SET used_at = ?
-         WHERE ${valid} AND EXISTS (SELECT 1 FROM pianos WHERE pianos.id = enrol_codes.piano_id)
+         WHERE ${valid} AND ${claimed}
          RETURNING piano_id`,
       )
-      .bind(at, probe, at),
+      .bind(at, probe, at, hash),
   ]);
   const pianoId = results[2]?.results?.[0]?.piano_id;
   if (!code || !pianoId) return error(404, 'code', "That code isn't right, or it has expired. Make a new one in the console.");
