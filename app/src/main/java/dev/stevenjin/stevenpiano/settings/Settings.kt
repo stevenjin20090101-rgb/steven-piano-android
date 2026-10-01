@@ -22,6 +22,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.stevenjin.stevenpiano.audio.Sampler
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
+import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -163,6 +164,8 @@ data class PianoSettings(
     val cloudSecretSet: Boolean = false,
     /** The version of Steven's library pack last loaded in full (v1.10 — M27); 0: never loaded. */
     val libraryPackVersion: Int = 0,
+    /** The Playlists listing's order (v1.10.1 — M28, D6): newest first, or by name as before. */
+    val playlistSort: PlaylistSort = PlaylistSort.NEWEST,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -353,6 +356,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** Steven's library pack [version] has been loaded (v1.10 — M27): the Library offers a later one as an update. */
     suspend fun setLibraryPackVersion(version: Int) = edit { it[LIBRARY_PACK_VERSION] = version.coerceAtLeast(0) }
 
+    /** The Playlists listing's order (v1.10.1 — M28). */
+    suspend fun setPlaylistSort(sort: PlaylistSort) = edit { it[PLAYLIST_SORT] = sort.name }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -433,6 +439,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             cloudPianoId = this[CLOUD_PIANO_ID]?.takeIf { PIANO_ID.matches(it) },
             cloudSecretSet = this[CLOUD_SECRET] != null,
             libraryPackVersion = (this[LIBRARY_PACK_VERSION] ?: defaults.libraryPackVersion).coerceAtLeast(0),
+            playlistSort = PlaylistSort.entries.firstOrNull { it.name == this[PLAYLIST_SORT] } ?: defaults.playlistSort,
         )
     }
 
@@ -486,6 +493,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CLOUD_PIANO_ID = stringPreferencesKey("cloudPianoId")
         val CLOUD_SECRET = stringPreferencesKey("cloudSecret")
         val LIBRARY_PACK_VERSION = intPreferencesKey("libraryPackVersion")
+        val PLAYLIST_SORT = stringPreferencesKey("playlistSort")
 
         /** A piano's id on the relay (`web.relay.RelayProtocol.PIANO_ID`, kept here so the settings need nothing from the web). */
         val PIANO_ID = Regex("[a-z2-7]{12}")

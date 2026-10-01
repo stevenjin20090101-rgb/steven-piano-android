@@ -86,7 +86,9 @@ class DiagnosticsExporterTest {
         assertFalse("the cloud's piano id never travels (v1.10 — M26)", "abcdefgh2345" in prefs)
         assertFalse("nor anything of its secret", "cloudSecret" in prefs)
         assertTrue("the library pack loaded (v1.10 — M27)", "cloudEnrolled = true\nlibraryPackVersion = 1\n" in prefs)
-        assertEquals("35 lines, the cloud's three (v1.10 — M26) and the library pack's (M27)", 39, prefs.lines().count { it.isNotEmpty() })
+        assertEquals("35 lines, the cloud's three (v1.10 — M26), the library pack's (M27) and the playlists' order (v1.10.1 — M28)", 40, prefs.lines().count { it.isNotEmpty() })
+        assertTrue("the order is a preference", prefs.contains("playlistSort = NEWEST\n"))
+        assertTrue("the repair of older uploads is housekeeping, never listed", !prefs.contains("Repair"))
 
         assertTrue(entries.getValue("link.log").endsWith("with its console\n"))
         assertTrue("IllegalStateException: second" in entries.getValue("crash-${now}.txt"))

@@ -27,6 +27,7 @@ import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.data.PlaylistOrder
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -141,8 +142,12 @@ class AppWebBackend(
         return WebPage(pieces.size, from, page)
     }
 
-    override suspend fun playlists(): List<WebPlaylist> =
-        library { graph.library.playlists().first() }.orEmpty().map { WebPlaylist(it.id, it.name, it.pieceCount, it.durationMs, it.builtIn) }
+    /** Every playlist, in the order the app's Playlists listing has chosen (v1.10.1 — M28, D6: newest first, or by name). */
+    override suspend fun playlists(): List<WebPlaylist> {
+        val all = library { graph.library.playlists().first() }.orEmpty()
+        return PlaylistOrder.listing(all, graph.settings.value.playlistSort, graph.builtIns.keys)
+            .map { WebPlaylist(it.id, it.name, it.pieceCount, it.durationMs, it.builtIn) }
+    }
 
     override suspend fun playlist(id: Long): WebPlaylistDetail? {
         val playlist = playlists().firstOrNull { it.id == id } ?: return null

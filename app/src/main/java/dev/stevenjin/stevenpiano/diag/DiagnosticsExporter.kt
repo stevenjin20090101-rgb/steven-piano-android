@@ -163,6 +163,8 @@ object DiagnosticsText {
         line("cloudEnrolled", s.cloudEnrolled)
         // Steven's library (v1.10 — M27): the version of the pack loaded, 0: none.
         line("libraryPackVersion", s.libraryPackVersion)
+        // The Playlists listing's order (v1.10.1 — M28): a preference, so it is here; the repair of older uploads is not.
+        line("playlistSort", s.playlistSort)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

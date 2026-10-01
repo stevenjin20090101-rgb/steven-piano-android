@@ -757,6 +757,12 @@ class WebServerTest {
         assertEquals(400, http.get("/api/library?offset=-1", auth).status)
         assertEquals(2, http.get("/api/library?limit=2", auth).json().getJSONArray("pieces").length())
         assertEquals("Evening", http.get("/api/playlists", auth).json().getJSONArray("playlists").getJSONObject(0).getString("name"))
+        // v1.10.1 — M28: the panel lists the playlists in the order the app chose (the backend's), not by name.
+        backend.playlistsHeld.add(0, WebPlaylist(14, "MIDI", 265, 3_600_000, builtIn = false))
+        backend.playlistsHeld.add(WebPlaylist(8, "Popular", 17, 900_000, builtIn = true))
+        val listed = http.get("/api/playlists", auth).json().getJSONArray("playlists")
+        assertEquals(listOf("MIDI", "Evening", "Popular"), (0 until listed.length()).map { listed.getJSONObject(it).getString("name") })
+        backend.playlistsHeld.removeAll { it.id != 10L }
         assertEquals(2, http.get("/api/playlists/10", auth).json().getJSONArray("pieces").length())
         assertEquals(404, http.get("/api/playlists/11", auth).status)
         assertEquals(3, http.get("/api/composers", auth).json().getJSONArray("composers").length())

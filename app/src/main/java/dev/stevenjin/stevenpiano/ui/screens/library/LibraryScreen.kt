@@ -80,6 +80,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
@@ -134,6 +135,8 @@ import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 
@@ -164,7 +167,17 @@ import java.time.LocalTime
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit) {
     val graph = LocalContext.current.graph
-    val vm = viewModel { LibraryViewModel(graph.library, graph.importProgress, graph.appScope, graph.artwork::forget, graph.channelPools.summaries) }
+    val vm = viewModel {
+        LibraryViewModel(
+            graph.library,
+            graph.importProgress,
+            graph.appScope,
+            graph.artwork::forget,
+            graph.channelPools.summaries,
+            playlistSort = graph.settings.map { it.playlistSort }.distinctUntilChanged(),
+            builtInOrder = { graph.builtIns.keys },
+        )
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
@@ -311,7 +324,9 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                                     scheduling = ScheduleDraft.fresh(LocalTime.now(), ScheduleKind.CHANNEL, key, graph.settings.value.channelVolume(key))
                                 }
                             }
-                            LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog, banners)
+                            // The Playlists' order is how the person looks at them, not a change to the library: no kiosk PIN.
+                            val sortPlaylists: (PlaylistSort) -> Unit = { sort -> graph.appScope.launch { graph.settingsRepository.setPlaylistSort(sort) } }
+                            LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog, banners, sortPlaylists)
                         }
                     }
                 }
@@ -442,6 +457,7 @@ private fun LibraryItems(
     gate: KioskGate,
     onDialog: (LibraryDialog) -> Unit,
     banners: @Composable () -> Unit,
+    onSortPlaylists: (PlaylistSort) -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
     val graph = LocalContext.current.graph
@@ -571,7 +587,12 @@ private fun LibraryItems(
                         )
                     }
                 }
-                item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
+                // The header row: the eyebrow PLAYLISTS and the pop-up button of their order (v1.10.1 — M28, D6).
+                if (listing.playlists.isNotEmpty()) {
+                    item(key = "playlists-head") { PlaylistsHeader(listing.sort, onSortPlaylists) }
+                } else {
+                    item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
+                }
                 items(listing.playlists.chunked(columns), key = { row -> "tiles-pl-${row.first().id}" }) { row ->
                     TileRow(columns, row.size) {
                         row.forEach { playlist ->

@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.settings
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -388,6 +389,20 @@ class SettingsRepositoryTest {
         assertEquals(2, SettingsRepository(store).settings.first().libraryPackVersion)
         repository.setLibraryPackVersion(-1)
         assertEquals(0, repository.settings.first().libraryPackVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the playlists are newest first until the person chooses by name, and a choice this version does not know reads as the default`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "sort.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(PlaylistSort.NEWEST, repository.settings.first().playlistSort)
+        repository.setPlaylistSort(PlaylistSort.NAME)
+        assertEquals(PlaylistSort.NAME, repository.settings.first().playlistSort)
+        assertEquals(PlaylistSort.NAME, SettingsRepository(store).settings.first().playlistSort)
+        store.edit { it[stringPreferencesKey("playlistSort")] = "BY_COLOUR" }
+        assertEquals(PlaylistSort.NEWEST, repository.settings.first().playlistSort)
         scope.cancel()
     }
 

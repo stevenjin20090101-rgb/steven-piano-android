@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
+import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -81,5 +82,20 @@ class LibraryStatesTest {
             PlaylistSummary(11, "Epic on piano", false, 0, 0, builtIn = true, builtInKey = "epic"),
         )
         assertEquals(listOf(8L, 9L, 5L, 2L), PlaylistShelf.shown(all).map { it.id })
+    }
+
+    @Test
+    fun `newest first, the built-in playlists come after the person's, an empty one still not shown`() {
+        val all = listOf(
+            PlaylistSummary(5, "Road trip", false, 3, 1_000),
+            PlaylistSummary(9, "Recognisable", false, 12, 1_000, builtIn = true, builtInKey = "recognisable"),
+            PlaylistSummary(2, "Bach", true, 40, 1_000),
+            PlaylistSummary(8, "Popular", false, 17, 1_000, builtIn = true, builtInKey = "popular"),
+            PlaylistSummary(11, "Epic on piano", false, 0, 0, builtIn = true, builtInKey = "epic"),
+            PlaylistSummary(14, "MIDI", true, 265, 1_000),
+        )
+        assertEquals(listOf(14L, 5L, 2L, 8L, 9L), PlaylistShelf.shown(all, PlaylistSort.NEWEST, listOf("popular", "recognisable", "epic")).map { it.id })
+        assertEquals("the sort's pop-up button reads it to TalkBack", "Sort playlists, Newest first", sortDescription(PlaylistSort.NEWEST))
+        assertEquals("Sort playlists, Name", sortDescription(PlaylistSort.NAME))
     }
 }

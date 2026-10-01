@@ -95,6 +95,25 @@ class GlassPopoverTest {
     }
 
     @Test
+    fun `the Playlists' sort opens its menu within the list's pane, its end at the button's (v1_10_1)`() {
+        // The tablet's two panes (2560 px at 320 dpi, 2 px a dp): the list's pane ends at the divider; the pop-up button
+        // stands at the end of the Playlists header row, 4 dp in, about 130 dp wide and 48 dp tall; its menu about 200 dp.
+        val divider = 1408
+        val button = IntRect(divider - 8 - 260, 900, divider - 8, 996)
+        val menu = IntSize(400, 256)
+        val ended = popoverPosition(button, window, menu, LayoutDirection.Ltr, Alignment.End, IntOffset(0, 8), 16)
+        assertTrue("within the list's pane: ${ended.x + menu.width} ≤ $divider", ended.x + menu.width <= divider)
+        assertEquals(button.bottom + 8, ended.y)
+        val started = popoverPosition(button, window, menu, LayoutDirection.Ltr, Alignment.Start, IntOffset(0, 8), 16)
+        assertTrue("starts aligned, it would cross onto the now-playing panel", started.x + menu.width > divider)
+        val calls = File("src/main/java/dev/stevenjin/stevenpiano/ui/screens/library/PlaylistsHeader.kt").readLines()
+            .map { it.substringBefore("//") }
+            .filter { "GlassPopover(" in it }
+        assertEquals(1, calls.size)
+        assertTrue(calls.single(), "alignment = Alignment.End" in calls.single())
+    }
+
+    @Test
     fun `the panel's foot starts its popover at the speaker, Now playing's tempo row keeps the ends`() {
         val sources = File("src/main/java/dev/stevenjin/stevenpiano/ui/screens/nowplaying")
         fun speakerCalls(name: String) = File(sources, name).readLines()

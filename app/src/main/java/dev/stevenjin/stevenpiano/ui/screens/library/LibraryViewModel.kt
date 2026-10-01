@@ -18,6 +18,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.channels.ChannelSummary
 import dev.stevenjin.stevenpiano.data.LibraryRepository
+import dev.stevenjin.stevenpiano.data.PlaylistOrder
+import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.data.TextKeys
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
@@ -26,6 +28,7 @@ import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +40,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -73,8 +77,12 @@ sealed interface Listing {
         override val isEmpty: Boolean get() = pieces.isEmpty()
     }
 
-    /** The playlists' grid, under the channels' row ([channels]; none while a search narrows the list). */
-    data class Playlists(val playlists: List<PlaylistSummary>, val channels: List<ChannelSummary> = emptyList()) : Listing {
+    /** The playlists' grid in the [sort] chosen, under the channels' row ([channels]; none while a search narrows the list). */
+    data class Playlists(
+        val playlists: List<PlaylistSummary>,
+        val channels: List<ChannelSummary> = emptyList(),
+        val sort: PlaylistSort = PlaylistSort.NEWEST,
+    ) : Listing {
         override val isEmpty: Boolean get() = playlists.isEmpty()
     }
 
@@ -147,6 +155,8 @@ class LibraryViewModel(
     private val writes: CoroutineScope,
     private val forgetArtwork: (String) -> Unit = {},
     private val channels: Flow<List<ChannelSummary>?> = flowOf(null),
+    private val playlistSort: Flow<PlaylistSort> = flowOf(PlaylistSort.NEWEST),
+    private val builtInOrder: () -> List<String> = { emptyList() },
 ) : ViewModel() {
     private val selection = MutableStateFlow(Selection(Category.All, null))
 
@@ -254,10 +264,15 @@ class LibraryViewModel(
                 Category.All -> (if (key.isEmpty()) library.all() else library.search(query)).map { Listing.Pieces(it) }
                 Category.Favorites -> library.favorites().map { Listing.Pieces(it.matching(key)) }
                 Category.Recent -> library.recent().map { Listing.Pieces(it.matching(key)) }
-                // The channels' row stands above the playlists; a search narrows the playlists alone.
-                Category.Playlists -> combine(library.playlists(), channels) { all, cards ->
-                    Listing.Playlists(PlaylistShelf.shown(all).filter { key in TextKeys.fold(it.name) }, if (key.isEmpty()) cards.orEmpty() else emptyList())
-                }
+                // The channels' row stands above the playlists; a search narrows the playlists alone. Their order is the
+                // person's choice (v1.10.1 — M28, D6); the built-in lists' order is read off the main thread.
+                Category.Playlists -> combine(library.playlists(), channels, playlistSort) { all, cards, sort ->
+                    Listing.Playlists(
+                        PlaylistShelf.shown(all, sort, builtInOrder()).filter { key in TextKeys.fold(it.name) },
+                        if (key.isEmpty()) cards.orEmpty() else emptyList(),
+                        sort,
+                    )
+                }.flowOn(Dispatchers.Default)
                 Category.Composers -> library.composers().map { all -> Listing.Composers(all.filter { key in TextKeys.fold(it.name) }) }
             }
         }
@@ -291,13 +306,12 @@ class LibraryViewModel(
 }
 
 /**
- * The Playlists grid's order: the built-in playlists first, in the order they were made (the
- * catalogue's), then the rest by name as the library lists them. A built-in playlist with nothing
- * in it is not shown at all: the library holds none of its pieces yet.
+ * The Playlists grid: every playlist in the order chosen ([PlaylistOrder.listing], v1.10.1 — M28: newest
+ * first, the built-in ones after them in their fixed order [builtInOrder]; or, by name, the built-in ones
+ * first in the order they were made, then the rest by name). A built-in playlist with nothing in it is not
+ * shown at all: the library holds none of its pieces yet.
  */
 internal object PlaylistShelf {
-    fun shown(all: List<PlaylistSummary>): List<PlaylistSummary> {
-        val (builtIn, others) = all.partition { it.builtIn }
-        return builtIn.filter { it.pieceCount > 0 }.sortedBy { it.id } + others
-    }
+    fun shown(all: List<PlaylistSummary>, sort: PlaylistSort = PlaylistSort.NAME, builtInOrder: List<String> = emptyList()): List<PlaylistSummary> =
+        PlaylistOrder.listing(all, sort, builtInOrder).filter { !it.builtIn || it.pieceCount > 0 }
 }
