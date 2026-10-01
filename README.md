@@ -526,7 +526,10 @@ A new tablet can load Steven's library straight from GitHub (from 1.10):
   it says so ("Loading Steven's library needs an internet connection.").
 - **Kiosk mode**: loading and updating wait for the kiosk PIN, as adding music does.
 - **From the console** (Steven Piano Cloud): **Load Steven's library** on a piano's page
-  does the same on that tablet.
+  brings a newer pack's new pieces to that tablet, as the + sheet's Update does. The first
+  load is always the tablet's own, after its licence sheet: on a tablet that has never loaded
+  the pack the console's button says so ("Steven's library loads the first time on the tablet,
+  where its licence is shown…") and starts nothing.
 - **The licences.** **MAESTRO v3.0.0** (Google Magenta; Curtis Hawthorne et al., "Enabling
   Factorized Piano Music Modeling and Generation with the MAESTRO Dataset", ICLR 2019):
   CC BY-NC-SA 4.0, **non-commercial use only**. **piano-midi.de** (Bernd Krueger,
@@ -767,10 +770,18 @@ request page doesn't exist.
 **What the relay sees:** it is your own Cloudflare Worker, and it carries what the panel shows and is sent,
 as any HTTPS site's server does: pages, lists, the piece playing, requests. The tablet reports every
 30 seconds: the app's and the piano's versions, whether the piano is connected, what plays, whether guests
-may request, the library's size and the channels' names. Never a device identifier (no Bluetooth address,
-no serial, no Android id); enrolling sends the code alone. The PIN is checked on the tablet, never by the
-relay. The tablet's key to the relay is sealed by Android's keystore and never shown or included in Share
-diagnostics.
+may request (and wait for approval), whether Web control is on, the library's size and the version of
+Steven's library loaded, and the channels' names. Never a device identifier (no Bluetooth address, no
+serial, no Android id) and never the tablet's address on its own networks; enrolling sends the code alone.
+Piano › About says the same. The PIN is checked on the tablet, never by the relay. The tablet's key to the
+relay is sealed by Android's keystore and never shown or included in Share diagnostics; nor is the piano's
+id.
+
+**PIN tries from the internet** have a gate of their own, stricter than the tailnet's: after ten wrong PINs
+in a row, from anywhere, the panel's sign-in through the relay waits a minute, then longer each time, up to
+an hour (some 24 tries a day, so a six-digit PIN can't be ground through). Someone who keeps sending wrong
+PINs can keep that sign-in shut; a browser already signed in stays signed in, and the tablet and the
+tailnet are not affected.
 
 ## Updating the piano's firmware
 
@@ -1217,9 +1228,10 @@ The full audit, every finding and what was done about it, is in
   GitHub hands the file over), carrying nothing but the app's User-Agent and, as with
   any connection, the device's IP address. With *Remote access over the internet* on (off
   at first; see *Cloud*), one connection more, over HTTPS to your own relay: what the panel
-  shows and is sent, and every 30 seconds the tablet's status (versions, what plays, the
-  library's size and pack, the channels' names), never a device identifier (*What the relay
-  sees*). Studio's runtime (ONNX Runtime 1.28.0) sends
+  shows and is sent, and every 30 seconds the tablet's status (versions, whether the piano
+  is connected, what plays, the guests' switches, whether Web control is on, the library's
+  size and pack, the channels' names), never a device identifier or the tablet's own network
+  address (*What the relay sees*). Studio's runtime (ONNX Runtime 1.28.0) sends
   nothing: during a transcription and a composition the app's UID sent no packet at all
   (the audit's count, `docs/SECURITY_AUDIT.md`). No analytics, no accounts, and no crash
   report goes anywhere by itself: diagnostics leave only when you share them. Nothing
@@ -1235,8 +1247,9 @@ The full audit, every finding and what was done about it, is in
   uploads and requests are capped before they are read. The panel is plain HTTP: over
   Tailscale that is encrypted by Tailscale, over Wi-Fi it is not. With *Remote access over
   the internet* on, the same panel also comes in through your relay, over HTTPS, behind the
-  same PIN, which the tablet checks, never the relay. The details, and what is left, are in
-  the audit's 1.5.1 section and its 1.10 notes.
+  same PIN, which the tablet checks, never the relay, with a stricter gate for PIN tries from
+  the internet. The details, and what is left, are in the audit's 1.5.1 section and its 1.10
+  audit (delta 3).
 - **Updates** install only a file whose SHA-256 matches the manifest and that Android
   accepts as signed with the release key (see *Updates*); on the school tablet the
   device owner role is used for silent updates and, once it is turned on, kiosk mode,

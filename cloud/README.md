@@ -180,21 +180,29 @@ The protocol (`steven-piano-relay-1`) is in `src/shared/protocol.ts`, and the ap
 **Security.** A tablet's secret is 32 random bytes, shown to it once, kept only as its SHA-256.
 Rotation is two-phase: the new secret's hash is accepted beside the old for 10 minutes, until the
 tablet confirms (`secret.ack`) or connects with it. Revoke closes the tablet's socket with 4401 and
-accepts no secret; Forget closes it with 4403 and removes the piano; a second connection for the
-same piano takes over (4409). Enrolment codes are 8 letters from 32 (no I, O, 0 or 1), used once
-within 15 minutes, 5 tries a minute per address, and a wrong, used or expired code costs the same
-work and gets the same answer. The console checks every request's Access token itself (RS256
-against the team's keys, the audience, the issuer, the dates), wants `X-Steven-Piano: 1` and its
-own origin on its API, and never answers with a CORS header; neither does the relay. Every answer
-carries HSTS and the panel's security headers; a tablet's cookie must stay under its own
-`/p/<piano>/`. The audit log (console actions, enrolments, rotations) keeps 90 days.
+accepts no secret; Forget closes it with 4403 and removes the piano; a connection still being checked
+when either comes is refused; a second connection for the same piano takes over (4409), and only the
+newest stays. Enrolment codes are 8 letters from 32 (no I, O, 0 or 1), used once within 15 minutes,
+only for the new piano they were made with (a code never re-keys or un-revokes one), 5 tries a minute
+per address, and a wrong, used or expired code costs the same work and gets the same answer. The
+console checks every request's Access token itself (RS256 against the team's keys, the audience, the
+issuer, the dates), wants `X-Steven-Piano: 1` and its own origin on its API, and never answers with a
+CORS header; neither does the relay. Every answer carries HSTS and the panel's security headers; of a
+tablet's answer the relay passes on only the headers the panel sends (its type, caching, cookies, the
+security headers), and a tablet's cookie must stay under its own `/p/<piano>/`: every piano's panel
+shares the relay's address, so nothing one tablet answers may reach beyond its piano's path. The
+tablet checks the PIN with a gate of its own for tries through the relay (ten wrong in a row from
+anywhere, then a minute, doubling to an hour). The audit log (console actions, enrolments, rotations)
+keeps 90 days and holds the owner's email as the actor, never a visitor's address.
 
 **On the Free plan.** Durable Objects with SQLite storage and WebSocket hibernation, the Rate
 Limiting binding and D1 are all on the Free plan; its request body limit is the relay's 100 MB. The
 rate limits are counted per Cloudflare location and are a brake, not an exact count.
 
-**What the relay sees.** The app's and firmware's versions, what the piano is playing, the guest
-switches and the library's size (the console shows them), and every request and answer between a
+**What the relay sees.** The app's and firmware's versions, whether the piano is connected, what it
+is playing, the guest switches, whether the tablet's Web control is on, the library's size and the
+version of Steven's library loaded, and the channels' names (the console shows them; never a device
+identifier or the tablet's address on its own networks), and every request and answer between a
 browser and the panel as they pass (kept in memory while they pass, never stored). Nothing reaches
 it until a tablet is enrolled.
 

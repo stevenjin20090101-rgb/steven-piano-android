@@ -1544,3 +1544,300 @@ held at these places:
   Android allowed the start (seen at the merge, BUILD_SPEC.md › v1.10 — M27 › *The merge*); were it refused,
   the load would run in the app's process without the notification.
 - Not run on the school tablet yet.
+
+## 1.10 — the cloud and the library pack: audit (delta 3) — 2026-09-30
+
+A delta audit read Steven Piano Cloud and Steven's library pack at `90f87fa` (R1's relay and console in
+`cloud/`, M26's relay client, M27's pack, merged on `main`) against the twelve points of its brief,
+adversarially: the relay and the console in the Workers runtime itself (vitest through Miniflare, a local
+D1, the rate-limit bindings), the app in JVM tests, and end to end on the audit's own AVD
+`steven_piano_audit` (API 34, `medium_tablet` 2560 × 1600, 4 GB, the debug build) enrolled with the relay
+and the console under `wrangler dev` on the Mac (`CloudOverride` → `10.0.2.2:8787`; nothing deployed,
+Steven's Cloudflare account untouched). Read closely: `cloud/src/**`, `cloud/test/**`, `cloud/console/**`,
+the two Wrangler configs, `M/web/relay/**`, `M/web/WebServer.kt`, `WebAuth.kt`, `WebPanel.kt`,
+`M/service/WebService.kt`, `LibraryService.kt`, `M/net/HttpPost.kt`, `M/library/**`, `M/update/UpdateSource.kt`,
+`VerifiedDownloader.kt`, `M/diag/**`, `tools/publish_library.py`. The coders' notes above (the cloud's
+pre-audit notes, M27's) were treated as claims and checked one by one.
+
+**The cloud holds where it matters most:** a tablet gets in only with its secret, which the relay keeps only
+as a SHA-256 and the tablet only sealed by its Keystore; the panel over the relay meets the same route table,
+PIN, header, `Host` and `Origin` checks as over a listener, with `Secure` cookies under the piano's own path;
+no CORS anywhere; bodies are capped and metered before they reach the tablet; the console is behind Access
+and checks Access's token itself; D1 holds hashes, the console's actions and nothing of a visitor. The
+findings are three Medium and four Low, all fixed: the relay put the PIN on the open internet behind a gate
+made for the tailnet (C1); a revoke could be missed by a connection replacing another (C2); the relay passed
+any header of a tablet's answer to a browser, on an origin every piano shares (C3); and four Low. Tests went
+from 1,324 to **1,328** in the app (13 skipped, as before) and from 61 to **79** in `cloud/`. Commits:
+`45edc49` (C1), `14cf525` (C2), `73026c6` (C3), `3ddfe5b` (C4), `91758d3` (C5), `dfb81ea` (C6),
+`bf0e10b` (C7), `5c67e6f` (tests of the limits, of traffic that is not the protocol, of the console's codes),
+then this one (docs) and the provenance. Transcripts are kept with the run's evidence (`…/audit3/`).
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| C1 | Medium | The relay put the six-digit PIN on the open internet behind the listeners' gate (W1's, gentle on purpose behind the tailnet): ~1,440 tries a day from rotating addresses, half the PINs in about a year; and the shared guard let the internet close the tailnet's sign-in | Fixed |
+| C2 | Medium | A revoke or a forget landing while a replacing connection wrote its "replaced" note was missed: the revoked tablet's connection was accepted and stayed; two replacing connections could both stay | Fixed |
+| C3 | Medium | The relay passed every header of a tablet's answer but a deny-list, on an origin every piano shares: `Service-Worker-Allowed` would let one piano's answer install a service worker over every piano's panel | Fixed |
+| C4 | Low | The console's `library.load` made a tablet's first load without its licence sheet (MAESTRO's non-commercial licence) | Fixed |
+| C5 | Low | Every status carried the tablet's own network address (kept in D1, never used); About said nothing of the relay; README's list was not exact | Fixed |
+| C6 | Low | An enrolment code could re-key, and un-revoke, any piano it named (none does today: the claim held only by the console's construction) | Fixed |
+| C7 | Low | After a 101 that failed the subprotocol check, the relay client still acted on what arrived before the close | Fixed |
+
+### C1: the relay's PIN gate was the tailnet's (Medium): fixed
+
+`web/WebAuth.kt:184` (`LoginGuard`) and `service/WebService.kt:232` at `90f87fa`: the relay's `WebServer` was
+given the process's one `guard`. Its per-address gate (5 wrong → 30 s doubling to 10 min) is escaped by
+rotating addresses, which on the internet are plentiful; its global gate is W1's (`GLOBAL_THRESHOLD` 20, then
+5 s doubling to a 60 s cap), deliberately gentle because "the panel is behind Tailscale (WireGuard), not the
+open internet" (this file, W1). Through the relay it is the open internet: one wrong PIN a minute from fresh
+addresses, the relay's own 10 a minute per address never in the way, weighs some 1,440 PINs a day, half the
+million in about a year and 4 % in a month. And since the guard was shared, wrong PINs from the internet shut
+the tailnet's and the Wi-Fi's sign-in too, the very lever W1 had taken away, now reachable by anyone.
+
+- **Fix** (`45edc49`): `LoginGuard.forRelay()`, `WebPanel.relayGuard`, given to the relay's server alone. The
+  per-address gate is the listeners'; the global one trips after `RELAY_GLOBAL_THRESHOLD` = 10 wrong in a row
+  and waits `RELAY_GLOBAL_FIRST_LOCK_MS` = 1 min, doubling to `RELAY_GLOBAL_MAX_LOCK_MS` = 1 h: some 40 tries the
+  first day and 24 a day after, under 1 % of the PINs in a year (half in some 57 years). The listeners keep W1's
+  gate, which the internet no longer reaches.
+- **Trade-off, chosen deliberately:** someone who keeps sending wrong PINs through the relay can keep its sign-in
+  shut, up to an hour at a time. Sessions already open keep working (24 h, renewed by use), and the tablet and
+  the tailnet are untouched; README › Cloud says so.
+- **Tests:** `WebAuthTest` › *the relay's gate lets a distributed brute force some 24 tries a day, the listeners'
+  some 1,440* (a simulated day of rotating addresses: 1,400–1,500 on the listeners' gate, 30–45 on the relay's,
+  and the relay's schedule 1, 2, 4 … 32 min, then 60, 60); `WebServerRelayTest` › *the relay's PIN tries have a
+  stricter gate of their own, and never close the listeners'*.
+- **Evidence** (`…/audit3/gate-check-audit3.txt`, the real wiring on `steven_piano_audit`): ten wrong PINs through
+  the relay from ten addresses, the tenth answered `retryAfter 60`; the right PIN through the relay 429 "Try again
+  in 60 s."; meanwhile the listener (the debug build's loopback, `adb forward`) weighs a wrong PIN (401) and signs
+  the owner in (204); a minute on, the relay signs in (204).
+
+### C2: a revoke during a replacement was missed (Medium): fixed
+
+`cloud/src/relay/room.ts:323–336` at `90f87fa`. R1's fix re-reads the room's auth epoch after the secret's look in
+D1, so a revoke landing during that read refuses the connection (`revoke.test.ts` › *refuses a connection whose
+check was overtaken by a revoke*, which holds). But a connection that replaces an open one then awaits a second D1
+call, the "replaced" audit note (`:327`), before it closes the older sockets it listed at `:325` and accepts
+itself (`:336`). D1 is I/O, so the Durable Object takes other events meanwhile: a revoke landing there sent away
+only the older socket, and the new connection was accepted (101) and stayed, its secret already gone from D1 and
+the console reading "Revoked". The same for a forget. A stolen secret reconnecting in a loop (two a second under
+the relay's limit) could now and then survive a revoke, unseen; revoke is the owner's one answer to a lost tablet. Two replacing connections in that window also both stayed open, each having closed only the sockets it
+listed before its write.
+
+- **Fix** (`14cf525`): the epoch is looked at again after the note, with no await from there to the accept, and
+  every tablet socket open at that moment is closed, one accepted meanwhile included: the newest stays. A revoke
+  that lands after the accept closes the new socket, as before. And the online flag: the connection's
+  `online = 1` and a status's write now need the piano to hold a secret, so a write arriving after a revoke's
+  `online = 0` no longer marks it online (`:352`, `:441`).
+- **Tests** (`revoke.test.ts`, holding the "replaced" note in D1 through a proxy): a revoke and a forget landing
+  there → 503, no socket, then 401 (both were 101); two replacing connections → one left open (both were); a late
+  status of a piano without a secret leaves it offline. They failed before the fix (`…/audit3/cloud-race-before.txt`)
+  and pass five runs in five. `tablet-auth.test.ts`: a wrong secret's 401 leaves the connected tablet connected.
+
+### C3: the relay passed a tablet's headers by a deny-list (Medium): fixed
+
+`cloud/src/relay/room.ts:986–1018` at `90f87fa` (`responseHeaders`). Every piano's panel lives on the relay's one
+origin, `https://<relay>/p/<id>/…`; only the cookies' `Path` separates them. The relay dropped a tablet's
+hop-by-hop, CORS, `x-relay-*` and `cf-*` headers and passed everything else. Among them `Service-Worker-Allowed`:
+an answer under `/p/<id>/` carrying it could register a service worker for the whole origin, which would then see
+every piano's panel in that browser (pages, sessions, every PIN typed there) for as long as it stayed registered;
+`Clear-Site-Data` could clear the origin's cookies and storage; `Refresh`, `Link`, `Location`,
+`Content-Disposition` and the reporting headers are no part of the panel. Only something holding a piano's secret
+answers under its path, so this widened what one stolen secret or one compromised tablet could reach: from its
+own piano to every piano.
+
+- **Fix** (`73026c6`): `RESPONSE_HEADERS`, an allow-list of exactly what the app's `RelayedResponse` sends:
+  `Content-Type`, `Cache-Control`, `Set-Cookie` (still only under the piano's prefix, no `Domain`), `Retry-After`,
+  `Allow`, and the five security headers. `Content-Encoding` no longer passes (the app never sends it).
+- **Test:** `forward.test.ts` › *passes on only the headers the app's panel sends* (fourteen others, all passed
+  before, `…/audit3/cloud-headers-before.txt`). Through the real relay the panel's own answers are unchanged
+  (`…/audit3/relay-checks-audit3.txt`). What stays is the shared origin itself (*Residuals*).
+
+### C4: the console's library.load skipped the licence sheet (Low): fixed
+
+`web/relay/RelayCommands.kt:143–154` at `90f87fa`: "on a tablet with none, the whole pack, without the licence
+sheet: the owner's command". The tablet shows the licence sheet (MAESTRO's CC BY-NC-SA 4.0, the credits, "for
+non-commercial use") before any load while no pack is loaded; the console's command reached the pack's load
+directly, so 1,726 pieces under a non-commercial licence could arrive on a school tablet with no one there having
+seen it.
+
+- **Fix** (`3ddfe5b`): `RelayCommands.libraryLoad(online, loaded, state, load)`; with no pack loaded it starts
+  nothing and answers "Steven's library loads the first time on the tablet, where its licence is shown. After that,
+  the console can bring its updates." (a load under way is still said first). Updates from the console are as
+  before.
+- **Test:** `LibraryPackTest` › *the console's library load starts the + sheet's load, and says why when it can't*
+  (rewritten: on a fresh tablet nothing starts; after the tablet's own first load, the console's update as before).
+- **Evidence** (`…/audit3/console-checks-audit3.txt`, the local console): on the fresh tablet `{"ok":false,
+  "message":"Steven's library loads the first time on the tablet, …"}`; after the tablet's own load behind its
+  licence sheet (`…/audit3/shots/14-licence-sheet.png`), the console's command `{"ok":true,"message":"Loading
+  Steven's library."}` and the status `pieces 3, pack 2`.
+
+### C5: the tablet's address in every status; About silent (Low): fixed
+
+`web/relay/RelayStatus.kt:71` at `90f87fa`: every report's `panel` carried `host`, the panel's Tailscale (or
+Wi-Fi) address and port, which the relay kept in D1's `status_json` (`protocol.ts:242`) and the console never
+showed or used. README's *What the relay sees* did not name it, and About, which should say what the relay sees
+and that it is off by default, said nothing of the cloud.
+
+- **Fix** (`91758d3`): `panel` is `{web}` alone in the app's report and in what the relay keeps
+  (`sanitizeStatus`), so no tablet's address reaches D1 whatever a tablet sends. About ends with `CloudCopy.ABOUT`:
+  "Remote access over the internet is off unless you turn it on. Then your own relay carries the panel's pages and
+  requests, and every 30 s the app's and the piano's versions, whether the piano is connected, what plays, the
+  guests' switches, whether Web control is on, the library's size and the channels' names. Never a device
+  identifier." README › Cloud (*What the relay sees*), README › Security, `cloud/README.md` and DESIGN.md now list
+  exactly that.
+- **Tests:** `RelayStatusTest` (panel holds `web` alone), `CloudCopyTest` (About names what the status carries),
+  `hygiene.test.ts` › *keeps nothing of a browser's visit in D1* (it failed on the tablet's address before).
+- **Evidence:** the console's live status `"panel": {"web": true}`; About on the emulator
+  (`…/audit3/shots/11-app-group.png`).
+
+### C6: a code could re-key the piano it named (Low): fixed
+
+`cloud/src/relay/enrol.ts:50–72` at `90f87fa`: the claim set a new secret on whatever piano a valid code named and
+cleared its revoke. The console makes every code with a new piano, so today no code names an enrolled one; the
+brief's "a code cannot re-enrol an existing piano" held only by that construction, not in the claim.
+
+- **Fix** (`dfb81ea`): the first statement claims a piano never enrolled (`enrolled_at` and `secret_hash` still
+  NULL); the audit note and the code's use follow that very write (the piano now holds this request's hash). The
+  same three statements run for every outcome, so the 404's cost is unchanged (the timing test's shapes and
+  medians).
+- **Tests:** `enrol.test.ts` › *never re-keys a piano that was enrolled already, revoked or not* (200 and a new
+  secret before); › *makes codes of 8 symbols from the 32 (40 bits), each symbol as likely as the others*.
+
+### C7: the subprotocol check's close was not the end (Low): fixed
+
+`web/relay/RelayClient.kt:279–303` at `90f87fa`: a 101 without `steven-piano-relay-1` was closed (1002), but OkHttp
+reads on until the other side's close, and what came meanwhile was acted on: a hello (Connected), a request
+(served), a command (run). The relay's host is the person's own, over TLS, so this mattered only for a host that
+answers 101 and isn't the relay.
+
+- **Fix** (`bf0e10b`): `Connection.refused` is set before the close; both `onMessage` overloads return while it is.
+- **Test:** `RelayClientTest` › *a relay that doesn't answer in the subprotocol is closed, and nothing it sends
+  meanwhile is read* (`FakeRelay.protocolAnswer`, `greeting`; the command was run before,
+  `…/audit3/app-subprotocol-before.log`).
+
+### The twelve points, verified
+
+1. **Relay auth and takeover.** The bearer is read from `Authorization` alone (`parseBearer`, the exact
+   `Bearer <12 base32>.<43 base64url>` form; 401 otherwise, `tablet-auth.test.ts`), sent by the tablet in that
+   header alone (`RelayClientTest`). The room compares SHA-256 hex strings over every character
+   (`constantTimeEqual`); the secret itself is never compared or stored. A second connection with the secret takes
+   over (4409), and after C2 only the newest stays; one without it is 401 and leaves the connected tablet alone
+   (new test). Revoke mid-handshake: R1's case holds; the replacement's window was C2, fixed. Limits:
+   `limits.test.ts` (120 tablet connections a minute per address, 120 panel requests, 10 PIN tries), enrolment's
+   5 a minute (`enrol.test.ts`). Through the real relay: `…/audit3/relay-checks-audit3.txt`.
+2. **Enrolment.** 8 symbols of 32 from `crypto.getRandomValues`, each byte's low five bits (256 is a multiple of
+   32): 40 bits, uniform (new test). 15 minutes, single use (the claim is one D1 batch), 5 a minute per address,
+   the same 404 after the same three statements for an unknown, used, expired or malformed code (`enrol.test.ts`,
+   with medians within 25 ms). A code never re-enrols an existing piano: C6. `POST /api/enrol-codes` needs Access's
+   token for this application, the console's header and its origin; nothing is made otherwise (new test in
+   `console-access.test.ts`).
+3. **Secrets on the tablet.** AES-256-GCM under an AndroidKeyStore key that never leaves the Keystore
+   (`KeystoreSealer`), a fresh IV each seal, the tag checked; DataStore holds `v1:` and the ciphertext; a text that
+   doesn't open reads as not enrolled (`SealedSecretTest`, `SettingsRepositoryTest`). So a copied DataStore file
+   opens nothing without that device's Keystore: verified by the design and the tests, not by an extraction on the
+   emulator (*Residuals*). Never logged: the debug build's own log through enrolment, connection and two console
+   commands holds no bearer, secret, cookie, PIN or piano id (`…/audit3/logcat-hygiene-audit3.txt`); release builds
+   strip more. Never in diagnostics: the export after enrolment (`…/audit3/diagnostics-export-audit3.txt`): no id, no
+   sealed or plain secret, no token, no PIN; `settings.txt` says `cloudEnabled`, `cloudHost`, `cloudEnrolled`. Never
+   in the panel's state: it carries the public link (the id) and no secret. Rotation is two-phase (`rotate.test.ts`,
+   `RelayClientTest`). Forget: on the emulator the switch off, "Enrol this tablet first", the room offline, the
+   trail's line (`…/audit3/shots/19-forgotten.png`); the text and the key go (`SealedSecretTest`).
+4. **CSRF over HTTPS.** Cookies `HttpOnly; SameSite=Strict; Path=/p/<id>/; Secure` over HTTPS (`WebServerRelayTest`;
+   over the local relay's plain HTTP without `Secure`, by design); no `Domain`, and the relay drops a cookie that
+   would leave the piano's path (`forward.test.ts`). Every change needs `X-Steven-Piano: 1` and, when sent, the
+   relay's exact origin; the tablet's LAN origin is refused too. No CORS: none in the app's or the cloud's sources
+   (grep), the relay and the console send none, a preflight is 405. The console's page sends the header on every
+   call (`console.js › call`). Clients' `x-relay-*` never reach the room (the Worker builds the room's headers
+   itself) and a tablet's are dropped (`forward.test.ts`; through the relay: `…/audit3/relay-checks-audit3.txt`).
+   Another piano's page cannot read this piano's cookies (`HttpOnly`, the path): but it shares the origin, so a
+   script running under one piano's path could use the owner's open session on another's: *Residuals*; C3 removed
+   the ways an answer could reach past its own path.
+5. **Uploads over the relay.** 100 MB at the Worker before a byte goes on (413), a body without a length or chunked
+   411 (`body.test.ts`; 411 through the local relay); the tablet's 8 MB / 64 MB / 200 MB caps on the declared
+   length before reading, the relayed request meeting the same routes (`WebServerRelayTest`'s 64 MB + 1 zip, and
+   `WebServerTest`'s matrix of those routes). The Worker passes the stream; the room holds at most one 64 KB
+   chunk of a request and never sends past the tablet's credit (`body.test.ts`: 64 MB under a 1 MB window, never
+   overdrawn); the tablet's pipe holds at most the window (`BodyPipeTest`). An answer may sit unread in the room up
+   to 8 MB per request (then 502). A stalled body: 408 at the relay, 30 s on the tablet. A second upload: 409 at the
+   relay and on the tablet. Malformed traffic: `malformed.test.ts` (the room) and `RelayProtocolTest`,
+   `RelayClientTest` (the tablet).
+6. **Console command trust.** Commands go only down the tablet's own authenticated socket (`PianoRoom.command`); the
+   relay Worker never calls the room's methods and only the console is given its binding besides; the console checks
+   Access's RS256 token against the team's keys, the audience, the issuer and the dates (`console-access.test.ts`,
+   eleven bad tokens); `DEV_BYPASS` is in neither deployed config and only in `wrangler dev`'s script, and even set it
+   lets in only a request to localhost (`hygiene.test.ts`, `console-access.test.ts`). The tablet's allow-list
+   refuses anything else (`RelayCommandsTest`; through the console: "reboot" refused). `library.load`: C4.
+7. **D1 hygiene.** Every statement binds its values; the only text spliced into SQL is three constants (`valid`,
+   `claimed`, `PUBLIC_COLUMNS`) (`…/audit3/greps-audit3.txt`). The audit log's actor is the Access email for the
+   console's actions and "tablet" for the tablet's (`cmd.test.ts`, `revoke.test.ts`; the local console's
+   `dev@localhost`); a guest's page and request, a PIN try and a panel's socket leave no row and no trace
+   (`hygiene.test.ts`). 90 days (`prune.test.ts`). Only hashes of secrets, never returned by the console
+   (`PUBLIC_COLUMNS`).
+8. **The tablet's listeners.** `allowedHosts` unchanged: a listener refuses the relay's host and origin, the relay's
+   edge refuses the LAN's (`WebServerRelayTest`); on the emulator the listeners bound the Wi-Fi address and the debug
+   loopback only (`…/audit3/listeners-audit3.txt`). Guests over the relay exist only while Guests can request is on (404 otherwise,
+   through the local relay too). The relay reaches the panel's routes and nothing more (the whole table compared in
+   `WebServerRelayTest`); a kiosk setting through the panel's settings route is 400 "Unknown field kioskEnabled."
+9. **Privacy statement.** C5: README › Cloud and Security, `cloud/README.md` and About now say exactly what the relay
+   sees, and that it is off by default; the piano's id is kept out of every export (`DiagnosticsExporterTest`, and the
+   export after enrolment).
+10. **The library pack.** Manifest: 64 KB read, 4 KB parsed, every field checked (`LibraryManifestTest`), fetched
+    from this repository's `main` over TLS (`UpdateSource.allowsLibraryManifest`, exact; the zip's address a `.zip`
+    asset of the release `library` alone, `UpdateSourceTest`). Zip: the manifest's size and SHA-256 and 200 MiB,
+    hashed as it arrives, renamed into place only on a match. On the emulator, from a stand-in for the release
+    (`LibraryOverride`): a zip with one byte changed → "The download didn't match the library; try again.", one cut
+    off after 1,000 bytes → "The download stopped; try again.", each leaving `cache/library` empty and nothing
+    recorded, the licence sheet shown again before each retry; the good one → "Imported 2 pieces.",
+    `offered-v1.txt` (shots 13–17). The importer's caps apply (`LocalZipTest`). Never deletes (`LibraryPackTest`).
+    `LibraryService` holds no wake lock (so none can leak); every step is bounded by bytes and by 30 s a read; its
+    `onTimeout` is written, not exercised at target 34 (*Residuals*). The licence sheet before the first load: C4.
+11. **Regression sweep.** The whole app suite passes: `WebServerTest`'s 401/403/411/413/415 matrix over the panel's
+    routes, `UpdateSourceTest`'s firmware, model and library allow-lists, `PinGuardTest`'s kiosk PIN, Studio's caps,
+    `GlassContainersTest`. `check` passes: lint 0 errors, 30 warnings (as at the merge), both variants' ONNX Runtime
+    checks ("runtime onnxruntime-android:1.28.0", no provider). Greps: no `0.0.0.0`, no `Access-Control` in the app,
+    `okhttp3`/`okio` only in `web/relay/RelayClient.kt`, no `Color(0x` outside the theme, no `Modifier.blur`.
+12. **Cloud tests and types.** `npm test` 79 passed (18 files), `npx tsc --noEmit` clean. `npm audit` reports 5 high
+    advisories, all in development tools (`sharp` and `undici` under `@cloudflare/vitest-pool-workers`' own
+    Miniflare and Wrangler); `npm audit --omit=dev` finds none: nothing of them is deployed (*Residuals*).
+
+### Residuals (stated honestly)
+
+- **Every piano shares the relay's origin.** Cookies are `HttpOnly` and under each piano's path, so no page reads
+  another piano's cookies; but a script running under one piano's path is same-origin with every other piano's panel
+  and could use the owner's session there while it is open in that browser. Only something holding a piano's secret
+  can answer under its path (the owner's own tablets), and the panel's pages build their DOM as text under a policy
+  with no inline script; C3 closed the ways an answer reached past its own path. Separate origins need a domain of
+  the owner's with one name per piano (not possible on `workers.dev`). Revoke a lost tablet at once.
+- **The relay's PIN gate can be held shut from the internet** (C1's trade-off), up to an hour at a time; open
+  sessions, the tablet and the tailnet are unaffected. The guards' counts and the sessions live in the app's memory:
+  a restart signs everyone out and gives the free tries back (ten before the relay's gate).
+- **Plain HTTP on the LAN**, as before (1.5.1): over Wi-Fi with Panel on Wi-Fi too the PIN crosses in the clear.
+- **No certificate pinning**: the platform's trust store and OkHttp's hostname check; a CA the platform trusts could
+  stand in for the relay's host (Cloudflare rotates its certificates, so a pin would break the link).
+- **A stolen secret is a stolen tablet**: whoever holds it can be the piano on the relay (and receive the PINs typed
+  into its panel) until revoked; after C2 a revoke holds. That a copied DataStore file opens nothing rests on the
+  Keystore's design and the tests; it was not demonstrated by copying one off a device.
+- **Rotation's one edge**: a tablet that keeps a new secret and loses the connection before its acknowledgement
+  reaches the relay, then stays offline past the ten minutes, is refused and asks to be enrolled again.
+- **The console trusts Access's policy for who**: any identity the policy admits is the owner. Keep the policy to the
+  owner's email (`cloud/README.md`, step 8).
+- **The Free plan's daily quotas**: the relay is a public Worker; a flood of requests from anywhere can use up the
+  day's requests (100,000) and stop the relay for everyone until the day turns; the rate limits count against it too.
+  Workers Paid lifts it.
+- **Uploads**: one at a time per edge (the relay's room and the relay's server, each listener its own), so an upload
+  through the relay can run beside one over the tailnet, as two listeners' could. An answer can wait unread in the
+  room up to 8 MB per request, 8 requests at once.
+- **`LibraryService` has no overall deadline** and no wake lock: each step is bounded (bytes, 30 s a read; GitHub
+  alone serves the pack), and Android 15's data-sync limit (`onTimeout`) is written for, not exercised at target 34;
+  with the screen off and the tablet off its charger, Doze may slow a load.
+- **Development advisories**: `npm audit`'s five high advisories are in the test and dev tools (`sharp`, `undici`
+  under `@cloudflare/vitest-pool-workers`), never deployed; fixing them needs a breaking downgrade of the test pool.
+- **Not on Cloudflare or on the school tablet yet**: everything here ran under `wrangler dev` and on the emulator;
+  Cloudflare's edge (its `CF-Connecting-IP`, its body limit, Access itself) and Doze with the screen off are still to
+  be seen on the real deployment.
+
+### What the owner must do
+
+Nothing new beyond the cloud's own steps (`cloud/README.md`): keep Cloudflare Access's policy to your own email, the
+account's sign-in strong (two-factor), and revoke a lost tablet in the console at once. Load Steven's library on a new
+tablet from the tablet itself (its licence sheet first); the console brings the updates after that. If someone keeps
+the relay's sign-in shut with wrong PINs, use the tailnet or the tablet; a browser already signed in keeps working.

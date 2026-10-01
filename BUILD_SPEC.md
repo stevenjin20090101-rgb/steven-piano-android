@@ -6232,3 +6232,54 @@ staged.
 - Seen in the Library, the pack's data: 111 Mutopia rows of `INDEX.csv` carry no composer, and some a file's
   name as their title ("a-breeze-from-alabama"); for the next pack.
 - The provenance manifest re-signed last.
+
+## Audit (delta 3) — 2026-09-30
+
+`docs/SECURITY_AUDIT.md › 1.10 — the cloud and the library pack: audit (delta 3)` records it in full: three
+Medium and four Low findings, all fixed, on the app's side and the cloud's. Nothing was deployed: the cloud
+ran under `wrangler dev` on the Mac, the app on the audit's own AVD `steven_piano_audit` (API 34,
+`medium_tablet` 2560 × 1600, 4 GB, kept for the run, never `steven_piano_tablet`). What changed, and where the
+build now differs from the notes above (M26's, M27's and R1's):
+
+- **C1** (`45edc49`): the relay's requests are weighed by a login guard of their own, `WebPanel.relayGuard` =
+  `LoginGuard.forRelay()` (the per-address gate as the listeners'; the global one `RELAY_GLOBAL_THRESHOLD` 10
+  wrong in a row, then `RELAY_GLOBAL_FIRST_LOCK_MS` 1 min doubling to `RELAY_GLOBAL_MAX_LOCK_MS` 1 h), given to
+  the relay's `WebServer` by `WebService`. M26's "the login guard is shared" no longer holds: the listeners keep
+  W1's gate and the internet doesn't reach it.
+- **C2** (`14cf525`): R1's room (`connectTablet`) looks at its auth epoch again after the "replaced" note, with
+  no await from there to the accept, and closes every tablet socket open then (one accepted meanwhile included);
+  the online flag is set only for a piano that holds a secret (`AND secret_hash IS NOT NULL` on the connection's
+  and the status's writes).
+- **C3** (`73026c6`): the room passes on a tablet's answer's headers by an allow-list, `RESPONSE_HEADERS`
+  (`Content-Type`, `Cache-Control`, `Set-Cookie` under the piano's prefix, `Retry-After`, `Allow`, the five
+  security headers), where R1 had a deny-list; `Content-Encoding` no longer passes and the Response's
+  `encodeBody` switch goes.
+- **C4** (`3ddfe5b`): `RelayCommands.libraryLoad(online, loaded, state, load)`: with no pack loaded the console's
+  `library.load` starts nothing and answers `LIBRARY_FIRST_ON_TABLET` ("Steven's library loads the first time on
+  the tablet, where its licence is shown. After that, the console can bring its updates."). *For M26: the
+  console's `library.load`* above said "on a fresh tablet it is the first load (no licence sheet: the owner's
+  command)": no longer; the first load is the tablet's own, after its licence sheet.
+- **C5** (`91758d3`): the status's `panel` is `{web}` alone (M26's protocol had `panel {web, host}`, the tablet's
+  Tailscale or Wi-Fi address); `RelayStatus.report` takes no `panelHost`, and `WebService` no longer reports when
+  it changes. The relay's `sanitizeStatus` keeps `panel.web` alone (`TabletStatus.panel: {web}`), so no address
+  reaches D1. About ends with `CloudCopy.ABOUT` (DESIGN.md › v1.10 — M26 › *What the relay sees*). The fake
+  tablet sends `{web}`.
+- **C6** (`dfb81ea`): the enrolment's claim takes a piano never enrolled (`enrolled_at` and `secret_hash` NULL);
+  its audit note and the code's use follow the piano's new hash (`claimed`), the same three statements for every
+  outcome.
+- **C7** (`bf0e10b`): `RelayClient`'s connection keeps `refused` once the 101 fails the subprotocol check; both
+  `onMessage` overloads drop everything from then on. `FakeRelay` gains `protocolAnswer` and `greeting`.
+- Tests (`5c67e6f` and each fix's): app `WebAuthTest` +1, `WebServerRelayTest` +1, `RelayClientTest` +1,
+  `CloudCopyTest` +1, `LibraryPackTest` and `RelayStatusTest` changed: 1,324 before, **1,328 after** (13 skipped,
+  as before). Cloud `revoke.test.ts` +4, `tablet-auth.test.ts` +1, `forward.test.ts` +1, `enrol.test.ts` +2,
+  `console-access.test.ts` +1, new `limits.test.ts` (3), `malformed.test.ts` (2), `hygiene.test.ts` (4; it reads
+  the deployed configs with Vite's `?raw`, declared in `test/raw.d.ts`): 61 before, **79 after**; `tsc --noEmit`
+  clean. `check` passes: lint 0 errors, 30 warnings (the merge's), both variants' ONNX Runtime checks.
+- Measured on `steven_piano_audit` with `wrangler dev` (`…/audit3/`): enrolment and connection; the 401/403/411/405/
+  404 matrix through the relay with the panel's headers unchanged; the relay's gate shut by ten wrong PINs from
+  ten addresses while the listener signed the owner in; the console's status without the tablet's address; its
+  `library.load` refused on the fresh tablet and an update after the tablet's own load; the debug build's log and
+  the diagnostics export without the id, secret, cookie or PIN; the pack from a stand-in release: a tampered zip
+  and a truncated one refused with nothing kept, the licence sheet before each try, the good one imported; Forget.
+- README (*Steven's library*, *Cloud*, *Security*), `cloud/README.md` (*Security*, *What the relay sees*) and
+  DESIGN.md carry the new lines.

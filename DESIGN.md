@@ -2134,10 +2134,17 @@ Off by default. When on, the relay (Steven's own Cloudflare account) carries wha
 sent, as any HTTPS site's server does: the pages, the library's lists, a piece being played. The tablet
 reports every 30 s and soon after a change: the app's version, the piano's firmware version, whether the
 piano is connected, what plays (its title, composer, position and length, the channel), whether guests may
-request, the panel's own address on the tablet's networks, the library's size, the channels' names. Never
-a device identifier: no Bluetooth address, no piano name, no serial, no Android id; the enrolment sends
-the code alone. The PIN is checked on the tablet, as always; the relay never holds it. The tablet's key to
-the relay is sealed by Android's keystore and never shown.
+request, whether Web control is on, the library's size and Steven's library's version, the channels' names.
+Never a device identifier: no Bluetooth address, no piano name, no serial, no Android id; and (audit delta 3)
+never the panel's own address on the tablet's networks, which went with every report at first and which the
+console never used. The enrolment sends the code alone. The PIN is checked on the tablet, as always; the
+relay never holds it. The tablet's key to the relay is sealed by Android's keystore and never shown.
+
+**About** says it too (audit delta 3: it said nothing of the cloud), a last eyebrow line after Wikipedia's:
+"Remote access over the internet is off unless you turn it on. Then your own relay carries the panel's pages
+and requests, and every 30 s the app's and the piano's versions, whether the piano is connected, what plays,
+the guests' switches, whether Web control is on, the library's size and the channels' names. Never a device
+identifier." (`CloudCopy.ABOUT`).
 
 ---
 
@@ -2199,7 +2206,10 @@ Everything above still holds; Library › + keeps its three ways in (files, a fo
 - **Kiosk mode**: loading and updating the library change it, so they wait for the kiosk PIN, as adding
   music does (the + is locked already).
 - **The console** (Steven Piano Cloud, M26): **Load Steven's library** on a piano's page starts the same
-  load on the tablet (an update when one is loaded; pieces a teacher deleted stay deleted). With the app
+  load on the tablet (an update when one is loaded; pieces a teacher deleted stay deleted). Never the first
+  load (audit delta 3): that one is the tablet's, after its licence sheet, and the console's button answers
+  "Steven's library loads the first time on the tablet, where its licence is shown. After that, the console
+  can bring its updates." With the app
   in the background the load keeps its notification: the web service, holding the relay's connection,
   keeps the app allowed to start it (seen at the merge); were Android to refuse, it would run without it.
 
