@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.ble
 
 import android.content.Context
 import android.os.HandlerThread
+import android.os.Process
 import android.util.Log
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.midi.MidiBatch
@@ -79,6 +80,13 @@ import kotlin.concurrent.withLock
  * ([OtaEvent.Lost]), and stale frames never outlive their session. [expectRestart]: after an
  * update's OK the piano restarts on purpose, so for that window a drop is reconnected whatever
  * auto-connect says, with the first scan after [RESTART_SCAN_AFTER_MS] rather than 20 s.
+ * Other MIDI devices (v1.11 — M29): a keyboard or a MIDI piano this app opens through Android's MIDI
+ * service advertises the same BLE-MIDI service. [isForeign] names them (the registry of MIDI devices
+ * answers it): a scan never connects to one, nor takes one another app holds for the piano. A nameless
+ * device this tablet is paired with is never a candidate either: the piano never pairs, a keyboard often
+ * does. Android's limit on scans is the app's, so the [throttle] is shared with the MIDI device picker.
+ * Keys played live go through [sendLive], ahead of a piece's backlog ([PacedWriter.enqueueLive]); the
+ * link's thread runs at audio priority.
  * [log] is the link's trail, kept in release builds (`Log.w`, tag "PianoLink": R8 strips only
  * v, d and i): each scan with its filter, each device a scan sees (once per address per scan: its
  * address, name, RSSI, whether it advertised the MIDI service, and what the link did about it), each
@@ -93,6 +101,10 @@ class GattPianoLink(
     private val onConnected: (address: String, name: String) -> Unit,
     private val shouldReconnect: () -> Boolean,
     private val log: (String) -> Unit = { Log.w(TAG, it) },
+    /** A MIDI device the app uses as a keyboard or instrument, never the piano (v1.11 — M29); any thread may answer. */
+    private val isForeign: (address: String) -> Boolean = { false },
+    /** Android's limit of 5 scans in 30 s, shared with the MIDI device picker (v1.11 — M29). */
+    private val throttle: ScanThrottle = ScanThrottle(),
 ) : PianoLink {
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
@@ -197,7 +209,6 @@ class GattPianoLink(
     private val assembler = ConsoleLineAssembler()
     private var reconnectStartedMs = 0L
     private var backoffStep = 0
-    private val throttle = ScanThrottle()
 
     /** Addresses the current scan has seen (upper case), so each is logged once a scan. */
     private val seen = HashSet<String>()
@@ -294,7 +305,16 @@ class GattPianoLink(
 
     override fun send(batch: MidiBatch, dropPending: Boolean) {
         if (!ready) return
-        val dropped = writer.enqueue(batch, dropPending)
+        queued(writer.enqueue(batch, dropPending))
+    }
+
+    /** Keys played live (v1.11 — M29): the writer's lane ahead of the backlog, never ahead of a message for the same key. */
+    override fun sendLive(batch: MidiBatch) {
+        if (!ready) return
+        queued(writer.enqueueLive(batch))
+    }
+
+    private fun queued(dropped: Int) {
         if (dropped > 0 && behindLogged.compareAndSet(false, true)) log("The piano fell behind: $dropped waiting notes dropped (logged once a connection)")
         if (pumpQueued.compareAndSet(false, true)) executor.execute(pump)
     }
@@ -361,12 +381,11 @@ class GattPianoLink(
             return connectFound(held)
         }
         scanning = true
-        val wait = throttle.delayBeforeNextScan(nowMs())
+        val wait = throttle.acquire(nowMs())
         if (wait > 0) {
             log("Scan waits $wait ms: Android allows 5 scans in 30 s")
             executor.schedule(wait, startScan)
         } else {
-            throttle.record(nowMs())
             seen.clear()
             log(
                 "Scan started (filter: MIDI service ${PianoBluetooth.SERVICE_UUID.toString().uppercase()}, mode: ${PianoScanner.MODE}), " +
@@ -396,6 +415,13 @@ class GattPianoLink(
             )
         }
         when {
+            foreign(found.address) -> {
+                sighted("ignored: a keyboard or instrument this app uses through Android's MIDI")
+                if (candidate?.address.equals(found.address, ignoreCase = true)) {
+                    executor.cancel(connectCandidate)
+                    candidate = null
+                }
+            }
             pinned != null && found.address.equals(pinned, ignoreCase = true) -> {
                 sighted("the remembered piano, connecting")
                 connectFound(found)
@@ -432,6 +458,7 @@ class GattPianoLink(
         val waiting = candidate
         return when {
             found.address.uppercase() in rejected -> "ignored: its GAP Device Name was not Steven Piano"
+            guard { radio.isBonded(found.address) } == true -> "ignored: no name, and paired with this device (the piano never pairs; a keyboard may)"
             waiting == null -> {
                 candidate = found
                 executor.schedule(NAMELESS_GRACE_MS, connectCandidate)
@@ -452,7 +479,8 @@ class GattPianoLink(
 
     /**
      * Connects to [found], found by a scan or held by another app, unless this device is paired with it.
-     * [verify]: it is a nameless candidate, taken only if its GAP Device Name is Steven Piano.
+     * [verify]: it is a nameless candidate, taken only if its GAP Device Name is Steven Piano; one this
+     * device is paired with is passed over (the piano never pairs: it is a keyboard), and the scan goes on.
      */
     private fun connectFound(found: FoundPiano, verify: Boolean = false) {
         executor.cancel(offerOther)
@@ -461,6 +489,11 @@ class GattPianoLink(
         candidate = null
         stopScanning()
         if (guard { radio.isBonded(found.address) } == true) {
+            if (verify) {
+                log("${found.address} has no name and is paired with this device: not the piano, which never pairs; the scan goes on without it")
+                rejected += found.address.uppercase()
+                return beginScan()
+            }
             log("${found.address} is paired with this device in Bluetooth settings (bonded): the piano refuses encryption, so connecting would fail")
             return fail(LinkError.Paired)
         }
@@ -477,7 +510,9 @@ class GattPianoLink(
     private fun heldPiano(): FoundPiano? {
         val pinned = preferredAddress
         return guard { radio.connectedDevices() }.orEmpty().firstOrNull { device ->
-            if (pinned != null) {
+            if (foreign(device.address)) {
+                false   // a keyboard or instrument Android's MIDI service holds for this app (v1.11 — M29)
+            } else if (pinned != null) {
                 device.address.equals(pinned, ignoreCase = true)
             } else {
                 device.name == PianoBluetooth.NAME && device.address.uppercase() !in rejected
@@ -1251,6 +1286,13 @@ class GattPianoLink(
 
     private fun nowMs(): Long = executor.nanoTime() / NANOS_PER_MS
 
+    /** [isForeign], which never takes the link down: a failure counts as foreign (never connected to). */
+    private fun foreign(address: String): Boolean = try {
+        isForeign(address)
+    } catch (e: RuntimeException) {
+        true
+    }
+
     private fun yesNo(value: Boolean): String = if (value) "yes" else "no"
 
     /** [reason] for the log, with the GATT status or the scan's code spelled out. */
@@ -1327,10 +1369,27 @@ class GattPianoLink(
         /** After this long, reconnect scans stop to spare the battery; the background connection keeps waiting. */
         private const val STOP_SCANNING_AFTER_MS = 10 * 60_000L
 
-        /** The real link: Android Bluetooth, on its own "steven-piano-ble" thread; its trail goes to the log and to [LinkLog]. */
-        fun create(context: Context, onConnected: (String, String) -> Unit, shouldReconnect: () -> Boolean): GattPianoLink {
-            val thread = HandlerThread("steven-piano-ble").apply { start() }
-            return GattPianoLink(AndroidBleRadio(context.applicationContext), HandlerLinkExecutor(thread.looper), onConnected, shouldReconnect, LinkLog::warn)
+        /**
+         * The real link: Android Bluetooth, on its own "steven-piano-ble" thread at audio priority (v1.11 — M29: live
+         * keys wait on it); its trail goes to the log and to [LinkLog]. [isForeign] and [throttle]: see the class.
+         */
+        fun create(
+            context: Context,
+            onConnected: (String, String) -> Unit,
+            shouldReconnect: () -> Boolean,
+            isForeign: (String) -> Boolean = { false },
+            throttle: ScanThrottle = ScanThrottle(),
+        ): GattPianoLink {
+            val thread = HandlerThread("steven-piano-ble", Process.THREAD_PRIORITY_AUDIO).apply { start() }
+            return GattPianoLink(
+                AndroidBleRadio(context.applicationContext),
+                HandlerLinkExecutor(thread.looper),
+                onConnected,
+                shouldReconnect,
+                LinkLog::warn,
+                isForeign,
+                throttle,
+            )
         }
     }
 }

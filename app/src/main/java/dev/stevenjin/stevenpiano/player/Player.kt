@@ -568,17 +568,22 @@ class Player(
      * A drop pauses a piece (the piano silences itself); coming back leaves Play to the person. A new
      * connection seen while still connected (a drop and a reconnection too quick to see), or the link
      * losing a packet, shows as a new epoch: playing, the piano is re-synced (silence, then the pedal).
+     * Every new connection and new epoch begins with the stop sequence (v1.11 — M29), playing or not:
+     * the piano may have kept a pedal from the old connection (the firmware stores the last CC64 and
+     * presses it again after a disconnect), and nothing of it must outlive that connection.
      */
     private fun onLinkState(linkState: LinkState) {
         val connected = linkState is LinkState.Connected
         val epoch = (linkState as? LinkState.Connected)?.epoch
         if (connected != linkConnected) {
             if (!connected) silenceLive()   // the piano lets go on a drop; forget the Keys screen's keys too
-            if (state.value.status == PlaybackStatus.Playing) {
-                if (connected) scheduler.submit { engine.resync(it) } else pause()   // the piano silences itself on a drop
+            if (connected) {
+                scheduler.submit { engine.connectedAnew(it) }
+            } else if (state.value.status == PlaybackStatus.Playing) {
+                pause()   // the piano silences itself on a drop
             }
-        } else if (connected && epoch != linkEpoch && state.value.status == PlaybackStatus.Playing) {
-            scheduler.submit { engine.resync(it) }
+        } else if (connected && epoch != linkEpoch) {
+            scheduler.submit { engine.connectedAnew(it) }
         }
         linkConnected = connected
         if (connected) linkEpoch = epoch

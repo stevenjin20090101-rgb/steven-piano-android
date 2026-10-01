@@ -47,4 +47,12 @@ class MidiBatch {
 fun interface MidiSink {
     /** Takes a copy of [batch]. [dropPending] replaces anything still queued (the stop sequence). */
     fun send(batch: MidiBatch, dropPending: Boolean)
+
+    /**
+     * Takes a copy of [batch], played live (the Keys screen, a keyboard: v1.11 — M29): ahead of a piece's
+     * backlog where the sink paces its sends ([dev.stevenjin.stevenpiano.ble.PacedWriter.enqueueLive]), yet
+     * never ahead of a message still waiting for the same key or controller, so each key's messages reach
+     * the piano in the order the router sent them. A sink that does not pace sends it as [send] does.
+     */
+    fun sendLive(batch: MidiBatch) = send(batch, dropPending = false)
 }

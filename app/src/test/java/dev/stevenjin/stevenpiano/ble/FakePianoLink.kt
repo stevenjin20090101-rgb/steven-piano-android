@@ -32,7 +32,8 @@ import kotlinx.coroutines.flow.callbackFlow
  * [otaOnConnect] (a [FakeOtaChannel]).
  */
 class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink {
-    data class Sent(val atNanos: Long, val message: String, val dropPending: Boolean)
+    /** One message as sent: when, its hex, whether it replaced what waited, and whether it was played live ([sendLive]). */
+    data class Sent(val atNanos: Long, val message: String, val dropPending: Boolean, val live: Boolean = false)
 
     private val _state = MutableStateFlow<LinkState>(LinkState.Connected("Steven Piano", 255))
     override val state: StateFlow<LinkState> = _state
@@ -109,6 +110,11 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
     override fun send(batch: MidiBatch, dropPending: Boolean) {
         val at = clock.nanoTime()
         synchronized(log) { batch.hex().forEach { log += Sent(at, it, dropPending) } }
+    }
+
+    override fun sendLive(batch: MidiBatch) {
+        val at = clock.nanoTime()
+        synchronized(log) { batch.hex().forEach { log += Sent(at, it, dropPending = false, live = true) } }
     }
 
     override fun flush(timeoutMs: Long): Boolean = true

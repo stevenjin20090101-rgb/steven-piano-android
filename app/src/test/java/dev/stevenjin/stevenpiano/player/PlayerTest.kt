@@ -24,6 +24,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -39,6 +40,18 @@ class PlayerTest {
     private val link = FakePianoLink()
     private val source = FakeSource()
     private val player = Player(link, source, scope, prepareThread = {})
+
+    /**
+     * The player saw the link connected as it started: a new connection begins with the stop sequence
+     * (v1.11 — M29), nothing playing. Each test starts after it.
+     */
+    @Before
+    fun connected() = runBlocking {
+        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), link.messages)
+        assertEquals(listOf(true, true), link.sent.map { it.dropPending })
+        link.clear()
+    }
 
     @After
     fun tearDown() {
@@ -117,6 +130,32 @@ class PlayerTest {
     }
 
     @Test
+    fun `a new connection with nothing playing begins with the stop sequence, and a paused piece stays where it was`() = runBlocking {
+        source.pieces[1] = piece(60, 5_000)
+        onMain { player.play(1) }
+        withTimeout(2_000) { while ("90 3C 50" !in link.messages) delay(5) }
+        onMain { player.pause() }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Paused } }
+        val at = player.positionMicrosNow()
+        link.drop()
+        delay(50)
+        link.clear()
+        link.connect(null)
+        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        delay(50)
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), link.messages)
+        assertEquals(PlaybackStatus.Paused, player.state.value.status)
+        assertEquals(at, player.positionMicrosNow())
+
+        link.clear()
+        link.reconnectQuietly()   // a new epoch, still nothing playing: the stop sequence again
+        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), link.messages)
+        assertEquals(PlaybackStatus.Paused, player.state.value.status)
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
     fun `a new epoch while playing re-syncs the piano, even with no drop seen`() = runBlocking {
         val pedalled = SmfParser.parse(
             SmfBuilder(format = 0, division = 1000).track {
@@ -128,7 +167,7 @@ class PlayerTest {
         )
         source.pieces[1] = pedalled
         onMain { player.play(1) }
-        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        withTimeout(2_000) { while ("90 3C 50" !in link.messages) delay(5) }
         link.clear()
         link.reconnectQuietly()
         withTimeout(2_000) { while (link.messages.size < 3) delay(5) }
@@ -145,6 +184,7 @@ class PlayerTest {
         }
         withTimeout(2_000) { player.liveSustain.first { it } }
         assertEquals(listOf("90 3C 64", "B0 40 7F"), link.messages)
+        assertEquals("the live lane", listOf(true, true), link.sent.map { it.live })
         assertEquals(1L shl 36, player.activeKeysLow)
         link.drop()
         withTimeout(2_000) { player.liveSustain.first { !it } }

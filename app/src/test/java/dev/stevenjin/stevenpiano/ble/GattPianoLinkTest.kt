@@ -24,7 +24,21 @@ class GattPianoLinkTest {
     private val remembered = mutableListOf<Pair<String, String>>()
     private var autoConnect = true
     private val logged = mutableListOf<String>()
-    private val link = GattPianoLink(radio, executor, { address, name -> remembered += address to name }, { autoConnect }, log = { logged += it })
+
+    /** Addresses the app uses as a keyboard or instrument through Android's MIDI (v1.11 — M29). */
+    private val foreign = mutableSetOf<String>()
+
+    /** Android's scan limit, shared with the MIDI device picker (v1.11 — M29). */
+    private val throttle = ScanThrottle()
+    private val link = GattPianoLink(
+        radio,
+        executor,
+        { address, name -> remembered += address to name },
+        { autoConnect },
+        log = { logged += it },
+        isForeign = { it in foreign },
+        throttle = throttle,
+    )
     private val address = "C8:2E:18:00:11:22"
 
     private fun state() = link.state.value
@@ -809,6 +823,97 @@ class GattPianoLinkTest {
         executor.runDue()
         assertEquals(1, radio.scans)
         assertEquals(address, radio.connections.single().address)
+    }
+
+    @Test
+    fun `a keyboard the app uses through Android's MIDI is never a candidate, nor taken from another app for the piano`() {
+        val keyboard = "11:22:33:44:55:66"
+        foreign += keyboard
+        link.connect(null)
+        executor.runDue()
+        radio.find(keyboard, null)
+        executor.advance(5_000)
+        assertTrue(radio.connections.isEmpty())
+        assertTrue(logged.contains("Seen $keyboard (no name), RSSI -60 dBm, MIDI service yes: ignored: a keyboard or instrument this app uses through Android's MIDI"))
+        link.disconnect()
+        executor.runDue()
+
+        radio.connectedElsewhere = listOf(FoundPiano(keyboard, null), FoundPiano(address, PianoBluetooth.NAME))
+        foreign += address   // even named Steven Piano: what the app holds as a MIDI device is never the piano
+        link.connect(null)
+        executor.runDue()
+        assertTrue(radio.connections.isEmpty())
+        assertEquals(LinkState.Scanning, state())
+        foreign -= address
+        link.disconnect()
+        executor.runDue()
+        link.connect(null)
+        executor.runDue()
+        assertEquals(address, radio.connections.single().address)
+    }
+
+    @Test
+    fun `a nameless device this tablet is paired with is never a candidate, as the piano never pairs`() {
+        val keyboard = "11:22:33:44:55:66"
+        radio.bonded = setOf(keyboard)
+        link.connect(null)
+        executor.runDue()
+        radio.find(keyboard, null)
+        executor.advance(11_000)
+        assertTrue(radio.connections.isEmpty())
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(logged.contains("Seen $keyboard (no name), RSSI -60 dBm, MIDI service yes: ignored: no name, and paired with this device (the piano never pairs; a keyboard may)"))
+        executor.advance(1_000)
+        assertEquals("not \"paired\": nothing was found", LinkError.NotFound().toState(), state())
+    }
+
+    @Test
+    fun `a candidate paired by the time it is connected to is passed over, and the scan goes on`() {
+        val keyboard = "11:22:33:44:55:66"
+        link.connect(null)
+        executor.runDue()
+        radio.find(keyboard, null)
+        executor.runDue()   // a candidate: no name, not paired
+        radio.bonded = setOf(keyboard)   // the keyboard asked to pair meanwhile
+        executor.advance(1_000)
+        assertTrue(radio.connections.isEmpty())
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(radio.scanning)
+        assertTrue(logged.contains("$keyboard has no name and is paired with this device: not the piano, which never pairs; the scan goes on without it"))
+        radio.find(keyboard, null)
+        executor.advance(2_000)
+        assertTrue("passed over until the next Connect", radio.connections.isEmpty())
+        radio.find(address, PianoBluetooth.NAME)
+        executor.runDue()
+        assertEquals(address, radio.connections.single().address)
+    }
+
+    @Test
+    fun `the scan budget is the app's, so scans the picker started count against the link`() {
+        repeat(5) { assertEquals(0L, throttle.acquire(0L)) }   // the MIDI device picker's five, at the link's time 0
+        assertEquals(30_000L, throttle.acquire(0L))
+        link.connect(null)
+        executor.runDue()
+        assertEquals(0, radio.scans)
+        assertEquals(LinkState.Scanning, state())
+        assertTrue(logged.contains("Scan waits 30000 ms: Android allows 5 scans in 30 s"))
+        executor.advance(30_000)
+        assertEquals(1, radio.scans)
+        repeat(4) { assertEquals(0L, throttle.acquire(executor.nowMs)) }
+        assertTrue("the link's own scan took the fifth", throttle.acquire(executor.nowMs) > 0)
+    }
+
+    @Test
+    fun `keys played live go ahead of a piece's backlog`() {
+        val gatt = connectFully()
+        link.send(notes(30), dropPending = false)
+        executor.runDue()
+        assertEquals(1, gatt.writes.size)
+        link.sendLive(MidiBatch().apply { add(0x90, 100, 90) })
+        gatt.writeDone()
+        executor.advance(1)
+        val next = gatt.writes.last().map { it.toInt() and 0xFF }
+        assertEquals(listOf(0x90, 100, 90), next.subList(2, 5))
     }
 
     @Test

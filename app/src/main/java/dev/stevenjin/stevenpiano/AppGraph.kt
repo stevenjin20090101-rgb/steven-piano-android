@@ -30,6 +30,7 @@ import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
+import dev.stevenjin.stevenpiano.ble.ScanThrottle
 import dev.stevenjin.stevenpiano.channels.Channel
 import dev.stevenjin.stevenpiano.channels.ChannelPlayer
 import dev.stevenjin.stevenpiano.channels.ChannelPools
@@ -207,6 +208,12 @@ class AppGraph(private val app: Application) {
         ArtworkRepository(app, database.artwork(), library, ArtFiles(app.filesDir), WikipediaClient(), network, appScope)
     }
 
+    /**
+     * Android's limit of 5 Bluetooth scans in 30 s is the app's: the piano's link and the MIDI device picker
+     * share this one (v1.11 — M29), on `SystemClock.elapsedRealtime`.
+     */
+    val scanThrottle = ScanThrottle()
+
     private val link = lazy {
         if (LoggingPianoLink.isWanted()) {
             LoggingPianoLink()
@@ -215,6 +222,7 @@ class AppGraph(private val app: Application) {
                 app,
                 onConnected = { address, name -> appScope.launch { settingsRepository.rememberDevice(address, name) } },
                 shouldReconnect = { settings.value.autoConnect },
+                throttle = scanThrottle,
             )
         }
     }

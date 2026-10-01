@@ -40,6 +40,12 @@ class TeeSink(private val link: MidiSink, private val tablet: MidiSink) : MidiSi
         link.send(batch, dropPending)
         tablet.send(batch, dropPending)
     }
+
+    /** Live keys (v1.11 — M29): the link's front lane first, then the tablet, as [send]. */
+    override fun sendLive(batch: MidiBatch) {
+        link.sendLive(batch)
+        tablet.sendLive(batch)
+    }
 }
 
 /**

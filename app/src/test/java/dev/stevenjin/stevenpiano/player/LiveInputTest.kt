@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.player
 
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
+import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
 import dev.stevenjin.stevenpiano.midi.SmfParser
@@ -54,6 +55,40 @@ class LiveInputTest {
         engine.liveNoteOff(60)
         assertEquals(listOf("0 90 3C 64", "300 80 3C 00"), sent())
         assertEquals(listOf(false, false), link.sent.map { it.dropPending })
+        assertEquals("through the live lane (v1.11 — M29)", listOf(true, true), link.sent.map { it.live })
+    }
+
+    @Test
+    fun `with nothing playing, a pedal change the router held back still goes when its turn comes`() {
+        val out = MidiBatch()
+        for (value in listOf(127, 0, 127, 0)) router.route(0xB0, 64, value, now / 1000, out)
+        link.send(out, dropPending = false)
+        assertEquals("three back to back, the fourth waits", listOf("0 B0 40 7F", "0 B0 40 00", "0 B0 40 7F"), sent())
+        assertEquals(PlaybackStatus.Stopped, engine.status)
+        assertEquals("the engine says when to look again", 50 * ms, engine.advance(now))
+        at(49)
+        assertEquals(50 * ms, engine.advance(now))
+        assertEquals(3, link.messages.size)
+        at(50)
+        assertEquals("nothing more to wait for", Long.MAX_VALUE, engine.advance(now))
+        assertEquals("50 B0 40 00", sent().last())
+        assertEquals(true, link.sent.last().live)
+        assertEquals(Long.MAX_VALUE, engine.advance(now))
+        assertEquals(4, link.messages.size)
+    }
+
+    @Test
+    fun `a new connection with nothing playing sends the stop sequence and keeps the piece where it was`() {
+        engine.load(piece { noteOn(0, 64); noteOff(5_000, 64) }, now)
+        engine.play(now)
+        runUntil(200)
+        engine.pause(now)
+        link.clear()
+        engine.connectedAnew(now)
+        assertEquals(listOf("B0 40 00", "B0 7B 00"), link.messages)
+        assertEquals(listOf(true, true), link.sent.map { it.dropPending })
+        assertEquals(PlaybackStatus.Paused, engine.status)
+        assertEquals(200_000L, engine.positionMicros(now))
     }
 
     @Test

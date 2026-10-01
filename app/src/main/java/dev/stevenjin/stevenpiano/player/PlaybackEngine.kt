@@ -24,7 +24,10 @@ import dev.stevenjin.stevenpiano.midi.NoteRouter
  * first event leaves exactly then; a pause inside it resumes from the start, a seek ends it. Keys played on the Keys screen go out at once through the same
  * [router] ([liveNoteOn] and friends), so a piece and the keys share its bookkeeping; a full
  * silence lets go of both. A pedal change the router holds back (it paces the pedal) is due by
- * the time [advance] returns. Not thread-safe: one thread (the scheduler's) owns it.
+ * the time [advance] returns, also with nothing playing (v1.11 — M29: a keyboard's pedal moves while
+ * the piece is stopped, and its last value must not be stranded). Live keys go out through the sink's
+ * live lane ([MidiSink.sendLive]), ahead of a piece's backlog. Not thread-safe: one thread (the
+ * scheduler's) owns it.
  */
 class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRouter()) {
     var status: PlaybackStatus = PlaybackStatus.Stopped
@@ -113,6 +116,16 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         silence()
     }
 
+    /**
+     * The piano was connected anew, or the link lost a packet (a new epoch): playing, the piano is
+     * re-synced ([resync]: silence, then the pedal where the music is); otherwise the stop sequence goes
+     * at once (v1.11 — M29), so nothing the piano kept from before (a stored pedal, a key) outlives the
+     * old connection, and a piece loaded stays where it was.
+     */
+    fun connectedAnew(nowNanos: Long) {
+        if (status == PlaybackStatus.Playing) resync(nowNanos) else silence()
+    }
+
     /** Always silences, even when idle: it is also the app's panic button. */
     fun stop(nowNanos: Long) {
         timing.close()
@@ -176,13 +189,16 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     private inline fun live(route: (MidiBatch) -> Unit) {
         batch.clear()
         route(batch)
-        send(dropPending = false)
+        if (!batch.isEmpty()) sink.sendLive(batch)
     }
 
-    /** Sends every event due at [nowNanos]; returns when the next one is due ([Long.MAX_VALUE]: nothing to wait for). */
+    /**
+     * Sends every event due at [nowNanos]; returns when the next one is due ([Long.MAX_VALUE]: nothing to wait for).
+     * With nothing playing, a pedal change the router held back still goes when its turn comes.
+     */
     fun advance(nowNanos: Long): Long {
         val midi = piece
-        if (status != PlaybackStatus.Playing || midi == null) return Long.MAX_VALUE
+        if (status != PlaybackStatus.Playing || midi == null) return flushIdlePedal(nowNanos)
         val position = positionMicros(nowNanos)
         val events = midi.events
         val nowMicros = nowNanos / 1000
@@ -212,6 +228,15 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
 
     /** When a pedal change the router is holding back may go ([Long.MAX_VALUE]: none is). */
     private fun pedalWakeTime(): Long = router.pedalDueMicros.let { if (it == Long.MAX_VALUE) it else it * 1000 }
+
+    /** Nothing playing: a pedal change the router holds back goes once its turn has come; returns when to look again. */
+    private fun flushIdlePedal(nowNanos: Long): Long {
+        if (router.pedalDueMicros == Long.MAX_VALUE) return Long.MAX_VALUE
+        batch.clear()
+        router.flushPedal(nowNanos / 1000, batch)
+        if (!batch.isEmpty()) sink.sendLive(batch)
+        return pedalWakeTime()
+    }
 
     private fun silence() {
         batch.clear()
