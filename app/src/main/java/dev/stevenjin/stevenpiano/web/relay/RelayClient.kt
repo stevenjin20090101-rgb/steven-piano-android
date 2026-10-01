@@ -266,6 +266,10 @@ class RelayClient(
 
         @Volatile
         private var hello: RelayMessage.Hello? = null
+
+        /** The 101 did not echo the subprotocol: closing, and nothing it sends meanwhile is read (audit delta 3). */
+        @Volatile
+        private var refused = false
         private val requests = ConcurrentHashMap<Long, Pending>()
         private val members = ConcurrentHashMap<Long, WebSocketHub.Member>()
         private val jobs = mutableListOf<Job>()
@@ -279,6 +283,8 @@ class RelayClient(
         override fun onOpen(webSocket: WebSocket, response: Response) {
             if (!::socket.isInitialized) socket = webSocket
             if (response.header("Sec-WebSocket-Protocol") != RelayProtocol.SUBPROTOCOL) {
+                // OkHttp goes on reading until the other side's close: a hello or a request sent meanwhile is dropped.
+                refused = true
                 log("Cloud: the relay didn't answer in ${RelayProtocol.SUBPROTOCOL}")
                 webSocket.close(PROTOCOL_ERROR, "Speak ${RelayProtocol.SUBPROTOCOL}.")
                 return
@@ -290,6 +296,7 @@ class RelayClient(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (refused) return
             when (val message = RelayProtocol.decode(text)) {
                 is RelayMessage.Hello -> onHello(webSocket, message)
                 is RelayMessage.Req -> onReq(message)
@@ -304,6 +311,7 @@ class RelayClient(
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            if (refused) return
             val frame = Frame.decode(bytes.toByteArray()) ?: return
             val pending = requests[frame.id] ?: return   // over already, or never begun: the relay learns from our answer
             when (frame.kind) {

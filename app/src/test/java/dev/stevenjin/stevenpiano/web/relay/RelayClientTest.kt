@@ -147,6 +147,34 @@ class RelayClientTest {
         assertEquals(2_000L, tablet.await<RelayMessage.Status>().body.getLong("at"))
     }
 
+    /**
+     * Audit delta 3: a 101 that doesn't echo the subprotocol was closed (1002), but OkHttp goes on reading until
+     * the other side's close, and the hello and a request sent meanwhile were acted on (Connected, the request
+     * served). Now nothing it sends is read.
+     */
+    @Test
+    fun `a relay that doesn't answer in the subprotocol is closed, and nothing it sends meanwhile is read`() {
+        relay.protocolAnswer = "something-else"
+        val token = sessions.open()
+        // Sent the moment the handshake is answered, ahead of the tablet's close.
+        relay.greeting = listOf(
+            RelayMessage.Hello(PIANO, HOST, PREFIX, Caps(), 5),
+            RelayMessage.Req(7, "POST", "/api/play", "", mapOf("host" to HOST, "cookie" to "sp_session=$token", "x-steven-piano" to "1", "content-type" to "application/json", "content-length" to "13", "origin" to "https://$HOST"), "203.0.113.9", PREFIX, true),
+            Frame(7, Frame.REQ_CHUNK, """{"pieceId":1}""".toByteArray()),
+            Frame(7, Frame.REQ_END),
+            RelayMessage.Cmd(8, "status", emptyMap()),
+        )
+        val client = newClient(sleep = { awaitCancellation() })
+        client.start()
+        val tablet = relay.next()
+        assertTrue("closed", tablet.closed.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        Thread.sleep(300)
+        assertFalse("never connected", client.state.value is CloudStatus.Connected)
+        assertFalse("no answer", tablet.sent { it is RelayMessage.Res || it is RelayMessage.CmdResult || it is RelayMessage.Status })
+        assertEquals("the request reached nothing", emptyList<String>(), backend.calls.toList())
+        assertEquals(emptyList<String>(), commandsRun.toList())
+    }
+
     @Test
     fun `a request goes to the web panel and its answer comes back with its headers and body`() {
         val tablet = connected()

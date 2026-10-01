@@ -33,6 +33,14 @@ class FakeRelay : NanoWSD("127.0.0.1", 0) {
     @Volatile
     var refuseWith: Int? = null
 
+    /** While set, the handshake's answer names this subprotocol instead of echoing the tablet's (audit delta 3). */
+    @Volatile
+    var protocolAnswer: String? = null
+
+    /** Messages and frames each connection sends the moment its handshake is answered, before it reads anything. */
+    @Volatile
+    var greeting: List<Any> = emptyList()
+
     /** Listens with no read timeout: a tablet's connection may be quiet between its pings. */
     fun begin() = start(0, false)
 
@@ -49,7 +57,7 @@ class FakeRelay : NanoWSD("127.0.0.1", 0) {
             }
             return newFixedLengthResponse(code, "application/json", """{"error":"refused"}""")
         }
-        return super.serve(session)
+        return super.serve(session).also { answer -> protocolAnswer?.let { answer.addHeader("sec-websocket-protocol", it) } }
     }
 
     override fun openWebSocket(handshake: IHTTPSession): WebSocket = Tablet(handshake).also { connections += it }
@@ -74,7 +82,19 @@ class FakeRelay : NanoWSD("127.0.0.1", 0) {
         @Volatile
         var closeCode: Int? = null
 
-        override fun onOpen() = opened.countDown()
+        override fun onOpen() {
+            try {
+                for (item in greeting) {
+                    when (item) {
+                        is RelayMessage -> say(item)
+                        is Frame -> say(item)
+                    }
+                }
+            } catch (e: IOException) {
+                // The tablet went first.
+            }
+            opened.countDown()
+        }
 
         override fun onClose(code: NanoWSD.WebSocketFrame.CloseCode?, reason: String?, initiatedByRemote: Boolean) {
             closeCode = code?.value
