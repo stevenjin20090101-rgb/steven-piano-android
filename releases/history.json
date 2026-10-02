@@ -130,5 +130,14 @@
     "minSdk": 26,
     "tag": "v1.10.1",
     "publishedAt": "2026-10-01"
+  },
+  {
+    "versionCode": 20,
+    "versionName": "1.11",
+    "notes": "Keyboards. Connect a Bluetooth MIDI piano or a USB MIDI keyboard under Piano › Keyboard and play the piano live from it: on the Keys tab switch Live on, and the keys you press light up on screen and sound on the piano. Record what you play with the Record button; after Stop choose Keep and the take joins the new Recordings playlist. The app can also play its library on any MIDI piano, by Bluetooth or cable (Piano › Instrument › Another MIDI piano). For safety the keys and pedal are let go whenever the keyboard disconnects, Live is switched off or the app leaves the Keys screen. In kiosk mode Live and Record are free, and choosing an instrument or keyboard asks for the PIN.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.11/steven-piano-1.11.apk",
+    "minSdk": 26,
+    "tag": "v1.11",
+    "draft": true
   }
 ]

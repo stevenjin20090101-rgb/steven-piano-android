@@ -6895,3 +6895,12 @@ hidden under a MIDI piano), `SettingsRepositoryTest` +3, `WebApiTest` +1 and the
 (no name) and its key set, `DiagnosticsExporterTest` +1 (46 lines, the about lines, no MTU of 0), `WebAssetsTest`'s
 words, `RoutesTest`'s pages. **1,372 → 1,503.** `cloud/test/status.test.ts` 3 (kinds, transports, states and the two
 switches kept, names dropped; cut and refused; through the room) and `d1-throttle.test.ts`'s key set: **79 → 82**.
+
+## The release: 1.11 (versionCode 20)
+
+Cut from `main` after M29 (phase 5 is `8b38c7f`): `versionCode` 20, `versionName` "1.11" (`-PversionCodeOverride`'s
+example now 21), `Provenance.text` "Made by Steven Jin · v1.11 · eab16a502f679465", README's version lines, and the
+entry drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.11`). The designer's review of the
+tablet-size screens found the run as designed; for the Piano tab's reorganisation (M31b): with the Instrument page
+open beside the hub, Disconnect shows twice (the hub's card and the page). The relay Worker is redeployed after
+this release so the console's status carries the instrument and keyboard states.
