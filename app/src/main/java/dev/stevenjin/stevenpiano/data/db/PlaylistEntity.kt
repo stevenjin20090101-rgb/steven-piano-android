@@ -69,7 +69,9 @@ data class PlaylistPieceEntity(
 
 /**
  * A playlist with its size and total length, for the Playlists tiles and a playlist's page. A
- * built-in one ([builtIn], [builtInKey]) is the app's: its menus offer Change photo only.
+ * built-in one ([builtIn], [builtInKey]) is the app's: its menus offer Change photo only. How many
+ * of its pieces are Classical and how many Modern ([classicalCount], [modernCount]: v1.14 — M37)
+ * say which genre it shows under (`Genres.playlistShows`).
  */
 data class PlaylistSummary(
     val id: Long,
@@ -79,6 +81,8 @@ data class PlaylistSummary(
     val durationMs: Long,
     val builtIn: Boolean = false,
     val builtInKey: String? = null,
+    val classicalCount: Int = 0,
+    val modernCount: Int = 0,
 )
 
 /** Where one piece sits in a playlist. */

@@ -55,8 +55,9 @@ on the tablet*). Made by Steven Jin. Version 1.13.1.
   can't be renamed, reordered or deleted; Change photo still works. A list that
   finds nothing is not shown. From Steven's `midi` folder they hold 17, 29 and 49 pieces.
 - **Channels**: a row of wide cards above the playlists (**See all** shows them
-  all as a grid): Calm, Epic, Recognisable, Popular, Baroque, Romantic, Impressionist, Nocturnes,
-  Études and Everything, each faced with its four most frequent composers. A tap
+  all as a grid): **Classical** and **Modern** (every piece of that genre; from 1.14), Calm, Epic,
+  Recognisable, Popular, Baroque, Romantic, Impressionist, Nocturnes, Études and Everything, each
+  faced with its four most frequent composers. A tap
   plays the channel without end: 25 of its pieces shuffled into Up next, ten
   more whenever fewer than five are left, and nothing again until the whole pool
   has played (the next round leaves out the last 20). Now playing and the panel read
@@ -1228,8 +1229,11 @@ pedal value: after **Stop**, *Keep this recording?* with its length and notes, a
 ("Recording · <date> <time>"), **Discard**, **Listen** and **Keep**. It goes into the playlist
 **Recordings**, by "Recorded live". A take ends by itself after an hour, 200,000 events or
 five minutes of silence; one with no note is not kept; a crash loses none (the next start
-saves it). In kiosk mode a take waits for someone with the PIN to keep or discard it
-("Saved to Recordings. Someone with the PIN keeps or discards it."), at most 30 at a time.
+saves it). After **Keep** the Keys tab says "Kept in Recordings." for a moment. Every
+recording has a cover of its own, drawn from its notes as Studio's pieces' are, and the
+Recordings playlist shows them (from 1.14). In kiosk mode a take waits for someone with
+the PIN to keep or discard it ("Saved to Recordings. Someone with the PIN keeps or discards
+it."), at most 30 at a time.
 
 ## Piano sound on the tablet
 

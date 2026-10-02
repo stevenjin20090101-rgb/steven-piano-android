@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -19,7 +20,8 @@ import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 /**
  * One piece in the library. Its file is `filesDir/pieces/<sha256>.mid`. [composerKey] groups
  * composers (the folded surname, "" when unknown), [composerShort] is what rows show,
- * [titleKey] sorts, [searchText] is what search matches.
+ * [titleKey] sorts, [searchText] is what search matches, [genre] is Classical or Modern
+ * (`Genres`; none for a piece made on the tablet; new in schema v5, `MIGRATION_4_5`).
  */
 @Entity(
     tableName = "pieces",
@@ -46,6 +48,8 @@ data class PieceEntity(
     val lastPlayedAt: Long? = null,
     val searchText: String,
     val titleKey: String,
+    /** 0 none (made here) · 1 classical · 2 modern (v1.14 — M37): sorted on import, moved by the person, never by Rename. */
+    @ColumnInfo(defaultValue = "0") val genre: Int = 0,
 )
 
 /** What a queue or a list needs to name a piece without loading all of it. */
@@ -53,6 +57,9 @@ data class PieceSummary(val id: Long, val title: String, val composerShort: Stri
 
 /** One of a playlist's first pieces: what its cover is made of (v1.14 — M37). */
 data class PieceHead(val id: Long, val composerKey: String)
+
+/** How many of an artist's pieces are Classical and how many Modern (v1.14 — M37): the import's rule 2. */
+data class ArtistGenres(val composerKey: String, val classical: Int, val modern: Int)
 
 /** A piece's id by its bytes' SHA-256: how an import finds the pieces it brought, new or there already. */
 data class PieceSha(val id: Long, val sha256: String)

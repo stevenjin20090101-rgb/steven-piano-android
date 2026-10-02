@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
@@ -50,7 +51,8 @@ class PieceUnavailableException(message: String) : Exception(message)
  * built-in playlists (DESIGN.md › v1.5 — M17) are the app's: their pieces are set by
  * [BuiltInPlaylists.refresh] through [setPlaylistPieces], and renaming, deleting, reordering or
  * adding to or taking from one does nothing. A playlist the person names like a built-in one
- * takes the name, and the built-in one moves beside it ("Popular · built in").
+ * takes the name, and the built-in one moves beside it ("Popular · built in"). Every list can
+ * be asked for one genre ([LibraryScope], v1.14 — M37); a piece or an artist moves between them.
  */
 class LibraryRepository(
     private val db: PianoDatabase,
@@ -68,16 +70,19 @@ class LibraryRepository(
      */
     val namesChanged: SharedFlow<Unit> = renamed.asSharedFlow()
 
-    /** Every piece, by title (accents ignored). */
-    fun all(): Flow<List<PieceEntity>> = pieces.all()
+    /** Every piece, by title (accents ignored); under a genre's [scope] (v1.14 — M37), that genre's. */
+    fun all(scope: LibraryScope = LibraryScope.All): Flow<List<PieceEntity>> = scope.genre?.let(pieces::allIn) ?: pieces.all()
 
-    /** Title or composer contains [query], ignoring case and accents. */
-    fun search(query: String): Flow<List<PieceEntity>> = pieces.search(likeEscape(TextKeys.fold(query.trim())))
+    /** Title or composer contains [query], ignoring case and accents; within [scope]. */
+    fun search(query: String, scope: LibraryScope = LibraryScope.All): Flow<List<PieceEntity>> {
+        val pattern = likeEscape(TextKeys.fold(query.trim()))
+        return scope.genre?.let { pieces.searchIn(pattern, it) } ?: pieces.search(pattern)
+    }
 
-    fun favorites(): Flow<List<PieceEntity>> = pieces.favorites()
+    fun favorites(scope: LibraryScope = LibraryScope.All): Flow<List<PieceEntity>> = scope.genre?.let(pieces::favoritesIn) ?: pieces.favorites()
 
-    /** The last 100 played, or added when never played. */
-    fun recent(): Flow<List<PieceEntity>> = pieces.recent()
+    /** The last 100 played, or added when never played; within [scope] (the 100 counted within it). */
+    fun recent(scope: LibraryScope = LibraryScope.All): Flow<List<PieceEntity>> = scope.genre?.let(pieces::recentIn) ?: pieces.recent()
 
     /**
      * Where a composition starts when no piece is chosen (Studio, v1.7 — M24): the piece played last,
@@ -85,9 +90,12 @@ class LibraryRepository(
      */
     suspend fun seedPiece(): PieceEntity? = pieces.seedPiece(ComposerNames.STUDIO)
 
-    fun composers(): Flow<List<ComposerGroup>> = pieces.composers()
+    /** The composers or artists by key; under a genre's [scope], those with a piece of it, counted within it. */
+    fun composers(scope: LibraryScope = LibraryScope.All): Flow<List<ComposerGroup>> = scope.genre?.let(pieces::composersIn) ?: pieces.composers()
 
-    fun byComposer(composerKey: String): Flow<List<PieceEntity>> = pieces.byComposer(composerKey)
+    /** A composer's pieces by title; within [scope]. */
+    fun byComposer(composerKey: String, scope: LibraryScope = LibraryScope.All): Flow<List<PieceEntity>> =
+        scope.genre?.let { pieces.byComposerIn(composerKey, it) } ?: pieces.byComposer(composerKey)
 
     /** A composer's first [limit] pieces by title (a composer's mosaic of roll cards). */
     suspend fun firstPieceIds(composerKey: String, limit: Int): List<Long> = pieces.idsByComposer(composerKey, limit)
@@ -98,8 +106,16 @@ class LibraryRepository(
     /** The recordings without a cover of their own (made before 1.14), newest first: the start's drawing (v1.14 — M37). */
     suspend fun recordingsWithoutCover(): List<Long> = pieces.withoutCover(ComposerNames.RECORDED_LIVE_KEY)
 
-    /** Every playlist by name, with its size and total length. */
-    fun playlists(): Flow<List<PlaylistSummary>> = playlists.summaries()
+    /**
+     * Every playlist by name, with its size and total length; under a genre's [scope], those that show under it
+     * ([Genres.playlistShows]: most of their pieces of that genre, a tie under both, Recordings and Made in Studio always).
+     */
+    fun playlists(scope: LibraryScope = LibraryScope.All): Flow<List<PlaylistSummary>> =
+        if (scope == LibraryScope.All) {
+            playlists.summaries()
+        } else {
+            playlists.summaries().map { list -> list.filter { Genres.playlistShows(it.classicalCount, it.modernCount, it.builtInKey, scope) } }
+        }
 
     /** A playlist's pieces in its order. */
     fun inPlaylist(playlistId: Long): Flow<List<PieceEntity>> = pieces.inPlaylist(playlistId)
@@ -111,6 +127,30 @@ class LibraryRepository(
     suspend fun piece(id: Long): PieceEntity? = pieces.byId(id)
 
     suspend fun setFavorite(id: Long, favorite: Boolean) = pieces.setFavorite(id, favorite)
+
+    /**
+     * The piece moves to [genre] ([Genres.CLASSICAL] or [Genres.MODERN]; v1.14 — M37). A piece made here (no genre) is
+     * refused, and so is any other genre: nothing changes.
+     */
+    suspend fun setGenre(pieceId: Long, genre: Int) {
+        if (genre != Genres.CLASSICAL && genre != Genres.MODERN) return
+        val piece = pieces.byId(pieceId) ?: return
+        if (piece.genre == Genres.NONE || Genres.madeHere(piece.composerKey)) return
+        pieces.setGenre(pieceId, genre)
+    }
+
+    /**
+     * Every piece by [composerKey] moves to [genre] (v1.14 — M37), so the artist's later uploads follow it; the blank
+     * key, a made-here key and any other genre are refused, and a piece made here keeps no genre.
+     */
+    suspend fun setComposerGenre(composerKey: String, genre: Int) {
+        if (genre != Genres.CLASSICAL && genre != Genres.MODERN) return
+        if (composerKey.isBlank() || Genres.madeHere(composerKey)) return
+        pieces.setComposerGenre(composerKey, genre)
+    }
+
+    /** The first [limit] Modern pieces by title (v1.14 — M37): the guests' Modern list. */
+    suspend fun modernPieces(limit: Int): List<PieceEntity> = pieces.modern(limit)
 
     /**
      * New title and composer; the composer is read as a file name's is on import ([ComposerNames.resolve]:
@@ -286,6 +326,10 @@ class LibraryRepository(
         pieces.update(piece.named(piece.title, composer))
 
     override suspend fun hasComposerKey(composerKey: String): Boolean = pieces.hasComposerKey(composerKey)
+
+    /** Each artist's genre, the one most of their pieces have (a tie: none), by key (v1.14 — M37: the import's rule 2). */
+    override suspend fun artistGenres(): Map<String, Int> =
+        pieces.artistGenres().mapNotNull { a -> Genres.majority(a.classical, a.modern)?.let { a.composerKey to it } }.toMap()
 
     /**
      * An import's pieces into its playlist (v1.10.1 — M28, D2): the pieces among [shas] the library holds,

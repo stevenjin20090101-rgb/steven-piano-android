@@ -7153,9 +7153,9 @@ download, steps, preview, cover, the shelf) and "Another like it"; Now playing s
 third with the score re-laid at two bars, and the View menu; the Piano tab showed the new groups, the folded
 Fine tuning, and the search finding the three volumes. No crash in the log.
 
-# v1.14 — M33: motion, smooth and responsive
+# v1.13 — M33: motion, smooth and responsive (planned as 1.14)
 
-Fable's design (DESIGN.md › v1.14 — motion), Opus coding, a lean run: the app only, no emulator, two tests. Nothing
+Fable's design (DESIGN.md › v1.13 — motion), Opus coding, a lean run: the app only, no emulator, two tests. Nothing
 about how notes or the pedal reach the piano changed, nor the Keys tab's live playing; the score's page turn, the
 roll, the aura, the live red and the sounding yellow are as they were. No new colour; glass only through its wrappers.
 
@@ -7384,3 +7384,58 @@ Cut from `main` at `ed51fb8`: Studio's stage (M36) and the Recognisable and Popu
 integrator's smoke pass on the tablet-size emulator: the stage idle with the aura and its glow, "A bright waltz,
 2 minutes" composed with the box in the upper third and the one card under it, and the History sheet listing
 three turns. No crash in the log.
+
+# v1.14 — M37: Classical and Modern, and the recordings
+
+Fable's design (DESIGN.md › v1.14 — M37), Opus coding from Fable's briefs, in three runs: this one on `main` (the two
+fixes and the genre data), then the tablet's Library on `main` beside the web panel in a worktree. A lean run: no
+emulator, three new tests, no version bump, no signing. Nothing about how notes are sent changed; `score/` untouched.
+
+## The recordings
+
+- **Quiet saves**: `Importer.importOpened(source, quiet = false)`; a quiet import follows a local `MutableStateFlow`
+  (`runOpened` and `run(source, sink = progress)` take the sink), under the same lock, caps and parse.
+  `AppStudioLibrary.add` imports quietly: its only callers are Studio's two saves and the recordings' store.
+- **Kept**: `RecordingState.Kept` and `RecordingSession.kept()` (as `empty()`, `KEPT_SHOWN_MS` 4 s, then Idle);
+  `KeysViewModel.keep` calls it; `recordingNote` gives `InstrumentCopy.KEPT`.
+- **Covers**: `RecordingPieces.finish` draws one (`StudioCover` → `Png` → `RecordingStore.setCover`, a default `false`;
+  seed the take's epoch ms; a recovered take's notes parsed by `SmfParser`); a failed draw never fails the save.
+  `RecordingSession.drawMissingCovers()` runs after `recoverPending` at start: `PieceDao.withoutCover(key)` (no
+  picture in the `piece:<id>` row, newest first), notes from `library.load(id)`, seed id × 7,919; unreadable ones wait.
+- **Where they show**: `PieceRow` uses `PieceArt` for `ComposerNames.RECORDED_LIVE_KEY` (now public);
+  `PlaylistCover` reads `LibraryRepository.playlistHead(id, limit = 4)` (`PieceDao.head`) and each head piece's
+  artwork row, so a cover drawn while the tile shows appears; `MosaicTile`'s cells show a piece's own cover before its
+  roll card; `ArtworkFetcher.NOT_PEOPLE` has "recorded live". The unused `firstComposerKey` chain is gone.
+
+## The data
+
+- **The column and the rule**: `PieceEntity.genre` (last, `@ColumnInfo(defaultValue = "0")`); `data/Genres.kt`:
+  `LibraryScope` and `Genres` (`PACK_COLLECTIONS`, `CLASSICAL_KEYS` (73), `madeHere`, `strong`, `majority`, `of`,
+  `name`, `named`, `playlistShows`); `ComposerNames.CANONICAL_KEYS` exposes the 47 canonical surnames.
+- **Room 4 → 5**: `MIGRATION_4_5` runs `SchemaV5.ADD_GENRE`, `SORT` (one `CASE`, its lists built from `Genres` and
+  `ComposerNames`, quoted with `''`) and `INHERIT`; `PianoDatabase` version 5; `schemas/…/5.json` committed.
+- **Imports**: `BatchGenres` per run beside `BatchNames`, from `ImportStore.artistGenres()` (default empty; the
+  library's majorities), remembering the keys a strong rule made Classical; `prepare` sorts each new piece after
+  `named`, and a duplicate that fills a blank name goes to `fillComposer` sorted again.
+- **DAO and repository**: `PieceDao.allIn`, `searchIn`, `favoritesIn`, `recentIn`, `byComposerIn`, `composersIn`,
+  `artistGenres`, `setGenre`, `setComposerGenre` (never a made-here piece), `modern`; `PlaylistDao.summaries` adds
+  `classicalCount` and `modernCount`. `LibraryRepository.all`, `search`, `favorites`, `recent`, `byComposer`,
+  `composers` and `playlists` take `scope: LibraryScope = All`; `setGenre` and `setComposerGenre` (1 or 2 only; a
+  made-here piece or key and the blank key refused), `artistGenres()`, `modernPieces(limit)`, `recordingsWithoutCover()`.
+- **Channels**: `PoolMatcher.Genre`; `Channel.genre` and `ChannelSummary.genre` (`Genres.NONE` by default);
+  `channels.json`'s `genrePool` and `genre`; Classical and Modern first, the nine others tagged classical.
+- **Studio**: `StyleVocabulary.channelAliases` (also in `allWords`) and their clause in `StylePrompt.catalogue()`.
+- **Tests**: `GenresTest` (3: the rule on the upgrade's cases; every key of a 1.10 library Classical by key but the
+  blank one and Anonymous; the playlists' majority), `SchemaV5Test` (3: the statements are 5.json's and nothing else
+  changes; a 1.13 database keeps every row and ends sorted as `Genres.of` sorts it; the shape of a fresh v5), and in
+  `ImporterTest` a quiet import leaving the shared progress at Idle; `ChannelsTest` and `KeysNoteTest` follow, and
+  `LibraryFixture.piece` sets the genre. 1,570 → 1,577 unit tests (12 skipped), none failing. `lintDebug`: 0 errors,
+  the same 30 warnings.
+
+## The Library
+
+Run 2 writes this.
+
+## The web panel and guests
+
+Run 3 writes this.

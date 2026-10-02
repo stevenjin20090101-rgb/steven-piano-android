@@ -472,8 +472,10 @@ object StylePrompt {
                     val joined = (i until i + size).joinToString(" ") { keys[it] }
                     if (joined in StyleVocabulary.moods || joined in StyleVocabulary.stopWords || joined in StyleVocabulary.notCatalogue) continue
                     val listKey = StyleVocabulary.listAliases[joined]
+                    val channelKey = StyleVocabulary.channelAliases[joined]   // "classic", "pop" (v1.14 — M37)
                     val entry = library.catalogue.firstOrNull { e ->
-                        (listKey != null && e.list && e.key == listKey) || TextKeys.fold(e.key) == joined || TextKeys.fold(e.name) == joined
+                        (listKey != null && e.list && e.key == listKey) || (channelKey != null && !e.list && e.key == channelKey) ||
+                            TextKeys.fold(e.key) == joined || TextKeys.fold(e.name) == joined
                     } ?: continue
                     catalogue = entry
                     claim("catalogue", entry.name, i, size)

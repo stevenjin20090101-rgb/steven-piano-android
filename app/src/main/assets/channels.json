@@ -1,6 +1,18 @@
 {
-  "about": "Steven Piano's channels (DESIGN.md > v1.5 - M17), in their order on screen. A pool is every piece whose composerKey is in composers or whose folded title matches one of titles (regular expressions), and, with maxNotesPerSecond, that plays no more notes a second than that (noteCount / duration); builtIn takes a built-in playlist's pieces; all takes the whole library.",
+  "about": "Steven Piano's channels (DESIGN.md > v1.5 - M17), in their order on screen. A pool is every piece whose composerKey is in composers or whose folded title matches one of titles (regular expressions), and, with maxNotesPerSecond, that plays no more notes a second than that (noteCount / duration); builtIn takes a built-in playlist's pieces; genrePool takes every piece of that genre (classical or modern, v1.14 - M37); all takes the whole library. genre is the genre a channel is listed under (none: both).",
   "channels": [
+    {
+      "key": "classical",
+      "name": "Classical",
+      "genrePool": "classical",
+      "genre": "classical"
+    },
+    {
+      "key": "modern",
+      "name": "Modern",
+      "genrePool": "modern",
+      "genre": "modern"
+    },
     {
       "key": "calm",
       "name": "Calm",
@@ -23,22 +35,26 @@
         "arabesque",
         "andante"
       ],
-      "maxNotesPerSecond": 6
+      "maxNotesPerSecond": 6,
+      "genre": "classical"
     },
     {
       "key": "epic",
       "name": "Epic",
-      "builtIn": "epic"
+      "builtIn": "epic",
+      "genre": "classical"
     },
     {
       "key": "recognisable",
       "name": "Recognisable",
-      "builtIn": "recognisable"
+      "builtIn": "recognisable",
+      "genre": "classical"
     },
     {
       "key": "popular",
       "name": "Popular",
-      "builtIn": "popular"
+      "builtIn": "popular",
+      "genre": "classical"
     },
     {
       "key": "baroque",
@@ -52,7 +68,8 @@
         "purcell",
         "telemann",
         "bach cpe"
-      ]
+      ],
+      "genre": "classical"
     },
     {
       "key": "romantic",
@@ -70,7 +87,8 @@
         "dvorak",
         "smetana",
         "mussorgsky"
-      ]
+      ],
+      "genre": "classical"
     },
     {
       "key": "impressionist",
@@ -84,7 +102,8 @@
         "granados",
         "falla",
         "scriabin"
-      ]
+      ],
+      "genre": "classical"
     },
     {
       "key": "nocturnes",
@@ -93,7 +112,8 @@
         "nocturne",
         "notturno",
         "nachtst"
-      ]
+      ],
+      "genre": "classical"
     },
     {
       "key": "etudes",
@@ -102,7 +122,8 @@
         "etude",
         "etued",
         "\\bstud(?:y|ies|ie)\\b"
-      ]
+      ],
+      "genre": "classical"
     },
     {
       "key": "everything",

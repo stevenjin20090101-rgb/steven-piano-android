@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.data.builtin
 
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
@@ -17,8 +18,8 @@ import java.io.File
 
 /**
  * Libraries for the matcher and channel tests, made as the importer makes them: a piece's
- * composer is normalized by [ComposerNames] and its keys come from `PieceEntity.named`, as on
- * import.
+ * composer is normalized by [ComposerNames], its keys come from `PieceEntity.named` and its genre
+ * from [Genres.of] (an empty library's artists), as on import.
  *
  * - [corpus]: `library_titles.csv`, Steven's MIDI library (`Player Piano/midi`, 1,727 files) as
  *   the importer names it: the collection and composer INDEX.csv gives, the title after the
@@ -56,7 +57,7 @@ object LibraryFixture {
         addedAt = id,
         searchText = "",
         titleKey = "",
-    ).named(title, ComposerNames.normalize(composer))
+    ).named(title, ComposerNames.normalize(composer)).let { it.copy(genre = Genres.of(it.composerKey, it.collection, emptyMap())) }
 
     val corpus: List<PieceEntity> by lazy {
         rows("library_titles.csv").mapIndexed { i, r ->

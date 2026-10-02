@@ -2520,7 +2520,7 @@ Steven chose the hub: INSTRUMENTS · THE PIANO · PLAYING · SHARING · THIS TAB
   opens its new screen. In kiosk searching is free and a locked page still asks for the PIN.
 - **No action twice**: beside the Instrument page the card shows the name and state only.
 
-# v1.14 — motion
+# v1.13 — motion (planned as 1.14)
 
 Steven chose "smooth and responsive"; designed by Fable (`motion.md`: purposeful, optional, brief, cancellable). It
 replaces › Motion's 240 ms tabs, "system ripple only" and "one haptic"; everything else there stands.
@@ -2588,3 +2588,49 @@ pieces somewhere else. Designed by Fable (apple-design `generative-ai.md`), buil
 - **Never behind words.** The glow lies behind the bar's solid surface; the understood line has its own, the card's
   covers it, and the headline and suggestions stand clear of it (40 and 32 dp); the words and the hairline still carry
   the status.
+
+# v1.14 — M37: Classical and Modern, and the recordings
+
+Steven asked (2026-10-02) for the two defects in the keyboard flow fixed and the Library split into Classical and
+Modern. Designed by Fable (apple-design lenses; the plan's decisions by multiple choice), built in three runs.
+
+## The recordings
+
+- **Quiet saves.** What the tablet makes itself (a recording, a take recovered after a crash, a Studio composition or
+  transcription) goes into the library without the import bar, the panel's import line or a notification. Imports the
+  person starts (files, folders, zips, the pack, panel uploads) are unchanged.
+- **"Kept in Recordings."** After Keep, one quiet line under the Keys pills for 4 s, where "Nothing was played." shows;
+  TalkBack hears it once. Discard, Listen, Done and the kiosk copy are unchanged.
+- **A cover for every recording**, drawn by Studio's generator from its own notes (key and mood read from them; the
+  same take always gives the same cover): new takes, recovered ones, and at the next start every recording already there.
+- **Playlists show their music.** A playlist's picture: the person's photo; when its first piece has a cover of its
+  own, the covers among its first four pieces (one fills the frame); the first composer's portrait; the monogram.
+- **Composers too.** A composer mosaic's cell shows a piece's own cover before its roll card, so Made in Studio and
+  Recorded live show covers in the grid; "Recorded live" is never looked up on Wikipedia.
+
+## The data
+
+- **The column.** `pieces.genre`: 0 none (Made in Studio, Recorded live), 1 Classical, 2 Modern.
+- **The rule** (`data/Genres.kt`, one for imports and the upgrade): made here, none; an artist (never the blank name)
+  the library already sorts, the genre most of their pieces have; a classical composer the app knows, Classical (the
+  47 canonical names, the channels' Field, Couperin, Telemann, Smetana, Falla and C. P. E. Bach, MacDowell, the pack's
+  other 19; a canonical surname followed only by 1–3 initials too, so "Bach CPE" is and "Adam Levine" is not); a piece
+  of the pack's three collections, Classical; anything else, Modern. Within one import a name a strong rule made
+  Classical teaches the import's later pieces; a duplicate that fills a blank name is sorted again; Rename never
+  changes a genre.
+- **The upgrade** (schema 4 → 5) adds the column, then sorts every piece with the same lists in two passes: the rule
+  without artists, then a Modern piece whose artist has a Classical piece becomes Classical. Every row stays.
+- **Moves.** A piece, or every piece by one name, goes to Classical or Modern; made-here pieces and the blank name stay
+  out. **Playlists** show under the genre most of their pieces have, under both on a tie or when empty; Recordings and
+  Made in Studio always.
+- **Channels.** **Classical** and **Modern** come first, every piece of their genre; the other channels are listed under
+  Classical, Everything under both. **Studio** reads "classical", "classic", "modern", "pop" and "contemporary" as those
+  channels: "… in the manner of Modern pieces".
+
+## The Library
+
+Run 2 writes this.
+
+## The web panel and guests
+
+Run 3 writes this.

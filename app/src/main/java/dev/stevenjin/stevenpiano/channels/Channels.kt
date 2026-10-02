@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.channels
 
 import android.content.Context
 import android.util.Log
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.TextKeys
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInList
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -49,6 +50,11 @@ sealed interface PoolMatcher {
         override fun pool(pieces: List<PieceEntity>): List<Long> = list.matches(pieces)
     }
 
+    /** Every piece of one [genre] (v1.14 — M37: the Classical and Modern channels). */
+    class Genre(val genre: Int) : PoolMatcher {
+        override fun pool(pieces: List<PieceEntity>): List<Long> = pieces.filter { it.genre == genre }.map { it.id }
+    }
+
     /**
      * Pieces by one of [composers] (composerKeys) or whose folded title matches [titles], and,
      * with [maxNotesPerSecond], that play no more notes a second than that on average (the density
@@ -77,8 +83,11 @@ sealed interface PoolMatcher {
     }
 }
 
-/** A channel: endless play from a pool (Calm, Epic, Baroque…). [key] is what the player and the settings know it by. */
-class Channel(val key: String, val name: String, val pool: PoolMatcher) {
+/**
+ * A channel: endless play from a pool (Calm, Epic, Baroque…). [key] is what the player and the settings know it by;
+ * [genre] is the genre it is listed under (v1.14 — M37: [Genres.NONE] for Everything, which is both).
+ */
+class Channel(val key: String, val name: String, val pool: PoolMatcher, val genre: Int = Genres.NONE) {
     fun pool(pieces: List<PieceEntity>): List<Long> = pool.pool(pieces)
 }
 
@@ -86,11 +95,12 @@ class Channel(val key: String, val name: String, val pool: PoolMatcher) {
 data class CardComposer(val key: String, val name: String)
 
 /**
- * A channel as its card shows it: the pool's [ids] (what it plays), its size, and the four
- * composers it holds most pieces by, most first ([composers], for the mosaic). Equal when nothing
- * the card shows has changed, so a library change that leaves a pool alone does not re-lay the row.
+ * A channel as its card shows it: the pool's [ids] (what it plays), its size, the four composers
+ * it holds most pieces by, most first ([composers], for the mosaic), and the genre it is listed
+ * under ([genre], v1.14 — M37). Equal when nothing the card shows has changed, so a library change
+ * that leaves a pool alone does not re-lay the row.
  */
-data class ChannelSummary(val key: String, val name: String, val ids: List<Long>, val composers: List<CardComposer>) {
+data class ChannelSummary(val key: String, val name: String, val ids: List<Long>, val composers: List<CardComposer>, val genre: Int = Genres.NONE) {
     val size: Int get() = ids.size
 
     /** Fewer than [MIN_POOL] pieces: the card says "Add more pieces" and does not play. */
@@ -114,20 +124,22 @@ object Channels {
 
     /**
      * The channels in [json], in their order on screen: each a key, a name, and either `all`, a
-     * `builtIn` list's key, or `composers` and `titles` (patterns for the folded title, any one
-     * enough) with an optional `maxNotesPerSecond`. A malformed catalogue throws: it ships with the
-     * app, and ChannelsTest reads it.
+     * `genrePool` ("classical", "modern": every piece of that genre), a `builtIn` list's key, or
+     * `composers` and `titles` (patterns for the folded title, any one enough) with an optional
+     * `maxNotesPerSecond`; and the `genre` it is listed under, if any. A malformed catalogue throws:
+     * it ships with the app, and ChannelsTest reads it.
      */
     fun parse(json: String, builtIns: List<BuiltInList>): List<Channel> {
         val channels = JSONObject(json).getJSONArray("channels")
         return (0 until channels.length()).map { i ->
             val channel = channels.getJSONObject(i)
-            Channel(channel.getString("key"), channel.getString("name"), poolOf(channel, builtIns))
+            Channel(channel.getString("key"), channel.getString("name"), poolOf(channel, builtIns), genreOf(channel, "genre") ?: Genres.NONE)
         }
     }
 
     private fun poolOf(json: JSONObject, builtIns: List<BuiltInList>): PoolMatcher = when {
         json.optBoolean("all") -> PoolMatcher.All
+        json.has("genrePool") -> PoolMatcher.Genre(genreOf(json, "genrePool")!!)
         json.has("builtIn") -> json.getString("builtIn").let { key ->
             PoolMatcher.BuiltIn(builtIns.firstOrNull { it.key == key } ?: error("No built-in list \"$key\" for channel ${json.getString("key")}"))
         }
@@ -140,12 +152,19 @@ object Channels {
 
     private fun strings(array: JSONArray?): List<String> = if (array == null) emptyList() else (0 until array.length()).map { array.getString(it) }
 
+    /** The genre [field] names ("classical", "modern"); null when there is none; any other word throws. */
+    private fun genreOf(json: JSONObject, field: String): Int? {
+        if (!json.has(field)) return null
+        val name = json.getString(field)
+        return Genres.named(name) ?: error("No genre \"$name\" for channel ${json.getString("key")}")
+    }
+
     /** Every channel's card for [pieces] (the library), in the channels' order. */
     fun summaries(channels: List<Channel>, pieces: List<PieceEntity>): List<ChannelSummary> {
         val byId = pieces.associateBy { it.id }
         return channels.map { channel ->
             val ids = channel.pool(pieces)
-            ChannelSummary(channel.key, channel.name, ids, topComposers(ids.mapNotNull(byId::get)))
+            ChannelSummary(channel.key, channel.name, ids, topComposers(ids.mapNotNull(byId::get)), channel.genre)
         }
     }
 

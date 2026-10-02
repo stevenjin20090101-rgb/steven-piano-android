@@ -35,6 +35,49 @@ interface PieceDao {
     @Query("SELECT * FROM pieces WHERE composerKey = :composerKey ORDER BY titleKey")
     fun byComposer(composerKey: String): Flow<List<PieceEntity>>
 
+    // The genre twins (v1.14 — M37): each list above for one genre's pieces, in SQL (Recent is a LIMIT, so it can't be filtered after).
+
+    @Query("SELECT * FROM pieces WHERE genre = :genre ORDER BY titleKey")
+    fun allIn(genre: Int): Flow<List<PieceEntity>>
+
+    /** [pattern] is folded and LIKE-escaped with '\'. */
+    @Query("SELECT * FROM pieces WHERE genre = :genre AND searchText LIKE '%' || :pattern || '%' ESCAPE '\\' ORDER BY titleKey")
+    fun searchIn(pattern: String, genre: Int): Flow<List<PieceEntity>>
+
+    @Query("SELECT * FROM pieces WHERE favorite = 1 AND genre = :genre ORDER BY titleKey")
+    fun favoritesIn(genre: Int): Flow<List<PieceEntity>>
+
+    @Query("SELECT * FROM pieces WHERE genre = :genre ORDER BY COALESCE(lastPlayedAt, addedAt) DESC, id DESC LIMIT 100")
+    fun recentIn(genre: Int): Flow<List<PieceEntity>>
+
+    @Query("SELECT * FROM pieces WHERE composerKey = :composerKey AND genre = :genre ORDER BY titleKey")
+    fun byComposerIn(composerKey: String, genre: Int): Flow<List<PieceEntity>>
+
+    /** The composers or artists with a piece of [genre], each counted within it (the `composer_groups` view, for one genre). */
+    @Query(
+        "SELECT composerKey, MIN(composer) AS name, MIN(composerShort) AS shortName, COUNT(*) AS pieceCount " +
+            "FROM pieces WHERE genre = :genre GROUP BY composerKey ORDER BY composerKey",
+    )
+    fun composersIn(genre: Int): Flow<List<ComposerGroup>>
+
+    /** Every artist's Classical and Modern pieces counted (never the blank key, never a piece made here): the import's rule 2. */
+    @Query(
+        "SELECT composerKey, SUM(genre = 1) AS classical, SUM(genre = 2) AS modern FROM pieces " +
+            "WHERE composerKey != '' AND genre != 0 GROUP BY composerKey",
+    )
+    suspend fun artistGenres(): List<ArtistGenres>
+
+    @Query("UPDATE pieces SET genre = :genre WHERE id = :id")
+    suspend fun setGenre(id: Long, genre: Int)
+
+    /** Every piece by [composerKey] but one made here (which keeps no genre). */
+    @Query("UPDATE pieces SET genre = :genre WHERE composerKey = :composerKey AND genre != 0")
+    suspend fun setComposerGenre(composerKey: String, genre: Int)
+
+    /** The first [limit] Modern pieces by title: the guests' list. */
+    @Query("SELECT * FROM pieces WHERE genre = 2 ORDER BY titleKey LIMIT :limit")
+    suspend fun modern(limit: Int): List<PieceEntity>
+
     /**
      * Studio's default seed (v1.7 — M24): the piece played last whose composer isn't [except] (Studio's
      * own pieces), else the first such by title; null when there is none.

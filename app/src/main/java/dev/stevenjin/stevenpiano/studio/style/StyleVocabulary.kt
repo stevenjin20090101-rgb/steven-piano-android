@@ -123,6 +123,12 @@ object StyleVocabulary {
         "popular" to "popular", "favourite" to "popular", "favorite" to "popular",
     )
 
+    /** The catalogue's aliases (folded) for the genre channels (v1.14 — M37), beside their keys and names. */
+    val channelAliases: Map<String, String> = mapOf(
+        "classical" to "classical", "classic" to "classical",
+        "modern" to "modern", "pop" to "modern", "contemporary" to "modern",
+    )
+
     /** Catalogue entries never named by an idea (they are the whole library). */
     val notCatalogue = setOf("everything", "all")
 
@@ -196,6 +202,7 @@ object StyleVocabulary {
             addAll(stopWords)
             forms.forEach { addAll(it.words) }
             listAliases.keys.forEach { addAll(it.split(' ')) }
+            channelAliases.keys.forEach { addAll(it.split(' ')) }
         }
     }
 }

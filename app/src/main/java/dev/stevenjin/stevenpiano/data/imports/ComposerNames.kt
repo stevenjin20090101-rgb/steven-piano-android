@@ -39,6 +39,9 @@ object ComposerNames {
         "Pyotr Ilyich Tchaikovsky", "Traditional",
     ).associateBy { TextKeys.fold(it.substringAfterLast(' ')) }
 
+    /** The folded surnames [canonical] knows (47, "traditional" among them): Classical by key (v1.14 — M37, `Genres`). */
+    val CANONICAL_KEYS: Set<String> = CANONICAL.keys
+
     /** Other spellings of a folded surname. */
     private val VARIANTS = mapOf(
         "rachmaninow" to "rachmaninoff", "rachmaninov" to "rachmaninoff", "rakhmaninov" to "rachmaninoff",

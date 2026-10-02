@@ -18,10 +18,13 @@ import kotlinx.coroutines.flow.Flow
 /** Playlists and their pieces (tables `collections` and `collection_pieces`, as in v1). */
 @Dao
 interface PlaylistDao {
-    /** Every playlist by name, with how many pieces it holds, how long they last together, and whether it is built in. */
+    /**
+     * Every playlist by name, with how many pieces it holds, how long they last together, whether it is built in,
+     * and how many of its pieces are Classical and how many Modern (v1.14 — M37).
+     */
     @Query(
         "SELECT c.id, c.name, c.imported, COUNT(cp.pieceId) AS pieceCount, COALESCE(SUM(p.durationMs), 0) AS durationMs, " +
-            "c.builtIn, c.builtInKey " +
+            "c.builtIn, c.builtInKey, COALESCE(SUM(p.genre = 1), 0) AS classicalCount, COALESCE(SUM(p.genre = 2), 0) AS modernCount " +
             "FROM collections c LEFT JOIN collection_pieces cp ON cp.collectionId = c.id " +
             "LEFT JOIN pieces p ON p.id = cp.pieceId GROUP BY c.id ORDER BY c.name COLLATE NOCASE",
     )

@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.data.imports
 import android.content.Context
 import android.util.Log
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -49,6 +50,9 @@ interface ImportStore {
      * already stays where it is. Returns the playlist, or null when none of the pieces is in the library.
      */
     suspend fun linkToPlaylist(name: String, imported: Boolean, shas: List<String>): ImportedPlaylist?
+
+    /** Each artist's genre by key, the one most of their pieces have (v1.14 — M37: [Genres.of]'s rule 2). */
+    suspend fun artistGenres(): Map<String, Int> = emptyMap()
 }
 
 /**
@@ -56,9 +60,10 @@ interface ImportStore {
  * (filling in a blank composer when this copy knows one), parse, name (INDEX.csv row, else
  * the file name, read the other way round when only its right side is a known artist, else the
  * artist folder that holds it, else Track 0's name for stub titles: [TitleHeuristics], DESIGN.md ›
- * v1.10.1), save, then insert 25 per transaction. What a Mac adds beside the music (`__MACOSX/`,
- * `._name`) is skipped before anything is counted. Files listed in INDEX.csv go first, so its names
- * win over copies elsewhere in the tree.
+ * v1.10.1), sort (Classical or Modern: [Genres.of], v1.14 — M37), save, then insert 25 per
+ * transaction. What a Mac adds beside the music (`__MACOSX/`, `._name`) is skipped before
+ * anything is counted. Files listed in INDEX.csv go first, so its names win over copies elsewhere
+ * in the tree.
  * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
  * (an [OutOfMemoryError]) counts as failed, and so does a file whose sender or database throws
  * anything else: one bad file never ends the import, nor the app. One import runs at a time;
@@ -127,6 +132,7 @@ class Importer(
         val items = listed.sortedByDescending { source.rowFor(it) != null }
         val folders = ImportFolders(listed.map { it.relativePath })
         val names = BatchNames(store, folders)
+        val genres = BatchGenres(store.artistGenres())
         var state = ImportProgress(total = items.size, finished = false)
         sink.value = state
         val seen = HashSet<String>()
@@ -155,7 +161,7 @@ class Importer(
             state = state.copy(current = item.name)
             sink.value = state
             val outcome = try {
-                prepare(item, source.rowFor(item), seen, names)
+                prepare(item, source.rowFor(item), seen, names, genres)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RuntimeException) {   // a sender's provider or the database threw: this file fails, the rest go on
@@ -241,7 +247,7 @@ class Importer(
         }
     }
 
-    private suspend fun prepare(item: ImportItem, row: IndexCsv.Row?, seen: MutableSet<String>, names: BatchNames): Outcome {
+    private suspend fun prepare(item: ImportItem, row: IndexCsv.Row?, seen: MutableSet<String>, names: BatchNames, genres: BatchGenres): Outcome {
         val bytes = try {
             item.open().use { ImportLimits.readCapped(it, MAX_BYTES) }
         } catch (e: IOException) {
@@ -257,7 +263,8 @@ class Importer(
             if (existing.composer.isBlank()) {
                 val meta = names.metadata(item, row, emptyList())
                 if (meta.composer.isNotEmpty()) {
-                    store.fillComposer(existing, names.composer(meta))
+                    val name = names.composer(meta)   // sorted again by its new name (v1.14 — M37)
+                    store.fillComposer(existing.copy(genre = genres.of(TextLimits.clip(name.key, TextLimits.COMPOSER), existing.collection)), name)
                     return Outcome.Duplicate(sha, filled = true)
                 }
             }
@@ -293,7 +300,7 @@ class Importer(
             searchText = "",
             titleKey = "",
         ).named(meta.title, names.composer(meta))   // named() cuts the title
-        return Outcome.Ready(piece)
+        return Outcome.Ready(piece.copy(genre = genres.of(piece.composerKey, piece.collection)))
     }
 
     /**
@@ -317,6 +324,21 @@ class Importer(
                     key in folders.artistKeys || keys.getOrPut(key) { store.hasComposerKey(key) }
                 }
             }
+        }
+    }
+
+    /**
+     * How one import sorts its pieces (v1.14 — M37, [Genres.of]): by the library's [artists] (each key's majority, read
+     * once a run), and by what the run itself learns: a key a strong rule made Classical (a pack collection's
+     * "Anonymous") makes the run's later pieces by it Classical too, as the upgrade's second pass does.
+     */
+    private class BatchGenres(artists: Map<String, Int>) {
+        private val known = HashMap(artists)
+
+        fun of(composerKey: String, collection: String?): Int {
+            val genre = Genres.of(composerKey, collection, known)
+            if (genre == Genres.CLASSICAL && composerKey.isNotBlank() && composerKey !in known) known[composerKey] = genre
+            return genre
         }
     }
 

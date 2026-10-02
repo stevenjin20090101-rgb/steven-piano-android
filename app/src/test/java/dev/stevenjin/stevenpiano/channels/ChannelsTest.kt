@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.channels
 
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
 import dev.stevenjin.stevenpiano.data.builtin.LibraryFixture
 import dev.stevenjin.stevenpiano.data.builtin.LibraryFixture.piece
@@ -19,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The channels (DESIGN.md › v1.5 — M17): their order and names, each pool's rule (composers,
+ * The channels (DESIGN.md › v1.5 — M17): their order, names and genres, each pool's rule (composers,
  * titles, Calm's note density, Epic as the built-in list, Everything as the library), the pools in
  * Steven's library, the four composers a card shows, and what the channels say.
  */
@@ -31,8 +32,16 @@ class ChannelsTest {
 
     @Test
     fun `the channels in their order on screen`() {
-        assertEquals(listOf("calm", "epic", "recognisable", "popular", "baroque", "romantic", "impressionist", "nocturnes", "etudes", "everything"), channels.map { it.key })
-        assertEquals(listOf("Calm", "Epic", "Recognisable", "Popular", "Baroque", "Romantic", "Impressionist", "Nocturnes", "Études", "Everything"), channels.map { it.name })
+        assertEquals(
+            listOf("classical", "modern", "calm", "epic", "recognisable", "popular", "baroque", "romantic", "impressionist", "nocturnes", "etudes", "everything"),
+            channels.map { it.key },
+        )
+        assertEquals(
+            listOf("Classical", "Modern", "Calm", "Epic", "Recognisable", "Popular", "Baroque", "Romantic", "Impressionist", "Nocturnes", "Études", "Everything"),
+            channels.map { it.name },
+        )
+        // v1.14 — M37: each listed under its genre, Everything under both.
+        assertEquals(listOf(Genres.CLASSICAL, Genres.MODERN) + List(9) { Genres.CLASSICAL } + Genres.NONE, channels.map { it.genre })
     }
 
     @Test
@@ -80,13 +89,14 @@ class ChannelsTest {
     }
 
     @Test
-    fun `in Steven's library every channel has a pool to play`() {
+    fun `in Steven's library every channel has a pool to play, but Modern, which waits for uploads`() {
         val fromZip = Channels.summaries(channels, LibraryFixture.allSongs)
         println("Channel pools in Steven's library from ALL-SONGS.zip: " + fromZip.joinToString { "${it.key} ${it.size}" })
-        assertTrue(fromZip.all { it.playable })
+        assertTrue(fromZip.filter { it.key != "modern" }.all { it.playable })
         val summaries = Channels.summaries(channels, LibraryFixture.corpus)
         println("Channel pools in Steven's library from the midi folder: " + summaries.joinToString { "${it.key} ${it.size}" })
-        assertTrue(summaries.all { it.playable })
+        assertTrue(summaries.filter { it.key != "modern" }.all { it.playable })
+        assertEquals("the library pack is Classical, every piece", listOf(1_727, 0), summaries.take(2).map { it.size })
         assertEquals(1_727, summaries.last().size)
         assertEquals(listOf("chopin", "debussy", "schumann"), summaries.first { it.key == "calm" }.composers.take(3).map { it.key })
         assertEquals(listOf("bach", "scarlatti", "handel", "purcell"), summaries.first { it.key == "baroque" }.composers.map { it.key })

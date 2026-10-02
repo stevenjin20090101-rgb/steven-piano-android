@@ -11,6 +11,8 @@ package dev.stevenjin.stevenpiano.data.db
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.stevenjin.stevenpiano.data.Genres
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 
 /**
  * Schema v1 (app 1.1) to v2 (app 1.2): playlists gain an order, and artwork gets its table.
@@ -181,4 +183,51 @@ object SchemaV4 {
             "COALESCE(a.description, 'Made in Studio'), p.id, p.title, 'kept' " +
             "FROM pieces p LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
             "WHERE p.composerKey = 'made in studio' ORDER BY p.addedAt, p.id"
+}
+
+/**
+ * Schema v4 (apps 1.12 to 1.13.1) to v5 (app 1.14 — M37): every piece gets a genre (`pieces.genre`: 0 none, 1
+ * classical, 2 modern), the column added as Room's own auto-migrations add one with a default ([SchemaV5.ADD_GENRE],
+ * as `schemas/…/5.json` declares it: SchemaV5Test holds the two equal), then sorted by [Genres]' rule in two passes:
+ * [SchemaV5.SORT] (made here, none; a classical composer the app knows or a pack collection, classical; else modern),
+ * then [SchemaV5.INHERIT] (an artist's piece that only reached "modern" takes "classical" when another of theirs got
+ * it). Nothing else is touched: every row stays. Runs inside Room's migration transaction.
+ */
+val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        SchemaV5.STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/** Schema v5's statements, the column as Room generated it in `5.json` and the rule in SQL, built from [Genres]' own lists. Pure: unit-tested. */
+object SchemaV5 {
+    /** `pieces.genre`, exactly as 5.json's createSql for the table declares it. */
+    const val GENRE_COLUMN = "`genre` INTEGER NOT NULL DEFAULT 0"
+
+    const val ADD_GENRE = "ALTER TABLE `pieces` ADD COLUMN $GENRE_COLUMN"
+
+    /**
+     * [Genres.strong] for every piece, and modern where it says nothing: made here, 0; a key in [Genres.CLASSICAL_KEYS],
+     * or a canonical surname followed by 1–3 letters a–z ("bach cpe"), 1; a piece of [Genres.PACK_COLLECTIONS], 1; else 2.
+     */
+    val SORT: String =
+        "UPDATE pieces SET genre = CASE " +
+            "WHEN composerKey IN (${list(listOf(ComposerNames.STUDIO_KEY, ComposerNames.RECORDED_LIVE_KEY))}) THEN 0 " +
+            "WHEN composerKey IN (${list(Genres.CLASSICAL_KEYS)}) THEN 1 " +
+            "WHEN instr(composerKey, ' ') > 0 " +
+            "AND substr(composerKey, 1, instr(composerKey, ' ') - 1) IN (${list(ComposerNames.CANONICAL_KEYS)}) " +
+            "AND length(substr(composerKey, instr(composerKey, ' ') + 1)) BETWEEN 1 AND 3 " +
+            "AND substr(composerKey, instr(composerKey, ' ') + 1) NOT GLOB '*[^a-z]*' THEN 1 " +
+            "WHEN collection IN (${list(Genres.PACK_COLLECTIONS)}) THEN 1 " +
+            "ELSE 2 END"
+
+    /** The second pass ([Genres.of]'s rule 2 for the upgrade): a named artist's modern piece is classical when another of theirs is. */
+    const val INHERIT =
+        "UPDATE pieces SET genre = 1 WHERE genre = 2 AND composerKey <> '' AND composerKey IN (SELECT composerKey FROM pieces WHERE genre = 1)"
+
+    /** The migration's statements, in order. */
+    val STATEMENTS: List<String> = listOf(ADD_GENRE, SORT, INHERIT)
+
+    /** [values] as an SQL list of string literals, sorted, each quoted with its quotes doubled. */
+    private fun list(values: Collection<String>): String = values.sorted().joinToString(", ") { "'" + it.replace("'", "''") + "'" }
 }

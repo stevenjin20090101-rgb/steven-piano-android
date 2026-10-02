@@ -1,0 +1,707 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "1d4d48a501864a23fe9d6a1a71d17180",
+    "entities": [
+      {
+        "tableName": "pieces",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `composer` TEXT NOT NULL, `composerKey` TEXT NOT NULL, `composerShort` TEXT NOT NULL, `collection` TEXT, `sha256` TEXT NOT NULL, `fileName` TEXT NOT NULL, `sourceName` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `noteCount` INTEGER NOT NULL, `addedAt` INTEGER NOT NULL, `favorite` INTEGER NOT NULL, `playCount` INTEGER NOT NULL, `lastPlayedAt` INTEGER, `searchText` TEXT NOT NULL, `titleKey` TEXT NOT NULL, `genre` INTEGER NOT NULL DEFAULT 0)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "composer",
+            "columnName": "composer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "composerKey",
+            "columnName": "composerKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "composerShort",
+            "columnName": "composerShort",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collection",
+            "columnName": "collection",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceName",
+            "columnName": "sourceName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "noteCount",
+            "columnName": "noteCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "favorite",
+            "columnName": "favorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playCount",
+            "columnName": "playCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastPlayedAt",
+            "columnName": "lastPlayedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "searchText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleKey",
+            "columnName": "titleKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "genre",
+            "columnName": "genre",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pieces_sha256",
+            "unique": true,
+            "columnNames": [
+              "sha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_pieces_sha256` ON `${TABLE_NAME}` (`sha256`)"
+          },
+          {
+            "name": "index_pieces_titleKey",
+            "unique": false,
+            "columnNames": [
+              "titleKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pieces_titleKey` ON `${TABLE_NAME}` (`titleKey`)"
+          },
+          {
+            "name": "index_pieces_composerKey",
+            "unique": false,
+            "columnNames": [
+              "composerKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pieces_composerKey` ON `${TABLE_NAME}` (`composerKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "collections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `imported` INTEGER NOT NULL, `builtIn` INTEGER NOT NULL DEFAULT 0, `builtInKey` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imported",
+            "columnName": "imported",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "builtIn",
+            "columnName": "builtIn",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "builtInKey",
+            "columnName": "builtInKey",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_collections_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_collections_name` ON `${TABLE_NAME}` (`name`)"
+          },
+          {
+            "name": "index_collections_builtInKey",
+            "unique": true,
+            "columnNames": [
+              "builtInKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_collections_builtInKey` ON `${TABLE_NAME}` (`builtInKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "collection_pieces",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`collectionId` INTEGER NOT NULL, `pieceId` INTEGER NOT NULL, `addedAt` INTEGER NOT NULL, `position` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`collectionId`, `pieceId`), FOREIGN KEY(`collectionId`) REFERENCES `collections`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`pieceId`) REFERENCES `pieces`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "collectionId",
+            "columnName": "collectionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pieceId",
+            "columnName": "pieceId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "collectionId",
+            "pieceId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_collection_pieces_pieceId",
+            "unique": false,
+            "columnNames": [
+              "pieceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_collection_pieces_pieceId` ON `${TABLE_NAME}` (`pieceId`)"
+          },
+          {
+            "name": "index_collection_pieces_collectionId_position",
+            "unique": false,
+            "columnNames": [
+              "collectionId",
+              "position"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_collection_pieces_collectionId_position` ON `${TABLE_NAME}` (`collectionId`, `position`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "collections",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "collectionId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "pieces",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pieceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "artwork",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `imagePath` TEXT, `description` TEXT, `sourceUrl` TEXT, `sourceTitle` TEXT, `fetchedAt` INTEGER NOT NULL, `status` TEXT NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imagePath",
+            "columnName": "imagePath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceUrl",
+            "columnName": "sourceUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceTitle",
+            "columnName": "sourceTitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fetchedAt",
+            "columnName": "fetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      },
+      {
+        "tableName": "schedules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `days` INTEGER NOT NULL, `startMinute` INTEGER NOT NULL, `kind` TEXT NOT NULL, `target` TEXT NOT NULL, `endMinute` INTEGER, `volumePct` INTEGER, `enabled` INTEGER NOT NULL DEFAULT 1, `createdAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "days",
+            "columnName": "days",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startMinute",
+            "columnName": "startMinute",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "target",
+            "columnName": "target",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endMinute",
+            "columnName": "endMinute",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "volumePct",
+            "columnName": "volumePct",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "studio_generations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `createdAt` INTEGER NOT NULL, `kind` TEXT NOT NULL, `parentId` INTEGER, `prompt` TEXT, `understood` TEXT NOT NULL DEFAULT '', `unused` TEXT NOT NULL DEFAULT '', `spec` TEXT, `mood` TEXT, `keyTonic` INTEGER, `keyMinor` INTEGER, `bpm` INTEGER, `minutes` INTEGER, `seedPieceId` INTEGER, `seedTitle` TEXT, `seedComposer` TEXT, `seedSource` TEXT, `randomSeed` INTEGER, `composerModel` TEXT, `composerVersion` INTEGER, `textModel` TEXT, `textModelVersion` INTEGER, `imageModel` TEXT, `imageModelVersion` INTEGER, `tokens` INTEGER, `slides` INTEGER, `stop` TEXT, `musicMs` INTEGER, `wallMs` INTEGER, `pieceId` INTEGER, `title` TEXT, `outcome` TEXT NOT NULL, `error` TEXT, `coverKind` TEXT, `coverSeed` INTEGER, FOREIGN KEY(`parentId`) REFERENCES `studio_generations`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`seedPieceId`) REFERENCES `pieces`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`pieceId`) REFERENCES `pieces`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentId",
+            "columnName": "parentId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "prompt",
+            "columnName": "prompt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "understood",
+            "columnName": "understood",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "unused",
+            "columnName": "unused",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "spec",
+            "columnName": "spec",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mood",
+            "columnName": "mood",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "keyTonic",
+            "columnName": "keyTonic",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "keyMinor",
+            "columnName": "keyMinor",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "bpm",
+            "columnName": "bpm",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "minutes",
+            "columnName": "minutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "seedPieceId",
+            "columnName": "seedPieceId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "seedTitle",
+            "columnName": "seedTitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "seedComposer",
+            "columnName": "seedComposer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "seedSource",
+            "columnName": "seedSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "randomSeed",
+            "columnName": "randomSeed",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "composerModel",
+            "columnName": "composerModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "composerVersion",
+            "columnName": "composerVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "textModel",
+            "columnName": "textModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "textModelVersion",
+            "columnName": "textModelVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "imageModel",
+            "columnName": "imageModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageModelVersion",
+            "columnName": "imageModelVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tokens",
+            "columnName": "tokens",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "slides",
+            "columnName": "slides",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "stop",
+            "columnName": "stop",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "musicMs",
+            "columnName": "musicMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wallMs",
+            "columnName": "wallMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pieceId",
+            "columnName": "pieceId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "error",
+            "columnName": "error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coverKind",
+            "columnName": "coverKind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coverSeed",
+            "columnName": "coverSeed",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_studio_generations_parentId",
+            "unique": false,
+            "columnNames": [
+              "parentId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_studio_generations_parentId` ON `${TABLE_NAME}` (`parentId`)"
+          },
+          {
+            "name": "index_studio_generations_seedPieceId",
+            "unique": false,
+            "columnNames": [
+              "seedPieceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_studio_generations_seedPieceId` ON `${TABLE_NAME}` (`seedPieceId`)"
+          },
+          {
+            "name": "index_studio_generations_pieceId",
+            "unique": true,
+            "columnNames": [
+              "pieceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_studio_generations_pieceId` ON `${TABLE_NAME}` (`pieceId`)"
+          },
+          {
+            "name": "index_studio_generations_createdAt",
+            "unique": false,
+            "columnNames": [
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_studio_generations_createdAt` ON `${TABLE_NAME}` (`createdAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "studio_generations",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "parentId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "pieces",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "seedPieceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "pieces",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pieceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [
+      {
+        "viewName": "composer_groups",
+        "createSql": "CREATE VIEW `${VIEW_NAME}` AS SELECT composerKey, MIN(composer) AS name, MIN(composerShort) AS shortName, COUNT(*) AS pieceCount FROM pieces GROUP BY composerKey"
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1d4d48a501864a23fe9d6a1a71d17180')"
+    ]
+  }
+}
