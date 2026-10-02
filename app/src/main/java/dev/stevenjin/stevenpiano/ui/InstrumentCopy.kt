@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.ble.LinkError
+import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.LiveThru
 import dev.stevenjin.stevenpiano.instruments.LiveTrip
@@ -80,6 +82,36 @@ object InstrumentCopy {
     const val CABLE_NOTE = "A cable is steadier than Bluetooth: plug the keyboard into the tablet when you can."
     const val PAIR_LINE = "This keyboard asks to pair. Accept the request, or pair it in Bluetooth settings, then choose it again."
     const val OPEN_BLUETOOTH_SETTINGS = "Open Bluetooth settings"
+
+    // ---- The Instrument page -----------------------------------------------------------------
+
+    const val STEVEN_PIANO = "Steven Piano"
+    const val THIS_INSTRUMENT = "This instrument"
+    const val CHOOSE = "Choose"
+    const val ANOTHER_MIDI_PIANO = "Another MIDI piano…"
+    const val ACTIONS = "Actions"
+    const val ALL_KEYS_OFF = "All keys off"
+    const val CONNECT = "Connect"
+    const val DISCONNECT = "Disconnect"
+
+    /** What kind of instrument it is. */
+    fun kindLine(kind: InstrumentKind): String = if (kind == InstrumentKind.StevenPiano) "The school piano" else "Standard MIDI piano"
+
+    /** The Instrument row's value: "Steven Piano", or the MIDI piano's name. */
+    fun instrumentValue(kind: InstrumentKind, midiName: String?): String =
+        if (kind == InstrumentKind.StevenPiano) STEVEN_PIANO else midiName?.takeIf { it.isNotBlank() } ?: "MIDI piano"
+
+    /** The instrument's state in words, as the connection card and the Instrument page say it. */
+    fun linkWords(kind: InstrumentKind, link: LinkState): String = when (link) {
+        is LinkState.Connected -> "Connected"
+        LinkState.Scanning -> if (kind == InstrumentKind.StevenPiano) "Looking for the piano…" else "Connecting…"
+        LinkState.Connecting -> "Connecting…"
+        is LinkState.Reconnecting -> "Reconnecting…"
+        LinkState.Disconnected, is LinkState.Error -> "Not connected"
+    }
+
+    /** Under a MIDI piano: why the PIANO group is gone. */
+    fun hiddenNote(name: String): String = "Feel, Lighting, Pedal and Firmware belong to Steven Piano and are hidden while $name plays."
 
     // ---- The picker -------------------------------------------------------------------------
 

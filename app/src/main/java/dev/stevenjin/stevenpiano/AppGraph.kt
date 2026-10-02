@@ -68,7 +68,12 @@ import dev.stevenjin.stevenpiano.instruments.AndroidMidiBluetooth
 import dev.stevenjin.stevenpiano.instruments.AndroidMidiPorts
 import dev.stevenjin.stevenpiano.instruments.CombinedMidiPorts
 import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
+import dev.stevenjin.stevenpiano.instruments.InstrumentSwitch
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.MidiChoice
+import dev.stevenjin.stevenpiano.instruments.MidiNames
+import dev.stevenjin.stevenpiano.instruments.MidiPortLink
 import dev.stevenjin.stevenpiano.instruments.LivePlayer
 import dev.stevenjin.stevenpiano.instruments.LiveThru
 import dev.stevenjin.stevenpiano.instruments.LiveTimingHold
@@ -80,6 +85,7 @@ import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikipediaClient
+import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -94,6 +100,7 @@ import dev.stevenjin.stevenpiano.service.LibraryService
 import dev.stevenjin.stevenpiano.service.StudioService
 import dev.stevenjin.stevenpiano.service.WebService
 import dev.stevenjin.stevenpiano.settings.Appearance
+import dev.stevenjin.stevenpiano.settings.InstrumentChoice
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.settingsDataStore
@@ -232,7 +239,7 @@ class AppGraph(private val app: Application) {
      */
     val scanThrottle = ScanThrottle()
 
-    private val link = lazy {
+    private val steven = lazy {
         if (LoggingPianoLink.isWanted()) {
             LoggingPianoLink()
         } else {
@@ -304,11 +311,52 @@ class AppGraph(private val app: Application) {
         )
     }
 
-    /** The Bluetooth link; on an emulator in debug builds, a stand-in that logs what it would send. */
-    val pianoLink: PianoLink by link
+    /**
+     * Steven Piano's own Bluetooth link; on an emulator in debug builds, a stand-in that logs what it would send. The
+     * piano's settings and its firmware updater read this one: under a MIDI piano they see it disconnected.
+     */
+    val stevenLink: PianoLink by steven
+
+    /**
+     * A MIDI piano as the app's output (v1.11 — M29), through Android's MIDI service, sent from its own thread at audio
+     * priority.
+     */
+    val midiLink: MidiPortLink by lazy {
+        MidiPortLink(
+            devices = midiDevices,
+            bluetooth = midiBluetooth,
+            executor = HandlerLinkExecutor(midiThread.looper),
+            log = LinkLog::warn,
+            startThread = { body ->
+                Thread({
+                    Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+                    body.run()
+                }, "steven-piano-midi-out").apply {
+                    isDaemon = true
+                    start()
+                }
+            },
+        )
+    }
+
+    private val link = lazy {
+        val saved = settings.value
+        InstrumentSwitch(
+            stevenLink,
+            midiLink,
+            appScope,
+            initial = if (saved.instrumentKind == InstrumentChoice.MIDI_PIANO && saved.midiOutId != null) InstrumentKind.MidiPiano else InstrumentKind.StevenPiano,
+        )
+    }
+
+    /**
+     * The instrument that plays (v1.11 — M29): Steven Piano's link or a MIDI piano's, as chosen ([InstrumentSwitch]).
+     * Everything that plays or shows the connection reads this one.
+     */
+    val pianoLink: InstrumentSwitch by link
 
     /** The link if something has made it already, else null: the crash handler's view, which must never make one. */
-    fun pianoLinkIfMade(): PianoLink? = if (link.isInitialized()) link.value else null
+    fun pianoLinkIfMade(): PianoLink? = if (link.isInitialized()) link.value else if (steven.isInitialized()) steven.value else null
 
     /**
      * The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23), and
@@ -383,7 +431,7 @@ class AppGraph(private val app: Application) {
     }
 
     /** The piano's own settings over its console, read on every connection. */
-    val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(pianoLink, appScope) }
+    val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(stevenLink, appScope) }
 
     /** The channels, in their order on screen (Calm, Epic, Baroque…), read from the app's assets the first time, off the main thread. */
     val channels: List<Channel> by lazy { Channels.load(app, builtIns.lists) }
@@ -474,7 +522,7 @@ class AppGraph(private val app: Application) {
     val firmwareUpdater: FirmwareUpdater by lazy {
         val fake = fakeOta
         FirmwareUpdater(
-            link = pianoLink,
+            link = stevenLink,
             pianoState = pianoSettings.state,
             readFact = pianoSettings::readFact,
             player = object : FirmwarePlayer {
@@ -777,10 +825,68 @@ class AppGraph(private val app: Application) {
             // The keyboard first (v1.11 — M29): its address is foreign to the piano's link before that link scans.
             midiDevices.start()
             keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
+            restoreInstrument(s)
             followLive()
             launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
-            // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
-            if (s.autoConnect && BlePermissions.missing(app).isEmpty()) pianoLink.connect(s.lastDeviceAddress)
+            // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
+            // connects with the same switch; by cable it needs no permission.
+            if (s.autoConnect) {
+                if (pianoLink.kind.value == InstrumentKind.MidiPiano) {
+                    pianoLink.connect(null)
+                } else if (BlePermissions.missing(app).isEmpty()) {
+                    pianoLink.connect(s.lastDeviceAddress)
+                }
+            }
+        }
+    }
+
+    /**
+     * The instrument remembered (v1.11 — M29): a MIDI piano chosen before is chosen again (it connects with the rest, as
+     * Steven Piano does), and the player takes its rules.
+     */
+    private fun restoreInstrument(s: PianoSettings) {
+        val choice = midiChoiceOf(s) ?: return
+        if (midiDevices.isPiano(choice.address, choice.name)) return   // never Steven Piano as a MIDI piano: Steven Piano plays
+        midiLink.choose(choice)
+        if (s.instrumentKind != InstrumentChoice.MIDI_PIANO) return
+        pianoLink.select(InstrumentKind.MidiPiano)
+        player.setProfile(InstrumentKind.MidiPiano.profile)
+    }
+
+    /** The MIDI piano the settings remember, or null. */
+    private fun midiChoiceOf(s: PianoSettings): MidiChoice? {
+        val id = s.midiOutId ?: return null
+        val transport = MidiNames.transportOf(id) ?: return null
+        return MidiChoice(id, MidiNames.clean(s.midiOutName).ifEmpty { "MIDI piano" }, transport, MidiNames.addressOf(id))
+    }
+
+    /**
+     * Another instrument plays from now on (v1.11 — M29; Piano › Instrument, which asks for the PIN in kiosk mode): the
+     * one playing is paused and silenced first (its stop sequence written), and let go; then the new one is chosen, the
+     * player takes its rules, the choice is remembered, and the new one connects. Nothing while the player is locked for a
+     * firmware update. [choice]: the MIDI piano, for [InstrumentKind.MidiPiano].
+     */
+    fun chooseInstrument(kind: InstrumentKind, choice: MidiChoice? = null) {
+        if (player.locked) return
+        if (kind == InstrumentKind.MidiPiano && choice == null && midiLink.choice == null) return
+        appScope.launch {
+            player.pauseAndFlush(DISCONNECT_FLUSH_MS)
+            pianoLink.disconnect()
+            if (choice != null) midiLink.choose(choice)
+            pianoLink.select(kind)
+            player.setProfile(kind.profile)
+            val chosen = choice ?: midiLink.choice
+            settingsRepository.setInstrument(
+                if (kind == InstrumentKind.MidiPiano) InstrumentChoice.MIDI_PIANO else InstrumentChoice.STEVEN_PIANO,
+                chosen?.key,
+                chosen?.name,
+            )
+            LinkLog.warn("Instrument: " + if (kind == InstrumentKind.MidiPiano) "a MIDI piano" else "Steven Piano")
+            if (kind == InstrumentKind.StevenPiano) {
+                if (BlePermissions.missing(app).isEmpty()) pianoLink.connect(settings.value.lastDeviceAddress)
+            } else {
+                pianoLink.connect(null)
+            }
         }
     }
 
@@ -793,6 +899,12 @@ class AppGraph(private val app: Application) {
         val live = liveThru
         appScope.launch { settingsRepository.settings.map { it.liveToPiano }.distinctUntilChanged().collect(live::setWanted) }
         appScope.launch { keyboard.state.map { it.connected }.distinctUntilChanged().collect(live::setKeyboard) }
+        // A keyboard that is the instrument too never plays through: every key would sound twice, or loop.
+        appScope.launch {
+            combine(pianoLink.kind, settingsRepository.settings) { kind, s -> kind == InstrumentKind.MidiPiano && s.midiOutId != null && s.midiOutId == s.keyboardId }
+                .distinctUntilChanged()
+                .collect(live::setLooped)
+        }
         appScope.launch {
             combine(pianoLink.state, tabletSound.state) { link, sound -> link is LinkState.Connected || sound.active }
                 .distinctUntilChanged()
@@ -912,6 +1024,15 @@ class AppGraph(private val app: Application) {
             if (!settingsRepository.settings.first().webEnabled) WebService.stop(app)
             LinkLog.warn("Cloud: this tablet's enrolment was forgotten")
         }
+    }
+
+    /**
+     * All keys off (Piano › Instrument, v1.11 — M29): the instrument's stop sequence through the player, at once; on
+     * Steven Piano also its own `off` over its console, where it has one (as Firmware and status's All keys off).
+     */
+    fun allKeysOff() {
+        player.allKeysOff()
+        if (pianoLink.kind.value == InstrumentKind.StevenPiano) pianoSettings.action(PianoAction.AllKeysOff)
     }
 
     /** Disconnect from the Piano tab: the player pauses first, so the piano is silenced, then the link drops. */

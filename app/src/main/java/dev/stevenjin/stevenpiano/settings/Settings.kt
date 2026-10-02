@@ -72,6 +72,9 @@ enum class Appearance {
     }
 }
 
+/** The instrument the settings remember (v1.11 — M29): Steven Piano, or a MIDI piano. */
+enum class InstrumentChoice { STEVEN_PIANO, MIDI_PIANO }
+
 /** Display mode's canvas: true black (the default), or the app's own surface, ink or paper as the app appears. */
 enum class StandbyCanvas { BLACK, INK }
 
@@ -175,6 +178,12 @@ data class PianoSettings(
     val keyboardName: String? = null,
     /** Live on the Keys tab (v1.11 — M29): the keyboard plays the instrument while the tab is on screen; off at first, remembered. */
     val liveToPiano: Boolean = false,
+    /** The instrument that plays (Piano › Instrument, v1.11 — M29): Steven Piano (the default), or a MIDI piano ([midiOutId]). */
+    val instrumentKind: InstrumentChoice = InstrumentChoice.STEVEN_PIANO,
+    /** The MIDI piano chosen, by what identifies it (as [keyboardId]); null: none chosen yet. */
+    val midiOutId: String? = null,
+    /** The MIDI piano's name as shown, with [midiOutId]. */
+    val midiOutName: String? = null,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -368,6 +377,18 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The Playlists listing's order (v1.10.1 — M28). */
     suspend fun setPlaylistSort(sort: PlaylistSort) = edit { it[PLAYLIST_SORT] = sort.name }
 
+    /**
+     * The instrument (v1.11 — M29): Steven Piano, or the MIDI piano [id] called [name]. The MIDI piano chosen stays
+     * remembered while Steven Piano plays, so choosing it again needs no search; null forgets it.
+     */
+    suspend fun setInstrument(kind: InstrumentChoice, id: String?, name: String?) = edit {
+        it[INSTRUMENT_KIND] = kind.name
+        if (id != null) {   // without one (Steven Piano chosen), the MIDI piano chosen before stays remembered
+            it[MIDI_OUT_ID] = id.take(MAX_DEVICE_ID)
+            it[MIDI_OUT_NAME] = (name ?: "").take(MAX_DEVICE_NAME)
+        }
+    }
+
     /** Live on the Keys tab (v1.11 — M29); the flood breaker turns it off. */
     suspend fun setLiveToPiano(on: Boolean) = edit { it[LIVE_TO_PIANO] = on }
 
@@ -466,6 +487,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             keyboardId = this[KEYBOARD_ID],
             keyboardName = this[KEYBOARD_ID]?.let { this[KEYBOARD_NAME] },
             liveToPiano = this[LIVE_TO_PIANO] ?: defaults.liveToPiano,
+            instrumentKind = InstrumentChoice.entries.firstOrNull { it.name == this[INSTRUMENT_KIND] }
+                ?.takeIf { it == InstrumentChoice.STEVEN_PIANO || this[MIDI_OUT_ID] != null } ?: defaults.instrumentKind,
+            midiOutId = this[MIDI_OUT_ID],
+            midiOutName = this[MIDI_OUT_ID]?.let { this[MIDI_OUT_NAME] },
         )
     }
 
@@ -523,6 +548,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KEYBOARD_ID = stringPreferencesKey("keyboardId")
         val KEYBOARD_NAME = stringPreferencesKey("keyboardName")
         val LIVE_TO_PIANO = booleanPreferencesKey("liveToPiano")
+        val INSTRUMENT_KIND = stringPreferencesKey("instrumentKind")
+        val MIDI_OUT_ID = stringPreferencesKey("midiOutId")
+        val MIDI_OUT_NAME = stringPreferencesKey("midiOutName")
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256

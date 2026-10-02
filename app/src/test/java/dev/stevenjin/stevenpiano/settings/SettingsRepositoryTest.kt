@@ -452,4 +452,33 @@ class SettingsRepositoryTest {
         assertEquals(PianoSettings(), repository.settings.first())
         scope.cancel()
     }
+
+    @Test
+    fun `Steven Piano plays at first, a MIDI piano chosen is kept with its name, and choosing Steven Piano again remembers it (v1_11 M29)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "instrument.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(InstrumentChoice.STEVEN_PIANO, repository.settings.first().instrumentKind)
+        repository.setInstrument(InstrumentChoice.MIDI_PIANO, "usb:Roland|FP-30X|1", "FP-30X")
+        val chosen = SettingsRepository(store).settings.first()
+        assertEquals(InstrumentChoice.MIDI_PIANO, chosen.instrumentKind)
+        assertEquals("usb:Roland|FP-30X|1", chosen.midiOutId)
+        assertEquals("FP-30X", chosen.midiOutName)
+        repository.setInstrument(InstrumentChoice.STEVEN_PIANO, null, null)
+        val back = repository.settings.first()
+        assertEquals(InstrumentChoice.STEVEN_PIANO, back.instrumentKind)
+        assertEquals("the MIDI piano stays remembered for next time", "usb:Roland|FP-30X|1", back.midiOutId)
+        repository.setInstrument(InstrumentChoice.MIDI_PIANO, "ble:" + "x".repeat(400), "y".repeat(100))
+        assertEquals(256, repository.settings.first().midiOutId?.length)
+        assertEquals(64, repository.settings.first().midiOutName?.length)
+        store.edit {
+            it.remove(stringPreferencesKey("midiOutId"))
+            it[stringPreferencesKey("instrumentKind")] = "MIDI_PIANO"
+        }
+        assertEquals("a MIDI piano without one chosen is Steven Piano", InstrumentChoice.STEVEN_PIANO, repository.settings.first().instrumentKind)
+        assertEquals(null, repository.settings.first().midiOutName)
+        store.edit { it[stringPreferencesKey("instrumentKind")] = "THEREMIN" }
+        assertEquals(InstrumentChoice.STEVEN_PIANO, repository.settings.first().instrumentKind)
+        scope.cancel()
+    }
 }

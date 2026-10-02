@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.ble.LinkError
+import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
@@ -83,5 +85,24 @@ class InstrumentCopyTest {
         assertNull(InstrumentCopy.takeEnded(TakeEnd.Stopped))
         assertEquals("It stopped by itself after an hour.", InstrumentCopy.takeEnded(TakeEnd.Longest))
         assertEquals("It stopped by itself after five minutes with nothing played.", InstrumentCopy.takeEnded(TakeEnd.Silence))
+    }
+
+    @Test
+    fun `the instrument's words, its row, its kind and its state`() {
+        assertEquals("Steven Piano", InstrumentCopy.instrumentValue(InstrumentKind.StevenPiano, "FP-30X"))
+        assertEquals("FP-30X", InstrumentCopy.instrumentValue(InstrumentKind.MidiPiano, "FP-30X"))
+        assertEquals("MIDI piano", InstrumentCopy.instrumentValue(InstrumentKind.MidiPiano, " "))
+        assertEquals("The school piano", InstrumentCopy.kindLine(InstrumentKind.StevenPiano))
+        assertEquals("Standard MIDI piano", InstrumentCopy.kindLine(InstrumentKind.MidiPiano))
+        assertEquals("Connected", InstrumentCopy.linkWords(InstrumentKind.MidiPiano, LinkState.Connected("FP-30X", 0, 1)))
+        assertEquals("Looking for the piano…", InstrumentCopy.linkWords(InstrumentKind.StevenPiano, LinkState.Scanning))
+        assertEquals("Connecting…", InstrumentCopy.linkWords(InstrumentKind.MidiPiano, LinkState.Scanning))
+        assertEquals("Not connected", InstrumentCopy.linkWords(InstrumentKind.MidiPiano, LinkError.InstrumentGone("FP-30X").toState()))
+        assertEquals(
+            "Feel, Lighting, Pedal and Firmware belong to Steven Piano and are hidden while FP-30X plays.",
+            InstrumentCopy.hiddenNote("FP-30X"),
+        )
+        assertEquals("Another MIDI piano…", InstrumentCopy.ANOTHER_MIDI_PIANO)
+        assertEquals("All keys off", InstrumentCopy.ALL_KEYS_OFF)
     }
 }

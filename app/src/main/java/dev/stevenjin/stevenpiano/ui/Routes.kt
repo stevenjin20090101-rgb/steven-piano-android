@@ -37,9 +37,11 @@ enum class Route(val path: String, val label: String, @param:DrawableRes val ico
  * The Piano tab's pages (DESIGN.md › v1.5), each opened from a row of the hub: `piano/{key}` on
  * phones, beside the hub on wide screens. [piano] is the piano page it shows, for the four whose rows
  * come from the piano's settings table. Remote control (the web panel) came in v1.5.1, Kiosk in
- * v1.6.1, Schedule in v1.6.2, Studio in v1.7, Keyboard in v1.11 (M29: a MIDI keyboard, under INSTRUMENTS).
+ * v1.6.1, Schedule in v1.6.2, Studio in v1.7, Instrument and Keyboard in v1.11 (M29: what plays, and a MIDI
+ * keyboard, under INSTRUMENTS).
  */
 enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?) {
+    Instrument("instrument", "Instrument", null),
     Keyboard("keyboard", "Keyboard", null),
     Feel("feel", "Feel", PianoPage.Feel),
     Lighting("lighting", "Lighting", PianoPage.Lighting),

@@ -87,7 +87,7 @@ class PianoPagesTest {
         assertEquals("with its first row the CONTROL eyebrow shows", listOf("Instruments", "Piano", "Playing", "Control", "App"), HubGroups.shown.map { it.title })
         assertEquals(
             listOf(
-                listOf(HubRow.Page(SettingsPage.Keyboard)),
+                listOf(HubRow.Page(SettingsPage.Instrument), HubRow.Page(SettingsPage.Keyboard)),
                 listOf(HubRow.Page(SettingsPage.Feel), HubRow.Page(SettingsPage.Lighting), HubRow.Page(SettingsPage.Pedal), HubRow.Page(SettingsPage.Firmware)),
                 listOf(HubRow.Page(SettingsPage.Playback), HubRow.Page(SettingsPage.Display), HubRow.Page(SettingsPage.Schedule)),
                 listOf(HubRow.Page(SettingsPage.Remote), HubRow.Page(SettingsPage.Kiosk), HubRow.Page(SettingsPage.Studio)),
@@ -96,6 +96,14 @@ class PianoPagesTest {
             HubGroups.shown.map { it.rows },
         )
         assertTrue("a group without rows still shows nothing", HubGroups.shown.none { it.rows.isEmpty() })
+    }
+
+    @Test
+    fun `while a MIDI piano plays the PIANO group is hidden, everything else stays (v1_11 M29)`() {
+        assertEquals(HubGroups.shown, HubGroups.shown(midiPiano = false))
+        assertEquals(listOf("Instruments", "Playing", "Control", "App"), HubGroups.shown(midiPiano = true).map { it.title })
+        val hidden = HubGroups.shown.flatMap { it.rows } - HubGroups.shown(midiPiano = true).flatMap { it.rows }.toSet()
+        assertEquals("only the piano's own pages", PianoPage.entries.toList(), hidden.map { ((it as HubRow.Page).page).piano })
     }
 
     @Test

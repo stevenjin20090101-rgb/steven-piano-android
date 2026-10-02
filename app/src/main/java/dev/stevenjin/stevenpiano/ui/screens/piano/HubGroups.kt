@@ -43,7 +43,7 @@ data class HubGroup(val title: String, val rows: List<HubRow>)
  */
 object HubGroups {
     val all: List<HubGroup> = listOf(
-        HubGroup("Instruments", pages(SettingsPage.Keyboard)),
+        HubGroup("Instruments", pages(SettingsPage.Instrument, SettingsPage.Keyboard)),
         HubGroup("Piano", pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.Display, SettingsPage.Schedule)),
         HubGroup("Control", pages(SettingsPage.Remote, SettingsPage.Kiosk, SettingsPage.Studio)),
@@ -52,6 +52,15 @@ object HubGroups {
 
     /** What the hub shows: a group with no rows yet shows nothing, not even its eyebrow. */
     val shown: List<HubGroup> = all.filter { it.rows.isNotEmpty() }
+
+    /**
+     * What the hub shows while a MIDI piano plays (v1.11 — M29): the PIANO group's pages belong to Steven Piano (its
+     * feel, lights, pedal and firmware), so they are hidden; [midiPiano] false, [shown].
+     */
+    fun shown(midiPiano: Boolean): List<HubGroup> = if (midiPiano) shown.filter { it.title != PIANO } else shown
+
+    /** The PIANO group's title. */
+    const val PIANO = "Piano"
 
     private fun pages(vararg pages: SettingsPage): List<HubRow> = pages.map { HubRow.Page(it) }
 }

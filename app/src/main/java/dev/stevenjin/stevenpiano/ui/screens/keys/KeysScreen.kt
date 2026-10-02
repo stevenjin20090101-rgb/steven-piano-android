@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.LiveState
 import dev.stevenjin.stevenpiano.record.RecordingSession
 import dev.stevenjin.stevenpiano.record.RecordingState
@@ -104,6 +105,7 @@ fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     val live by vm.live.collectAsStateWithLifecycle()
     val recording by vm.recording.collectAsStateWithLifecycle()
+    val instrument by vm.instrumentKind.collectAsStateWithLifecycle()
     val visible = frame.keysVisibleWhites
     val gate = rememberKioskGate()
     val touches = remember(vm) { KeyTouches(vm) }
@@ -219,7 +221,7 @@ fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
                         record = { RecordButton(taking, elapsed, enabled = recording != RecordingState.Saving, onToggle = vm::record) },
                     )
                     // One quiet line under the pills (v1.11 — M29): why Live is off, or the piano's 2 s rule while it plays.
-                    (recordingNote(recording) ?: keysNote(live, keyboard.connected, steven = link is LinkState.Connected))?.let { note ->
+                    (recordingNote(recording) ?: keysNote(live, keyboard.connected, steven = link is LinkState.Connected && instrument == InstrumentKind.StevenPiano))?.let { note ->
                         Eyebrow(
                             note,
                             Modifier

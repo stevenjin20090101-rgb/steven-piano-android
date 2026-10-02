@@ -18,6 +18,7 @@ import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.LiveState
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
@@ -51,6 +52,9 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** The MIDI keyboard (v1.11 — M29): its state for the eyebrow, and what it holds for the keys to show. */
     val keyboard: StateFlow<KeyboardState> = graph.keyboard.state
     val external: MidiKeyboard = graph.keyboard
+
+    /** The instrument (v1.11 — M29): Steven Piano's 2 s rule is said only while it plays. */
+    val instrumentKind: StateFlow<InstrumentKind> = graph.pianoLink.kind
 
     /** Live (v1.11 — M29): whether the keyboard plays the instrument now, the switch, and why it is off. */
     val live: StateFlow<LiveState> = graph.liveThru.state

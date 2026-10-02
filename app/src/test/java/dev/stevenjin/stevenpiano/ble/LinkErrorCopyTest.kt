@@ -73,4 +73,12 @@ class LinkErrorCopyTest {
         assertEquals("-1 (no scanner: Bluetooth is off)", BleCodes.scanFailure(PianoScanner.NO_SCANNER))
         assertEquals("99", BleCodes.scanFailure(99))
     }
+
+    @Test
+    fun `a MIDI piano's problems name it and say what to do (v1_11 M29)`() {
+        assertEquals("FP-30X isn't connected. Plug it into the tablet or switch it on nearby, then tap Retry.", LinkError.InstrumentGone("FP-30X").message)
+        assertEquals("Another app is using FP-30X. Close it, then tap Retry.", LinkError.InstrumentBusy("FP-30X").message)
+        assertEquals("FP-30X asks to pair. Accept the request, or pair it in Bluetooth settings, then tap Retry.", LinkError.InstrumentPairing("FP-30X").message)
+        assertEquals("This tablet has no MIDI, so it can't play a MIDI piano.", LinkError.NoMidi.message)
+    }
 }

@@ -54,9 +54,13 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
+import dev.stevenjin.stevenpiano.instruments.MidiNames
+import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
+import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.KioskLockCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
@@ -85,6 +89,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.DisplayPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FeelPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwarePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareReport
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.InstrumentPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KeyboardPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KioskPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LockedFirmwareUpdate
@@ -128,7 +133,10 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
         if (!frame.twoPane) vm.takeOpened()?.let(onReopenPage)
     }
     if (frame.twoPane) {
-        val selected by vm.selectedPage.collectAsStateWithLifecycle()
+        val chosen by vm.selectedPage.collectAsStateWithLifecycle()
+        val kind by vm.instrumentKind.collectAsStateWithLifecycle()
+        // A page of Steven Piano's own while a MIDI piano plays (v1.11 — M29): Playback stands in for it.
+        val selected = if (kind == InstrumentKind.MidiPiano && chosen.piano != null) SettingsPage.Playback else chosen
         Row(
             Modifier
                 .fillMaxSize()
@@ -227,6 +235,9 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val studioModels by vm.studioModels.collectAsStateWithLifecycle()
     val studioJobs by vm.studioJobs.collectAsStateWithLifecycle()
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
+    val kind by vm.instrumentKind.collectAsStateWithLifecycle()
+    val midi = kind == InstrumentKind.MidiPiano
+    val instrument = InstrumentCopy.instrumentValue(kind, settings.midiOutName)
     LaunchedEffect(Unit) { vm.checkStudio() }
     val frame = LocalAppFrame.current
     val context = LocalContext.current
@@ -235,7 +246,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, studioModels, studioJobs, keyboard) {
+    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, studioModels, studioJobs, keyboard, instrument) {
         GroupSummaries.from(
             piano,
             settings,
@@ -246,6 +257,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
             nextSchedule?.occurrence?.at,
             StudioCopy.hub(studioModels.size, studioJobs),
             keyboard,
+            instrument,
         )
     }
 
@@ -268,8 +280,12 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
                     onDisconnect = { gate.run(vm::disconnect) },   // Connect stays free; Disconnect asks in kiosk mode
                     onConnectTo = vm::connectTo,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    name = instrument,
+                    status = InstrumentCopy.linkWords(kind, link),
+                    bluetooth = !midi || MidiNames.transportOf(settings.midiOutId) == MidiTransport.BLUETOOTH,
                 )
-                PianoStatusLine(piano, link is LinkState.Connected)
+                // The piano's status line is Steven Piano's: hidden while a MIDI piano plays (v1.11 — M29).
+                if (!midi) PianoStatusLine(piano, link is LinkState.Connected)
                 UpdateRow(
                     update,
                     canInstall,
@@ -277,7 +293,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
                     onRestart = { vm.restart(context) },
                     onAllowInstalls = { runCatching { context.startActivity(vm.installPermissionSettings()) } },
                 )
-                for (group in HubGroups.shown) {
+                for (group in HubGroups.shown(midi)) {
                     SectionEyebrow(group.title)
                     for (row in group.rows) {
                         // Studio on a device it can't run on: the reason where its row would be, nothing to open.
@@ -373,6 +389,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     if (update) LockedFirmwareUpdate(firmware, onCancel = { gate.run(vm::cancelFirmware) })
                     LockedPage(gate, rule = !update)
                 } else when (page) {
+                    SettingsPage.Instrument -> InstrumentPage(vm)
                     SettingsPage.Keyboard -> KeyboardPage(vm)
                     SettingsPage.Feel -> FeelPage(pianoReport(vm), vm)
                     SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)

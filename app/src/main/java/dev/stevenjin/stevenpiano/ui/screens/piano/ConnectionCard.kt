@@ -70,7 +70,9 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
  * device holds it, with Retry and, when Location is off, Open Location settings. Permission is
  * asked for here, in context, with a one-line reason. When only another piano called Steven Piano
  * answered, the phone connects to it only if the person taps Connect to it ([onConnectTo] with its
- * address). Monochrome throughout: the only red is the [LiveDot].
+ * address). Monochrome throughout: the only red is the [LiveDot]. Under a MIDI piano (v1.11 — M29) it names that
+ * instrument ([name]) with its own words ([status]), and asks for no Bluetooth permission for one on a cable
+ * ([bluetooth] false).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -82,6 +84,9 @@ fun ConnectionCard(
     onDisconnect: () -> Unit,
     onConnectTo: (String) -> Unit,
     modifier: Modifier = Modifier,
+    name: String = PianoBluetooth.NAME,
+    status: String = statusOf(link),
+    bluetooth: Boolean = true,
 ) {
     val context = LocalContext.current
     val activity = LocalActivity.current
@@ -101,16 +106,16 @@ fun ConnectionCard(
     }
     val fixThenRetry = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { onConnect() }
     val searching = link == LinkState.Scanning || link == LinkState.Connecting || link is LinkState.Reconnecting
-    val needsPermission = missing.isNotEmpty() && !searching && link !is LinkState.Connected
+    val needsPermission = bluetooth && missing.isNotEmpty() && !searching && link !is LinkState.Connected
 
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp)) {
-            Text(PianoBluetooth.NAME, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 LiveDot(live = link is LinkState.Connected, breathing = playing)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    statusOf(link),
+                    status,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -161,7 +166,7 @@ fun ConnectionCard(
                 searching -> OutlinedButton(onClick = onCancel, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
                     Text("Cancel")
                 }
-                else -> Button(onClick = { if (missing.isEmpty()) onConnect() else askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
+                else -> Button(onClick = { if (!bluetooth || missing.isEmpty()) onConnect() else askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
             }
         }
     }

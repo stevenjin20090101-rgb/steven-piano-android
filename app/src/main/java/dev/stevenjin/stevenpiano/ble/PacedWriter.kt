@@ -106,6 +106,24 @@ class PacedWriter(
         return BleMidiFramer.frame(scratch, 0, n, timestampMs)
     }
 
+    /**
+     * The next [max] messages at most, when they may go at [nowNanos] (the live lane first, then the
+     * backlog), copied into [out] as packed messages; how many, 0 when idle or out of tokens. For a link
+     * that sends whole messages itself (v1.11 — M29: [dev.stevenjin.stevenpiano.instruments.MidiPortLink]),
+     * at the same pace as [nextPacket].
+     */
+    @Synchronized
+    fun nextMessages(nowNanos: Long, out: IntArray, max: Int = out.size): Int {
+        val count = lane.count + backlog.count
+        if (count == 0) return 0
+        refill(nowNanos)
+        val n = minOf(count, (budgetNanos / nanosPerMessage).toInt(), max, out.size)
+        if (n <= 0) return 0
+        for (i in 0 until n) out[i] = take()
+        budgetNanos -= n * nanosPerMessage
+        return n
+    }
+
     /** Nanoseconds until [nextPacket] can return a packet: 0 now, [Long.MAX_VALUE] when idle. */
     @Synchronized
     fun nanosUntilReady(nowNanos: Long): Long {

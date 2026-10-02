@@ -47,9 +47,12 @@ data class GroupSummaries(
     val studio: String = StudioCopy.hub(0, emptyList()),
     /** The MIDI keyboard (v1.11 — M29): "None", its name, or its name and "not connected". */
     val keyboard: String = InstrumentCopy.NONE,
+    /** The instrument (v1.11 — M29): "Steven Piano", or the MIDI piano's name. */
+    val instrument: String = InstrumentCopy.STEVEN_PIANO,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
+        SettingsPage.Instrument -> instrument
         SettingsPage.Keyboard -> keyboard
         SettingsPage.Feel -> feel
         SettingsPage.Lighting -> lighting
@@ -84,6 +87,7 @@ data class GroupSummaries(
             nextSchedule: ZonedDateTime? = null,
             studio: String = StudioCopy.hub(0, emptyList()),
             keyboard: KeyboardState = KeyboardState(),
+            instrument: String = InstrumentCopy.STEVEN_PIANO,
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -96,6 +100,7 @@ data class GroupSummaries(
             schedule = schedule(nextSchedule),
             studio = studio,
             keyboard = InstrumentCopy.keyboardValue(keyboard),
+            instrument = instrument,
         )
 
         /** When the next schedule starts, "Next Wed 12:30", or "None". */

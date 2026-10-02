@@ -121,7 +121,7 @@ class GroupSummariesTest {
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off", "No models"),
+            listOf("Steven Piano", "None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off", "No models"),
             SettingsPage.entries.map { rows.of(it) },
         )
     }

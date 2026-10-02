@@ -170,6 +170,26 @@ sealed interface LinkError {
     data object OtherPiano : LinkError {
         override val message = "Another piano called Steven Piano is nearby, not the one this phone knows. Connect to it only if it's yours."
     }
+
+    /** A MIDI piano (v1.11 — M29) that isn't here: unplugged, switched off, out of range. */
+    data class InstrumentGone(val name: String) : LinkError {
+        override val message: String get() = "$name isn't connected. Plug it into the tablet or switch it on nearby, then tap Retry."
+    }
+
+    /** A MIDI piano whose input another app holds (Android lets one app send to a port at a time). */
+    data class InstrumentBusy(val name: String) : LinkError {
+        override val message: String get() = "Another app is using $name. Close it, then tap Retry."
+    }
+
+    /** A Bluetooth MIDI piano that asks to pair first. */
+    data class InstrumentPairing(val name: String) : LinkError {
+        override val message: String get() = "$name asks to pair. Accept the request, or pair it in Bluetooth settings, then tap Retry."
+    }
+
+    /** No MIDI on this tablet (Android's MIDI service is missing). */
+    data object NoMidi : LinkError {
+        override val message = "This tablet has no MIDI, so it can't play a MIDI piano."
+    }
 }
 
 private const val NOT_FOUND_COPY = "Can't find Steven Piano. Make sure it's powered on, within range, and that no iPad, phone " +

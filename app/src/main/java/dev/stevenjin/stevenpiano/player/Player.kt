@@ -303,6 +303,9 @@ class Player(
         scheduler.submit { engine.external(packed, packed.size, arrivalNanos, it) }
     }
 
+    /** All keys off (v1.11 — M29): the instrument's stop sequence at once; a piece playing goes on. Any thread. */
+    fun allKeysOff() = scheduler.submit { engine.allKeysOff() }
+
     /** Lets go of every key the keyboard holds through the player, its pedal back where the piece wants it (v1.11 — M29). Any thread. */
     fun silenceExternal() = scheduler.submit { engine.silenceExternal() }
 

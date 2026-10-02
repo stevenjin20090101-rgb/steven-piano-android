@@ -24,6 +24,7 @@ import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiChoice
 import dev.stevenjin.stevenpiano.instruments.MidiDeviceRef
@@ -148,6 +149,18 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun cancelTabletSound() = graph.tabletSound.cancelDownload()
 
     fun removeTabletSound() = graph.tabletSound.remove()
+
+    /** The instrument (Piano › Instrument, v1.11 — M29): Steven Piano or a MIDI piano. */
+    val instrumentKind: StateFlow<InstrumentKind> = graph.pianoLink.kind
+
+    /** Steven Piano plays from now on (the MIDI piano silenced and let go first). */
+    fun chooseStevenPiano() = graph.chooseInstrument(InstrumentKind.StevenPiano)
+
+    /** [choice] plays from now on (the instrument before silenced and let go first). */
+    fun chooseMidiPiano(choice: MidiChoice) = graph.chooseInstrument(InstrumentKind.MidiPiano, choice)
+
+    /** All keys off: the instrument's stop sequence at once (and Steven Piano's own off). */
+    fun allKeysOff() = graph.allKeysOff()
 
     /** The MIDI keyboard (Piano › Keyboard, v1.11 — M29). */
     val keyboard: StateFlow<KeyboardState> = graph.keyboard.state

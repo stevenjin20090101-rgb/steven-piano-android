@@ -115,8 +115,16 @@ class MidiDevices(
         refresh()
     }
 
-    /** Whether [address] is a MIDI device the app uses or has seen, never the piano. Any thread. */
-    fun isForeign(address: String): Boolean = address.trim().uppercase() in foreign
+    /**
+     * Whether [address] is a MIDI device the app uses or has seen, never the piano. The remembered piano's own address,
+     * and one found to be Steven Piano, never are, whatever was claimed: the piano's link always reaches its piano. Any
+     * thread.
+     */
+    fun isForeign(address: String): Boolean {
+        val a = address.trim().uppercase()
+        if (a in pianos || a == pianoAddress()?.trim()?.uppercase()) return false
+        return a in foreign
+    }
 
     /** [address] belongs to the chosen keyboard or instrument: foreign from now on, until [unclaim]. Any thread, at once. */
     fun claim(address: String?) {

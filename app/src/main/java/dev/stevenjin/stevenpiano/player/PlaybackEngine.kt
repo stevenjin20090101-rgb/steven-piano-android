@@ -131,6 +131,12 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         if (status == PlaybackStatus.Playing) resync(nowNanos) else silence()
     }
 
+    /**
+     * All keys off (v1.11 — M29, the Instrument page): the instrument's stop sequence at once, every key forgotten; a
+     * piece playing goes on from where it is, its next notes sounding as they come.
+     */
+    fun allKeysOff() = silence()
+
     /** Always silences, even when idle: it is also the app's panic button. */
     fun stop(nowNanos: Long) {
         timing.close()
