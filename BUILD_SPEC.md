@@ -6904,3 +6904,76 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.11
 tablet-size screens found the run as designed; for the Piano tab's reorganisation (M31b): with the Instrument page
 open beside the hub, Disconnect shows twice (the hub's card and the page). The relay Worker is redeployed after
 this release so the console's status carries the instrument and keyboard states.
+
+# v1.13 — M31b: the Piano tab reorganised, with search
+
+Branch `m31b-settings` from `7c24ff5` (1.11), built as if M30 (Studio's own tab) and M31a (the View menu) were
+merged: no Studio row, no NOTES section. No firmware setting was added or removed; nothing about how settings are sent
+changed. No emulator in this run (lean run): unit tests and lint only.
+
+## The structure
+
+`HubGroups`: INSTRUMENTS (Instrument · Keyboard) · THE PIANO (Sound and touch · Lights and screen · Pedal · Firmware
+and status) · PLAYING (Playback · Tablet sound · Schedule) · SHARING (Web panel · Guests) · THIS TABLET (Display · Kiosk
+· Updates · Library and artwork · Help and about). Every hub row is a page (`HubRow.Page` only). `SettingsPage` keeps
+its older constant names where a page was renamed (`Feel`, `Lighting`, `Remote`, keys `feel`/`lighting`/`remote`) so
+the other runs' code still meets them; new pages `TabletSound`, `Guests`, `Updates`, `Artwork`, `Help`.
+`piano/PianoSettings.kt` gains `PianoPage.title`, `PianoFold` (Fine tuning, Strip set-up), `PianoSection.fold`, a
+`Save` section and the rows `ReadStatus` and `SaveNow` (ACTIONS is gone); the key-force readings moved to TOUCH. The
+web panel's piano groups take `PianoPage.title`; their keys are unchanged.
+
+## What moved
+
+- Feel → **Sound and touch**: PRESETS, LOUDNESS ("Full power", "Piano volume"), **Fine tuning** (TOUCH with the key-force
+  readings, TIMING, RELEASE, DRIVE), then "Save to the piano now". Lighting → **Lights and screen**: STRIP, **Strip
+  set-up** (LAYOUT · MOTION, Test LED), THE PIANO'S SCREEN. Firmware and status: FIRMWARE, STATUS with Read status.
+- Playback's TABLET SOUND → **Tablet sound** page ("Tablet volume"). Remote control → **Web panel** (PANEL: "Web
+  panel", address and QR, PIN, "Also on Wi-Fi"; OVER THE INTERNET, was CLOUD: "Web panel over the internet", "Relay
+  address", Enrol, Forget) and **Guests** (two switches, the poster).
+- Display: APPEARANCE (Appearance, black-and-white artwork) and RESTING SCREEN ("Resting screen after a minute",
+  "Background", "What it shows"). "Fetch artwork automatically" → **Library and artwork**, with "Fetch artwork for every
+  composer" and Steven's library (both still in the Library's + sheet).
+- The hub's APP group and About: Auto-connect → Instrument; "Check for updates automatically", "Check for app updates"
+  (was Check now) and the UPDATE block → **Updates**; Share diagnostics and the About lines → **Help and about**.
+- Names: "Web panel" (notification, PIN sheet, panel copy), "Piano/Tablet/Channel/Schedule volume", "Resting screen"
+  (Kiosk's note, the resting screen's TalkBack label). The panel's place names follow ("Piano › Web panel",
+  "Piano › Tablet sound"), and its Save is "Save to the piano now".
+- Notes: 48 new one-line notes, all in `ui/SettingNotes.kt`; `PianoSettings.all` takes the piano's (the panel shows them).
+
+## Search
+
+`ui/screens/piano/SettingsIndex.kt` is pure: entries for every page, every row of the piano's table (anchored by
+setting or fact name; the key-force note is not a row), every row of `PageRows.kt` (the app pages' row table their
+composables draw labels and anchors from), and nine entries for what moved (`Elsewhere`: Now playing › View, Studio,
+Library › Channels). Matching: NFKD-folded, accents dropped, words split at punctuation plus each hyphenated word whole;
+every typed word must prefix a word of the label or a synonym; label hits before synonym hits, hub order, at most 50.
+A result goes through the kiosk gate, then `PianoViewModel.jumpTo` opens its fold and `JumpEffect` (in
+`SettingAnchors.kt`) waits for the row's `Anchored` wrapper to be placed, scrolls it 24 dp under the header and lights
+it with `surfaceVariant` for 1.1 s (snaps under reduced motion). Hidden with THE PIANO while a MIDI piano plays.
+
+## Deviations
+
+- **Studio's result opens the Library on this branch**: `Route.of("studio") ?: Route.Library`, so it opens M30's tab by
+  itself once `Route.Studio` ("studio") is merged.
+- **The UPDATE block left the hub** for the Updates page (the brief's structure); the hub's Updates row names a release
+  on offer ("1.14 available"). In kiosk it is now behind the PIN like every page.
+- **The card hides only its main button** beside the Instrument page; its Bluetooth fixes (Turn on Bluetooth, Retry…)
+  stay, as the page has none. The card is otherwise as before ("compact" taken as no added content).
+- **"Cloud address" is "Relay address"**, the enrol sheet's own word for it (one name per thing).
+- Not done (no emulator): screenshots and on-device checks of the search, the disclosures and the highlight.
+
+## Still naming Studio's page or the NOTES rows on this branch
+
+For the integrator: `ui/screens/piano/pages/StudioPage.kt` and `ComposeSheet.kt` (unreferenced here),
+`PianoViewModel`'s Studio members (`studioSupport`, `studioModels`, `studioJobs`, `checkStudio`, `downloadModel`, …),
+`AboutRow`'s Studio models credit (kept on purpose), the index's `Elsewhere.Studio` entries and `routeOf`;
+`PianoViewModel.setNoteDisplay`, `setWideLayout`, `setFingering`, `setChordNames`, `setHandColours` (no caller here);
+the index's five `Elsewhere.NowPlayingView` entries; README lines on "Piano › Studio" and "Piano › Display ›
+Fingering / Wide layout / Hand colours"; the Hand colours note's "waterfall" now lives only in M31a's View menu.
+
+## Tests
+
+`SettingsIndexTest` (7: every page and row indexed once, label and synonym hits, folding and prefixes, ordering, what
+moved, a MIDI piano, the notes' rules); `PianoPagesTest`, `RoutesTest`, `GroupSummariesTest` rewritten for the pages;
+copy tests updated (`InstrumentCopyTest`, `TabletSoundCopyTest`, `CloudCopyTest`, `WebAssetsTest`,
+`PianoSettingsTableTest`). 1,503 → 1,509 unit tests, all green; lint: no errors, no warning in a touched file.

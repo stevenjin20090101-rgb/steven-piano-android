@@ -2441,3 +2441,17 @@ The panel shows two read-only lines under "Sent to piano" and on its Piano page:
 plays, the panel's Piano page shows those lines and the same note as the tablet; Steven Piano's pages and actions
 are hidden. The relay's status carries the same without any name: the instrument's kind and state, the keyboard's
 transport and state, Live and Recording.
+
+# v1.13 — the Piano tab reorganised, with search (M31b)
+
+Steven chose the hub: INSTRUMENTS · THE PIANO · PLAYING · SHARING · THIS TABLET, under "Search settings" and the card.
+
+- **Every hub row opens a page**; switches and actions sit on the page they belong to, and the row's value says what it holds.
+- **One disclosure per page at most** (Fine tuning, Strip set-up): closed at first, its value names what it holds.
+- **One name per thing**, app and web panel alike: Web panel; Piano, Tablet, Channel and Schedule volume; Resting
+  screen; Falling notes. Copy that names a place names it as the hub does.
+- **Notes**: one plain line, sentence case, no full stop, under 60 characters, all in `ui/SettingNotes.kt`.
+- **Search** is content, not glass: results give the label and its path in the eyebrow; a result opens its page at
+  the row, opens its fold and fills the row with the elevated surface for about a second; what moved off the tab
+  opens its new screen. In kiosk searching is free and a locked page still asks for the PIN.
+- **No action twice**: beside the Instrument page the card shows the name and state only.
