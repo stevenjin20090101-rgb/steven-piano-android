@@ -20,14 +20,14 @@ Wikipedia (see *Artwork and notes* below), for the app's own updates from its
 GitHub repository (see *Updates*), for the piano's firmware releases from the
 firmware's (see *Updating the piano's firmware*) and for Studio's models and the
 piano sound when you download them (see *Studio*, *Piano sound on the tablet*). With
-**Web control** on, it also
+**Web panel** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
-page to guests on the tablet's Wi-Fi (see *Web control*). It can play by itself at set
+page to guests on the tablet's Wi-Fi (see *Web panel*). It can play by itself at set
 times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
-(see *Kiosk*), **Studio** turns a piano recording into a piece, or composes a new one in the
-manner of a piece from the library, on the tablet itself (see *Studio*), and the tablet can play
+(see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
+piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
-on the tablet*). Made by Steven Jin. Version 1.11.
+on the tablet*). Made by Steven Jin. Version 1.12.
 
 ## What it does
 
@@ -90,7 +90,7 @@ on the tablet*). Made by Steven Jin. Version 1.11.
 - **The mini player**: on a phone, whatever is playing sits above the tab bar
   with its portrait, title and composer, play/pause and next; tap it for Now
   playing.
-- **Display mode** (**Piano › Display › Display mode after a minute**, off at
+- **Resting screen** (**Piano › Display › Resting screen after a minute**, off at
   first): after a minute without a touch while a piece is loaded, the screen
   fades slowly into a display for passers-by: the piece's art large (the
   composer's portrait, else its roll card), its title, the composer and the
@@ -98,7 +98,7 @@ on the tablet*). Made by Steven Jin. Version 1.11.
   composer's), the art beside the words when the screen is wider than tall and
   above them when it is taller; the live dot at the foot and the byline, "Player
   piano" over "Made by Steven Jin", at the top right; on true black (or on the
-  app's own ink or paper: **Standby canvas**). **Standby shows › Paper roll**
+  app's own ink or paper: **Background**). **What it shows › Paper roll**
   keeps the earlier display instead: the portrait faint behind the title and the
   paper roll over its keyboard. A new piece cross-fades in. No controls: any
   touch, or Back, fades it away and brings the app back as it was, and does
@@ -211,39 +211,46 @@ on the tablet*). Made by Steven Jin. Version 1.11.
   Live* and *Recording*).
 - **Piano settings**: the piano's own settings, from the Piano tab, over the
   same Bluetooth connection (on firmware with its Bluetooth console; older
-  firmware just says it doesn't offer them yet). **Feel**: the Soft, Cinematic,
-  Expressive and Snappy presets, full power, volume, velocity curve, the strike
-  floors and ceiling (with a strike test), timing, release and drive.
-  **Lighting**: the strip on or off, mode, brightness, palette, length, offset,
-  scale, glow, fade, the piano's own screen, and a *Test LED* that lights one
-  key's LED to line the strip up. **Pedal**: on, half-pedalling, up and down
-  positions. **Firmware and status**: the piano's firmware version, the power
-  boards, I²C errors, uptime, the piano's own status report, *All keys off* and
-  *Save now*. The app reads every value when it connects, sends a change as you
-  make it and shows what the piano reports back; the piano saves your changes
-  when you leave the tab. Bench commands (firing solenoids, resets, per-key
-  force) stay at the piano's USB console.
-- **Piano**: one page of groups. The connection card on top, then
-  **INSTRUMENTS** (**Instrument**: Steven Piano or another MIDI piano;
-  **Keyboard**: the MIDI keyboard; see *Instruments*), **PIANO**
-  (Feel · Lighting · Pedal · Firmware and status, the piano's settings above),
-  **PLAYING** (**Playback**: the pause before each piece, default tempo,
-  transpose, velocity, folding, drum channel, and the tablet's own piano sound;
-  **Display**: appearance (follow
-  the system, light or dark), artwork in black and white, fetching artwork automatically, and
-  standby: display mode after a minute, its canvas and what it shows (how the notes look moved
-  to Now playing's **View** menu in 1.12); **Schedule**: timed play,
-  see *Schedules*), **CONTROL** (**Remote
-  control**: the web panel, its PIN, guests and the poster; **Kiosk**: kiosk
-  mode and its PIN) and
-  **APP** (auto-connect, checking for updates, Check now, Share diagnostics),
-  then the About line. Each row says in a few words what its page holds
-  ("Volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
+  firmware just says it doesn't offer them yet). **Sound and touch**: the Soft,
+  Cinematic, Expressive and Snappy presets, *Full power* and *Piano volume*; under
+  **Fine tuning** (folded until you open it) the velocity curve, the strike floors
+  and ceiling (with a strike test), the key-force readings, timing, release and
+  drive; then *Save to the piano now*. **Lights and screen**: the strip on or off,
+  mode, brightness and palette; under **Strip set-up** its length, offset, scale,
+  glow, fade and a *Test LED* that lights one key's LED to line the strip up; then
+  the piano's own screen. **Pedal**: on, half-pedalling, up and down positions.
+  **Firmware and status**: the piano's firmware version, the power boards, I²C
+  errors, uptime and the piano's own status report (*Read status*). Most rows
+  carry one line saying what they do. The app reads every value when it connects,
+  sends a change as you make it and shows what the piano reports back; the piano
+  saves your changes when you leave the tab. Bench commands (firing solenoids,
+  resets, per-key force) stay at the piano's USB console.
+- **Piano**: one page of groups under **Search settings**. Type a few letters of
+  any setting ("tab vol", "dark", "wifi") and the list gives way to what matches,
+  each with where it lives ("THE PIANO › SOUND AND TOUCH › FINE TUNING"); choose
+  one and its page opens at that row, lit for a moment (a folded section opens
+  itself); settings that moved elsewhere say where ("Fingering — Now playing ›
+  View") and take you there. Then the connection card, then **INSTRUMENTS**
+  (**Instrument**: Steven Piano or another MIDI piano, Connect or Disconnect,
+  *Auto-connect on launch*, *All keys off*; **Keyboard**: the MIDI keyboard; see
+  *Instruments*), **THE PIANO** (Sound and touch · Lights and screen · Pedal ·
+  Firmware and status, the piano's settings above), **PLAYING** (**Playback**: the
+  pause before each piece, default tempo, transpose, velocity, folding, drum
+  channel; **Tablet sound**: the tablet's own piano sound and *Tablet volume*;
+  **Schedule**: timed play, see *Schedules*), **SHARING** (**Web panel**: the
+  panel, its PIN, *Also on Wi-Fi* and the panel over the internet; **Guests**: the
+  guests' switches and the poster) and **THIS TABLET** (**Display**: appearance,
+  artwork in black and white and the **resting screen**: after a minute, its
+  background and what it shows; **Kiosk**; **Updates**: checking by itself, *Check
+  for app updates* and a release on offer; **Library and artwork**: fetching
+  artwork, for every composer too, and Steven's library; **Help and about**: Share
+  diagnostics and the credits). Each row says in a few words what its page holds
+  ("Piano volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
   (back returns), on a tablet or a phone on its side the page opens beside it.
-- **Web control**: the piano from any browser on your phone or laptop, over
+- **Web panel**: the piano from any browser on your phone or laptop, over
   Tailscale and behind a six-digit PIN: Now playing, Up next, the library,
   channels, requests, adding MIDI files and zips, and the piano's settings, all
-  live (see *Web control*).
+  live (see *Web panel*).
 - **Guests' requests**: a printed poster's QR code opens a request page on the
   tablet's Wi-Fi, where anyone can ask the piano for a piece from Popular,
   Recognisable or Epic on piano, one every five minutes; it joins Up next, or
@@ -255,15 +262,17 @@ on the tablet*). Made by Steven Jin. Version 1.11.
 - **Schedules**: the piano plays a channel, a playlist or a piece by itself on
   chosen days at a set time, until an end time or its end, at its own volume; the
   tablet wakes for it with its screen off (see *Schedules*).
-- **Studio**: turns a piano recording (m4a, mp3, wav, flac, ogg…) into a piece on
-  the tablet itself, with how hard each note was played and the pedal, and
-  composes new pieces in the manner of one from the library, with a mood, a key, a
-  tempo and a length: from the Library's **+**, **Piano › Studio** or the web
-  panel's Studio page. Listen, then keep it or discard it. Each model (125 MB, 173 MB)
-  downloads once, when you ask; nothing you record leaves the tablet (see *Studio*).
+- **Studio** (its own tab since 1.12): type an idea ("calm and slow", "a bright waltz,
+  2 minutes", "stormy, in D minor", a composer or a piece's name) and the tablet composes a
+  piece in that manner from the library, showing what it understood, its progress and the
+  notes as they are written; it also turns a piano recording (m4a, mp3, wav, flac, ogg…) into
+  a piece, with how hard each note was played and the pedal. Every piece gets a cover drawn
+  from its music and joins the playlist **Made in Studio**. Listen, then keep it or discard
+  it. Each model (125 MB, 173 MB) downloads once, when you ask; nothing you record or type
+  leaves the tablet (see *Studio*).
 - **Piano sound on the tablet**: recordings of a real upright piano play what the
   app plays, on the tablet itself: while the piano isn't connected (the default), or
-  always, with a volume on Now playing's speaker and under Piano › Playback; the
+  always, with a volume on Now playing's speaker and under Piano › Tablet sound; the
   Keys tab sounds too. The sound (57 MB, CC0) downloads once (see *Piano sound on the
   tablet*).
 - **The piano's firmware**: Piano › Firmware and status shows the version the
@@ -276,7 +285,7 @@ on the tablet*). Made by Steven Jin. Version 1.11.
   the app, rests in display mode, and settings, disconnecting, imports and
   deletions ask for a PIN while playing, queueing and browsing stay free. A
   three-second hold on the byline and the PIN are the way out (see *Kiosk*).
-- **Diagnostics**: **Piano › Share diagnostics** sends a small zip
+- **Diagnostics**: **Piano › Help and about › Share diagnostics** sends a small zip
   of the app's own logs by any app you choose; after a crash, the Library offers
   it (see *Diagnostics*).
 - **Tablets and phones on their side**: a navigation rail on the left instead of
@@ -328,7 +337,7 @@ location, nothing about what you play.
 - Composers are fetched after an import, when the app opens with composers not yet
   looked up, and from **Library › + › Fetch artwork and notes for every composer**
   (a notification shows the progress); a piece's notes when its sheet opens.
-  **Piano › Display › Fetch artwork automatically** (on) turns the automatic fetching off; then a
+  **Piano › Library and artwork › Fetch artwork automatically** (on) turns the automatic fetching off; then a
   piece's sheet asks Wikipedia only when you tap **Fetch notes**.
 - One request at a time, at most four a second. Offline nothing is fetched and nothing
   is recorded; a failed fetch is retried a day later. Without a portrait a composer
@@ -339,8 +348,8 @@ location, nothing about what you play.
 ## Updates
 
 The app looks for a newer release when it opens (after its first screen is drawn) and
-once a day while it stays open, when **Piano › Check for updates automatically** is on
-(the default) and the tablet is online. **Check now**, under the switch, asks at once
+once a day while it stays open, when **Piano › Updates › Check for updates automatically** is on
+(the default) and the tablet is online. **Check for app updates** (Piano › Updates), under the switch, asks at once
 whatever the switch says, and says what it found ("Steven Piano is up to date.").
 
 A check reads one small file from this repository on GitHub,
@@ -373,7 +382,7 @@ Why a wrong file cannot install:
   that matched a tampered manifest still could not replace the app.
 
 The repository must be **public** for tablets to read the manifest without a login.
-While it is private GitHub answers 404, and Check now says "Couldn't reach the update
+While it is private GitHub answers 404, and Check for app updates says "Couldn't reach the update
 server."; nothing else happens. Failures are one line under the row, in words; Update
 is the retry.
 
@@ -393,7 +402,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.11.apk`.
+   `adb install ../apk/steven-piano-1.12.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -453,7 +462,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=21`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=22`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -502,7 +511,7 @@ create`); and only then writes `releases/latest.json` (versionCode read from the
 the notes, the asset's address, SHA-256, size, minSdk), appends it to
 `releases/history.json` in place of the drafted entry, commits and pushes. A tablet
 never sees a manifest whose file is not there yet. Installed copies offer the release
-within a day, or at once with Check now. It needs the GitHub CLI signed in (`brew install gh`, `gh auth login`) and a
+within a day, or at once with Check for app updates. It needs the GitHub CLI signed in (`brew install gh`, `gh auth login`) and a
 public repository.
 
 ## Bring in the music
@@ -695,7 +704,7 @@ keeps the last 500 of them.
 
 ## Diagnostics
 
-**Piano › Share diagnostics** (the last row of APP) builds one small zip and opens Android's
+**Piano › Help and about › Share diagnostics** builds one small zip and opens Android's
 share sheet, so it can go by mail, Drive, Bluetooth or anything else you choose. It
 holds:
 
@@ -728,7 +737,7 @@ background apps: set **Settings › Apps › Steven Piano › Battery** to
 **Unrestricted** (or *Don't optimise*). Allow notifications when the app asks on
 the first play, so the lock screen shows play and pause.
 
-## Web control
+## Web panel
 
 Run the piano from a phone or a laptop, and let guests ask it for a piece. The
 tablet on the piano serves a small web panel itself; nothing goes through the
@@ -741,8 +750,8 @@ internet or any server of ours.
    address such as `100.101.2.3` that only your own devices can reach, from anywhere,
    and everything between them is encrypted. Keep Tailscale connected on the tablet
    (Android's *Always-on VPN* for Tailscale is the steadiest).
-2. On the tablet: **Piano › Remote control › Set a PIN**: six digits, twice.
-3. Turn on **Web control**. The page shows the panel's address,
+2. On the tablet: **Piano › Web panel › Set a PIN**: six digits, twice.
+3. Turn on **Web panel**. The page shows the panel's address,
    `http://100.101.2.3:8737`, with its QR code beside it (tap it to show it large).
    Scan it with your phone, or type the address into a browser on a device with
    Tailscale, and enter the PIN.
@@ -754,7 +763,7 @@ playlists, composers; Play, Play next, Add to queue), Channels, Schedule (see
 to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
 tally; a zip becomes a playlist and loose files go into **Uploads**, and under the
 tally "In the playlist MIDI" with **Open the playlist**) and **Piano** (the piano's
-Feel, Lighting and Pedal settings, Read status, All keys off, Save now; while another MIDI
+Sound and touch, Lights and screen and Pedal settings, Read status, All keys off, Save to the piano now; while another MIDI
 piano plays, only a note that they are Steven Piano's). Now playing and Piano also show,
 read-only, the instrument and the keyboard ("Instrument: Steven Piano", "Keyboard:
 FP-30X · Live · Recording"); Live and recording are the tablet's alone. It updates as
@@ -771,17 +780,17 @@ Falling notes, Fingering, Chord names and Hand colours. The score turns its page
 ‹ and › look ahead or back, **Follow** catches up, and a tap on a bar plays from there. It
 works through Steven Piano Cloud too; the first time, the score's font (about 0.9 MB) comes
 from the tablet, then the browser keeps it. A session lasts until it has
-gone a day unused; a new PIN, turning Web control off or restarting the app signs every
+gone a day unused; a new PIN, turning the web panel off or restarting the app signs every
 browser out. Five wrong PINs close the gate for 30 seconds, then longer each time, up
 to ten minutes.
 
-While Web control is on, a quiet notification reads "Web control on" with the address.
+While the web panel is on, a quiet notification reads "Web panel on" with the address.
 The panel runs as a foreground service, as playback does: set the app's battery use to
 *Unrestricted* (see *Keep playing with the screen off*) so Android leaves it running
 while the screen is off. After the tablet restarts, it comes back when the app is
 opened.
 
-**Guests** (Piano › Remote control › GUESTS):
+**Guests** (Piano › Guests):
 
 - **Guests can request** (off at first) opens the request page, served on the tablet's
   Wi-Fi address, such as `http://192.168.1.20:8737/request`: a phone on the same Wi-Fi,
@@ -819,14 +828,14 @@ own email). Then, for each tablet:
 
 1. In the console, **Enrol a tablet**: it shows a code such as `QUUT-9Q3H` (it works once, for
    15 minutes) and the relay's address.
-2. On the tablet: set the panel's PIN first (Piano › Remote control › **Set a PIN**), then
+2. On the tablet: set the panel's PIN first (Piano › Web panel › **Set a PIN**), then
    **CLOUD › Enrol with code**: type the relay's address (for example
    `steven-piano-relay.you.workers.dev`; the tablet remembers it) and the code.
 3. Turn on **Remote access over the internet**. The line under it says "Connected", and the panel's
    public link appears with its QR code (tap it to show it large). Open it on any phone or laptop and
    enter the PIN.
 
-The hub's row reads "Cloud" (or "On · 100.101.2.3 · Cloud" with Web control too), and the notification
+The hub's Web panel row reads "Internet" (or "On · 100.101.2.3 · Internet" with the panel on the tablet's networks too), and the notification
 adds "· Cloud" while connected. If the tablet loses its network, the line says so and counts down to the
 next try; it reconnects by itself. A panel already open says "The piano is offline" at the top until the
 tablet is back; a page opened meanwhile is the relay's own offline page.
@@ -845,7 +854,7 @@ request page doesn't exist.
 **What the relay sees:** it is your own Cloudflare Worker, and it carries what the panel shows and is sent,
 as any HTTPS site's server does: pages, lists, the piece playing, requests. The tablet reports every
 30 seconds: the app's and the piano's versions, whether the piano is connected, what plays, whether guests
-may request (and wait for approval), whether Web control is on, the library's size and the version of
+may request (and wait for approval), whether the web panel is on, the library's size and the version of
 Steven's library loaded, and the channels' names. Never a device identifier (no Bluetooth address, no
 serial, no Android id) and never the tablet's address on its own networks; enrolling sends the code alone.
 Piano › About says the same. The PIN is checked on the tablet, never by the relay. The tablet's key to the
@@ -869,8 +878,8 @@ authorship key before anything is installed.
 one that can, 2.0.0, goes on from the Mac over the USB-C port (the firmware's README: `pio run -t
 upload` with the board's BOOT and RST dance). After that flash, **Piano › Firmware and status** shows
 "Piano firmware 2.0.0 · a1b2c3d". Before it, the page says "Unknown — this firmware has no version.
-Flash 2.0.0 over USB once." The same 2.0.0 also brings the piano's settings over Bluetooth: Feel,
-Lighting and Pedal come alive on the tablet.
+Flash 2.0.0 over USB once." The same 2.0.0 also brings the piano's settings over Bluetooth: Sound and touch,
+Lights and screen and Pedal come alive on the tablet.
 
 **From then on, from the tablet.** The app looks for a new release once a day while the piano is
 connected (with *Check for updates automatically* on), and whenever the Firmware and status page
@@ -921,7 +930,7 @@ notifications, no other apps. The app is the tablet's home screen, so a restart 
 back in it; the lock screen is off, so the power button wakes straight into it; and the
 screen stays on while the tablet is plugged in. With nobody touching it for a minute the
 tablet rests in display mode: the piece playing (its art and a few lines about it), or
-with nothing loaded the byline at the top right and, while Web control and **Guests can
+with nothing loaded the byline at the top right and, while the web panel and **Guests can
 request** are on, the request page's QR code.
 
 **Turning it on**
@@ -970,10 +979,10 @@ to use kiosk mode again. A factory reset also ends everything.
 **Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab
 (**Live** and **Record** included: a recording then waits, at most 30, for someone with the
 PIN to keep or discard it), but anything that changes the piano or the library asks for the
-kiosk PIN first: every page of the Piano tab (Instrument, Keyboard, Feel, Lighting, Pedal,
-Firmware and status, Playback, Display, Schedule, Remote control, Kiosk; so choosing or
-forgetting an instrument or a keyboard), keeping or discarding a recording, its two APP
-switches and Check now, Disconnect, and in the Library the
+kiosk PIN first: every page of the Piano tab (Instrument, Keyboard, Sound and touch, Lights and screen, Pedal,
+Firmware and status, Playback, Tablet sound, Schedule, Web panel, Guests, Display, Kiosk, Updates,
+Library and artwork, Help and about; so choosing or forgetting an instrument or a keyboard), keeping or
+discarding a recording, Disconnect; searching the settings stays free, and in the Library the
 **+** (adding music), deleting, renaming, playlists' edits, Change photo, and a channel's volume
 and Schedule. A
 small padlock marks them. The right PIN opens them for five minutes, or until the tablet
@@ -1043,16 +1052,16 @@ seconds of that piece into music of its own. (Studio came with 1.7.)
 
 **Transcribing a recording**
 
-1. **Piano › Studio › Transcription › Download**, once: 125 MB from this repository's GitHub
+1. **Studio › Models › Transcription › Download**, once: 125 MB from this repository's GitHub
    release `models`, checked against the SHA-256 the app carries before it is used. **Remove**
    frees the space again.
-2. **Library › + › Transcribe a recording…** (or the button on the Studio page) and pick a
+2. **Library › + › Transcribe a recording…** (or the paper clip on the Studio tab) and pick a
    recording: m4a, mp3, wav, flac, ogg, opus, whatever the tablet plays, up to 20 minutes and
    200 MB. From a computer or a phone, drop recordings on the web panel's **Studio** page instead;
    they go to the tablet one at a time, and while Studio has eight jobs waiting or running the page
    says to try again when one has finished. Without the model, the job downloads it first.
-3. It runs in the background, with its progress in the notification (and Cancel), on the Studio
-   page and in the Library: "Transcribing Clair de lune.m4a · 42%". About **a minute per three
+3. It runs in the background, with its progress in the notification (and Cancel), on its card in
+   the Studio tab and in the Library: "Transcribing Clair de lune.m4a · 42%". About **a minute per three
    minutes of audio**; the piano can go on playing meanwhile, and keeps its time. A Cancel that comes
    once the piece is being saved changes nothing: the piece is kept, to keep or discard.
 4. The piece appears in the library titled after the file, by **Made in Studio** (a roll card,
@@ -1060,29 +1069,53 @@ seconds of that piece into music of its own. (Studio came with 1.7.)
    to its end), Now playing asks **Keep this piece?** **Keep** keeps it; **Discard** deletes it
    (in kiosk mode, behind the PIN). The job's **Listen** plays it straight away.
 
+**The Studio tab (1.12)**
+
+Studio is the fourth tab: Library · Now playing · Keys · **Studio** · Piano. Type an idea in the
+box at the bottom ("Describe a piece…") and **Send**: a mood (calm, bright, stormy, sad…), a tempo
+(slow, andante, fast, 96 bpm), a key (in D minor, F♯ major), a length (2 minutes, 3:30, short), a
+form (nocturne, waltz, lullaby, étude…), a composer, a performer or a piece's name from the
+library, or a channel or list (Baroque, Popular). There is no text model: words are understood by
+keywords, and the line above the box says what was understood ("Calm · D minor · slow · 2 min · in
+the manner of Clair de lune (Debussy)") and which words were not used. After a piece, **slower**,
+**faster**, **longer**, **shorter**, **sadder**, **in D minor**, **another** or **different** change
+the last one. Each turn's card shows the steps (Reading the piece · Composing · Shaping · Saving),
+the percentage, the music written of the length asked for, the time left, and the notes appearing
+as they are written; then **Listen**, **Keep**, **Discard**, **Another like it** and **Adjust…**
+(the options sheet, as before). The **Options** button opens that sheet from what you typed; the
+paper clip transcribes a recording; **Models** (top right) downloads or removes the two models.
+On a tablet the shelf **MADE IN STUDIO** sits beside the conversation (tap to listen, hold for
+more). Titles are made from what was understood, never from what was typed: "Calm, after Clair de
+lune", "Wild, after Chopin", "Calm piece". In kiosk mode typing ideas is free (at most three wait;
+the history hides the words until the PIN opens the settings); Models, recordings, Keep, Discard
+and removing a turn ask for the PIN. The notification opens the Studio tab.
+
 **Composing a piece**
 
-1. **Piano › Studio › Composing › Download**, once: 173 MB, checked the same way.
-2. **Library › + › Compose a piece…** (or the button on the Studio page) opens the sheet:
+1. **Studio › Models › Composing › Download**, once: 173 MB, checked the same way.
+2. Type an idea and **Send** (above), or **Options** on the Studio tab (also **Library › + ›
+   Compose in Studio…**) for the sheet:
    **Mood** (Calm, Bright, Wild, Melancholy); **Key** (C to B, major or minor) and **Tempo** (40–200
    bpm), both the chosen piece's own until you change them (Melancholy turns the key to its minor);
    **Length** (1–5 minutes); and **In the manner of**: the piece played last, or **Change** to search
    the library for another. From a computer or a phone, the web panel's **Studio** page has the same
    form.
-3. **Compose**. It runs in the background like a transcription: "Composing in the manner of Clair
-   de lune · 42%" in the notification (with Cancel), on the Studio page, on the Piano tab's
-   Studio row and in the Library. About **a minute for a two-minute piece**, often less.
-4. The piece appears as **Composition · Sep 28, 2026 2:05 PM** by **Made in Studio**, its sheet
-   saying "Made in Studio · in the manner of Clair de lune (Claude Debussy)", written at the tempo
-   chosen. Keep it or discard it after a first listen, as a transcription.
+3. **Compose**. It runs in the background like a transcription: "Composing · 42% · 0:50 of 2:00 ·
+   about 40 s left" on its card, in the notification (with Cancel) and in the Library. About **a
+   minute for a two-minute piece**, often less.
+4. The piece appears titled from what was asked ("Calm, after Clair de lune") by **Made in Studio**,
+   with a cover drawn from its music, in the playlist **Made in Studio**, its sheet saying "Made in
+   Studio · in the manner of Clair de lune (Claude Debussy)", written at the tempo chosen. Keep it or
+   discard it after a first listen, as a transcription.
 
 **What it writes**: new music only. The chosen piece's first fifteen seconds are the model's
 starting point and are never part of the result; the model (trained on the Lakh MIDI collection,
 not on piano alone) carries on in their manner, not note for note. Calm plays softest, Wild the
 most freely; every piece ends with a two-bar fade and no pedal. Every note is one the piano can
 play: keys 24–107, a key struck again no sooner than 120 ms after itself, at most ten notes
-starting at once. A very dense piece can come out shorter than asked, above all at four or five
-minutes (the model is stopped at 45 tokens a second of music, 9,000 at most).
+starting at once. A very dense piece can come out shorter than asked (the model is stopped at 45
+tokens a second of music, 13,500 for five minutes since 1.12); its card then says so: "3:41 written
+of 5:00: the music was dense, so it ends here".
 
 **What it hears well**: a clear recording of a solo piano. The model was trained on real pianos
 (the MAESTRO recordings; its authors measured a 96.8 % note F1 there); audio from a synthesizer gets
@@ -1100,7 +1133,7 @@ minutes makes a few tens of thousands).
 | Composing | 173 MB | Apache 2.0 | The Anticipatory Music Transformer, music-small-800k (Thickstun et al., Stanford CRFM), converted to ONNX |
 
 **Memory and devices.** Studio needs an arm64 tablet or phone with at least 2.5 GiB of memory
-(most sold with 3 GB or more); elsewhere the Piano tab says "Studio isn't available on this
+(most sold with 3 GB or more); elsewhere the Studio tab says only "Studio isn't available on this
 device" or "This tablet doesn't have enough memory for Studio", and the + sheet has no Studio
 row. A transcription starts only with about 900 MiB free, a composition with about 700 MiB, else
 "Close other apps and try again."; the app uses about 0.75 GB while it transcribes and 0.6 GB
@@ -1113,7 +1146,9 @@ in the app's own storage.
 
 **Privacy.** Recordings never leave the tablet: they are decoded and transcribed there, and a
 recording sent from the panel is deleted once its job ends. A composition starts only from a
-piece already in the library, and nothing anyone types reaches the model. The only traffic is the
+piece already in the library, and nothing anyone types reaches the model: an idea is read for
+keywords, kept (at most 200 characters) only in Studio's history on the tablet, and never put in a
+title, a file name, the log or Share diagnostics. The only traffic is the
 models' download, when you ask for it.
 
 **On the piano:**
@@ -1142,7 +1177,7 @@ models' download, when you ask for it.
   pauses and silences the instrument before, and connects the new one; it is remembered,
   and connects at launch when *Auto-connect on launch* is on.
 
-While another MIDI piano plays, the piano's own pages (Feel, Lighting, Pedal, Firmware and
+While another MIDI piano plays, the piano's own pages (Sound and touch, Lights and screen, Pedal, Firmware and
 status) and its status line are hidden: they belong to Steven Piano. What it is sent
 differs from Steven Piano's: all 88 keys (21–108) as they are, a key struck again while it
 sounds is struck again, the sustain, soft and sostenuto pedals at once, and stopping sends
@@ -1200,7 +1235,7 @@ note by note by the app's own sampler (nothing is synthesised). It plays exactly
 the piano would be sent: pieces, channels, schedules, the **Keys** tab, and Studio's
 Listen. (From 1.8.)
 
-1. **Piano › Playback › TABLET SOUND › Upright piano › Download**, once: 57 MB from this
+1. **Piano › Tablet sound › Upright piano › Download**, once: 57 MB from this
    repository's GitHub release `models`, checked against the SHA-256 the app carries
    before it is used (the same way as Studio's models). **Remove** frees the space. While
    the tablet would play but has no sound yet, Now playing offers the same download in a
@@ -1317,9 +1352,9 @@ file to the release `models`.
       sheet says notes need an internet connection when it has none).
 - [ ] Piano settings (firmware with the Bluetooth console): on connect the Piano
       tab's PIANO rows fill in ("Full power", "Reactive · 62%", the firmware
-      version) and their pages come alive. On Lighting, set Brightness to 15 % and
+      version) and their pages come alive. On Lights and screen, set Brightness to 15 % and
       confirm the piano's serial `status` shows it (`bright=40/255`); the hub's row
-      then reads "… · 15%". On Feel, choose Cinematic: the dependent settings
+      then reads "… · 15%". On Sound and touch, choose Cinematic: the dependent settings
       change to what the piano reports. Going back to the hub saves nothing yet;
       leave the tab, power the piano off and on: the change is still there. *Test
       LED* lights the key's LED; Firmware and status › Read status shows the
@@ -1329,27 +1364,27 @@ file to the release `models`.
       Cancel adds nothing, Add imports it. From one that gives no access: after Add
       the Library says it couldn't read the file (no crash); *Add files* imports it.
 - [ ] Updates (once the repository is public and a newer release exists): Piano ›
-      Check now shows UPDATE with the release's notes; Update downloads it with the
+      Updates › Check for app updates shows UPDATE with the release's notes; Update downloads it with the
       progress row and a notification, then Android asks "Do you want to update this
-      app?"; after Update and Open the About line shows the new version and Check now
+      app?"; after Update and Open the About line shows the new version and Check for app updates
       says it is up to date. On the school tablet (device owner) Update installs with
       no tap and the app comes back on the Piano tab reading "Updated to …". While
-      the repository is private, Check now says "Couldn't reach the update server."
+      the repository is private, Check for app updates says "Couldn't reach the update server."
 - [ ] Share diagnostics opens the share sheet with `steven-piano-diagnostics-….zip`;
       send it to yourself and check it holds about.txt, settings.txt, link.log and no
       titles.
-- [ ] Channels, with the piano's firmware offering its settings: note the Feel row
-      ("Full power" or "Volume …"), then tap the Calm card: the piano plays at 70 %
-      and Feel reads "Volume 70%"; pieces follow one another without end. Long-press
+- [ ] Channels, with the piano's firmware offering its settings: note the Sound and touch row
+      ("Full power" or "Piano volume …"), then tap the Calm card: the piano plays at 70 %
+      and Sound and touch reads "Piano volume 70%"; pieces follow one another without end. Long-press
       Calm › Set volume and move the slider: the piano follows. Tap a piece in the
-      library: the channel ends and Feel reads as it did before; power-cycle the
+      library: the channel ends and Sound and touch reads as it did before; power-cycle the
       piano: its own volume never changed (nothing was saved). With older firmware
       the channel plays at the app's velocity instead, and the Playback page's
       Velocity comes back when it ends.
-- [ ] Display mode on the school tablet: Piano › Display › Display mode after a
+- [ ] The resting screen on the school tablet: Piano › Display › Resting screen after a
       minute on, play a channel and leave the tablet: a minute later the black
       display fades in (the art, the title and a few lines about the piece; the
-      roll with Standby shows › Paper roll), the next piece cross-fades in, and the
+      roll with What it shows › Paper roll), the next piece cross-fades in, and the
       tablet does not sleep; a touch fades it away and brings the app back without
       pressing what was under the finger.
 
@@ -1393,7 +1428,7 @@ The full audit, every finding and what was done about it, is in
   any connection, the device's IP address. With *Remote access over the internet* on (off
   at first; see *Cloud*), one connection more, over HTTPS to your own relay: what the panel
   shows and is sent, and every 30 seconds the tablet's status (versions, whether the piano
-  is connected, what plays, the guests' switches, whether Web control is on, the library's
+  is connected, what plays, the guests' switches, whether the web panel is on, the library's
   size and pack, the channels' names), never a device identifier or the tablet's own network
   address (*What the relay sees*). Studio's runtime (ONNX Runtime 1.28.0) sends
   nothing: during a transcription and a composition the app's UID sent no packet at all
@@ -1403,7 +1438,7 @@ The full audit, every finding and what was done about it, is in
   library stays where it was imported). Release builds log no file names or URLs; the
   Bluetooth link logs its steps, with Bluetooth addresses and device names only (*Send
   a log*).
-- **What comes in (Web control, off at first):** the app listens on port 8737 only on
+- **What comes in (the web panel, off at first):** the app listens on port 8737 only on
   the tablet's Tailscale address (the whole panel, behind the PIN) and its Wi-Fi address
   (the request page and the poster only, unless *Panel on Wi-Fi too*), never on every
   address. The panel's PIN is kept only as a salted PBKDF2 hash; every change needs the

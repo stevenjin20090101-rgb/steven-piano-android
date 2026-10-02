@@ -19,75 +19,93 @@ import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.Format
+import dev.stevenjin.stevenpiano.ui.SettingNotes
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
 import dev.stevenjin.stevenpiano.ui.components.ChoiceRow
-import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
 import dev.stevenjin.stevenpiano.ui.components.SliderRow
 import dev.stevenjin.stevenpiano.ui.components.SoundFontRow
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.StepperRow
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 import kotlin.math.roundToInt
 
 /**
  * Playback: how the app sends a piece to the piano, in one section. Pause before each piece (Off,
  * then half seconds up to 5 s; 2 s at first), Default tempo, Transpose and Velocity (steppers),
- * Fold notes outside C1–B7 and Skip drum channel (switches). The hub's row reads the pause and the
- * default tempo, "2 s pause · 100%". Then TABLET SOUND (v1.8 — M25): Piano sound on the tablet (Off ·
- * When the piano isn't connected · Always, with what the choice does), Volume, and the SoundFont's row
- * (Download, its progress with Cancel, or Installed with Remove).
+ * Fold notes outside C1–B7 and Skip drum channel (switches), each with its one-line note (v1.13). The hub's
+ * row reads the pause and the default tempo, "2 s pause · 100%". The tablet's own sound has its own page
+ * since v1.13 ([TabletSoundPage]).
  */
 @Composable
 fun PlaybackPage(settings: PianoSettings, vm: PianoViewModel) {
     SectionRule()
-    StepperRow("Pause before each piece") {
-        StepperControl(settings.preRollMs, PlaybackLimits.PreRollMs, PRE_ROLL_STEP_MS, ::pauseLabel, "Shorter pause", "Longer pause", vm::setPreRoll)
+    Anchored(PageRows.PAUSE.anchor) {
+        StepperRow(PageRows.PAUSE.label) {
+            StepperControl(settings.preRollMs, PlaybackLimits.PreRollMs, PRE_ROLL_STEP_MS, ::pauseLabel, "Shorter pause", "Longer pause", vm::setPreRoll)
+        }
     }
-    StepperRow("Default tempo") {
-        StepperControl(settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo)
+    Anchored(PageRows.DEFAULT_TEMPO.anchor) {
+        StepperRow(PageRows.DEFAULT_TEMPO.label, note = SettingNotes.DEFAULT_TEMPO) {
+            StepperControl(settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo)
+        }
     }
-    StepperRow("Transpose") {
-        StepperControl(settings.transpose, PlaybackLimits.Transpose, 1, Format::semitones, "Transpose down a semitone", "Transpose up a semitone", vm::setTranspose)
+    Anchored(PageRows.TRANSPOSE.anchor) {
+        StepperRow(PageRows.TRANSPOSE.label) {
+            StepperControl(settings.transpose, PlaybackLimits.Transpose, 1, Format::semitones, "Transpose down a semitone", "Transpose up a semitone", vm::setTranspose)
+        }
     }
-    StepperRow("Velocity") {
-        StepperControl(settings.velocityPct, PlaybackLimits.VelocityPct, 5, Format::percent, "Play softer", "Play louder", vm::setVelocity)
+    Anchored(PageRows.VELOCITY.anchor) {
+        StepperRow(PageRows.VELOCITY.label, note = SettingNotes.VELOCITY) {
+            StepperControl(settings.velocityPct, PlaybackLimits.VelocityPct, 5, Format::percent, "Play softer", "Play louder", vm::setVelocity)
+        }
     }
-    SwitchRow("Fold notes outside C1–B7", settings.foldOutOfRange, vm::setFold)
-    SwitchRow("Skip drum channel", settings.skipDrumChannel, vm::setSkipDrums)
-    TabletSoundSection(settings, vm)
+    Anchored(PageRows.FOLD.anchor) { SwitchRow(PageRows.FOLD.label, settings.foldOutOfRange, vm::setFold, note = SettingNotes.FOLD) }
+    Anchored(PageRows.SKIP_DRUMS.anchor) { SwitchRow(PageRows.SKIP_DRUMS.label, settings.skipDrumChannel, vm::setSkipDrums, note = SettingNotes.SKIP_DRUMS) }
 }
 
-/** TABLET SOUND (DESIGN.md › v1.8 — M25): the mode, the volume, the SoundFont. */
+/**
+ * Tablet sound (DESIGN.md › v1.8 — M25; its own page in PLAYING since v1.13): Piano sound on the tablet (Off ·
+ * When the piano isn't connected · Always, with what the choice does), Tablet volume, and the SoundFont's row
+ * (Download, its progress with Cancel, or Installed with Remove). The hub's row reads "Off" or "Always · 70%".
+ */
 @Composable
-private fun TabletSoundSection(settings: PianoSettings, vm: PianoViewModel) {
+fun TabletSoundPage(settings: PianoSettings, vm: PianoViewModel) {
     val sound by vm.tabletSound.collectAsStateWithLifecycle()
-    SectionEyebrow(TabletSoundCopy.EYEBROW)
-    ChoiceRow(
-        TabletSoundCopy.CHOICE,
-        TabletSoundCopy.MODES,
-        settings.tabletSound.ordinal,
-        { vm.setTabletSound(TabletSoundMode.entries[it]) },
-        note = TabletSoundCopy.modeNote(settings.tabletSound),
-    )
+    SectionRule()
+    Anchored(PageRows.TABLET_SOUND.anchor) {
+        ChoiceRow(
+            TabletSoundCopy.CHOICE,
+            TabletSoundCopy.MODES,
+            settings.tabletSound.ordinal,
+            { vm.setTabletSound(TabletSoundMode.entries[it]) },
+            note = TabletSoundCopy.modeNote(settings.tabletSound),
+        )
+    }
     // The slider shows the finger's value at once; the setting follows.
     var shown by remember(settings.tabletVolume) { mutableIntStateOf(settings.tabletVolume) }
-    SliderRow(
-        label = TabletSoundCopy.VOLUME,
-        value = shown.toFloat(),
-        range = 0f..100f,
-        step = 1f,
-        shown = Format.percent(shown),
-        onChange = {
-            shown = it.roundToInt()
-            vm.setTabletVolume(shown)
-        },
-        description = "Tablet sound volume",
-        stateDescription = Format.percent(shown),
-        unit = "%",
-    )
-    SoundFontRow(sound, onDownload = vm::downloadTabletSound, onCancel = vm::cancelTabletSound, onRemove = vm::removeTabletSound)
+    Anchored(PageRows.TABLET_VOLUME.anchor) {
+        SliderRow(
+            label = TabletSoundCopy.VOLUME,
+            value = shown.toFloat(),
+            range = 0f..100f,
+            step = 1f,
+            shown = Format.percent(shown),
+            onChange = {
+                shown = it.roundToInt()
+                vm.setTabletVolume(shown)
+            },
+            description = TabletSoundCopy.VOLUME,
+            stateDescription = Format.percent(shown),
+            unit = "%",
+        )
+    }
+    Anchored(PageRows.SOUND_FILE.anchor) {
+        SoundFontRow(sound, onDownload = vm::downloadTabletSound, onCancel = vm::cancelTabletSound, onRemove = vm::removeTabletSound)
+    }
 }
 
 /** The pause steps by half a second. */

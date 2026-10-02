@@ -32,6 +32,8 @@ import dev.stevenjin.stevenpiano.ui.components.PinSheet
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.leave
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import kotlinx.coroutines.launch
 
 /** The Kiosk page's words (DESIGN.md › v1.6.1 — M20). */
@@ -50,7 +52,7 @@ object KioskPageCopy {
     const val UNLOCK_NOTE = "Home and the other apps come back until the app is opened again"
     const val LOCK_AGAIN_NOTE = "Unlocked until the app is opened again, or left alone"
     const val PIN_NOTE = "Six digits, asked for to leave kiosk mode"
-    const val DISPLAY_NOTE = "Display mode is always on in kiosk"
+    const val DISPLAY_NOTE = "The resting screen is always on in kiosk"
 
     /** The line under the switch, when it can't come on (or Android refused it): what is missing. */
     fun switchNote(on: Boolean, status: KioskStatus, pinSet: Boolean): String? = when {
@@ -75,7 +77,7 @@ object KioskPageCopy {
  * does and the way out under it before it comes on; turning it off asks for the PIN. While it is
  * on: Unlock for now (the PIN, then Home and the other apps until the app is opened again), or Lock
  * again while unlocked. Set a PIN / Change PIN (six digits, twice; while kiosk mode is on, the old
- * PIN first). The page ends with "Display mode is always on in kiosk". Everything it starts runs in
+ * PIN first). The page ends with "The resting screen is always on in kiosk". Everything it starts runs in
  * the app's scope, so leaving the page never cuts it short. The hub's row reads "On" or "Off".
  */
 @Composable
@@ -93,27 +95,35 @@ fun KioskPage(settings: PianoSettings) {
     val on = settings.kioskEnabled
 
     SectionRule()
-    SwitchRow(
-        "Kiosk mode",
-        on,
-        onChange = { wanted -> if (wanted) graph.appScope.launch { kiosk.turnOn() } else pinCheck = KioskExit.TurnOff },
-        enabled = on || (status.owner && settings.kioskPinSet),
-        note = KioskPageCopy.switchNote(on, status, settings.kioskPinSet),
-    )
-    KioskPageCopy.explanation(on, status, settings.kioskPinSet)?.let {
-        NoteLine(it)
-        HairlineDivider(startInset = 16.dp)
-    }
-    if (on && status.unlockedForNow) {
-        ActionRow(note = KioskPageCopy.LOCK_AGAIN_NOTE) { ActionButton("Lock again", onClick = kiosk::relock) }
-    } else if (on) {
-        ActionRow(note = KioskPageCopy.UNLOCK_NOTE) { ActionButton(KioskExit.Unlock.label, onClick = { pinCheck = KioskExit.Unlock }) }
-    }
-    ActionRow(note = KioskPageCopy.PIN_NOTE) {
-        ActionButton(
-            if (settings.kioskPinSet) "Change PIN" else "Set a PIN",
-            onClick = { if (on && settings.kioskPinSet) pinCheck = KioskExit.ChangePin else newPin = true },
+    Anchored(PageRows.KIOSK_MODE.anchor) {
+        SwitchRow(
+            PageRows.KIOSK_MODE.label,
+            on,
+            onChange = { wanted -> if (wanted) graph.appScope.launch { kiosk.turnOn() } else pinCheck = KioskExit.TurnOff },
+            enabled = on || (status.owner && settings.kioskPinSet),
+            note = KioskPageCopy.switchNote(on, status, settings.kioskPinSet),
         )
+        KioskPageCopy.explanation(on, status, settings.kioskPinSet)?.let {
+            NoteLine(it)
+            HairlineDivider(startInset = 16.dp)
+        }
+    }
+    if (on) {
+        Anchored(PageRows.KIOSK_UNLOCK.anchor) {
+            if (status.unlockedForNow) {
+                ActionRow(note = KioskPageCopy.LOCK_AGAIN_NOTE) { ActionButton("Lock again", onClick = kiosk::relock) }
+            } else {
+                ActionRow(note = KioskPageCopy.UNLOCK_NOTE) { ActionButton(KioskExit.Unlock.label, onClick = { pinCheck = KioskExit.Unlock }) }
+            }
+        }
+    }
+    Anchored(PageRows.KIOSK_PIN.anchor) {
+        ActionRow(note = KioskPageCopy.PIN_NOTE) {
+            ActionButton(
+                if (settings.kioskPinSet) "Change PIN" else "Set a PIN",
+                onClick = { if (on && settings.kioskPinSet) pinCheck = KioskExit.ChangePin else newPin = true },
+            )
+        }
     }
     NoteLine(KioskPageCopy.DISPLAY_NOTE)
 

@@ -30,8 +30,8 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.update.UpdateState
 
 /**
- * The Piano tab's UPDATE row, on the hub between the connection card and the groups (it is
- * transient and wants attention, so it never hides in a page), while a newer release is known or
+ * The Piano tab's UPDATE block, on THIS TABLET › Updates since v1.13 (M31b; on the hub until then, whose
+ * Updates row now names it: "1.4 available"), while a newer release is known or
  * has just been installed (DESIGN.md › v1.4 › Updates, v1.5): the eyebrow header, "Steven Piano 1.4 is available"
  * in Body, the release notes in the secondary colour, and one filled Update button; while it
  * downloads, a hairline progress row ("Downloading 1.4 · 1.2 of 2.3 MB", tabular figures); after a

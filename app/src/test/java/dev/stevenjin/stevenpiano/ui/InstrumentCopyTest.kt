@@ -99,7 +99,7 @@ class InstrumentCopyTest {
         assertEquals("Connecting…", InstrumentCopy.linkWords(InstrumentKind.MidiPiano, LinkState.Scanning))
         assertEquals("Not connected", InstrumentCopy.linkWords(InstrumentKind.MidiPiano, LinkError.InstrumentGone("FP-30X").toState()))
         assertEquals(
-            "Feel, Lighting, Pedal and Firmware belong to Steven Piano and are hidden while FP-30X plays.",
+            "Sound and touch, Lights and screen, Pedal and Firmware belong to Steven Piano and are hidden while FP-30X plays.",
             InstrumentCopy.hiddenNote("FP-30X"),
         )
         assertEquals("Another MIDI piano…", InstrumentCopy.ANOTHER_MIDI_PIANO)

@@ -40,7 +40,9 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
 import dev.stevenjin.stevenpiano.ui.screens.piano.MidiPickerSheet
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 
 /**
@@ -69,8 +71,10 @@ fun KeyboardPage(vm: PianoViewModel) {
             )
         }
     }
-    ActionRow {
-        ActionButton(InstrumentCopy.CHOOSE_KEYBOARD, onClick = { picking = true }, enabled = state.phase != KeyboardState.Phase.Unavailable)
+    Anchored(PageRows.CHOOSE_KEYBOARD.anchor) {
+        ActionRow {
+            ActionButton(InstrumentCopy.CHOOSE_KEYBOARD, onClick = { picking = true }, enabled = state.phase != KeyboardState.Phase.Unavailable)
+        }
     }
     val chosen = state.chosen
     if (chosen != null) {
@@ -86,7 +90,9 @@ fun KeyboardPage(vm: PianoViewModel) {
             Eyebrow(InstrumentCopy.keyboardDetail(state), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         HairlineDivider(startInset = 16.dp)
-        ActionRow { ActionButton(InstrumentCopy.FORGET, onClick = vm::forgetKeyboard, description = "Forget ${chosen.name}") }
+        Anchored(PageRows.FORGET_KEYBOARD.anchor) {
+            ActionRow { ActionButton(InstrumentCopy.FORGET, onClick = vm::forgetKeyboard, description = "Forget ${chosen.name}") }
+        }
     }
     NoteLine(InstrumentCopy.PLAY_FROM_KEYS)
     NoteLine(InstrumentCopy.CABLE_NOTE)

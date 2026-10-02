@@ -12,9 +12,11 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.ScrollState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,6 +34,7 @@ import dev.stevenjin.stevenpiano.instruments.MidiPicker
 import dev.stevenjin.stevenpiano.instruments.MidiPurpose
 import dev.stevenjin.stevenpiano.instruments.MidiScan
 import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.schedule.NextSchedule
@@ -40,11 +43,6 @@ import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
-import dev.stevenjin.stevenpiano.settings.WideLayout
-import dev.stevenjin.stevenpiano.studio.AudioSource
-import dev.stevenjin.stevenpiano.studio.ModelEntry
-import dev.stevenjin.stevenpiano.studio.StudioJob
-import dev.stevenjin.stevenpiano.studio.StudioSupport
 import dev.stevenjin.stevenpiano.service.FirmwareService
 import dev.stevenjin.stevenpiano.service.UpdateService
 import dev.stevenjin.stevenpiano.ui.SettingsPage
@@ -109,32 +107,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** The next schedule's start (the hub's Schedule row). */
     val nextSchedule: StateFlow<NextSchedule?> = graph.schedules.next
-
-    /** Studio (v1.7 — M23): whether it runs here, its models, its jobs, and the pieces waiting for Keep or Discard. */
-    val studioSupport: StateFlow<StudioSupport> = graph.studio.availability.support
-    val studioModels: StateFlow<Set<String>> = graph.studio.models.installed
-    val studioJobs: StateFlow<List<StudioJob>> = graph.studio.jobs.jobs
-    val studioUndecided: StateFlow<Set<Long>> = graph.studio.review.undecided
-    val studioDiscarded: StateFlow<Set<Long>> = graph.studio.review.discardedNow
-
-    /** Asks once per process whether Studio runs here (the hub and the page need to know). */
-    fun checkStudio() = graph.studio.availability.check()
-
-    fun downloadModel(model: ModelEntry) {
-        graph.studio.download(model)
-    }
-
-    fun removeModel(model: ModelEntry) {
-        graph.studio.remove(model)
-    }
-
-    fun cancelStudioJob(id: Long) = graph.studio.cancel(id)
-
-    /** A recording the person picked: its read grant kept for the job (given back after), and queued. */
-    fun transcribe(context: Context, uri: Uri) {
-        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        graph.studio.transcribe(AudioSource.Document(uri))
-    }
 
     /** The tablet's piano sound (v1.8 — M25): its mode and volume as set, the piano's link, the SoundFont and its download. */
     val tabletSound: StateFlow<TabletSoundState> = graph.tabletSound.state
@@ -208,7 +180,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     private val _selectedPage = MutableStateFlow(SettingsPage.of(saved.get<String>(SELECTED)) ?: SettingsPage.Feel)
 
-    /** The page open beside the hub on wide screens (Feel at first), and on phones the one last opened. */
+    /** The page open beside the hub on wide screens (Sound and touch at first), and on phones the one last opened. */
     val selectedPage: StateFlow<SettingsPage> = _selectedPage.asStateFlow()
 
     /**
@@ -240,6 +212,41 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** The window widened with [page] open on the phone: it stays open, beside the hub, where it was scrolled to. */
     fun keepOpen(page: SettingsPage) = choose(page, opened = true)
+
+    // ---- Search and the disclosures (v1.13 — M31b) --------------------------------------------------
+
+    /** What the hub's search field holds (Compose state: the field reads it as it is typed). */
+    var query by mutableStateOf("")
+        private set
+
+    fun search(text: String) {
+        query = text.take(MAX_QUERY)
+    }
+
+    private var folds by mutableStateOf(emptySet<PianoFold>())
+
+    override val openFolds: Set<PianoFold> get() = folds
+
+    override fun toggleFold(fold: PianoFold) {
+        folds = if (fold in folds) folds - fold else folds + fold
+    }
+
+    private val _jump = MutableStateFlow<Jump?>(null)
+    private var jumps = 0L
+
+    /** A search result's way into its page: its fold opened, then scrolled to and lit by the page ([JumpEffect]). */
+    val jump: StateFlow<Jump?> = _jump.asStateFlow()
+
+    /** A result was chosen: [target]'s fold opens now, and its page scrolls to it once it shows. */
+    fun jumpTo(target: SettingsTarget.Row) {
+        target.fold?.let { folds = folds + it }
+        _jump.value = Jump(target.page, target.anchor, target.fold, ++jumps)
+    }
+
+    /** The page has done [jump] (or given up on it). */
+    fun jumpDone(jump: Jump) {
+        _jump.compareAndSet(jump, null)
+    }
 
     /** The window narrowed: the page to put back over the hub, if the person had one open; asked once. */
     fun takeOpened(): SettingsPage? {
@@ -348,6 +355,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     }
 
     private companion object {
+        const val MAX_QUERY = 60
         const val STOP_TIMEOUT_MS = 5_000L
         const val SELECTED = "selectedPage"
         const val OPENED = "pageOpened"

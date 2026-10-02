@@ -9,27 +9,17 @@
 
 package dev.stevenjin.stevenpiano.studio
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.emptyPreferences
-import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.PlayerState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
@@ -39,13 +29,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.IOException
 
-/** The pieces Studio made that wait for Keep or Discard, kept across restarts. */
+/**
+ * The pieces waiting for Keep or Discard, kept across restarts (v1.12 — M30: a Studio piece's state is its turn in
+ * Studio's history, [RoomReview]; a recording's, the "studio" DataStore's set, as before).
+ */
 interface ReviewStore {
-    val undecided: Flow<Set<Long>>
+    /** The pieces waiting, read once as the review starts (the one-off import of the old set runs here). */
+    suspend fun undecided(): Set<Long>
 
-    suspend fun save(ids: Set<Long>)
+    /** [pieceId] waits for Keep or Discard. */
+    suspend fun waiting(pieceId: Long)
+
+    /** [pieceId] was kept, or discarded. */
+    suspend fun decided(pieceId: Long, kept: Boolean)
+
+    /** [ids] left the library meanwhile (deleted from its menu). */
+    suspend fun gone(ids: Set<Long>)
 }
 
 /** What the review watches of the player: what is loaded and playing, and where it is. */
@@ -99,10 +99,10 @@ class StudioReview(
      */
     fun start() {
         scope.launch {
-            val stored = store.undecided.first()
+            val stored = store.undecided()
             val gone = stored.filterNot { library.exists(it) }.toSet()
             open.update { it + (stored - gone) }
-            if (gone.isNotEmpty()) change { it - gone }
+            if (gone.isNotEmpty()) saving.withLock { store.gone(gone) }
         }
         scope.launch {
             combine(player.state, open) { state, waiting ->
@@ -130,23 +130,24 @@ class StudioReview(
         }
     }
 
-    /** Studio has just made [pieceId]: it waits for Keep or Discard. */
-    suspend fun made(pieceId: Long) = change { it + pieceId }
+    /** Studio (or a recording) has just made [pieceId]: it waits for Keep or Discard. */
+    suspend fun made(pieceId: Long) {
+        open.update { it + pieceId }
+        saving.withLock { store.waiting(pieceId) }
+    }
 
     /** Keep: it stays in the library, and is not asked about again. */
-    suspend fun keep(pieceId: Long) = change { it - pieceId }
+    suspend fun keep(pieceId: Long) {
+        open.update { it - pieceId }
+        saving.withLock { store.decided(pieceId, kept = true) }
+    }
 
     /** Discard: it leaves the library (and the player, silenced first if it plays it). */
     suspend fun discard(pieceId: Long) {
         discarded.update { it + pieceId }
-        change { it - pieceId }
+        open.update { it - pieceId }
+        saving.withLock { store.decided(pieceId, kept = false) }
         library.discard(pieceId)
-    }
-
-    /** The undecided pieces changed: at once in memory, then in the store (a store that fails loses nothing now). */
-    private suspend fun change(edit: (Set<Long>) -> Set<Long>) {
-        open.update(edit)
-        saving.withLock { store.save(open.value) }   // the latest set, whichever change came last
     }
 
     companion object {
@@ -156,30 +157,5 @@ class StudioReview(
         /** A piece shorter than that is heard at its end (a frame before it, as the clock may stop just short). */
         private const val END_SLACK_MICROS = 50_000L
         private const val POLL_MS = 250L
-    }
-}
-
-/** Studio's own small store, apart from the app's settings: the pieces waiting for Keep or Discard. */
-private val Context.studioStore: DataStore<Preferences> by preferencesDataStore(name = "studio")
-
-/** [ReviewStore] in the "studio" DataStore. A store that can't be read holds nothing: no piece is ever asked about wrongly. */
-class StoredReview(context: Context) : ReviewStore {
-    private val store = context.applicationContext.studioStore
-
-    override val undecided: Flow<Set<Long>> = store.data
-        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
-        .map { prefs -> prefs[UNDECIDED].orEmpty().mapNotNull { it.toLongOrNull() }.toSet() }
-        .distinctUntilChanged()
-
-    override suspend fun save(ids: Set<Long>) {
-        try {
-            store.edit { it[UNDECIDED] = ids.map { id -> id.toString() }.toSet() }
-        } catch (e: IOException) {
-            // Not kept: the piece simply isn't asked about after a restart.
-        }
-    }
-
-    private companion object {
-        val UNDECIDED = stringSetPreferencesKey("undecided")
     }
 }

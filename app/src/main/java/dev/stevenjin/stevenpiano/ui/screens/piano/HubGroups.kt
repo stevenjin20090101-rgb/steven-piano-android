@@ -12,23 +12,11 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 
-/** A row of the Piano tab's hub. */
+/** A row of the Piano tab's hub: since v1.13 (M31b) every row opens a page; the switches and actions moved onto them. */
 @Immutable
 sealed interface HubRow {
     /** Opens [page]; its value comes from [GroupSummaries]. */
     data class Page(val page: SettingsPage) : HubRow
-
-    /** Auto-connect on launch (a switch). */
-    data object AutoConnect : HubRow
-
-    /** Check for updates automatically (a switch). */
-    data object CheckForUpdates : HubRow
-
-    /** Check now, with what the last check found under it. */
-    data object CheckNow : HubRow
-
-    /** Share diagnostics, with what it sends under it. */
-    data object ShareDiagnostics : HubRow
 }
 
 /** A group of the hub: its eyebrow and its rows. */
@@ -36,31 +24,35 @@ sealed interface HubRow {
 data class HubGroup(val title: String, val rows: List<HubRow>)
 
 /**
- * The hub's groups, in order (DESIGN.md › v1.5): INSTRUMENTS (v1.11 — M29: what plays and what is played
- * from, under the connection card), PIANO (the piano's own settings), PLAYING (how the app plays and shows
- * pieces), CONTROL (ways to run the piano from elsewhere), APP (the app itself). A later feature adds its
- * page to [SettingsPage] and its row here, nowhere else.
+ * The hub's groups, in order (DESIGN.md › v1.13 — M31b, decided by Steven from a preview): INSTRUMENTS
+ * (what plays and what is played from), THE PIANO (the piano's own settings), PLAYING (how the app plays,
+ * on the piano and on the tablet), SHARING (the web panel and its guests), THIS TABLET (the app on this
+ * tablet: its look and resting screen, kiosk, updates, the library's artwork, help). A later feature adds
+ * its page to [SettingsPage] and its row here, nowhere else; the search index ([SettingsIndex]) follows.
  */
 object HubGroups {
     val all: List<HubGroup> = listOf(
         HubGroup("Instruments", pages(SettingsPage.Instrument, SettingsPage.Keyboard)),
-        HubGroup("Piano", pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
-        HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.Display, SettingsPage.Schedule)),
-        HubGroup("Control", pages(SettingsPage.Remote, SettingsPage.Kiosk, SettingsPage.Studio)),
-        HubGroup("App", listOf(HubRow.AutoConnect, HubRow.CheckForUpdates, HubRow.CheckNow, HubRow.ShareDiagnostics)),
+        HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
+        HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Schedule)),
+        HubGroup("Sharing", pages(SettingsPage.Remote, SettingsPage.Guests)),
+        HubGroup("This tablet", pages(SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help)),
     )
 
     /** What the hub shows: a group with no rows yet shows nothing, not even its eyebrow. */
     val shown: List<HubGroup> = all.filter { it.rows.isNotEmpty() }
 
     /**
-     * What the hub shows while a MIDI piano plays (v1.11 — M29): the PIANO group's pages belong to Steven Piano (its
-     * feel, lights, pedal and firmware), so they are hidden; [midiPiano] false, [shown].
+     * What the hub shows while a MIDI piano plays (v1.11 — M29): THE PIANO's pages belong to Steven Piano (its
+     * sound and touch, lights, pedal and firmware), so they are hidden; [midiPiano] false, [shown].
      */
     fun shown(midiPiano: Boolean): List<HubGroup> = if (midiPiano) shown.filter { it.title != PIANO } else shown
 
-    /** The PIANO group's title. */
-    const val PIANO = "Piano"
+    /** The group [page]'s row sits in. */
+    fun groupOf(page: SettingsPage): HubGroup = all.first { group -> group.rows.any { it == HubRow.Page(page) } }
+
+    /** THE PIANO group's title. */
+    const val PIANO = "The piano"
 
     private fun pages(vararg pages: SettingsPage): List<HubRow> = pages.map { HubRow.Page(it) }
 }

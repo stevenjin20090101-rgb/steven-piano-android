@@ -7,7 +7,7 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.ui.screens.piano.pages
+package dev.stevenjin.stevenpiano.ui.screens.studio
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,6 +51,7 @@ import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.studio.StudioSupport
+import dev.stevenjin.stevenpiano.studio.TurnRecord
 import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
 import dev.stevenjin.stevenpiano.studio.compose.Mood
@@ -79,8 +80,21 @@ private sealed interface Seed {
 }
 
 /**
- * Compose a piece (DESIGN.md › v1.7 — M24), in a sheet with its drag handle, from the Studio page's
- * COMPOSE and the Library's + sheet. The eyebrow names the seed ("In the manner of Clair de lune
+ * What the options sheet opens with (v1.12 — M30): the Studio tab's Options prefill it from what the idea box
+ * understood, a card's "Adjust…" from that turn: the seed piece, the mood, the key (an index of [MusicKey.all]),
+ * the tempo and the length. Null fields follow the seed as before.
+ */
+data class ComposeStart(
+    val pieceId: Long? = null,
+    val mood: Mood = Mood.Calm,
+    val key: Int? = null,
+    val bpm: Int? = null,
+    val minutes: Int = 2,
+)
+
+/**
+ * Compose a piece (DESIGN.md › v1.7 — M24), in a sheet with its drag handle, from the Studio tab's Options and a
+ * card's "Adjust…" (v1.12 — M30; [start] its first choices, [turn] what the history keeps of how it was asked). The eyebrow names the seed ("In the manner of Clair de lune
  * (Claude Debussy)") over **Compose a piece**; MOOD, four chips (Calm · Bright · Wild · Melancholy:
  * Melancholy turns the key to the seed's minor while no key has been chosen); KEY, the twelve tonics in
  * the mode's own spelling and Major · Minor; TEMPO, 40–200 bpm, the seed's own until changed; LENGTH,
@@ -92,19 +106,19 @@ private sealed interface Seed {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ComposeSheet(onDismiss: () -> Unit) {
+fun ComposeSheet(onDismiss: () -> Unit, start: ComposeStart = ComposeStart(), turn: TurnRecord = TurnRecord()) {
     val graph = LocalContext.current.graph
     val studio = graph.studio
     val installed by studio.models.installed.collectAsStateWithLifecycle()
     val support by studio.availability.support.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { studio.availability.check() }
 
-    var chosenPiece by rememberSaveable { mutableStateOf<Long?>(null) }
-    var mood by rememberSaveable { mutableStateOf(Mood.Calm) }
+    var chosenPiece by rememberSaveable { mutableStateOf(start.pieceId) }
+    var mood by rememberSaveable { mutableStateOf(start.mood) }
     // Null until chosen here: the key and tempo follow the seed (and the key the mood) until then.
-    var chosenKey by rememberSaveable { mutableStateOf<Int?>(null) }
-    var chosenBpm by rememberSaveable { mutableStateOf<Int?>(null) }
-    var minutes by rememberSaveable { mutableIntStateOf(DEFAULT_MINUTES) }
+    var chosenKey by rememberSaveable { mutableStateOf(start.key) }
+    var chosenBpm by rememberSaveable { mutableStateOf(start.bpm) }
+    var minutes by rememberSaveable { mutableIntStateOf(start.minutes) }
     var choosing by rememberSaveable { mutableStateOf(false) }
 
     val seed by produceState<Seed>(Seed.Reading, chosenPiece) {
@@ -227,7 +241,8 @@ fun ComposeSheet(onDismiss: () -> Unit) {
                     "Compose",
                     onClick = {
                         val ready = choice ?: return@ActionButton
-                        studio.compose(ComposeOrder(ready.pieceId, ComposeRequest(mood, key, bpm, minutes)), name = ready.title)
+                        val request = ComposeRequest(mood, key, bpm, minutes)
+                        studio.compose(ComposeOrder(ready.pieceId, request, turn = turn.copy(understood = StudioCopy.optionsLine(request, ready.title, ready.composer))), name = ready.title)
                         onDismiss()
                     },
                     enabled = choice != null && key != null && bpm != null && support != StudioSupport.NoRuntime && support != StudioSupport.TooLittleMemory,
@@ -282,6 +297,3 @@ private fun SeedRow(choice: SeedChoice, choosing: Boolean, onChange: () -> Unit)
 
 /** "F♯ major" as TalkBack says it: "F sharp major". */
 private fun spoken(label: String): String = label.replace("♯", " sharp").replace("♭", " flat")
-
-/** Two minutes: what the note's "about a minute" is about. */
-private const val DEFAULT_MINUTES = 2

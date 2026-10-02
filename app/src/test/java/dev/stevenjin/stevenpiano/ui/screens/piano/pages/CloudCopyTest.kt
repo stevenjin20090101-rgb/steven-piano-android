@@ -38,8 +38,8 @@ class CloudCopyTest {
     @Test
     fun `About says remote access is off by default and what the relay sees`() {
         val about = CloudCopy.ABOUT
-        assertTrue(about.startsWith("Remote access over the internet is off unless you turn it on."))
-        for (seen in listOf("pages", "requests", "versions", "whether the piano is connected", "what plays", "guests'", "Web control", "library's size", "channels' names")) {
+        assertTrue(about.startsWith("The web panel over the internet is off unless you turn it on."))
+        for (seen in listOf("pages", "requests", "versions", "whether the piano is connected", "what plays", "guests'", "whether the web panel is on", "library's size", "channels' names")) {
             assertTrue("About names $seen", seen in about)
         }
         assertTrue("Never a device identifier." in about)

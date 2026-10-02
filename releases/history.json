@@ -141,5 +141,16 @@
     "minSdk": 26,
     "tag": "v1.11",
     "publishedAt": "2026-10-02"
+  },
+  {
+    "versionCode": 21,
+    "versionName": "1.12",
+    "notes": "Studio is now its own tab: type an idea such as \"calm and slow\" or \"a bright waltz, 2 minutes\" and the tablet writes a piece, showing each step, the notes as they are written and the time left. Every piece gets a cover drawn from its music and joins the new Made in Studio playlist; \"another like it\", \"slower\" or \"longer\" change the last one. On Now playing, drag the divider between the sheet music and the notes to resize them or hide one, and a View button holds the note style, fingering, chord names and hand colours. The Piano tab is reorganised into Instruments, The piano, Playing, Sharing and This tablet, with a search box that finds any setting by name.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.12/steven-piano-1.12.apk",
+    "sha256": "6e0bf65f0e25e5ede87ffbfdd1fde8c136f08f0763f0085061dfe7e7728cb6a8",
+    "sizeBytes": 13921571,
+    "minSdk": 26,
+    "tag": "v1.12",
+    "publishedAt": "2026-10-02"
   }
 ]

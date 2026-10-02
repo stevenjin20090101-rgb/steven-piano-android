@@ -326,7 +326,8 @@ object WebApi {
         .put("composerKey", p.composerKey)
         .put("durationMs", p.durationMs)
         .put("favorite", p.favorite)
-        .put("art", if (p.portrait) "portrait" else "roll")
+        .put("art", if (p.cover) "cover" else if (p.portrait) "portrait" else "roll")
+        .apply { if (p.cover) put("artVersion", p.artVersion) }
 
     fun pieces(list: List<WebPiece>): JSONArray = JSONArray().apply { list.forEach { put(piece(it)) } }
 
@@ -443,7 +444,11 @@ object WebApi {
         .put("live", s.live)
         .put("recording", s.recording)
 
-    /** Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, licence, installed, line, progress}], jobs: [{id, kind, name, state, line, progress, title}]}`. */
+    /**
+     * Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, licence, installed, line, progress}], jobs:
+     * [{id, kind, name, state, line, progress, title, step, steps, tokens, musicMs, targetMs, etaMs, notes, turn}]}` (the last
+     * eight v1.12 — M30).
+     */
     fun studio(s: WebStudio): JSONObject = JSONObject()
         .put("available", s.available)
         .put("reason", s.reason ?: JSONObject.NULL)
@@ -464,7 +469,9 @@ object WebApi {
                 s.jobs.forEach { j ->
                     put(
                         JSONObject().put("id", j.id).put("kind", j.kind).put("name", j.name).put("state", j.state).put("line", j.line)
-                            .put("progress", j.progress?.toDouble() ?: JSONObject.NULL).put("title", j.title ?: JSONObject.NULL),
+                            .put("progress", j.progress?.toDouble() ?: JSONObject.NULL).put("title", j.title ?: JSONObject.NULL)
+                            .put("step", j.step).put("steps", JSONArray(j.steps)).put("tokens", j.tokens).put("musicMs", j.musicMs)
+                            .put("targetMs", j.targetMs).put("etaMs", j.etaMs ?: JSONObject.NULL).put("notes", j.notes).put("turn", j.turn ?: JSONObject.NULL),
                     )
                 }
             },
@@ -555,7 +562,7 @@ object WebApi {
         .put("lastError", p.lastError ?: JSONObject.NULL)
         .put("errorAbout", p.errorAbout ?: JSONObject.NULL)
 
-    /** `/api/piano`: the state and report, the presets, and the table the page draws its controls from (Feel · Lighting · Pedal). */
+    /** `/api/piano`: the state and report, the presets, and the table the page draws its controls from (Sound and touch · Lights and screen · Pedal). */
     fun piano(p: WebPiano): JSONObject = pianoState(p.state)
         .put("statusText", p.statusText ?: JSONObject.NULL)
         .put("statusReading", p.statusReading)
@@ -564,7 +571,7 @@ object WebApi {
 
     private fun page(page: PianoPage): JSONObject = JSONObject()
         .put("key", page.name.lowercase())
-        .put("title", page.name)
+        .put("title", page.title)   // the page's one name, as the app has it (v1.13)
         .put(
             "sections",
             JSONArray().apply {

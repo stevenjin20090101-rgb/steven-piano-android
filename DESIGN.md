@@ -2443,6 +2443,40 @@ plays, the panel's Piano page shows those lines and the same note as the tablet;
 are hidden. The relay's status carries the same without any name: the instrument's kind and state, the keyboard's
 transport and state, Live and Recording.
 
+# v1.12 — Studio as a tab
+
+Designed by Fable (apple-design lenses), built in M30. Studio leaves the Piano hub and becomes the fourth of five
+tabs: Library · Now playing · Keys · **Studio** · Piano (a compact bar's labels may scale to 0.85; none is
+shortened). The rules:
+
+- **A conversation.** Turns at reading width, newest at the bottom; the prompt bar (glass, 28 dp, the aura's ring)
+  docked above the bottom inset and the keyboard: attach · "Describe a piece…" (200 characters, a counter past
+  160) · Options · Send (off while empty or while three ideas wait). Over it, 250 ms after the last key, the line
+  of what is understood and "Not used: …". Models live in a glass sheet from the header; on wide frames the shelf
+  MADE IN STUDIO stands beside the conversation (a sheet from a second glyph on phones).
+- **Keywords, honestly.** There is no text model; an idea is read by keywords (moods, tempo, keys, lengths, forms,
+  the library's titles and names, the catalogue). What was not used is said. An idea without a seed of its own
+  refines the last turn ("slower", "longer", "in D minor", "another", "different"), and the card says what changed.
+- **Titles never contain typed text**: "<Mood>, after <seed title>", "<Mood>, after <composer or form>", "<Mood>
+  piece". Typed text lives only in Studio's history on the tablet: never in a title, a file name, a log line or
+  the diagnostics.
+- **A card says where it is**: the steps as words (the current one in the content colour), a determinate hairline,
+  "42% · 0:50 of 2:00 · about 40 s left" in tabular digits, the notes appearing as they are written, Cancel; then
+  Listen · Keep · Discard · Another like it · Adjust… and the credits. A budget stop is said plainly ("3:41 written
+  of 5:00: the music was dense, so it ends here"). Progress is announced at steps, not every tick.
+- **Every Studio piece has a drawn cover** (from its key, mood and notes; it reads in grey too) and joins the
+  built-in **Made in Studio**, which no channel draws from and no guest sees. A piece's own cover comes first
+  wherever the piece is shown.
+- **The aura is colour's one new meaning: the tablet is writing music.** Blue, violet, rose, amber, in
+  `ui/theme/Aura.kt` alone, drawn by one component: the prompt bar's ring (rest 30 %, focused 60 %, working 100 %),
+  the running card's top line, a 6 dp dot on the Studio tab while a job runs. Red stays live, yellow stays sounding.
+  It turns only while the screen is resumed and in sight, is still under reduced motion, has no glow with high
+  contrast or reduced transparency, never stands behind text without the bar's surface, and is never the only sign
+  of status.
+- **Kiosk mode: typing ideas is free** (Steven). Send, Options, Another like it, Listen and Cancel need no PIN;
+  Attach, Models, Keep, Discard and removing a turn do. At most three ideas wait, "Not used" is a count, the
+  history hides typed words until the PIN opens the settings, and at most 30 Studio pieces wait (the oldest goes).
+
 # v1.12 — the split and the View menu
 
 Designed by Fable with the `apple-design` lenses (`split-views.md`, `settings.md › Task-specific options`,
@@ -2469,6 +2503,20 @@ Designed by Fable with the `apple-design` lenses (`split-views.md`, `settings.md
   music 33 percent", adjusted as a slider, with the actions Reset, Show sheet music only, Show notes only. **Keys**:
   the arrows along the axis move it 2 %, Page keys jump between the stops, Home and End hide a pane. Short screens
   that scroll keep their fixed heights and no divider.
+
+# v1.13 — the Piano tab reorganised, with search (M31b)
+
+Steven chose the hub: INSTRUMENTS · THE PIANO · PLAYING · SHARING · THIS TABLET, under "Search settings" and the card.
+
+- **Every hub row opens a page**; switches and actions sit on the page they belong to, and the row's value says what it holds.
+- **One disclosure per page at most** (Fine tuning, Strip set-up): closed at first, its value names what it holds.
+- **One name per thing**, app and web panel alike: Web panel; Piano, Tablet, Channel and Schedule volume; Resting
+  screen; Falling notes. Copy that names a place names it as the hub does.
+- **Notes**: one plain line, sentence case, no full stop, under 60 characters, all in `ui/SettingNotes.kt`.
+- **Search** is content, not glass: results give the label and its path in the eyebrow; a result opens its page at
+  the row, opens its fold and fills the row with the elevated surface for about a second; what moved off the tab
+  opens its new screen. In kiosk searching is free and a locked page still asks for the PIN.
+- **No action twice**: beside the Instrument page the card shows the name and state only.
 
 # v1.13 — the panel's notes and score
 

@@ -316,7 +316,7 @@
       if (e.status === 401 && wait > 0) gateWait(wait, "That PIN isn't right.");
       else if (e.status === 401) $('gate-note').textContent = "That PIN isn't right.";
       else if (e.status === 429) gateWait(wait || 30, 'Too many tries.');
-      else if (e.status === 403 && e.body.error === 'no-pin') $('gate-note').textContent = 'Set a PIN on the tablet first: Piano › Remote control.';
+      else if (e.status === 403 && e.body.error === 'no-pin') $('gate-note').textContent = 'Set a PIN on the tablet first: Piano › Web panel.';
       else $('gate-note').textContent = e.message;
     }
     if (!$('pin').disabled) $('gate-open').disabled = false;   // a countdown keeps it off until the wait is over
@@ -508,13 +508,22 @@
     box.dataset.id = String(piece.id);
     box.dataset.size = size;
     box.dataset.title = piece.title || '';
+    box.dataset.version = String(piece.artVersion || 0);
     if (lazy && lazyArt) lazyArt.observe(box);
     else loadArt(box);
     return box;
   }
 
   function loadArt(box) {
-    if (box.dataset.kind === 'portrait') {
+    if (box.dataset.kind === 'cover') {
+      // A Studio piece's own cover (v1.12): drawn from its music; its version keeps the hour-long cache honest.
+      const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/piece/${encodeURIComponent(box.dataset.id)}?v=${encodeURIComponent(box.dataset.version || '0')}` });
+      img.addEventListener('error', () => {
+        box.dataset.kind = 'roll';
+        loadArt(box);
+      });
+      box.replaceChildren(img);
+    } else if (box.dataset.kind === 'portrait') {
       const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/composer/${encodeURIComponent(box.dataset.key)}?size=${box.dataset.size}` });
       img.addEventListener('error', () => {
         box.dataset.kind = 'roll';
@@ -555,7 +564,7 @@
     const player = state.player;
     const piece = player.piece;
     const playing = player.status === 'playing';
-    const artKey = piece ? `${piece.id}:${piece.art}` : null;
+    const artKey = piece ? `${piece.id}:${piece.art}:${piece.artVersion || 0}` : null;
     if (artKey !== shownArt) {
       shownArt = artKey;
       art($('now-art'), piece, 'tile');
@@ -797,7 +806,7 @@
 
   /** What the tablet's piano sound is doing, as the tablet's popover says it. */
   function tabletLine(tablet) {
-    if (!tablet.installed) return "The piano sound isn't on the tablet yet: download it there, in Piano › Playback.";
+    if (!tablet.installed) return "The piano sound isn't on the tablet yet: download it there, in Piano › Tablet sound.";
     if (!tablet.active) return 'Silent while the piano is connected.';
     return tablet.mode === 'always' ? 'Playing on the tablet with the piano.' : "Playing on the tablet while the piano isn't connected.";
   }
@@ -1327,7 +1336,7 @@
   }
 
   function volumeSetting(d) {
-    const range = h('input', { class: 'range', type: 'range', min: '0', max: '100', step: '1', 'aria-label': 'Volume' });
+    const range = h('input', { class: 'range', type: 'range', min: '0', max: '100', step: '1', 'aria-label': 'Schedule volume' });
     const value = h('span', { class: 'value', text: `${d.volumePct}%` });
     setRange(range, d.volumePct, 100);
     range.addEventListener('input', () => {
@@ -1336,7 +1345,7 @@
       value.textContent = `${d.volumePct}%`;
     });
     return h('div', { class: 'setting stacked' },
-      h('div', { class: 'label' }, 'Volume', h('span', { class: 'eyebrow', text: '%' })),
+      h('div', { class: 'label' }, 'Schedule volume', h('span', { class: 'eyebrow', text: '%' })),
       h('div', { class: 'with-value' }, range, value),
       h('p', { class: 'meta', text: "The piano's own volume while it plays, or how hard its keys are struck where the piano has none. What was there comes back when it ends." }));
   }
@@ -2144,7 +2153,7 @@
     ];
     // Another MIDI piano plays (v1.11 — M29): the piano's pages and actions are Steven Piano's, hidden meanwhile.
     if (state.instruments && state.instruments.instrument && state.instruments.instrument.kind === 'midi') {
-      fill(body, lines, h('p', { class: 'note inset', text: `Feel, Lighting, Pedal and Firmware belong to Steven Piano and are hidden while ${state.instruments.instrument.name} plays.` }));
+      fill(body, lines, h('p', { class: 'note inset', text: `Sound and touch, Lights and screen, Pedal and Firmware belong to Steven Piano and are hidden while ${state.instruments.instrument.name} plays.` }));
       return;
     }
     const status = !connected
@@ -2194,7 +2203,7 @@
         failed(e);
       }
     } }, label);
-    nodes.push(h('h3', { class: 'section-head eyebrow', text: 'Actions' }), h('div', { class: 'actions' }, act('status', 'Read status'), act('off', 'All keys off'), act('save', 'Save now')));
+    nodes.push(h('h3', { class: 'section-head eyebrow', text: 'Actions' }), h('div', { class: 'actions' }, act('status', 'Read status'), act('off', 'All keys off'), act('save', 'Save to the piano now')));
     if (pianoTable.statusText) nodes.push(h('pre', { class: 'status-report', text: pianoTable.statusText }));
     fill(body, nodes);
   }

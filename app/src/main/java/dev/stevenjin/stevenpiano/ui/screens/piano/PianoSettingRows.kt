@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoPage
 import dev.stevenjin.stevenpiano.piano.PianoRow
 import dev.stevenjin.stevenpiano.piano.PianoSection
@@ -45,7 +46,9 @@ import dev.stevenjin.stevenpiano.piano.Preset
 import dev.stevenjin.stevenpiano.piano.SettingKind
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
+import dev.stevenjin.stevenpiano.ui.SettingNotes
 import dev.stevenjin.stevenpiano.ui.components.ChoiceRow
+import dev.stevenjin.stevenpiano.ui.components.DisclosureRow
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
@@ -62,10 +65,17 @@ import dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlin.math.roundToInt
 
 /** What the piano's pages ask of the Piano tab. */
 interface PianoSettingsActions {
+    /** The disclosures open just now (v1.13 — M31b): Fine tuning, Strip set-up; Compose state, so reading it recomposes. */
+    val openFolds: Set<PianoFold>
+
+    /** Opens or closes [fold]. */
+    fun toggleFold(fold: PianoFold)
+
     /** A setting changed to [value], in its wire form. */
     fun setPianoValue(name: String, value: String)
 
@@ -99,8 +109,10 @@ fun PianoStatusLine(piano: PianoState, connected: Boolean) {
 }
 
 /**
- * A piano page's content (DESIGN.md › v1.5): the status line, then [page]'s sections from the
- * table, each under its eyebrow. Switches for on and off, steppers for numbers with few steps,
+ * A piano page's content (DESIGN.md › v1.5, v1.13): the status line, then [page]'s sections from the
+ * table, each under its eyebrow; the sections a page folds away ([PianoFold]) sit behind its one
+ * disclosure row, closed until opened (or until search lands on a row inside). Each row is anchored for
+ * search ([SettingsIndex.anchorOf]). Switches for on and off, steppers for numbers with few steps,
  * hairline sliders with the number beside them for continuous values, chips for modes, palettes
  * and presets; units in each control's eyebrow. Every control shows what the piano holds and sends
  * a change the moment it is made; until the piano has answered, everything is disabled under the
@@ -116,9 +128,28 @@ fun PianoPageContent(page: PianoPage, report: PianoReport, actions: PianoSetting
     firmwareSection?.invoke()
     if (report.piano == PianoState.Unsupported) return
     val ready = report.piano as? PianoState.Ready
+    val reduced = rememberReducedMotion()
+    var drawn: PianoFold? = null
     for (section in PianoSettings.sections(page)) {
         if (firmwareSection != null && section == PianoSection.Firmware) continue
-        PianoSettingsSection(section, ready, report.statusText, report.statusReading, actions)
+        val fold = section.fold
+        if (fold == null) {
+            PianoSettingsSection(section, ready, report.statusText, report.statusReading, actions)
+            continue
+        }
+        if (fold == drawn) continue
+        drawn = fold
+        val inside = PianoSettings.folded(fold)
+        SectionRule()
+        DisclosureRow(
+            fold.title,
+            value = inside.mapNotNull { it.title }.joinToString(" · "),
+            open = fold in actions.openFolds,
+            onToggle = { actions.toggleFold(fold) },
+            reduced = reduced,
+        ) {
+            for (folded in inside) PianoSettingsSection(folded, ready, report.statusText, report.statusReading, actions)
+        }
     }
 }
 
@@ -143,16 +174,19 @@ private fun PianoSettingsSection(
     val error = ready?.lastError
     val place = error?.let { placeOf(ready.errorAbout) }
     for (row in PianoSettings.rows(section)) {
-        when (row) {
-            is PianoRow.Control -> SettingRow(row.setting, ready, actions)
-            is PianoRow.Reading -> FactRow(row.fact.name, row.fact.label, ready)
-            PianoRow.Presets -> PresetsRow(ready != null, actions)
-            PianoRow.StrikeTest -> StrikeTestRow(ready != null, actions)
-            PianoRow.TestLed -> TestLedRow(ready != null, actions)
-            PianoRow.KeyForceNote -> NoteLine(KEY_FORCE_NOTE, Modifier.padding(top = 4.dp))
-            PianoRow.Actions -> ActionRows(ready, statusText, statusReading, actions)
+        Anchored(SettingsIndex.anchorOf(row)) {
+            when (row) {
+                is PianoRow.Control -> SettingRow(row.setting, ready, actions)
+                is PianoRow.Reading -> FactRow(row.fact.name, row.fact.label, ready)
+                PianoRow.Presets -> PresetsRow(ready != null, actions)
+                PianoRow.StrikeTest -> StrikeTestRow(ready != null, actions)
+                PianoRow.TestLed -> TestLedRow(ready != null, actions)
+                PianoRow.KeyForceNote -> NoteLine(KEY_FORCE_NOTE, Modifier.padding(top = 4.dp))
+                PianoRow.ReadStatus -> ReadStatusRow(ready, statusText, statusReading, actions)
+                PianoRow.SaveNow -> SaveNowRow(ready, actions)
+            }
+            if (error != null && place == placeKey(row)) ErrorBanner(error, actions::dismissPianoError)
         }
-        if (error != null && place == placeKey(row)) ErrorBanner(error, actions::dismissPianoError)
     }
 }
 
@@ -161,15 +195,17 @@ private const val KEY_FORCE_NOTE = "Key force is set at the piano's USB console.
 
 /**
  * Where a refusal shows: under the setting it names, under the Test LED, strike test or preset
- * row for their commands, and at the end of ACTIONS for its rows and anything unnamed.
+ * row for their commands, under Save to the piano now for a save, and under Read status (Firmware and
+ * status) for a status read, All keys off and anything unnamed.
  */
 private fun placeOf(about: String?): String = when {
-    about == null -> ACTIONS
+    about == null -> READ_STATUS
     PianoSettings.named(about) != null -> about
     about == PianoAction.LedTest.command -> about
     about == PianoAction.TestMin.command || about == PianoAction.TestMax.command -> STRIKE_TEST
     PianoSettings.presets.any { it.command == about } -> PRESETS
-    else -> ACTIONS
+    about == PianoAction.Save.command -> SAVE
+    else -> READ_STATUS
 }
 
 /** The place a row gives a refusal, as [placeOf] names it; null for rows no refusal concerns. */
@@ -178,13 +214,15 @@ private fun placeKey(row: PianoRow): String? = when (row) {
     PianoRow.Presets -> PRESETS
     PianoRow.StrikeTest -> STRIKE_TEST
     PianoRow.TestLed -> PianoAction.LedTest.command
-    PianoRow.Actions -> ACTIONS
+    PianoRow.ReadStatus -> READ_STATUS
+    PianoRow.SaveNow -> SAVE
     is PianoRow.Reading, PianoRow.KeyForceNote -> null
 }
 
 private const val PRESETS = "presets"
 private const val STRIKE_TEST = "strike test"
-private const val ACTIONS = "actions"
+private const val READ_STATUS = "read status"
+private const val SAVE = "save"
 
 /** One setting, in the control its kind takes. Adjustable only once the piano has reported it. */
 @Composable
@@ -199,6 +237,7 @@ private fun SettingRow(setting: PianoSetting, ready: PianoState.Ready?, actions:
             checked = wire != null && wire.trim() != "0",
             onChange = { change(PianoSettings.wire(it)) },
             enabled = enabled,
+            note = setting.note,
             stateDescription = spoken,
         )
         is SettingKind.Stepper -> {
@@ -230,9 +269,10 @@ private fun SettingRow(setting: PianoSetting, ready: PianoState.Ready?, actions:
                     stateDescription = spoken,
                     unit = setting.unit,
                     enabled = enabled,
+                    note = setting.note,
                 )
             }
-        is SettingKind.Choice -> ChoiceRow(setting.label, kind.options, wire?.toIntOrNull(), { change(PianoSettings.wire(it)) }, enabled = enabled)
+        is SettingKind.Choice -> ChoiceRow(setting.label, kind.options, wire?.toIntOrNull(), { change(PianoSettings.wire(it)) }, enabled = enabled, note = setting.note)
     }
 }
 
@@ -274,7 +314,7 @@ private fun PresetChip(preset: Preset, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun TestLedRow(enabled: Boolean, actions: PianoSettingsActions) {
     var key by rememberSaveable { mutableIntStateOf(PianoSettings.TEST_KEY_DEFAULT) }
-    TestKeyRow("Test LED", key, { key = it }, enabled) {
+    TestKeyRow("Test LED", key, { key = it }, enabled, SettingNotes.TEST_LED) {
         ActionButton("Light it", { actions.runPianoAction(PianoAction.LedTest, key) }, enabled = enabled, description = "Light the LED for ${spokenKey(key)}")
     }
 }
@@ -329,12 +369,12 @@ private fun FactRow(name: String, label: String, ready: PianoState.Ready?) {
 }
 
 /**
- * ACTIONS, as v1.4's DIAGNOSTICS had them: Read status (while it reads, a hairline; then the
- * piano's report as it wrote it, on the elevated surface, under the button), then All keys off
- * and Save now side by side. Outlined buttons, available once the piano has answered.
+ * STATUS's last row (v1.13; ACTIONS until then): Read status, with what it does under it; while it
+ * reads, a hairline; then the piano's report as it wrote it, on the elevated surface, under the button.
+ * An outlined button, available once the piano has answered. (All keys off lives on the Instrument page.)
  */
 @Composable
-private fun ActionRows(ready: PianoState.Ready?, statusText: String?, statusReading: Boolean, actions: PianoSettingsActions) {
+private fun ReadStatusRow(ready: PianoState.Ready?, statusText: String?, statusReading: Boolean, actions: PianoSettingsActions) {
     val enabled = ready != null
     val report: (@Composable () -> Unit)? = if (statusReading || statusText != null) {
         {
@@ -359,19 +399,23 @@ private fun ActionRows(ready: PianoState.Ready?, statusText: String?, statusRead
     } else {
         null
     }
-    ActionRow(below = report) {
+    ActionRow(note = SettingNotes.READ_STATUS, below = report) {
         ActionButton(
-            if (statusReading) "Reading status…" else "Read status",
+            if (statusReading) "Reading status…" else SettingsIndex.READ_STATUS,
             onClick = { actions.runPianoAction(PianoAction.Status, 0) },
             enabled = enabled && !statusReading,
         )
     }
-    ActionRow {
-        ActionButton("All keys off", onClick = { actions.runPianoAction(PianoAction.AllKeysOff, 0) }, enabled = enabled)
+}
+
+/** Sound and touch's last row (v1.13; "Save now" under ACTIONS until then): the piano keeps what it holds after a restart. */
+@Composable
+private fun SaveNowRow(ready: PianoState.Ready?, actions: PianoSettingsActions) {
+    ActionRow(note = SettingNotes.SAVE_TO_PIANO) {
         ActionButton(
-            "Save now",
+            SettingsIndex.SAVE_TO_PIANO,
             onClick = { actions.runPianoAction(PianoAction.Save, 0) },
-            enabled = enabled,
+            enabled = ready != null,
             description = "Save the settings on the piano now",
         )
     }

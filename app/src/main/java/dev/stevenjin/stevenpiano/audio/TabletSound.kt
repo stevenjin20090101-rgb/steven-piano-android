@@ -49,7 +49,7 @@ class TeeSink(private val link: MidiSink, private val tablet: MidiSink) : MidiSi
 }
 
 /**
- * When the tablet plays the piano sound (Piano › Playback › TABLET SOUND, v1.8 — M25): never; only while
+ * When the tablet plays the piano sound (Piano › Tablet sound, v1.8 — M25): never; only while
  * the piano isn't connected (the default, so it never doubles the real piano out of step); or always,
  * with the piano too (Steven's choice: it may sound slightly early or late against the piano).
  */

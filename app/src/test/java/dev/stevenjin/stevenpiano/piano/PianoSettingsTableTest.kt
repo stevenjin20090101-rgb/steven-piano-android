@@ -87,7 +87,8 @@ class PianoSettingsTableTest {
         assertEquals(PianoSettings.all.size, PianoSettings.all.map { it.name }.toSet().size)
         val order = PianoSettings.all.map { it.section.ordinal }
         assertEquals(order.sorted(), order)
-        assertEquals(PianoPage.entries.toList(), PianoSettings.all.map { it.page }.distinct())
+        // Firmware and status holds the facts and Read status only since v1.13: the key-force readings went to Sound and touch.
+        assertEquals(PianoPage.entries - PianoPage.Firmware, PianoSettings.all.map { it.page }.distinct())
     }
 
     @Test

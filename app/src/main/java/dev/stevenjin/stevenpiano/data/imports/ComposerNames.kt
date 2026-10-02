@@ -79,7 +79,9 @@ object ComposerNames {
      * whole name everywhere, rows included ("Made in Studio · 3:05", not "Studio · 3:05").
      */
     const val STUDIO = "Made in Studio"
-    private val STUDIO_KEY = TextKeys.fold(STUDIO)
+
+    /** Its key: a Studio piece's row shows its own cover (v1.12 — M30). */
+    val STUDIO_KEY = TextKeys.fold(STUDIO)
 
     /**
      * The composer of a recording made on the tablet (v1.11 — M29): not a person either, so it keeps its whole

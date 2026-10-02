@@ -37,6 +37,8 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoPageContent
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoReport
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoSettingsActions
@@ -44,8 +46,9 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 
 /**
  * Firmware and status: FIRMWARE (the piano's firmware version and its updates, v1.6 — M21) ·
- * STATUS (the seven power boards, I²C errors, the pedal board, uptime, the two key-force lines and
- * where key force is set) · ACTIONS (Read status with the piano's report, All keys off, Save now).
+ * STATUS (the seven power boards, I²C errors, the pedal board, uptime, then Read status with the
+ * piano's report). Since v1.13 (M31b) the key-force lines are under Sound and touch › Fine tuning, Save
+ * now is Sound and touch's "Save to the piano now", and All keys off is on the Instrument page.
  * The hub's row reads the version, "Update available" while a newer release is known, or "—".
  */
 @Composable
@@ -103,9 +106,11 @@ private fun FirmwareSection(firmware: FirmwareReport, actions: FirmwareActions) 
         connected.tooOld -> FirmwareCopy.NO_VERSION
         else -> FirmwareCopy.UNKNOWN
     }
-    ReadingRow("Piano firmware", shown)
-    ActionRow(note = FirmwareCopy.checkLine(state)) {
-        ActionButton(FirmwareCopy.CHECK, onClick = actions::checkFirmware, enabled = canSend && !state.busy && state != FirmwareState.Checking)
+    Anchored("fw") { ReadingRow("Piano firmware", shown) }
+    Anchored(PageRows.CHECK_PIANO_UPDATES.anchor) {
+        ActionRow(note = FirmwareCopy.checkLine(state)) {
+            ActionButton(FirmwareCopy.CHECK, onClick = actions::checkFirmware, enabled = canSend && !state.busy && state != FirmwareState.Checking)
+        }
     }
     UpdateBlock(state, canSend, onUpdate = { actions.updateFirmware(context) }, onCancel = actions::cancelFirmware)
 }

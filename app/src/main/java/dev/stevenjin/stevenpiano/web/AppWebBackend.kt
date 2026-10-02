@@ -114,9 +114,13 @@ class AppWebBackend(
         val player = graph.player.state.value
         val settings = graph.settings.value
         val portraits = portraits()
+        val covers = covers()
         val piece = player.piece
         val shown = piece?.let {
-            WebPiece(it.pieceId, it.title, it.composer, it.composerKey, it.durationMicros / MICROS_PER_MS, portrait = it.composerKey in portraits)
+            WebPiece(
+                it.pieceId, it.title, it.composer, it.composerKey, it.durationMicros / MICROS_PER_MS, portrait = it.composerKey in portraits,
+                cover = it.pieceId in covers, artVersion = covers[it.pieceId] ?: 0,
+            )
         }
         val queue = player.queue
         val from = queue.index.coerceAtLeast(0)
@@ -125,7 +129,7 @@ class AppWebBackend(
         val known = library { graph.library.pieces(itemIds) }.orEmpty()
         val asked = requested()
         val items = itemUids.zip(itemIds).mapNotNull { (uid, id) ->
-            known[id]?.let { WebQueueItem(uid, it.toWeb(portraits), requested = uid in asked) }
+            known[id]?.let { WebQueueItem(uid, it.toWeb(portraits, covers), requested = uid in asked) }
         }
         val channel = player.channel?.let { key ->
             WebChannelPlaying(key, channelName(key) ?: key, settings.channelVolume(key))
@@ -201,8 +205,9 @@ class AppWebBackend(
             }
         }.orEmpty()
         val portraits = portraits()
+        val covers = covers()
         val from = offset.coerceIn(0, pieces.size)
-        val page = pieces.subList(from, (from + limit).coerceAtMost(pieces.size)).map { it.toWeb(portraits) }
+        val page = pieces.subList(from, (from + limit).coerceAtMost(pieces.size)).map { it.toWeb(portraits, covers) }
         return WebPage(pieces.size, from, page)
     }
 
@@ -216,7 +221,8 @@ class AppWebBackend(
     override suspend fun playlist(id: Long): WebPlaylistDetail? {
         val playlist = playlists().firstOrNull { it.id == id } ?: return null
         val portraits = portraits()
-        val pieces = library { graph.library.inPlaylist(id).first() }.orEmpty().map { it.toWeb(portraits) }
+        val covers = covers()
+        val pieces = library { graph.library.inPlaylist(id).first() }.orEmpty().map { it.toWeb(portraits, covers) }
         return WebPlaylistDetail(playlist, pieces)
     }
 
@@ -230,14 +236,16 @@ class AppWebBackend(
         val pieces = library { graph.library.byComposer(key).first() }.orEmpty()
         if (pieces.isEmpty()) return null
         val portraits = portraits()
+        val covers = covers()
         val name = pieces.minOf { it.composer }
-        return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits), pieces.map { it.toWeb(portraits) })
+        return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits), pieces.map { it.toWeb(portraits, covers) })
     }
 
     override suspend fun composerArt(key: String, size: WebArtSize): WebImage? = portrait(key, if (size == WebArtSize.ROW) ArtSize.Row else ArtSize.Tile)
 
     override suspend fun pieceArt(id: Long): WebImage? {
         val piece = library { graph.library.piece(id) } ?: return null
+        image(ArtworkEntity.forPiece(id), ArtSize.Tile)?.let { return it }   // its own cover first (v1.12 — M30)
         portrait(piece.composerKey, ArtSize.Tile)?.let { return it }
         val cacheKey = "roll:$id"
         encoded.get(cacheKey)?.let { return it }
@@ -464,12 +472,13 @@ class AppWebBackend(
 
     override suspend fun catalogue(): List<CatalogueList> {
         val portraits = portraits()
+        val covers = covers()
         val seen = HashSet<Long>()
         return graph.builtIns.lists.mapNotNull { list ->
             val id = library { graph.library.builtInId(list.key) } ?: return@mapNotNull null
             val pieces = library { graph.library.inPlaylist(id).first() }.orEmpty()
                 .filter { seen.add(it.id) }
-                .map { it.toWeb(portraits) }
+                .map { it.toWeb(portraits, covers) }
             CatalogueList(list.key, list.name, pieces).takeIf { pieces.isNotEmpty() }
         }
     }
@@ -539,6 +548,14 @@ class AppWebBackend(
                     line = StudioCopy.jobLine(job, undecided, discarded),
                     progress = job.progress.takeIf { job.state == JobState.Running },
                     title = job.title,
+                    step = job.step.name.lowercase(Locale.ROOT),
+                    steps = job.steps.map { it.name.lowercase(Locale.ROOT) },
+                    tokens = job.tokens,
+                    musicMs = job.musicMs,
+                    targetMs = job.targetMs,
+                    etaMs = job.etaMs,
+                    notes = job.notes,
+                    turn = job.turnId,
                 )
             },
         )
@@ -621,7 +638,12 @@ class AppWebBackend(
 
     private suspend fun portrait(composerKey: String, size: ArtSize): WebImage? {
         if (composerKey.isEmpty()) return null
-        val row = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.artwork(ArtworkEntity.forComposer(composerKey)).first() } ?: return null
+        return image(ArtworkEntity.forComposer(composerKey), size)
+    }
+
+    /** The picture of artwork row [key] at [size], encoded once per version; null when it has none. */
+    private suspend fun image(key: String, size: ArtSize): WebImage? {
+        val row = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.artwork(key).first() } ?: return null
         if (row.imagePath == null) return null
         val cacheKey = "${row.key}|${row.fetchedAt}|$size"
         encoded.get(cacheKey)?.let { return it }
@@ -645,11 +667,17 @@ class AppWebBackend(
     /** The composers with portraits, or none after a moment (the table unreadable): every piece then shows its roll card. */
     private suspend fun portraits(): Set<String> = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.portraitComposers() }.orEmpty()
 
+    /** The pieces with a cover of their own (Studio's), with when it was drawn (v1.12 — M30). */
+    private suspend fun covers(): Map<Long, Long> = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.pieceCovers() }.orEmpty()
+
     private fun channelName(key: String): String? =
         graph.channelPools.summary(key)?.name ?: graph.channels.firstOrNull { it.key == key }?.name
 
-    private fun PieceEntity.toWeb(portraits: Set<String>): WebPiece =
-        WebPiece(id, title, composer, composerKey, durationMs, composerShort = composerShort, favorite = favorite, portrait = composerKey in portraits)
+    private fun PieceEntity.toWeb(portraits: Set<String>, covers: Map<Long, Long>): WebPiece =
+        WebPiece(
+            id, title, composer, composerKey, durationMs, composerShort = composerShort, favorite = favorite, portrait = composerKey in portraits,
+            cover = id in covers, artVersion = covers[id] ?: 0,
+        )
 
     /** A library read; null when it fails (the library unreadable), which the panel shows as an empty list or a 404. */
     private suspend fun <T> library(read: suspend () -> T): T? = try {

@@ -210,7 +210,10 @@ class WebApiTest {
         assertEquals(setOf("name", "title", "sizeBytes", "licence", "installed", "line", "progress"), model.keys().asSequence().toSet())
         assertEquals(0.34, model.getDouble("progress"), 1e-6)
         val job = studio.getJSONArray("jobs").getJSONObject(0)
-        assertEquals(setOf("id", "kind", "name", "state", "line", "progress", "title"), job.keys().asSequence().toSet())
+        assertEquals(
+            setOf("id", "kind", "name", "state", "line", "progress", "title", "step", "steps", "tokens", "musicMs", "targetMs", "etaMs", "notes", "turn"),
+            job.keys().asSequence().toSet(),
+        )
         assertTrue(job.isNull("progress"))
         assertEquals("Kept as take", job.getString("line"))
         assertTrue("no schedule ahead: null, not missing", json.getJSONObject("schedule").isNull("next"))

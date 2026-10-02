@@ -9,6 +9,16 @@
 
 package dev.stevenjin.stevenpiano.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +51,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,6 +78,7 @@ import dev.stevenjin.stevenpiano.ui.LockGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalDisabledGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 
 // The Piano tab's rows (DESIGN.md › v1.5): one set for the piano's settings and the app's, so every
@@ -215,6 +227,8 @@ fun StepperButtons(
 /**
  * A continuous value: the label with its [unit] beneath, then a [HairlineSlider] with the value
  * beside it ([shown], tabular). The slider speaks for the row ([description], [stateDescription]).
+ * [note] (v1.13): a line under the slider saying what the value does, in the eyebrow's size, sentence
+ * case, secondary.
  */
 @Composable
 fun SliderRow(
@@ -229,6 +243,7 @@ fun SliderRow(
     modifier: Modifier = Modifier,
     unit: String = "",
     enabled: Boolean = true,
+    note: String? = null,
 ) {
     Column(
         modifier
@@ -249,6 +264,7 @@ fun SliderRow(
             )
             ValueText(shown, enabled, TextAlign.End)
         }
+        if (note != null) Eyebrow(note, Modifier.padding(bottom = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
     }
     HairlineDivider(startInset = RowInset)
 }
@@ -370,6 +386,62 @@ fun NavRow(
 }
 
 /**
+ * A disclosure (v1.13 — M31b, DESIGN.md › The Piano tab: one per page): [label] with what it holds
+ * ([value], secondary) and a chevron in the tertiary colour that turns from pointing at the row's end to
+ * pointing down as it opens; [content] (the folded sections) grows in beneath it. One tap toggles; TalkBack
+ * hears "Expanded" or "Collapsed" and "Expand" or "Collapse". The turn and the growth follow the standard
+ * motion, cuts under reduced motion ([reduced]).
+ */
+@Composable
+fun DisclosureRow(
+    label: String,
+    value: String,
+    open: Boolean,
+    onToggle: () -> Unit,
+    reduced: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val turned by animateFloatAsState(
+        targetValue = if (open) 90f else if (rtl) 180f else 0f,
+        animationSpec = if (reduced) snap() else tween(Motion.StandardMs, easing = Motion.Standard),
+        label = "disclosure chevron",
+    )
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clickable(onClickLabel = if (open) "Collapse" else "Expand", role = Role.Button, onClick = onToggle)
+                .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+                .padding(start = RowInset, end = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LabelAndValue(label, value, Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer { rotationZ = turned },
+                tint = LocalTertiary.current,
+            )
+        }
+        HairlineDivider(startInset = RowInset)
+        AnimatedVisibility(
+            visible = open,
+            enter = if (reduced) EnterTransition.None else expandVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeIn(tween(Motion.StandardMs)),
+            exit = if (reduced) ExitTransition.None else shrinkVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeOut(tween(Motion.FastMs)),
+            label = "disclosure",
+        ) {
+            Column(Modifier.fillMaxWidth()) { content() }
+        }
+    }
+}
+
+/**
  * A row that does something at once: the app's action control ([ActionButton], the outlined button
  * of the connection card and the test rows) at the 16 dp inset, in the 56 dp rhythm; [buttons] side
  * by side when there are several (All keys off · Save now). Under them an optional [note] in the
@@ -475,18 +547,24 @@ fun NoteLine(text: String, modifier: Modifier = Modifier, inset: Boolean = true)
     )
 }
 
-/** A read-only row: what it is, and what the piano says ([shown], tabular); TalkBack reads "label, [spoken]". */
+/**
+ * A read-only row: what it is, and what the piano says ([shown], tabular); TalkBack reads "label, [spoken]".
+ * [note] (v1.13): what the value is, under it in the eyebrow's size, sentence case, secondary.
+ */
 @Composable
-fun ReadingRow(label: String, shown: String, modifier: Modifier = Modifier, spoken: String = shown) {
+fun ReadingRow(label: String, shown: String, modifier: Modifier = Modifier, spoken: String = shown, note: String? = null) {
     Row(
         modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .semantics(mergeDescendants = true) { contentDescription = "$label, $spoken" }
+            .semantics(mergeDescendants = true) { contentDescription = if (note == null) "$label, $spoken" else "$label, $spoken. $note" }
             .padding(horizontal = RowInset),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LabelAndValue(label, shown, Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            LabelAndValue(label, shown, Modifier.fillMaxWidth())
+            if (note != null) Eyebrow(note, Modifier.padding(bottom = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
+        }
     }
     HairlineDivider(startInset = RowInset)
 }

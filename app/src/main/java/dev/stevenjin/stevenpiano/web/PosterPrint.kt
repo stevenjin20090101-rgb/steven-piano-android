@@ -22,7 +22,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 
 /**
- * Prints the request poster from the tablet (Piano › Remote control › Print the request poster):
+ * Prints the request poster from the tablet (Piano › Guests › Print the request poster):
  * the poster page rendered by a WebView the app makes for it alone, from its assets (no network,
  * no script, nothing that navigates), handed to Android's print dialog on A4. Never a browser, so
  * it works in kiosk mode too (M20). Each print job holds its own WebView until it is done with it,

@@ -34,7 +34,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -66,6 +68,9 @@ class ArtworkRepository(
 
     /** One roll card drawn at a time: each parses its piece's whole file. */
     private val drawing = Semaphore(1)
+
+    /** A piece's row is read and written whole: its line and its cover never undo each other. */
+    private val writing = Mutex()
 
     /** Each composer's mosaic pieces, forgotten whenever the library's pieces change. */
     private val mosaics = ConcurrentHashMap<String, List<Long>>()
@@ -174,8 +179,52 @@ class ArtworkRepository(
      * for it. False when it could not be written.
      */
     suspend fun describe(pieceId: Long, description: String): Boolean = readOr(false) {
-        dao.upsert(ArtworkEntity(ArtworkEntity.forPiece(pieceId), description = description, fetchedAt = System.currentTimeMillis(), status = ArtworkStatus.OK))
+        // v1.12 (M30): merged into the row, so a Studio piece's cover stays (it used to be replaced whole).
+        writing.withLock {
+            val key = ArtworkEntity.forPiece(pieceId)
+            val row = dao.get(key)
+            dao.upsert(
+                ArtworkEntity(
+                    key, imagePath = row?.imagePath, description = description,
+                    fetchedAt = row?.fetchedAt ?: System.currentTimeMillis(), status = ArtworkStatus.OK,
+                ),
+            )
+        }
         true
+    }
+
+    /**
+     * [image] becomes piece [pieceId]'s own cover (v1.12 — M30: a Studio piece's, drawn from its music): kept under
+     * `files/art/`, its row keeping the piece's line and naming no source (so no Wikipedia credit), the old file gone
+     * when it had another name. A new `fetchedAt` makes every screen and the web panel read it afresh. False when it
+     * could not be kept.
+     */
+    suspend fun setPieceCover(pieceId: Long, image: ByteArray): Boolean {
+        val key = ArtworkEntity.forPiece(pieceId)
+        val path = withContext(io) {
+            try {
+                files.write(key, image)
+            } catch (e: IOException) {
+                null
+            }
+        } ?: return false
+        return readOr(false) {
+            writing.withLock {
+                val row = dao.get(key)
+                val old = row?.imagePath
+                if (old != null && old != path) withContext(io) { files.delete(old) }
+                dao.upsert(ArtworkEntity(key, imagePath = path, description = row?.description, fetchedAt = System.currentTimeMillis(), status = ArtworkStatus.OK))
+            }
+            true
+        }
+    }
+
+    /** The pieces with a cover of their own (Studio's), by id, with when it was drawn: the web panel's art kind and version. */
+    suspend fun pieceCovers(): Map<Long, Long> = readOr(emptyMap()) {
+        rows.filterNotNull().first().values.asSequence()
+            .filter { it.imagePath != null && it.key.startsWith(PIECE_PREFIX) }
+            .mapNotNull { row -> row.key.removePrefix(PIECE_PREFIX).toLongOrNull()?.let { it to row.fetchedAt } }
+            .toMap()
     }
 
     /**

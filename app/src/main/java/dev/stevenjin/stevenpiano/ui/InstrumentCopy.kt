@@ -110,8 +110,8 @@ object InstrumentCopy {
         LinkState.Disconnected, is LinkState.Error -> "Not connected"
     }
 
-    /** Under a MIDI piano: why the PIANO group is gone. */
-    fun hiddenNote(name: String): String = "Feel, Lighting, Pedal and Firmware belong to Steven Piano and are hidden while $name plays."
+    /** Under a MIDI piano: why THE PIANO group is gone (its pages' names as v1.13 has them). */
+    fun hiddenNote(name: String): String = "Sound and touch, Lights and screen, Pedal and Firmware belong to Steven Piano and are hidden while $name plays."
 
     // ---- The picker -------------------------------------------------------------------------
 

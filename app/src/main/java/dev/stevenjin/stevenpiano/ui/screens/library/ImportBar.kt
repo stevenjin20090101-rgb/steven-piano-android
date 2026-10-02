@@ -24,7 +24,6 @@ import dev.stevenjin.stevenpiano.data.art.ArtworkProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.library.PackState
 import dev.stevenjin.stevenpiano.studio.JobState
-import dev.stevenjin.stevenpiano.studio.JobStep
 import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.ImportCopy
@@ -94,8 +93,8 @@ fun ArtworkBar(progress: ArtworkProgress) {
 @Composable
 fun StudioBar(jobs: List<StudioJob>) {
     val job = jobs.firstOrNull { it.state == JobState.Running } ?: return
-    val measured = job.step == JobStep.Downloading || job.step == JobStep.Transcribing
-    ProgressRow(StudioCopy.libraryLine(job), if (measured) job.progress ?: 0f else null)
+    // v1.12 (M30): the job's own measure (composing's too: it used to sweep while its line said 42%).
+    ProgressRow(StudioCopy.libraryLine(job), StudioCopy.libraryProgress(job))
 }
 
 /** A line of progress copy over a hairline progress line; [progress] null is indeterminate. */

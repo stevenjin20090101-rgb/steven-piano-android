@@ -83,11 +83,11 @@ import java.io.File
 import java.io.IOException
 
 /**
- * The web panel's server, running while Piano › Remote control › Web control is on (DESIGN.md ›
+ * The web panel's server, running while Piano › Web panel is on (DESIGN.md ›
  * v1.5.1 — M18; BUILD_SPEC.md › The service). A foreground service of type `specialUse` (a local
  * control panel is none of Android's named types; `dataSync` would run out after six hours a day
  * from Android 15), with `connectedDevice` as the fallback should a device refuse `specialUse`;
- * not exported; `START_STICKY`. Its low-importance notification reads "Web control on" and the
+ * not exported; `START_STICKY`. Its low-importance notification reads "Web panel on" (v1.13) and the
  * panel's address.
  *
  * It listens where [WebAddress.choose] says and nowhere else: the tailnet address serves the whole
@@ -488,9 +488,9 @@ class WebService : Service() {
     }
 
     /**
-     * "Web control on", and where: the panel's address, the guests' when only they are served, or that
+     * "Web panel on" ("Web control on" until v1.13), and where: the panel's address, the guests' when only they are served, or that
      * no network has an address yet; "· Cloud" after it while the relay is connected (v1.10 — M26).
-     * With remote access alone, "Remote access on" and the relay's state.
+     * Over the internet alone, "Web panel on over the internet" and the relay's state.
      */
     private fun notificationFor(status: WebStatus): Notification {
         val cloud = graph.web.cloud.value
@@ -507,7 +507,7 @@ class WebService : Service() {
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_piano)
-            .setContentTitle(if (web) "Web control on" else "Remote access on")
+            .setContentTitle(if (web) "Web panel on" else "Web panel on over the internet")
             .setContentText(text)
             .setContentIntent(openPiano())
             .setOngoing(true)
@@ -553,7 +553,7 @@ class WebService : Service() {
 
         fun createChannel(context: Context) {
             val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("Web control")
+                .setName("Web panel")
                 .setDescription("Shows while the web panel is on, with its address.")
                 .setShowBadge(false)
                 .build()

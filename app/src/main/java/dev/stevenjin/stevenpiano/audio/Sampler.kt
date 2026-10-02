@@ -393,7 +393,7 @@ class Sampler(private val font: SoundFont, val outputRate: Int, val polyphony: I
          */
         const val HEADROOM = 2f
 
-        /** The volume at first (Piano › Playback › TABLET SOUND). */
+        /** The volume at first (Piano › Tablet sound). */
         const val DEFAULT_VOLUME = 60
 
         /** A full change of the volume envelope: 100 dB (SF2 2.04 § 8.1.2, decay and release). */

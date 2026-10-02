@@ -6905,6 +6905,99 @@ tablet-size screens found the run as designed; for the Piano tab's reorganisatio
 open beside the hub, Disconnect shows twice (the hub's card and the page). The relay Worker is redeployed after
 this release so the console's status carries the instrument and keyboard states.
 
+# v1.12 — M30: the Studio tab (typed ideas, live progress, history, drawn covers, the aura)
+
+Read `DESIGN.md › v1.12 — Studio as a tab` first. Fable's brief (`m30-studio-brief.md`) with `plans/PLAN.md` and
+`plans/plan-studio.md` (findings 1–12; (a) StylePrompt, (b) progress, (c) persistence, (d) the tab, (e) the drawn
+cover only), built by Opus on `main` from `7c24ff5` (1.11). Out of this run, as the brief says: no text model, no
+picture model, no `/api/studio/prompt`. Mid-run the owner narrowed verification: core tests only, **no emulator
+work** (the integrator's smoke pass covers it), short documents. **No version bump, no provenance signing, no
+release build, no push**; ONNX Runtime stays 1.28.0, its telemetry check untouched.
+
+## What was built
+
+- **The idea parser** (`studio/style/`): `StyleVocabulary` (moods, tempo words, lengths, keys, 28 forms,
+  comparatives, again and different, negators, stop words), `StyleLibrary` (the library as the parser reads it:
+  Studio's pieces, recordings, pieces under 15 s or 16 notes left out; channels and built-in lists as the
+  catalogue), `StylePrompt` (passes: patterns, titles, negators, names, forms, catalogue, moods; a refinement when no
+  seed-bearing word; the understood line; at most 12 unused words; 200 code points, 40 words, no regular expression
+  from input; `title()` builds titles from what was understood), `SeedPicker` (on the job thread: at most four
+  candidates read; a mode match and the nearest tempo; a tempo word held to 0.67–1.5 × the seed's).
+- **Progress**: `Sampler.generate(onEvent)` after the event is in the history; `PreviewRoll` (append-only, rests
+  skipped, keys folded, `Studio.preview`, never in the job); `ProgressMeter` (at most every 500 ms; time left after 3 s
+  or 5 %, the smaller of the token and music estimates; cold start from `StoredCalibration`, the median ms a token of
+  the last five jobs); `StudioJob` gains `turnId, tokens, budget, musicMs, targetMs, etaMs, steps, notes, stop` and
+  `JobStep.Shaping`. The budget follows the length: `PromptBuilder.MAX_TOKENS` 13,500.
+- **Schema v4** (`GenerationEntity`, `GenerationDao`, `GenerationSql`, `MIGRATION_3_4`, `SchemaV4`): the table
+  `studio_generations` as plan-studio (c) lists it, plus `spec` (the asked `StyleSpec`, encoded); the backfill gives
+  every 1.7–1.11 Studio piece a "kept" turn. `Generations`/`RoomGenerations`; turns written as a job queues and
+  filled as it runs; leftover "pending" turns read "interrupted" at start; the history trimmed to 200 (never a
+  waiting piece's turn).
+- **Keep or Discard on the history** (`RoomReview`, `StoredWaiting` in `studio/StudioStore.kt`): a Studio piece waits
+  while its turn is "made"; the one-off import of the old DataStore set reopens the backfilled turns it names, once
+  (a flag), retried while the set can't be read. In kiosk mode at most 30 Studio pieces wait (the oldest discarded).
+- **Covers and the playlist**: `data/art/StudioCover.kt` (`CoverInput`, `CoverSpec`, `StudioCover.render`: 768 px,
+  `StrictMath`, a paper or ink ground, an accent from the key on the circle of fifths and the mood, twelve
+  pitch-class rays round a disc set by the register, a density band, every note a faint perforation) and `Png.kt`;
+  `ArtworkRepository.setPieceCover` and `pieceCovers`, `describe` now merges; covers drawn at start for pieces made
+  before. `data/builtin/StudioPlaylist.kt`: **Made in Studio** from the history, refreshed after each save and with
+  the built-ins. `PieceArt` takes a piece's own cover first (rows of Studio pieces, the piece sheet, the mini
+  player, the now-playing panel, the resting screen); the panel's `art: "cover"` with `artVersion`.
+- **The tab** (`ui/screens/studio/`: `StudioScreen`, `StudioViewModel`, `StudioTurns`, `StudioAccess`, `ComposeSheet`
+  moved here with `ComposeStart`): `Route.Studio` between Keys and Piano (`ic_tab_studio`), the compact bar's label
+  floor 0.85; Studio out of the Piano hub (`SettingsPage.Studio`, `StudioPage.kt` and the hub's Studio row gone);
+  the Library's + sheet "Compose in Studio…" opens the tab; both notifications open it (`OPEN_STUDIO_REQUEST` 11,
+  updates at most once a second). **The aura**: `ui/theme/Aura.kt` (the four stops, light and dark, and
+  `LocalAuraStops`), `ui/components/Aura.kt` (`AuraRing`, `AuraHairline`, `AuraDot`; a `SweepGradient` turned by a
+  frame clock, a `BlurEffect` glow on API 31+, three fading strokes below).
+- **Smaller fixes**: the Library bar's hairline follows the job's own measure (composing swept before); a Studio
+  piece never joins a channel by its title (`Channels.Match`: "Calm, after Clair de lune" isn't Clair de lune).
+
+## Deviations from the brief, and why
+
+- **No emulator evidence** (the owner's call mid-run): no 1.11 → 1.12 upgrade on `steven_piano_audit`, no
+  screenshots, no `gfxinfo` frame figure. The migration is proven on real SQLite only (`SchemaV4Test`); **the
+  integrator's smoke pass should install the 1.11 debug build, compose a piece, then install this build over it** and
+  check the piece is in Made in Studio with a cover and its turn.
+- **Recordings keep their waiting set in the DataStore.** M29 (after the plan) put the tablet's recordings in the
+  same review. They are not Studio's turns, so a Studio piece waits on its turn and a recording in the old set; a
+  piece is either a turn's or not, so the two stores never speak of the same piece.
+- **A `spec` column** holds the asked spec (encoded, no typed text but a title's folded words), so "Another like
+  it", "different" and refinements work after a restart; the variant lives inside it.
+- **The web panel**: the job JSON's new fields and covers only. The preview's notes route
+  (`/api/studio/jobs/{id}/notes`, plan (b)) waits for M32, which builds the panel's cards.
+- **Listen** plays the piece and opens Now playing, as the old Studio page did. The piece sheet has no credits
+  line (the card carries them). No minutes cap from the calibration: there is no bench figure yet.
+- **Kept simple, as the owner asked**: the shelf's long press is a plain glass menu; refinements are the words in
+  `StyleVocabulary` (slower/faster with "a bit" and "much", longer/shorter, a mood or a comparative, a key, another,
+  different).
+
+## Greps (v1.12 — M30)
+
+The aura's eight hexes: `ui/theme/Aura.kt` alone. `LocalAuraStops`: provided by `Theme.kt`, read by
+`ui/components/Aura.kt` alone. `Color(0x` outside `ui/theme`: none. `BlurEffect`: the aura's glow alone;
+`Modifier.blur`: none. Sheets and menus: `GlassSheet` and `GlassDropdownMenu` (GlassContainersTest still passes).
+
+## Tests added in M30
+
+`StylePromptTest` 12 (a composer with a form; a title with a tempo word; mood, tempo and key; the length cap; the
+refinements; a negated word; unused words never in the line; accents and case; hostile input and 10,000
+characters; a shuffled library; the spec's line; titles). `SchemaV4Test` 5 (4.json's statements; a 1.11 database
+with Studio pieces migrates on real SQLite and is backfilled; the shape Room expects; foreign keys null on delete;
+the history's own statements: the import, Keep and Discard, Made in Studio, interrupted, the trim). `RoomReviewTest`
+3 (the one-off import once; an unreadable set retried; Studio pieces and recordings each in their store).
+`StudioAccessTest` 4 (the kiosk rules). `SamplerTest` +1 (`onEvent` after the history, in order, never a partial
+event). Updated: `PromptBuilderTest` (13,500), `StudioTest`, `StudioReviewTest` (the new store), `RoutesTest` (five
+tabs, no Studio page), `PianoPagesTest`, `GroupSummariesTest`, `WebApiTest` (the job's keys). **1,503 → 1,527**
+(12 skipped), none failing. `lintDebug`: 0 errors, 30 warnings, the same 30 as at `7c24ff5`. The debug APK
+assembles (29.6 MB).
+
+## Residuals
+
+- The 13,500-token budget's time on the school tablet (five minutes of music may take several minutes there), the
+  covers' look by eye, and the aura's frame cost over the glass: none measured in this run.
+- The integrator's upgrade check above, and a first composition from a typed idea on the merged build.
+
 # v1.12 — M31a: the split between the score and the notes, and the View menu
 
 Read `DESIGN.md › v1.12 — the split and the View menu` first. Fable's brief (`m31a-split-brief.md`) with the plan's
@@ -6971,6 +7064,94 @@ side, the width, a hidden roll). `AdaptiveFrameTest` (the new plan; 0 and 1 the 
 removed), `GroupSummariesTest` (Display reads the appearance), `DiagnosticsExporterTest` (47 lines). The existing score
 tests are untouched. **1,503 → 1,513** (12 skipped). `lintDebug`: 0 errors, the same 30 warnings as M29. The UI-contract
 greps as M29's (`m31a/greps.txt`): no colour added, the divider no glass, the View menu a `GlassPopover`.
+
+# v1.13 — M31b: the Piano tab reorganised, with search
+
+Branch `m31b-settings` from `7c24ff5` (1.11), built as if M30 (Studio's own tab) and M31a (the View menu) were
+merged: no Studio row, no NOTES section; then `main` (`bba2d4d`, both landed) merged into it. No firmware setting was
+added or removed; nothing about how settings are sent changed. No emulator in this run (lean run): unit tests and lint
+only.
+
+## The structure
+
+`HubGroups`: INSTRUMENTS (Instrument · Keyboard) · THE PIANO (Sound and touch · Lights and screen · Pedal · Firmware
+and status) · PLAYING (Playback · Tablet sound · Schedule) · SHARING (Web panel · Guests) · THIS TABLET (Display · Kiosk
+· Updates · Library and artwork · Help and about). Every hub row is a page (`HubRow.Page` only). `SettingsPage` keeps
+its older constant names where a page was renamed (`Feel`, `Lighting`, `Remote`, keys `feel`/`lighting`/`remote`) so
+the other runs' code still meets them; new pages `TabletSound`, `Guests`, `Updates`, `Artwork`, `Help`.
+`piano/PianoSettings.kt` gains `PianoPage.title`, `PianoFold` (Fine tuning, Strip set-up), `PianoSection.fold`, a
+`Save` section and the rows `ReadStatus` and `SaveNow` (ACTIONS is gone); the key-force readings moved to TOUCH. The
+web panel's piano groups take `PianoPage.title`; their keys are unchanged.
+
+## What moved
+
+- Feel → **Sound and touch**: PRESETS, LOUDNESS ("Full power", "Piano volume"), **Fine tuning** (TOUCH with the key-force
+  readings, TIMING, RELEASE, DRIVE), then "Save to the piano now". Lighting → **Lights and screen**: STRIP, **Strip
+  set-up** (LAYOUT · MOTION, Test LED), THE PIANO'S SCREEN. Firmware and status: FIRMWARE, STATUS with Read status.
+- Playback's TABLET SOUND → **Tablet sound** page ("Tablet volume"). Remote control → **Web panel** (PANEL: "Web
+  panel", address and QR, PIN, "Also on Wi-Fi"; OVER THE INTERNET, was CLOUD: "Web panel over the internet", "Relay
+  address", Enrol, Forget) and **Guests** (two switches, the poster).
+- Display: APPEARANCE (Appearance, black-and-white artwork) and RESTING SCREEN ("Resting screen after a minute",
+  "Background", "What it shows"). "Fetch artwork automatically" → **Library and artwork**, with "Fetch artwork for every
+  composer" and Steven's library (both still in the Library's + sheet).
+- The hub's APP group and About: Auto-connect → Instrument; "Check for updates automatically", "Check for app updates"
+  (was Check now) and the UPDATE block → **Updates**; Share diagnostics and the About lines → **Help and about**.
+- Names: "Web panel" (notification, PIN sheet, panel copy), "Piano/Tablet/Channel/Schedule volume", "Resting screen"
+  (Kiosk's note, the resting screen's TalkBack label). The panel's place names follow ("Piano › Web panel",
+  "Piano › Tablet sound"), and its Save is "Save to the piano now".
+- Notes: 48 new one-line notes, all in `ui/SettingNotes.kt`; `PianoSettings.all` takes the piano's (the panel shows them).
+
+## Search
+
+`ui/screens/piano/SettingsIndex.kt` is pure: entries for every page, every row of the piano's table (anchored by
+setting or fact name; the key-force note is not a row), every row of `PageRows.kt` (the app pages' row table their
+composables draw labels and anchors from), and nine entries for what moved (`Elsewhere`: Now playing › View for Show,
+Note display, Fingering, Chord names and Hand colours; Studio for Models, Compose a piece and Transcribe a recording,
+opening `Route.Studio`; Library › Channels for Channel volume). Matching: NFKD-folded, accents dropped, words split at punctuation plus each hyphenated word whole;
+every typed word must prefix a word of the label or a synonym; label hits before synonym hits, hub order, at most 50.
+A result goes through the kiosk gate, then `PianoViewModel.jumpTo` opens its fold and `JumpEffect` (in
+`SettingAnchors.kt`) waits for the row's `Anchored` wrapper to be placed, scrolls it 24 dp under the header and lights
+it with `surfaceVariant` for 1.1 s (snaps under reduced motion). Hidden with THE PIANO while a MIDI piano plays.
+
+## Deviations
+
+- **The UPDATE block left the hub** for the Updates page (the brief's structure); the hub's Updates row names a release
+  on offer ("1.14 available"). In kiosk it is now behind the PIN like every page.
+- **The card hides only its main button** beside the Instrument page; its Bluetooth fixes (Turn on Bluetooth, Retry…)
+  stay, as the page has none. The card is otherwise as before ("compact" taken as no added content).
+- **"Cloud address" is "Relay address"**, the enrol sheet's own word for it (one name per thing).
+- Not done (no emulator): screenshots and on-device checks of the search, the disclosures and the highlight.
+
+## The merge with `main` (M30, M31a)
+
+Conflicts in `Routes.kt`, `HubGroups.kt`, `GroupSummaries.kt`, `PianoScreen.kt`, `DisplayPage.kt`, `NavHost.kt`, the
+three structure tests and the three documents. `main`'s side there was removals only (Studio's page and row, the
+NOTES rows, `wide`, `onListen`), all of which this branch had made too, so the new structure was kept, with `main`'s
+five tabs and `Route.Studio`; `NavHost` keeps `main`'s calls plus `onOpenTab`; `GroupSummaries.from` is `main`'s
+shape with `update` and `version` added. `PianoViewModel` merged by itself (`main` removed the Studio members and the
+five setters; this branch added search, folds and jumps). The documents keep M30's and M31a's sections, then this
+one. After the merge the index's Studio results open `Route.Studio`, "Wide layout" gave way to the View menu's
+"Show", and a few code comments naming old places (Piano › Studio, Remote control, Playback › TABLET SOUND, Display ›
+STANDBY) were brought up to date. `AboutRow` keeps the Studio models' credit on purpose.
+
+## Tests
+
+`SettingsIndexTest` (7: every page and row indexed once, label and synonym hits, folding and prefixes, ordering, what
+moved, a MIDI piano, the notes' rules); `PianoPagesTest`, `RoutesTest`, `GroupSummariesTest` rewritten for the pages;
+copy tests updated (`InstrumentCopyTest`, `TabletSoundCopyTest`, `CloudCopyTest`, `WebAssetsTest`,
+`PianoSettingsTableTest`). 1,503 → 1,509 unit tests before the merge; 1,545 after it (`main`'s 1,537, plus the seven
+of `SettingsIndexTest` and one more in `GroupSummariesTest`); lint: no errors, no warning in a touched file.
+
+## The release: 1.12 (versionCode 21)
+
+Cut from `main` at `75367b9`: M30 (the Studio tab), M31a (the split and the View menu) and M31b (the Piano tab
+reorganised, with search) together. `versionCode` 21, `versionName` "1.12". From this release the runs are lean
+at the owner's request: coders write only the critical tests and do no emulator work, and the integrator makes
+one smoke pass on the merged build. That pass (tablet-size emulator, the 1.10 debug build's library upgraded in
+place): the database upgraded with the library intact; Studio composed "Calm and slow" end to end (model
+download, steps, preview, cover, the shelf) and "Another like it"; Now playing showed the divider dragged to a
+third with the score re-laid at two bars, and the View menu; the Piano tab showed the new groups, the folded
+Fine tuning, and the search finding the three volumes. No crash in the log.
 
 # v1.13 — M32: the web panel's notes and score
 
@@ -7067,3 +7248,14 @@ piano; screenshots in `scratchpad/m32/shots/`: `m32-1280-now-a` and `-now-b` (3 
 `m32-tablet-sync` (the same moment: the same system, bar and sounding heads). Bravura loaded (`document.fonts`), yellow
 heads under the cursor, no horizontal scroll at 390 px, no console error but the panel's old `favicon.ico` 404. Not run:
 through the real relay, on a phone's browser, in dark mode.
+
+## The merge with `main` (1.12)
+
+`main` at `32a1fa0` (release 1.12: M30's Studio tab and covers, M31b's Piano tab and its wording, M29's instruments)
+merged into `m32-web`. Only the documents conflicted (BUILD_SPEC, DESIGN: `main`'s M31b sections, then this one;
+README: this run's Now playing paragraph with `main`'s "turning the web panel off"). The code merged cleanly and was
+read side by side: `main`'s covers (`art: "cover"`, `artVersion`), Studio job fields, page titles and reworded strings
+sit beside the views' routes, `at`, `fold`, `views`, `display` and the four settings keys; `WebApiTest` pins both sides'
+keys, `WebAssetsTest` both sides' checks. **1,545 → 1,559** (12 skipped); `lintDebug` 0 errors, the same 30
+warnings. Re-checked on `steven_piano_audit` with the merged debug build: `merged-1280-now`, `merged-1280-library`
+(artist photos; no Studio cover on that emulator) and `merged-390-now` in `scratchpad/m32/shots/`.

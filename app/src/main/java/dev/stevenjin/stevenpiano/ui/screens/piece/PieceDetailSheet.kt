@@ -48,11 +48,10 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
-import dev.stevenjin.stevenpiano.ui.components.ArtworkImage
+import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
-import dev.stevenjin.stevenpiano.ui.components.RollCardImage
 import dev.stevenjin.stevenpiano.ui.components.WikipediaLink
 import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
 import kotlinx.coroutines.CancellationException
@@ -130,7 +129,7 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState, fetching: Boo
             .padding(horizontal = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ArtworkImage(ArtworkEntity.forComposer(piece.composerKey), ArtSize.Full, Modifier.size(ART)) { RollCardImage(piece.id, it, title = piece.title) }
+            PieceArt(piece.id, piece.composerKey, ArtSize.Full, Modifier.size(ART), title = piece.title)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(

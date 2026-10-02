@@ -10,36 +10,57 @@
 package dev.stevenjin.stevenpiano.piano
 
 import androidx.compose.runtime.Immutable
+import dev.stevenjin.stevenpiano.ui.SettingNotes
 import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
  * The Piano tab's four piano pages (DESIGN.md › v1.5), in the hub's order: each opens from a row of
- * the hub's PIANO group and shows its sections of the table below.
+ * the hub's THE PIANO group and shows its sections of the table below. [title] is the page's name in
+ * the app and the web panel (v1.13 — M31b: Feel became Sound and touch, Lighting Lights and screen; the
+ * constants keep their names, which are the web panel's keys).
  */
-enum class PianoPage { Feel, Lighting, Pedal, Firmware }
+enum class PianoPage(val title: String) {
+    Feel("Sound and touch"),
+    Lighting("Lights and screen"),
+    Pedal("Pedal"),
+    Firmware("Firmware and status"),
+}
+
+/**
+ * A page's one disclosure (v1.13 — M31b, DESIGN.md › The Piano tab): a row that folds the sections
+ * behind it away until it is opened. Sound and touch folds TOUCH · TIMING · RELEASE · DRIVE under
+ * "Fine tuning"; Lights and screen folds LAYOUT · MOTION under "Strip set-up". Search opens one when
+ * its hit is inside.
+ */
+enum class PianoFold(val page: PianoPage, val title: String) {
+    FineTuning(PianoPage.Feel, "Fine tuning"),
+    StripSetup(PianoPage.Lighting, "Strip set-up"),
+}
 
 /**
  * The sections of the piano pages, in page order and then in the order each page shows them, each
- * under its eyebrow ([title]; null for a page with one section, which needs none). Feel: PRESETS ·
- * LOUDNESS · TOUCH · TIMING · RELEASE · DRIVE; Lighting: STRIP · LAYOUT · MOTION · PIANO'S SCREEN;
- * Pedal: one section; Firmware and status: FIRMWARE · STATUS · ACTIONS.
+ * under its eyebrow ([title]; null for a section that needs none: a page's only one, or Sound and
+ * touch's last, which holds Save to the piano now), folded behind its page's disclosure when [fold]
+ * says so. Sound and touch: PRESETS · LOUDNESS · Fine tuning (TOUCH · TIMING · RELEASE · DRIVE) · Save
+ * to the piano now; Lights and screen: STRIP · Strip set-up (LAYOUT · MOTION) · THE PIANO'S SCREEN;
+ * Pedal: one section; Firmware and status: FIRMWARE · STATUS (with Read status).
  */
-enum class PianoSection(val page: PianoPage, val title: String?) {
+enum class PianoSection(val page: PianoPage, val title: String?, val fold: PianoFold? = null) {
     Presets(PianoPage.Feel, "Presets"),
     Loudness(PianoPage.Feel, "Loudness"),
-    Touch(PianoPage.Feel, "Touch"),
-    Timing(PianoPage.Feel, "Timing"),
-    Release(PianoPage.Feel, "Release"),
-    Drive(PianoPage.Feel, "Drive"),
+    Touch(PianoPage.Feel, "Touch", PianoFold.FineTuning),
+    Timing(PianoPage.Feel, "Timing", PianoFold.FineTuning),
+    Release(PianoPage.Feel, "Release", PianoFold.FineTuning),
+    Drive(PianoPage.Feel, "Drive", PianoFold.FineTuning),
+    Save(PianoPage.Feel, null),
     Strip(PianoPage.Lighting, "Strip"),
-    Layout(PianoPage.Lighting, "Layout"),
-    Motion(PianoPage.Lighting, "Motion"),
-    PianoScreen(PianoPage.Lighting, "Piano's screen"),
+    Layout(PianoPage.Lighting, "Layout", PianoFold.StripSetup),
+    Motion(PianoPage.Lighting, "Motion", PianoFold.StripSetup),
+    PianoScreen(PianoPage.Lighting, "The piano's screen"),
     Pedal(PianoPage.Pedal, null),
     Firmware(PianoPage.Firmware, "Firmware"),
     Status(PianoPage.Firmware, "Status"),
-    Actions(PianoPage.Firmware, "Actions"),
 }
 
 /** How a setting is adjusted. Ranges are the firmware's (`firmware/docs/BLE_SETTINGS.md` › 4). */
@@ -163,11 +184,14 @@ sealed interface PianoRow {
     /** LAYOUT, after the strip's geometry: one key's LED lit, to line the strip up. */
     data object TestLed : PianoRow
 
-    /** STATUS, under the two key-force lines: where key force is set. */
+    /** TOUCH, under the two key-force lines (v1.13: moved from STATUS): where key force is set. */
     data object KeyForceNote : PianoRow
 
-    /** ACTIONS: Read status (and the piano's report), All keys off, Save now. */
-    data object Actions : PianoRow
+    /** STATUS's last row: Read status, and the piano's report under it. */
+    data object ReadStatus : PianoRow
+
+    /** Sound and touch's last row: Save to the piano now (was ACTIONS' Save now). */
+    data object SaveNow : PianoRow
 }
 
 /** What the Piano tab may ask the piano to do besides settings. [takesKey]: followed by a MIDI key. */
@@ -200,14 +224,17 @@ object PianoSettings {
     private val STATUS = PianoSection.Status
 
     val all: List<PianoSetting> = listOf(
-        // FEEL (PRESETS, the chips, comes first and holds no setting)
-        PianoSetting("fullpower", "Full power (no dynamics)", LOUDNESS, SettingKind.Switch),
-        PianoSetting("volume", "Volume", LOUDNESS, SettingKind.Slider(0f, 100f), unit = "%"),
+        // SOUND AND TOUCH (PRESETS, the chips, comes first and holds no setting)
+        PianoSetting("fullpower", "Full power", LOUDNESS, SettingKind.Switch),
+        PianoSetting("volume", "Piano volume", LOUDNESS, SettingKind.Slider(0f, 100f), unit = "%"),
         PianoSetting("velcurve", "Velocity curve", TOUCH, SettingKind.Slider(0.4f, 3.0f, step = 0.05f, decimals = 2)),
         PianoSetting("velmult", "Velocity multiplier", TOUCH, SettingKind.Slider(0.1f, 5.0f, step = 0.1f, decimals = 2)),
         PianoSetting("min", "White-key floor", TOUCH, SettingKind.Slider(0f, 4095f)),
         PianoSetting("minblack", "Black-key floor (0 = same as white)", TOUCH, SettingKind.Slider(0f, 4095f)),
         PianoSetting("max", "Ceiling", TOUCH, SettingKind.Slider(0f, 4095f)),
+        // Per-key force is set at the piano's USB console only: read here, beside the touch it shapes (v1.13: from STATUS)
+        PianoSetting("keyforce_white", "White-key force", TOUCH, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
+        PianoSetting("keyforce_black", "Black-key force", TOUCH, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
         PianoSetting("humanvel", "Velocity scatter", TIMING, SettingKind.Stepper(0, 30)),
         PianoSetting("humantime", "Timing scatter", TIMING, SettingKind.Stepper(0, 40), unit = "ms"),
         PianoSetting("burstgap", "Burst window", TIMING, SettingKind.Stepper(0, 600, step = 10), unit = "ms"),
@@ -222,7 +249,7 @@ object PianoSettings {
         PianoSetting("releasepwm", "Release cushion", RELEASE, SettingKind.Slider(0f, 4095f)),
         PianoSetting("releasems", "Release time", RELEASE, SettingKind.Stepper(0, 200), unit = "ms"),
         PianoSetting("freq", "Drive frequency", DRIVE, SettingKind.Stepper(24, 1526, step = 10), unit = "Hz"),
-        // LIGHTING
+        // LIGHTS AND SCREEN
         PianoSetting("leds", "Strip", STRIP, SettingKind.Switch),
         PianoSetting("ledmode", "Mode", STRIP, SettingKind.Choice(listOf("Off", "Static", "Rainbow", "Reactive"))),
         PianoSetting("ledbright", "Brightness", STRIP, SettingKind.Slider(0f, 255f), unit = "%", asPercentOf255 = true),
@@ -249,10 +276,7 @@ object PianoSettings {
         PianoSetting("pedalhalf", "Half-pedalling", PEDAL, SettingKind.Switch),
         PianoSetting("pedalup", "Up position", PEDAL, SettingKind.Stepper(80, 600)),
         PianoSetting("pedaldown", "Down position", PEDAL, SettingKind.Stepper(80, 600)),
-        // FIRMWARE AND STATUS › STATUS: per-key force is set at the piano's USB console only
-        PianoSetting("keyforce_white", "White-key force", STATUS, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
-        PianoSetting("keyforce_black", "Black-key force", STATUS, SettingKind.Slider(0f, 4f, step = 0.01f, decimals = 2), readOnly = true, times = true),
-    )
+    ).map { it.copy(note = it.note ?: SettingNotes.piano[it.name]) }   // the notes the designer reviews in one place (v1.13)
 
     private val byName: Map<String, PianoSetting> = all.associateBy { it.name }
 
@@ -260,8 +284,11 @@ object PianoSettings {
 
     fun inSection(section: PianoSection): List<PianoSetting> = all.filter { it.section == section }
 
-    /** [page]'s sections, in the order the page shows them. */
+    /** [page]'s sections, in the order the page shows them (folded ones included, in their place). */
     fun sections(page: PianoPage): List<PianoSection> = PianoSection.entries.filter { it.page == page }
+
+    /** [fold]'s sections, in order. */
+    fun folded(fold: PianoFold): List<PianoSection> = PianoSection.entries.filter { it.fold == fold }
 
     /** What [section] shows, in order: its facts, its settings, and the rows that are not settings where they belong. */
     fun rows(section: PianoSection): List<PianoRow> = rowsBySection.getValue(section)
@@ -289,10 +316,13 @@ object PianoSettings {
             facts.filter { it.section == section }.forEach { add(PianoRow.Reading(it)) }
             inSection(section).forEach { add(PianoRow.Control(it)) }
             when (section) {
-                PianoSection.Touch -> add(PianoRow.StrikeTest)
+                PianoSection.Touch -> {
+                    add(PianoRow.KeyForceNote)
+                    add(PianoRow.StrikeTest)
+                }
                 PianoSection.Layout -> add(PianoRow.TestLed)
-                PianoSection.Status -> add(PianoRow.KeyForceNote)
-                PianoSection.Actions -> add(PianoRow.Actions)
+                PianoSection.Status -> add(PianoRow.ReadStatus)
+                PianoSection.Save -> add(PianoRow.SaveNow)
                 else -> Unit
             }
         }

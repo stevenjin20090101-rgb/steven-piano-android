@@ -56,7 +56,7 @@ interface WebBackend {
     /** Composer [key]'s portrait at [size]; null when there is none. */
     suspend fun composerArt(key: String, size: WebArtSize): WebImage?
 
-    /** Piece [id]'s art: its composer's portrait, else its own roll card (a mask the page tints); null when neither can be had. */
+    /** Piece [id]'s art: its own cover (a Studio piece's), else its composer's portrait, else its own roll card (a mask the page tints); null when none can be had. */
     suspend fun pieceArt(id: Long): WebImage?
 
     /** Plays piece [pieceId], then [queue] around it (just the piece when null). False when the library has no such piece. */
@@ -178,8 +178,29 @@ interface WebBackend {
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
 data class WebModel(val name: String, val title: String, val sizeBytes: Long, val licence: String, val installed: Boolean, val line: String, val progress: Float? = null)
 
-/** One of Studio's jobs as the tablet's page lists it: "download" or "transcribe", "queued"… "cancelled", its line, its progress, the piece it made. */
-data class WebStudioJob(val id: Long, val kind: String, val name: String, val state: String, val line: String, val progress: Float?, val title: String?)
+/**
+ * One of Studio's jobs as the tablet's page lists it: "download", "transcribe" or "compose", "queued"… "cancelled", its
+ * line, its progress, the piece it made; since v1.12 (M30) its [step] and [steps], the tokens written, the music
+ * written of what was asked ([musicMs], [targetMs]), the time left ([etaMs]), the notes written and its [turn] in
+ * Studio's history. The notes themselves never travel in the state.
+ */
+data class WebStudioJob(
+    val id: Long,
+    val kind: String,
+    val name: String,
+    val state: String,
+    val line: String,
+    val progress: Float?,
+    val title: String?,
+    val step: String = "waiting",
+    val steps: List<String> = emptyList(),
+    val tokens: Int = 0,
+    val musicMs: Long = 0,
+    val targetMs: Long = 0,
+    val etaMs: Long? = null,
+    val notes: Int = 0,
+    val turn: Long? = null,
+)
 
 /** Studio on the panel: [available] (else [reason]), the models, the jobs newest first. */
 data class WebStudio(val available: Boolean = false, val reason: String? = null, val models: List<WebModel> = emptyList(), val jobs: List<WebStudioJob> = emptyList())
@@ -226,6 +247,9 @@ data class WebPiece(
     val composerShort: String = composer,
     val favorite: Boolean = false,
     val portrait: Boolean = false,
+    /** Its own cover (v1.12 — M30: a Studio piece's), drawn at [artVersion]: the panel asks for it afresh when that changes. */
+    val cover: Boolean = false,
+    val artVersion: Long = 0,
 )
 
 /** One page of a list: [total] pieces in all, these from [offset]. */

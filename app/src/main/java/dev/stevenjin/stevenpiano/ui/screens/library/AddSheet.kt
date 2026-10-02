@@ -130,7 +130,7 @@ fun AddSheet(
             pickers.addZip()
         }
         HairlineDivider(Modifier.padding(vertical = 8.dp))
-        SheetOption("Fetch artwork and notes for every composer", "Portraits and notes from Wikipedia. Nothing about you is sent.") {
+        SheetOption("Fetch artwork for every composer", "Portraits and notes from Wikipedia. Nothing about you is sent.") {
             onDismiss()
             onFetchArtwork()
         }

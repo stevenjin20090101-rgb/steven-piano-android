@@ -132,3 +132,53 @@ object SchemaV3 {
     /** The migration's DDL, in order. */
     val DDL: List<String> = listOf(ADD_BUILT_IN, ADD_BUILT_IN_KEY, CREATE_BUILT_IN_KEY_INDEX, CREATE_SCHEDULES)
 }
+
+/**
+ * Schema v3 (apps 1.5 to 1.11) to v4 (app 1.12 — M30): Studio's history gets its table, `studio_generations`,
+ * and every piece Studio made before (composer "Made in Studio", apps 1.7 to 1.11) gets a turn: a composition when
+ * its sheet's line says what it was in the manner of, else a transcription; "kept" until the one-off import
+ * (`RoomReview`) reopens the ones the old store said were still waiting. Nothing is dropped or rewritten.
+ * [SchemaV4.DDL] is copied from Room's generated `schemas/…/4.json` (SchemaV4Test holds the two equal). Runs
+ * inside Room's migration transaction.
+ */
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        SchemaV4.DDL.forEach(db::execSQL)
+        db.execSQL(SchemaV4.BACKFILL)
+    }
+}
+
+/** Schema v4's statements, as Room generated them in `4.json`, and the backfill. Pure: unit-tested. */
+object SchemaV4 {
+    /** 4.json's createSql for the history's table, with the table name filled in. */
+    const val CREATE_GENERATIONS =
+        "CREATE TABLE IF NOT EXISTS `studio_generations` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`createdAt` INTEGER NOT NULL, `kind` TEXT NOT NULL, `parentId` INTEGER, `prompt` TEXT, " +
+            "`understood` TEXT NOT NULL DEFAULT '', `unused` TEXT NOT NULL DEFAULT '', `spec` TEXT, `mood` TEXT, " +
+            "`keyTonic` INTEGER, `keyMinor` INTEGER, `bpm` INTEGER, `minutes` INTEGER, `seedPieceId` INTEGER, " +
+            "`seedTitle` TEXT, `seedComposer` TEXT, `seedSource` TEXT, `randomSeed` INTEGER, `composerModel` TEXT, " +
+            "`composerVersion` INTEGER, `textModel` TEXT, `textModelVersion` INTEGER, `imageModel` TEXT, " +
+            "`imageModelVersion` INTEGER, `tokens` INTEGER, `slides` INTEGER, `stop` TEXT, `musicMs` INTEGER, " +
+            "`wallMs` INTEGER, `pieceId` INTEGER, `title` TEXT, `outcome` TEXT NOT NULL, `error` TEXT, " +
+            "`coverKind` TEXT, `coverSeed` INTEGER, " +
+            "FOREIGN KEY(`parentId`) REFERENCES `studio_generations`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , " +
+            "FOREIGN KEY(`seedPieceId`) REFERENCES `pieces`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , " +
+            "FOREIGN KEY(`pieceId`) REFERENCES `pieces`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )"
+
+    /** 4.json's createSql for its four indices. */
+    const val CREATE_PARENT_INDEX = "CREATE INDEX IF NOT EXISTS `index_studio_generations_parentId` ON `studio_generations` (`parentId`)"
+    const val CREATE_SEED_INDEX = "CREATE INDEX IF NOT EXISTS `index_studio_generations_seedPieceId` ON `studio_generations` (`seedPieceId`)"
+    const val CREATE_PIECE_INDEX = "CREATE UNIQUE INDEX IF NOT EXISTS `index_studio_generations_pieceId` ON `studio_generations` (`pieceId`)"
+    const val CREATE_CREATED_INDEX = "CREATE INDEX IF NOT EXISTS `index_studio_generations_createdAt` ON `studio_generations` (`createdAt`)"
+
+    /** The migration's DDL, in order. */
+    val DDL: List<String> = listOf(CREATE_GENERATIONS, CREATE_PARENT_INDEX, CREATE_SEED_INDEX, CREATE_PIECE_INDEX, CREATE_CREATED_INDEX)
+
+    /** A turn for each piece apps 1.7 to 1.11 made, oldest first; its line is its sheet's ("Made in Studio · in the manner of …"). */
+    const val BACKFILL =
+        "INSERT INTO studio_generations (createdAt, kind, understood, pieceId, title, outcome) " +
+            "SELECT p.addedAt, CASE WHEN a.description LIKE 'Made in Studio · in the manner of %' THEN 'compose' ELSE 'transcribe' END, " +
+            "COALESCE(a.description, 'Made in Studio'), p.id, p.title, 'kept' " +
+            "FROM pieces p LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
+            "WHERE p.composerKey = 'made in studio' ORDER BY p.addedAt, p.id"
+}

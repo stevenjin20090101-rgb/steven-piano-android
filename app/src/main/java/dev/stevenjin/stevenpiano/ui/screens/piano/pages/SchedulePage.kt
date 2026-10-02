@@ -55,6 +55,8 @@ import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
 import dev.stevenjin.stevenpiano.ui.components.switchColors
 import dev.stevenjin.stevenpiano.ui.screens.library.MenuItem
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
 import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleDraftSaver
 import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleEditorSheet
@@ -99,8 +101,10 @@ fun SchedulePage() {
         Eyebrow(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
     }
     if (!exact) {
-        ActionRow(Modifier.padding(top = 8.dp), note = EXACT_ALARMS_NOTE) {
-            ActionButton("Allow exact alarms", onClick = { openExactAlarmSettings(context) })
+        Anchored(PageRows.EXACT_ALARMS.anchor) {
+            ActionRow(Modifier.padding(top = 8.dp), note = EXACT_ALARMS_NOTE) {
+                ActionButton(PageRows.EXACT_ALARMS.label, onClick = { openExactAlarmSettings(context) })
+            }
         }
     }
     SectionRule()
@@ -117,8 +121,10 @@ fun SchedulePage() {
             )
         }
     }
-    ActionRow(note = TABLET_NOTE) {
-        ActionButton("Add schedule", onClick = { editing = ScheduleDraft.fresh(LocalTime.now()) })
+    Anchored(PageRows.ADD_SCHEDULE.anchor) {
+        ActionRow(note = TABLET_NOTE) {
+            ActionButton(PageRows.ADD_SCHEDULE.label, onClick = { editing = ScheduleDraft.fresh(LocalTime.now()) })
+        }
     }
 
     editing?.let { draft -> ScheduleEditorSheet(draft, onDismiss = { editing = null }) }

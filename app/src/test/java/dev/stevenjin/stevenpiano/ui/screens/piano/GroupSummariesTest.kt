@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
+import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.firmware.FirmwareFailures
 import dev.stevenjin.stevenpiano.firmware.FirmwareManifest
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
@@ -23,6 +24,7 @@ import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.ui.SettingsPage
+import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.WebStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -41,8 +43,8 @@ class GroupSummariesTest {
     fun `Feel reads full power, or the volume`() {
         assertEquals("Full power", GroupSummaries.feel(ready("fullpower" to "1", "volume" to "100")))
         assertEquals("full power wins over the volume", "Full power", GroupSummaries.feel(ready("fullpower" to "1", "volume" to "55")))
-        assertEquals("Volume 70%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "70")))
-        assertEquals("Volume 0%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "0")))
+        assertEquals("Piano volume 70%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "70")))
+        assertEquals("Piano volume 0%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "0")))
         assertEquals("firmware without the names", unknown, GroupSummaries.feel(ready("fullpower" to "0")))
     }
 
@@ -88,17 +90,17 @@ class GroupSummariesTest {
     }
 
     @Test
-    fun `Display reads the appearance, the note display having moved to Now playing's View menu (v1_12)`() {
+    fun `Display reads the appearance, now that the note views live on Now playing (v1_13)`() {
         assertEquals("Follow system", GroupSummaries.display(PianoSettings()))
-        assertEquals("Light", GroupSummaries.display(PianoSettings(appearance = Appearance.LIGHT)))
         assertEquals("Dark", GroupSummaries.display(PianoSettings(appearance = Appearance.DARK)))
         val changed = PianoSettings(
-            noteDisplay = NoteDisplay.FALLING,
+            appearance = Appearance.LIGHT,
+            noteDisplay = NoteDisplay.STAFF,
             displayModeAfterMinute = true,
             standbyCanvas = StandbyCanvas.INK,
             standbyShows = StandbyShows.PAPER_ROLL,
         )
-        assertEquals("whatever the notes and standby say", "Follow system", GroupSummaries.display(changed))
+        assertEquals("the resting screen and the note view don't change it", "Light", GroupSummaries.display(changed))
     }
 
     @Test
@@ -106,13 +108,37 @@ class GroupSummariesTest {
         val piano = ready("fullpower" to "0", "volume" to "70", "leds" to "0", "pedalon" to "1", facts = mapOf("fw" to "emulator"))
         val rows = GroupSummaries.from(
             piano,
-            PianoSettings(defaultTempoPct = 90, noteDisplay = NoteDisplay.FALLING, webEnabled = true),
+            PianoSettings(defaultTempoPct = 90, noteDisplay = NoteDisplay.FALLING, webEnabled = true, tabletSound = TabletSoundMode.ALWAYS, tabletVolume = 70),
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
+            instrument = GroupSummaries.instrumentLine("Steven Piano", "Connected"),
+            version = "1.13",
         )
         assertEquals(
-            listOf("Steven Piano", "None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Follow system", "None", "On · 100.101.2.3", "Off", "No models"),
+            listOf(
+                "Steven Piano · Connected", "None", "Piano volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Always · 70%", "None",
+                "On · 100.101.2.3", "Off", "Follow system", "Off", "Automatic", "Automatic", "Version 1.13",
+            ),
             SettingsPage.entries.map { rows.of(it) },
         )
+    }
+
+    @Test
+    fun `the new pages read their own values (v1_13 M31b)`() {
+        assertEquals("Steven Piano · Not connected", GroupSummaries.from(PianoState.Unknown, PianoSettings()).of(SettingsPage.Instrument))
+        assertEquals("FP-30X · Connected", GroupSummaries.instrumentLine("FP-30X", "Connected"))
+        assertEquals("Off", GroupSummaries.tabletSound(PianoSettings(tabletSound = TabletSoundMode.OFF)))
+        assertEquals("When not connected · 45%", GroupSummaries.tabletSound(PianoSettings(tabletSound = TabletSoundMode.WHEN_NOT_CONNECTED, tabletVolume = 45)))
+        assertEquals("Off", GroupSummaries.guests(PianoSettings()))
+        assertEquals("On", GroupSummaries.guests(PianoSettings(webGuests = true, webApproveFirst = false)))
+        assertEquals("On · approve first", GroupSummaries.guests(PianoSettings(webGuests = true, webApproveFirst = true)))
+        assertEquals("Automatic", GroupSummaries.updates(PianoSettings(checkForUpdates = true), UpdateState.Idle))
+        assertEquals("Off", GroupSummaries.updates(PianoSettings(checkForUpdates = false), UpdateState.UpToDate))
+        assertEquals("Restart to finish", GroupSummaries.updates(PianoSettings(), UpdateState.Installed("1.13")))
+        assertEquals("Updated to 1.13", GroupSummaries.updates(PianoSettings(), UpdateState.Installed("1.13", restartNeeded = false)))
+        assertEquals("Automatic", GroupSummaries.artwork(PianoSettings(fetchArtworkAutomatically = true)))
+        assertEquals("Off", GroupSummaries.artwork(PianoSettings(fetchArtworkAutomatically = false)))
+        assertEquals("Version 1.13", GroupSummaries.help("1.13"))
+        assertEquals("", GroupSummaries.help(""))
     }
 
     @Test
@@ -170,7 +196,7 @@ class GroupSummariesTest {
     }
 
     @Test
-    fun `Remote control reads off, or on with the panel's address`() {
+    fun `Web panel reads off, or on with the panel's address`() {
         val on = PianoSettings(webEnabled = true, webPinSet = true)
         assertEquals("Off", GroupSummaries.remote(PianoSettings(), WebStatus(running = true, tailnet = "100.101.2.3")))
         assertEquals("On · 100.101.2.3", GroupSummaries.remote(on, WebStatus(running = true, tailnet = "100.101.2.3", wifi = "192.168.1.20")))
@@ -181,20 +207,14 @@ class GroupSummariesTest {
     }
 
     @Test
-    fun `Remote control adds Cloud while remote access over the internet is on and enrolled (v1_10 M26)`() {
+    fun `Web panel adds Internet while it is on over the internet and enrolled (v1_10 M26, renamed in v1_13)`() {
         val enrolled = PianoSettings(webPinSet = true, cloudHost = "relay.example.dev", cloudPianoId = "abcdefgh2345", cloudSecretSet = true)
         val lan = WebStatus(running = true, tailnet = "100.101.2.3")
-        assertEquals("On · 100.101.2.3 · Cloud", GroupSummaries.remote(enrolled.copy(webEnabled = true, cloudEnabled = true), lan))
-        assertEquals("Cloud", GroupSummaries.remote(enrolled.copy(cloudEnabled = true), WebStatus()))
+        assertEquals("On · 100.101.2.3 · Internet", GroupSummaries.remote(enrolled.copy(webEnabled = true, cloudEnabled = true), lan))
+        assertEquals("Internet", GroupSummaries.remote(enrolled.copy(cloudEnabled = true), WebStatus()))
         assertEquals("On · 100.101.2.3", GroupSummaries.remote(enrolled.copy(webEnabled = true), lan))
-        assertEquals("not enrolled: no Cloud yet", "Off", GroupSummaries.remote(PianoSettings(cloudEnabled = true, cloudHost = "relay.example.dev"), WebStatus()))
+        assertEquals("not enrolled: no Internet yet", "Off", GroupSummaries.remote(PianoSettings(cloudEnabled = true, cloudHost = "relay.example.dev"), WebStatus()))
         assertEquals("Off", GroupSummaries.remote(enrolled, WebStatus()))
-    }
-
-    @Test
-    fun `Studio reads its job, or how many models it has, with or without the piano`() {
-        assertEquals("No models", GroupSummaries.from(PianoState.Unknown, PianoSettings()).of(SettingsPage.Studio))
-        assertEquals("2 models", GroupSummaries.from(PianoState.Unknown, PianoSettings(), studio = "2 models").of(SettingsPage.Studio))
     }
 
     @Test

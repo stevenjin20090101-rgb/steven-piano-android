@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import androidx.compose.runtime.Immutable
+import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
@@ -20,16 +21,16 @@ import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
-import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.label
+import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.WebStatus
 import java.time.ZonedDateTime
 import kotlin.math.roundToInt
 import dev.stevenjin.stevenpiano.piano.PianoSettings as PianoTable
 
 /**
- * The one-line values on the hub's page rows (DESIGN.md › v1.5), worked out from what the app
- * already holds: the piano's last report and the app's own preferences. Never a read from the
+ * The one-line values on the hub's page rows (DESIGN.md › v1.5, v1.13 — M31b), worked out from what the
+ * app already holds: the piano's last report and the app's own preferences. Never a read from the
  * piano. While the piano has not answered (not connected, still reading, or firmware without the
  * settings) its four rows read [UNKNOWN] and still open their pages.
  */
@@ -44,11 +45,15 @@ data class GroupSummaries(
     val remote: String,
     val kiosk: String,
     val schedule: String = ScheduleCopy.NONE,
-    val studio: String = StudioCopy.hub(0, emptyList()),
     /** The MIDI keyboard (v1.11 — M29): "None", its name, or its name and "not connected". */
     val keyboard: String = InstrumentCopy.NONE,
-    /** The instrument (v1.11 — M29): "Steven Piano", or the MIDI piano's name. */
-    val instrument: String = InstrumentCopy.STEVEN_PIANO,
+    /** The instrument and its state (v1.13): "Steven Piano · Connected". */
+    val instrument: String = instrumentLine(InstrumentCopy.STEVEN_PIANO, NOT_CONNECTED),
+    val tabletSound: String = OFF,
+    val guests: String = OFF,
+    val updates: String = AUTOMATIC,
+    val artwork: String = AUTOMATIC,
+    val help: String = "",
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -59,11 +64,15 @@ data class GroupSummaries(
         SettingsPage.Pedal -> pedal
         SettingsPage.Firmware -> firmware
         SettingsPage.Playback -> playback
-        SettingsPage.Display -> display
-        SettingsPage.Remote -> remote
-        SettingsPage.Kiosk -> kiosk
+        SettingsPage.TabletSound -> tabletSound
         SettingsPage.Schedule -> schedule
-        SettingsPage.Studio -> studio
+        SettingsPage.Remote -> remote
+        SettingsPage.Guests -> guests
+        SettingsPage.Display -> display
+        SettingsPage.Kiosk -> kiosk
+        SettingsPage.Updates -> updates
+        SettingsPage.Artwork -> artwork
+        SettingsPage.Help -> help
     }
 
     companion object {
@@ -71,10 +80,11 @@ data class GroupSummaries(
         const val UNKNOWN = "—"
 
         /**
-         * Every row's value; [web] where the web panel listens; [firmwareUpdate] and
-         * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule]
-         * when the next schedule starts; [studio] Studio's own value ([StudioCopy.hub], v1.7 — M23); [keyboard] the MIDI
-         * keyboard's state (v1.11 — M29).
+         * Every row's value; [web] where the web panel listens; [firmwareUpdate] and [firmwareVersion]
+         * (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule] when the next schedule
+         * starts; [keyboard] the MIDI keyboard's state (v1.11 — M29); [instrument] the Instrument row's value
+         * ([instrumentLine]); [update] the app's updater; [version] the app's version (Help and about). Studio is a tab
+         * of its own since v1.12 (M30).
          */
         fun from(
             piano: PianoState,
@@ -83,9 +93,10 @@ data class GroupSummaries(
             firmwareUpdate: FirmwareState = FirmwareState.Idle,
             firmwareVersion: String? = null,
             nextSchedule: ZonedDateTime? = null,
-            studio: String = StudioCopy.hub(0, emptyList()),
             keyboard: KeyboardState = KeyboardState(),
-            instrument: String = InstrumentCopy.STEVEN_PIANO,
+            instrument: String = instrumentLine(InstrumentCopy.STEVEN_PIANO, NOT_CONNECTED),
+            update: UpdateState = UpdateState.Idle,
+            version: String = "",
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -96,35 +107,49 @@ data class GroupSummaries(
             remote = remote(settings, web),
             kiosk = kiosk(settings),
             schedule = schedule(nextSchedule),
-            studio = studio,
             keyboard = InstrumentCopy.keyboardValue(keyboard),
             instrument = instrument,
+            tabletSound = tabletSound(settings),
+            guests = guests(settings),
+            updates = updates(settings, update),
+            artwork = artwork(settings),
+            help = help(version),
         )
+
+        /** The Instrument row (v1.13): the instrument's name and its state, "Steven Piano · Connected". */
+        fun instrumentLine(name: String, state: String): String = "$name · $state"
 
         /** When the next schedule starts, "Next Wed 12:30", or "None". */
         fun schedule(next: ZonedDateTime?): String = ScheduleCopy.hub(next)
 
         /**
-         * "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"), and "· Cloud"
-         * while remote access over the internet is on and the tablet enrolled (v1.10 — M26): "On ·
-         * 100.101.2.3 · Cloud", or "Cloud" alone with Web control off.
+         * The web panel: "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"), and
+         * "· Internet" while it is on over the internet and the tablet enrolled (v1.10 — M26; "Cloud" until
+         * v1.13): "On · 100.101.2.3 · Internet", or "Internet" alone with the panel off on the tablet's networks.
          */
         fun remote(settings: PianoSettings, web: WebStatus): String {
             val cloud = settings.cloudEnabled && settings.cloudEnrolled
-            if (!settings.webEnabled) return if (cloud) CLOUD else OFF
+            if (!settings.webEnabled) return if (cloud) INTERNET else OFF
             val local = web.panelHost?.let { "On · $it" } ?: "On"
-            return if (cloud) "$local · $CLOUD" else local
+            return if (cloud) "$local · $INTERNET" else local
+        }
+
+        /** Guests (v1.13): "Off", "On", or "On · approve first". */
+        fun guests(settings: PianoSettings): String = when {
+            !settings.webGuests -> OFF
+            settings.webApproveFirst -> "On · approve first"
+            else -> "On"
         }
 
         /** Kiosk mode: "On" or "Off" ("On" while unlocked for now too: it locks again). */
         fun kiosk(settings: PianoSettings): String = if (settings.kioskEnabled) "On" else OFF
 
-        /** "Full power" while full power is on, else "Volume 70%". */
+        /** "Full power" while full power is on, else "Piano volume 70%". */
         fun feel(piano: PianoState): String {
             val values = (piano as? PianoState.Ready)?.values ?: return UNKNOWN
             if (values["fullpower"]?.let(::on) == true) return "Full power"
             val volume = values["volume"]?.toFloatOrNull() ?: return UNKNOWN
-            return "Volume ${Format.percent(volume.roundToInt())}"
+            return "Piano volume ${Format.percent(volume.roundToInt())}"
         }
 
         /** "Off" while the strip (or its mode) is off, else the mode and the brightness: "Reactive · 62%". */
@@ -164,11 +189,45 @@ data class GroupSummaries(
             return "$pause · ${Format.percent(settings.defaultTempoPct)}"
         }
 
-        /** The appearance: "Follow system", "Light" or "Dark" (the note display moved to Now playing's View menu, v1.12). */
+        /** Tablet sound (v1.13: its own page): "Off", or when it plays and the tablet volume, "Always · 70%". */
+        fun tabletSound(settings: PianoSettings): String = when (settings.tabletSound) {
+            TabletSoundMode.OFF -> OFF
+            TabletSoundMode.WHEN_NOT_CONNECTED -> "When not connected · ${Format.percent(settings.tabletVolume)}"
+            TabletSoundMode.ALWAYS -> "Always · ${Format.percent(settings.tabletVolume)}"
+        }
+
+        /** Display (v1.13: the app's look, now that the note views live on Now playing): "Follow system", "Light" or "Dark". */
         fun display(settings: PianoSettings): String = settings.appearance.label
 
+        /**
+         * Updates (v1.13): what the updater has to say ("1.14 available", "Downloading 1.14", "Ready to
+         * install", "Installing…", "Restart to finish"), else whether it checks by itself: "Automatic" or "Off".
+         */
+        fun updates(settings: PianoSettings, update: UpdateState): String {
+            val manifest = update.manifest
+            return when {
+                update is UpdateState.Installed -> if (update.restartNeeded) "Restart to finish" else "Updated to ${update.version}"
+                update is UpdateState.Downloading && manifest != null -> "Downloading ${manifest.versionName}"
+                update is UpdateState.ReadyToInstall -> "Ready to install"
+                update is UpdateState.Installing -> "Installing…"
+                manifest != null -> "${manifest.versionName} available"
+                settings.checkForUpdates -> AUTOMATIC
+                else -> OFF
+            }
+        }
+
+        /** Library and artwork (v1.13): whether artwork is fetched by itself, "Automatic" or "Off". */
+        fun artwork(settings: PianoSettings): String = if (settings.fetchArtworkAutomatically) AUTOMATIC else OFF
+
+        /** Help and about (v1.13): the app's version, "Version 1.13". */
+        fun help(version: String): String = if (version.isBlank()) "" else "Version $version"
+
+        /** The instrument's state before it has said otherwise. */
+        const val NOT_CONNECTED = "Not connected"
+
         private const val OFF = "Off"
-        private const val CLOUD = "Cloud"
+        private const val AUTOMATIC = "Automatic"
+        private const val INTERNET = "Internet"
 
         private fun on(wire: String): Boolean = wire.trim() != "0"
     }

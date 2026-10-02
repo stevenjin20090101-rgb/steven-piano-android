@@ -126,8 +126,7 @@ import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingPanel
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleDraftSaver
 import dev.stevenjin.stevenpiano.ui.screens.schedule.ScheduleEditorSheet
-import dev.stevenjin.stevenpiano.ui.screens.piano.pages.ComposeSheet
-import dev.stevenjin.stevenpiano.ui.screens.piano.pages.rememberRecordingPicker
+import dev.stevenjin.stevenpiano.ui.screens.studio.rememberRecordingPicker
 import dev.stevenjin.stevenpiano.studio.AudioSource
 import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.studio.StudioSupport
@@ -165,7 +164,7 @@ import java.time.LocalTime
  * Schedule opens the schedule editor with the channel chosen (DESIGN.md › v1.6.2 — M19).
  */
 @Composable
-fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit) {
+fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit, onOpenStudio: () -> Unit = {}) {
     val graph = LocalContext.current.graph
     val vm = viewModel {
         LibraryViewModel(
@@ -364,7 +363,6 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     // waits for the kiosk PIN in kiosk mode, so composing and transcribing are locked there as adding music is.
     val studioSupport by graph.studio.availability.support.collectAsStateWithLifecycle()
     val studioModels by graph.studio.models.installed.collectAsStateWithLifecycle()
-    var composing by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(adding) { if (adding) graph.studio.availability.check() }
     LaunchedEffect(adding) { if (adding) pack.check(maxAgeMs = LIBRARY_CHECK_AGE_MS) }   // the library's row shows the pack's numbers
     val pickRecording = rememberRecordingPicker { uri ->
@@ -376,7 +374,11 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     } else {
         listOf(
             StudioEntry(StudioCopy.TRANSCRIBE, StudioCopy.withDownload(StudioCopy.TRANSCRIBE_NOTE, ModelCatalogue.transcription, studioModels), pickRecording),
-            StudioEntry(StudioCopy.COMPOSE, StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, studioModels)) { composing = true },
+            // v1.12 (M30): composing lives on the Studio tab; the + sheet opens it.
+            StudioEntry(StudioCopy.COMPOSE_IN_STUDIO, StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, studioModels)) {
+                adding = false
+                onOpenStudio()
+            },
         )
     }
     // Steven's library's row: Load until a pack has been loaded; then Update while a newer one is on offer (or loading).
@@ -398,7 +400,6 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             onDismiss = { licenceFor = null },
         )
     }
-    if (composing) ComposeSheet(onDismiss = { composing = false })
     dialog?.let { LibraryDialogs(it, vm) { dialog = null } }
     about?.let { PieceDetailSheet(it) { about = null } }
     volumeFor?.let { key ->

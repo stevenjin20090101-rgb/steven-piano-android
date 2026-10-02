@@ -250,10 +250,20 @@ class StudioTest {
             override fun positionMicrosNow(): Long = 0
         }
         val store = object : ReviewStore {
-            override val undecided = MutableStateFlow<Set<Long>>(emptySet())
+            val undecided = MutableStateFlow<Set<Long>>(emptySet())
 
-            override suspend fun save(ids: Set<Long>) {
-                undecided.value = ids
+            override suspend fun undecided(): Set<Long> = undecided.value
+
+            override suspend fun waiting(pieceId: Long) {
+                undecided.value += pieceId
+            }
+
+            override suspend fun decided(pieceId: Long, kept: Boolean) {
+                undecided.value -= pieceId
+            }
+
+            override suspend fun gone(ids: Set<Long>) {
+                undecided.value -= ids
             }
         }
         return Studio(
@@ -410,9 +420,8 @@ class StudioTest {
         assertEquals(listOf(JobState.Done, JobState.Done), done.map { it.state })
         assertEquals(setOf("tunes"), studio.models.installed.value)
         val made = done.single { it.id == job.id }
-        val at = ZonedDateTime.of(2026, 9, 28, 12, 0, 0, 0, ZoneId.of("UTC"))
-        val title = StudioPieces(library, Locale.US).compositionTitle(at)
-        assertTrue(title, title.startsWith("Composition · Sep 28, 2026 12:00"))
+        // v1.12 (M30): titled from what was asked, never from typed text: the mood, after the seed chosen.
+        val title = "Calm, after Prelude in C major"
         assertEquals(title, made.title)
         assertEquals(101L, made.pieceId)
         assertEquals(1f, made.progress)

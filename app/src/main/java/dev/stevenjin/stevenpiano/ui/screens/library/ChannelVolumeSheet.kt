@@ -66,7 +66,7 @@ fun ChannelVolumeSheet(key: String, name: String, onDismiss: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             SliderRow(
-                label = "Volume",
+                label = "Channel volume",
                 value = volume.toFloat(),
                 range = 0f..100f,
                 step = 1f,
