@@ -37,6 +37,9 @@ import kotlin.math.cos
 /** In sp, so the dot keeps its size next to the word it sits beside at any font scale. */
 private val DotSize = 8.sp
 private const val BREATH_LOW = 0.55f
+
+/** The breath's period, 100 % to 55 % and back: status while the piano plays, not a transition (Motion's durations). */
+private const val BREATH_MS = 2_000
 private val Sine = Easing { x -> (1f - cos(PI.toFloat() * x)) / 2f }
 
 /**
@@ -59,7 +62,7 @@ fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
     }
     val breath = if (live && breathing && !reduced) {
         rememberInfiniteTransition(label = "live")
-            .animateFloat(1f, BREATH_LOW, infiniteRepeatable(tween(Motion.LivePulseMs / 2, easing = Sine), RepeatMode.Reverse), label = "breath")
+            .animateFloat(1f, BREATH_LOW, infiniteRepeatable(tween(BREATH_MS / 2, easing = Sine), RepeatMode.Reverse), label = "breath")
     } else {
         null
     }
