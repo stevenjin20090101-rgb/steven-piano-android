@@ -1,9 +1,9 @@
 {
-  "versionCode": 22,
-  "versionName": "1.13",
-  "notes": "The web panel now shows what the tablet shows: on Now playing, the sheet music with the notes turning yellow as they sound and the moving paper roll or falling notes with the keyboard strip, in step with the piano. Drag the divider between them, turn pages or tap a bar to jump there, and use View for the note style, fingering, chord names and hand colours. On a phone, pick Art, Notes or Score. It works over Tailscale, Wi-Fi and the internet link. The app also moves more smoothly: screens fade between tabs, buttons respond to touch, lists ease in, numbers roll, progress glides and menus grow from where you tapped. All of it is cut when the tablet's \"remove animations\" setting is on.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.13/steven-piano-1.13.apk",
-  "sha256": "8a73a37a37aba2eaf31f4137f27580912adc0ba653436cbc7d2e6ad765634f97",
-  "sizeBytes": 13977186,
+  "versionCode": 23,
+  "versionName": "1.13.1",
+  "notes": "Studio's create box now sits in the middle of the screen under \"What should the piano play?\", with the aura moving and glowing around it. The piece being made shows under the box, and everything made before is behind the new History button and in the Made in Studio playlist. Channels gain Recognisable and Popular, each playing its list without end.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.13.1/steven-piano-1.13.1.apk",
+  "sha256": "440afdcf8aee4a002530b658f3e5a6d30ef640e195a0f3ef1d508b7434b66a6b",
+  "sizeBytes": 13963966,
   "minSdk": 26
 }
