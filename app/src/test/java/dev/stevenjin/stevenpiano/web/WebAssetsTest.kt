@@ -166,6 +166,12 @@ class WebAssetsTest {
             assertTrue(copy, text("app.js").contains(copy))
         }
         assertTrue("the tablet's piano sound (1.8)", index.contains("Piano sound on the tablet") && text("app.js").contains("tabletVolume"))
+        // What plays and what is played from (1.11 — M29): two read-only lines, the piano's pages hidden under a MIDI piano.
+        assertTrue(index.contains("id=\"instrument-line\"") && index.contains("id=\"keyboard-line\""))
+        for (copy in listOf("Instrument: ", "Keyboard: ", "'Live'", "'Recording'", "belong to Steven Piano and are hidden while")) {
+            assertTrue("Instruments (1.11): $copy", text("app.js").contains(copy))
+        }
+        assertFalse("Live is never offered to the panel", text("app.js").contains("liveToPiano") || text("app.js").contains("/api/live"))
         assertTrue(text("poster.html").contains("data-theme=\"light\""))
     }
 }

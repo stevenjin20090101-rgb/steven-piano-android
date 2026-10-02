@@ -17,6 +17,10 @@ import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.MidiNames
+import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
@@ -157,7 +161,7 @@ class WebApiTest {
         assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio"), json.keys().asSequence().toSet())
         // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
         assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
         assertTrue(json.getJSONObject("web").isNull("cloud"))
@@ -235,5 +239,33 @@ class WebApiTest {
         assertFalse(seed.getJSONObject("key").getBoolean("minor"))
         assertEquals("D♭ major", seed.getJSONObject("key").getString("label"))
         assertEquals(66, seed.getInt("bpm"))
+    }
+
+    @Test
+    fun `what plays and what is played from, read-only (v1_11 M29)`() {
+        val keyboard = KeyboardState(KeyboardState.Chosen(MidiNames.bluetoothKey("11:22:33:44:55:66"), "KeyStep", MidiTransport.BLUETOOTH), KeyboardState.Phase.NeedsPairing)
+        val state = WebInstruments.of(InstrumentKind.MidiPiano, "FP-30X", "connected", keyboard, live = false, recording = true)
+        val json = WebApi.instruments(state)
+        assertEquals(setOf("instrument", "keyboard", "live", "recording"), json.keys().asSequence().toSet())
+        assertEquals(setOf("kind", "name", "state"), json.getJSONObject("instrument").keys().asSequence().toSet())
+        assertEquals("midi", json.getJSONObject("instrument").getString("kind"))
+        assertEquals("FP-30X", json.getJSONObject("instrument").getString("name"))
+        assertEquals("connected", json.getJSONObject("instrument").getString("state"))
+        assertEquals(setOf("name", "transport", "state"), json.getJSONObject("keyboard").keys().asSequence().toSet())
+        assertEquals("KeyStep", json.getJSONObject("keyboard").getString("name"))
+        assertEquals("bluetooth", json.getJSONObject("keyboard").getString("transport"))
+        assertEquals("pairing", json.getJSONObject("keyboard").getString("state"))
+        assertFalse(json.getBoolean("live"))
+        assertTrue(json.getBoolean("recording"))
+        val steven = WebApi.instruments(WebInstruments.of(InstrumentKind.StevenPiano, "FP-30X", "disconnected", KeyboardState(), live = false, recording = false))
+        assertEquals("steven", steven.getJSONObject("instrument").getString("kind"))
+        assertEquals("Steven Piano", steven.getJSONObject("instrument").getString("name"))
+        assertTrue("no keyboard: null, not missing", steven.isNull("keyboard"))
+        assertEquals(
+            listOf("connected", "connecting", "disconnected", "disconnected", "pairing", "unavailable"),
+            listOf(KeyboardState.Phase.Connected, KeyboardState.Phase.Connecting, KeyboardState.Phase.NotConnected, KeyboardState.Phase.None, KeyboardState.Phase.NeedsPairing, KeyboardState.Phase.Unavailable)
+                .map(WebInstruments::keyboardState),
+        )
+        assertEquals("in the state beside the link", "midi", WebApi.state(WebState(instruments = state), 0).getJSONObject("instruments").getJSONObject("instrument").getString("kind"))
     }
 }

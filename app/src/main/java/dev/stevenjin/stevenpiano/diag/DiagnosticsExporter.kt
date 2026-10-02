@@ -10,6 +10,11 @@
 package dev.stevenjin.stevenpiano.diag
 
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.LiveState
+import dev.stevenjin.stevenpiano.instruments.LiveTrip
+import dev.stevenjin.stevenpiano.instruments.MidiNames
+import dev.stevenjin.stevenpiano.settings.InstrumentChoice
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.update.UpdateState
 import java.io.File
@@ -25,7 +30,8 @@ import java.util.zip.ZipOutputStream
  * The file Share diagnostics sends: `cacheDir/diagnostics/steven-piano-diagnostics-<date>.zip`
  * (the one folder of the cache the app's FileProvider shares for it), holding exactly
  * - `about.txt`: the app's version and build, the device's model and Android, whether the app is
- *   the device owner, the updater's state, the piano link's state ([about]);
+ *   the device owner, the updater's state, the piano link's state, the instrument and the keyboard
+ *   (v1.11 — M29) ([about]);
  * - `settings.txt`: the app's preferences, the remembered piano's address among them ([settings]);
  * - `link.log`: the piano link's last lines ([linkLog]);
  * - the crash reports kept ([crashes]), each cut at [MAX_REPORT_CHARS].
@@ -108,6 +114,8 @@ object DiagnosticsText {
         lastCheckedAt: String?,
         link: LinkState?,
         exportedAt: String,
+        instrument: String = "Steven Piano",
+        keyboard: String = "none",
     ): String = buildString {
         append("Steven Piano diagnostics\n")
         append("Exported: ").append(exportedAt).append('\n')
@@ -117,6 +125,42 @@ object DiagnosticsText {
         append("Automatic update checks: ").append(if (checkForUpdates) "on" else "off")
         append(", last check ").append(lastCheckedAt ?: "none yet in this session").append('\n')
         append("Piano link: ").append(linkLine(link)).append('\n')
+        append("Instrument: ").append(instrument).append('\n')
+        append("Keyboard: ").append(keyboard).append('\n')
+    }
+
+    /** `about.txt`'s Instrument line (v1.11 — M29): "Steven Piano", or "FP-30X (a MIDI piano, USB)". */
+    fun instrumentLine(s: PianoSettings): String {
+        if (s.instrumentKind != InstrumentChoice.MIDI_PIANO || s.midiOutId == null) return "Steven Piano"
+        val transport = MidiNames.transportOf(s.midiOutId)?.label
+        return MidiNames.clean(s.midiOutName).ifEmpty { "A MIDI piano" } + " (a MIDI piano" + (transport?.let { ", $it" } ?: "") + ")"
+    }
+
+    /**
+     * `about.txt`'s Keyboard line (v1.11 — M29): "none", or the keyboard, its state and Live's: "FP-30X (Bluetooth),
+     * connected, Live on", "…, Live off (too many notes at once)".
+     */
+    fun keyboardLine(keyboard: KeyboardState, live: LiveState): String {
+        val chosen = keyboard.chosen ?: return "none"
+        val state = when (keyboard.phase) {
+            KeyboardState.Phase.Connected -> "connected"
+            KeyboardState.Phase.Connecting -> "connecting"
+            KeyboardState.Phase.NeedsPairing -> "asks to pair"
+            KeyboardState.Phase.Unavailable -> "no MIDI on this tablet"
+            KeyboardState.Phase.None, KeyboardState.Phase.NotConnected -> "not connected"
+        }
+        val gate = when {
+            live.open -> "Live on"
+            live.looped -> "Live off (the keyboard is the instrument too)"
+            live.tripped != null -> "Live off (" + when (live.tripped) {
+                LiveTrip.TooManyNotes -> "too many notes at once"
+                LiveTrip.TooManyKeys -> "too many keys held"
+                LiveTrip.Garbled -> "garbled bytes"
+            } + ")"
+            live.wanted -> "Live switched on, closed now"
+            else -> "Live off"
+        }
+        return "${chosen.name} (${chosen.transport.label}), $state, $gate"
     }
 
     /** `settings.txt`: every preference, one a line; of the web panel's and the kiosk's PINs only whether one is set. */
@@ -165,6 +209,13 @@ object DiagnosticsText {
         line("libraryPackVersion", s.libraryPackVersion)
         // The Playlists listing's order (v1.10.1 — M28): a preference, so it is here; the repair of older uploads is not.
         line("playlistSort", s.playlistSort)
+        // Keyboards and instruments (v1.11 — M29): the keyboard and the MIDI piano chosen, as the piano's address is.
+        line("keyboardId", s.keyboardId)
+        line("keyboardName", s.keyboardName)
+        line("liveToPiano", s.liveToPiano)
+        line("instrumentKind", s.instrumentKind)
+        line("midiOutId", s.midiOutId)
+        line("midiOutName", s.midiOutName)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {
@@ -181,7 +232,7 @@ object DiagnosticsText {
 
     private fun linkLine(link: LinkState?): String = when (link) {
         null -> "not started"
-        is LinkState.Connected -> "connected (MTU ${link.mtu})"
+        is LinkState.Connected -> if (link.mtu > 0) "connected (MTU ${link.mtu})" else "connected"   // a MIDI piano has none (v1.11 — M29)
         LinkState.Disconnected -> "not connected"
         LinkState.Scanning -> "looking for the piano"
         LinkState.Connecting -> "connecting"

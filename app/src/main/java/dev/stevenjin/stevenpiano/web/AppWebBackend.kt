@@ -37,6 +37,7 @@ import dev.stevenjin.stevenpiano.data.imports.ImportItem
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.OpenedSource
 import dev.stevenjin.stevenpiano.data.imports.ZipSource
+import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -124,6 +125,14 @@ class AppWebBackend(
             monochrome = settings.artworkMonochrome,
             schedule = WebScheduleState(graph.schedules.nextNow()?.line, graph.schedules.revision),
             studio = studio(),
+            instruments = WebInstruments.of(
+                graph.pianoLink.kind.value,
+                settings.midiOutName,
+                linkOf(graph.pianoLink.state.value).state,
+                graph.keyboard.state.value,
+                live = graph.liveThru.state.value.open,
+                recording = graph.recording.state.value is RecordingState.Recording,
+            ),
         )
     }
 

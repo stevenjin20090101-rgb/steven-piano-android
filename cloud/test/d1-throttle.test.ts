@@ -64,7 +64,7 @@ describe("the status's writes to D1", () => {
     await until(async () => (await stub(pianoId)).status !== null, 'the status');
     const kept = (await stub(pianoId)).status!;
     expect(JSON.stringify(kept)).not.toContain('R58N12345');
-    expect(Object.keys(kept)).toEqual(['app', 'firmware', 'link', 'player', 'guests', 'panel', 'library', 'channels', 'at']);
+    expect(Object.keys(kept)).toEqual(['app', 'firmware', 'link', 'instruments', 'player', 'guests', 'panel', 'library', 'channels', 'at']);
     expect(kept.player!.title!.length).toBe(200);
     expect(kept.player!.composer).toBe('AB');
     tablet.close();

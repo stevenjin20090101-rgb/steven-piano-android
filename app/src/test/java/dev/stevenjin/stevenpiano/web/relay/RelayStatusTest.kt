@@ -14,6 +14,9 @@ import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.web.GuestSettings
 import dev.stevenjin.stevenpiano.web.WebChannel
 import dev.stevenjin.stevenpiano.web.WebChannelPlaying
+import dev.stevenjin.stevenpiano.web.WebInstrument
+import dev.stevenjin.stevenpiano.web.WebInstruments
+import dev.stevenjin.stevenpiano.web.WebKeyboard
 import dev.stevenjin.stevenpiano.web.WebLink
 import dev.stevenjin.stevenpiano.web.WebPianoState
 import dev.stevenjin.stevenpiano.web.WebPiece
@@ -41,7 +44,7 @@ class RelayStatusTest {
         )
         val channels = listOf(WebChannel("calm", "Calm", 30, playable = true, playing = true, volume = 70, composers = emptyList()))
         val status = RelayStatus.report("1.10", 18, state, webEnabled = true, libraryPieces = 1_727, pack = null, channels = channels, at = 5)
-        assertEquals(setOf("app", "firmware", "link", "player", "guests", "panel", "library", "channels", "at"), status.keys().asSequence().toSet())
+        assertEquals(setOf("app", "firmware", "link", "instruments", "player", "guests", "panel", "library", "channels", "at"), status.keys().asSequence().toSet())
         assertEquals("1.10", status.getJSONObject("app").getString("version"))
         assertEquals(18, status.getJSONObject("app").getInt("code"))
         assertEquals("2.0.0", status.getString("firmware"))
@@ -63,6 +66,32 @@ class RelayStatusTest {
         val text = status.toString()
         for (identifier in listOf("C8:2E:18", "Steven Piano", "mac")) assertFalse("$identifier never goes to the relay", identifier in text)
         assertTrue(RelayProtocol.utf8Length(RelayMessage.Status(status).encode()) < RelayProtocol.MAX_TEXT)
+    }
+
+    @Test
+    fun `what plays and what is played from goes without a name (v1_11 M29)`() {
+        val state = WebState(
+            link = WebLink("connected", "Roland FP-30X"),
+            instruments = WebInstruments(
+                instrument = WebInstrument("midi", "Roland FP-30X", "connected"),
+                keyboard = WebKeyboard("Kim's KeyStep", "bluetooth", "connected"),
+                live = true,
+                recording = true,
+            ),
+        )
+        val status = RelayStatus.report("1.11", 19, state, webEnabled = false, libraryPieces = 3, pack = 0, channels = emptyList(), at = 5)
+        val instruments = status.getJSONObject("instruments")
+        assertEquals(setOf("instrument", "keyboard", "live", "recording"), instruments.keys().asSequence().toSet())
+        assertEquals(setOf("kind", "state"), instruments.getJSONObject("instrument").keys().asSequence().toSet())
+        assertEquals("midi", instruments.getJSONObject("instrument").getString("kind"))
+        assertEquals(setOf("transport", "state"), instruments.getJSONObject("keyboard").keys().asSequence().toSet())
+        assertEquals("bluetooth", instruments.getJSONObject("keyboard").getString("transport"))
+        assertTrue(instruments.getBoolean("live") && instruments.getBoolean("recording"))
+        for (name in listOf("Roland", "FP-30X", "Kim")) assertFalse("$name never goes to the relay", name in status.toString())
+        val none = RelayStatus.report("1.11", 19, WebState(), webEnabled = false, libraryPieces = 3, pack = 0, channels = emptyList(), at = 5).getJSONObject("instruments")
+        assertEquals("steven", none.getJSONObject("instrument").getString("kind"))
+        assertTrue("no keyboard: null, not missing", none.isNull("keyboard"))
+        assertFalse(none.getBoolean("live") || none.getBoolean("recording"))
     }
 
     @Test

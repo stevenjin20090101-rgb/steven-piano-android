@@ -41,6 +41,7 @@ import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.net.HttpFetch
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.web.AndroidAssets
@@ -289,6 +290,11 @@ class WebService : Service() {
             graph.pianoLink.state.map { },
             graph.pianoSettings.state.map { },
             graph.settings.map { listOf(it.webGuests, it.webApproveFirst, it.webEnabled, it.libraryPackVersion) },   // a pack loaded: the console's line at once
+            // What plays and what is played from (v1.11 — M29): the instrument chosen, the keyboard, Live, a take.
+            graph.pianoLink.kind.map { },
+            graph.keyboard.state.map { it.chosen?.transport to it.phase },
+            graph.liveThru.state.map { it.open }.distinctUntilChanged(),
+            graph.recording.state.map { it is RecordingState.Recording }.distinctUntilChanged(),
         ).map { }
     }
 
@@ -392,6 +398,11 @@ class WebService : Service() {
             graph.tabletSound.state.map { },
             // Steven Piano Cloud (v1.10 — M26): the public link in the state follows the connection.
             panel.cloud.map { },
+            // The panel's two read-only lines (v1.11 — M29): the instrument chosen, the keyboard, Live, a take.
+            graph.pianoLink.kind.map { },
+            graph.keyboard.state.map { },
+            graph.liveThru.state.map { it.open }.distinctUntilChanged().map { },
+            graph.recording.state.map { it is RecordingState.Recording }.distinctUntilChanged().map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes)
         hub = created

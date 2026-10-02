@@ -6628,3 +6628,270 @@ drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.10.1`). 
 tablet-size screens found the run as designed; one note for a later pass: at font scale 2.0 a playlist tile's meta
 line is cut ("265 PIEC…") where it should wrap. The push that publishes it also carries the deployed Cloudflare
 values of `cloud/wrangler.*.jsonc` (`ad10e07`).
+
+# v1.11 — M29: keyboards, live playing, recording, any MIDI piano
+
+Read `DESIGN.md › v1.11 — instruments, live playing, recording` first. Fable's brief (the session scratchpad's
+`m29-keyboards-brief.md`) with the approved plan (`plans/PLAN.md`) and the implementation plan (`plans/plan-midi.md`,
+sections a–i), built by Opus on `main` from `1bb6887` (1.10.1, versionCode 19) in six phases, a commit each: `ba01334`
+(0, hardening), `1b5292b` (1, a keyboard in), `0e031e2` (2, Live), `222fc2b` (3, recording), `6a58c0f` (4, any MIDI
+piano out) and phase 5's (status and these documents). **No version bump, no `Provenance.text` change, no provenance
+signing, no release build, no push, no relay deploy**: the integrator's, at 1.11. The firmware repository was not
+touched; `firmware/docs/BLE_LIVE.md` (written before this run) is what the firmware should change for live playing.
+
+## Files
+
+`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `T` = its tests. Added:
+
+- Phase 1: `M/midi/MidiStreamParser.kt` (with `KeyboardHolds`, `KeyEvents`); `M/instruments/MidiPorts.kt` (the seam:
+  `MidiPorts`, `MidiDeviceRef`, `MidiTransport`, `MidiNames`, `MidiChoice`), `AndroidMidiPorts.kt` (and
+  `AndroidMidiBluetooth`, `CombinedMidiPorts`), `EmulatedMidiPorts.kt`, `MidiDebugHooks.kt`, `MidiDevices.kt`,
+  `MidiKeyboard.kt`, `MidiPicker.kt`; `M/ui/InstrumentCopy.kt` (every word of M29); `M/ui/screens/piano/
+  MidiPickerSheet.kt`, `pages/KeyboardPage.kt`; debug only: `app/src/debug/java/.../debugmidi/TestMidiDeviceService.kt`
+  and `app/src/debug/res/xml/test_midi_device.xml`.
+- Phase 2: `M/midi/InstrumentProfile.kt`; `M/instruments/LiveThru.kt`, `LiveTimingHold.kt`.
+- Phase 3: `M/record/Recorder.kt`, `RecordingPieces.kt`, `RecordingSession.kt`; `M/ui/screens/keys/RecordingSheet.kt`.
+- Phase 4: `M/instruments/MidiPortLink.kt`, `InstrumentSwitch.kt`; `M/ui/screens/piano/pages/InstrumentPage.kt`.
+- Tests: `T/midi/MidiStreamParserTest`, `InstrumentProfileTest`; `T/instruments/FakeMidiPorts` (the fakes),
+  `MidiKeyboardTest`, `MidiDevicesTest`, `LiveThruTest`, `LiveTimingHoldTest`, `MidiPortLinkTest`,
+  `InstrumentSwitchTest`; `T/record/RecorderTest`, `RecordingPiecesTest` (with the session's tests);
+  `T/ui/InstrumentCopyTest`, `T/ui/screens/keys/KeysNoteTest`; `cloud/test/status.test.ts`.
+
+Changed (each addition marked v1.11 — M29): `M/ble/PacedWriter.kt` (the live lane, `nextMessages`),
+`GattPianoLink.kt` (foreign addresses, bonded candidates, `sendLive`, audio priority), `PianoScanner.kt`
+(`ScanThrottle` shared, `acquire`), `PianoLink.kt` (`sendLive`; the MIDI piano's `LinkError`s); `M/midi/MidiBatch.kt`
+(`MidiSink.sendLive`), `NoteRouter.kt` (the profile, the keyboard's bank), `KeyMap.kt` (a range), `SmfWriter.kt`
+(`Control`); `M/audio/TabletSound.kt` (`TeeSink.sendLive`); `M/player/PlaybackEngine.kt` and `Player.kt`
+(`connectedAnew`, the idle pedal, `external`, `silenceExternal`, `setProfile`, `allKeysOff`); `M/AppGraph.kt` (the
+devices, the keyboard, Live, the recorder, the MIDI link and the switch; `chooseInstrument`, `restoreInstrument`,
+`allKeysOff`; diagnostics); `M/MainActivity.kt` (the emulator's MIDI extras; `onStop` closes Live and ends a take);
+`M/settings/Settings.kt` (`keyboardId`, `keyboardName`, `liveToPiano`, `instrumentKind`, `midiOutId`, `midiOutName`);
+`M/data/LibraryRepository.kt` (`addRecording`, `recordings`), `M/data/imports/ComposerNames.kt` (`RECORDED_LIVE`);
+`M/ui/Routes.kt` (`SettingsPage.Instrument`, `Keyboard`), `NavHost.kt`, `StudioCopy.kt`, `components/
+ConnectionLine.kt`; `M/ui/screens/keys/KeysScreen.kt`, `KeysViewModel.kt`, `KeysPills.kt`, `PlayableKeyboard.kt`,
+`KeyMiniMap.kt`; `M/ui/screens/piano/PianoScreen.kt`, `PianoViewModel.kt`, `HubGroups.kt`, `GroupSummaries.kt`,
+`ConnectionCard.kt`; `M/ui/screens/nowplaying/StudioReviewBanner.kt`; `M/web/WebBackend.kt` (`WebInstruments`),
+`WebApi.kt`, `AppWebBackend.kt`, `relay/RelayStatus.kt`; `M/service/WebService.kt`; `M/diag/DiagnosticsExporter.kt`;
+`app/src/main/assets/web/index.html` and `app.js`; `app/src/main/AndroidManifest.xml` and `app/src/debug/
+AndroidManifest.xml`; `cloud/src/shared/protocol.ts` and `cloud/test/d1-throttle.test.ts`; the tests below; `DESIGN.md`,
+`README.md`, `docs/SECURITY_AUDIT.md`. No schema change (the database stays at version 3).
+
+## Phase 0 — hardening (`ba01334`)
+
+- **The live lane** (`PacedWriter.enqueueLive`): the keyboard's and the screen's messages go ahead of a piece's
+  backlog, under one guard: a live message whose key or controller still waits in the backlog goes right behind the
+  last such message (`insertBehindLast`), so each key's messages reach the wire in the router's order and a live
+  Note Off never overtakes a piece's Note On. The stop sequence clears both lanes; the backlog's drop never touches
+  the lane. `MidiSink.sendLive` (default `send`), `TeeSink`, `GattPianoLink.sendLive`.
+- **The idle pedal**: `PlaybackEngine.advance` sends a held-back pedal change with nothing playing.
+- **A stop on every connection** (`PlaybackEngine.connectedAnew`): each new connection or epoch begins with the stop
+  sequence, playing or not, so a pedal the firmware kept from an old connection never outlives it.
+- **The piano's link and other devices**: an address the MIDI side uses is foreign (`isForeign`): never connected to,
+  never taken from another app; a nameless device this tablet is paired with is never a candidate, and one paired by
+  the time it is connected to is passed over. `ScanThrottle` is one, shared, thread-safe (`acquire`); the link's
+  thread runs at `THREAD_PRIORITY_AUDIO`.
+
+## Phase 1 — a keyboard in, the Keys tab its monitor (`1b5292b`)
+
+- **The seam** (`MidiPorts`): `AndroidMidiPorts` lists byte-stream devices only (`getDevicesForTransport` on API 33+;
+  a MIDI 2.0 device's UMP twin ignored), another app's virtual ports only in debug builds; `EmulatedMidiPorts` gives
+  the emulator "Emulated keyboard" (fed by `adb … --es dev.stevenjin.stevenpiano.EMULATOR_MIDI "<hex>"`, unplugged
+  with `EMULATOR_MIDI_PLUG false`) and "Emulated MIDI piano" (logs every byte: `adb logcat -s MidiPiano`).
+- **`MidiDevices`**: what Android lists; the picker's Bluetooth search (12 s, on the shared budget, a wait line when
+  it is spent); foreign addresses for the piano's link; a device opened once for all its holders, 15 s to open.
+  Steven Piano is never listed (its name, the remembered address, a nameless device), closed at once if a device
+  turns out to be it, never paired with.
+- **`MidiKeyboard`**: every output port heard; USB back when Android lists the same identity again; Bluetooth reopened
+  with the piano link's backoff (1, 2, 4, 8, 15 s, then every minute after ten minutes); pairing asked once; everything
+  let go when the device goes, when Active Sensing stops for a second, when keys or a pedal stay down with no byte for
+  60 s, on Forget or another choice; malformed bytes counted in the trail.
+- **`MidiStreamParser`**: running status across buffers, velocity-0 offs, real-time bytes inside messages, SysEx and
+  system common dropped, malformed bytes counted, nothing allocated from input, every value masked; CC120 and
+  CC123–127 let go of that channel's keys, CC121 of its pedals, System Reset of everything.
+- **The UI**: INSTRUMENTS with the Keyboard row and page, the picker (a `GlassSheet`), the Keys tab's eyebrow and keys
+  lit by the keyboard. Manifest: `android.software.midi` and `android.hardware.usb.host`, not required; no new
+  permission.
+
+## Phase 2 — Live (`0e031e2`)
+
+- **`InstrumentProfile`**: StevenPiano (24–107, the 100 ms rule, a held key shared, CC64 paced, stop: CC64 0 then
+  CC123) and StandardPiano (21–108, re-strike, CC64/66/67 at once, stop: every held key's Note Off, the pedals up,
+  CC123).
+- **`NoteRouter`**: the keyboard's bank (`externalNoteOn`, `externalNoteOff`, `externalPedal`, `silenceExternal`): the
+  note as played (no transpose; folded or dropped as Fold says), the velocity percentage applied; the keyboard's CC64
+  at once when it crosses 64 and paced between; letting go hands the pedal back to the higher of the piece's and the
+  screen's (a keyboard pedal never touched stays untouched).
+- **`LiveThru`**: the gate (DESIGN's conditions), fresh presses only, a Note Off only for a Note On let through, every
+  close lets go through `Player.silenceExternal`; the breaker (200 Note Ons a second, 32 held, 64 malformed bytes a
+  second) switches Live off and says why. **`LiveTimingHold`** holds the piano's `humantime` at 0 while Live plays
+  Steven Piano and puts it back after. `PlaybackEngine.external` sends one buffer as one batch on the live lane;
+  `LiveTiming` (median and worst, arrival to the lane) goes to the trail.
+- **The Keys tab**: the Live pill, the pills one scrollable row, the line under them, "Keyboard connected. Live is
+  off." with a hollow dot, the screen kept on; `MainActivity.onStop` closes the gate. Keyboard activity counts as a
+  touch for display mode.
+
+## Phase 3 — recording (`222fc2b`)
+
+- **`Recorder`**: before the router; keys 0–127 with their velocities and every CC64/66/67 value, from the keyboard
+  (its own timestamps within 250 ms, never going backwards, else the arrival) and the screen; caps an hour, 200,000
+  events, five minutes of silence; on stop in time order, a held key closed, the pedals lifted, everything from 0.
+- **`RecordingPieces`**: the take written to `filesDir/recordings/pending-*.mid` first, then through the importer
+  (`StudioLibrary.add`) as "Recording · <medium date> <short time>" by "Recorded live", its text meta stamped to the
+  second (once more with " (2)" if the library holds the bytes), first in the built-in playlist `recordings`
+  (`LibraryRepository.addRecording`: never a catalogue list, so never refreshed and never offered to guests), undecided
+  in Studio's review (hoisted into `AppGraph`); in kiosk mode at most 30 wait, the oldest discarded; leftovers saved
+  at start (`recoverPending`). **`RecordingSession`**: Record, the caps' watch, Stop, the save off the main thread.
+- **The UI**: the Record control, the sheet after Stop, "Nothing was played.", Now playing's banner line for a
+  recording; a recording's Keep waits for the PIN in kiosk mode as its Discard does.
+
+## Phase 4 — any MIDI piano out (`6a58c0f`)
+
+- **`MidiPortLink`** (a `PianoLink` over the seam): its own `PacedWriter` (burst 20, then one message a millisecond,
+  the live lane first) drained on a thread at audio priority (`nextMessages`), whole three-byte messages to input
+  port 0, never running status; the keys it sent tracked; `disconnect`, another choice and `emergencySilence` (the
+  crash handler's, straight to the port) send every tracked key's Note Off, CC64/66/67 0, CC120 and CC123 before it
+  closes. Unplugged by cable: "<name> isn't connected…" and connected again when Android lists it; lost over
+  Bluetooth: Reconnecting with the piano's backoff; pairing asked once; an input another app holds is said so.
+  `choose` refuses Steven Piano (its name or address): it is never opened, paired with or made foreign.
+- **`InstrumentSwitch`**: the app's one `PianoLink` hands everything to the instrument chosen, so the player, Keys,
+  the tablet's sound, the web panel and the crash handler follow it unchanged; console, firmware version and update
+  service are Steven Piano's alone, and the piano's settings and the firmware updater read `AppGraph.stevenLink`.
+- **`AppGraph.chooseInstrument`**: refused while the player is locked; pause and silence (`pauseAndFlush`), let go of
+  the old link, choose, select, the player's profile, remember (`setInstrument`), connect. `restoreInstrument` at
+  start (never a remembered MIDI piano that is Steven Piano); auto-connect connects either. A keyboard that is the
+  MIDI piano too sets `LiveThru.setLooped`.
+- **The UI**: the Instrument row and page, the hub without PIANO and without the piano's status line under a MIDI
+  piano (a piano page open beside it falls back to Playback), the connection card's name and words, no Bluetooth
+  permission asked for a cable, the 2 s coil note on Keys only for Steven Piano.
+
+## Phase 5 — status and documents
+
+- **The panel**: `WebState.instruments` (`WebInstruments.of`), `/api/state`'s `instruments` beside `link`
+  (`{instrument: {kind, name, state}, keyboard: {name, transport, state} | null, live, recording}`; `live` is the gate
+  open, not the switch); `app.js`'s two lines (`instrumentLines`) under "Sent to piano" and on the Piano page, which
+  under a MIDI piano shows only its link line, the two lines and the hidden note. Read-only: no route takes them.
+- **The relay**: `RelayStatus.report` adds `instruments` without names (`{instrument: {kind, state}, keyboard:
+  {transport, state} | null, live, recording}`); `sanitizeStatus` keeps exactly that (texts cut to 16 and 24, the
+  booleans strictly `true`). The status is sent again when the instrument, the keyboard, Live or a take changes
+  (`WebService`), and the panel's socket on the same.
+- **Diagnostics**: `about.txt` gains *Instrument* and *Keyboard* lines (`DiagnosticsText.instrumentLine`,
+  `keyboardLine`, with Live's state and why it is off); the MTU only when above 0; `settings.txt` the six new
+  preferences (46 lines).
+
+## The release table, as built
+
+| Case | What lets go |
+|---|---|
+| The app leaves the foreground, the screen goes off | `MainActivity.onStop`: `player.silenceLive()`, `liveThru.setOnScreen(false)`, a take ended and saved |
+| The Keys tab left | `KeysScreen`'s lifecycle effect: `KeysViewModel.onScreen(false)` |
+| Live switched off; the keyboard or the instrument changed | `LiveThru` closes: `Player.silenceExternal`; an instrument change first `pauseAndFlush`es the old link |
+| The keyboard unplugged, lost, forgotten | `MidiKeyboard` lets go (`letGo`) and the gate closes |
+| The keyboard silent | Active Sensing seen then absent for 1 s, or keys or a pedal down with no byte for 60 s |
+| All Notes Off or All Sound Off (CC120, CC123–127), CC121, System Reset from it | the parser's release: that channel's keys, its pedals, everything |
+| The flood breaker | `LiveThru`'s trip: let go, Live off, the line |
+| The instrument's link drops | `Player.onLinkState` (`silenceLive`, pause) and the gate's target |
+| A firmware update | `Player.external` refused while locked; `stopForUpdate`'s stop sequence; `chooseInstrument` refused |
+| A crash | `App`'s handler: the switch's `emergencySilence` (a MIDI piano: offs, pedals, CC120, CC123 to the port) |
+
+## Greps (v1.11 — M29)
+
+`Color(0x` outside `ui/theme`: none. `Modifier.blur`: none. `0.0.0.0`: none. `dev.chrisbanes`: `Glass.kt` alone.
+`hazeSource`/`HazeState`: `Glass.kt`, `GlassHeader.kt`, `GlassMenu.kt`, `NavHost.kt`, `NotePanel.kt`,
+`MainActivity.kt`. `LocalLive`: `LiveDot.kt` and the theme; `LocalNoteSounding`: `ScorePages.kt` and the theme.
+`LensAlpha`/`GlassLens`/`LensVeil`: none. `ModalBottomSheet(`, `DropdownMenu(`, `AlertDialog(`, `Popup(` outside the
+glass wrappers: none (the time picker's `BasicAlertDialog` holds `GlassDialogSurface`). M29's sheets are
+`GlassSheet`s (`MidiPickerSheet`, `RecordingSheet`); no colour added; red only through `LiveDot` (`m29/p5-greps.txt`).
+The release manifest merged alone (`processReleaseMainManifest`): no `TestMidiDeviceService`, no
+`BIND_MIDI_DEVICE_SERVICE`; the two features, not required.
+
+## Measured (2026-10-01, `steven_piano_audit`: API 34, `medium_tablet` 2560 × 1600 at 320 dpi, debug builds)
+
+The audit's AVD, booted headless as `emulator-5560`, stopped at the end, the AVD kept; `steven_piano_tablet` and
+`steven_piano` never touched; host port 8737 never used. Screenshots in the session scratchpad, `m29/shots/`.
+
+- **A keyboard in** (`p1-01`–`p1-08`): INSTRUMENTS under the connection card, the Keyboard page, the picker listing
+  the emulated keyboard (USB) and the debug test device (Virtual); a chord lit C4, E4 and G4 with the eyebrow
+  "KEYBOARD · EMULATED KEYBOARD"; unplugged it let go and read "· not connected", plugged in again it reconnected; the
+  debug `MidiDeviceService` lit C3–E3–G3 through Android's own `MidiManager`.
+- **Live** (`p2-01`–`p2-05`): a chord forwarded as one batch to `LoggingPianoLink`; leaving Keys, Home, Live off and
+  the keyboard unplugged each sent the held key's Note Off and the pedal up; a 210-note flood and a malformed burst
+  (after `F6`, which clears running status) tripped the breaker with its line, nothing of the flood reached the piano,
+  Live re-armed only by hand; "Keyboard connected. Live is off." with the hollow dot.
+- **Recording** (`p3-01`–`p3-07`): a scale, a pedal sweep and a chord recorded; the sheet; renamed and kept; the piece
+  in Recordings ("Recorded live · 0:08"), played back with its half-pedal values.
+- **Any MIDI piano** (`p4-01`–`p4-09`, `m29/p4-*.log`): Instrument › Another MIDI piano… › Emulated MIDI piano; the card
+  "Emulated MIDI piano · Connected", the PIANO group and the status line gone, the note shown; on connecting
+  `B0 40 00 B0 42 00 B0 43 00 B0 7B 00`. A library piece played to it: B0 (23) and D1 (26) sent as they are; Clair de
+  lune's sustain `B0 40 7F` / `B0 40 00` at once beside its notes; a re-strike as `90 36 5F 80 36 00 90 36 5F`; Pause
+  sent `80 38 00 80 3A 00 80 3D 00 80 41 00 B0 40 00 B0 42 00 B0 43 00 B0 7B 00` (explicit offs, the pedals, then
+  CC123). Live to it: A0 and C8 (`90 15 50 90 6C 50`) and a half pedal (`B0 40 40`) as played, no coil note; leaving
+  Keys `80 3C 00 80 40 00 B0 40 00`. Steven Piano chosen again: the MIDI piano got `B0 40 00 B0 42 00 B0 43 00 B0 78 00
+  B0 7B 00` and closed; PIANO back.
+- **Light and dark, font scale** (`p5-01`–`p5-07`): the Instrument and Keyboard pages and Keys in both; Keys at font
+  scale 2.0 with the pills on one row and the coil note.
+- **Kiosk** (`p5-08`–`p5-16`): the app made device owner with `dpm set-device-owner`, a test PIN (generated, kept in a
+  scratchpad file, never shown), kiosk on (lock task `LOCKED`). On Keys, Live off and on and a take recorded without
+  the PIN; the sheet "Saved to Recordings. Someone with the PIN keeps or discards it." with Listen and Done ("0:01 · 3
+  notes"); the Keyboard row asked for the PIN; with it, the page and its picker. Kiosk off with the PIN, the device
+  owner given back (`debug.stevenpiano.releaseowner`, "no owners", lock task `NONE`).
+- **The panel** (`p5-17`–`p5-19`, `m29/p5-panel-state-*.txt`): through `adb forward tcp:8738 tcp:8737` and a scratchpad
+  proxy (as M28's): "Instrument: Steven Piano / Keyboard: Emulated keyboard"; with the MIDI piano, Keys on screen and
+  a take running, "Instrument: Emulated MIDI piano / Keyboard: Emulated keyboard · Live · Recording", and its Piano
+  page with only those lines and the note.
+- **Tests**: 1,372 before (12 skipped), **1,503** after (12 skipped), none failing; per phase 1,386, 1,432, 1,462,
+  1,483, 1,500, 1,503. `lintDebug`: 0 errors, 30 warnings, the same 30 as at `1bb6887`. `cloud/`: 79 → **82** tests,
+  `tsc --noEmit` clean. The debug APK 29,905,820 bytes.
+
+## Deviations from the brief, and why
+
+- **A MIDI piano on a cable that is unplugged is an error with its words, not "Reconnecting"** (plan-midi (d)): the app
+  cannot plug a cable back in, so the card says what to do ("<name> isn't connected. Plug it into the tablet or switch
+  it on nearby, then tap Retry.") and connects by itself the moment Android lists the same device again. The player
+  pauses as on any drop.
+- **Bluetooth devices are reopened by address with the backoff, without a scan** (plan-midi (d): "a direct open, then
+  scans"): `openBluetoothDevice` connects by address; a scan would spend the five-in-30-seconds budget that Steven
+  Piano's link and the picker share. Keyboards and MIDI pianos alike.
+- **The Instrument page's All keys off** is the instrument's stop sequence through the player, and on Steven Piano also
+  its own `off` over the console (as Firmware and status's): the page serves both kinds.
+- **The panel's "Live" is the gate open** (keys going to the instrument now), not the remembered switch: a panel line
+  saying Live while the Keys tab is closed would be wrong.
+- **Under a MIDI piano the panel's Piano page keeps its link line, the two lines and the note**, and hides Steven
+  Piano's pages and its actions (Read status, All keys off, Save now are the piano's console's).
+- **The drawings stay 84 keys** (plan-midi's own note): A0–B0 and C8 from a keyboard light an octave in on Keys.
+
+## Residuals — what only the hardware can tell
+
+- **Real keyboards**: a Bluetooth MIDI keyboard and a USB one on the school tablet: pairing (Android's request, the
+  "asks to pair" line), latency by ear, Active Sensing, unplugging mid-chord, two Bluetooth links at once (the piano's
+  and the keyboard's) and their jitter. The emulator had only the emulated ports and the debug service.
+- **The piano's own limits**: the 2 s hold, the 100 ms same-key gap, the timing scatter and `humantime 0` (held at 0
+  while Live plays), the pedal board: they bound the live feel until the firmware does what `BLE_LIVE.md` asks.
+- **A real MIDI piano as the instrument** (Roland, Yamaha, Kawai…): whether it honours CC123 (the explicit offs are
+  there for those that don't), CC66/67, re-strikes, and its USB identity across replugs and reboots.
+- **The flood breaker's numbers** (200 Note Ons a second, 32 held) are first guesses, to be tuned on the piano.
+- **Android's Bluetooth MIDI service** on the school tablet's Android version: if it proves weak, the seam allows a
+  fallback on the app's own GATT client later.
+- **The relay must be redeployed** (`npm run deploy:relay`) for the console's status to keep `instruments`; until then
+  the relay drops the unknown field and nothing else changes.
+
+## Tests added in M29
+
+`MidiStreamParserTest` 15 (running status across buffers, velocity 0, real-time inside messages, SysEx dropped,
+malformed data, the holds). `MidiKeyboardTest` 15 (connect, ports, replug, Bluetooth backoff, pairing asked once and
+never for the piano, Active Sensing, the 60 s hold, Forget, malformed counts). `MidiDevicesTest` 9 (listing, the
+picker's search and budget, never the piano, foreign addresses, shared opens). `InstrumentProfileTest` 3,
+`NoteRouterTest` +9 (the keyboard's bank, keys 21 and 108, the pedal crossing 64, the standard stop). `LiveThruTest` 8
+(the gate, fresh presses only, the breaker, looped), `LiveTimingHoldTest` 3, `LiveInputTest` +6 (the idle pedal flush,
+the keyboard through the engine), `PlayerTest` +2, `PacedWriterTest` +6 (the lane, the guard, the stop, the drop, and
+300 random interleavings of file, screen and keyboard traffic against the real router: a key the router let go is
+never left down on the wire), `GattPianoLinkTest` +5 (a foreign address, a bonded candidate, the shared budget).
+`RecorderTest` 7 (caps, trim, pedal values), `RecordingPiecesTest` 10 (unique files, the playlist, the kiosk cap,
+crash recovery, the session), `SmfWriterTest` +1 (controller values round-trip), `ComposerNamesTest` +1.
+`MidiPortLinkTest` 11 (epochs, whole messages at the pace with the live lane first, the stop replacing what waits,
+disconnect and the crash's stop, busy, unplugged and back, not plugged in, Bluetooth pairing and backoff, Steven
+Piano never chosen and its address never foreign, another choice letting go), `InstrumentSwitchTest` 2.
+`InstrumentCopyTest` 7, `KeysNoteTest` 2, `LinkErrorCopyTest` +1, `GroupSummariesTest` +1, `PianoPagesTest` +1 (PIANO
+hidden under a MIDI piano), `SettingsRepositoryTest` +3, `WebApiTest` +1 and the state's key set, `RelayStatusTest` +1
+(no name) and its key set, `DiagnosticsExporterTest` +1 (46 lines, the about lines, no MTU of 0), `WebAssetsTest`'s
+words, `RoutesTest`'s pages. **1,372 → 1,503.** `cloud/test/status.test.ts` 3 (kinds, transports, states and the two
+switches kept, names dropped; cut and refused; through the room) and `d1-throttle.test.ts`'s key set: **79 → 82**.

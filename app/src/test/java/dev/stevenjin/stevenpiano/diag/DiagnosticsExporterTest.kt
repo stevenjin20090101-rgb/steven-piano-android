@@ -10,6 +10,12 @@
 package dev.stevenjin.stevenpiano.diag
 
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.LiveState
+import dev.stevenjin.stevenpiano.instruments.LiveTrip
+import dev.stevenjin.stevenpiano.instruments.MidiNames
+import dev.stevenjin.stevenpiano.instruments.MidiTransport
+import dev.stevenjin.stevenpiano.settings.InstrumentChoice
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.update.Manifests
 import dev.stevenjin.stevenpiano.update.UpdateFailures
@@ -86,7 +92,16 @@ class DiagnosticsExporterTest {
         assertFalse("the cloud's piano id never travels (v1.10 — M26)", "abcdefgh2345" in prefs)
         assertFalse("nor anything of its secret", "cloudSecret" in prefs)
         assertTrue("the library pack loaded (v1.10 — M27)", "cloudEnrolled = true\nlibraryPackVersion = 1\n" in prefs)
-        assertEquals("35 lines, the cloud's three (v1.10 — M26), the library pack's (M27) and the playlists' order (v1.10.1 — M28)", 40, prefs.lines().count { it.isNotEmpty() })
+        assertEquals(
+            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29)",
+            46,
+            prefs.lines().count { it.isNotEmpty() },
+        )
+        assertTrue(
+            "the keyboard and the MIDI piano as the piano's address is (v1.11 — M29)",
+            "keyboardId = (none)\nkeyboardName = (none)\nliveToPiano = false\ninstrumentKind = STEVEN_PIANO\nmidiOutId = (none)\nmidiOutName = (none)\n" in prefs,
+        )
+        assertTrue("Instrument: Steven Piano\nKeyboard: none\n" in about)
         assertTrue("the order is a preference", prefs.contains("playlistSort = NEWEST\n"))
         assertTrue("the repair of older uploads is housekeeping, never listed", !prefs.contains("Repair"))
 
@@ -115,5 +130,25 @@ class DiagnosticsExporterTest {
         assertEquals(listOf(second.name), second.parentFile!!.list()!!.toList())
         val log = ZipFile(second).use { file -> file.getInputStream(file.getEntry("link.log")).readBytes().toString(Charsets.UTF_8) }
         assertEquals("No piano link lines since the app started.\n", log)
+    }
+
+    @Test
+    fun `about names the instrument and the keyboard with Live's state, and a link without an MTU prints none (v1_11 M29)`() {
+        val midi = PianoSettings(instrumentKind = InstrumentChoice.MIDI_PIANO, midiOutId = "usb:Roland|FP-30X|1", midiOutName = "FP-30X")
+        assertEquals("FP-30X (a MIDI piano, USB)", DiagnosticsText.instrumentLine(midi))
+        assertEquals("Steven Piano", DiagnosticsText.instrumentLine(midi.copy(instrumentKind = InstrumentChoice.STEVEN_PIANO)))
+        val chosen = KeyboardState.Chosen(MidiNames.bluetoothKey("11:22:33:44:55:66"), "KeyStep", MidiTransport.BLUETOOTH)
+        assertEquals("none", DiagnosticsText.keyboardLine(KeyboardState(), LiveState()))
+        assertEquals("KeyStep (Bluetooth), connected, Live on", DiagnosticsText.keyboardLine(KeyboardState(chosen, KeyboardState.Phase.Connected), LiveState(wanted = true, open = true)))
+        assertEquals(
+            "KeyStep (Bluetooth), connected, Live off (too many notes at once)",
+            DiagnosticsText.keyboardLine(KeyboardState(chosen, KeyboardState.Phase.Connected), LiveState(tripped = LiveTrip.TooManyNotes)),
+        )
+        assertEquals("KeyStep (Bluetooth), asks to pair, Live switched on, closed now", DiagnosticsText.keyboardLine(KeyboardState(chosen, KeyboardState.Phase.NeedsPairing), LiveState(wanted = true)))
+        val about = DiagnosticsText.about(
+            facts, deviceOwner = false, update = UpdateState.Idle, checkForUpdates = false, lastCheckedAt = null,
+            link = LinkState.Connected("FP-30X", 0, 1), exportedAt = "now", instrument = DiagnosticsText.instrumentLine(midi), keyboard = "none",
+        )
+        assertTrue("Piano link: connected\nInstrument: FP-30X (a MIDI piano, USB)\nKeyboard: none\n" in about)
     }
 }

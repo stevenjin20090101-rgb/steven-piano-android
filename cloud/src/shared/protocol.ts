@@ -199,6 +199,16 @@ export interface TabletStatus {
   app: { version: string | null; code: number | null } | null;
   firmware: string | null;
   link: { state: string | null; name: string | null } | null;
+  /**
+   * What plays and what is played from (v1.11 — M29): the instrument's kind ("steven" or "midi") and state, the
+   * keyboard's transport and state, whether Live and a take are on. Never a device's name: a name may say whose it is.
+   */
+  instruments: {
+    instrument: { kind: string | null; state: string | null } | null;
+    keyboard: { transport: string | null; state: string | null } | null;
+    live: boolean;
+    recording: boolean;
+  } | null;
   player: {
     status: string | null;
     title: string | null;
@@ -239,6 +249,16 @@ export function sanitizeStatus(raw: unknown): TabletStatus | null {
       channel,
     };
   }
+  let instruments: TabletStatus['instruments'] = null;
+  if (isObject(raw.instruments)) {
+    const i = raw.instruments;
+    instruments = {
+      instrument: isObject(i.instrument) ? { kind: text(i.instrument.kind, 16), state: text(i.instrument.state, 24) } : null,
+      keyboard: isObject(i.keyboard) ? { transport: text(i.keyboard.transport, 16), state: text(i.keyboard.state, 24) } : null,
+      live: i.live === true,
+      recording: i.recording === true,
+    };
+  }
   const guests = isObject(raw.guests) ? { open: raw.guests.open === true, approveFirst: raw.guests.approveFirst === true } : null;
   const panel = isObject(raw.panel) ? { web: raw.panel.web === true } : null;
   const library = isObject(raw.library) ? { pieces: whole(raw.library.pieces), pack: whole(raw.library.pack) } : null;
@@ -252,7 +272,7 @@ export function sanitizeStatus(raw: unknown): TabletStatus | null {
       channels.push({ key, name: text(c.name, 80) ?? key });
     }
   }
-  return { app, firmware: text(raw.firmware, 40), link, player, guests, panel, library, channels, at: whole(raw.at) };
+  return { app, firmware: text(raw.firmware, 40), link, instruments, player, guests, panel, library, channels, at: whole(raw.at) };
 }
 
 // ---- Small checks -------------------------------------------------------------------------------

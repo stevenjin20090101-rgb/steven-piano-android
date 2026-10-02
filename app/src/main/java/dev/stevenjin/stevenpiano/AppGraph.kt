@@ -719,6 +719,8 @@ class AppGraph(private val app: Application) {
                     lastCheckedAt = updateChecker.lastCheckedAt?.let { DiagnosticsText.stamp(it) },
                     link = pianoLinkIfMade()?.state?.value,
                     exportedAt = DiagnosticsText.stamp(System.currentTimeMillis()),
+                    instrument = DiagnosticsText.instrumentLine(settings.value),
+                    keyboard = DiagnosticsText.keyboardLine(keyboard.state.value, liveThru.state.value),
                 )
             },
             settings = { DiagnosticsText.settings(settings.value) },

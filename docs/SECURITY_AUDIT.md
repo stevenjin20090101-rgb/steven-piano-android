@@ -1904,3 +1904,64 @@ name. Where each is held:
   becomes a playlist per top folder (BUILD_SPEC.md › v1.10.1 — M28 › *Residuals*); its reach is names and links, as
   above.
 - Not run on the school tablet yet.
+
+## 1.11 — keyboards, live playing, recording, any MIDI piano (pre-audit notes, M29)
+
+2026-10-01, notes written with M29 for the next audit (delta 4), not an audit (BUILD_SPEC.md › v1.11 — M29). Nothing
+new listens and no new host is reached. What is new is **input from devices the person plugs in or pairs** (MIDI
+keyboards, by USB or Bluetooth through Android's MIDI service), **a second kind of output** (any MIDI piano), and
+**recordings** written on the tablet. The piano these drive is a permanent install in a school: every doubt about an
+input releases the keys and the pedal. Where each is held:
+
+- **MIDI from a device is untrusted input.** `MidiStreamParser` reads every byte through a fixed state machine:
+  nothing is allocated from input (SysEx is skipped whole, never buffered), every value is masked to 7 bits, offsets
+  and counts are held to the buffer, malformed bytes (a data byte with no status, a message cut short) are counted
+  and dropped, running status is honoured and cleared as MIDI says, and System Reset, All Notes Off (CC120,
+  CC123–127) and Reset All Controllers (CC121) release. Random bytes never throw (`MidiStreamParserTest`).
+- **Caps.** The flood breaker (`LiveThru`): more than 200 Note Ons a second, 32 keys held at once, or more than 64
+  malformed bytes a second from a keyboard let go of everything and switch Live off until the person turns it on
+  again. Only fresh presses pass; a Note Off only for a Note On that passed. The keyboard's keys are bounded by the
+  piano's own rules on Steven Piano (24–107, 100 ms, a held key shared), and Live waits for the Keys tab on screen with
+  the app in front. A keyboard silent with keys or a pedal down (Active Sensing gone for 1 s, or no byte for 60 s)
+  is released. A take is capped at an hour, 200,000 events and five minutes of silence; in kiosk mode at most 30 wait
+  for the PIN (the oldest discarded).
+- **Names.** A device's name is cleaned (`MidiNames.clean`: control and format characters dropped, whitespace
+  collapsed, at most 40 characters) and shown as text (Compose; the panel's `textContent`); it is never a file name,
+  a path or a command. The settings keep
+  a device's identity (`ble:<address>` or `usb:<manufacturer>|<product>|<serial>`) cut to 256 and its name to 64.
+  Recordings are saved as `filesDir/pieces/<sha256>.mid` like every piece, their pending files as
+  `filesDir/recordings/pending-<epoch ms>.mid` (app-private; anything else there is cleared).
+- **Only what the person picked is opened**, pinned by Bluetooth address or USB identity; another app's virtual MIDI
+  ports are offered in debug builds only. The debug build's test `MidiDeviceService` (which any app could send to) is
+  in `app/src/debug` only: the release manifest, merged alone, has no `TestMidiDeviceService` and no
+  `BIND_MIDI_DEVICE_SERVICE`. No new permission; `android.software.midi` and `android.hardware.usb.host` are declared
+  not required.
+- **Steven Piano is never a MIDI device.** It is never listed, opened, paired with or chosen through Android's MIDI
+  service (by its name, the remembered piano's address, or a nameless device that turns out to be it): a bond made by
+  the MIDI side would break the piano's own link. Pairing (`createBond`) is asked at most once per choice, only for
+  the device chosen. The piano's link never connects to an address the MIDI side uses, and the remembered piano's
+  address is never one of those, whatever was claimed.
+- **Nothing is offered remotely.** Live, the choice of an instrument or a keyboard, and recording have no web route
+  and no relay command. The panel's `/api/state` gains a read-only `instruments` (the instrument's kind, name and
+  state; the keyboard's name, transport and state; whether Live is open and a take runs), behind the same session as
+  everything else. The relay's status gains the same **without any name** (kinds, transports, states, two booleans);
+  `sanitizeStatus` keeps exactly those fields, texts cut to 16 and 24 characters, the booleans strictly `true`.
+  Recordings is a built-in playlist that is no catalogue list, so guests never see it.
+- **Kiosk.** Live and Record are free without the PIN (Steven's decision); keeping or discarding a recording, and the
+  Instrument and Keyboard pages, ask for it.
+- **Diagnostics.** `settings.txt` lists `keyboardId`, `keyboardName`, `liveToPiano`, `instrumentKind`, `midiOutId` and
+  `midiOutName` (a Bluetooth address or a USB identity, and names, as `lastDeviceAddress` always was); `about.txt`
+  names the instrument and the keyboard. The person shares the file; nothing sends it.
+- **The output's stop.** A MIDI piano gets every key it was sent let go, its three pedals up, All Sound Off and All
+  Notes Off when it is disconnected, replaced, or the app crashes (`MidiPortLink.emergencySilence`, straight to the
+  port).
+
+### Residuals (stated honestly)
+
+- **A Bluetooth MIDI device is trusted by its address** once chosen; one that is never paired could be imitated by
+  another device advertising that address. The breaker and the fresh-press rule bound what it could play, and Live
+  needs the Keys tab on screen.
+- **Android's MIDI service itself** (its Bluetooth MIDI implementation, the USB host stack) is outside the app; a flaw
+  there is the platform's.
+- **The breaker's numbers are first guesses**, to be tuned on the piano.
+- Not run on the school tablet or with real keyboards yet (BUILD_SPEC.md › v1.11 — M29 › *Residuals*).

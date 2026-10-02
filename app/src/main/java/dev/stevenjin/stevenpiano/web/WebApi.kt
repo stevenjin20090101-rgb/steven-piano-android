@@ -401,6 +401,7 @@ object WebApi {
                     .put("problem", p.problem ?: JSONObject.NULL),
             )
             .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL))
+            .put("instruments", instruments(s.instruments))
             .put("piano", pianoState(s.piano))
             .put("import", import(s.import))
             .put("artwork", JSONObject().put("running", s.artwork.running).put("done", s.artwork.done).put("total", s.artwork.total))
@@ -414,6 +415,16 @@ object WebApi {
             .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))
     }
+
+    /**
+     * What plays and what is played from (v1.11 — M29), read-only: `{instrument: {kind, name, state}, keyboard: {name,
+     * transport, state} or null, live, recording}`. The panel shows it in two lines; nothing it sends changes it.
+     */
+    fun instruments(s: WebInstruments): JSONObject = JSONObject()
+        .put("instrument", JSONObject().put("kind", s.instrument.kind).put("name", s.instrument.name).put("state", s.instrument.state))
+        .put("keyboard", s.keyboard?.let { JSONObject().put("name", it.name).put("transport", it.transport).put("state", it.state) } ?: JSONObject.NULL)
+        .put("live", s.live)
+        .put("recording", s.recording)
 
     /** Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, licence, installed, line, progress}], jobs: [{id, kind, name, state, line, progress, title}]}`. */
     fun studio(s: WebStudio): JSONObject = JSONObject()

@@ -2320,3 +2320,124 @@ Wikipedia's free photographs: no album covers. "Fetch artwork automatically" sti
   A loose file reads "In the playlist Uploads". Sentence case, no exclamation marks.
 - **The tablet's import bar**: "Imported 265 pieces · in the playlist MIDI."; pieces that were all there already, "Those
   pieces are already in the library · in the playlist MIDI.".
+
+# v1.11 — instruments, live playing, recording
+
+On 2026-10-01 Steven chose all four: connect any Bluetooth MIDI piano or keyboard, and USB keyboards by cable;
+play the school piano live from it; record what is played and keep it as a piece; play the app's library on any
+MIDI piano, not only Steven Piano. Designed by Fable with the `apple-design` lenses, tablet first, in the app's ink
+and paper; glass only through the existing wrappers (the picker and the recording sheet are glass sheets). The
+school piano is a permanent install: **fire safety decides every doubt**, so keys and pedal are let go whenever
+anything about an input is uncertain. Nothing above changes except where this section says so.
+
+## The rules
+
+- **Steven Piano keeps its own Bluetooth link.** Every other device goes through Android's MIDI service. Steven
+  Piano is never opened, listed, paired with or chosen as a MIDI device: not by its name, not at the remembered
+  piano's address, not as a nameless device that turns out to be it. A keyboard or a MIDI piano chosen is never
+  connected to by the piano's link either.
+- **Live only on the Keys tab.** The keyboard plays the instrument only while the Keys tab is on screen, the app in
+  front, Live switched on, the keyboard connected and something to play on (the instrument, or the tablet's own
+  piano sound). The screen stays on while Live is on or a take runs. Live is never offered to the web panel or the
+  cloud: they only show it.
+- **Let go, every time.** Every key and pedal the keyboard holds is let go when the Keys tab is left, the app goes
+  to the background or the screen goes off, Live is switched off, the keyboard is unplugged, lost or forgotten,
+  another keyboard or instrument is chosen, the keyboard falls silent (its Active Sensing stops for a second, or
+  keys or a pedal stay down with no byte for a minute), it sends All Notes Off or a System Reset, the instrument's
+  link drops, a firmware update locks the player, or the app crashes.
+- **Fresh presses only.** A key or pedal already down when Live opens waits for a new press; a Note Off goes to the
+  instrument only for a Note On that went.
+- **The flood breaker.** More than 200 Note Ons in a second, 32 keys held at once, or more than 64 malformed bytes in
+  a second from a keyboard: everything is let go, Live switches itself off, and a line says why ("Live turned off: the
+  keyboard sent more than 200 notes in a second."). Only the person turns it on again.
+- **Never looped.** A device that is both the instrument and the keyboard never plays through: Live stays off with a
+  line saying why ("Live stays off: this keyboard is the instrument too, so it already plays its own keys."); the
+  keys still light and a take still records.
+- **Steven Piano's keys.** A0–B0 (21–23) and C8 (108) from a keyboard follow *Fold notes outside C1–B7*: an octave in,
+  or dropped. On a MIDI piano they play as they are.
+
+| | Steven Piano | Any other MIDI piano |
+|---|---|---|
+| Keys | 24–107 (folded or dropped as Fold says) | 21–108 |
+| A key struck again within 100 ms | waits, as today | struck again: Note Off, then Note On |
+| A key another source holds | shared | struck again |
+| Pedals | sustain (CC64), paced | sustain, soft and sostenuto (CC64, 66, 67), at once |
+| Stopping | sustain up, then All Notes Off | every held key's Note Off, the three pedals up, All Notes Off |
+| Leaving the instrument | as before | the same, then All Sound Off |
+
+## The Piano tab: INSTRUMENTS
+
+The full reorganisation of the Piano tab is a later milestone; this adds only:
+
+- **INSTRUMENTS**, under the connection card, two navigation rows: **Instrument** ("Steven Piano", or the chosen
+  instrument's name) and **Keyboard** ("None", "<name>", or "<name> · not connected").
+- **The connection card** names the selected instrument and says its state in its own words ("Looking for the
+  piano…" is Steven Piano's; a MIDI piano is "Connecting…"). A MIDI piano on a cable asks for no Bluetooth
+  permission.
+- **The Instrument page.** THIS INSTRUMENT: its name, its kind ("The school piano" or "Standard MIDI piano") with its
+  state, and Connect or Disconnect. CHOOSE: "Steven Piano" and "Another MIDI piano…", a check on the one playing; the
+  second opens the picker. While a MIDI piano plays, the note "Feel, Lighting, Pedal and Firmware belong to Steven
+  Piano and are hidden while <name> plays.", and the hub hides the PIANO group and the piano's status line (a piano
+  page left open falls back to Playback). ACTIONS: **All keys off** (it also stays on Firmware and status).
+- **The Keyboard page.** The state line; "Choose a keyboard…" (the picker); once chosen: its name, "Bluetooth" or
+  "USB", its state, and **Forget**. Notes: "Play it from the Keys tab." and "A cable is steadier than Bluetooth: plug
+  the keyboard into the tablet when you can." When pairing is needed: "This keyboard asks to pair. Accept the
+  request, or pair it in Bluetooth settings, then choose it again." with **Open Bluetooth settings**.
+- **The picker**, one glass sheet for both: eyebrow MIDI, title "Choose an instrument" or "Choose a keyboard"; USB
+  devices first, then Bluetooth devices as they are found ("Looking for MIDI devices…", 12 s, on the scan budget
+  the piano's link shares; **Look again** after; a line saying how long to wait when Android's budget is spent);
+  each row its name and "USB" or "Bluetooth"; never Steven Piano, never the remembered piano's address; **Cancel**.
+  Other apps' MIDI ports are offered in debug builds only.
+
+A MIDI piano that is unplugged reads "<name> isn't connected. Plug it into the tablet or switch it on nearby, then
+tap Retry." and connects again by itself when it is plugged in; one another app holds, "Another app is using
+<name>. Close it, then tap Retry."; one that asks to pair, "<name> asks to pair. Accept the request, or pair it in
+Bluetooth settings, then tap Retry."
+
+## The Keys tab: the live monitor
+
+- **The eyebrow** under the header, when a keyboard is set: "KEYBOARD · <NAME>", and its state in words when it is
+  not connected.
+- **The pills, in order**: **Live** (latching like Sustain: "Live" / "Live on"; shown only while a keyboard is
+  connected; remembered) · Octave down · Sustain · Octave up · **Record** (a filled circle and "Record"; while
+  recording a square and the elapsed time in tabular digits, "0:42"). The Record control is in the content colour,
+  never red: red means live.
+- **The keys light** for presses on the keyboard, Live on or off. The drawing stays 84 keys: a key outside C1–B7
+  lights an octave in.
+- **The connection line**: "Sent to piano" (the live dot) while Live is on and an instrument is connected; "Keyboard
+  connected. Live is off." with a hollow dot; the lines of before otherwise. While Live plays Steven Piano, one quiet
+  note under the pills: "The piano lets a held key go after 2 seconds to keep its coils cool." The same place says
+  why Live is off when it switched itself off.
+- **Accessibility**: every pill has a label and a state ("Live, on"); the elapsed time is said on Stop, not every
+  second; 48 dp targets; at font scale 2.0 the pills stay on one row that scrolls.
+
+## Recording
+
+- **What was played**, captured before anything is folded or paced: every key with its velocity and every pedal value
+  (half-pedalling kept), from the keyboard (Live on or off) and the on-screen keys. A piece playing is never
+  captured.
+- **After Stop**, a glass sheet: the eyebrow RECORDING, "Keep this recording?", the take's line ("0:42 · 318 notes"),
+  a **Title** field prefilled with "Recording · <medium date> <short time>", and **Discard** · **Listen** · **Keep**.
+  The take is in the library already, waiting: Keep keeps it under the title typed, Discard deletes it, Listen plays
+  it (Now playing's banner then asks, "Recorded here. Discard deletes it."), and dismissing the sheet leaves it
+  waiting. A take with no note: "Nothing was played." for a moment, and nothing saved.
+- **The piece**: composer "Recorded live" (its row reads "Recorded live · 0:42"), in the built-in playlist
+  **Recordings**, newest first, which the Library shows among the playlists once it holds a piece. Recordings is
+  never in the guests' catalogue and never refilled by the built-in lists.
+- **Limits**: an hour or 200,000 events; five minutes with nothing played ends the take. A take is written to a file
+  before it is imported, so a crash loses none: the next start saves it.
+
+## Kiosk mode
+
+Free without the PIN: **Live** and **Record**. A take then waits undecided ("Saved to Recordings. Someone with the PIN
+keeps or discards it." with **Listen** and **Done**); at most 30 wait, the oldest discarded. The PIN, as Disconnect
+asks for it: choosing or forgetting an instrument or a keyboard (their pages are settings), and keeping or
+discarding a recording.
+
+## The web panel and the cloud
+
+The panel shows two read-only lines under "Sent to piano" and on its Piano page: "Instrument: <name>" and "Keyboard:
+<name>" ("None", or "· not connected"), followed by "· Live" and "· Recording" when they are on. While a MIDI piano
+plays, the panel's Piano page shows those lines and the same note as the tablet; Steven Piano's pages and actions
+are hidden. The relay's status carries the same without any name: the instrument's kind and state, the keyboard's
+transport and state, Live and Recording.

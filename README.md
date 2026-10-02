@@ -205,7 +205,10 @@ on the tablet*). Made by Steven Jin. Version 1.10.1.
   Keys shares the piano's safety rules with playback (never re-strike a held
   key, no same-key strikes closer than 100 ms), so it can be played while a
   piece plays. Turning the phone or tablet while keys are held never cuts them:
-  the screen turns once the last finger lifts.
+  the screen turns once the last finger lifts. A **MIDI keyboard** (Bluetooth, or
+  USB by cable) lights the keys as it is played, and with **Live** on it plays the
+  piano; **Record** keeps what was played as a piece (see *Keys: a keyboard and
+  Live* and *Recording*).
 - **Piano settings**: the piano's own settings, from the Piano tab, over the
   same Bluetooth connection (on firmware with its Bluetooth console; older
   firmware just says it doesn't offer them yet). **Feel**: the Soft, Cinematic,
@@ -220,7 +223,9 @@ on the tablet*). Made by Steven Jin. Version 1.10.1.
   make it and shows what the piano reports back; the piano saves your changes
   when you leave the tab. Bench commands (firing solenoids, resets, per-key
   force) stay at the piano's USB console.
-- **Piano**: one page of groups. The connection card on top, then **PIANO**
+- **Piano**: one page of groups. The connection card on top, then
+  **INSTRUMENTS** (**Instrument**: Steven Piano or another MIDI piano;
+  **Keyboard**: the MIDI keyboard; see *Instruments*), **PIANO**
   (Feel · Lighting · Pedal · Firmware and status, the piano's settings above),
   **PLAYING** (**Playback**: the pause before each piece, default tempo,
   transpose, velocity, folding, drum channel, and the tablet's own piano sound;
@@ -684,9 +689,11 @@ share sheet, so it can go by mail, Drive, Bluetooth or anything else you choose.
 holds:
 
 - `about.txt`: the app's version and build, the tablet's model and Android version,
-  whether the app is the device owner, the updater's state, the piano link's state;
+  whether the app is the device owner, the updater's state, the piano link's state, the
+  instrument and the keyboard (with Live's state, and why it is off when it switched itself
+  off);
 - `settings.txt`: the app's preferences (the remembered piano's Bluetooth address
-  among them);
+  among them, and the keyboard's and MIDI piano's address or USB identity and name);
 - `link.log`: the last 500 lines of the piano link's log, with their times (Bluetooth
   addresses, device names and status codes, as in *Send a log*), for each piece played how
   many notes went out and how late the latest was ("Timing: 3059 events, the latest 6 ms after
@@ -736,7 +743,10 @@ playlists, composers; Play, Play next, Add to queue), Channels, Schedule (see
 to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
 tally; a zip becomes a playlist and loose files go into **Uploads**, and under the
 tally "In the playlist MIDI" with **Open the playlist**) and **Piano** (the piano's
-Feel, Lighting and Pedal settings, Read status, All keys off, Save now). It updates as
+Feel, Lighting and Pedal settings, Read status, All keys off, Save now; while another MIDI
+piano plays, only a note that they are Steven Piano's). Now playing and Piano also show,
+read-only, the instrument and the keyboard ("Instrument: Steven Piano", "Keyboard:
+FP-30X · Live · Recording"); Live and recording are the tablet's alone. It updates as
 things change on the tablet, and it follows the browser's light or dark, or its own
 **Appearance** chips. A session lasts until it has
 gone a day unused; a new PIN, turning Web control off or restarting the app signs every
@@ -935,10 +945,13 @@ adb shell "setprop debug.stevenpiano.releaseowner ''"            # quoted whole:
 owner's own app; the `am start` is what reaches it.) Set the device owner again, as above,
 to use kiosk mode again. A factory reset also ends everything.
 
-**Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab,
-but anything that changes the piano or the library asks for the kiosk PIN first: every page
-of the Piano tab (Feel, Lighting, Pedal, Firmware and status, Playback, Display, Schedule,
-Remote control, Kiosk), its two APP switches and Check now, Disconnect, and in the Library the
+**Settings are locked in kiosk mode.** Anyone can play, queue, browse and use the Keys tab
+(**Live** and **Record** included: a recording then waits, at most 30, for someone with the
+PIN to keep or discard it), but anything that changes the piano or the library asks for the
+kiosk PIN first: every page of the Piano tab (Instrument, Keyboard, Feel, Lighting, Pedal,
+Firmware and status, Playback, Display, Schedule, Remote control, Kiosk; so choosing or
+forgetting an instrument or a keyboard), keeping or discarding a recording, its two APP
+switches and Check now, Disconnect, and in the Library the
 **+** (adding music), deleting, renaming, playlists' edits, Change photo, and a channel's volume
 and Schedule. A
 small padlock marks them. The right PIN opens them for five minutes, or until the tablet
@@ -1094,6 +1107,68 @@ models' download, when you ask for it.
       ("Studio: composed … s of music in … s (… ms a token …); peak VmHWM … kB": about a minute
       and under 1 GB is right). Play one and listen: every note should sound (none dropped for
       coming too soon).
+
+## Instruments
+
+**Piano › Instrument** chooses what plays the library, the Keys tab and schedules (from
+1.11):
+
+- **Steven Piano**, the school piano, over its own Bluetooth link, as always.
+- **Another MIDI piano…**: any digital piano or sound module with MIDI, by USB cable or
+  Bluetooth MIDI. The picker lists USB devices first, then Bluetooth devices as a 12 s
+  search finds them (**Look again** after); it never lists Steven Piano. Choosing one
+  pauses and silences the instrument before, and connects the new one; it is remembered,
+  and connects at launch when *Auto-connect on launch* is on.
+
+While another MIDI piano plays, the piano's own pages (Feel, Lighting, Pedal, Firmware and
+status) and its status line are hidden: they belong to Steven Piano. What it is sent
+differs from Steven Piano's: all 88 keys (21–108) as they are, a key struck again while it
+sounds is struck again, the sustain, soft and sostenuto pedals at once, and stopping sends
+every held key's Note Off, the three pedals up and All Notes Off (many digital pianos
+ignore All Notes Off alone). The Instrument page's **All keys off** sends that at once.
+
+A Bluetooth MIDI piano that asks to pair: accept Android's request (or pair it in Bluetooth
+settings), then **Retry**. Unplugged, a USB one reads "… isn't connected" and connects again
+by itself when it is plugged back in. The connection card names the instrument with its
+state.
+
+## Keys: a keyboard and Live
+
+**Piano › Keyboard › Choose a keyboard…** picks a MIDI keyboard: USB by cable (steadier),
+or Bluetooth MIDI. Once chosen, the Keys tab names it ("KEYBOARD · <NAME>") and lights the
+keys it plays. **Forget** lets it go.
+
+**Live** (a pill on the Keys tab, shown while the keyboard is connected; remembered) plays
+the instrument from the keyboard, **only while the Keys tab is on screen**: leaving the
+tab, Home, the screen going off, Live off, the keyboard unplugged or gone quiet, or the
+piano's link dropping lets go of every key and the pedal at once. The connection line reads
+"Sent to piano" while Live plays, and "Keyboard connected. Live is off." otherwise. On
+Steven Piano, A0–B0 and C8 follow *Fold notes outside C1–B7*, and the piano lets a held key
+go after 2 seconds to keep its coils cool (the tab says so). A keyboard that sends a flood
+(more than 200 notes a second, 32 keys held, or garbled data) switches Live off with a line
+saying why; turn it on again by hand. A keyboard that is also the instrument never plays
+through.
+
+The web panel shows the instrument and the keyboard in two lines (and Live and Recording
+while they are on), never a switch: Live is the tablet's alone.
+
+**On the emulator** (debug builds): "Emulated keyboard" and "Emulated MIDI piano" are listed
+beside a test device that goes through Android's own MIDI service. Play bytes from the
+keyboard with `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --es
+dev.stevenjin.stevenpiano.EMULATOR_MIDI "'90 3C 50 80 3C 00'"` (`EMULATOR_MIDI_SERVICE` for
+the test device; `--ez dev.stevenjin.stevenpiano.EMULATOR_MIDI_PLUG false` unplugs it), and
+read what the emulated piano was sent with `adb logcat -s MidiPiano`.
+
+## Recording
+
+**Record** (the last pill on the Keys tab: a filled circle, then a square and the time)
+keeps what was played, from the keyboard (Live on or off) and the screen's keys, with every
+pedal value: after **Stop**, *Keep this recording?* with its length and notes, a title
+("Recording · <date> <time>"), **Discard**, **Listen** and **Keep**. It goes into the playlist
+**Recordings**, by "Recorded live". A take ends by itself after an hour, 200,000 events or
+five minutes of silence; one with no note is not kept; a crash loses none (the next start
+saves it). In kiosk mode a take waits for someone with the PIN to keep or discard it
+("Saved to Recordings. Someone with the PIN keeps or discards it."), at most 30 at a time.
 
 ## Piano sound on the tablet
 
@@ -1254,6 +1329,29 @@ file to the release `models`.
       roll with Standby shows › Paper roll), the next piece cross-fades in, and the
       tablet does not sleep; a touch fades it away and brings the app back without
       pressing what was under the finger.
+
+Still open after 1.11 (the emulator can't tell; on the school tablet and the piano):
+
+- [ ] A **USB keyboard** by cable: chosen in Piano › Keyboard, the Keys tab lights its keys;
+      Live on, it plays the piano with no lag you can hear; pull the cable mid-chord: every
+      key lets go at once and the pedal comes up.
+- [ ] A **Bluetooth MIDI keyboard**: Android's pairing request when it asks, then the same;
+      with Steven Piano's link up too, play a fast passage and listen for unevenness (two
+      Bluetooth links share the radio). Switch the keyboard off: it lets go within a second
+      or two.
+- [ ] Live: hold a key: the piano lets it go after 2 s (its coils), as the tab says; the
+      sustain pedal on the keyboard works, half-pedalling too; leave the Keys tab, press
+      Home, turn the screen off, each with keys and the pedal held: everything lets go.
+- [ ] The flood breaker: mash many keys at once or play a glissando with the palm: 32 keys
+      held switches Live off with its line; if it trips in normal playing, tell the
+      developer (200 notes a second and 32 keys are first guesses).
+- [ ] Record a piece from the keyboard, Keep it, and play it back from Recordings on the
+      piano: the timing and the pedal as played.
+- [ ] **Another MIDI piano** (any digital piano, USB or Bluetooth): Piano › Instrument ›
+      Another MIDI piano…, play a library piece and Pause: no note hangs and the pedal comes
+      up; play Live to it; choose Steven Piano again: the digital piano falls silent.
+- [ ] Kiosk mode: Live and Record work without the PIN; a recording waits for the PIN;
+      Piano › Keyboard and Instrument ask for it.
 
 ## Security
 

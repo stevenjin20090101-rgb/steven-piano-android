@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.web.relay
 
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.web.WebChannel
+import dev.stevenjin.stevenpiano.web.WebInstruments
 import dev.stevenjin.stevenpiano.web.WebState
 import org.json.JSONArray
 import org.json.JSONObject
@@ -22,7 +23,9 @@ import java.util.Locale
  * `fw`), the piano link's state, the player (playing, paused or stopped; the piece's title and
  * composer; where it is and how long it lasts; the channel), whether guests may request and wait for
  * approval, whether the tablet's own Web control is on, the library's size and the version of Steven's
- * library pack loaded (v1.10 — M27; 0: none yet), and the channels' keys and names for the console's list.
+ * library pack loaded (v1.10 — M27; 0: none yet), the channels' keys and names for the console's list,
+ * and (v1.11 — M29) what plays and what is played from: the instrument's kind and state, the keyboard's
+ * transport and state, whether Live and a take are on; never their names.
  * Nothing that names the device: no Bluetooth address, no piano name, no serial, no Android id; and not
  * the tablet's address on its own networks (audit delta 3: the panel's Tailscale or Wi-Fi address went
  * with every report, and the console never used it). Texts are cut to [MAX_TEXT] characters.
@@ -65,6 +68,7 @@ object RelayStatus {
             .put("app", JSONObject().put("version", appVersion).put("code", appCode))
             .put("firmware", state.piano.facts["fw"]?.trim()?.takeIf { it.isNotEmpty() }?.take(40) ?: JSONObject.NULL)
             .put("link", state.link.state)
+            .put("instruments", instruments(state.instruments))
             .put("player", playing)
             .put("guests", JSONObject().put("open", state.guests.open).put("approveFirst", state.guests.approveFirst))
             .put("panel", JSONObject().put("web", webEnabled))
@@ -72,4 +76,11 @@ object RelayStatus {
             .put("channels", JSONArray().apply { channels.take(MAX_CHANNELS).forEach { put(JSONObject().put("key", it.key).put("name", it.name.take(MAX_TEXT))) } })
             .put("at", at)
     }
+
+    /** What plays and what is played from (v1.11 — M29), without a name: a device's name may say whose it is. */
+    fun instruments(i: WebInstruments): JSONObject = JSONObject()
+        .put("instrument", JSONObject().put("kind", i.instrument.kind).put("state", i.instrument.state))
+        .put("keyboard", i.keyboard?.let { JSONObject().put("transport", it.transport).put("state", it.state) } ?: JSONObject.NULL)
+        .put("live", i.live)
+        .put("recording", i.recording)
 }

@@ -14,13 +14,17 @@ import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
+import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.schedule.SaveResult
 import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
+import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import java.io.File
+import java.util.Locale
 
 /**
  * Everything the web panel reads and does, and nothing else (DESIGN.md › v1.5.1 — M18): the
@@ -366,7 +370,55 @@ data class WebState(
     val monochrome: Boolean = false,
     val schedule: WebScheduleState = WebScheduleState(),
     val studio: WebStudio = WebStudio(),
+    /** What plays and what is played from (v1.11 — M29), read-only. */
+    val instruments: WebInstruments = WebInstruments(),
 )
+
+/**
+ * What plays and what is played from (v1.11 — M29), read-only on the panel: the [instrument], the [keyboard]
+ * (null with none chosen), whether the keyboard plays the instrument now ([live]) and whether a take runs
+ * ([recording]). Live, recording and the choice of a device are the tablet's alone: nothing the panel or
+ * the cloud sends changes them.
+ */
+data class WebInstruments(
+    val instrument: WebInstrument = WebInstrument(),
+    val keyboard: WebKeyboard? = null,
+    val live: Boolean = false,
+    val recording: Boolean = false,
+) {
+    companion object {
+        /**
+         * As the panel reads it: the instrument [kind] (named [midiName] when a MIDI piano), its [link] state's name
+         * ([WebLink.state]), the [keyboard], and whether Live is open and a take runs.
+         */
+        fun of(kind: InstrumentKind, midiName: String?, link: String, keyboard: KeyboardState, live: Boolean, recording: Boolean): WebInstruments =
+            WebInstruments(
+                instrument = WebInstrument(
+                    kind = if (kind == InstrumentKind.MidiPiano) "midi" else "steven",
+                    name = InstrumentCopy.instrumentValue(kind, midiName),
+                    state = link,
+                ),
+                keyboard = keyboard.chosen?.let { WebKeyboard(it.name, it.transport.name.lowercase(Locale.ROOT), keyboardState(keyboard.phase)) },
+                live = live,
+                recording = recording,
+            )
+
+        /** A keyboard's state on the wire. */
+        fun keyboardState(phase: KeyboardState.Phase): String = when (phase) {
+            KeyboardState.Phase.Connected -> "connected"
+            KeyboardState.Phase.Connecting -> "connecting"
+            KeyboardState.Phase.NeedsPairing -> "pairing"
+            KeyboardState.Phase.Unavailable -> "unavailable"
+            KeyboardState.Phase.None, KeyboardState.Phase.NotConnected -> "disconnected"
+        }
+    }
+}
+
+/** The instrument: [kind] "steven" (Steven Piano) or "midi" (another MIDI piano), its [name], and its link's [state] as [WebLink] names it. */
+data class WebInstrument(val kind: String = "steven", val name: String = "Steven Piano", val state: String = "disconnected")
+
+/** The keyboard chosen: its [name], "usb", "bluetooth" or "virtual", and "connected", "connecting", "disconnected", "pairing" or "unavailable". */
+data class WebKeyboard(val name: String, val transport: String, val state: String)
 
 /** The schedules in the state: the next start ("Next: Wednesday 12:30, Calm", null with none ahead) and a revision of the list. */
 data class WebScheduleState(val next: String? = null, val revision: Int = 0)

@@ -564,9 +564,27 @@
     $('link-dot').classList.toggle('live', connected);
     $('link-dot').classList.toggle('breathing', connected && playing);
     $('link-text').textContent = connected ? 'Sent to piano' : 'Not connected';
+    const [instrumentLine, keyboardLine] = instrumentLines(state.instruments);
+    $('instrument-line').textContent = instrumentLine || '';
+    $('instrument-line').hidden = !instrumentLine;
+    $('keyboard-line').textContent = keyboardLine || '';
+    $('keyboard-line').hidden = !keyboardLine;
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
     tick();
+  }
+
+  /**
+   * What plays and what is played from (v1.11 — M29), in two read-only lines: "Instrument: Steven Piano" and
+   * "Keyboard: FP-30X · Live · Recording" ("None", or "· not connected"). Live, recording and the choice of a
+   * device stay the tablet's: the panel only shows them.
+   */
+  function instrumentLines(instruments) {
+    if (!instruments || !instruments.instrument) return [null, null];
+    const keyboard = instruments.keyboard;
+    const on = [instruments.live ? 'Live' : null, instruments.recording ? 'Recording' : null].filter(Boolean);
+    const named = keyboard ? keyboard.name + (keyboard.state === 'connected' ? '' : ' · not connected') : 'None';
+    return [`Instrument: ${instruments.instrument.name}`, [`Keyboard: ${named}`, ...on].join(' · ')];
   }
 
   function setRange(input, value, max) {
@@ -2002,13 +2020,24 @@
     const piano = state.piano;
     const connected = state.link.state === 'connected';
     const ready = piano.state === 'ready';
+    const [instrumentLine, keyboardLine] = instrumentLines(state.instruments);
+    const lines = [
+      h('p', { class: 'link-line inset' }, h('span', { class: connected ? 'dot live' : 'dot' }), connected ? `Connected to ${state.link.name || 'the piano'}` : 'Not connected'),
+      instrumentLine ? h('p', { class: 'meta inset', text: instrumentLine }) : null,
+      keyboardLine ? h('p', { class: 'meta inset', text: keyboardLine }) : null,
+    ];
+    // Another MIDI piano plays (v1.11 — M29): the piano's pages and actions are Steven Piano's, hidden meanwhile.
+    if (state.instruments && state.instruments.instrument && state.instruments.instrument.kind === 'midi') {
+      fill(body, lines, h('p', { class: 'note inset', text: `Feel, Lighting, Pedal and Firmware belong to Steven Piano and are hidden while ${state.instruments.instrument.name} plays.` }));
+      return;
+    }
     const status = !connected
       ? 'Connect to the piano to adjust its settings.'
       : piano.state === 'unsupported'
         ? "This piano's firmware doesn't offer settings over Bluetooth yet."
         : ready ? null : "Reading the piano's settings…";
     const nodes = [
-      h('p', { class: 'link-line inset' }, h('span', { class: connected ? 'dot live' : 'dot' }), connected ? `Connected to ${state.link.name || 'the piano'}` : 'Not connected'),
+      ...lines,
       status ? h('p', { class: 'note inset', text: status }) : null,
       piano.lastError ? h('div', { class: 'banner', role: 'status', text: `The piano said: ${piano.lastError}` }) : null,
     ];
