@@ -174,5 +174,14 @@
     "minSdk": 26,
     "tag": "v1.13.1",
     "publishedAt": "2026-10-02"
+  },
+  {
+    "versionCode": 24,
+    "versionName": "1.14",
+    "notes": "The Library now sorts music into Classical and Modern. A switch at the top (All · Classical · Modern) that search, pieces, playlists, composers, favorites and recent all follow; long-press a piece or an artist to move it to the other side. Two new channels, Classical and Modern, play a whole genre without end, and schedules can use them. The web panel's library has the same switch, and the guests' request page gets it too, with a search box and your modern songs to ask for. Studio understands \"modern\" and \"classical\" in a typed idea. Every recording now gets its own cover, Recordings and Made in Studio show covers instead of letters, keeping a recording says \"Kept in Recordings.\", and nothing the tablet makes itself shows an import message any more.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.14/steven-piano-1.14.apk",
+    "minSdk": 26,
+    "tag": "v1.14",
+    "draft": true
   }
 ]

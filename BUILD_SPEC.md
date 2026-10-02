@@ -7385,6 +7385,21 @@ integrator's smoke pass on the tablet-size emulator: the stage idle with the aur
 2 minutes" composed with the box in the upper third and the one card under it, and the History sheet listing
 three turns. No crash in the log.
 
+## The release: 1.14 (versionCode 24)
+
+Cut from `main` after the merge of `m39-genre-web` (`14d12a8`, `0227e23`) onto `ffe3f58` (run 2) and `f774428`,
+`31c9955` (run 1): M37 in three lean runs. 1,582 unit tests green, lint 0 errors. The integrator's smoke pass on the
+tablet-size emulator, upgraded in place from the 1.13 debug build with 88 pieces (the Epic set, three Studio pieces, a
+recording and four uploaded artist folders sent through the panel beforehand): the upgrade sorted 48 pieces Classical
+and 36 Modern with the Debussy upload among the classical ones; the switch in the header in all three positions on
+Pieces, Playlists and Composers / Artists; "Search Modern titles and artists" finding A Sky Full of Stars; a piece moved
+to Classical and back from the long-press menu; the Modern channel playing (ED SHEERAN · MODERN · CHANNEL); a take
+recorded, kept, "Kept in Recordings." under the pills and no import bar; the Recordings tile and page showing covers,
+the one made before 1.14 drawn at start; Studio reading "something modern and bright" as "Bright · 2 min · in the
+manner of Modern pieces"; the panel's reads with `genre=`, the 400 for a wrong value, and the guests' catalogue with its
+Modern list, all through `adb forward`. The guests' page was not opened in a browser (the emulator's Chrome wants its
+first-run terms accepted first). No crash in the log.
+
 # v1.14 — M37: Classical and Modern, and the recordings
 
 Fable's design (DESIGN.md › v1.14 — M37), Opus coding from Fable's briefs, in three runs: this one on `main` (the two
