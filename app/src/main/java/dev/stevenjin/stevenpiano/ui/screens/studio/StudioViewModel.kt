@@ -207,8 +207,12 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
         viewModelScope.launch { runCatching { studio.review.discard(pieceId) } }
     }
 
-    /** Takes [turn] out of the history: a piece still waiting is discarded first; a kept piece stays in the library. */
+    /**
+     * Takes [turn] out of the history: a piece still waiting is discarded first; a kept piece stays in the library. The
+     * stage keeps its card unless it was this one (then it is idle: no older result comes back).
+     */
     fun remove(turn: Turn) {
+        stage.update { it.removed(turn, turns.value, StudioStage.card(turns.value, it)) }
         viewModelScope.launch {
             if (turn.state == TurnState.Made) turn.pieceId?.let { runCatching { studio.review.discard(it) } }
             turn.rowId?.let { id -> runCatching { studio.generations.remove(id) } }

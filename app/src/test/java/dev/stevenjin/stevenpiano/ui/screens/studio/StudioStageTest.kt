@@ -80,6 +80,15 @@ class StudioStageTest {
         val removed = StudioStage.history(turns(rows.drop(1), listOf(job(1, 1, JobState.Done, pieceId = 11))))
         assertEquals(listOf("turn:5", "turn:3", "turn:2"), removed.map { it.key })
         assertEquals(emptyList<Turn>(), StudioStage.history(emptyList()))
+
+        // The stage's result removed in History: the result before it doesn't take its place; another turn removed
+        // leaves the stage's card where it is.
+        val both = turns(listOf(row(1, MADE, pieceId = 11), row(2, MADE, pieceId = 12)), listOf(job(1, 1, JobState.Done, pieceId = 11), job(2, 2, JobState.Done, pieceId = 12)), setOf(11, 12))
+        val onStage = StudioStage.card(both)
+        assertEquals("turn:2", onStage?.key)
+        val afterRemoval = StageMemory().removed(onStage!!, both, onStage)
+        assertNull(StudioStage.card(both.filter { it.key != "turn:2" }, afterRemoval))
+        assertEquals("turn:2", StudioStage.card(both.filter { it.key != "turn:1" }, StageMemory().removed(both.first(), both, onStage))?.key)
     }
 
     @Test

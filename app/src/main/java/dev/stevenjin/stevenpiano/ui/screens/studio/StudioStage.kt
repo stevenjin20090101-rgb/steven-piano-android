@@ -69,4 +69,13 @@ data class StageMemory(
         val at = leftAt ?: return this
         return StageMemory(if (now - at >= StudioStage.AWAY_MS) aside + showing else aside)
     }
+
+    /**
+     * [turn] removed in History, [card] on the stage: the removed turn and every other finished one but the card are
+     * set aside, so an older result never comes back to the stage in the removed one's place.
+     */
+    fun removed(turn: Turn, turns: List<Turn>, card: Turn?): StageMemory {
+        val older = turns.filter { it.finished && it.key != card?.key }.flatMap(StudioStage::names)
+        return copy(aside = aside + StudioStage.names(turn) + older)
+    }
 }
