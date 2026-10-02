@@ -2445,6 +2445,8 @@ transport and state, Live and Recording.
 
 # v1.12 — Studio as a tab
 
+*(The conversation, the shelf and the aura's numbers below gave way in v1.13.1 to Studio's stage, at the end.)*
+
 Designed by Fable (apple-design lenses), built in M30. Studio leaves the Piano hub and becomes the fourth of five
 tabs: Library · Now playing · Keys · **Studio** · Piano (a compact bar's labels may scale to 0.85; none is
 shortened). The rules:
@@ -2561,3 +2563,28 @@ shows, in step with it.
   back, **Follow** comes back, and a tap on a bar plays from there. Nothing on the panel moves the tablet's own split.
 - **Motion**: frames run only while Now playing shows, the page is visible and the piece plays (and 400 ms after a
   change); with reduced motion the roll still scrolls and everything else cuts.
+
+# v1.13.1 — Studio's stage
+
+Steven, on 1.12's Studio: the create box in the middle of the screen, the aura moving and glowing, the generated
+pieces somewhere else. Designed by Fable (apple-design `generative-ai.md`), built in M36.
+
+- **The stage.** One column at reading width, centred on the whole width (no second pane). Idle: "What should the
+  piano play?" in the display style, the idea box (glass on its solid surface, at least 64 dp: attach · "Describe a
+  piece…" · Options · Send), the understood line on its own small glass, the suggestions, centred in the space above
+  the bar or the keyboard; with nothing made yet, one quiet line at the foot.
+- **One card.** While a turn waits or runs the column eases upward (320 ms; a cut under reduced motion) so the box
+  sits in the upper third, the card under it as in 1.12, then its result (Listen · Keep · Discard · Another like it ·
+  Adjust…, the credits). It stays until the next idea is sent or the tab has been left for a minute (one that came
+  while away waits); a cancelled turn leaves the stage idle.
+- **History.** A second glyph beside Models: a glass sheet of every turn, newest first, its cover, title, the idea's
+  words (hidden in kiosk mode until the PIN) and its state as an eyebrow (KEPT · UNDECIDED · DISCARDED · FAILED ·
+  CANCELLED); a tap opens Listen · Another like it · Adjust… · Keep · Discard · Remove under the same PIN rules. The
+  Library's Made in Studio is unchanged.
+- **The aura's three states.** Ring 2.5 dp. Rest 65 %, a turn in 8 s, glow 28 dp; focused 85 %, a turn in 6 s; working
+  100 %, a turn in 2.5 s, the glow breathing 28 ↔ 40 dp every 1.8 s. It moves only while Studio is resumed and in
+  sight; still with its glow under reduced motion; the ring alone with high contrast or reduced transparency; stacked
+  fading strokes below API 31.
+- **Never behind words.** The glow lies behind the bar's solid surface; the understood line has its own, the card's
+  covers it, and the headline and suggestions stand clear of it (40 and 32 dp); the words and the hairline still carry
+  the status.

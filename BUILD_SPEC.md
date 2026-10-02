@@ -7334,3 +7334,46 @@ panel on the loopback answered the state with `views`, `display` and `instrument
 index, the font (889,228 bytes) and the five modules with a session, and 401 without one; the coder's browser
 screenshots after its merge with 1.12 show the score and roll at 1280 px and 390 px. No crash in the log.
 Designer's change to M33: the arc round the connection dot is removed (the hairline already says "looking").
+
+# v1.13.1 — M36: Studio's stage
+
+Fable's design (DESIGN.md › v1.13.1 — Studio's stage), Opus coding, a lean run: the app only, no emulator, one test
+file. Nothing about how notes or the pedal are sent changed; no version bump, no signing. No new colour (the aura's
+stops stay in `ui/theme/Aura.kt`); glass only through `GlassSurface` and `GlassSheet`.
+
+## What was built
+
+- **The stage's rules** (`ui/screens/studio/StudioStage.kt`, pure): `StudioStage.card` (the running turn, else the
+  next waiting, else the latest turn if finished, made since the app started (its job still known), not cancelled and
+  not set aside), `history` (newest first), `eyebrow`; `StageMemory`, the one-minute rule on an injected monotonic
+  clock (`left(card, now)`, `returned(now)`; a turn is known by its key and its job's, so a job's card that becomes its
+  row is still recognised), and `removed(turn, turns, card)`: a result removed in History is never replaced on the
+  stage by an older one.
+- **`StudioViewModel`**: `stageMemory`, `stageLeft()`, `stageShown()`, `stageCard(turns, memory, inSight)` (the rule
+  applied at composition, so the first frame back is already right), `nothingYet` (the foot line waits for the
+  history's first read); `clock` defaults to `SystemClock.elapsedRealtime`.
+- **`StudioScreen.kt`**: `StageColumn`, a hand-laid column in the space above the bar or the keyboard (the box's
+  middle at 0.46 of it idle and a third with a card, `lift` easing between; the headline 40 dp above the box, the
+  suggestions or the card 32 dp under it or 16 dp under the understood line; taller than the space it scrolls, under
+  the header's glass); `PromptBar` (64 dp, radius 32, `GlassSurface(blur = false)`: nothing passes beneath it);
+  `UnderstoodLine` (its own glass); `StageCard` (1.12's card without the idea's words and Remove); `HistorySheet` and
+  `HistoryRow`; `stageInSight` (STARTED and not under the resting screen). The shelf, its pane and `ic_grid` are
+  gone; `ic_history` (a clock turned back) is new.
+- **`StudioTurns.of`**: a finished job whose written turn has left the history (removed in History) no longer comes
+  back as a turn of its own (a 1.12 slip History would have shown).
+- **The aura** (`ui/components/Aura.kt`, tokens in `ui/theme/Aura.kt`): `AuraMotion` (the turn and the breath on one
+  frame loop per drawing; after working the glow settles in 320 ms); `AuraRing` takes no layout room: its glow's layer
+  is laid out at the bar's size and drawn 60 dp beyond it, a stroke half the glow's reach wide, blurred by 0.6 of it,
+  at 80 % of the ring's alpha (below API 31, three strokes up to the reach at a fifth each).
+
+## Simplified
+
+- History's actions open under the tapped row (no menu); a waiting or running turn offers Cancel there.
+- The glow's reach is its visible fall-off (stroke and blur in proportion), judged by arithmetic, not on a device.
+- Not done (lean run): on-device checks; the web panel's Studio page is unchanged.
+
+## Tests
+
+`StudioStageTest` (3: the stage's card, else idle; History newest first with its eyebrows and a removed turn staying
+out; the one-minute rule on an injected clock). 1,567 → 1,570 unit tests (12 skipped), none failing. `lintDebug`:
+0 errors, the same 30 warnings, none in a touched file.

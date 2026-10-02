@@ -1069,26 +1069,30 @@ seconds of that piece into music of its own. (Studio came with 1.7.)
    to its end), Now playing asks **Keep this piece?** **Keep** keeps it; **Discard** deletes it
    (in kiosk mode, behind the PIN). The job's **Listen** plays it straight away.
 
-**The Studio tab (1.12)**
+**The Studio tab (1.12; the stage since 1.13.1)**
 
-Studio is the fourth tab: Library · Now playing · Keys · **Studio** · Piano. Type an idea in the
-box at the bottom ("Describe a piece…") and **Send**: a mood (calm, bright, stormy, sad…), a tempo
-(slow, andante, fast, 96 bpm), a key (in D minor, F♯ major), a length (2 minutes, 3:30, short), a
-form (nocturne, waltz, lullaby, étude…), a composer, a performer or a piece's name from the
-library, or a channel or list (Baroque, Popular). There is no text model: words are understood by
-keywords, and the line above the box says what was understood ("Calm · D minor · slow · 2 min · in
-the manner of Clair de lune (Debussy)") and which words were not used. After a piece, **slower**,
-**faster**, **longer**, **shorter**, **sadder**, **in D minor**, **another** or **different** change
-the last one. Each turn's card shows the steps (Reading the piece · Composing · Shaping · Saving),
+Studio is the fourth tab: Library · Now playing · Keys · **Studio** · Piano. In the middle of the
+screen, under "What should the piano play?", type an idea in the box ("Describe a piece…") and
+**Send**, or tap a suggestion: a mood (calm, bright, stormy, sad…), a tempo (slow, andante, fast,
+96 bpm), a key (in D minor, F♯ major), a length (2 minutes, 3:30, short), a form (nocturne, waltz,
+lullaby, étude…), a composer, a performer or a piece's name from the library, or a channel or list
+(Baroque, Popular). There is no text model: words are understood by keywords, and the line under
+the box says what was understood ("Calm · D minor · slow · 2 min · in the manner of Clair de lune
+(Debussy)") and which words were not used. The ring round the box is the aura: it turns slowly at
+rest, brighter while you type, and fast and glowing while the tablet writes. Once sent, the box
+moves up and one card under it shows the steps (Reading the piece · Composing · Shaping · Saving),
 the percentage, the music written of the length asked for, the time left, and the notes appearing
 as they are written; then **Listen**, **Keep**, **Discard**, **Another like it** and **Adjust…**
-(the options sheet, as before). The **Options** button opens that sheet from what you typed; the
-paper clip transcribes a recording; **Models** (top right) downloads or removes the two models.
-On a tablet the shelf **MADE IN STUDIO** sits beside the conversation (tap to listen, hold for
-more). Titles are made from what was understood, never from what was typed: "Calm, after Clair de
-lune", "Wild, after Chopin", "Calm piece". In kiosk mode typing ideas is free (at most three wait;
-the history hides the words until the PIN opens the settings); Models, recordings, Keep, Discard
-and removing a turn ask for the PIN. The notification opens the Studio tab.
+(the options sheet, as before). The card stays until the next idea, or until you have been away
+from the tab for a minute. After a piece, **slower**, **faster**, **longer**, **shorter**,
+**sadder**, **in D minor**, **another** or **different** change the last one. Everything Studio
+made is in **History** (top right, beside **Models**), newest first: tap one for Listen, Another
+like it, Adjust…, Keep, Discard or Remove. The **Options** button opens the options sheet from what
+you typed; the paper clip transcribes a recording; **Models** downloads or removes the two models.
+Titles are made from what was understood, never from what was typed: "Calm, after Clair de lune",
+"Wild, after Chopin", "Calm piece". In kiosk mode typing ideas is free (at most three wait; History
+hides the words until the PIN opens the settings); Models, recordings, Keep, Discard and removing a
+turn ask for the PIN. The notification opens the Studio tab.
 
 **Composing a piece**
 
