@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.web
 
 import android.content.Context
+import android.content.res.Resources
+import dev.stevenjin.stevenpiano.R
 import java.io.IOException
 
 /** Where the panel's files are read from: the app's assets, or a map in the tests. */
@@ -18,11 +20,17 @@ fun interface AssetSource {
     fun read(name: String): ByteArray?
 }
 
-/** The app's own `assets/web/` folder. */
+/** The app's own `assets/web/` folder, and (v1.13 — M32) the score's font from `res/font`, the one copy the app carries. */
 class AndroidAssets(private val context: Context) : AssetSource {
     override fun read(name: String): ByteArray? = try {
-        context.assets.open("$FOLDER/$name").use { it.readBytes() }
+        if (name == WebAssets.FONT.name) {
+            context.resources.openRawResource(R.font.bravura).use { it.readBytes() }
+        } else {
+            context.assets.open("$FOLDER/$name").use { it.readBytes() }
+        }
     } catch (e: IOException) {
+        null
+    } catch (e: Resources.NotFoundException) {
         null
     }
 
@@ -49,6 +57,12 @@ object WebAssets {
     val PANEL: Map<String, Asset> = mapOf(
         "/" to Asset("index.html", HTML),
         "/app.js" to Asset("app.js", JS),
+        // The views of Now playing (v1.13 — M32): modules the page imports the first time it shows them.
+        "/clock.js" to Asset("clock.js", JS),
+        "/wire.js" to Asset("wire.js", JS),
+        "/roll.js" to Asset("roll.js", JS),
+        "/score.js" to Asset("score.js", JS),
+        "/views.js" to Asset("views.js", JS),
     )
 
     val PUBLIC: Map<String, Asset> = mapOf(
@@ -60,6 +74,16 @@ object WebAssets {
     /** The poster's template; its route fills in the QR and the address ([Poster.page]). */
     val POSTER = Asset("poster.html", HTML)
 
+    /**
+     * Bravura, the score's font (v1.13 — M32): sent unmodified (its licence reserves the name, so it is never subset,
+     * converted or renamed) by a route that needs a session, `/api/font/bravura.otf?v=` [FONT_VERSION], cached for a
+     * year. It is read from `res/font`, not `assets/web`.
+     */
+    val FONT = Asset("bravura.otf", "font/otf")
+
+    /** The first eight hex digits of the font's SHA-256: its address's version (the panel's `score.js` names the same). */
+    const val FONT_VERSION = "cdf0f893"
+
     /** Every file the server may ever read. */
-    val NAMES: Set<String> = (PANEL.values + PUBLIC.values + POSTER).map { it.name }.toSet()
+    val NAMES: Set<String> = (PANEL.values + PUBLIC.values + POSTER + FONT).map { it.name }.toSet()
 }

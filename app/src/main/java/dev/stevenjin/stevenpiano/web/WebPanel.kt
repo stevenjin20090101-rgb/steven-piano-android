@@ -140,8 +140,11 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
         sessions.closeAll()
     }
 
-    /** The panel is turned off: every session ends with it. */
-    fun turnedOff() = sessions.closeAll()
+    /** The panel is turned off: every session ends with it, and the views' layouts are forgotten (v1.13 — M32). */
+    fun turnedOff() {
+        sessions.closeAll()
+        backend.clearViews()
+    }
 
     /** Approve on the tablet (the Library's banner): the piece joins Up next, as from the panel. */
     fun approve(id: Long) {

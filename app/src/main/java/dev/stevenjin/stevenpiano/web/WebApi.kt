@@ -26,6 +26,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
+import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -238,6 +239,10 @@ object WebApi {
             webApproveFirst = boolOrNull(json, "webApproveFirst"),
             webHostName = host,
             tabletVolume = if (json.has("tabletVolume")) int(json, "tabletVolume", 0..100) else null,
+            noteDisplay = stringOrNull(json, "noteDisplay", 16)?.let { NOTE_DISPLAYS[it] ?: throw ApiError(400, "field", "noteDisplay must be paperRoll or falling.") },
+            fingering = boolOrNull(json, "fingering"),
+            chordNames = boolOrNull(json, "chordNames"),
+            handColours = boolOrNull(json, "handColours"),
         )
         if (change.isEmpty) throw ApiError(400, "field", "Nothing to change.")
         return change
@@ -382,6 +387,7 @@ object WebApi {
                     .put("loading", p.loading)
                     .put("piece", p.piece?.let(::piece) ?: JSONObject.NULL)
                     .put("positionMs", p.positionMs)
+                    .put("at", p.at)
                     .put("tempoPct", p.tempoPct)
                     .put("transpose", p.transpose)
                     .put("velocityPct", p.velocityPct)
@@ -398,7 +404,9 @@ object WebApi {
                             .put("repeat", p.queue.repeat.name.lowercase())
                             .put("items", JSONArray().apply { p.items.forEach { put(piece(it.piece).put("uid", it.uid).put("requested", it.requested)) } }),
                     )
-                    .put("problem", p.problem ?: JSONObject.NULL),
+                    .put("problem", p.problem ?: JSONObject.NULL)
+                    .put("fold", p.fold)
+                    .put("views", p.views?.let(::views) ?: JSONObject.NULL),
             )
             .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL))
             .put("instruments", instruments(s.instruments))
@@ -414,7 +422,16 @@ object WebApi {
             .put("monochrome", s.monochrome)
             .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))
+            .put("display", display(s.display))
     }
+
+    /** The views of the piece playing (v1.13 — M32): `{rev, notes, hands, fingers, chords, score}`. */
+    fun views(v: WebViews): JSONObject = JSONObject()
+        .put("rev", v.rev).put("notes", v.notes).put("hands", v.hands).put("fingers", v.fingers).put("chords", v.chords).put("score", v.score)
+
+    /** The display settings the View control mirrors (v1.13 — M32): `{noteDisplay, rollStyle, fingering, chordNames, handColours}`. */
+    fun display(d: WebDisplay): JSONObject = JSONObject()
+        .put("noteDisplay", d.noteDisplay).put("rollStyle", d.rollStyle).put("fingering", d.fingering).put("chordNames", d.chordNames).put("handColours", d.handColours)
 
     /**
      * What plays and what is played from (v1.11 — M29), read-only: `{instrument: {kind, name, state}, keyboard: {name,
@@ -512,8 +529,13 @@ object WebApi {
         .put("last", s.last ?: JSONObject.NULL)
         .put("exactAlarms", s.exactAlarms)
 
-    /** The socket's once-a-second message while a piece plays: where it is, and when that was (the page carries on from there at the tempo). */
-    fun progress(positionMs: Long, at: Long): JSONObject = JSONObject().put("type", "progress").put("positionMs", positionMs).put("at", at)
+    /**
+     * The socket's once-a-second message while a piece plays, and (v1.13 — M32) at once whenever the position jumps
+     * (play, pause, a seek, the tempo, a load), playing or not: where it is, when that was on the tablet's monotonic
+     * clock ([at], ms), whether it runs and at what tempo (the page carries on from there).
+     */
+    fun progress(positionMs: Long, at: Long, playing: Boolean = true, tempoPct: Int = 100): JSONObject =
+        JSONObject().put("type", "progress").put("positionMs", positionMs).put("at", at).put("playing", playing).put("tempoPct", tempoPct)
 
     /**
      * The import's progress, then its tally; and (v1.10.1 — M28, D7) the playlist the last finished import put its
@@ -583,7 +605,18 @@ object WebApi {
     private val SETTINGS_KEYS = setOf(
         "preRollMs", "defaultTempoPct", "transpose", "velocityPct", "foldOutOfRange", "skipDrumChannel",
         "webGuests", "webApproveFirst", "webHostName", "tabletVolume",
+        "noteDisplay", "fingering", "chordNames", "handColours",
     )
+
+    /** The roll styles the panel may choose (v1.13 — M32): never Score, a phone-sized tablet's own choice. */
+    private val NOTE_DISPLAYS = mapOf("paperRoll" to NoteDisplay.PAPER_ROLL, "falling" to NoteDisplay.FALLING)
+
+    /** A display setting's name on the wire. */
+    fun noteDisplayName(display: NoteDisplay): String = when (display) {
+        NoteDisplay.PAPER_ROLL -> "paperRoll"
+        NoteDisplay.FALLING -> "falling"
+        NoteDisplay.STAFF -> "score"
+    }
 
     private const val MAX_HOST_NAME = 253
 

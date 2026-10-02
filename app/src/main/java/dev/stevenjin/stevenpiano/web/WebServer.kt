@@ -360,6 +360,17 @@ class WebServer(
         Route(Method.GET, Regex("/api/piano"), Access.READ, "/api/piano") { json(WebApi.piano(backend.piano())) },
         Route(Method.GET, Regex("/api/schedules"), Access.READ, "/api/schedules") { json(WebApi.schedules(backend.schedules())) },
         Route(Method.GET, Regex("/api/studio/seed"), Access.READ, "/api/studio/seed") { call -> studioSeed(call) },
+        // The views of the piece playing (v1.13 — M32): its notes, its score's index and pages, the score's font. Read-only,
+        // each input a bounded integer, the work bounded by NowViews.
+        Route(Method.GET, Regex("/api/now/notes"), Access.READ, "/api/now/notes") { call -> now(backend.nowNotes(rev(call))) },
+        Route(Method.GET, Regex("/api/now/score"), Access.READ, "/api/now/score?w=800&h=600") { call ->
+            now(backend.nowScore(rev(call), bounded(call, "w", WebLimits.VIEW_SIZE), bounded(call, "h", WebLimits.VIEW_SIZE)))
+        },
+        Route(Method.GET, Regex("/api/now/score/(\\d{1,10})/page/(\\d{1,5})"), Access.READ, "/api/now/score/1/page/0") { call ->
+            val id = call.groups[0].toLong().takeIf { it <= Int.MAX_VALUE } ?: throw ApiError(400, "field", "Not a layout.")
+            now(backend.nowScorePage(id.toInt(), call.groups[1].toInt()))
+        },
+        Route(Method.GET, Regex("/api/font/bravura\\.otf"), Access.READ, "/api/font/bravura.otf") { font() },
 
         // The panel acts.
         Route(Method.POST, Regex("/api/play"), Access.WRITE, "/api/play") { call ->
@@ -496,6 +507,33 @@ class WebServer(
         },
         Route(Method.POST, Regex("/api/public/request"), Access.PUBLIC, "/api/public/request") { call -> guestRequest(call) },
     )
+
+    /** A `rev` the views were asked for: absent (the current one), or a whole number that fits an Int. */
+    private fun rev(call: Call): Int? {
+        val raw = call.param("rev") ?: return null
+        return raw.takeIf { REV.matches(it) }?.toLong()?.takeIf { it <= Int.MAX_VALUE }?.toInt() ?: throw ApiError(400, "field", "rev must be a whole number.")
+    }
+
+    /** A required whole-number parameter within [range]. */
+    private fun bounded(call: Call, name: String, range: IntRange): Int =
+        call.param(name)?.takeIf { REV.matches(it) }?.toLong()?.takeIf { it in range.first..range.last }?.toInt()
+            ?: throw ApiError(400, "field", "$name must be from ${range.first} to ${range.last}.")
+
+    /** A views answer ([NowAnswer]) as HTTP: the bytes, 202 while a layout runs, 409 stale, 404 nothing playing, 413, 429. */
+    private fun now(answer: NowAnswer): Response = when (answer) {
+        is NowAnswer.Ready -> binary(answer.bytes)
+        is NowAnswer.Working -> working(answer.retryAfterMs)
+        NowAnswer.Stale -> refuse(409, "stale", "The piece or its layout has changed. Ask again.")
+        NowAnswer.NoPiece -> refuse(404, "no-piece", "Nothing is playing.")
+        NowAnswer.TooLarge -> refuse(413, "too-large", "This score is too large to show.")
+        is NowAnswer.Busy -> waitResponse(answer.retryAfterMs)
+    }
+
+    /** The score's font, Bravura, exactly as the app carries it (its licence reserves the name: never changed), cached for a year under its versioned address. */
+    private fun font(): Response {
+        val bytes = assets.read(WebAssets.FONT.name) ?: return notFound()
+        return bytesResponse(Response.Status.OK, WebAssets.FONT.contentType, bytes).also { it.addHeader("Cache-Control", "private, max-age=31536000, immutable") }
+    }
 
     private suspend fun library(call: Call): Response {
         val query = call.param("q")?.let { TextLimits.clip(it, TextLimits.TITLE) }?.trim()
@@ -722,6 +760,14 @@ class WebServer(
 
     private fun json(body: JSONObject, status: Response.Status = Response.Status.OK): Response =
         bytesResponse(status, JSON, body.toString().toByteArray(Charsets.UTF_8)).also { it.addHeader("Cache-Control", "no-store") }
+
+    /** Bytes for the panel's own reader (v1.13 — M32): never sniffed (the security headers' `nosniff`), never stored. */
+    private fun binary(bytes: ByteArray): Response =
+        bytesResponse(Response.Status.OK, BINARY, bytes).also { it.addHeader("Cache-Control", "no-store") }
+
+    /** 202 while a layout runs: ask again after [retryAfterMs]. */
+    private fun working(retryAfterMs: Long): Response =
+        json(JSONObject().put("status", "working").put("retryAfterMs", retryAfterMs), Response.Status.ACCEPTED)
 
     private fun noContent(): Response =
         newFixedLengthResponse(Response.Status.NO_CONTENT, null, ByteArrayInputStream(ByteArray(0)), 0).also { it.addHeader("Cache-Control", "no-store") }
@@ -1247,6 +1293,10 @@ private const val SOCKET_PATH = "/ws"
 private const val POSTER_PATH = "/poster"
 private const val REQUEST_PAGE = "/request"
 private const val JSON = "application/json; charset=utf-8"
+private const val BINARY = "application/octet-stream"
+
+/** A whole number as a query may give it: digits only, at most ten. */
+private val REV = Regex("\\d{1,10}")
 private const val SWITCHING_PROTOCOLS = 101
 private const val UPLOAD_PREFIX = "upload-"
 private const val STUDIO_PREFIX = "studio-"

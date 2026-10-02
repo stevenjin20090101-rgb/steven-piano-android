@@ -35,6 +35,7 @@ import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.ChordTrack
 import dev.stevenjin.stevenpiano.score.Hands
+import dev.stevenjin.stevenpiano.score.ScoreStyle
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandTones
@@ -80,14 +81,14 @@ internal const val RAMP_STEPS = 12
  */
 internal const val MAX_BACKOFF_MICROS = 30_000_000L
 
-/** Notes drawn per frame at most, however dense the file: the roll and the score's overlay alike. */
-internal const val MAX_NOTE_DRAWS = 4_000
+/** Notes drawn per frame at most, however dense the file: the roll and the score's overlay alike (ScoreStyle's, v1.13 — M32). */
+internal const val MAX_NOTE_DRAWS = ScoreStyle.MAX_NOTE_DRAWS
 
 /** Chord names drawn per frame at most (names clear of each other fill the tallest canvas with about fifty). */
 internal const val MAX_CHORD_DRAWS = 64
 
 /** A system's run of rests, numerals, beams or ties as the score's page draws it: its first [MAX_NOTE_DRAWS] only. */
-internal fun IntRange.capped(): IntRange = if (last - first + 1 > MAX_NOTE_DRAWS) first until first + MAX_NOTE_DRAWS else this
+internal fun IntRange.capped(): IntRange = ScoreStyle.capped(this)
 
 /**
  * Of the chords starting at [starts] (in time order), the ones whose names the waterfall draws: each

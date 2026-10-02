@@ -36,6 +36,13 @@
   --ink-secondary: #A3A3A3;
   --ink-tertiary: #8A8A8A;
   --ink-live: #D9232E;
+  /* The views (v1.13 — M32): the score's sounding yellow, and the two hands (Hand colours), each appearance's own. */
+  --paper-sounding: #9C7A00;
+  --paper-hand-left: #3D6C50;
+  --paper-hand-right: #3E6189;
+  --ink-sounding: #F2C94C;
+  --ink-hand-left: #6AA080;
+  --ink-hand-right: #7A97B8;
 
   --surface: var(--paper-surface);
   --elevated: var(--paper-elevated);
@@ -45,6 +52,9 @@
   --secondary: var(--paper-secondary);
   --tertiary: var(--paper-tertiary);
   --live: var(--paper-live);
+  --sounding: var(--paper-sounding);
+  --hand-left: var(--paper-hand-left);
+  --hand-right: var(--paper-hand-right);
   color-scheme: light;
 
   /* The glass (ui/theme/Glass.kt's GlassTokens): the fills, the blur, the scroll-edge band and the
@@ -76,6 +86,9 @@
     --tertiary: var(--ink-tertiary);
     --live: var(--ink-live);
     --specular: var(--ink-specular);
+    --sounding: var(--ink-sounding);
+    --hand-left: var(--ink-hand-left);
+    --hand-right: var(--ink-hand-right);
     color-scheme: dark;
   }
 }
@@ -90,6 +103,9 @@
   --tertiary: var(--ink-tertiary);
   --live: var(--ink-live);
   --specular: var(--ink-specular);
+  --sounding: var(--ink-sounding);
+  --hand-left: var(--ink-hand-left);
+  --hand-right: var(--ink-hand-right);
   color-scheme: dark;
 }
 
@@ -781,6 +797,147 @@ button, input, select { font: inherit; color: inherit; }
   .now { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.6fr); }
 }
 
+/* ---- Now playing's views (v1.13 — M32) ------------------------------------------------------------
+   The score and the moving notes, as the tablet's Now playing shows them: content, never glass; each view a 12 px
+   card on the elevated surface. From 900 px both show, split by a divider (a hairline with a 36 × 4 grabber in an
+   8 px gap, a 48 px target); below, one at a time (Art · Notes · Score). Sizes the scripts set go through the CSSOM
+   (--split, a page's place), never an inline style. */
+
+.views-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+
+.views-view { margin-left: auto; }
+
+.views { width: 100%; }
+
+.now.views-on .now-art { display: none; }
+
+.views-panes {
+  --split: 0.3333;
+  --views-height: clamp(420px, 62vh, 780px);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: var(--views-height);
+}
+
+.views-panes[data-axis="side"] { flex-direction: row; }
+
+.pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--elevated);
+}
+
+.pane-score { flex: 0 0 calc((100% - 8px) * var(--split)); }
+
+.pane-roll { flex: 1 1 0; display: flex; flex-direction: column; }
+
+.views-panes[data-hidden="score"] .pane-score, .views-panes[data-hidden="roll"] .pane-roll { display: none; }
+
+.views-panes[data-hidden="roll"] .pane-score { flex: 1 1 0; }
+
+.split-handle {
+  position: relative;
+  flex: 0 0 8px;
+  cursor: row-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.views-panes[data-axis="side"] .split-handle { cursor: col-resize; }
+
+/* The 48 px target, centred on the gap. */
+.split-handle::before { content: ""; position: absolute; inset: -20px 0; }
+
+.views-panes[data-axis="side"] .split-handle::before { inset: 0 -20px; }
+
+/* The grabber. */
+.split-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 4px;
+  margin: -2px 0 0 -18px;
+  border-radius: 2px;
+  background: var(--secondary);
+}
+
+.views-panes[data-axis="side"] .split-handle::after { width: 4px; height: 36px; margin: -18px 0 0 -2px; }
+
+.split-handle:focus-visible::after { box-shadow: 0 0 0 2px var(--primary); }
+
+.views-panes[data-hidden] .split-handle { flex-basis: 16px; }
+
+.roll-canvas { display: block; flex: 1 1 0; width: 100%; min-height: 0; }
+
+.strip-canvas { display: block; flex: none; width: 100%; height: 44px; border-top: 1px solid var(--hairline); }
+
+.score-stage { position: absolute; inset: 0; overflow: hidden; outline: none; }
+
+.score-stage:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+
+.score-page, .score-overlay { position: absolute; top: 0; left: 0; display: block; }
+
+.score-spine { position: absolute; width: 1px; background: var(--hairline); }
+
+.score-tools { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; }
+
+.score-turn { border-radius: 50%; background: color-mix(in srgb, var(--elevated) 86%, transparent); }
+
+.score-turn:disabled { color: var(--disabled); }
+
+.glyph.flip { transform: scaleX(-1); }
+
+.score-follow { position: absolute; top: 8px; right: 8px; background: var(--surface); color: var(--primary); }
+
+.score-note { position: absolute; inset: auto 16px 50% 16px; text-align: center; }
+
+.views-note { padding-top: 8px; }
+
+/* The View control's panel: the menus' glass, holding the roll's style and the three switches. */
+.view-menu {
+  position: fixed;
+  z-index: 10;
+  width: min(320px, calc(100vw - 16px));
+  padding: 12px 0 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.view-menu .eyebrow { padding: 0 var(--inset) 8px; }
+
+.view-menu .chips { padding: 0 var(--inset) 8px; }
+
+.view-menu .setting { margin-left: var(--inset); padding-right: var(--inset); }
+
+.view-menu .setting:last-child { border-bottom: 0; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Phones: one view at a time, a little shorter, no divider. */
+@media (max-width: 899px) {
+  .views-panes { --views-height: clamp(320px, 56vh, 640px); }
+  .views-panes .split-handle { display: none; }
+  .views-panes[data-mode="notes"] .pane-score, .views-panes[data-mode="score"] .pane-roll { display: none; }
+  .views-panes[data-mode="notes"] .pane-roll, .views-panes[data-mode="score"] .pane-score { flex: 1 1 0; }
+}
+
 /* ---- Up next ------------------------------------------------------------------------------- */
 
 .queue-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px var(--inset); border-bottom: 1px solid var(--hairline); }
@@ -1006,7 +1163,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* Reduce transparency, or more contrast: solid surfaces and their hairlines, no scroll-edge bands. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .sections, .menu, .toast, .gate-card, .schedule-editor, .compose-editor {
+  .sections, .menu, .view-menu, .toast, .gate-card, .schedule-editor, .compose-editor {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     box-shadow: none;
@@ -1014,7 +1171,7 @@ button, input, select { font: inherit; color: inherit; }
   .sections { background-color: var(--surface); }
   .panel.scrolled .sections { background-image: none; }
   .sections::after { display: none; }
-  .menu, .toast { background: var(--elevated); }
+  .menu, .view-menu, .toast { background: var(--elevated); }
   .gate-card, .schedule-editor, .compose-editor { background: var(--surface); }
   .panel.scrolled .section-tab { color: var(--secondary); }
   .panel.scrolled .section-tab[aria-selected="true"] { color: var(--primary); }

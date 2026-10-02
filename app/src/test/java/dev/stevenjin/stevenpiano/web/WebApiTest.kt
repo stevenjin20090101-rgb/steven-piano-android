@@ -25,6 +25,7 @@ import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -105,6 +106,16 @@ class WebApiTest {
         refused(400) { WebApi.settingsChange(JSONObject("""{"tabletSound":"always"}""")) }   // the mode is the tablet's alone
         refused(400) { WebApi.settingsChange(JSONObject("""{"webHostName":"-piano"}""")) }
         refused(400) { WebApi.settingsChange(JSONObject("""{"webHostName":"piano:8737"}""")) }
+        // The View control's four (v1.13 — M32): the roll's two styles only, never the phone's Score.
+        assertEquals(
+            SettingsChange(noteDisplay = NoteDisplay.FALLING, fingering = false, chordNames = true, handColours = true),
+            WebApi.settingsChange(JSONObject("""{"noteDisplay":"falling","fingering":false,"chordNames":true,"handColours":true}""")),
+        )
+        assertEquals(SettingsChange(noteDisplay = NoteDisplay.PAPER_ROLL), WebApi.settingsChange(JSONObject("""{"noteDisplay":"paperRoll"}""")))
+        refused(400) { WebApi.settingsChange(JSONObject("""{"noteDisplay":"score"}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"noteDisplay":"PAPER_ROLL"}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"handColours":1}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"notesSplitStacked":0.4}""")) }   // the split is the tablet's alone
         assertEquals(RepeatMode.ALL, WebApi.repeatOf("all"))
         refused(400) { WebApi.repeatOf("ALL") }
     }
@@ -134,6 +145,9 @@ class WebApiTest {
                 status = PlaybackStatus.Playing,
                 piece = piece,
                 positionMs = 12_345,
+                at = 98_765_432,
+                fold = false,
+                views = WebViews(rev = 41, notes = 3_216, hands = true, fingers = false, chords = true, score = true),
                 tempoPct = 90,
                 preRollMs = 2_000,
                 channel = WebChannelPlaying("calm", "Calm", 70),
@@ -145,10 +159,25 @@ class WebApiTest {
             import = ImportProgress(done = 3, total = 10, imported = 2, finished = false),
             web = WebAddresses("http://100.101.2.3:8737", "http://192.168.1.20:8737/request"),
             guests = GuestSettings(open = true, approveFirst = true),
+            display = WebDisplay(noteDisplay = "score", rollStyle = "paperRoll", fingering = true, chordNames = false, handColours = true),
         )
         val json = WebApi.state(state, pending = 2)
         val player = json.getJSONObject("player")
-        assertEquals(setOf("status", "loading", "piece", "positionMs", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem"), player.keys().asSequence().toSet())
+        assertEquals(setOf("status", "loading", "piece", "positionMs", "at", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem", "fold", "views"), player.keys().asSequence().toSet())
+        // The views (v1.13 — M32): when the position was taken, folding, and what the views of the piece show.
+        assertEquals(98_765_432L, player.getLong("at"))
+        assertFalse(player.getBoolean("fold"))
+        val views = player.getJSONObject("views")
+        assertEquals(setOf("rev", "notes", "hands", "fingers", "chords", "score"), views.keys().asSequence().toSet())
+        assertEquals(41, views.getInt("rev"))
+        assertEquals(3_216, views.getInt("notes"))
+        assertTrue(views.getBoolean("hands") && !views.getBoolean("fingers") && views.getBoolean("chords") && views.getBoolean("score"))
+        assertTrue("nothing loaded: no views", WebApi.state(WebState(), 0).getJSONObject("player").isNull("views"))
+        val display = json.getJSONObject("display")
+        assertEquals(setOf("noteDisplay", "rollStyle", "fingering", "chordNames", "handColours"), display.keys().asSequence().toSet())
+        assertEquals("score", display.getString("noteDisplay"))
+        assertEquals("paperRoll", display.getString("rollStyle"))
+        assertTrue(display.getBoolean("handColours"))
         // The tablet's piano sound (v1.8 — M25): its mode, volume, whether it sounds, whether its SoundFont is there.
         val tablet = player.getJSONObject("tablet")
         assertEquals(setOf("mode", "volume", "active", "installed"), tablet.keys().asSequence().toSet())
@@ -161,7 +190,7 @@ class WebApiTest {
         assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio", "display"), json.keys().asSequence().toSet())
         // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
         assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
         assertTrue(json.getJSONObject("web").isNull("cloud"))

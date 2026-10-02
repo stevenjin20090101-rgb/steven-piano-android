@@ -128,6 +128,39 @@
   }
 
   /**
+   * A read of the views' bytes (v1.13 — M32): `{status: 200, buffer}`, or `{status: 202, retryAfterMs}` while the
+   * tablet lays the score out; anything else is an ApiError, as call()'s (the gate on 401, the offline card on 503).
+   */
+  async function callBinary(path) {
+    let response;
+    try {
+      response = await fetch(path, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+    } catch (e) {
+      throw new ApiError(0, { message: "The tablet can't be reached." });
+    }
+    const type = response.headers.get('Content-Type') || '';
+    if (response.status === 200 && type.startsWith('application/octet-stream')) return { status: 200, buffer: await response.arrayBuffer() };
+    let data = null;
+    if (type.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = null;
+      }
+    }
+    if (response.status === 503 && data && data.error === 'offline') {
+      offline(true);
+      throw new ApiError(503, data);
+    }
+    if (response.status === 401) {
+      showGate();
+      throw new ApiError(401, data);
+    }
+    if (response.status === 202) return { status: 202, retryAfterMs: (data && data.retryAfterMs) || 500 };
+    throw new ApiError(response.status, data);
+  }
+
+  /**
    * The relay's answer while the piano's tablet isn't connected (v1.10 — M26, `{"error":"offline"}`,
    * 503): before the panel has its state, the offline card in place of the PIN gate (start() looks
    * again every few seconds); after, a line at the head of the window until the tablet answers again.
@@ -325,11 +358,14 @@
     clockBase.duration = player.piece ? player.piece.durationMs : 0;
     document.body.classList.toggle('mono', !!next.monochrome);
     render(before);
+    renderViews();
   }
 
   function onProgress(message) {
     clockBase.ms = message.positionMs;
     clockBase.at = performance.now();
+    if (typeof message.playing === 'boolean') clockBase.running = message.playing;
+    if (views) views.progress(message);
   }
 
   function openSocket() {
@@ -410,6 +446,7 @@
     if (section === 'add') renderAdd();
     if (section === 'studio') renderStudio();
     render(state);
+    if (views) views.show(section === 'now');
   }
 
   for (const tab of document.querySelectorAll('.section-tab')) {
@@ -614,17 +651,96 @@
     input.style.setProperty('--fill', `${(Number(input.value) / Math.max(1, Number(input.max))) * 100}%`);
   });
 
-  $('now-seek').addEventListener('change', async () => {
-    const ms = Number($('now-seek').value);
+  $('now-seek').addEventListener('change', () => {
+    seeking = false;
+    seekTo(Number($('now-seek').value));
+  });
+
+  /** Seeks there: the clock, the scrubber and the views go at once, the tablet follows. */
+  async function seekTo(ms) {
     clockBase.ms = ms;
     clockBase.at = performance.now();
-    seeking = false;
+    if (views) views.seeked(ms);
+    tick();
     try {
       await post(ROOT + '/api/seek', { ms });
     } catch (e) {
       failed(e);
     }
-  });
+  }
+
+  // ---- Now playing's views (v1.13 — M32) ----------------------------------------------------------------------
+  //
+  // The score and the moving notes, as the tablet shows them (views.js and its modules, imported the first time
+  // they show). On a phone one view at a time, Art first; from 900 px both, with the divider.
+
+  /** Bravura's version: the first eight hex digits of its SHA-256 (WebAssetsTest pins it to the file). */
+  const FONT_VERSION = 'cdf0f893';
+  const NOW_VIEW = 'steven-piano-now-view';
+  const wideQuery = window.matchMedia('(min-width: 900px)');
+  let views = null;
+  let viewsLoading = false;
+  let nowView = (() => {
+    try {
+      const value = localStorage.getItem(NOW_VIEW);
+      return value === 'notes' || value === 'score' ? value : 'art';
+    } catch (e) {
+      return 'art';
+    }
+  })();
+
+  /** What the views' modules may ask of the tablet: every address built here, from ROOT. */
+  const viewsApi = {
+    notes: (rev) => callBinary(ROOT + `/api/now/notes?rev=${encodeURIComponent(rev)}`),
+    score: (rev, w, h) => callBinary(ROOT + `/api/now/score?rev=${encodeURIComponent(rev)}&w=${Math.floor(w)}&h=${Math.floor(h)}`),
+    page: (id, n) => callBinary(ROOT + `/api/now/score/${Math.floor(id)}/page/${Math.floor(n)}`),
+    seek: (ms) => seekTo(Math.max(0, Math.round(ms))),
+    settings: (change) => put(ROOT + '/api/settings', change),
+    fontUrl: ROOT + '/api/font/bravura.otf?v=' + FONT_VERSION,
+  };
+
+  function chooseView(view) {
+    nowView = view;
+    try {
+      localStorage.setItem(NOW_VIEW, view);
+    } catch (e) {
+      // Private browsing: it holds for this page only.
+    }
+    renderViews();
+  }
+
+  /** The switch (phones) and the views: loaded the first time a view shows, then told every state. */
+  function renderViews() {
+    if (!state) return;
+    const piece = !!(state.player.piece && state.player.views);
+    const isWide = wideQuery.matches;
+    $('now-views-bar').hidden = !piece;
+    $('now-switch').hidden = isWide;
+    if (!isWide) {
+      $('now-switch').replaceChildren(
+        chip('Art', nowView === 'art', () => chooseView('art')),
+        chip('Notes', nowView === 'notes', () => chooseView('notes')),
+        chip('Score', nowView === 'score', () => chooseView('score')),
+      );
+    }
+    if (views) {
+      views.state(state);
+      return;
+    }
+    $('now-view').hidden = true;
+    if (!piece || (!isWide && nowView === 'art') || viewsLoading) return;
+    viewsLoading = true;
+    import('./views.js').then((module) => {
+      views = module.mountViews($('now-views'), viewsApi, { h, glyph, chip, failed, viewButton: $('now-view'), phoneView: () => nowView });
+      views.show(section === 'now');
+      views.state(state);
+    }, () => {
+      viewsLoading = false;
+      toast('The score and notes could not be loaded. Reload the page.');
+    });
+  }
+
+  wideQuery.addEventListener('change', renderViews);
 
   function transport(action) {
     return async () => {

@@ -41,6 +41,7 @@ import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.net.HttpFetch
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.Route
@@ -70,6 +71,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -370,13 +372,11 @@ class WebService : Service() {
         val created = WebSocketHub(
             stateMessage = { WebApi.state(panel.backend.state(), panel.requests.pending.value.size, type = "state").toString() },
             progressMessage = {
-                if (player.state.value.status != PlaybackStatus.Playing) {
-                    null
-                } else {
-                    WebApi.progress(player.positionMicrosNow() / 1_000, System.currentTimeMillis()).toString()
-                }
+                if (player.state.value.status != PlaybackStatus.Playing) null else progress(player)
             },
             sessionValid = panel.sessions::isValid,
+            // The moment the position jumps (v1.13 — M32), playing or not, while a piece is loaded.
+            jumpMessage = { if (player.state.value.piece == null) null else progress(player) },
         )
         val changes = merge(
             graph.player.state.map { },
@@ -404,8 +404,18 @@ class WebService : Service() {
             graph.liveThru.state.map { it.open }.distinctUntilChanged().map { },
             graph.recording.state.map { it is RecordingState.Recording }.distinctUntilChanged().map { },
         )
-        created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes)
+        created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created
+    }
+
+    /**
+     * Where the piece is, and when that was on this tablet's monotonic clock (v1.13 — M32: the panel's clock measures
+     * its own lag against it), whether it runs and at what tempo.
+     */
+    private fun progress(player: Player): String {
+        val nanos = System.nanoTime()
+        val state = player.state.value
+        return WebApi.progress(player.positionMicrosAt(nanos) / 1_000, nanos / 1_000_000, state.status == PlaybackStatus.Playing, state.tempoPct).toString()
     }
 
     /** Network changes, VPNs (Tailscale) included, nudge [networkChanged]; the loop also looks every 30 s. */

@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -54,6 +55,8 @@ class WebSocketHub(
     private val pingMs: Long = PING_MS,
     private val progressMs: Long = PROGRESS_MS,
     private val maxMembers: Int = MAX_MEMBERS,
+    /** Where the piece is the moment its position jumps (v1.13 — M32), playing or not; null with nothing loaded. */
+    private val jumpMessage: () -> String? = { null },
 ) : WebSockets {
     private val open = CopyOnWriteArrayList<HubSocket>()
     private val members = CopyOnWriteArrayList<Member>()
@@ -102,8 +105,12 @@ class WebSocketHub(
         return member
     }
 
-    /** Starts the hub's three loops in [scope]: the coalesced state messages, the progress, the pings. */
-    fun start(scope: CoroutineScope, changes: Flow<Unit>) {
+    /**
+     * Starts the hub's loops in [scope]: the coalesced state messages, the progress, the pings, and (v1.13 — M32) a
+     * progress message at once whenever [jumps] says the position jumped, so the panel's clock never runs a second
+     * on an old anchor.
+     */
+    fun start(scope: CoroutineScope, changes: Flow<Unit>, jumps: Flow<Unit> = emptyFlow()) {
         stop()
         this.scope = scope
         jobs = listOf(
@@ -118,6 +125,11 @@ class WebSocketHub(
                     delay(progressMs)
                     if (open.isEmpty() && members.isEmpty()) continue
                     progressMessage()?.let { broadcast(it) }
+                }
+            },
+            scope.launch {
+                jumps.conflate().collect {
+                    if (open.isNotEmpty() || members.isNotEmpty()) jumpMessage()?.let { broadcast(it) }
                 }
             },
             scope.launch {

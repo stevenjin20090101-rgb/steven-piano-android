@@ -85,9 +85,13 @@ import dev.stevenjin.stevenpiano.score.Rests
 import dev.stevenjin.stevenpiano.score.ScoreLayout
 import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
 import dev.stevenjin.stevenpiano.score.ScoreMetrics
+import dev.stevenjin.stevenpiano.score.ScoreMarks
+import dev.stevenjin.stevenpiano.score.ScoreStyle
 import dev.stevenjin.stevenpiano.score.ScoreSystem
+import dev.stevenjin.stevenpiano.score.ScoreText
 import dev.stevenjin.stevenpiano.score.Sign
 import dev.stevenjin.stevenpiano.score.TempoMark
+import dev.stevenjin.stevenpiano.score.TempoPlacement
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalNoteSounding
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
@@ -101,78 +105,43 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Staff line spacing: the score's unit. SMuFL fonts are drawn at four spaces to the em. */
-private val LineGap = 6.dp
-private val CursorWidth = 2.dp
-
-/** A ledger line runs this far past each side of its head. */
-private val LedgerOverhang = 2.dp
-
-/** A final bar line's thick stroke, and the gap before it. */
-private val FinalStroke = 3.dp
-private val FinalGap = 2.dp
-
-/** The score's fingering numerals follow the font scale up to this, then keep their size with the heads. */
-private const val NUMERAL_MAX_SCALE = 1.3f
-
-/** A chord name keeps this far above the bar number, and from the name before it. */
-private val ChordGap = 2.dp
-private val ChordSpacing = 6.dp
-
-/** A horizontal drag this long turns the page. */
-private val SwipeDistance = 40.dp
-
-/** Bravura's G clef rises this many spaces above the treble staff's top line; a bar number sits clear of it. */
-private const val G_CLEF_RISE = 1.4f
-private val NumberClearance = 1.dp
-
-/** Bravura (SMuFL) glyphs. */
-private const val G_CLEF = ""
-private const val F_CLEF = ""
-private const val SHARP = ""
-private const val FLAT = ""
-private const val NATURAL = ""
-private const val WHOLE_HEAD = ""
-private const val HALF_HEAD = ""
-private const val BLACK_HEAD = ""
-private const val FLAG_8TH_UP = ""
-private const val FLAG_8TH_DOWN = ""
-private const val FLAG_16TH_UP = ""
-private const val FLAG_16TH_DOWN = ""
-private const val DOT = ""
-private const val TIME_DIGIT_0 = 0xE080
-private const val REST_WHOLE = "\uE4E3"
-private const val REST_HALF = "\uE4E4"
-private const val REST_QUARTER = "\uE4E5"
-private const val REST_8TH = "\uE4E6"
-private const val REST_16TH = "\uE4E7"
-
-/** The tempo mark's note: Bravura's quarter note, stem up (U+E1D5), dotted with U+E1E7 in a compound metre. */
-private const val TEMPO_NOTE = "\uE1D5"
-
-/**
- * The tempo mark's note is set in Bravura at this multiple of the bar number's (eyebrow) size, so it
- * grows with the text; its head sits on the text's baseline (the head reaches 0.564 of its space
- * below its own baseline), and the glyph is 1.328 spaces wide, the dot 0.4.
- */
-private const val TEMPO_NOTE_SCALE = 1.5f
-private const val TEMPO_HEAD_BELOW = 0.564f
-private const val TEMPO_NOTE_RISE = 3.5f
-private const val TEMPO_NOTE_WIDTH = 1.328f
-private const val TEMPO_DOT_GAP = 0.3f
-private const val TEMPO_DOT_WIDTH = 0.4f
-private const val TEMPO_TEXT_GAP = 0.6f
-
-/**
- * A tempo mark (and a chord name) keeps this far (in staff spaces) above the notes under it: stems,
- * flags, beams, heads and their accidentals, as the layout's skyline has them.
- */
-private const val TEMPO_CLEARANCE = 0.5f
-
-/** A tie rises this share of its length, held to 0.3 to 0.9 of a staff space. */
-private const val TIE_RISE = 0.15f
-private const val TIE_LOWEST = 0.3f
-private const val TIE_HIGHEST = 0.9f
+// The score's sizes, glyphs and proportions live in ScoreStyle (v1.13 — M32), shared with the web panel's display list.
+private val LineGap = ScoreStyle.LINE_GAP_DP.dp
+private val CursorWidth = ScoreStyle.CURSOR_WIDTH_DP.dp
+private val LedgerOverhang = ScoreStyle.LEDGER_OVERHANG_DP.dp
+private val FinalStroke = ScoreStyle.FINAL_STROKE_DP.dp
+private val FinalGap = ScoreStyle.FINAL_GAP_DP.dp
+private const val NUMERAL_MAX_SCALE = ScoreStyle.NUMERAL_MAX_SCALE
+private val ChordGap = ScoreStyle.CHORD_GAP_DP.dp
+private val SwipeDistance = ScoreStyle.SWIPE_DP.dp
+private const val G_CLEF_RISE = ScoreStyle.G_CLEF_RISE
+private val NumberClearance = ScoreStyle.NUMBER_CLEARANCE_DP.dp
+private val G_CLEF = ScoreStyle.text(ScoreStyle.G_CLEF)
+private val F_CLEF = ScoreStyle.text(ScoreStyle.F_CLEF)
+private val SHARP = ScoreStyle.text(ScoreStyle.SHARP)
+private val FLAT = ScoreStyle.text(ScoreStyle.FLAT)
+private val NATURAL = ScoreStyle.text(ScoreStyle.NATURAL)
+private val WHOLE_HEAD = ScoreStyle.text(ScoreStyle.WHOLE_HEAD)
+private val HALF_HEAD = ScoreStyle.text(ScoreStyle.HALF_HEAD)
+private val BLACK_HEAD = ScoreStyle.text(ScoreStyle.BLACK_HEAD)
+private val FLAG_8TH_UP = ScoreStyle.text(ScoreStyle.FLAG_8TH_UP)
+private val FLAG_8TH_DOWN = ScoreStyle.text(ScoreStyle.FLAG_8TH_DOWN)
+private val FLAG_16TH_UP = ScoreStyle.text(ScoreStyle.FLAG_16TH_UP)
+private val FLAG_16TH_DOWN = ScoreStyle.text(ScoreStyle.FLAG_16TH_DOWN)
+private val DOT = ScoreStyle.text(ScoreStyle.DOT)
+private const val TIME_DIGIT_0 = ScoreStyle.TIME_DIGIT_0
+private val REST_WHOLE = ScoreStyle.text(ScoreStyle.REST_WHOLE)
+private val REST_HALF = ScoreStyle.text(ScoreStyle.REST_HALF)
+private val REST_QUARTER = ScoreStyle.text(ScoreStyle.REST_QUARTER)
+private val REST_8TH = ScoreStyle.text(ScoreStyle.REST_8TH)
+private val REST_16TH = ScoreStyle.text(ScoreStyle.REST_16TH)
+private val TEMPO_NOTE = ScoreStyle.text(ScoreStyle.TEMPO_NOTE)
+private const val TEMPO_NOTE_SCALE = ScoreStyle.TEMPO_NOTE_SCALE
+private const val TEMPO_HEAD_BELOW = ScoreStyle.TEMPO_HEAD_BELOW
+private const val TEMPO_NOTE_WIDTH = ScoreStyle.TEMPO_NOTE_WIDTH
+private const val TEMPO_DOT_GAP = ScoreStyle.TEMPO_DOT_GAP
+private const val TEMPO_DOT_WIDTH = ScoreStyle.TEMPO_DOT_WIDTH
+private const val TEMPO_TEXT_GAP = ScoreStyle.TEMPO_TEXT_GAP
 
 /** Bravura, the SMuFL reference music font (SIL Open Font Licence; see AUTHORS). */
 private val Bravura = FontFamily(Font(R.font.bravura))
@@ -488,7 +457,7 @@ private fun PageLayer(
                 val numbers = systems.map { s -> measurer.measure((layout.systems[s].firstBar + 1).toString(), numberStyle, maxLines = 1) }
                 val marks = systems.mapIndexed { k, s -> painter.marks(layout, layout.systems[s], numbers[k], measurer, numberStyle) }
                 val chordLabels = systems.mapIndexed { k, s ->
-                    chordText?.let { painter.chordLabels(layout, layout.systems[s], numbers[k], marks[k], it, measurer) }
+                    chordText?.let { painter.chordLabels(layout, layout.systems[s], marks[k], it, measurer, numberStyle) }
                 }
                 onDrawBehind {
                     with(painter) {
@@ -504,6 +473,25 @@ private class ChordText(val chords: ChordTrack, val names: Array<String>, val st
 
 /** One system's chord names as placed: each name's layout and its box's top-left corner. */
 private class ChordLabels(val text: List<TextLayoutResult>, val x: FloatArray, val top: FloatArray)
+
+/**
+ * The text the marks set, as this device measures it (v1.13 — M32: [ScoreMarks] places them): bar numbers and the
+ * tempo mark's "= N" in [numberStyle], chord names in [chordStyle], exactly as the painter then draws them.
+ */
+private class MeasuredText(
+    private val measurer: TextMeasurer,
+    private val numberStyle: TextStyle,
+    private val chordStyle: TextStyle?,
+    override val tempoSpace: Float,
+) : ScoreText {
+    override fun numberWidth(text: String): Float = measurer.measure(text, numberStyle, maxLines = 1).size.width.toFloat()
+
+    override fun numberBaseline(text: String): Float = measurer.measure(text, numberStyle, maxLines = 1).firstBaseline
+
+    override fun chordWidth(name: String): Float = measurer.measure(name, chordStyle ?: numberStyle, maxLines = 1).size.width.toFloat()
+
+    override fun chordHeight(name: String): Float = measurer.measure(name, chordStyle ?: numberStyle, maxLines = 1).size.height.toFloat()
+}
 
 /**
  * The score's colours: staff and bar lines tertiary, glyphs and upcoming notes secondary, sounding
@@ -641,8 +629,6 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     private val finalStroke = with(density) { FinalStroke.toPx() }
     private val finalGap = with(density) { FinalGap.toPx() }
     private val tieStroke = Stroke(width = hair)
-    private val chordGap = with(density) { ChordGap.toPx() }
-    private val chordSpacing = with(density) { ChordSpacing.toPx() }
 
     /** From the treble's top line up to a bar number's baseline: over the clef's top, never on the staff. */
     private val numberLift = G_CLEF_RISE * space + with(density) { NumberClearance.toPx() }
@@ -650,8 +636,8 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
     /**
      * System [system]'s beams (half-space bands, the thickness toward the heads) and ties (1 dp arcs
      * rising a share of their length) as paths, at most [MAX_NOTE_DRAWS] of each, and its tempo mark
-     * with its text measured in [style]: after the bar [number] on the numbers' line, lifted clear of
-     * any note that reaches up under it (the layout's skyline).
+     * with its text measured in [style]: placed by [ScoreMarks.tempo] (v1.13 — M32), after the bar
+     * [number] on the numbers' line, lifted clear of any note that reaches up under it (the skyline).
      */
     fun marks(layout: ScoreLayout, system: ScoreSystem, number: TextLayoutResult, measurer: TextMeasurer, style: TextStyle): SystemMarks {
         val s = system.index
@@ -671,63 +657,35 @@ private class ScorePainter(private val glyphs: ScoreGlyphs, private val numerals
         for (k in t.inSystem(s).capped()) {
             val length = t.x2[k] - t.x1[k]
             if (length <= 0f) continue
-            val rise = (length * TIE_RISE).coerceIn(TIE_LOWEST * space, TIE_HIGHEST * space)
-            val bow = if (t.above[k]) -2 * rise else 2 * rise   // a quadratic's middle reaches half its control point's offset
+            val bow = ScoreStyle.tieBow(length, space, t.above[k])   // a quadratic's middle reaches half its control point's offset
             ties.moveTo(t.x1[k], t.y1[k])
             ties.quadraticTo((t.x1[k] + t.x2[k]) / 2, (t.y1[k] + t.y2[k]) / 2 + bow, t.x2[k], t.y2[k])
         }
-        val tempo = layout.tempoMarkIn(s) ?: return SystemMarks(beams, ties, null, null, 0f, 0f)
-        val text = measurer.measure(tempo.text, style, maxLines = 1)
-        val unit = glyphs.tempoSpace
-        val x = max(tempo.x, system.left + number.size.width + space)
-        val glyphWidth = TEMPO_NOTE_WIDTH * unit + if (tempo.dotted) (TEMPO_DOT_GAP + TEMPO_DOT_WIDTH) * unit else 0f
-        val right = x + glyphWidth + TEMPO_TEXT_GAP * unit + text.size.width
-        val height = max((TEMPO_HEAD_BELOW + TEMPO_NOTE_RISE) * unit, text.firstBaseline)
-        val onLine = system.trebleTop - numberLift
-        val lifted = min(onLine, layout.skyline.top(s, x, right) - TEMPO_CLEARANCE * space)
-        val baseline = max(lifted, min(onLine, system.bandTop + height))   // never above its band
-        return SystemMarks(beams, ties, tempo, text, x, baseline, right, baseline - height)
+        val placed = ScoreMarks.tempo(layout, system, number.size.width.toFloat(), MeasuredText(measurer, style, null, glyphs.tempoSpace))
+            ?: return SystemMarks(beams, ties, null, null, 0f, 0f)
+        val text = measurer.measure(placed.mark.text, style, maxLines = 1)
+        return SystemMarks(beams, ties, placed.mark, text, placed.x, placed.baseline, placed.right, placed.top)
     }
 
     /**
-     * System [system]'s chord names ([chordText]): each where its chord begins in the system, its box
-     * on the chord line just above the bar [number] (lifted clear of notes, numerals and the tempo mark
-     * that reach up into it, never above its band, moved left to stay on the page); a name that would
-     * run into the one before it is left out on the score (the waterfall still shows it).
+     * System [system]'s chord names ([chordText]), placed by [ScoreMarks.chords] (v1.13 — M32): each where its
+     * chord begins in the system, its box on the chord line just above the bar number (lifted clear of notes,
+     * numerals and the tempo mark that reach up into it, never above its band, moved left to stay on the page);
+     * a name that would run into the one before it is left out on the score (the waterfall still shows it).
      */
     fun chordLabels(
         layout: ScoreLayout,
         system: ScoreSystem,
-        number: TextLayoutResult,
         marks: SystemMarks,
         chordText: ChordText,
         measurer: TextMeasurer,
+        numberStyle: TextStyle,
     ): ChordLabels {
-        val chords = chordText.chords
-        val bars = layout.bars
-        val from = chords.firstAtOrAfter(bars.startMicros[system.firstBar])
-        val until = if (system.lastBar + 1 < bars.count) chords.firstAtOrAfter(bars.startMicros[system.lastBar + 1]) else chords.size
-        val numberTop = system.trebleTop - numberLift - number.firstBaseline
-        val texts = ArrayList<TextLayoutResult>()
-        val xs = ArrayList<Float>()
-        val tops = ArrayList<Float>()
-        var lastRight = Float.NEGATIVE_INFINITY
-        for (i in from until until) {
-            val at = system.xAt(chords.startMicros[i])
-            if (at < lastRight + chordSpacing) continue
-            val text = measurer.measure(chordText.names[i], chordText.style, maxLines = 1)
-            // A name near the system's end is moved left to stay on the page, not cut at its edge.
-            val x = max(system.left, min(at, layout.metrics.pageWidth - text.size.width))
-            if (x < lastRight + chordSpacing) continue
-            val right = x + text.size.width
-            var bottom = min(numberTop - chordGap, layout.skyline.top(system.index, x, right) - TEMPO_CLEARANCE * space)
-            if (marks.tempo != null && right >= marks.tempoX && x <= marks.tempoRight) bottom = min(bottom, marks.tempoTop - chordGap)
-            texts += text
-            xs += x
-            tops += max(bottom - text.size.height, system.bandTop)
-            lastRight = right
-        }
-        return ChordLabels(texts, xs.toFloatArray(), tops.toFloatArray())
+        val tempo = if (marks.tempo != null) TempoPlacement(marks.tempo, marks.tempoX, marks.tempoBaseline, marks.tempoRight, marks.tempoTop) else null
+        val text = MeasuredText(measurer, numberStyle, chordText.style, glyphs.tempoSpace)
+        val placed = ScoreMarks.chords(layout, system, chordText.chords, chordText.names, (system.firstBar + 1).toString(), tempo, text)
+        val texts = List(placed.size) { k -> measurer.measure(chordText.names[placed.index[k]], chordText.style, maxLines = 1) }
+        return ChordLabels(texts, placed.x, placed.top)
     }
 
     /**

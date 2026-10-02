@@ -102,6 +102,13 @@ class Player(
 
     @Volatile
     private var position = PositionClock.Zero
+    private val _positionJumps = MutableStateFlow(0)
+
+    /**
+     * Moves on whenever the position's clock is replaced (play, pause, a seek, stop, the tempo, a load; v1.13 — M32):
+     * the web panel's clock takes a fresh sample at once rather than wait for the next second.
+     */
+    val positionJumps: StateFlow<Int> = _positionJumps.asStateFlow()
     private val activeLow = AtomicLong()
     private val activeHigh = AtomicLong()
     private val _liveSustain = MutableStateFlow(false)
@@ -632,6 +639,7 @@ class Player(
             shown.startMicros != engine.startMicros
         ) {
             position = PositionClock(engine.anchorSongMicros, engine.anchorNanos, engine.tempoPct, running, duration, engine.startMicros)
+            _positionJumps.update { it + 1 }
         }
         if (status != shownStatus || engine.tempoPct != shownTempo) {
             shownStatus = status

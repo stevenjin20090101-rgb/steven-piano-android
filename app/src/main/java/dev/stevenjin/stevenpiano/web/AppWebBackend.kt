@@ -78,6 +78,38 @@ class AppWebBackend(
         override fun sizeOf(key: String, value: WebImage): Int = value.bytes.size
     }
 
+    /** The panel's notes and score of the piece playing (v1.13 — M32): one layout thread, bounded, cleared with the panel. */
+    private val views = NowViews(source = ::nowSource)
+
+    /** What the views are drawn from now: the piece playing as Now playing shows it, at the transpose and folding played. */
+    private fun nowSource(): NowSource? {
+        val player = graph.player.state.value
+        val piece = player.piece ?: return null
+        val settings = graph.settings.value
+        return NowSource(
+            notes = piece.notes,
+            tempo = piece.tempoMap,
+            bars = piece.barStartsMicros,
+            keySignatures = piece.keySignatures,
+            timeSignatures = piece.timeSignatures,
+            durationMicros = piece.durationMicros,
+            transpose = player.transpose,
+            fold = player.fold,
+            hands = piece.handsOrNull,
+            fingers = if (settings.fingering) piece.fingersFor(player.transpose, player.fold) else null,
+            chords = if (settings.chordNames) piece.chords.takeIf { it.size > 0 } else null,
+        )
+    }
+
+    /** Forgets the views' layouts (the panel turned off). */
+    fun clearViews() = views.clear()
+
+    override suspend fun nowNotes(rev: Int?): NowAnswer = withContext(Dispatchers.Default) { views.notes(rev) }
+
+    override suspend fun nowScore(rev: Int?, width: Int, height: Int): NowAnswer = views.score(rev, width, height)
+
+    override suspend fun nowScorePage(layoutId: Int, page: Int): NowAnswer = withContext(Dispatchers.Default) { views.page(layoutId, page) }
+
     override suspend fun state(): WebState {
         val player = graph.player.state.value
         val settings = graph.settings.value
@@ -99,13 +131,27 @@ class AppWebBackend(
             WebChannelPlaying(key, channelName(key) ?: key, settings.channelVolume(key))
         }
         val artwork = graph.artwork.progress.value
+        val source = nowSource()
+        val views = source?.let {
+            WebViews(
+                rev = this.views.revision() ?: 0,
+                notes = it.notes.size,
+                hands = it.hands != null,
+                fingers = it.fingers != null,
+                chords = it.chords != null,
+                score = it.notes.size <= NowViews.MAX_SCORE_NOTES && it.bars.size <= NowViews.MAX_SCORE_BARS,
+            )
+        }
+        // The position and the moment it was taken, on the tablet's monotonic clock, together (v1.13 — M32).
+        val nanos = System.nanoTime()
         return WebState(
             player = WebPlayer(
                 status = player.status,
                 loading = player.loading,
                 piece = shown,
                 // Below zero during the pause before a piece: the page shows 0:00 and "Starting" until it ends.
-                positionMs = if (piece == null) 0L else graph.player.positionMicrosNow() / MICROS_PER_MS,
+                positionMs = if (piece == null) 0L else graph.player.positionMicrosAt(nanos) / MICROS_PER_MS,
+                at = nanos / NANOS_PER_MS,
                 tempoPct = player.tempoPct,
                 transpose = player.transpose,
                 velocityPct = player.velocityPct,
@@ -115,6 +161,8 @@ class AppWebBackend(
                 queue = queue,
                 items = items,
                 problem = player.problem,
+                fold = player.fold,
+                views = views,
             ),
             link = linkOf(graph.pianoLink.state.value),
             piano = pianoOf(graph.pianoSettings.state.value),
@@ -132,6 +180,13 @@ class AppWebBackend(
                 graph.keyboard.state.value,
                 live = graph.liveThru.state.value.open,
                 recording = graph.recording.state.value is RecordingState.Recording,
+            ),
+            display = WebDisplay(
+                noteDisplay = WebApi.noteDisplayName(settings.noteDisplay),
+                rollStyle = WebApi.noteDisplayName(settings.noteDisplay.rollStyle),
+                fingering = settings.fingering,
+                chordNames = settings.chordNames,
+                handColours = settings.handColours,
             ),
         )
     }
@@ -369,6 +424,11 @@ class AppWebBackend(
         change.velocityPct?.let { settings.setVelocity(it) }
         change.foldOutOfRange?.let { settings.setFoldOutOfRange(it) }
         change.skipDrumChannel?.let { settings.setSkipDrumChannel(it) }
+        // The View control's four (v1.13 — M32), as the tablet's own View menu sets them.
+        change.noteDisplay?.let { settings.setNoteDisplay(it) }
+        change.fingering?.let { settings.setFingering(it) }
+        change.chordNames?.let { settings.setChordNames(it) }
+        change.handColours?.let { settings.setHandColours(it) }
         applyWebSettings(change)
     }
 
@@ -610,6 +670,7 @@ class AppWebBackend(
         const val UPLOAD_DIR = ImportLimits.WEB_DIR
 
         private const val MICROS_PER_MS = 1_000L
+        private const val NANOS_PER_MS = 1_000_000L
         private const val MAX_VOLUME = 100
         private const val READ_TIMEOUT_MS = 2_000L
         private const val JPEG_QUALITY = 85
