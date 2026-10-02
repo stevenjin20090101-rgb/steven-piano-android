@@ -183,19 +183,12 @@ private fun KioskGate.openPage(vm: PianoViewModel, page: SettingsPage, open: () 
     if (LockedFirmware.opensUnlocked(page, vm.firmware.value)) open() else run(open)
 }
 
-/**
- * The tab a result for something that moved off the Piano tab opens: Now playing (its View menu, M31a), the
- * Library (its channels), and Studio: its own tab once M30's `Route.Studio` is merged ("studio"), the
- * Library (whose + sheet composes and transcribes) until then.
- */
+/** The tab a result for something that moved off the Piano tab opens: Now playing (its View menu, v1.12), Studio (v1.12), the Library (its channels). */
 private fun routeOf(place: Elsewhere): Route = when (place) {
     Elsewhere.NowPlayingView -> Route.NowPlaying
-    Elsewhere.Studio -> Route.of(STUDIO_PATH) ?: Route.Library
+    Elsewhere.Studio -> Route.Studio
     Elsewhere.LibraryChannels -> Route.Library
 }
-
-/** The Studio tab's path (M30). */
-private const val STUDIO_PATH = "studio"
 
 /** What keeps the tab clear of the rail (and the system bars at the sides); its background still reaches under them. */
 @Composable

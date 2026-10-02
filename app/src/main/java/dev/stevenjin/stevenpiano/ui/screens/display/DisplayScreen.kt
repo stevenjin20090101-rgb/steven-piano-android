@@ -117,7 +117,7 @@ private val MARGIN_TOP_AND_FOOT = 16.dp
  * true black in either appearance (the only pure black in the app, through [DisplayTheme]), or with
  * Standby canvas "Same as the app" the app's own surface, ink or paper as the app appears.
  *
- * Piano › Display › Standby shows chooses what is on it. **Art and notes** (the default,
+ * Piano › Display › What it shows chooses what is on it. **Art and notes** (the default,
  * [ArtAndNotes]): the piece's art large and sharp (the composer's portrait, else the piece's roll
  * card; black and white when the person chose that), its title, the composer (and the channel) as
  * an eyebrow, and a few lines about it ([StandbyText]); a new piece cross-fades in. **Paper roll**

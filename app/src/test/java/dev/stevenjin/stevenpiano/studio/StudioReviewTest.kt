@@ -33,10 +33,19 @@ import org.junit.Test
 class StudioReviewTest {
     private class Store(initial: Set<Long> = emptySet()) : ReviewStore {
         val saved = MutableStateFlow(initial)
-        override val undecided = saved
 
-        override suspend fun save(ids: Set<Long>) {
-            saved.value = ids
+        override suspend fun undecided(): Set<Long> = saved.value
+
+        override suspend fun waiting(pieceId: Long) {
+            saved.value += pieceId
+        }
+
+        override suspend fun decided(pieceId: Long, kept: Boolean) {
+            saved.value -= pieceId
+        }
+
+        override suspend fun gone(ids: Set<Long>) {
+            saved.value -= ids
         }
     }
 

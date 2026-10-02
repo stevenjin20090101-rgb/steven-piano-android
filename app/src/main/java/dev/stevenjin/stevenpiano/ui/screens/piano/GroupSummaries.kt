@@ -83,7 +83,8 @@ data class GroupSummaries(
          * Every row's value; [web] where the web panel listens; [firmwareUpdate] and [firmwareVersion]
          * (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule] when the next schedule
          * starts; [keyboard] the MIDI keyboard's state (v1.11 — M29); [instrument] the Instrument row's value
-         * ([instrumentLine]); [update] the app's updater; [version] the app's version (Help and about).
+         * ([instrumentLine]); [update] the app's updater; [version] the app's version (Help and about). Studio is a tab
+         * of its own since v1.12 (M30).
          */
         fun from(
             piano: PianoState,

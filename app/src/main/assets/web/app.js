@@ -471,13 +471,22 @@
     box.dataset.id = String(piece.id);
     box.dataset.size = size;
     box.dataset.title = piece.title || '';
+    box.dataset.version = String(piece.artVersion || 0);
     if (lazy && lazyArt) lazyArt.observe(box);
     else loadArt(box);
     return box;
   }
 
   function loadArt(box) {
-    if (box.dataset.kind === 'portrait') {
+    if (box.dataset.kind === 'cover') {
+      // A Studio piece's own cover (v1.12): drawn from its music; its version keeps the hour-long cache honest.
+      const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/piece/${encodeURIComponent(box.dataset.id)}?v=${encodeURIComponent(box.dataset.version || '0')}` });
+      img.addEventListener('error', () => {
+        box.dataset.kind = 'roll';
+        loadArt(box);
+      });
+      box.replaceChildren(img);
+    } else if (box.dataset.kind === 'portrait') {
       const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/composer/${encodeURIComponent(box.dataset.key)}?size=${box.dataset.size}` });
       img.addEventListener('error', () => {
         box.dataset.kind = 'roll';
@@ -518,7 +527,7 @@
     const player = state.player;
     const piece = player.piece;
     const playing = player.status === 'playing';
-    const artKey = piece ? `${piece.id}:${piece.art}` : null;
+    const artKey = piece ? `${piece.id}:${piece.art}:${piece.artVersion || 0}` : null;
     if (artKey !== shownArt) {
       shownArt = artKey;
       art($('now-art'), piece, 'tile');

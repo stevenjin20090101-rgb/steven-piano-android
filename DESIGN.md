@@ -304,7 +304,8 @@ Window size classes decide the frame; nothing else changes with size.
   *Notes only* · *Staff only*. On compact widths the *Note display* preference gains
   *Staff* as a third option. *(Since v1.2 the staff is the score, and the choices read
   **Score and notes** · **Notes only** · **Score only**, and **Score**; the saved values
-  keep their v1.1 names.)*
+  keep their v1.1 names. **Superseded in v1.12** by the divider and the View menu: see
+  v1.12 — the split and the View menu.)*
 - Landscape phones use the Medium layout. Rotation keeps position and state.
 
 ## Keys — a playable keyboard
@@ -728,7 +729,7 @@ it inset 16 dp to the text; the system ripple and nothing else.
 - **Display**: NOTES (Note display as chips, with Wide layout under it on wide screens;
   Fingering, Chord names, Hand colours) · ARTWORK (Artwork in black and white, Fetch artwork
   automatically with its line) (M17 puts APPEARANCE first and adds STANDBY last:
-  see v1.5 — M17).
+  see v1.5 — M17; v1.12 moves NOTES to Now playing's View menu).
 - The piano's pages carry the status line at their top; until the piano has answered, their
   controls are there, disabled, under it. Firmware without the Bluetooth console: each piano
   page shows that one line and nothing else (the v1.1 rule, now per page). A refusal shows
@@ -2441,6 +2442,67 @@ The panel shows two read-only lines under "Sent to piano" and on its Piano page:
 plays, the panel's Piano page shows those lines and the same note as the tablet; Steven Piano's pages and actions
 are hidden. The relay's status carries the same without any name: the instrument's kind and state, the keyboard's
 transport and state, Live and Recording.
+
+# v1.12 — Studio as a tab
+
+Designed by Fable (apple-design lenses), built in M30. Studio leaves the Piano hub and becomes the fourth of five
+tabs: Library · Now playing · Keys · **Studio** · Piano (a compact bar's labels may scale to 0.85; none is
+shortened). The rules:
+
+- **A conversation.** Turns at reading width, newest at the bottom; the prompt bar (glass, 28 dp, the aura's ring)
+  docked above the bottom inset and the keyboard: attach · "Describe a piece…" (200 characters, a counter past
+  160) · Options · Send (off while empty or while three ideas wait). Over it, 250 ms after the last key, the line
+  of what is understood and "Not used: …". Models live in a glass sheet from the header; on wide frames the shelf
+  MADE IN STUDIO stands beside the conversation (a sheet from a second glyph on phones).
+- **Keywords, honestly.** There is no text model; an idea is read by keywords (moods, tempo, keys, lengths, forms,
+  the library's titles and names, the catalogue). What was not used is said. An idea without a seed of its own
+  refines the last turn ("slower", "longer", "in D minor", "another", "different"), and the card says what changed.
+- **Titles never contain typed text**: "<Mood>, after <seed title>", "<Mood>, after <composer or form>", "<Mood>
+  piece". Typed text lives only in Studio's history on the tablet: never in a title, a file name, a log line or
+  the diagnostics.
+- **A card says where it is**: the steps as words (the current one in the content colour), a determinate hairline,
+  "42% · 0:50 of 2:00 · about 40 s left" in tabular digits, the notes appearing as they are written, Cancel; then
+  Listen · Keep · Discard · Another like it · Adjust… and the credits. A budget stop is said plainly ("3:41 written
+  of 5:00: the music was dense, so it ends here"). Progress is announced at steps, not every tick.
+- **Every Studio piece has a drawn cover** (from its key, mood and notes; it reads in grey too) and joins the
+  built-in **Made in Studio**, which no channel draws from and no guest sees. A piece's own cover comes first
+  wherever the piece is shown.
+- **The aura is colour's one new meaning: the tablet is writing music.** Blue, violet, rose, amber, in
+  `ui/theme/Aura.kt` alone, drawn by one component: the prompt bar's ring (rest 30 %, focused 60 %, working 100 %),
+  the running card's top line, a 6 dp dot on the Studio tab while a job runs. Red stays live, yellow stays sounding.
+  It turns only while the screen is resumed and in sight, is still under reduced motion, has no glow with high
+  contrast or reduced transparency, never stands behind text without the bar's surface, and is never the only sign
+  of status.
+- **Kiosk mode: typing ideas is free** (Steven). Send, Options, Another like it, Listen and Cancel need no PIN;
+  Attach, Models, Keep, Discard and removing a turn do. At most three ideas wait, "Not used" is a count, the
+  history hides typed words until the PIN opens the settings, and at most 30 Studio pieces wait (the oldest goes).
+
+# v1.12 — the split and the View menu
+
+Designed by Fable with the `apple-design` lenses (`split-views.md`, `settings.md › Task-specific options`,
+`pop-up-buttons.md`), tablet first. The v1.1 **Wide layout** preference is gone; nothing else changes.
+
+- **The divider.** On wide frames a divider sits in the 8 dp gap between the score and the notes: a 1 dp hairline
+  (`LocalHairline`) with a 36 × 4 dp grabber (`onSurfaceVariant`), a 48 dp touch target centred on the gap. It is
+  content: no colour, no glass. Drag it: it rests at a third, a half and two thirds (within 12 dp); a pane keeps its
+  minimum (stacked: the score 200 dp, the notes 165 dp; side by side: 240 dp each), and dragged 56 dp past it the pane
+  hides, the divider waiting at that edge to bring it back. A light tick on resting on a stop and on hiding. Double-tap
+  resets to the arrangement's default: a third for the score stacked, a half side by side.
+- **Remembered per arrangement**: stacked and side by side each keep their own share (`notesSplitStacked`,
+  `notesSplitSide`); 0 shows the notes alone, 1 the score alone. An older build's *Notes only* reads as 0 and *Score
+  only* as 1, for both.
+- **Bars per system follow the score page's width**: under 480 dp two, under 560 dp three, else four. A re-layout
+  waits for the 150 ms settle; while a finger moves, the old layout stays drawn, top-start, clipped, never scaled.
+  The transport floats or stands as the committed share says, so it does not jump during a drag.
+- **The View menu**: a glyph in Now playing's header opening the menus' glass, its end at the glyph's end so it
+  never crosses the divider. On wide frames SHOW (*Score and notes* · *Notes only* · *Score only*: the same shares
+  without dragging); NOTES (*Paper roll* · *Falling notes*, and *Score* on a phone); *Fingering* · *Chord names* ·
+  *Hand colours* (with its note). Piano › Display keeps Appearance, Artwork and Standby. "Falling notes" is the one
+  name for that view.
+- **Kiosk**: the divider and the View menu are free, no PIN. **TalkBack**: "Sheet music and notes divider, sheet
+  music 33 percent", adjusted as a slider, with the actions Reset, Show sheet music only, Show notes only. **Keys**:
+  the arrows along the axis move it 2 %, Page keys jump between the stops, Home and End hide a pane. Short screens
+  that scroll keep their fixed heights and no divider.
 
 # v1.13 — the Piano tab reorganised, with search (M31b)
 

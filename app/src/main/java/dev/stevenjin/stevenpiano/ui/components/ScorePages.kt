@@ -86,7 +86,6 @@ import dev.stevenjin.stevenpiano.score.ScoreLayout
 import dev.stevenjin.stevenpiano.score.ScoreLayoutEngine
 import dev.stevenjin.stevenpiano.score.ScoreMetrics
 import dev.stevenjin.stevenpiano.score.ScoreSystem
-import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.score.Sign
 import dev.stevenjin.stevenpiano.score.TempoMark
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
@@ -180,7 +179,8 @@ private val Bravura = FontFamily(Font(R.font.bravura))
 
 /**
  * The score (DESIGN.md › v1.2 › Score): the piece as systems of bars on pages, one page, or two
- * side by side when the panel is 840 dp wide or more, laid out by [ScoreLayoutEngine] from the
+ * side by side when the panel is 840 dp wide or more, two bars a system on a page under 480 dp, three
+ * under 560 dp, else four (v1.12, [ScoreMetrics.fitting]), laid out by [ScoreLayoutEngine] from the
  * file's tempo map, bars and signatures ([keySignatures] are the file's; [transpose] moves them
  * with the notes), each note on its hand's staff when the [hands] are known, the suggested
  * [fingers] as small numerals above the right hand's heads and below the left's, and the [chords]'
@@ -220,7 +220,6 @@ fun ScorePages(
     timeSignatures: List<TimeSignature>,
     transpose: Int,
     fold: Boolean,
-    width: ScoreWidth,
     frameNanos: LongState,
     clock: SongClock,
     onSeek: (micros: Long) -> Unit,
@@ -270,9 +269,10 @@ fun ScorePages(
     BoxWithConstraints(modifier.clipToBounds()) {
         val panelWidth = constraints.maxWidth.toFloat()
         val panelHeight = constraints.maxHeight.toFloat()
-        val metrics = remember(width, panelWidth, panelHeight, density, glyphs, numberHeight, numerals, chordHeight) {
-            ScoreMetrics.forPanel(
-                width, panelWidth, panelHeight, density.density, glyphs.headWidth, glyphs.clefWidth, numberHeight,
+        // Bars per system follow the page's own width (v1.12 — M31a), so the split can size the panel freely.
+        val metrics = remember(panelWidth, panelHeight, density, glyphs, numberHeight, numerals, chordHeight) {
+            ScoreMetrics.fitting(
+                panelWidth, panelHeight, density.density, glyphs.headWidth, glyphs.clefWidth, numberHeight,
                 numeralHeight = numerals.height, numeralWidth = numerals.width, chordHeight = chordHeight,
             )
         }

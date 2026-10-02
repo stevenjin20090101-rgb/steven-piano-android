@@ -30,8 +30,8 @@ enum class JobState {
     val finished: Boolean get() = this == Done || this == Failed || this == Cancelled
 }
 
-/** What a running job is doing now. */
-enum class JobStep { Waiting, Downloading, Reading, Transcribing, Composing, Saving }
+/** What a running job is doing now ([Shaping]: a composition's notes placed on the grid and given their touch, v1.12 — M30). */
+enum class JobStep { Waiting, Downloading, Reading, Transcribing, Composing, Shaping, Saving }
 
 /**
  * One of Studio's jobs, as the Studio page, its notification and the web panel show it (v1.7 — M23).
@@ -39,6 +39,11 @@ enum class JobStep { Waiting, Downloading, Reading, Transcribing, Composing, Sav
  * composition is in the manner of (v1.7 — M24); [progress] is 0–1 while its [step] has a measure (null
  * otherwise); [error] is the failure's line. A download names its [model] and counts its [bytes] of
  * [total]; a finished transcription or composition names the piece it made ([pieceId], [title]).
+ *
+ * v1.12 (M30): a job is a turn of Studio's history ([turnId]); a composition counts its [tokens] of [budget], the
+ * music written ([musicMs]) of what was asked ([targetMs]), the [notes] written and the time left ([etaMs], null
+ * while too early to say), published at most twice a second; [steps] are the words of its row of steps; [stop]
+ * says why it ended ("budget" when the music was dense and the budget ran out before the length).
  */
 data class StudioJob(
     val id: Long,
@@ -53,6 +58,15 @@ data class StudioJob(
     val total: Long = 0,
     val pieceId: Long? = null,
     val title: String? = null,
+    val turnId: Long? = null,
+    val tokens: Int = 0,
+    val budget: Int = 0,
+    val musicMs: Long = 0,
+    val targetMs: Long = 0,
+    val etaMs: Long? = null,
+    val steps: List<JobStep> = emptyList(),
+    val notes: Int = 0,
+    val stop: String? = null,
 )
 
 /**
@@ -66,8 +80,8 @@ class StudioJobs(private val keep: Int = KEEP) {
     private val nextId = AtomicLong(1)
 
     /** A new job, queued. */
-    fun add(kind: JobKind, name: String, model: String? = null): StudioJob {
-        val job = StudioJob(nextId.getAndIncrement(), kind, name, model = model)
+    fun add(kind: JobKind, name: String, model: String? = null, steps: List<JobStep> = emptyList()): StudioJob {
+        val job = StudioJob(nextId.getAndIncrement(), kind, name, model = model, steps = steps)
         state.update { trimmed(it + job) }
         return job
     }

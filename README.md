@@ -24,8 +24,8 @@ piano sound when you download them (see *Studio*, *Piano sound on the tablet*). 
 serves its own control panel to your phone or laptop over Tailscale, and a request
 page to guests on the tablet's Wi-Fi (see *Web panel*). It can play by itself at set
 times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
-(see *Kiosk*), **Studio** turns a piano recording into a piece, or composes a new one in the
-manner of a piece from the library, on the tablet itself (see *Studio*), and the tablet can play
+(see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
+piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
 on the tablet*). Made by Steven Jin. Version 1.11.
 
@@ -177,9 +177,9 @@ on the tablet*). Made by Steven Jin. Version 1.11.
     the root: B♭/D), spelled in the key (a file without a key signature in the
     key its notes suggest). A beat is named only when more than one line sounds
     and the notes point to one chord; otherwise the name before holds.
-  - **Piano › Display › Fingering** and **Chord names** (on) show or hide them; **Hand
-    colours** (off) tints the left hand green and the right hand blue on the
-    waterfall and the keyboard strip only: the one place colour enters the app
+  - **Now playing › View › Fingering** and **Chord names** (on) show or hide them; **Hand
+    colours** (off) tints the left hand green and the right hand blue in the
+    notes and on the keyboard strip only: the one place colour enters the app
     besides artwork, and red still means only that the piano is live.
   - Honest limits: the hands of a single-track file are a guess (with
     piano-midi.de's files that name both hands merged into one track, the split
@@ -262,12 +262,14 @@ on the tablet*). Made by Steven Jin. Version 1.11.
 - **Schedules**: the piano plays a channel, a playlist or a piece by itself on
   chosen days at a set time, until an end time or its end, at its own volume; the
   tablet wakes for it with its screen off (see *Schedules*).
-- **Studio**: turns a piano recording (m4a, mp3, wav, flac, ogg…) into a piece on
-  the tablet itself, with how hard each note was played and the pedal, and
-  composes new pieces in the manner of one from the library, with a mood, a key, a
-  tempo and a length: from the Library's **+**, **Piano › Studio** or the web
-  panel's Studio page. Listen, then keep it or discard it. Each model (125 MB, 173 MB)
-  downloads once, when you ask; nothing you record leaves the tablet (see *Studio*).
+- **Studio** (its own tab since 1.12): type an idea ("calm and slow", "a bright waltz,
+  2 minutes", "stormy, in D minor", a composer or a piece's name) and the tablet composes a
+  piece in that manner from the library, showing what it understood, its progress and the
+  notes as they are written; it also turns a piano recording (m4a, mp3, wav, flac, ogg…) into
+  a piece, with how hard each note was played and the pedal. Every piece gets a cover drawn
+  from its music and joins the playlist **Made in Studio**. Listen, then keep it or discard
+  it. Each model (125 MB, 173 MB) downloads once, when you ask; nothing you record or type
+  leaves the tablet (see *Studio*).
 - **Piano sound on the tablet**: recordings of a real upright piano play what the
   app plays, on the tablet itself: while the piano isn't connected (the default), or
   always, with a volume on Now playing's speaker and under Piano › Tablet sound; the
@@ -289,8 +291,19 @@ on the tablet*). Made by Steven Jin. Version 1.11.
 - **Tablets and phones on their side**: a navigation rail on the left instead of
   the bottom bar. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
-  side; **Piano › Display › Wide layout** can show either alone (*Score only* on a tablet
-  on its side opens two pages). The Library and the Piano tab keep a comfortable
+  side. **Drag the divider** between them to share the screen as you like: it rests
+  at a third, a half and two thirds, drag a view well past its smallest size to hide
+  it (the divider waits at the edge to bring it back), double-tap it to go back to
+  the start (a third for the score stacked, half each side by side); each
+  arrangement remembers its own split. A system holds two bars on a page under 480 dp
+  wide, three under 560, else four. The **View** menu (the split-frame glyph in the
+  header) offers the same without dragging (*Score and notes* · *Notes only* ·
+  *Score only*; *Score only* on a tablet on its side opens two pages), the notes'
+  style (*Paper roll* · *Falling notes*, and *Score* on a phone), and *Fingering*,
+  *Chord names* and *Hand colours*. In kiosk mode the divider and the menu stay
+  free. TalkBack reads the divider as "Sheet music and notes divider" and adjusts
+  it like a slider; with a keyboard the arrows move it, Page keys jump between the
+  stops, Home and End hide a view. The Library and the Piano tab keep a comfortable
   720 dp reading column in the middle of the screen. The Library is two panes: the
   list, and beside it a now-playing panel (the portrait, the title, a small live
   roll, the scrubber and the transport, Up next, and where the piece goes), so playing a piece keeps you in
@@ -1028,16 +1041,16 @@ seconds of that piece into music of its own. (Studio came with 1.7.)
 
 **Transcribing a recording**
 
-1. **Piano › Studio › Transcription › Download**, once: 125 MB from this repository's GitHub
+1. **Studio › Models › Transcription › Download**, once: 125 MB from this repository's GitHub
    release `models`, checked against the SHA-256 the app carries before it is used. **Remove**
    frees the space again.
-2. **Library › + › Transcribe a recording…** (or the button on the Studio page) and pick a
+2. **Library › + › Transcribe a recording…** (or the paper clip on the Studio tab) and pick a
    recording: m4a, mp3, wav, flac, ogg, opus, whatever the tablet plays, up to 20 minutes and
    200 MB. From a computer or a phone, drop recordings on the web panel's **Studio** page instead;
    they go to the tablet one at a time, and while Studio has eight jobs waiting or running the page
    says to try again when one has finished. Without the model, the job downloads it first.
-3. It runs in the background, with its progress in the notification (and Cancel), on the Studio
-   page and in the Library: "Transcribing Clair de lune.m4a · 42%". About **a minute per three
+3. It runs in the background, with its progress in the notification (and Cancel), on its card in
+   the Studio tab and in the Library: "Transcribing Clair de lune.m4a · 42%". About **a minute per three
    minutes of audio**; the piano can go on playing meanwhile, and keeps its time. A Cancel that comes
    once the piece is being saved changes nothing: the piece is kept, to keep or discard.
 4. The piece appears in the library titled after the file, by **Made in Studio** (a roll card,
@@ -1045,29 +1058,53 @@ seconds of that piece into music of its own. (Studio came with 1.7.)
    to its end), Now playing asks **Keep this piece?** **Keep** keeps it; **Discard** deletes it
    (in kiosk mode, behind the PIN). The job's **Listen** plays it straight away.
 
+**The Studio tab (1.12)**
+
+Studio is the fourth tab: Library · Now playing · Keys · **Studio** · Piano. Type an idea in the
+box at the bottom ("Describe a piece…") and **Send**: a mood (calm, bright, stormy, sad…), a tempo
+(slow, andante, fast, 96 bpm), a key (in D minor, F♯ major), a length (2 minutes, 3:30, short), a
+form (nocturne, waltz, lullaby, étude…), a composer, a performer or a piece's name from the
+library, or a channel or list (Baroque, Popular). There is no text model: words are understood by
+keywords, and the line above the box says what was understood ("Calm · D minor · slow · 2 min · in
+the manner of Clair de lune (Debussy)") and which words were not used. After a piece, **slower**,
+**faster**, **longer**, **shorter**, **sadder**, **in D minor**, **another** or **different** change
+the last one. Each turn's card shows the steps (Reading the piece · Composing · Shaping · Saving),
+the percentage, the music written of the length asked for, the time left, and the notes appearing
+as they are written; then **Listen**, **Keep**, **Discard**, **Another like it** and **Adjust…**
+(the options sheet, as before). The **Options** button opens that sheet from what you typed; the
+paper clip transcribes a recording; **Models** (top right) downloads or removes the two models.
+On a tablet the shelf **MADE IN STUDIO** sits beside the conversation (tap to listen, hold for
+more). Titles are made from what was understood, never from what was typed: "Calm, after Clair de
+lune", "Wild, after Chopin", "Calm piece". In kiosk mode typing ideas is free (at most three wait;
+the history hides the words until the PIN opens the settings); Models, recordings, Keep, Discard
+and removing a turn ask for the PIN. The notification opens the Studio tab.
+
 **Composing a piece**
 
-1. **Piano › Studio › Composing › Download**, once: 173 MB, checked the same way.
-2. **Library › + › Compose a piece…** (or the button on the Studio page) opens the sheet:
+1. **Studio › Models › Composing › Download**, once: 173 MB, checked the same way.
+2. Type an idea and **Send** (above), or **Options** on the Studio tab (also **Library › + ›
+   Compose in Studio…**) for the sheet:
    **Mood** (Calm, Bright, Wild, Melancholy); **Key** (C to B, major or minor) and **Tempo** (40–200
    bpm), both the chosen piece's own until you change them (Melancholy turns the key to its minor);
    **Length** (1–5 minutes); and **In the manner of**: the piece played last, or **Change** to search
    the library for another. From a computer or a phone, the web panel's **Studio** page has the same
    form.
-3. **Compose**. It runs in the background like a transcription: "Composing in the manner of Clair
-   de lune · 42%" in the notification (with Cancel), on the Studio page, on the Piano tab's
-   Studio row and in the Library. About **a minute for a two-minute piece**, often less.
-4. The piece appears as **Composition · Sep 28, 2026 2:05 PM** by **Made in Studio**, its sheet
-   saying "Made in Studio · in the manner of Clair de lune (Claude Debussy)", written at the tempo
-   chosen. Keep it or discard it after a first listen, as a transcription.
+3. **Compose**. It runs in the background like a transcription: "Composing · 42% · 0:50 of 2:00 ·
+   about 40 s left" on its card, in the notification (with Cancel) and in the Library. About **a
+   minute for a two-minute piece**, often less.
+4. The piece appears titled from what was asked ("Calm, after Clair de lune") by **Made in Studio**,
+   with a cover drawn from its music, in the playlist **Made in Studio**, its sheet saying "Made in
+   Studio · in the manner of Clair de lune (Claude Debussy)", written at the tempo chosen. Keep it or
+   discard it after a first listen, as a transcription.
 
 **What it writes**: new music only. The chosen piece's first fifteen seconds are the model's
 starting point and are never part of the result; the model (trained on the Lakh MIDI collection,
 not on piano alone) carries on in their manner, not note for note. Calm plays softest, Wild the
 most freely; every piece ends with a two-bar fade and no pedal. Every note is one the piano can
 play: keys 24–107, a key struck again no sooner than 120 ms after itself, at most ten notes
-starting at once. A very dense piece can come out shorter than asked, above all at four or five
-minutes (the model is stopped at 45 tokens a second of music, 9,000 at most).
+starting at once. A very dense piece can come out shorter than asked (the model is stopped at 45
+tokens a second of music, 13,500 for five minutes since 1.12); its card then says so: "3:41 written
+of 5:00: the music was dense, so it ends here".
 
 **What it hears well**: a clear recording of a solo piano. The model was trained on real pianos
 (the MAESTRO recordings; its authors measured a 96.8 % note F1 there); audio from a synthesizer gets
@@ -1085,7 +1122,7 @@ minutes makes a few tens of thousands).
 | Composing | 173 MB | Apache 2.0 | The Anticipatory Music Transformer, music-small-800k (Thickstun et al., Stanford CRFM), converted to ONNX |
 
 **Memory and devices.** Studio needs an arm64 tablet or phone with at least 2.5 GiB of memory
-(most sold with 3 GB or more); elsewhere the Piano tab says "Studio isn't available on this
+(most sold with 3 GB or more); elsewhere the Studio tab says only "Studio isn't available on this
 device" or "This tablet doesn't have enough memory for Studio", and the + sheet has no Studio
 row. A transcription starts only with about 900 MiB free, a composition with about 700 MiB, else
 "Close other apps and try again."; the app uses about 0.75 GB while it transcribes and 0.6 GB
@@ -1098,7 +1135,9 @@ in the app's own storage.
 
 **Privacy.** Recordings never leave the tablet: they are decoded and transcribed there, and a
 recording sent from the panel is deleted once its job ends. A composition starts only from a
-piece already in the library, and nothing anyone types reaches the model. The only traffic is the
+piece already in the library, and nothing anyone types reaches the model: an idea is read for
+keywords, kept (at most 200 characters) only in Studio's history on the tablet, and never put in a
+title, a file name, the log or Share diagnostics. The only traffic is the
 models' download, when you ask for it.
 
 **On the piano:**
@@ -1273,7 +1312,8 @@ file to the release `models`.
       re-strike it, and leaving Keys leaves the piece's notes sounding.
 - [ ] On a tablet: the rail replaces the bottom bar; Now playing shows the score
       over the roll upright and beside it on its side, in step with each other;
-      Wide layout › Score only and Notes only work while playing.
+      dragging the divider, hiding a view and bringing it back, and View › Score
+      only and Notes only work while playing.
 - [ ] Shuffle a playlist and skip around while connected: every piece starts
       cleanly, no key is left down between pieces, Previous and Next follow the
       shuffled order, and turning Shuffle off keeps the current piece playing.
@@ -1292,7 +1332,7 @@ file to the release `models`.
       outlined keys and its right hand filled; fingering figures sit in the long
       left-hand bars and over and under the score's heads; the chord names read
       C, Dm7/C, G7/B, C, Am/C over the first bars and arrive at the waterfall's
-      left edge as each bar begins. Piano › Display › Hand colours colours the two hands
+      left edge as each bar begins. Now playing › View › Hand colours colours the two hands
       green and blue, in light and dark; Fingering and Chord names off take each
       away. A MAESTRO performance splits its hands by pitch. The piano plays as
       before whatever is shown.

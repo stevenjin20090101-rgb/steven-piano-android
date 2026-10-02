@@ -81,11 +81,11 @@ import java.io.File
 import java.io.IOException
 
 /**
- * The web panel's server, running while Piano › Remote control › Web control is on (DESIGN.md ›
+ * The web panel's server, running while Piano › Web panel is on (DESIGN.md ›
  * v1.5.1 — M18; BUILD_SPEC.md › The service). A foreground service of type `specialUse` (a local
  * control panel is none of Android's named types; `dataSync` would run out after six hours a day
  * from Android 15), with `connectedDevice` as the fallback should a device refuse `specialUse`;
- * not exported; `START_STICKY`. Its low-importance notification reads "Web control on" and the
+ * not exported; `START_STICKY`. Its low-importance notification reads "Web panel on" (v1.13) and the
  * panel's address.
  *
  * It listens where [WebAddress.choose] says and nowhere else: the tailnet address serves the whole

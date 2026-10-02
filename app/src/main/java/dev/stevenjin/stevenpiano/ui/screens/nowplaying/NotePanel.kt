@@ -40,6 +40,7 @@ import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.TRACKER_FROM_BOTTOM
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
+import dev.stevenjin.stevenpiano.ui.components.TransportMinWidth
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 
@@ -100,16 +101,20 @@ internal fun GlassTransportPanel(
 }
 
 /**
- * Whether the transport can float on glass over the roll when the note views have [height]: only
- * the paper roll has a history (the third below the tracker bar; falling notes end at the keys),
- * and it must hold the controls with a little room under the bar. Otherwise the transport stands
- * below the views as a solid row, as before (a phone on its side, the score alone).
+ * Whether the transport can float on glass over the roll when the note views have [height] (and
+ * [width]): only the paper roll has a history (the third below the tracker bar; falling notes end at
+ * the keys), and it must hold the controls with a little room under the bar. Otherwise the transport
+ * stands below the views as a solid row, as before (a phone on its side, the score alone). Stacked,
+ * the roll has what the split leaves it below the score ([NotesPlan.split], v1.12 — M31a); side by
+ * side, the whole height, but it must also be as wide as the controls ([TransportMinWidth]). The
+ * plan's split is the committed one, so the transport does not jump while a finger drags the divider.
  */
-internal fun transportFloats(plan: NotesPlan, height: Dp): Boolean {
+internal fun transportFloats(plan: NotesPlan, height: Dp, width: Dp = Dp.Infinity): Boolean {
     if (plan.rollStyle != NoteDisplay.PAPER_ROLL) return false
     val rollCard = when (plan.layout) {
-        NotesLayout.ROLL, NotesLayout.SIDE_BY_SIDE -> height
-        NotesLayout.STACKED -> (height - PANEL_GAP) * 2f / 3f
+        NotesLayout.ROLL -> height
+        NotesLayout.SIDE_BY_SIDE -> if ((width - PANEL_GAP) * (1f - plan.split) < TransportMinWidth) return false else height
+        NotesLayout.STACKED -> (height - PANEL_GAP) * (1f - plan.split)
         NotesLayout.SCORE -> return false
     }
     val canvas = rollCard - Hairline - KeyboardStripHeight

@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,8 +39,8 @@ import java.io.IOException
 /**
  * How Now playing draws notes: the pianola roll (default), Synthesia-style falling notes, or the
  * score (saved as STAFF, its v1.1 name, so the choice carries over). On wide screens the score has
- * its own place ([WideLayout]) and this chooses the roll's style, the score reading as the paper
- * roll there.
+ * its own pane beside the notes (the split, [PianoSettings.notesSplitStacked]) and this chooses the
+ * roll's style, the score reading as the paper roll there.
  */
 enum class NoteDisplay {
     PAPER_ROLL,
@@ -51,7 +52,10 @@ enum class NoteDisplay {
     val rollStyle: NoteDisplay get() = if (this == STAFF) PAPER_ROLL else this
 }
 
-/** What Now playing shows on medium and expanded widths: the score and the notes, or either alone (v1.1 names, kept). */
+/**
+ * What Now playing showed on medium and expanded widths until v1.11: the score and the notes, or either alone. Read
+ * once, to seed the split that replaced it (v1.12 — M31a): Notes only as 0, Score only as 1.
+ */
 enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
 /**
@@ -89,7 +93,7 @@ enum class StandbyShows { ART_AND_NOTES, PAPER_ROLL }
  * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
  * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
  * its own updates, the pause before each piece, the channels' volumes, the app's appearance and
- * display mode, the web panel (Piano › Remote control) and kiosk mode (Piano › Kiosk). Of the
+ * display mode, the web panel (Piano › Web panel) and kiosk mode (Piano › Kiosk). Of the
  * panel's PIN only [webPinSet] is here, and of the kiosk's only [kioskPinSet]: their salts and
  * hashes are read on their own ([SettingsRepository.webPin], [SettingsRepository.kioskPin]), so
  * nothing that passes these settings around (the screens, Share diagnostics) ever holds them. So
@@ -106,7 +110,13 @@ data class PianoSettings(
     val velocityPct: Int = 100,
     val foldOutOfRange: Boolean = true,
     val skipDrumChannel: Boolean = true,
-    val wideLayout: WideLayout = WideLayout.STAFF_AND_NOTES,
+    /**
+     * Now playing's split on wide frames (v1.12 — M31a): the score's share of the room it shares with the notes,
+     * stacked (medium widths) and side by side (expanded), each remembered; 0 hides the score, 1 the notes; null:
+     * the arrangement's default (a third stacked, a half side by side).
+     */
+    val notesSplitStacked: Float? = null,
+    val notesSplitSide: Float? = null,
     /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
     val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
     /** The transport's Shuffle, remembered across launches. */
@@ -129,15 +139,15 @@ data class PianoSettings(
     val preRollMs: Int = DEFAULT_PRE_ROLL_MS,
     /** Each channel's volume as the person set it, 0-100 %, by channel key; a channel not here plays at [DEFAULT_CHANNEL_VOLUME]. */
     val channelVolumes: Map<String, Int> = emptyMap(),
-    /** Display mode after a minute without a touch while a piece is loaded (Piano › Display › STANDBY). */
+    /** Display mode after a minute without a touch while a piece is loaded (Piano › Display › RESTING SCREEN). */
     val displayModeAfterMinute: Boolean = false,
     /** Light, dark, or as the system says (Piano › Display › APPEARANCE). */
     val appearance: Appearance = Appearance.SYSTEM,
-    /** Display mode's canvas: black, or the app's own (Piano › Display › STANDBY). */
+    /** Display mode's canvas: black, or the app's own (Piano › Display › RESTING SCREEN). */
     val standbyCanvas: StandbyCanvas = StandbyCanvas.BLACK,
-    /** What the resting screen shows: the art and notes, or the paper roll (Piano › Display › STANDBY). */
+    /** What the resting screen shows: the art and notes, or the paper roll (Piano › Display › RESTING SCREEN). */
     val standbyShows: StandbyShows = StandbyShows.ART_AND_NOTES,
-    /** The web panel is on (Piano › Remote control › Web control); it can be only once a PIN is set. */
+    /** The web panel is on (Piano › Web panel); it can be only once a PIN is set. */
     val webEnabled: Boolean = false,
     /** Guests may ask for pieces from the request page (Guests can request). */
     val webGuests: Boolean = false,
@@ -153,11 +163,11 @@ data class PianoSettings(
     val kioskEnabled: Boolean = false,
     /** Whether a kiosk PIN is set. */
     val kioskPinSet: Boolean = false,
-    /** When the tablet plays the piano sound itself (Piano › Playback › TABLET SOUND, v1.8 — M25). */
+    /** When the tablet plays the piano sound itself (Piano › Tablet sound, v1.8 — M25). */
     val tabletSound: TabletSoundMode = TabletSoundMode.WHEN_NOT_CONNECTED,
     /** The tablet's piano sound's volume, 0–100 % (Now playing's speaker, the Playback page, the web panel). */
     val tabletVolume: Int = Sampler.DEFAULT_VOLUME,
-    /** Remote access over the internet (Piano › Remote control › CLOUD, v1.10 — M26): the tablet keeps its connection to the relay. */
+    /** Remote access over the internet (Piano › Web panel › OVER THE INTERNET, v1.10 — M26): the tablet keeps its connection to the relay. */
     val cloudEnabled: Boolean = false,
     /** The relay's address as the person typed it for enrolling ("steven-piano-relay.you.workers.dev"), remembered; null: never typed. */
     val cloudHost: String? = null,
@@ -238,7 +248,22 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setSkipDrumChannel(on: Boolean) = edit { it[SKIP_DRUM_CHANNEL] = on }
 
-    suspend fun setWideLayout(layout: WideLayout) = edit { it[WIDE_LAYOUT] = layout.name }
+    /**
+     * Now playing's split for one arrangement (v1.12 — M31a): [stacked] or side by side, held to 0-1; a share that
+     * is not a number is refused. The first write after an older build's Wide layout keeps that choice for the other
+     * arrangement too, then forgets it.
+     */
+    suspend fun setNotesSplit(stacked: Boolean, share: Float) {
+        if (!share.isFinite()) return
+        edit {
+            it.legacySplit()?.let { seed ->
+                if (it[NOTES_SPLIT_STACKED] == null) it[NOTES_SPLIT_STACKED] = seed
+                if (it[NOTES_SPLIT_SIDE] == null) it[NOTES_SPLIT_SIDE] = seed
+            }
+            it.remove(WIDE_LAYOUT)
+            it[if (stacked) NOTES_SPLIT_STACKED else NOTES_SPLIT_SIDE] = share.coerceIn(0f, 1f)
+        }
+    }
 
     suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
 
@@ -336,7 +361,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setKioskStayOnBefore(mask: Int?) = edit { if (mask == null) it.remove(KIOSK_STAY_ON_BEFORE) else it[KIOSK_STAY_ON_BEFORE] = mask }
 
-    /** Remote access over the internet on or off (v1.10 — M26); it connects only once enrolled, with a PIN set. */
+    /** The web panel over the internet on or off (v1.10 — M26); it connects only once enrolled, with a PIN set. */
     suspend fun setCloudEnabled(on: Boolean) = edit { it[CLOUD_ENABLED] = on }
 
     /** The relay's address as typed (already read into its one form, `CloudAddress.host`), remembered for the next enrolment. */
@@ -452,7 +477,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             velocityPct = (this[VELOCITY_PCT] ?: defaults.velocityPct).coerceIn(PlaybackLimits.VelocityPct),
             foldOutOfRange = this[FOLD_OUT_OF_RANGE] ?: defaults.foldOutOfRange,
             skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
-            wideLayout = WideLayout.entries.firstOrNull { it.name == this[WIDE_LAYOUT] } ?: defaults.wideLayout,
+            notesSplitStacked = this[NOTES_SPLIT_STACKED].asShare() ?: legacySplit(),
+            notesSplitSide = this[NOTES_SPLIT_SIDE].asShare() ?: legacySplit(),
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
             shuffle = this[SHUFFLE] ?: defaults.shuffle,
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
@@ -504,7 +530,20 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val VELOCITY_PCT = intPreferencesKey("velocityPct")
         val FOLD_OUT_OF_RANGE = booleanPreferencesKey("foldOutOfRange")
         val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
+        /** v1.1-1.11's Wide layout, read only to seed the split (v1.12 — M31a). */
         val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
+        val NOTES_SPLIT_STACKED = floatPreferencesKey("notesSplitStacked")
+        val NOTES_SPLIT_SIDE = floatPreferencesKey("notesSplitSide")
+
+        /** A stored split as read: held to 0-1; not a number reads as the default. */
+        fun Float?.asShare(): Float? = this?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
+
+        /** What an older build's Wide layout says of the split: Notes only 0, Score only 1, else nothing. */
+        fun Preferences.legacySplit(): Float? = when (this[WIDE_LAYOUT]) {
+            WideLayout.NOTES_ONLY.name -> 0f
+            WideLayout.STAFF_ONLY.name -> 1f
+            else -> null
+        }
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
         val SHUFFLE = booleanPreferencesKey("shuffle")
         val REPEAT = stringPreferencesKey("repeat")

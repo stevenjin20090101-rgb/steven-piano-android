@@ -106,6 +106,7 @@ fun PianoTheme(
         LocalDisabledGlyph provides (if (darkTheme) InkDisabledGlyph else PaperDisabledGlyph),
         LocalTertiary provides (if (darkTheme) SilverTertiary else CarbonTertiary),
         LocalHandTones provides (if (darkTheme) HandTones(HandLeftDark, HandRightDark) else HandTones(HandLeftLight, HandRightLight)),
+        LocalAuraStops provides (if (darkTheme) AuraDark else AuraLight),
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkScheme else LightScheme,

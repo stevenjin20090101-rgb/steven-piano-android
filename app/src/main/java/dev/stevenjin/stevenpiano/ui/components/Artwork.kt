@@ -147,7 +147,14 @@ fun rememberArtwork(key: String, size: ArtSize): ImageBitmap? {
  * is none. Black and white when the person chose that.
  */
 @Composable
-fun ArtworkImage(key: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, fallback: @Composable (Modifier) -> Unit) {
+fun ArtworkImage(
+    key: String,
+    size: ArtSize,
+    modifier: Modifier = Modifier,
+    framed: Boolean = true,
+    alignment: Alignment = PortraitAlignment,
+    fallback: @Composable (Modifier) -> Unit,
+) {
     val image = rememberArtwork(key, size)
     if (image == null) {
         fallback(modifier)
@@ -158,7 +165,7 @@ fun ArtworkImage(key: String, size: ArtSize, modifier: Modifier = Modifier, fram
             image,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            alignment = PortraitAlignment,
+            alignment = alignment,
             contentScale = ContentScale.Crop,
             colorFilter = if (LocalArtworkMonochrome.current) Monochrome else null,
         )
@@ -244,13 +251,17 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
 
 /**
  * A piece's art where it stands for the piece itself (the mini player, the now-playing panel,
- * display mode's backdrop, as the piece sheet): its composer's portrait, else its own roll card,
- * which is never mistaken for another piece's, else ([title] given) its title's monogram. [composerKey] is
- * the library's ("" when the composer is unknown). Unframed ([framed] false) it fills [modifier]'s box, cropped.
+ * display mode's backdrop, the piece sheet, a Studio piece's row): its own cover first (v1.12 — M30: a piece
+ * Studio made has one, drawn from its music, cropped about its centre), then its composer's portrait, else its
+ * own roll card, which is never mistaken for another piece's, else ([title] given) its title's monogram.
+ * [composerKey] is the library's ("" when the composer is unknown). Unframed ([framed] false) it fills
+ * [modifier]'s box, cropped.
  */
 @Composable
 fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, title: String? = null) {
-    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { RollCardImage(pieceId, it, framed, title) }
+    ArtworkImage(ArtworkEntity.forPiece(pieceId), size, modifier, framed, alignment = Alignment.Center) { frame ->
+        ArtworkImage(ArtworkEntity.forComposer(composerKey), size, frame, framed) { RollCardImage(pieceId, it, framed, title) }
+    }
 }
 
 /**

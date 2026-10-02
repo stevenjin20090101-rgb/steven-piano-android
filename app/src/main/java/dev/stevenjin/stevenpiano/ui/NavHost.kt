@@ -112,6 +112,13 @@ import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoPageScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoScreen
+import dev.stevenjin.stevenpiano.ui.screens.studio.StudioScreen
+import dev.stevenjin.stevenpiano.studio.JobState
+import dev.stevenjin.stevenpiano.ui.components.AuraDot
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
@@ -123,7 +130,7 @@ import kotlinx.coroutines.flow.first
 import kotlin.math.min
 
 /**
- * The app's frame: four destinations (Library, Now playing, Keys, Piano) in a bottom navigation
+ * The app's frame: five destinations (Library, Now playing, Keys, Studio, Piano; Studio since v1.12 — M30) in a bottom navigation
  * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
  * with a 240 ms fade-through between them, or a cut when motion is reduced. The bar and the rail
  * are glass (DESIGN.md › v1.5 — M16, v1.9): the content fills the window and draws beneath them, the
@@ -280,12 +287,13 @@ fun PianoNavHost(
                                 },
                             ) {
                                 composable(Route.Library.path) {
-                                    LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onOpenPiano = { open(Route.Piano) }, onImport = onImport)
+                                    LibraryScreen(playback, onPlaying = { open(Route.NowPlaying) }, onOpenPiano = { open(Route.Piano) }, onImport = onImport, onOpenStudio = { open(Route.Studio) })
                                 }
                                 composable(Route.NowPlaying.path) {
                                     NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })
                                 }
                                 composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }, onListen = listen) }
+                                composable(Route.Studio.path) { StudioScreen(onListen = listen) }
                                 navigation(startDestination = PianoRoutes.HUB, route = Route.Piano.path) {
                                     composable(PianoRoutes.HUB) { hub ->
                                         val tab = remember(hub) { nav.getBackStackEntry(Route.Piano.path) }
@@ -416,7 +424,7 @@ private object MiniPlayerMotion {
 }
 
 /**
- * Compact widths: the four destinations along the bottom, short labels, the selected one on a
+ * Compact widths: the five destinations along the bottom, short labels, the selected one on a
  * surfaceElevated pill, never a tint. The bar is transparent: the glass under it ([BottomBar]) is
  * its container. Labels scale with the system font only as far as the widest one ("Now playing")
  * still fits its quarter of the bar on one line, and never past 1.5x, so the four icons stay level.
@@ -435,13 +443,13 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
     BoxWithConstraints {
         val itemWidth = (maxWidth - BAR_ITEM_GAP * (Route.entries.size - 1)) / Route.entries.size
         val cap = labelScaleThatFits(itemWidth)
-        CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, cap))) {
+        CompositionLocalProvider(LocalDensity provides Density(density.density, if (cap < 1f) cap else min(density.fontScale, cap))) {
             NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
                 Route.entries.forEach { route ->
                     NavigationBarItem(
                         selected = route == current,
                         onClick = { onSelect(route) },
-                        icon = { Icon(painterResource(route.icon), contentDescription = null) },
+                        icon = { TabIcon(route) },
                         label = { Text(route.label, maxLines = 1) },
                         colors = colors,
                     )
@@ -452,7 +460,7 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
 }
 
 /**
- * Medium and expanded widths: the same four glyphs and labels in a rail on the left, labels
+ * Medium and expanded widths: the same five glyphs and labels in a rail on the left, labels
  * always shown, on glass whose end edge (a hairline and the specular line) sets it off from the
  * content beside it. Every screen keeps clear of the rail, so it has the glass's look without
  * blurring (see [GlassSurface]). Labels scale up to 1.5x.
@@ -479,7 +487,7 @@ private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
                     NavigationRailItem(
                         selected = route == current,
                         onClick = { onSelect(route) },
-                        icon = { Icon(painterResource(route.icon), contentDescription = null) },
+                        icon = { TabIcon(route) },
                         label = { Text(route.label, maxLines = 1, textAlign = TextAlign.Center) },
                         alwaysShowLabel = true,
                         colors = colors,
@@ -505,7 +513,28 @@ private fun tabTones(): TabTones {
     return TabTones(primary, secondary, if (LocalOnGlass.current) primary else secondary)
 }
 
-/** The font scale, between 1x and [MAX_LABEL_SCALE], at which the widest destination label fills [itemWidth]. */
+/**
+ * A destination's glyph; Studio's carries a 6 dp dot of the aura while a job runs (v1.12 — M30), never the live red,
+ * and TalkBack hears it in the tab's name ("Studio, composing").
+ */
+@Composable
+private fun TabIcon(route: Route) {
+    if (route != Route.Studio) {
+        Icon(painterResource(route.icon), contentDescription = null)
+        return
+    }
+    val jobs by LocalContext.current.graph.studio.jobs.jobs.collectAsStateWithLifecycle()
+    val busy = jobs.any { it.state == JobState.Running || it.state == JobState.Queued }
+    Box(if (busy) Modifier.semantics { stateDescription = "working" } else Modifier) {
+        Icon(painterResource(route.icon), contentDescription = null)
+        if (busy) AuraDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+    }
+}
+
+/**
+ * The font scale, between [MIN_LABEL_SCALE] and [MAX_LABEL_SCALE], at which the widest destination label fills
+ * [itemWidth]: five labels on a compact bar may scale down to 0.85 (v1.12 — M30); none is ever shortened.
+ */
 @Composable
 private fun labelScaleThatFits(itemWidth: Dp): Float {
     val measurer = rememberTextMeasurer()
@@ -515,11 +544,12 @@ private fun labelScaleThatFits(itemWidth: Dp): Float {
         val unscaled = Density(density, 1f)
         val widest = Route.entries.maxOf { measurer.measure(it.label, style, maxLines = 1, density = unscaled).size.width }
         val room = with(unscaled) { itemWidth.toPx() } * LABEL_FILL
-        if (widest <= 0) MAX_LABEL_SCALE else (room / widest).coerceIn(1f, MAX_LABEL_SCALE)
+        if (widest <= 0) MAX_LABEL_SCALE else (room / widest).coerceIn(MIN_LABEL_SCALE, MAX_LABEL_SCALE)
     }
 }
 
 private const val MAX_LABEL_SCALE = 1.5f
+private const val MIN_LABEL_SCALE = 0.85f
 
 /** How often the nav host looks whether a MIDI keyboard was played (v1.11 — M29), as a touch for display mode. */
 private const val KEYBOARD_TOUCH_MS = 500L

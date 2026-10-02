@@ -19,9 +19,9 @@ import org.junit.Test
 
 class RoutesTest {
     @Test
-    fun `the four tabs keep their paths, labels and order`() {
-        assertEquals(listOf("library", "now-playing", "keys", "piano"), Route.entries.map { it.path })
-        assertEquals(listOf("Library", "Now playing", "Keys", "Piano"), Route.entries.map { it.label })
+    fun `the five tabs keep their paths, labels and order - Studio between Keys and Piano (v1_12)`() {
+        assertEquals(listOf("library", "now-playing", "keys", "studio", "piano"), Route.entries.map { it.path })
+        assertEquals(listOf("Library", "Now playing", "Keys", "Studio", "Piano"), Route.entries.map { it.label })
         for (route in Route.entries) assertEquals(route, Route.of(route.path))
     }
 
@@ -36,6 +36,7 @@ class RoutesTest {
         assertNull(Route.of(""))
         assertNull(Route.of(null))
         assertEquals(Route.NowPlaying, Route.of("now-playing"))
+        assertEquals("a notification's EXTRA_TAB opens Studio", Route.Studio, Route.of("studio"))
     }
 
     @Test

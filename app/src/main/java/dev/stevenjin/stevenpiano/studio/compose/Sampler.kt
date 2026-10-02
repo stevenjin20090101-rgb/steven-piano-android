@@ -78,19 +78,26 @@ class Sampler(
     private val weights = DoubleArray(Amt.MAX_TIME + 1)
     private val order = LongArray(Amt.MAX_TIME + 1)
 
-    /** Continues [prompt]'s seed with its sampling, budget and end time. */
-    fun generate(prompt: Prompt, progress: (made: Int, fraction: Float) -> Unit = { _, _ -> }): Generation =
-        generate(prompt.events, prompt.sampling, prompt.budget, prompt.endTime, progress)
+    /** Continues [prompt]'s seed with its sampling, budget and end time; [onEvent] hears each whole event (v1.12 — M30). */
+    fun generate(
+        prompt: Prompt,
+        onEvent: (event: AmtEvent, made: Int, fraction: Float) -> Unit = { _, _, _ -> },
+        progress: (made: Int, fraction: Float) -> Unit = { _, _ -> },
+    ): Generation = generate(prompt.events, prompt.sampling, prompt.budget, prompt.endTime, onEvent, progress)
 
     /**
      * Continues [seed] (events in time order, times from 0) with [settings]: at most [budget] tokens,
-     * no event at or after [endTime] ticks. [progress] hears (tokens made, how far along: 0–1).
+     * no event at or after [endTime] ticks. [progress] hears (tokens made, how far along: 0–1) every
+     * [PROGRESS_EVERY] tokens; [onEvent] hears every whole event written (v1.12 — M30: the live preview and
+     * the music written so far), once it is in the history and the counters count it, with the tokens made
+     * and how far along. Neither may throw but for cancellation.
      */
     fun generate(
         seed: List<AmtEvent>,
         settings: SamplingSettings,
         budget: Int,
         endTime: Int = Int.MAX_VALUE,
+        onEvent: (event: AmtEvent, made: Int, fraction: Float) -> Unit = { _, _, _ -> },
         progress: (made: Int, fraction: Float) -> Unit = { _, _ -> },
     ): Generation {
         require(budget >= 0) { "budget $budget" }
@@ -218,6 +225,7 @@ class Sampler(
                 runNote = event.note
                 runLength = 1
             }
+            onEvent(event, made, fraction())
             if (made == budget) break
             // The window is full, or its times run out: the slide reads this note, so the step isn't needed.
             if (positions + 1 + Amt.EVENT_TOKENS > Amt.CONTEXT || current - origin > MAX_REL_TIME) {

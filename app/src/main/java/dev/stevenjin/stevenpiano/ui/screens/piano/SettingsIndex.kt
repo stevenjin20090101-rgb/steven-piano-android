@@ -20,10 +20,10 @@ import java.util.Locale
 
 /** A screen outside the Piano tab that a setting moved to (v1.13 — M31b), and the path its result names. */
 enum class Elsewhere(val path: List<String>) {
-    /** Now playing's View menu (M31a): the note views and their options. */
+    /** Now playing's View menu (v1.12 — M31a): what shows (the score, the notes or both), the notes' style and their options. */
     NowPlayingView(listOf("Now playing", "View")),
 
-    /** The Studio tab (M30): its models, composing and transcribing. */
+    /** The Studio tab (v1.12 — M30): its models (in a sheet there), composing and transcribing. */
     Studio(listOf("Studio")),
 
     /** The Library's channels: a channel's own volume (long-press its card). */
@@ -201,10 +201,14 @@ object SettingsIndex {
         "strike-test" to listOf("test a key", "floor", "ceiling"),
     )
 
-    /** What moved off the Piano tab (v1.12 and v1.13), so a search for the old place still finds the new one. */
+    /**
+     * What moved off the Piano tab (v1.12), so a search for the old place still finds the new one: the View menu's
+     * Show (which, with the divider, replaced Wide layout), the notes' style, Fingering, Chord names, Hand colours;
+     * Studio's models, composing and transcribing; a channel's volume.
+     */
     private val MOVED: List<Triple<String, Elsewhere, List<String>>> = listOf(
+        Triple("Show", Elsewhere.NowPlayingView, listOf("score and notes", "notes only", "score only", "wide layout", "split", "divider")),
         Triple("Note display", Elsewhere.NowPlayingView, listOf("paper roll", "falling notes", "waterfall", "score", "sheet music")),
-        Triple("Wide layout", Elsewhere.NowPlayingView, listOf("score and notes", "notes only", "score only", "split")),
         Triple("Fingering", Elsewhere.NowPlayingView, listOf("finger numbers")),
         Triple("Chord names", Elsewhere.NowPlayingView, listOf("chords", "harmony")),
         Triple("Hand colours", Elsewhere.NowPlayingView, listOf("hand colors", "left hand", "right hand")),

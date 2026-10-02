@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<!-- Models: a box, what the tablet downloads. Tinted where it is used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,2l9,5v10l-9,5l-9,-5V7z M12,4.3L5.6,7.8L12,11.3l6.4,-3.5z M5,9.5v6.3l6,3.3v-6.3z M19,9.5l-6,3.3v6.3l6,-3.3z" />
+</vector>

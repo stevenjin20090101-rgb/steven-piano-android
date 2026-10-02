@@ -16,14 +16,16 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.piano.PianoPage
 
 /**
- * The four destinations, in bar and rail order. They navigate; they never act. Library keeps the
- * books, Now playing the roll, Keys takes the keyboard, and Piano (the connection and settings)
- * the sliders. Piano is a nested graph: its hub and its pages ([PianoRoutes]) all belong to it.
+ * The five destinations, in bar and rail order. They navigate; they never act. Library keeps the
+ * books, Now playing the roll, Keys takes the keyboard, Studio (v1.12 — M30) writes music from an idea,
+ * and Piano (the connection and settings) the sliders. Piano is a nested graph: its hub and its pages
+ * ([PianoRoutes]) all belong to it.
  */
 enum class Route(val path: String, val label: String, @param:DrawableRes val icon: Int) {
     Library("library", "Library", R.drawable.ic_tab_library),
     NowPlaying("now-playing", "Now playing", R.drawable.ic_stat_piano),
     Keys("keys", "Keys", R.drawable.ic_tab_keys),
+    Studio("studio", "Studio", R.drawable.ic_tab_studio),
     Piano("piano", "Piano", R.drawable.ic_tab_piano),
     ;
 
@@ -38,8 +40,8 @@ enum class Route(val path: String, val label: String, @param:DrawableRes val ico
  * hub, in the hub's order: `piano/{key}` on phones, beside the hub on wide screens. [piano] is the piano
  * page it shows, for the four whose rows come from the piano's settings table. The constants keep their
  * older names where the page was renamed (Feel is Sound and touch, Lighting is Lights and screen, Remote
- * is Web panel), so the other runs' code still meets them; the [title] is the one name the person reads.
- * Studio left for its own tab (M30): no page here.
+ * is Web panel); the [title] is the one name the person reads. Studio, a page from v1.7, is its own tab
+ * since v1.12 (M30): a saved "studio" page reads as none.
  */
 enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?) {
     Instrument("instrument", "Instrument", null),

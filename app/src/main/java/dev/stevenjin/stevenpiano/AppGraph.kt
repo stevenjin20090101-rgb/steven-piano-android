@@ -45,6 +45,7 @@ import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.art.ArtFiles
 import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
+import dev.stevenjin.stevenpiano.data.builtin.StudioPlaylist
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.TextRepair
@@ -112,7 +113,11 @@ import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.studio.ModelInstaller
 import dev.stevenjin.stevenpiano.studio.ModelStore
 import dev.stevenjin.stevenpiano.studio.ReviewPlayer
-import dev.stevenjin.stevenpiano.studio.StoredReview
+import dev.stevenjin.stevenpiano.studio.Generations
+import dev.stevenjin.stevenpiano.studio.RoomGenerations
+import dev.stevenjin.stevenpiano.studio.RoomReview
+import dev.stevenjin.stevenpiano.studio.StoredCalibration
+import dev.stevenjin.stevenpiano.studio.StoredWaiting
 import dev.stevenjin.stevenpiano.studio.Studio
 import dev.stevenjin.stevenpiano.studio.StudioAvailability
 import dev.stevenjin.stevenpiano.studio.StudioPieces
@@ -199,7 +204,22 @@ class AppGraph(private val app: Application) {
         } catch (e: Exception) {
             Log.w(TAG, "The built-in playlists couldn't be refreshed", e)
         }
+        refreshStudioShelf()
     }
+
+    /** "Made in Studio" (v1.12 — M30) from Studio's history: after each piece Studio saves, and with the built-in lists. */
+    suspend fun refreshStudioShelf() = withContext(Dispatchers.IO) {
+        try {
+            StudioPlaylist.refresh(library, studioHistory.madeHere())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Made in Studio couldn't be refreshed", e)
+        }
+    }
+
+    /** Studio's history (v1.12 — M30): the turns of its conversation, and the one record of its pieces' Keep or Discard. */
+    val studioHistory: Generations by lazy { RoomGenerations(database.generations()) }
 
     /**
      * The one-time repair of uploads imported before 1.10.1 ([UploadRepair], v1.10.1 — M28, D4), off the main
@@ -367,7 +387,7 @@ class AppGraph(private val app: Application) {
     /**
      * The tablet's piano sound (v1.8 — M25): the Upright Piano KW SoundFont (downloaded on demand from the
      * release `models` through Studio's verified path into `filesDir/models/`, as the models are), the voice
-     * that plays it at the device's own output rate, and when it sounds (Piano › Playback › TABLET SOUND).
+     * that plays it at the device's own output rate, and when it sounds (Piano › Tablet sound).
      */
     val tabletSound: TabletSound by lazy {
         val source = ModelsOverride.source() ?: UpdateSource.models
@@ -544,7 +564,7 @@ class AppGraph(private val app: Application) {
         )
     }
 
-    /** The web panel (Piano › Remote control): its sessions, login guard, guests' requests, and where its service listens. */
+    /** The web panel (Piano › Web panel): its sessions, login guard, guests' requests, and where its service listens. */
     val web: WebPanel by lazy { WebPanel(app, this) }
 
     /** Kiosk mode (Piano › Kiosk): the screen locked to the app as device owner, the app as the home screen, its PIN. */
@@ -580,7 +600,7 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * Studio (Piano › Studio, v1.7 — M23): the models (downloaded on demand from the release tagged
+     * Studio (its own tab since v1.12 — M30; a Piano page from v1.7 — M23): the models (downloaded on demand from the release tagged
      * `models`, pinned by hash; on the emulator in debug builds, the server [ModelsOverride] names), the
      * jobs (one at a time on [studioThread], a partial wake lock around each, the foreground service
      * following them), and what a transcription leaves: a piece that waits for Keep or Discard.
@@ -607,6 +627,9 @@ class AppGraph(private val app: Application) {
             log = { Log.i(STUDIO_TAG, it) },
             trail = LinkLog.shared::add,
             seeds = LibrarySeeds(this.library),
+            generations = studioHistory,
+            calibration = StoredCalibration(app),
+            kiosk = { settings.value.kioskEnabled },
         )
     }
 
@@ -619,7 +642,7 @@ class AppGraph(private val app: Application) {
     /** Keep or Discard after a first listen, for Studio's pieces and the tablet's recordings (hoisted in v1.11 — M29). */
     val studioReview: StudioReview by lazy {
         StudioReview(
-            StoredReview(app),
+            RoomReview(studioHistory, StoredWaiting(app)),
             object : ReviewPlayer {
                 override val state = player.state
 
@@ -954,7 +977,7 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * Web control on or off (Piano › Remote control): the switch is saved first, so the service,
+     * The web panel on or off (Piano › Web panel): the switch is saved first, so the service,
      * which follows it, sees it on when it starts; off, the service stops and every session ends.
      */
     fun setWebEnabled(on: Boolean) {
@@ -984,7 +1007,7 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * Remote access over the internet on or off (Piano › Remote control › CLOUD, v1.10 — M26): saved
+     * The web panel over the internet on or off (Piano › Web panel › OVER THE INTERNET, v1.10 — M26): saved
      * first, so the web service, which follows it, sees it; on, the service starts (it connects once
      * a PIN is set and the tablet is enrolled); off, it stops unless Web control keeps it.
      */

@@ -12,7 +12,6 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -40,16 +39,10 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.schedule.NextSchedule
 import dev.stevenjin.stevenpiano.settings.Appearance
-import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
-import dev.stevenjin.stevenpiano.settings.WideLayout
-import dev.stevenjin.stevenpiano.studio.AudioSource
-import dev.stevenjin.stevenpiano.studio.ModelEntry
-import dev.stevenjin.stevenpiano.studio.StudioJob
-import dev.stevenjin.stevenpiano.studio.StudioSupport
 import dev.stevenjin.stevenpiano.service.FirmwareService
 import dev.stevenjin.stevenpiano.service.UpdateService
 import dev.stevenjin.stevenpiano.ui.SettingsPage
@@ -114,32 +107,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** The next schedule's start (the hub's Schedule row). */
     val nextSchedule: StateFlow<NextSchedule?> = graph.schedules.next
-
-    /** Studio (v1.7 — M23): whether it runs here, its models, its jobs, and the pieces waiting for Keep or Discard. */
-    val studioSupport: StateFlow<StudioSupport> = graph.studio.availability.support
-    val studioModels: StateFlow<Set<String>> = graph.studio.models.installed
-    val studioJobs: StateFlow<List<StudioJob>> = graph.studio.jobs.jobs
-    val studioUndecided: StateFlow<Set<Long>> = graph.studio.review.undecided
-    val studioDiscarded: StateFlow<Set<Long>> = graph.studio.review.discardedNow
-
-    /** Asks once per process whether Studio runs here (the hub and the page need to know). */
-    fun checkStudio() = graph.studio.availability.check()
-
-    fun downloadModel(model: ModelEntry) {
-        graph.studio.download(model)
-    }
-
-    fun removeModel(model: ModelEntry) {
-        graph.studio.remove(model)
-    }
-
-    fun cancelStudioJob(id: Long) = graph.studio.cancel(id)
-
-    /** A recording the person picked: its read grant kept for the job (given back after), and queued. */
-    fun transcribe(context: Context, uri: Uri) {
-        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        graph.studio.transcribe(AudioSource.Document(uri))
-    }
 
     /** The tablet's piano sound (v1.8 — M25): its mode and volume as set, the piano's link, the SoundFont and its download. */
     val tabletSound: StateFlow<TabletSoundState> = graph.tabletSound.state
@@ -296,10 +263,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     fun setAutoConnect(on: Boolean) = edit { setAutoConnect(on) }
 
-    fun setNoteDisplay(display: NoteDisplay) = edit { setNoteDisplay(display) }
-
-    fun setWideLayout(layout: WideLayout) = edit { setWideLayout(layout) }
-
     fun setDefaultTempo(pct: Int) = edit { setDefaultTempo(pct) }
 
     fun setPreRoll(ms: Int) = edit { setPreRoll(ms) }
@@ -315,12 +278,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setArtworkMonochrome(on: Boolean) = edit { setArtworkMonochrome(on) }
 
     fun setFetchArtworkAutomatically(on: Boolean) = edit { setFetchArtworkAutomatically(on) }
-
-    fun setFingering(on: Boolean) = edit { setFingering(on) }
-
-    fun setChordNames(on: Boolean) = edit { setChordNames(on) }
-
-    fun setHandColours(on: Boolean) = edit { setHandColours(on) }
 
     fun setCheckForUpdates(on: Boolean) = edit { setCheckForUpdates(on) }
 

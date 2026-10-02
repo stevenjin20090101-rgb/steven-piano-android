@@ -107,7 +107,14 @@ class SettingsIndexTest {
         assertEquals("Now playing › View", fingering.eyebrow)
         assertEquals(SettingsTarget.Away(Elsewhere.Studio), first("models").target)
         assertEquals("Studio", first("models").eyebrow)
+        assertEquals(SettingsTarget.Away(Elsewhere.Studio), first("compose a piece").target)
         assertEquals("Note display", first("waterfall").label)
+        assertEquals("the View menu's Show replaced Wide layout (v1.12)", "Show", first("wide layout").label)
+        assertEquals(SettingsTarget.Away(Elsewhere.NowPlayingView), first("wide layout").target)
+        assertTrue("no Wide layout any more", SettingsIndex.entries.none { it.label == "Wide layout" })
+        for (moved in listOf("Show", "Note display", "Fingering", "Chord names", "Hand colours")) {
+            assertEquals(moved, "Now playing › View", SettingsIndex.entries.single { it.label == moved }.eyebrow)
+        }
     }
 
     @Test

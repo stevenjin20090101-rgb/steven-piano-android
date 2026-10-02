@@ -51,6 +51,9 @@ private val MIN_GAP = 8.dp
 private val MAX_GAP = 32.dp
 private val SIDE_ROOM = 16.dp
 
+/** The narrowest the bar fits in with its smallest gaps and room at both ends: what a pane must give it (v1.12 — M31a). */
+internal val TransportMinWidth = CONTROLS_WIDTH + MIN_GAP * 4 + SIDE_ROOM * 2
+
 /**
  * shuffle · previous · play/pause · next · repeat. Play/pause is the 72 dp circle in the content
  * colour with a surface glyph; its glyph crossfades over 320 ms (a cut when motion is reduced) and

@@ -93,8 +93,8 @@ class DiagnosticsExporterTest {
         assertFalse("nor anything of its secret", "cloudSecret" in prefs)
         assertTrue("the library pack loaded (v1.10 — M27)", "cloudEnrolled = true\nlibraryPackVersion = 1\n" in prefs)
         assertEquals(
-            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29)",
-            46,
+            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a)",
+            47,
             prefs.lines().count { it.isNotEmpty() },
         )
         assertTrue(
@@ -103,6 +103,7 @@ class DiagnosticsExporterTest {
         )
         assertTrue("Instrument: Steven Piano\nKeyboard: none\n" in about)
         assertTrue("the order is a preference", prefs.contains("playlistSort = NEWEST\n"))
+        assertTrue("the split's two shares, the arrangements' defaults (v1.12 — M31a)", "notesSplitStacked = (none)\nnotesSplitSide = (none)\n" in prefs)
         assertTrue("the repair of older uploads is housekeeping, never listed", !prefs.contains("Repair"))
 
         assertTrue(entries.getValue("link.log").endsWith("with its console\n"))
