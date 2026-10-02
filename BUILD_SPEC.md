@@ -6997,3 +6997,70 @@ assembles (29.6 MB).
 - The 13,500-token budget's time on the school tablet (five minutes of music may take several minutes there), the
   covers' look by eye, and the aura's frame cost over the glass: none measured in this run.
 - The integrator's upgrade check above, and a first composition from a typed idea on the merged build.
+
+# v1.12 — M31a: the split between the score and the notes, and the View menu
+
+Read `DESIGN.md › v1.12 — the split and the View menu` first. Fable's brief (`m31a-split-brief.md`) with the plan's
+section 3 (`plans/plan-web-split.md`), built by Opus in the worktree `android-wt-m31a` (branch `m31a-split`) from
+`7c24ff5` (1.11), beside M30 on `main`. The owner then cut the run to the feature, the critical tests and short
+documents: **no emulator pass** (the integrator smoke-tests the merged build), no version bump, no provenance signing.
+
+## Files
+
+`M` = `app/src/main/java/dev/stevenjin/stevenpiano`. Added: `M/ui/components/SplitPane.kt` (`SplitAxis`, the pure
+`SplitRules`, the `SplitPane` layout), `M/ui/screens/nowplaying/ViewMenu.kt` (`ViewMenu`, `ViewShow`),
+`res/drawable/ic_view.xml`. Changed: `M/score/ScoreMetrics.kt` (`ScoreWidth.forPage`, `ScoreMetrics.fitting`),
+`M/ui/components/ScorePages.kt` (no `width`; `fitting`), `TransportBar.kt` (`TransportMinWidth`), `M/ui/AdaptiveFrame.kt`
+(`NotesPlan.split`/`axis`, `notesPlan(display, stacked, side)`; `scoreWidth` and `WideLayout.label` gone),
+`M/ui/screens/nowplaying/NowPlayingScreen.kt`, `NotePanel.kt` (`transportFloats`); shared with other runs:
+`M/settings/Settings.kt`, `M/diag/DiagnosticsExporter.kt`, `M/ui/screens/piano/pages/DisplayPage.kt`, `GroupSummaries.kt`,
+`PianoScreen.kt`, `PianoViewModel.kt`.
+
+## What was built
+
+- **Settings**: `notesSplitStacked` and `notesSplitSide` (`Float?`, null the arrangement's default), the first Float
+  preferences; `setNotesSplit(stacked, share)` refuses a share that is not a number and holds the rest to 0–1. A stored
+  `wideLayout` of `NOTES_ONLY` reads as 0 for both, `STAFF_ONLY` as 1; the first write stores both and removes the old
+  key (an older build then reads its default). `settings.txt` prints the two shares (47 lines).
+- **The plan**: wide frames get an axis (medium: stacked, expanded: side by side) and the committed share; 0 is `ROLL`,
+  1 is `SCORE`, anything between `STACKED` or `SIDE_BY_SIDE`. Phones are unchanged.
+- **`SplitPane`**: a custom `Layout` reading the share in layout, so a drag moves the panes without recomposing them;
+  a hidden pane leaves composition and the divider waits at its edge. `SplitRules` holds the arithmetic: the stops
+  (12 dp), the minimums, hiding 56 dp past them and coming back at the minimum, the 2 % nudge, the Page-key stops,
+  the tick (`CLOCK_TICK`, as play/pause) on resting on a stop and on hiding, TalkBack's state text. Release, double-tap,
+  keys and accessibility actions write the setting; the pane holds what it drew until the committed share arrives.
+- **Now playing**: the divider only where both views fit unscrolled; short screens keep their fixed heights (side by
+  side, their widths follow the share). The transport's float rule reads the committed share, and
+  one call site keeps the split and the score in place when the transport moves between glass and solid.
+- **Bars per system** from the page's width (`ScoreWidth.forPage`: under 480 dp 2, under 560 dp 3, else 4) through
+  `ScoreMetrics.fitting`, which is `forPanel` with that width; the score's 150 ms settle and clipping are unchanged.
+- **The View menu** and **Display**: as DESIGN says; `PianoViewModel` loses the five setters that moved; the hub's
+  Display row reads the appearance.
+
+## Deviations from the brief, and why
+
+- **The plan's pure moves for the web panel wait for M32**: `score/ScoreStyle.kt`, `score/ScoreMarks.kt`,
+  `ScoreMetrics.chordLine` and `ScoreBars.microsAt` (plan § 1.2) serve only the browser's painter. With the run cut to the
+  essentials and the equivalence test dropped, moving the painter's tempo-mark and chord-name placement now would risk
+  the engraving for nothing the tablet shows. Only `ScoreWidth.forPage` and `ScoreMetrics.fitting` landed.
+- **The transport floats side by side only on a roll at least 344 dp wide** (`TransportMinWidth`: the bar's five
+  controls with their smallest gaps and 16 dp each side): the plan's 240 dp minimum would squeeze the bar; below 344 dp
+  the transport stands solid under the views.
+- **No edge grabber where bringing a pane back would make the screen scroll**: on a medium frame 520–780 dp tall with a
+  pane hidden, the single view shows without the grabber (the View menu brings the pane back), since the stacked views
+  need 780 dp before the short layout takes over.
+- **TalkBack's state at the ends** reads "sheet music hidden" and "notes hidden", not a percentage.
+- **The 48 dp target overlaps 20 dp of each pane** (as designed): a tap there, such as the last 8 dp of a side-by-side
+  system or the Follow chip's right edge, goes to the divider. A pane hidden mid-drag takes the floating transport with
+  it until the release. Worth a look on the school tablet.
+
+## Tests added in M31a
+
+`SplitRulesTest` 6 (defaults and minimums, the stops, hiding and coming back, shares kept to the minimums and the tight
+case, keys and adjustments, ticks and TalkBack's words). `ScorePageWidthTest` 2 (the thresholds, `fitting` equal to
+`forPanel` otherwise, 840 dp as two pages of two bars). `SettingsRepositoryTest` +2 (the Float round trip, clamping and
+refusal; the seed from `wideLayout` and the first write). `TransportFloatsTest` +2 (explicit shares stacked and side by
+side, the width, a hidden roll). `AdaptiveFrameTest` (the new plan; 0 and 1 the single views; the window-class bars test
+removed), `GroupSummariesTest` (Display reads the appearance), `DiagnosticsExporterTest` (47 lines). The existing score
+tests are untouched. **1,503 → 1,513** (12 skipped). `lintDebug`: 0 errors, the same 30 warnings as M29. The UI-contract
+greps as M29's (`m31a/greps.txt`): no colour added, the divider no glass, the View menu a `GlassPopover`.

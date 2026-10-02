@@ -239,11 +239,10 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, keyboard, instrument) {
+    val summaries = remember(piano, settings, web, firmware, firmwarePiano, nextSchedule, keyboard, instrument) {
         GroupSummaries.from(
             piano,
             settings,
-            frame.wide,
             web,
             firmware,
             (firmwarePiano as? FirmwarePiano.Connected)?.text,

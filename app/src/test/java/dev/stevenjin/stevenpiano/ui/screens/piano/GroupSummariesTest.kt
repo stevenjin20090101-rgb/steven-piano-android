@@ -70,10 +70,10 @@ class GroupSummariesTest {
     @Test
     fun `until the piano answers its four rows read a dash, and the app's rows still read`() {
         for (state in listOf(PianoState.Unknown, PianoState.Unsupported)) {
-            val rows = GroupSummaries.from(state, PianoSettings(), wide = false)
+            val rows = GroupSummaries.from(state, PianoSettings())
             assertEquals(listOf(unknown, unknown, unknown, unknown), listOf(rows.feel, rows.lighting, rows.pedal, rows.firmware))
             assertEquals("2 s pause · 100%", rows.playback)
-            assertEquals("Paper roll", rows.display)
+            assertEquals("Follow system", rows.display)
         }
     }
 
@@ -88,27 +88,17 @@ class GroupSummariesTest {
     }
 
     @Test
-    fun `Display reads the note display, the roll's style on wide screens`() {
-        fun shown(display: NoteDisplay, wide: Boolean) = GroupSummaries.display(PianoSettings(noteDisplay = display), wide)
-        assertEquals("Paper roll", shown(NoteDisplay.PAPER_ROLL, wide = false))
-        assertEquals("Falling notes", shown(NoteDisplay.FALLING, wide = false))
-        assertEquals("Score", shown(NoteDisplay.STAFF, wide = false))
-        assertEquals("the score has its own place there", "Paper roll", shown(NoteDisplay.STAFF, wide = true))
-        assertEquals("Falling notes", shown(NoteDisplay.FALLING, wide = true))
-    }
-
-    @Test
-    fun `Display still reads the note display, whatever the appearance and standby say`() {
-        val plain = GroupSummaries.display(PianoSettings(), wide = false)
+    fun `Display reads the appearance, the note display having moved to Now playing's View menu (v1_12)`() {
+        assertEquals("Follow system", GroupSummaries.display(PianoSettings()))
+        assertEquals("Light", GroupSummaries.display(PianoSettings(appearance = Appearance.LIGHT)))
+        assertEquals("Dark", GroupSummaries.display(PianoSettings(appearance = Appearance.DARK)))
         val changed = PianoSettings(
-            appearance = Appearance.DARK,
+            noteDisplay = NoteDisplay.FALLING,
             displayModeAfterMinute = true,
             standbyCanvas = StandbyCanvas.INK,
             standbyShows = StandbyShows.PAPER_ROLL,
         )
-        assertEquals("Paper roll", plain)
-        assertEquals(plain, GroupSummaries.display(changed, wide = false))
-        assertEquals(GroupSummaries.display(PianoSettings(), wide = true), GroupSummaries.display(changed, wide = true))
+        assertEquals("whatever the notes and standby say", "Follow system", GroupSummaries.display(changed))
     }
 
     @Test
@@ -117,11 +107,10 @@ class GroupSummariesTest {
         val rows = GroupSummaries.from(
             piano,
             PianoSettings(defaultTempoPct = 90, noteDisplay = NoteDisplay.FALLING, webEnabled = true),
-            wide = false,
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("Steven Piano", "None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off"),
+            listOf("Steven Piano", "None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Follow system", "None", "On · 100.101.2.3", "Off"),
             SettingsPage.entries.map { rows.of(it) },
         )
     }
@@ -129,11 +118,11 @@ class GroupSummariesTest {
     @Test
     fun `Keyboard reads None, the keyboard's name, or its name not connected (v1_11 M29)`() {
         val chosen = KeyboardState.Chosen(MidiNames.usbKey("Roland", "FP-30X", "1"), "FP-30X", MidiTransport.USB)
-        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).of(SettingsPage.Keyboard))
-        assertEquals("FP-30X", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false, keyboard = KeyboardState(chosen, KeyboardState.Phase.Connected)).of(SettingsPage.Keyboard))
+        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings()).of(SettingsPage.Keyboard))
+        assertEquals("FP-30X", GroupSummaries.from(PianoState.Unknown, PianoSettings(), keyboard = KeyboardState(chosen, KeyboardState.Phase.Connected)).of(SettingsPage.Keyboard))
         assertEquals(
             "FP-30X · not connected",
-            GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false, keyboard = KeyboardState(chosen, KeyboardState.Phase.NotConnected)).of(SettingsPage.Keyboard),
+            GroupSummaries.from(PianoState.Unknown, PianoSettings(), keyboard = KeyboardState(chosen, KeyboardState.Phase.NotConnected)).of(SettingsPage.Keyboard),
         )
     }
 
@@ -166,7 +155,7 @@ class GroupSummariesTest {
         assertEquals("2.0.0", GroupSummaries.firmware(connected, FirmwareState.UpToDate("2.0.0"), "2.0.0+a1b2c3d"))
         assertEquals("a refusal Retry won't mend offers nothing", "2.0.0",
             GroupSummaries.firmware(connected, FirmwareState.Failed(FirmwareFailures.DIDNT_FINISH, retryable = false, manifest = manifest), "2.0.0+a1b2c3d"))
-        val rows = GroupSummaries.from(connected, PianoSettings(), wide = false, firmwareUpdate = FirmwareState.Available(manifest), firmwareVersion = "2.0.0+a1b2c3d")
+        val rows = GroupSummaries.from(connected, PianoSettings(), firmwareUpdate = FirmwareState.Available(manifest), firmwareVersion = "2.0.0+a1b2c3d")
         assertEquals("Update available", rows.of(SettingsPage.Firmware))
     }
 
@@ -176,8 +165,8 @@ class GroupSummariesTest {
         assertEquals("None", GroupSummaries.schedule(null))
         assertEquals("Next Wed 12:30", GroupSummaries.schedule(wednesday))
         assertEquals("Next Sun 07:05", GroupSummaries.schedule(wednesday.plusDays(4).withHour(7).withMinute(5)))
-        assertEquals("the Schedule row reads without the piano", "Next Wed 12:30", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false, nextSchedule = wednesday).schedule)
-        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).of(SettingsPage.Schedule))
+        assertEquals("the Schedule row reads without the piano", "Next Wed 12:30", GroupSummaries.from(PianoState.Unknown, PianoSettings(), nextSchedule = wednesday).schedule)
+        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings()).of(SettingsPage.Schedule))
     }
 
     @Test
@@ -188,7 +177,7 @@ class GroupSummariesTest {
         assertEquals("guests only on the Wi-Fi: no panel address", "On", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20")))
         assertEquals("On · 192.168.1.20", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20", panelOnWifi = true)))
         assertEquals("On", GroupSummaries.remote(on, WebStatus()))
-        assertEquals("the Remote row reads without the piano", "Off", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).remote)
+        assertEquals("the Remote row reads without the piano", "Off", GroupSummaries.from(PianoState.Unknown, PianoSettings()).remote)
     }
 
     @Test
@@ -206,6 +195,6 @@ class GroupSummariesTest {
     fun `Kiosk reads on or off, with or without the piano`() {
         assertEquals("Off", GroupSummaries.kiosk(PianoSettings()))
         assertEquals("On", GroupSummaries.kiosk(PianoSettings(kioskEnabled = true, kioskPinSet = true)))
-        assertEquals("On", GroupSummaries.from(PianoState.Unknown, PianoSettings(kioskEnabled = true), wide = true).of(SettingsPage.Kiosk))
+        assertEquals("On", GroupSummaries.from(PianoState.Unknown, PianoSettings(kioskEnabled = true)).of(SettingsPage.Kiosk))
     }
 }

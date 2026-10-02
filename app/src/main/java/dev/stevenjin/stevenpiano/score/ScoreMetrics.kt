@@ -13,16 +13,37 @@ package dev.stevenjin.stevenpiano.score
 import kotlin.math.floor
 import kotlin.math.max
 
-/** The window's width as the score counts it: bars per system follow it (DESIGN.md › v1.2 › Score). */
+/**
+ * A page's width as the score counts it: bars per system follow it (DESIGN.md › v1.2 › Score; until v1.11 they
+ * followed the window's width class, since v1.12 the page's own width, [forPage]).
+ */
 enum class ScoreWidth(val barsPerSystem: Int) {
-    /** Phones upright. */
+    /** A page under 480 dp wide: a phone upright, a narrow pane. */
     COMPACT(2),
 
-    /** Small tablets, tablets upright, phones on their side. */
+    /** A page 480 to 560 dp wide. */
     MEDIUM(3),
 
-    /** Tablets on their side. */
+    /** A page 560 dp wide or more. */
     EXPANDED(4),
+    ;
+
+    companion object {
+        /** Pages narrower than this (dp) hold two bars a system, and narrower than [FOUR_BARS_DP] three. */
+        const val THREE_BARS_DP = 480f
+        const val FOUR_BARS_DP = 560f
+
+        /**
+         * The width a page [pageWidthDp] wide counts as (DESIGN.md › v1.12): under 480 dp two bars a system, under
+         * 560 dp three, else four. It reads the page, not the panel, so a bar's width stays continuous where a panel
+         * grows to two pages.
+         */
+        fun forPage(pageWidthDp: Float): ScoreWidth = when {
+            pageWidthDp < THREE_BARS_DP -> COMPACT
+            pageWidthDp < FOUR_BARS_DP -> MEDIUM
+            else -> EXPANDED
+        }
+    }
 }
 
 /**
@@ -115,8 +136,8 @@ data class ScoreMetrics(
             numeralWidth: Float = NUMERAL_WIDTH_DP * density,
             chordHeight: Float = 0f,
         ): ScoreMetrics {
-            val pages = if (panelWidthPx / density >= TWO_PAGES_DP) 2 else 1
-            val pageGap = if (pages == 2) PAGE_GAP_DP * density else 0f
+            val pages = pagesFor(panelWidthPx, density)
+            val pageGap = pageGapFor(pages, density)
             val space = SPACE_DP * density
             val staveGap = STAVE_GAP_DP * density
             val systemGap = SYSTEM_GAP_DP * density
@@ -150,5 +171,34 @@ data class ScoreMetrics(
                 chordHeight = chordHeight,
             )
         }
+
+        /**
+         * The metrics for a panel of [panelWidthPx] × [panelHeightPx] (v1.12 — M31a): as [forPanel], with the bars a
+         * system holds from the width of the panel's pages ([ScoreWidth.forPage]), so a panel the split resizes keeps
+         * bars of a sensible width at any share.
+         */
+        fun fitting(
+            panelWidthPx: Float,
+            panelHeightPx: Float,
+            density: Float,
+            headWidth: Float,
+            clefWidth: Float,
+            numberHeight: Float = NUMBER_HEIGHT_DP * density,
+            numeralHeight: Float = NUMERAL_HEIGHT_DP * density,
+            numeralWidth: Float = NUMERAL_WIDTH_DP * density,
+            chordHeight: Float = 0f,
+        ): ScoreMetrics {
+            val pages = pagesFor(panelWidthPx, density)
+            val pageWidth = (panelWidthPx - pageGapFor(pages, density) * (pages - 1)) / pages
+            return forPanel(
+                ScoreWidth.forPage(pageWidth / density), panelWidthPx, panelHeightPx, density, headWidth, clefWidth,
+                numberHeight, numeralHeight, numeralWidth, chordHeight,
+            )
+        }
+
+        /** Two pages side by side on a panel [TWO_PAGES_DP] wide or more, else one. */
+        private fun pagesFor(panelWidthPx: Float, density: Float): Int = if (panelWidthPx / density >= TWO_PAGES_DP) 2 else 1
+
+        private fun pageGapFor(pages: Int, density: Float): Float = if (pages == 2) PAGE_GAP_DP * density else 0f
     }
 }

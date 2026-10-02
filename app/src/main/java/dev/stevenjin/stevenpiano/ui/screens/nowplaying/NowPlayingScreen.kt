@@ -93,6 +93,8 @@ import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.ScorePages
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
+import dev.stevenjin.stevenpiano.ui.components.SplitAxis
+import dev.stevenjin.stevenpiano.ui.components.SplitPane
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.components.scrollEdges
@@ -100,6 +102,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
+import kotlinx.coroutines.launch
 
 /**
  * Below this height the screen scrolls, and the note views get fixed heights; the stacked views
@@ -115,9 +118,10 @@ private val SHORT_SCORE = 200.dp
  * The signature screen: the title, the composer, the note views, the scrubber, the transport,
  * tempo and the connection line. The note views follow the window's width class: on a phone one
  * canvas (paper roll, falling notes or the score, as Note display says); on wider screens the
- * score and the notes together (stacked on medium widths, side by side on expanded ones), or
- * either alone, as Wide layout says. The roll always keeps its keyboard strip beneath it, lane
- * for key. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through [playback], which keeps the playback service running, with
+ * score and the notes together (stacked on medium widths, side by side on expanded ones), sharing
+ * the room as the divider between them says, or either alone (DESIGN.md › v1.12: [SplitPane]; the
+ * View menu in the header, [ViewMenu], sets the same shares and the notes' style and marks). The roll
+ * always keeps its keyboard strip beneath it, lane for key. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through [playback], which keeps the playback service running, with
  * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet, and
  * the title opens the piece sheet. [onOpenPiano] shows the Piano tab. The scrubber and the
  * transport float on glass over the paper roll's history, the third below the tracker bar, above
@@ -137,7 +141,7 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val settings by graph.settings.collectAsStateWithLifecycle()
     val link by graph.pianoLink.state.collectAsStateWithLifecycle()
     val piece = state.piece
-    val plan = frame.notesPlan(settings.noteDisplay, settings.wideLayout)
+    val plan = frame.notesPlan(settings.noteDisplay, settings.notesSplitStacked, settings.notesSplitSide)
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     // The status bar, before the header's glass takes the top: the short rule measures what is below it, as before.
@@ -151,7 +155,10 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
         modifier = Modifier.padding(outer.sides()),
         header = {
             ScreenHeader("Now playing") {
-                if (piece != null) GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
+                if (piece != null) {
+                    ViewMenu(settings, plan, frame)   // v1.12 — M31a
+                    GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
+                }
             }
         },
     ) {
@@ -164,11 +171,18 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
         ) {
             // Too short for the note views to share the height (landscape, a small phone at a large
             // font): the screen scrolls and the views keep fixed heights instead of collapsing.
-            val short = piece != null && maxHeight - statusBar < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
+            val available = maxHeight - statusBar
+            val short = piece != null && available < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
+            // The divider (and a hidden pane's grabber at its edge) only where both views would fit unscrolled (v1.12 — M31a).
+            val divided = !short && when (plan.axis) {
+                SplitAxis.Stacked -> available >= SHORT_BELOW_STACKED
+                SplitAxis.SideBySide -> true
+                null -> false
+            }
             Column(if (short) Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column) else Modifier.fillMaxSize().padding(top = top)) {
                 if (short) Spacer(Modifier.height(top))
                 val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
-                NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short) { about = it }
+                NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, divided) { about = it }
             }
         }
     }
@@ -187,13 +201,14 @@ private fun ColumnScope.NowPlayingContent(
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
     short: Boolean,
+    divided: Boolean,
     onAbout: (Long) -> Unit,
 ) {
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
     if (piece != null) {
-        PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short) { onAbout(piece.pieceId) }
+        PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short, divided) { onAbout(piece.pieceId) }
     } else if (!state.loading) {
         Box(
             Modifier
@@ -227,6 +242,7 @@ private fun ColumnScope.PieceView(
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
     short: Boolean,
+    divided: Boolean,
     onAbout: () -> Unit,
 ) {
     val playing = state.status == PlaybackStatus.Playing
@@ -261,22 +277,21 @@ private fun ColumnScope.PieceView(
         TransportControls(piece, state, frame, roll, player, playback, onSeek = seek, onMoved = { if (!playing) settle++ })
     }
     if (short) {
-        NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, null, Modifier.height(shortHeight(plan.layout)).fillMaxWidth().padding(horizontal = 16.dp))
+        NoteViews(plan, piece, state, marks, frame, roll, player, short, false, seek, null, Modifier.height(shortHeight(plan.layout)).fillMaxWidth().padding(horizontal = 16.dp))
         Column(content = controls)
     } else {
         // The controls float on glass over the roll's history when it can hold them; otherwise they stand below.
+        // Both read the committed split, so the transport stays put while a finger drags the divider.
+        // One call site either way, so the split and the score keep their state when the transport moves.
         BoxWithConstraints(
             Modifier
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
-            if (glassAvailable() && transportFloats(plan, maxHeight)) {
-                NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, controls, Modifier.fillMaxSize().padding(horizontal = 16.dp))
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    NoteViews(plan, piece, state, marks, frame, roll, player, short, seek, null, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp))
-                    controls()
-                }
+            val floats = glassAvailable() && transportFloats(plan, maxHeight, maxWidth - 32.dp)
+            Column(Modifier.fillMaxSize()) {
+                NoteViews(plan, piece, state, marks, frame, roll, player, short, divided, seek, if (floats) controls else null, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp))
+                if (!floats) controls()
             }
         }
     }
@@ -309,6 +324,9 @@ private fun shortHeight(layout: NotesLayout): Dp = when (layout) {
  * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the score,
  * or both, each on the elevated surface with the card corners. [onSeek] is a tap on a bar. With
  * [controls] the roll's card carries them on glass over its history ([GlassTransportPanel]).
+ * [divided] (wide frames with room, v1.12 — M31a): the two share a [SplitPane] whose divider the
+ * person drags, a hidden pane's grabber waiting at its edge; the share it settles on is remembered
+ * for the arrangement. Otherwise (a short screen that scrolls) they keep fixed heights.
  */
 @Composable
 private fun NoteViews(
@@ -320,11 +338,12 @@ private fun NoteViews(
     roll: RollClock,
     player: Player,
     short: Boolean,
+    divided: Boolean,
     onSeek: (Long) -> Unit,
     controls: (@Composable ColumnScope.() -> Unit)?,
     modifier: Modifier,
 ) {
-    val scoreWidth = LocalAppFrame.current.scoreWidth
+    val graph = LocalContext.current.graph
     val hands = piece.handsOrNull
     val fingers = if (marks.fingering) piece.fingersFor(state.transpose, state.fold) else null
     val chords = if (marks.chordNames) piece.chords else null
@@ -357,7 +376,6 @@ private fun NoteViews(
                 timeSignatures = piece.timeSignatures,
                 transpose = state.transpose,
                 fold = state.fold,
-                width = scoreWidth,
                 frameNanos = frame,
                 clock = roll,
                 onSeek = onSeek,
@@ -372,20 +390,32 @@ private fun NoteViews(
             }
         }
     }
+    val axis = plan.axis
+    if (divided && axis != null) {
+        // The keyboard strip stays under the roll, not across both views, so every lane still meets its key; with
+        // the roll hidden it comes under the score.
+        SplitPane(
+            axis = axis,
+            share = plan.split,
+            onShare = { share -> graph.appScope.launch { graph.settingsRepository.setNotesSplit(axis == SplitAxis.Stacked, share) } },
+            first = { panel, alone -> score(panel, alone) },
+            second = { panel, _ -> notes(panel) },
+            modifier = modifier,
+        )
+        return
+    }
     when (plan.layout) {
         NotesLayout.ROLL -> notes(modifier)
         NotesLayout.SCORE -> score(modifier, true)
         NotesLayout.STACKED -> Column(modifier) {
-            score(if (short) Modifier.height(SHORT_SCORE).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth(), false)
+            score(if (short) Modifier.height(SHORT_SCORE).fillMaxWidth() else Modifier.weight(plan.split).fillMaxWidth(), false)
             Spacer(Modifier.height(PANEL_GAP))
-            notes(if (short) Modifier.height(SHORT_ROLL).fillMaxWidth() else Modifier.weight(2f).fillMaxWidth())
+            notes(if (short) Modifier.height(SHORT_ROLL).fillMaxWidth() else Modifier.weight(1f - plan.split).fillMaxWidth())
         }
-        // The keyboard strip stays under the roll, not across both views, so every lane still
-        // meets its key.
         NotesLayout.SIDE_BY_SIDE -> Row(modifier) {
-            score(Modifier.weight(1f).fillMaxHeight(), false)
+            score(Modifier.weight(plan.split).fillMaxHeight(), false)
             Spacer(Modifier.width(PANEL_GAP))
-            notes(Modifier.weight(1f).fillMaxHeight())
+            notes(Modifier.weight(1f - plan.split).fillMaxHeight())
         }
     }
 }
@@ -420,5 +450,5 @@ private fun PaddingValues.sides(): PaddingValues = PaddingValues(
     end = calculateEndPadding(LayoutDirection.Ltr),
 )
 
-/** What the note views show beside the notes, as the Piano tab's switches say. */
+/** What the note views show beside the notes, as the View menu's switches say. */
 private data class Marks(val fingering: Boolean, val chordNames: Boolean)

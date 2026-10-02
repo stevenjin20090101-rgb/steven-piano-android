@@ -304,7 +304,8 @@ Window size classes decide the frame; nothing else changes with size.
   *Notes only* · *Staff only*. On compact widths the *Note display* preference gains
   *Staff* as a third option. *(Since v1.2 the staff is the score, and the choices read
   **Score and notes** · **Notes only** · **Score only**, and **Score**; the saved values
-  keep their v1.1 names.)*
+  keep their v1.1 names. **Superseded in v1.12** by the divider and the View menu: see
+  v1.12 — the split and the View menu.)*
 - Landscape phones use the Medium layout. Rotation keeps position and state.
 
 ## Keys — a playable keyboard
@@ -728,7 +729,7 @@ it inset 16 dp to the text; the system ripple and nothing else.
 - **Display**: NOTES (Note display as chips, with Wide layout under it on wide screens;
   Fingering, Chord names, Hand colours) · ARTWORK (Artwork in black and white, Fetch artwork
   automatically with its line) (M17 puts APPEARANCE first and adds STANDBY last:
-  see v1.5 — M17).
+  see v1.5 — M17; v1.12 moves NOTES to Now playing's View menu).
 - The piano's pages carry the status line at their top; until the piano has answered, their
   controls are there, disabled, under it. Firmware without the Bluetooth console: each piano
   page shows that one line and nothing else (the v1.1 rule, now per page). A refusal shows
@@ -2475,3 +2476,30 @@ shortened). The rules:
 - **Kiosk mode: typing ideas is free** (Steven). Send, Options, Another like it, Listen and Cancel need no PIN;
   Attach, Models, Keep, Discard and removing a turn do. At most three ideas wait, "Not used" is a count, the
   history hides typed words until the PIN opens the settings, and at most 30 Studio pieces wait (the oldest goes).
+
+# v1.12 — the split and the View menu
+
+Designed by Fable with the `apple-design` lenses (`split-views.md`, `settings.md › Task-specific options`,
+`pop-up-buttons.md`), tablet first. The v1.1 **Wide layout** preference is gone; nothing else changes.
+
+- **The divider.** On wide frames a divider sits in the 8 dp gap between the score and the notes: a 1 dp hairline
+  (`LocalHairline`) with a 36 × 4 dp grabber (`onSurfaceVariant`), a 48 dp touch target centred on the gap. It is
+  content: no colour, no glass. Drag it: it rests at a third, a half and two thirds (within 12 dp); a pane keeps its
+  minimum (stacked: the score 200 dp, the notes 165 dp; side by side: 240 dp each), and dragged 56 dp past it the pane
+  hides, the divider waiting at that edge to bring it back. A light tick on resting on a stop and on hiding. Double-tap
+  resets to the arrangement's default: a third for the score stacked, a half side by side.
+- **Remembered per arrangement**: stacked and side by side each keep their own share (`notesSplitStacked`,
+  `notesSplitSide`); 0 shows the notes alone, 1 the score alone. An older build's *Notes only* reads as 0 and *Score
+  only* as 1, for both.
+- **Bars per system follow the score page's width**: under 480 dp two, under 560 dp three, else four. A re-layout
+  waits for the 150 ms settle; while a finger moves, the old layout stays drawn, top-start, clipped, never scaled.
+  The transport floats or stands as the committed share says, so it does not jump during a drag.
+- **The View menu**: a glyph in Now playing's header opening the menus' glass, its end at the glyph's end so it
+  never crosses the divider. On wide frames SHOW (*Score and notes* · *Notes only* · *Score only*: the same shares
+  without dragging); NOTES (*Paper roll* · *Falling notes*, and *Score* on a phone); *Fingering* · *Chord names* ·
+  *Hand colours* (with its note). Piano › Display keeps Appearance, Artwork and Standby. "Falling notes" is the one
+  name for that view.
+- **Kiosk**: the divider and the View menu are free, no PIN. **TalkBack**: "Sheet music and notes divider, sheet
+  music 33 percent", adjusted as a slider, with the actions Reset, Show sheet music only, Show notes only. **Keys**:
+  the arrows along the axis move it 2 %, Page keys jump between the stops, Home and End hide a pane. Short screens
+  that scroll keep their fixed heights and no divider.

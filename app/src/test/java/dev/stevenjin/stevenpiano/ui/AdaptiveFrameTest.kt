@@ -14,15 +14,13 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.settings.NoteDisplay.FALLING
 import dev.stevenjin.stevenpiano.settings.NoteDisplay.PAPER_ROLL
 import dev.stevenjin.stevenpiano.settings.NoteDisplay.STAFF
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
-import dev.stevenjin.stevenpiano.settings.WideLayout.NOTES_ONLY
-import dev.stevenjin.stevenpiano.settings.WideLayout.STAFF_AND_NOTES
-import dev.stevenjin.stevenpiano.settings.WideLayout.STAFF_ONLY
+import dev.stevenjin.stevenpiano.ui.components.SplitAxis
+import dev.stevenjin.stevenpiano.ui.screens.nowplaying.ViewShow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -73,7 +71,7 @@ class AdaptiveFrameTest {
         assertEquals(WindowWidthSizeClass.Medium, landscape.widthClass)
         assertTrue(landscape.rail)
         assertEquals(AppFrame.MEDIUM_WHITES, landscape.keysVisibleWhites)
-        assertEquals(NotesLayout.STACKED, landscape.notesPlan(PAPER_ROLL, STAFF_AND_NOTES).layout)
+        assertEquals(NotesLayout.STACKED, landscape.notesPlan(PAPER_ROLL, null, null).layout)
     }
 
     @Test
@@ -97,23 +95,29 @@ class AdaptiveFrameTest {
     @Test
     fun `on a phone Note display picks the one canvas, the score included`() {
         assertEquals(listOf(PAPER_ROLL, FALLING, STAFF), phone.noteDisplayChoices)
-        assertEquals(NotesPlan(NotesLayout.ROLL, PAPER_ROLL), phone.notesPlan(PAPER_ROLL, STAFF_AND_NOTES))
-        assertEquals(NotesPlan(NotesLayout.ROLL, FALLING), phone.notesPlan(FALLING, STAFF_ONLY))
-        assertEquals(NotesLayout.SCORE, phone.notesPlan(STAFF, NOTES_ONLY).layout)
+        assertEquals(NotesPlan(NotesLayout.ROLL, PAPER_ROLL), phone.notesPlan(PAPER_ROLL, null, null))
+        assertEquals(NotesPlan(NotesLayout.ROLL, FALLING), phone.notesPlan(FALLING, 1f, 1f))   // the split is the wide frames' alone
+        assertEquals(NotesLayout.SCORE, phone.notesPlan(STAFF, 0f, 0f).layout)
+        assertEquals(null, phone.notesPlan(STAFF, null, null).axis)
     }
 
     @Test
-    fun `medium widths stack the score over the notes, expanded ones set them side by side`() {
-        assertEquals(NotesPlan(NotesLayout.STACKED, FALLING), tabletUpright.notesPlan(FALLING, STAFF_AND_NOTES))
-        assertEquals(NotesPlan(NotesLayout.SIDE_BY_SIDE, PAPER_ROLL), tabletOnItsSide.notesPlan(PAPER_ROLL, STAFF_AND_NOTES))
+    fun `medium widths stack the score over the notes, a third for the score, expanded ones set them side by side, half each`() {
+        assertEquals(NotesPlan(NotesLayout.STACKED, FALLING, 1f / 3f, SplitAxis.Stacked), tabletUpright.notesPlan(FALLING, null, null))
+        assertEquals(NotesPlan(NotesLayout.SIDE_BY_SIDE, PAPER_ROLL, 0.5f, SplitAxis.SideBySide), tabletOnItsSide.notesPlan(PAPER_ROLL, null, null))
+        // Each arrangement keeps its own share.
+        assertEquals(0.6f, tabletUpright.notesPlan(PAPER_ROLL, 0.6f, 0.2f).split)
+        assertEquals(0.2f, tabletOnItsSide.notesPlan(PAPER_ROLL, 0.6f, 0.2f).split)
     }
 
     @Test
-    fun `on wide screens Wide layout can show either view alone, and Note display picks the roll's style`() {
+    fun `on wide screens a share of 0 shows the notes alone and 1 the score alone, and Note display picks the roll's style`() {
+        assertEquals(NotesPlan(NotesLayout.ROLL, FALLING, 0f, SplitAxis.Stacked), tabletUpright.notesPlan(FALLING, 0f, 1f))
+        assertEquals(NotesPlan(NotesLayout.SCORE, PAPER_ROLL, 1f, SplitAxis.SideBySide), tabletOnItsSide.notesPlan(PAPER_ROLL, 0f, 1f))
         for (wide in listOf(tabletUpright, tabletOnItsSide)) {
-            assertEquals(NotesPlan(NotesLayout.ROLL, FALLING), wide.notesPlan(FALLING, NOTES_ONLY))
-            assertEquals(NotesPlan(NotesLayout.ROLL, PAPER_ROLL), wide.notesPlan(STAFF, NOTES_ONLY))   // the score reads as the paper roll
-            assertEquals(NotesLayout.SCORE, wide.notesPlan(PAPER_ROLL, STAFF_ONLY).layout)
+            assertEquals(NotesLayout.ROLL, wide.notesPlan(STAFF, 0f, 0f).layout)
+            assertEquals(PAPER_ROLL, wide.notesPlan(STAFF, 0f, 0f).rollStyle)   // the score reads as the paper roll
+            assertEquals(NotesLayout.SCORE, wide.notesPlan(PAPER_ROLL, 1f, 1f).layout)
             assertEquals(listOf(PAPER_ROLL, FALLING), wide.noteDisplayChoices)
             assertTrue(wide.wide)
         }
@@ -123,8 +127,8 @@ class AdaptiveFrameTest {
     @Test
     fun `the staff is called the score, under the settings' old names`() {
         assertEquals(listOf("Paper roll", "Falling notes", "Score"), listOf(PAPER_ROLL, FALLING, STAFF).map { it.label })
-        assertEquals(listOf("Score and notes", "Notes only", "Score only"), listOf(STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY).map { it.label })
-        assertEquals(listOf("STAFF_AND_NOTES", "NOTES_ONLY", "STAFF_ONLY"), listOf(STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY).map { it.name })
+        assertEquals(listOf("Score and notes", "Notes only", "Score only"), ViewShow.entries.map { it.label })
+        assertEquals(listOf(ViewShow.NOTES, ViewShow.BOTH, ViewShow.BOTH, ViewShow.SCORE), listOf(0f, 0.01f, 0.99f, 1f).map { ViewShow.of(it) })
         assertEquals("STAFF", STAFF.name)   // saved choices carry over
     }
 
@@ -132,14 +136,5 @@ class AdaptiveFrameTest {
     fun `the Display page's standby chips, in their order`() {
         assertEquals(listOf("Black", "Same as the app"), StandbyCanvas.entries.map { it.label })
         assertEquals(listOf("Art and notes", "Paper roll"), StandbyShows.entries.map { it.label })
-    }
-
-    @Test
-    fun `a system holds two bars on a phone, three at medium widths, four on a tablet on its side`() {
-        assertEquals(ScoreWidth.COMPACT, phone.scoreWidth)
-        assertEquals(ScoreWidth.MEDIUM, tabletUpright.scoreWidth)
-        assertEquals(ScoreWidth.MEDIUM, frame(891, 411).scoreWidth)   // a phone on its side
-        assertEquals(ScoreWidth.EXPANDED, tabletOnItsSide.scoreWidth)
-        assertEquals(listOf(2, 3, 4), listOf(phone, tabletUpright, tabletOnItsSide).map { it.scoreWidth.barsPerSystem })
     }
 }

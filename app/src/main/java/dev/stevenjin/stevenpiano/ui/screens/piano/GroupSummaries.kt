@@ -68,8 +68,7 @@ data class GroupSummaries(
         const val UNKNOWN = "—"
 
         /**
-         * Every row's value; [wide] when the window shows the score beside the notes (Note display
-         * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
+         * Every row's value; [web] where the web panel listens; [firmwareUpdate] and
          * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule]
          * when the next schedule starts; [keyboard] the MIDI keyboard's state (v1.11 — M29). Studio is a tab of its
          * own since v1.12 (M30).
@@ -77,7 +76,6 @@ data class GroupSummaries(
         fun from(
             piano: PianoState,
             settings: PianoSettings,
-            wide: Boolean,
             web: WebStatus = WebStatus(),
             firmwareUpdate: FirmwareState = FirmwareState.Idle,
             firmwareVersion: String? = null,
@@ -90,7 +88,7 @@ data class GroupSummaries(
             pedal = pedal(piano),
             firmware = firmware(piano, firmwareUpdate, firmwareVersion),
             playback = playback(settings),
-            display = display(settings, wide),
+            display = display(settings),
             remote = remote(settings, web),
             kiosk = kiosk(settings),
             schedule = schedule(nextSchedule),
@@ -161,9 +159,8 @@ data class GroupSummaries(
             return "$pause · ${Format.percent(settings.defaultTempoPct)}"
         }
 
-        /** The note display's name; on wide screens the roll's style, as the Display page offers it there. */
-        fun display(settings: PianoSettings, wide: Boolean): String =
-            (if (wide) settings.noteDisplay.rollStyle else settings.noteDisplay).label
+        /** The appearance: "Follow system", "Light" or "Dark" (the note display moved to Now playing's View menu, v1.12). */
+        fun display(settings: PianoSettings): String = settings.appearance.label
 
         private const val OFF = "Off"
         private const val CLOUD = "Cloud"
