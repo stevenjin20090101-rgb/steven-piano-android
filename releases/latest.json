@@ -1,9 +1,9 @@
 {
-  "versionCode": 23,
-  "versionName": "1.13.1",
-  "notes": "Studio's create box now sits in the middle of the screen under \"What should the piano play?\", with the aura moving and glowing around it. The piece being made shows under the box, and everything made before is behind the new History button and in the Made in Studio playlist. Channels gain Recognisable and Popular, each playing its list without end.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.13.1/steven-piano-1.13.1.apk",
-  "sha256": "440afdcf8aee4a002530b658f3e5a6d30ef640e195a0f3ef1d508b7434b66a6b",
-  "sizeBytes": 13963966,
+  "versionCode": 24,
+  "versionName": "1.14",
+  "notes": "The Library now sorts music into Classical and Modern. A switch at the top (All · Classical · Modern) that search, pieces, playlists, composers, favorites and recent all follow; long-press a piece or an artist to move it to the other side. Two new channels, Classical and Modern, play a whole genre without end, and schedules can use them. The web panel's library has the same switch, and the guests' request page gets it too, with a search box and your modern songs to ask for. Studio understands \"modern\" and \"classical\" in a typed idea. Every recording now gets its own cover, Recordings and Made in Studio show covers instead of letters, keeping a recording says \"Kept in Recordings.\", and nothing the tablet makes itself shows an import message any more.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.14/steven-piano-1.14.apk",
+  "sha256": "aa2affe244e4366b3c53ebcb1ab44dfbbf894fb01f697d346dbd8e9fc86f1a42",
+  "sizeBytes": 13985674,
   "minSdk": 26
 }
