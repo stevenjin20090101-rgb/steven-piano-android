@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.web
 
 import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.SeedChoice
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
@@ -40,18 +41,23 @@ interface WebBackend {
     /** What `/api/state` and the socket's state messages carry, but for the guests' requests (the server adds them). */
     suspend fun state(): WebState
 
-    /** Pieces in the library: those whose title or composer contains [query] when it is not blank, else the [category]; [limit] from [offset]. */
-    suspend fun library(query: String?, category: LibraryCategory, offset: Int, limit: Int): WebPage
+    /**
+     * Pieces in the library: those whose title or composer contains [query] when it is not blank, else the [category];
+     * [limit] from [offset]; within the genre's [scope] (v1.14 — M37: the panel's switch; All is every piece).
+     */
+    suspend fun library(query: String?, category: LibraryCategory, offset: Int, limit: Int, scope: LibraryScope = LibraryScope.All): WebPage
 
-    suspend fun playlists(): List<WebPlaylist>
+    /** The playlists in the app's order; under a genre's [scope], those that show under it (most of their pieces of it, a tie both, Recordings and Made in Studio always). */
+    suspend fun playlists(scope: LibraryScope = LibraryScope.All): List<WebPlaylist>
 
     /** Playlist [id] and its pieces in its order; null when there is none. */
     suspend fun playlist(id: Long): WebPlaylistDetail?
 
-    suspend fun composers(): List<WebComposer>
+    /** The composers or artists; under a genre's [scope], those with a piece of it, counted within it. */
+    suspend fun composers(scope: LibraryScope = LibraryScope.All): List<WebComposer>
 
-    /** Composer [key] and their pieces; null when the library has none by them. */
-    suspend fun composer(key: String): WebComposerDetail?
+    /** Composer [key] and their pieces (within [scope]); null when the library has none by them there. */
+    suspend fun composer(key: String, scope: LibraryScope = LibraryScope.All): WebComposerDetail?
 
     /** Composer [key]'s portrait at [size]; null when there is none. */
     suspend fun composerArt(key: String, size: WebArtSize): WebImage?
@@ -117,8 +123,15 @@ interface WebBackend {
     /** Starts importing a zip the panel sent, saved as [file] (deleted once read); returns at once. */
     suspend fun importZip(name: String, file: File)
 
-    /** What guests may ask for: the built-in lists' pieces (Popular, Recognisable, Epic on piano), each piece once. */
+    /**
+     * What guests may ask for: the built-in lists' pieces (Popular, Recognisable, Epic on piano), each piece once, as
+     * Classical lists; and (v1.14 — M37) the list Modern, every Modern piece by title up to [WebLimits.GUEST_MODERN],
+     * kept until the library changes. Titles and composers only: no art is looked up for it.
+     */
     suspend fun catalogue(): List<CatalogueList>
+
+    /** Piece [pieceId] as guests are offered it (in a built-in list, or the Modern list); null when it is not on offer. */
+    suspend fun offered(pieceId: Long): WebPiece?
 
     /** Whether guests may ask, and whether their requests wait for approval. */
     suspend fun guestSettings(): GuestSettings
@@ -250,6 +263,8 @@ data class WebPiece(
     /** Its own cover (v1.12 — M30: a Studio piece's), drawn at [artVersion]: the panel asks for it afresh when that changes. */
     val cover: Boolean = false,
     val artVersion: Long = 0,
+    /** "classical" or "modern" (v1.14 — M37, `Genres.name`); null for a piece made on the tablet, or one not read from the library. */
+    val genre: String? = null,
 )
 
 /** One page of a list: [total] pieces in all, these from [offset]. */
@@ -315,7 +330,10 @@ enum class ChannelStart { STARTED, TOO_SMALL, UNKNOWN }
 /** A composer on a channel's card: the key finds the portrait, the name the monogram. */
 data class WebCardComposer(val key: String, val name: String, val portrait: Boolean)
 
-/** A channel's card: its pool's size, whether it can play (three pieces or more), whether it plays, its volume. */
+/**
+ * A channel's card: its pool's size, whether it can play (three pieces or more), whether it plays, its volume, and the
+ * genre it is listed under ([genre], v1.14 — M37: "classical", "modern", or null for Everything, which is both).
+ */
 data class WebChannel(
     val key: String,
     val name: String,
@@ -324,6 +342,7 @@ data class WebChannel(
     val playing: Boolean,
     val volume: Int,
     val composers: List<WebCardComposer>,
+    val genre: String? = null,
 )
 
 /** The channel playing, its name and volume. */
@@ -413,8 +432,8 @@ data class WebAddresses(val panel: String?, val guest: String?, val cloud: Strin
 /** Guests: whether they may ask, and whether a request waits for approval. */
 data class GuestSettings(val open: Boolean, val approveFirst: Boolean)
 
-/** One of the built-in lists guests choose from, with the pieces it holds now. */
-data class CatalogueList(val key: String, val name: String, val pieces: List<WebPiece>)
+/** One of the lists guests choose from, with the pieces it holds now, and its [genre] (v1.14 — M37: "classical" or "modern"). */
+data class CatalogueList(val key: String, val name: String, val pieces: List<WebPiece>, val genre: String? = null)
 
 /**
  * Everything `/api/state` carries but the requests waiting. [monochrome]: Artwork in black and
@@ -530,6 +549,9 @@ object WebLimits {
 
     /** Piece ids in one request (a list played, a queue given, pieces added). */
     const val IDS_MAX = 5_000
+
+    /** The guests' Modern list (v1.14 — M37): at most this many pieces, the first by title. */
+    const val GUEST_MODERN = 2_000
 
     /** A views panel's width or height as a request may give it, in CSS px (v1.13 — M32; [NowViews] then holds it to its own bounds). */
     val VIEW_SIZE = 1..8_192

@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.web
 
 import android.annotation.SuppressLint
+import dev.stevenjin.stevenpiano.data.Genres
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.piano.PianoAction
@@ -335,19 +337,19 @@ class WebServer(
         // The panel reads.
         Route(Method.GET, Regex("/api/state"), Access.READ, "/api/state") { json(WebApi.state(backend.state(), requests.pending.value.size)) },
         Route(Method.GET, Regex("/api/library"), Access.READ, "/api/library") { call -> library(call) },
-        Route(Method.GET, Regex("/api/playlists"), Access.READ, "/api/playlists") {
-            json(JSONObject().put("playlists", JSONArray().apply { backend.playlists().forEach { put(WebApi.playlist(it)) } }))
+        Route(Method.GET, Regex("/api/playlists"), Access.READ, "/api/playlists") { call ->
+            json(JSONObject().put("playlists", JSONArray().apply { backend.playlists(scope(call)).forEach { put(WebApi.playlist(it)) } }))
         },
         Route(Method.GET, Regex("/api/playlists/(\\d{1,18})"), Access.READ, "/api/playlists/10") { call ->
             val detail = backend.playlist(call.groups[0].toLong()) ?: return@Route notFound()
             json(JSONObject().put("playlist", WebApi.playlist(detail.playlist)).put("pieces", WebApi.pieces(detail.pieces)))
         },
-        Route(Method.GET, Regex("/api/composers"), Access.READ, "/api/composers") {
-            json(JSONObject().put("composers", JSONArray().apply { backend.composers().forEach { put(WebApi.composer(it)) } }))
+        Route(Method.GET, Regex("/api/composers"), Access.READ, "/api/composers") { call ->
+            json(JSONObject().put("composers", JSONArray().apply { backend.composers(scope(call)).forEach { put(WebApi.composer(it)) } }))
         },
         Route(Method.GET, Regex("/api/composers/([^/]{1,120})"), Access.READ, "/api/composers/debussy") { call ->
             val key = composerKey(call.groups[0])
-            val detail = backend.composer(key) ?: return@Route notFound()
+            val detail = backend.composer(key, scope(call)) ?: return@Route notFound()
             json(JSONObject().put("composer", WebApi.composer(detail.composer)).put("pieces", WebApi.pieces(detail.pieces)))
         },
         Route(Method.GET, Regex("/api/art/composer/([^/]{1,120})"), Access.READ, "/api/art/composer/debussy") { call ->
@@ -508,6 +510,16 @@ class WebServer(
         Route(Method.POST, Regex("/api/public/request"), Access.PUBLIC, "/api/public/request") { call -> guestRequest(call) },
     )
 
+    /**
+     * The genre a Library read asks for (v1.14 — M37, the panel's switch): absent, every piece; `genre=classical` or
+     * `genre=modern` ([Genres.named]); anything else is refused.
+     */
+    private fun scope(call: Call): LibraryScope {
+        val raw = call.param("genre") ?: return LibraryScope.All
+        val genre = Genres.named(raw) ?: throw ApiError(400, "field", "genre must be classical or modern.")
+        return LibraryScope.entries.first { it.genre == genre }
+    }
+
     /** A `rev` the views were asked for: absent (the current one), or a whole number that fits an Int. */
     private fun rev(call: Call): Int? {
         val raw = call.param("rev") ?: return null
@@ -540,7 +552,7 @@ class WebServer(
         val category = call.param("category")?.let { LibraryCategory.of(it) ?: throw ApiError(400, "field", "category must be all, favorites or recent.") } ?: LibraryCategory.ALL
         val offset = call.param("offset")?.let { it.toIntOrNull()?.takeIf { n -> n >= 0 } ?: throw ApiError(400, "field", "offset must be 0 or more.") } ?: 0
         val limit = call.param("limit")?.let { it.toIntOrNull()?.takeIf { n -> n in 1..WebLimits.PAGE_MAX } ?: throw ApiError(400, "field", "limit must be from 1 to ${WebLimits.PAGE_MAX}.") } ?: DEFAULT_PAGE
-        return json(WebApi.page(backend.library(query, category, offset, limit)))
+        return json(WebApi.page(backend.library(query, category, offset, limit, scope(call))))
     }
 
     /**
@@ -587,8 +599,8 @@ class WebServer(
         val pieceId = WebApi.id(body, "pieceId")
         val guests = backend.guestSettings()
         if (!guests.open) return refuse(403, "closed", "Requests are closed right now.")
-        val piece = backend.catalogue().asSequence().flatMap { it.pieces }.firstOrNull { it.id == pieceId }
-            ?: return refuse(400, "not-offered", "That piece isn't on the list.")
+        // One piece looked up (v1.14 — M37), never the whole catalogue built again for each request.
+        val piece = backend.offered(pieceId) ?: return refuse(400, "not-offered", "That piece isn't on the list.")
         val cookie = guestCookie(call.cookies)
         val guest = cookie ?: call.cookies[WebCookies.GUEST]!!
         val keys = listOf("guest:$guest", "address:${call.address}")

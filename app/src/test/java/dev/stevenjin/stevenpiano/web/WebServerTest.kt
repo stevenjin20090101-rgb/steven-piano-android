@@ -673,6 +673,28 @@ class WebServerTest {
     }
 
     @Test
+    fun `guests see each list's genre and the Modern list, and may ask for a Modern piece but never an unlisted one (v1_14 M37)`() {
+        val (_, http) = start()
+        val alone = http.get("/api/public/catalogue").json().getJSONArray("lists")
+        assertEquals("no Modern piece: the built-in lists alone", 1, alone.length())
+        assertEquals("classical", alone.getJSONObject(0).getString("genre"))
+        backend.pieces += WebPiece(4, "Shape of You", "Ed Sheeran", "ed sheeran", 233_000, composerShort = "Ed Sheeran", genre = "modern")
+        val lists = http.get("/api/public/catalogue").json().getJSONArray("lists")
+        assertEquals(listOf("popular" to "classical", "modern" to "modern"), (0 until lists.length()).map { i -> lists.getJSONObject(i).let { it.getString("key") to it.getString("genre") } })
+        assertEquals("Modern", lists.getJSONObject(1).getString("name"))
+        val piece = lists.getJSONObject(1).getJSONArray("pieces").getJSONObject(0)
+        assertEquals("a guest's piece is still its id, title and artist alone", setOf("id", "title", "composer"), piece.keys().asSequence().toSet())
+        assertEquals("Ed Sheeran", piece.getString("composer"))
+        fun ask(id: Long) = http.api("POST", "/api/public/request", """{"pieceId":$id}""", panel = false)
+        val unlisted = ask(3)
+        assertEquals("in the library but on no list", 400, unlisted.status)
+        assertEquals("not-offered", unlisted.json().getString("error"))
+        val asked = ask(4)
+        assertEquals(asked.toString(), 202, asked.status)
+        assertEquals(listOf("requested 4"), backend.calls.toList())
+    }
+
+    @Test
     fun `with approval first a request waits on the panel until approved or dismissed`() {
         val (_, http) = start()
         val token = login(http)
@@ -838,6 +860,29 @@ class WebServerTest {
         assertEquals(404, http.get("/api/art/composer/chopin", auth).status)
         assertEquals("image/png", http.get("/api/art/piece/1", auth).header("content-type"))
         assertEquals(404, http.get("/api/art/piece/99", auth).status)
+    }
+
+    @Test
+    fun `the Library's reads follow the genre asked for, classical or modern, and refuse any other (v1_14 M37)`() {
+        val (_, http) = start()
+        val token = login(http)
+        val auth = mapOf("Cookie" to "sp_session=$token")
+        backend.pieces += WebPiece(4, "Shape of You", "Ed Sheeran", "ed sheeran", 233_000, composerShort = "Ed Sheeran", genre = "modern")
+        for (path in listOf("/api/library", "/api/playlists", "/api/composers", "/api/composers/debussy")) {
+            for (genre in listOf("weird", "Modern", "")) assertEquals("$path?genre=$genre", 400, http.get("$path?genre=$genre", auth).status)
+        }
+        assertEquals("genre must be classical or modern.", http.get("/api/library?genre=pop", auth).json().getString("message"))
+        val modern = http.get("/api/library?genre=modern", auth).json()
+        assertEquals(1, modern.getInt("total"))
+        assertEquals("modern", modern.getJSONArray("pieces").getJSONObject(0).getString("genre"))
+        assertEquals(3, http.get("/api/library?genre=classical", auth).json().getInt("total"))
+        assertEquals("with a search too", 0, http.get("/api/library?q=clair&genre=modern", auth).json().getInt("total"))
+        assertEquals("absent: every piece", 4, http.get("/api/library", auth).json().getInt("total"))
+        val artists = http.get("/api/composers?genre=modern", auth).json().getJSONArray("composers")
+        assertEquals("ed sheeran", artists.getJSONObject(0).getString("key"))
+        assertEquals(1, artists.length())
+        assertEquals(404, http.get("/api/composers/debussy?genre=modern", auth).status)
+        assertEquals(200, http.get("/api/composers/debussy?genre=classical", auth).status)
     }
 
     @Test

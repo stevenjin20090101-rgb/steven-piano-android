@@ -13,6 +13,8 @@ import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
+import dev.stevenjin.stevenpiano.data.Genres
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.piano.PianoAction
@@ -34,9 +36,9 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
 
     var state = WebState()
     val pieces = mutableListOf(
-        WebPiece(1, "Clair de lune", "Claude Debussy", "debussy", 300_000, composerShort = "Debussy", portrait = true),
-        WebPiece(2, "Nocturne in E-flat", "Frédéric Chopin", "chopin", 271_000, composerShort = "Chopin"),
-        WebPiece(3, "Für Elise", "Ludwig van Beethoven", "beethoven", 180_000, composerShort = "Beethoven", favorite = true),
+        WebPiece(1, "Clair de lune", "Claude Debussy", "debussy", 300_000, composerShort = "Debussy", portrait = true, genre = "classical"),
+        WebPiece(2, "Nocturne in E-flat", "Frédéric Chopin", "chopin", 271_000, composerShort = "Chopin", genre = "classical"),
+        WebPiece(3, "Für Elise", "Ludwig van Beethoven", "beethoven", 180_000, composerShort = "Beethoven", favorite = true, genre = "classical"),
     )
     val playlistsHeld = mutableListOf(WebPlaylist(10, "Evening", 2, 571_000, builtIn = false))
     val playlistPieces = mutableMapOf(10L to listOf(1L, 2L))
@@ -46,7 +48,8 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     )
     var piano = WebPiano(WebPianoState("ready", mapOf("volume" to "70", "leds" to "1")), statusText = null, statusReading = false)
     var guests = GuestSettings(open = true, approveFirst = false)
-    var catalogueHeld = listOf(CatalogueList("popular", "Popular", pieces.take(2)))
+    /** The built-in lists guests see; the Modern list is every Modern piece in [pieces], as the app's (v1.14 — M37). */
+    var catalogueHeld = listOf(CatalogueList("popular", "Popular", pieces.take(2), "classical"))
     var pin: PinHash? = null
     val imported = Collections.synchronizedList(mutableListOf<String>())
     private var nextUid = 100L
@@ -57,28 +60,32 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
 
     override suspend fun state(): WebState = state
 
-    override suspend fun library(query: String?, category: LibraryCategory, offset: Int, limit: Int): WebPage {
+    /** [pieces] within [scope]: every one under All, else those of its genre. */
+    private fun scoped(scope: LibraryScope): List<WebPiece> = scope.genre?.let { g -> pieces.filter { it.genre == Genres.name(g) } } ?: pieces
+
+    override suspend fun library(query: String?, category: LibraryCategory, offset: Int, limit: Int, scope: LibraryScope): WebPage {
+        val held = scoped(scope)
         val all = when {
-            !query.isNullOrBlank() -> pieces.filter { query.lowercase() in it.title.lowercase() || query.lowercase() in it.composer.lowercase() }
-            category == LibraryCategory.FAVORITES -> pieces.filter { it.favorite }
-            else -> pieces
+            !query.isNullOrBlank() -> held.filter { query.lowercase() in it.title.lowercase() || query.lowercase() in it.composer.lowercase() }
+            category == LibraryCategory.FAVORITES -> held.filter { it.favorite }
+            else -> held
         }
         val from = offset.coerceIn(0, all.size)
         return WebPage(all.size, from, all.drop(from).take(limit))
     }
 
-    override suspend fun playlists(): List<WebPlaylist> = playlistsHeld
+    override suspend fun playlists(scope: LibraryScope): List<WebPlaylist> = playlistsHeld
 
     override suspend fun playlist(id: Long): WebPlaylistDetail? {
         val playlist = playlistsHeld.firstOrNull { it.id == id } ?: return null
         return WebPlaylistDetail(playlist, playlistPieces[id].orEmpty().mapNotNull { pid -> pieces.firstOrNull { it.id == pid } })
     }
 
-    override suspend fun composers(): List<WebComposer> =
-        pieces.groupBy { it.composerKey }.map { (key, list) -> WebComposer(key, list.first().composer, list.size, list.first().portrait) }
+    override suspend fun composers(scope: LibraryScope): List<WebComposer> =
+        scoped(scope).groupBy { it.composerKey }.map { (key, list) -> WebComposer(key, list.first().composer, list.size, list.first().portrait) }
 
-    override suspend fun composer(key: String): WebComposerDetail? {
-        val list = pieces.filter { it.composerKey == key }
+    override suspend fun composer(key: String, scope: LibraryScope): WebComposerDetail? {
+        val list = scoped(scope).filter { it.composerKey == key }
         if (list.isEmpty()) return null
         return WebComposerDetail(WebComposer(key, list.first().composer, list.size, list.first().portrait), list)
     }
@@ -166,7 +173,12 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         file.delete()
     }
 
-    override suspend fun catalogue(): List<CatalogueList> = catalogueHeld
+    override suspend fun catalogue(): List<CatalogueList> {
+        val modern = pieces.filter { it.genre == "modern" }
+        return if (modern.isEmpty()) catalogueHeld else catalogueHeld + CatalogueList("modern", "Modern", modern, "modern")
+    }
+
+    override suspend fun offered(pieceId: Long): WebPiece? = catalogue().asSequence().flatMap { it.pieces }.firstOrNull { it.id == pieceId }
 
     override suspend fun guestSettings(): GuestSettings = guests
 
