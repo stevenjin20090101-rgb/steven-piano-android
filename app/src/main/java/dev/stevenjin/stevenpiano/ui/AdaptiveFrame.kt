@@ -16,13 +16,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.dp
-import dev.stevenjin.stevenpiano.score.ScoreWidth
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
-import dev.stevenjin.stevenpiano.settings.WideLayout
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
+import dev.stevenjin.stevenpiano.ui.components.SplitAxis
 
 /** How Now playing arranges its note views. */
 enum class NotesLayout {
@@ -32,15 +31,15 @@ enum class NotesLayout {
     /** The score alone. */
     SCORE,
 
-    /** Score on top (a third of the height), the roll below (two thirds). */
+    /** Score on top, the roll below, as the split says (a third for the score at first). */
     STACKED,
 
-    /** Score on the left, the roll on the right, equal widths. */
+    /** Score at the start, the roll at the end, as the split says (half each at first). */
     SIDE_BY_SIDE,
 }
 
 /**
- * What the Piano tab calls each Note display choice. The settings keep their v1.1 names (STAFF)
+ * What the View menu calls each Note display choice. The settings keep their v1.1 names (STAFF)
  * so a saved choice carries over; people see the score's name.
  */
 val NoteDisplay.label: String
@@ -48,14 +47,6 @@ val NoteDisplay.label: String
         NoteDisplay.PAPER_ROLL -> "Paper roll"
         NoteDisplay.FALLING -> "Falling notes"
         NoteDisplay.STAFF -> "Score"
-    }
-
-/** What the Piano tab calls each Wide layout choice (saved under the v1.1 names). */
-val WideLayout.label: String
-    get() = when (this) {
-        WideLayout.STAFF_AND_NOTES -> "Score and notes"
-        WideLayout.NOTES_ONLY -> "Notes only"
-        WideLayout.STAFF_ONLY -> "Score only"
     }
 
 /** What the Display page calls each Appearance choice. */
@@ -80,18 +71,22 @@ val StandbyShows.label: String
         StandbyShows.PAPER_ROLL -> "Paper roll"
     }
 
-/** Now playing's note views: their arrangement and the roll's style (paper roll or falling notes). */
-data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay)
+/**
+ * Now playing's note views: their arrangement and the roll's style (paper roll or falling notes). On wide frames
+ * (v1.12 — M31a) also the [axis] the score and the notes share and the score's committed [split] of it (0: the
+ * notes alone, 1: the score alone); a phone's plan has no axis.
+ */
+data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay, val split: Float = 0f, val axis: SplitAxis? = null)
 
 /**
  * What the window's width class decides (DESIGN.md › v1.1 › Adaptive layout). Nothing else
  * changes with size. Compact (under 600 dp: phones upright) keeps v1.0's bottom bar; Medium
  * (600-840 dp: small tablets, phones on their side) and Expanded (840 dp and up: tablets on
  * their side) move the four destinations to a rail on the left. Never a rail and a bar at once.
- * The class also sets how Now playing arranges the score and the notes, how many bars a system of
- * the score holds, how many keys the Keys screen shows, how many tiles the Library's grids set side
- * by side, which note-display choices the Piano tab offers, and whether the Piano tab's pages open
- * beside its hub.
+ * The class also sets how Now playing arranges the score and the notes, how many keys the Keys
+ * screen shows, how many tiles the Library's grids set side by side, which note-display choices the
+ * View menu offers, and whether the Piano tab's pages open beside its hub. (Bars per system follow
+ * the score's page width since v1.12, not the class: `ScoreWidth.forPage`.)
  *
  * A phone on its side is often 840 dp wide or more, but only 360-480 dp tall: an expanded width
  * over a compact height ([height]) counts as medium, so landscape phones get the medium layout,
@@ -128,15 +123,7 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
     /** Whether the Keys screen can scroll, and so shows the mini-map and the octave buttons. */
     val keysScroll: Boolean get() = keysVisibleWhites < KeyLayout.WHITE_KEYS
 
-    /** Bars in a system of the score: 2 on phones, 3 at medium widths, 4 on tablets on their side. */
-    val scoreWidth: ScoreWidth
-        get() = when (widthClass) {
-            WindowWidthSizeClass.Compact -> ScoreWidth.COMPACT
-            WindowWidthSizeClass.Medium -> ScoreWidth.MEDIUM
-            else -> ScoreWidth.EXPANDED
-        }
-
-    /** Wide screens show the score beside or above the notes, as the Wide layout preference says. */
+    /** Wide screens show the score above or beside the notes, as the split says (v1.12 — M31a). */
     val wide: Boolean get() = widthClass != WindowWidthSizeClass.Compact
 
     /**
@@ -147,25 +134,31 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
     val twoPane: Boolean get() = widthClass != WindowWidthSizeClass.Compact
 
     /**
-     * The Note display choices the Piano tab offers: on compact widths the score is a third style;
-     * on wide ones it has its own place, so the choice is the roll's style.
+     * The Note display choices the View menu offers: on compact widths the score is a third style;
+     * on wide ones it has its own pane, so the choice is the roll's style.
      */
     val noteDisplayChoices: List<NoteDisplay>
         get() = if (wide) listOf(NoteDisplay.PAPER_ROLL, NoteDisplay.FALLING) else NoteDisplay.entries
 
     /**
      * Now playing's note views. Compact: one canvas, chosen by [display]. Medium: the score
-     * stacked over the notes. Expanded: side by side. Wide screens follow [wideLayout].
+     * stacked over the notes, sharing the height as [stacked] says. Expanded: side by side, sharing
+     * the width as [side] says (v1.12 — M31a). A share of null is the arrangement's default (a third,
+     * a half), 0 shows the notes alone and 1 the score alone.
      */
-    fun notesPlan(display: NoteDisplay, wideLayout: WideLayout): NotesPlan {
+    fun notesPlan(display: NoteDisplay, stacked: Float?, side: Float?): NotesPlan {
+        if (!wide) {
+            return if (display == NoteDisplay.STAFF) NotesPlan(NotesLayout.SCORE, display.rollStyle, split = 1f) else NotesPlan(NotesLayout.ROLL, display.rollStyle)
+        }
+        val axis = if (widthClass == WindowWidthSizeClass.Medium) SplitAxis.Stacked else SplitAxis.SideBySide
+        val split = ((if (axis == SplitAxis.Stacked) stacked else side) ?: axis.defaultShare).coerceIn(0f, 1f)
         val layout = when {
-            !wide -> if (display == NoteDisplay.STAFF) NotesLayout.SCORE else NotesLayout.ROLL
-            wideLayout == WideLayout.NOTES_ONLY -> NotesLayout.ROLL
-            wideLayout == WideLayout.STAFF_ONLY -> NotesLayout.SCORE
-            widthClass == WindowWidthSizeClass.Medium -> NotesLayout.STACKED
+            split <= 0f -> NotesLayout.ROLL
+            split >= 1f -> NotesLayout.SCORE
+            axis == SplitAxis.Stacked -> NotesLayout.STACKED
             else -> NotesLayout.SIDE_BY_SIDE
         }
-        return NotesPlan(layout, display.rollStyle)
+        return NotesPlan(layout, display.rollStyle, split, axis)
     }
 
     override fun equals(other: Any?): Boolean = other is AppFrame && other.widthClass == widthClass

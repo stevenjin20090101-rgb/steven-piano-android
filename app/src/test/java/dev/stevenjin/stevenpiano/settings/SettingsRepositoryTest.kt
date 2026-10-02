@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -45,7 +46,7 @@ class SettingsRepositoryTest {
         repository.setVelocity(10)
         repository.setFoldOutOfRange(false)
         repository.setSkipDrumChannel(false)
-        repository.setWideLayout(WideLayout.NOTES_ONLY)
+        repository.setNotesSplit(stacked = true, share = 0f)
         repository.setKeysViewportStart(3)
         assertEquals(
             PianoSettings(
@@ -58,7 +59,7 @@ class SettingsRepositoryTest {
                 velocityPct = 50,
                 foldOutOfRange = false,
                 skipDrumChannel = false,
-                wideLayout = WideLayout.NOTES_ONLY,
+                notesSplitStacked = 0f,
                 keysViewportStart = 24,
             ),
             repository.settings.first(),
@@ -107,10 +108,50 @@ class SettingsRepositoryTest {
     fun `v1_1 defaults - paper roll, staff and notes on wide screens, the Keys screen from C3`() {
         val defaults = PianoSettings()
         assertEquals(NoteDisplay.PAPER_ROLL, defaults.noteDisplay)
-        assertEquals(WideLayout.STAFF_AND_NOTES, defaults.wideLayout)
+        assertEquals("each arrangement's own default split (v1.12)", null, defaults.notesSplitStacked)
+        assertEquals(null, defaults.notesSplitSide)
         assertEquals(48, defaults.keysViewportStart)
         assertEquals(NoteDisplay.PAPER_ROLL, NoteDisplay.STAFF.rollStyle)
         assertEquals(NoteDisplay.FALLING, NoteDisplay.FALLING.rollStyle)
+    }
+
+    @Test
+    fun `the split is the first Float preference - each arrangement's share round-trips, held to 0-1, not a number refused (v1_12 M31a)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "split.preferences_pb") }
+        val repository = SettingsRepository(store)
+        repository.setNotesSplit(stacked = true, share = 0.4f)
+        repository.setNotesSplit(stacked = false, share = 0.62f)
+        assertEquals(PianoSettings(notesSplitStacked = 0.4f, notesSplitSide = 0.62f), repository.settings.first())
+        repository.setNotesSplit(stacked = true, share = 1.7f)
+        repository.setNotesSplit(stacked = false, share = -0.3f)
+        assertEquals(1f, repository.settings.first().notesSplitStacked)
+        assertEquals(0f, repository.settings.first().notesSplitSide)
+        repository.setNotesSplit(stacked = true, share = Float.NaN)
+        repository.setNotesSplit(stacked = true, share = Float.POSITIVE_INFINITY)
+        assertEquals("refused, the share before kept", 1f, repository.settings.first().notesSplitStacked)
+        // A stored value this version cannot use reads as the default, or held to 0-1.
+        store.edit { it[floatPreferencesKey("notesSplitStacked")] = Float.NaN }
+        store.edit { it[floatPreferencesKey("notesSplitSide")] = 3f }
+        assertEquals(PianoSettings(notesSplitStacked = null, notesSplitSide = 1f), repository.settings.first())
+        scope.cancel()
+    }
+
+    @Test
+    fun `an older build's Wide layout seeds both arrangements - Notes only 0, Score only 1 - and the first write keeps it and forgets it (v1_12 M31a)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        for ((legacy, seed) in listOf("NOTES_ONLY" to 0f, "STAFF_ONLY" to 1f, "STAFF_AND_NOTES" to null, "SOMETHING_NEW" to null)) {
+            val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "legacy-$legacy.preferences_pb") }
+            val repository = SettingsRepository(store)
+            store.edit { it[stringPreferencesKey("wideLayout")] = legacy }
+            assertEquals(legacy, PianoSettings(notesSplitStacked = seed, notesSplitSide = seed), repository.settings.first())
+            // The person drags the stacked divider: the side-by-side share keeps what Wide layout said, and the old key goes.
+            repository.setNotesSplit(stacked = true, share = 0.5f)
+            assertEquals(legacy, PianoSettings(notesSplitStacked = 0.5f, notesSplitSide = seed), repository.settings.first())
+            assertEquals(legacy, null, store.data.first()[stringPreferencesKey("wideLayout")])
+            assertEquals(legacy, seed, store.data.first()[floatPreferencesKey("notesSplitSide")])
+        }
+        scope.cancel()
     }
 
     @Test

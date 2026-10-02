@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
+import dev.stevenjin.stevenpiano.ui.components.SplitAxis
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,10 +38,31 @@ class TransportFloatsTest {
     }
 
     @Test
-    fun `stacked the roll has two thirds of the height, side by side all of it`() {
-        val stacked = NotesPlan(NotesLayout.STACKED, NoteDisplay.PAPER_ROLL)
-        assertTrue(transportFloats(stacked, 900.dp))   // a roll card of about 595 dp
-        assertFalse(transportFloats(stacked, 600.dp))  // about 395 dp: its history is too short
-        assertTrue(transportFloats(NotesPlan(NotesLayout.SIDE_BY_SIDE, NoteDisplay.PAPER_ROLL), 600.dp))
+    fun `stacked the roll has what the committed split leaves it below the score`() {
+        fun stacked(split: Float) = NotesPlan(NotesLayout.STACKED, NoteDisplay.PAPER_ROLL, split, SplitAxis.Stacked)
+        // A third for the score: a roll card of about 595 dp at 900, 395 dp at 600 (its history too short).
+        assertTrue(transportFloats(stacked(1f / 3f), 900.dp))
+        assertFalse(transportFloats(stacked(1f / 3f), 600.dp))
+        // A half: 446 dp at 900 is too short, 466 dp at 940 holds it.
+        assertFalse(transportFloats(stacked(0.5f), 900.dp))
+        assertTrue(transportFloats(stacked(0.5f), 940.dp))
+        // A fifth for the score: 474 dp at 600.
+        assertTrue(transportFloats(stacked(0.2f), 600.dp))
+    }
+
+    @Test
+    fun `side by side the roll has all of the height, if it is as wide as the controls`() {
+        fun side(split: Float) = NotesPlan(NotesLayout.SIDE_BY_SIDE, NoteDisplay.PAPER_ROLL, split, SplitAxis.SideBySide)
+        assertTrue(transportFloats(side(0.5f), 600.dp))   // no width given: the height alone decides
+        assertTrue(transportFloats(side(0.5f), 600.dp, 1_168.dp))   // a tablet on its side: 580 dp of roll
+        assertTrue(transportFloats(side(2f / 3f), 600.dp, 1_168.dp))   // 387 dp
+        assertFalse(transportFloats(side(0.75f), 600.dp, 1_168.dp))   // 290 dp: the controls need 344
+        assertFalse(transportFloats(side(0.5f), 400.dp, 1_168.dp))   // too short, however wide
+    }
+
+    @Test
+    fun `with the roll hidden there is nothing to float over`() {
+        assertFalse(transportFloats(NotesPlan(NotesLayout.SCORE, NoteDisplay.PAPER_ROLL, 1f, SplitAxis.Stacked), 900.dp))
+        assertTrue(transportFloats(NotesPlan(NotesLayout.ROLL, NoteDisplay.PAPER_ROLL, 0f, SplitAxis.Stacked), 900.dp))
     }
 }

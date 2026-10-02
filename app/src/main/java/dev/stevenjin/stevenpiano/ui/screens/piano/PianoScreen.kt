@@ -250,7 +250,6 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         GroupSummaries.from(
             piano,
             settings,
-            frame.wide,
             web,
             firmware,
             (firmwarePiano as? FirmwarePiano.Connected)?.text,

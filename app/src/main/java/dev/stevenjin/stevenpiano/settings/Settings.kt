@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,8 +39,8 @@ import java.io.IOException
 /**
  * How Now playing draws notes: the pianola roll (default), Synthesia-style falling notes, or the
  * score (saved as STAFF, its v1.1 name, so the choice carries over). On wide screens the score has
- * its own place ([WideLayout]) and this chooses the roll's style, the score reading as the paper
- * roll there.
+ * its own pane beside the notes (the split, [PianoSettings.notesSplitStacked]) and this chooses the
+ * roll's style, the score reading as the paper roll there.
  */
 enum class NoteDisplay {
     PAPER_ROLL,
@@ -51,7 +52,10 @@ enum class NoteDisplay {
     val rollStyle: NoteDisplay get() = if (this == STAFF) PAPER_ROLL else this
 }
 
-/** What Now playing shows on medium and expanded widths: the score and the notes, or either alone (v1.1 names, kept). */
+/**
+ * What Now playing showed on medium and expanded widths until v1.11: the score and the notes, or either alone. Read
+ * once, to seed the split that replaced it (v1.12 — M31a): Notes only as 0, Score only as 1.
+ */
 enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
 
 /**
@@ -106,7 +110,13 @@ data class PianoSettings(
     val velocityPct: Int = 100,
     val foldOutOfRange: Boolean = true,
     val skipDrumChannel: Boolean = true,
-    val wideLayout: WideLayout = WideLayout.STAFF_AND_NOTES,
+    /**
+     * Now playing's split on wide frames (v1.12 — M31a): the score's share of the room it shares with the notes,
+     * stacked (medium widths) and side by side (expanded), each remembered; 0 hides the score, 1 the notes; null:
+     * the arrangement's default (a third stacked, a half side by side).
+     */
+    val notesSplitStacked: Float? = null,
+    val notesSplitSide: Float? = null,
     /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
     val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
     /** The transport's Shuffle, remembered across launches. */
@@ -238,7 +248,22 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setSkipDrumChannel(on: Boolean) = edit { it[SKIP_DRUM_CHANNEL] = on }
 
-    suspend fun setWideLayout(layout: WideLayout) = edit { it[WIDE_LAYOUT] = layout.name }
+    /**
+     * Now playing's split for one arrangement (v1.12 — M31a): [stacked] or side by side, held to 0-1; a share that
+     * is not a number is refused. The first write after an older build's Wide layout keeps that choice for the other
+     * arrangement too, then forgets it.
+     */
+    suspend fun setNotesSplit(stacked: Boolean, share: Float) {
+        if (!share.isFinite()) return
+        edit {
+            it.legacySplit()?.let { seed ->
+                if (it[NOTES_SPLIT_STACKED] == null) it[NOTES_SPLIT_STACKED] = seed
+                if (it[NOTES_SPLIT_SIDE] == null) it[NOTES_SPLIT_SIDE] = seed
+            }
+            it.remove(WIDE_LAYOUT)
+            it[if (stacked) NOTES_SPLIT_STACKED else NOTES_SPLIT_SIDE] = share.coerceIn(0f, 1f)
+        }
+    }
 
     suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
 
@@ -452,7 +477,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             velocityPct = (this[VELOCITY_PCT] ?: defaults.velocityPct).coerceIn(PlaybackLimits.VelocityPct),
             foldOutOfRange = this[FOLD_OUT_OF_RANGE] ?: defaults.foldOutOfRange,
             skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
-            wideLayout = WideLayout.entries.firstOrNull { it.name == this[WIDE_LAYOUT] } ?: defaults.wideLayout,
+            notesSplitStacked = this[NOTES_SPLIT_STACKED].asShare() ?: legacySplit(),
+            notesSplitSide = this[NOTES_SPLIT_SIDE].asShare() ?: legacySplit(),
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
             shuffle = this[SHUFFLE] ?: defaults.shuffle,
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
@@ -504,7 +530,20 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val VELOCITY_PCT = intPreferencesKey("velocityPct")
         val FOLD_OUT_OF_RANGE = booleanPreferencesKey("foldOutOfRange")
         val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
+        /** v1.1-1.11's Wide layout, read only to seed the split (v1.12 — M31a). */
         val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
+        val NOTES_SPLIT_STACKED = floatPreferencesKey("notesSplitStacked")
+        val NOTES_SPLIT_SIDE = floatPreferencesKey("notesSplitSide")
+
+        /** A stored split as read: held to 0-1; not a number reads as the default. */
+        fun Float?.asShare(): Float? = this?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
+
+        /** What an older build's Wide layout says of the split: Notes only 0, Score only 1, else nothing. */
+        fun Preferences.legacySplit(): Float? = when (this[WIDE_LAYOUT]) {
+            WideLayout.NOTES_ONLY.name -> 0f
+            WideLayout.STAFF_ONLY.name -> 1f
+            else -> null
+        }
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
         val SHUFFLE = booleanPreferencesKey("shuffle")
         val REPEAT = stringPreferencesKey("repeat")

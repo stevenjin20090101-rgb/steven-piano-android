@@ -36,7 +36,6 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.schedule.NextSchedule
 import dev.stevenjin.stevenpiano.settings.Appearance
-import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
 import dev.stevenjin.stevenpiano.settings.PianoSettings
@@ -257,10 +256,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     fun setAutoConnect(on: Boolean) = edit { setAutoConnect(on) }
 
-    fun setNoteDisplay(display: NoteDisplay) = edit { setNoteDisplay(display) }
-
-    fun setWideLayout(layout: WideLayout) = edit { setWideLayout(layout) }
-
     fun setDefaultTempo(pct: Int) = edit { setDefaultTempo(pct) }
 
     fun setPreRoll(ms: Int) = edit { setPreRoll(ms) }
@@ -276,12 +271,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setArtworkMonochrome(on: Boolean) = edit { setArtworkMonochrome(on) }
 
     fun setFetchArtworkAutomatically(on: Boolean) = edit { setFetchArtworkAutomatically(on) }
-
-    fun setFingering(on: Boolean) = edit { setFingering(on) }
-
-    fun setChordNames(on: Boolean) = edit { setChordNames(on) }
-
-    fun setHandColours(on: Boolean) = edit { setHandColours(on) }
 
     fun setCheckForUpdates(on: Boolean) = edit { setCheckForUpdates(on) }
 
