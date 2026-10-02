@@ -294,6 +294,24 @@ class SamplerTest {
     }
 
     @Test
+    fun `onEvent hears every whole event once it is written, in order, with the tokens made and how far along (v1_12)`() {
+        val heard = ArrayList<Triple<AmtEvent, Int, Float>>()
+        val out = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 3_000, endTime = 5_360, onEvent = { e, made, f -> heard += Triple(e, made, f) })
+        assertEquals("each whole event once, in order", out.events, heard.map { it.first })
+        assertEquals("after its note token", (1..out.events.size).map { it * 3 }, heard.map { it.second })
+        val start = AmtTokenizer.maxTime(seed)
+        for ((event, _, fraction) in heard) {
+            // The event already counts: the music's share written includes its time.
+            assertTrue("$event at $fraction", fraction + 1e-6f >= (event.time - start).toFloat() / (5_360 - start))
+        }
+        assertTrue("how far along never goes back", heard.zipWithNext().all { (a, b) -> b.third >= a.third })
+        // A partial event at the budget is never heard.
+        val partial = ArrayList<AmtEvent>()
+        val cut = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 250, onEvent = { e, _, _ -> partial += e })
+        assertEquals(cut.events, partial)
+    }
+
+    @Test
     fun `the budget, the end time, progress every 100 tokens, a cancel and the memory guard`() {
         val heard = ArrayList<Pair<Int, Float>>()
         val partial = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 250) { made, fraction -> heard += made to fraction }

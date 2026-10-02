@@ -52,6 +52,12 @@ class AppStudioLibrary(private val graph: AppGraph) : StudioLibrary {
 
     override suspend fun exists(pieceId: Long): Boolean = graph.library.piece(pieceId) != null
 
+    override suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = graph.artwork.setPieceCover(pieceId, png)
+
+    override suspend fun shelve() {
+        graph.refreshStudioShelf()
+    }
+
     /** One CSV field, quoted when it holds a comma, a quote or a line break (RFC 4180). */
     private fun csv(field: String): String =
         if (field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + field.replace("\"", "\"\"") + "\"" else field

@@ -11,8 +11,10 @@ package dev.stevenjin.stevenpiano.channels
 
 import android.content.Context
 import android.util.Log
+import dev.stevenjin.stevenpiano.data.TextKeys
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInList
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +58,10 @@ sealed interface PoolMatcher {
         override fun pool(pieces: List<PieceEntity>): List<Long> = pieces.filter(::accepts).map { it.id }
 
         fun accepts(piece: PieceEntity): Boolean {
-            val chosen = piece.composerKey in composers || titles?.containsMatchIn(piece.titleKey) == true
+            // v1.12 (M30): a Studio piece's title names its seed ("Calm, after Clair de lune"); that isn't Clair de lune,
+            // so pieces made on the tablet never join a pool by their title.
+            val byTitle = piece.composerKey !in MADE_HERE && titles?.containsMatchIn(piece.titleKey) == true
+            val chosen = piece.composerKey in composers || byTitle
             return chosen && (maxNotesPerSecond == null || calmEnough(piece, maxNotesPerSecond))
         }
 
@@ -66,6 +71,9 @@ sealed interface PoolMatcher {
 
     private companion object {
         const val MILLIS_PER_SECOND = 1_000.0
+
+        /** Pieces made on the tablet: Studio's and the recordings. */
+        val MADE_HERE = setOf(TextKeys.fold(ComposerNames.STUDIO), TextKeys.fold(ComposerNames.RECORDED_LIVE))
     }
 }
 

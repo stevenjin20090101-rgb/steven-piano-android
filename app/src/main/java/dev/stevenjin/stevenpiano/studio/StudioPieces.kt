@@ -10,6 +10,10 @@
 package dev.stevenjin.stevenpiano.studio
 
 import dev.stevenjin.stevenpiano.data.TextLimits
+import dev.stevenjin.stevenpiano.data.art.CoverInput
+import dev.stevenjin.stevenpiano.data.art.CoverNote
+import dev.stevenjin.stevenpiano.data.art.Png
+import dev.stevenjin.stevenpiano.data.art.StudioCover
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics
 import dev.stevenjin.stevenpiano.midi.SmfWriter
@@ -37,10 +41,16 @@ interface StudioLibrary {
 
     /** Whether the piece is still in the library (it may have been deleted from its menu meanwhile). */
     suspend fun exists(pieceId: Long): Boolean
+
+    /** [png] becomes the piece's own cover (v1.12 — M30); false when it could not be kept. */
+    suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = false
+
+    /** The built-in playlist "Made in Studio" follows Studio's history (v1.12 — M30). */
+    suspend fun shelve() = Unit
 }
 
-/** A piece Studio made: its library [id] and [title]. */
-data class StudioPiece(val id: Long, val title: String)
+/** A piece Studio made: its library [id] and [title], and its cover's kind when one was drawn ("drawn"). */
+data class StudioPiece(val id: Long, val title: String, val cover: String? = null)
 
 /**
  * A transcription into a piece of the library (v1.7 — M23): the notes and pedal written as a MIDI file
@@ -53,14 +63,16 @@ data class StudioPiece(val id: Long, val title: String)
  * the library couldn't take is [StudioFailures.NOT_SAVED].
  */
 class StudioPieces(private val library: StudioLibrary, private val locale: Locale = Locale.getDefault()) {
-    suspend fun add(transcription: Transcription, recordingName: String?, at: ZonedDateTime): StudioPiece {
+    suspend fun add(transcription: Transcription, recordingName: String?, at: ZonedDateTime, coverSeed: Long = 0L): StudioPiece {
         if (transcription.notes.isEmpty()) throw StudioFailure(StudioFailures.NO_NOTES)
         val title = title(recordingName, at)
         val bytes = midi(transcription, title, "${ComposerNames.STUDIO}, ${STAMP.format(at)}")
         val fileName = title.replace('/', '-').replace('\\', '-') + ".mid"
         val id = library.add(fileName, bytes, title, ComposerNames.STUDIO) ?: throw StudioFailure(StudioFailures.NOT_SAVED)
         library.describe(id, description(at))
-        return StudioPiece(id, title)
+        val notes = transcription.notes.map { CoverNote((it.onset * 1000).toLong(), (it.offset * 1000).toLong(), it.pitch, it.velocity) }
+        val drawn = cover(id, CoverInput(notes, null, null, null, coverSeed))
+        return StudioPiece(id, title, if (drawn) DRAWN else null)
     }
 
     /**
@@ -70,9 +82,14 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
      * ([compositionDescription]). One without a note is refused ([ComposeFailures.NO_MUSIC]); one the
      * library couldn't take is [StudioFailures.NOT_SAVED].
      */
-    suspend fun addComposition(composition: Composition, mannerOf: String, at: ZonedDateTime): StudioPiece {
+    suspend fun addComposition(
+        composition: Composition,
+        mannerOf: String,
+        at: ZonedDateTime,
+        title: String = compositionTitle(at),
+        cover: CoverInput? = null,
+    ): StudioPiece {
         if (composition.notes.isEmpty()) throw StudioFailure(ComposeFailures.NO_MUSIC)
-        val title = compositionTitle(at)
         val bytes = SmfWriter.write(
             notes = composition.notes,
             title = title,
@@ -82,7 +99,33 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
         val fileName = title.replace('/', '-').replace('\\', '-') + ".mid"
         val id = library.add(fileName, bytes, title, ComposerNames.STUDIO) ?: throw StudioFailure(StudioFailures.NOT_SAVED)
         library.describe(id, compositionDescription(mannerOf))
-        return StudioPiece(id, title)
+        val drawn = cover != null && cover(id, cover)
+        return StudioPiece(id, title, if (drawn) DRAWN else null)
+    }
+
+    /** "Made in Studio" brought up to date; a failure changes nothing (the next refresh tries again). */
+    suspend fun shelve() {
+        try {
+            library.shelve()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The playlist catches up at the next start or import.
+        }
+    }
+
+    /**
+     * Piece [pieceId]'s own cover, drawn from [input] (v1.12 — M30): [StudioCover] at 768 px, a PNG, kept as the
+     * piece's artwork. False when it could not be drawn or kept: the piece is saved all the same.
+     */
+    suspend fun cover(pieceId: Long, input: CoverInput): Boolean = try {
+        library.setCover(pieceId, Png.encode(StudioCover.render(input), StudioCover.SIZE, StudioCover.SIZE))
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    } catch (e: OutOfMemoryError) {
+        false
     }
 
     /** "Composition · Sep 28, 2026 2:05 PM": the date and the time in the device's own style. */
@@ -101,6 +144,12 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
     private fun date(at: ZonedDateTime): String = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(at)
 
     companion object {
+        /** A cover drawn from the music. */
+        const val DRAWN = "drawn"
+
+        /** A transcription's line in the history: "Transcription of Clair de lune.m4a" (the recording's own name). */
+        fun transcribeLine(recordingName: String): String = "Transcription of ${TextLimits.clip(recordingName, TextLimits.TITLE)}"
+
         private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         private val TIME = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
         private const val MANNER = "${ComposerNames.STUDIO} · in the manner of "

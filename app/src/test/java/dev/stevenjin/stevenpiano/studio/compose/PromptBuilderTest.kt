@@ -51,11 +51,11 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun `a length of 1 to 5 minutes is 45 tokens a second, at most 9,000`() {
-        assertEquals(listOf(2_700, 5_400, 8_100, 9_000, 9_000), (1..5).map { PromptBuilder.budget(it) })
+    fun `a length of 1 to 5 minutes is 45 tokens a second, 13,500 for five (v1_12)`() {
+        assertEquals(listOf(2_700, 5_400, 8_100, 10_800, 13_500), (1..5).map { PromptBuilder.budget(it) })
         assertEquals(45, PromptBuilder.TOKENS_PER_SECOND)
         assertEquals(2_700, PromptBuilder.budget(0))
-        assertEquals(9_000, PromptBuilder.budget(12))
+        assertEquals(13_500, PromptBuilder.budget(12))
         assertTrue((1..5).all { PromptBuilder.budget(it) % 3 == 0 })
     }
 
@@ -77,7 +77,7 @@ class PromptBuilderTest {
         // Choosing the seed's own key and tempo is the same as leaving them.
         val same = PromptBuilder.build(bach, ComposeRequest(Mood.Wild, MusicKey.C, 120, 5))
         assertArrayEquals(ComposerFixtures.inputTokens, same.tokens)
-        assertEquals(9_000, same.budget)
+        assertEquals(13_500, same.budget)
         assertEquals(1_500 + 30_000, same.endTime)
         assertEquals(Mood.Wild.sampling, same.sampling)
     }

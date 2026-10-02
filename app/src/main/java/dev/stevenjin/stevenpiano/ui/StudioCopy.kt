@@ -88,9 +88,10 @@ object StudioCopy {
             JobState.Failed -> job.error ?: "It didn't finish."
             JobState.Running -> when (job.step) {
                 JobStep.Downloading -> "Downloading · ${megabytes(job.bytes, job.total, locale)}"
-                JobStep.Reading -> "Reading the recording…"
+                JobStep.Reading -> if (job.kind == JobKind.Compose) "Reading the piece…" else "Reading the recording…"
                 JobStep.Transcribing -> "Transcribing · ${Format.percent(percentOf(job.progress ?: 0f))}"
-                JobStep.Composing -> "Composing · ${Format.percent(percentOf(job.progress ?: 0f))}"
+                JobStep.Composing -> composingLine(job, locale)
+                JobStep.Shaping -> "Shaping the piece…"
                 JobStep.Saving -> "Adding it to the library…"
                 JobStep.Waiting -> if (job.kind == JobKind.Download) "Downloading" else "Starting…"
             }
@@ -125,6 +126,7 @@ object StudioCopy {
         job.kind == JobKind.Download -> notificationTitle(job)
         job.step == JobStep.Transcribing || job.step == JobStep.Composing -> "${notificationTitle(job)} · ${Format.percent(percentOf(job.progress ?: 0f))}"
         job.step == JobStep.Reading -> "Reading ${job.name}…"
+        job.step == JobStep.Shaping -> "Shaping the piece…"
         job.step == JobStep.Saving && job.kind == JobKind.Compose -> "Adding the composition to the library…"
         job.step == JobStep.Saving -> "Adding ${job.name} to the library…"
         else -> notificationTitle(job)
@@ -164,6 +166,75 @@ object StudioCopy {
         val manner = StudioPieces.mannerOf(description) ?: return REVIEW_LINE
         return "Composed in Studio in the manner of $manner. Discard deletes it."
     }
+
+    /**
+     * A composition's line while it writes (v1.12 — M30): "Composing · 42% · 0:50 of 2:00 · about 40 s left" (the
+     * time left once there is one to say), in tabular digits on the card.
+     */
+    fun composingLine(job: StudioJob, locale: Locale = Locale.getDefault()): String = "Composing · " + figures(job, locale)
+
+    /** "42% · 0:50 of 2:00 · about 40 s left": how far along, the music written of what was asked, the time left. */
+    fun figures(job: StudioJob, locale: Locale = Locale.getDefault()): String = buildList {
+        add(Format.percent(percentOf(job.progress ?: 0f)))
+        if (job.targetMs > 0) add("${clock(job.musicMs)} of ${clock(job.targetMs)}")
+        job.etaMs?.let { add(left(it)) }
+    }.joinToString(" · ")
+
+    /** "1:05": minutes and seconds. */
+    fun clock(ms: Long): String {
+        val seconds = (ms.coerceAtLeast(0) / 1000).toInt()
+        return String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    /**
+     * Time left in coarse steps, so the words do not flicker: "a few seconds left", "about 40 s left" (tens of
+     * seconds), "about a minute left", "about 3 minutes left".
+     */
+    fun left(ms: Long): String {
+        val seconds = ms.coerceAtLeast(0) / 1000
+        return when {
+            seconds < 10 -> "a few seconds left"
+            seconds < 55 -> "about ${((seconds + 5) / 10) * 10} s left"
+            seconds < 90 -> "about a minute left"
+            else -> "about ${(seconds + 30) / 60} minutes left"
+        }
+    }
+
+    /** The same, as TalkBack says it on the card: "Composing, 42 percent, about 40 seconds left". */
+    fun spoken(job: StudioJob): String = buildList {
+        add(stepWord(job))
+        if (job.step == JobStep.Composing || job.step == JobStep.Transcribing || job.step == JobStep.Downloading) add("${percentOf(job.progress ?: 0f)} percent")
+        job.etaMs?.let { add(left(it).replace(" s left", " seconds left")) }
+    }.joinToString(", ")
+
+    /** The words of a job's row of steps: "Reading the piece", "Composing", "Shaping", "Saving". */
+    fun stepWord(step: JobStep, kind: JobKind): String = when (step) {
+        JobStep.Waiting -> "Waiting"
+        JobStep.Downloading -> "Downloading"
+        JobStep.Reading -> if (kind == JobKind.Compose) "Reading the piece" else "Reading the recording"
+        JobStep.Transcribing -> "Transcribing"
+        JobStep.Composing -> "Composing"
+        JobStep.Shaping -> "Shaping"
+        JobStep.Saving -> "Saving"
+    }
+
+    private fun stepWord(job: StudioJob): String = if (job.state == JobState.Queued) "Waiting" else stepWord(job.step, job.kind)
+
+    /** A piece that ended at the token budget, said plainly: "3:41 written of 5:00: the music was dense, so it ends here". */
+    fun budgetStop(musicMs: Long, targetMs: Long): String = "${clock(musicMs)} written of ${clock(targetMs)}: the music was dense, so it ends here"
+
+    /**
+     * The card's credits, an eyebrow: "MADE ON THIS TABLET BY THE ANTICIPATORY MUSIC TRANSFORMER (APACHE-2.0), FROM CLAIR
+     * DE LUNE BY DEBUSSY · COVER DRAWN FROM THE MUSIC" (the eyebrow sets it in capitals).
+     */
+    fun credits(seedTitle: String?, seedComposer: String?, transcription: Boolean): String {
+        val made = if (transcription) "Transcribed on this tablet by ByteDance piano transcription (CC BY 4.0)" else "Made on this tablet by the Anticipatory Music Transformer (Apache-2.0)"
+        val from = seedTitle?.takeIf { it.isNotBlank() }?.let { title -> ", from $title" + (seedComposer?.takeIf { it.isNotBlank() }?.let { " by $it" } ?: "") }.orEmpty()
+        return "$made$from · cover drawn from the music"
+    }
+
+    /** The Library bar's hairline while a job runs: the job's own measure, which is null exactly when its step has none. */
+    fun libraryProgress(job: StudioJob): Float? = job.progress
 
     /** A share as a whole percentage, rounded down (100% only when it is done), a float's last bit forgiven. */
     fun percentOf(fraction: Float): Int = (fraction * 100 + 0.001f).toInt().coerceIn(0, 100)

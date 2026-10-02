@@ -45,6 +45,7 @@ import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.art.ArtFiles
 import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
+import dev.stevenjin.stevenpiano.data.builtin.StudioPlaylist
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.TextRepair
@@ -112,7 +113,11 @@ import dev.stevenjin.stevenpiano.studio.ModelCatalogue
 import dev.stevenjin.stevenpiano.studio.ModelInstaller
 import dev.stevenjin.stevenpiano.studio.ModelStore
 import dev.stevenjin.stevenpiano.studio.ReviewPlayer
-import dev.stevenjin.stevenpiano.studio.StoredReview
+import dev.stevenjin.stevenpiano.studio.Generations
+import dev.stevenjin.stevenpiano.studio.RoomGenerations
+import dev.stevenjin.stevenpiano.studio.RoomReview
+import dev.stevenjin.stevenpiano.studio.StoredCalibration
+import dev.stevenjin.stevenpiano.studio.StoredWaiting
 import dev.stevenjin.stevenpiano.studio.Studio
 import dev.stevenjin.stevenpiano.studio.StudioAvailability
 import dev.stevenjin.stevenpiano.studio.StudioPieces
@@ -199,7 +204,22 @@ class AppGraph(private val app: Application) {
         } catch (e: Exception) {
             Log.w(TAG, "The built-in playlists couldn't be refreshed", e)
         }
+        refreshStudioShelf()
     }
+
+    /** "Made in Studio" (v1.12 — M30) from Studio's history: after each piece Studio saves, and with the built-in lists. */
+    suspend fun refreshStudioShelf() = withContext(Dispatchers.IO) {
+        try {
+            StudioPlaylist.refresh(library, studioHistory.madeHere())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Made in Studio couldn't be refreshed", e)
+        }
+    }
+
+    /** Studio's history (v1.12 — M30): the turns of its conversation, and the one record of its pieces' Keep or Discard. */
+    val studioHistory: Generations by lazy { RoomGenerations(database.generations()) }
 
     /**
      * The one-time repair of uploads imported before 1.10.1 ([UploadRepair], v1.10.1 — M28, D4), off the main
@@ -607,6 +627,9 @@ class AppGraph(private val app: Application) {
             log = { Log.i(STUDIO_TAG, it) },
             trail = LinkLog.shared::add,
             seeds = LibrarySeeds(this.library),
+            generations = studioHistory,
+            calibration = StoredCalibration(app),
+            kiosk = { settings.value.kioskEnabled },
         )
     }
 
@@ -619,7 +642,7 @@ class AppGraph(private val app: Application) {
     /** Keep or Discard after a first listen, for Studio's pieces and the tablet's recordings (hoisted in v1.11 — M29). */
     val studioReview: StudioReview by lazy {
         StudioReview(
-            StoredReview(app),
+            RoomReview(studioHistory, StoredWaiting(app)),
             object : ReviewPlayer {
                 override val state = player.state
 

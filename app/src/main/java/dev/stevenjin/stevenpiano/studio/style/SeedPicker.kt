@@ -30,7 +30,7 @@ object SeedPicker {
     data class Pick(val pieceId: Long, val request: ComposeRequest, val facts: SeedFacts)
 
     /** The seed among [candidates] (best first), [avoid] passed over when another will do; null when none can be read. */
-    fun pick(spec: StyleSpec, candidates: List<Long>, facts: (Long) -> SeedFacts?, avoid: Long? = null): Pick? {
+    suspend fun pick(spec: StyleSpec, candidates: List<Long>, facts: suspend (Long) -> SeedFacts?, avoid: Long? = null): Pick? {
         if (candidates.isEmpty()) return null
         val start = Math.floorMod(spec.variant, candidates.size)
         val rotated = candidates.drop(start) + candidates.take(start)
