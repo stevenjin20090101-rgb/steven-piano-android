@@ -9,7 +9,9 @@
 
 // The request page (DESIGN.md › v1.5.1 — M18): the pieces guests may ask for, each with Request.
 // No PIN and no free text: a request is a piece's id from the list, one every five minutes. Titles
-// go into the page as text only.
+// go into the page as text only. Since v1.14 (M37) the lists name their genre: a switch (All ·
+// Classical · Modern) shows when there are both, and a search over the rows already here when there
+// are more than a few; neither asks the tablet anything. A list shows 200 rows at a time.
 
 'use strict';
 
@@ -52,6 +54,18 @@
 
   const NOTE_MS = 8000;
 
+  const GENRES = [['all', 'All'], ['classical', 'Classical'], ['modern', 'Modern']];
+
+  /** More pieces than this: the search shows. */
+  const SEARCH_FROM = 20;
+
+  /** Rows a list shows at first, and each Show more adds. */
+  const PAGE = 200;
+
+  /** The catalogue as it came, and the switch's choice. */
+  let lists = [];
+  let genre = 'all';
+
   /** "30 s", "4 min". */
   function wait(seconds) {
     return seconds < 60 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`;
@@ -81,6 +95,7 @@
       body = {};
     }
     if (response.status === 202) {
+      $('guest-tools').hidden = true;
       $('catalogue').hidden = true;
       $('thanks').hidden = false;
       $('thanks-title').textContent = body.status === 'pending' ? "Thanks — it joins the queue once it's approved." : "Thanks — it's in the queue.";
@@ -97,9 +112,75 @@
   }
 
   function showClosed() {
+    $('guest-tools').hidden = true;
     $('catalogue').hidden = true;
     $('closed').hidden = false;
   }
+
+  /** Text as the search compares it: lower case, accents set aside. */
+  function fold(text) {
+    return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  /** The switch's three buttons, built once, then pressed as the choice is (the panel's segmented control). */
+  function renderSwitch() {
+    const group = $('genre');
+    if (!group.childElementCount) {
+      group.append(...GENRES.map(([key, label]) => h('button', { type: 'button', 'data-key': key, text: label, onclick: () => choose(key) })));
+    }
+    for (const button of group.children) button.setAttribute('aria-pressed', button.dataset.key === genre ? 'true' : 'false');
+  }
+
+  function choose(key) {
+    if (key === genre) return;
+    genre = key;
+    renderSwitch();
+    renderLists();
+  }
+
+  /** The lists the switch shows (all of them under All), each cut to the search's matches; a list with none is left out. */
+  function renderLists() {
+    const wanted = fold($('search').value.trim());
+    const sections = [];
+    for (const list of lists) {
+      if (genre !== 'all' && list.genre && list.genre !== genre) continue;
+      const pieces = wanted ? list.pieces.filter((piece) => piece.words.some((words) => words.includes(wanted))) : list.pieces;
+      if (pieces.length > 0) sections.push(section(list.name, pieces));
+    }
+    $('catalogue').replaceChildren(...(sections.length > 0 ? sections
+      : [h('p', { class: 'empty', text: wanted ? 'Nothing matches that search.' : 'There is nothing to ask for yet.' })]));
+  }
+
+  /** A list's heading and its rows, [PAGE] at a time: Show more adds the next ones. */
+  function section(name, pieces) {
+    const rows = h('ul', { class: 'rows' });
+    const more = h('div', { class: 'more-button' });
+    let shown = 0;
+    const next = () => {
+      rows.append(...pieces.slice(shown, shown + PAGE).map(row));
+      shown = Math.min(pieces.length, shown + PAGE);
+      more.hidden = shown >= pieces.length;
+    };
+    more.append(h('button', { class: 'outlined', type: 'button', text: 'Show more', onclick: next }));
+    next();
+    return h('section', null, h('h2', { class: 'section-head eyebrow', text: name }), rows, more);
+  }
+
+  function row(piece) {
+    const button = h('button', { class: 'outlined', type: 'button', 'aria-label': `Request ${piece.title}`, text: 'Request' });
+    button.addEventListener('click', () => ask(piece, button));
+    return h('li', { class: 'row' },
+      h('div', { class: 'text' },
+        h('p', { class: 'title', text: piece.title }),
+        h('p', { class: 'meta', text: piece.composer || 'Unknown composer' })),
+      button);
+  }
+
+  let searchTimer = null;
+  $('search').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderLists, 150);
+  });
 
   async function load() {
     let data;
@@ -120,23 +201,21 @@
       showClosed();
       return;
     }
-    const lists = data.lists || [];
+    lists = data.lists || [];
     if (lists.length === 0) {
       $('closed').textContent = 'There is nothing to ask for yet.';
       showClosed();
       return;
     }
-    $('catalogue').replaceChildren(...lists.map((list) => h('section', null,
-      h('h2', { class: 'section-head eyebrow', text: list.name }),
-      h('ul', { class: 'rows' }, list.pieces.map((piece) => {
-        const button = h('button', { class: 'outlined', type: 'button', 'aria-label': `Request ${piece.title}`, text: 'Request' });
-        button.addEventListener('click', () => ask(piece, button));
-        return h('li', { class: 'row' },
-          h('div', { class: 'text' },
-            h('p', { class: 'title', text: piece.title }),
-            h('p', { class: 'meta', text: piece.composer || 'Unknown composer' })),
-          button);
-      })))));
+    for (const list of lists) {
+      for (const piece of list.pieces) piece.words = [fold(piece.title), fold(piece.composer)];
+    }
+    const genres = new Set(lists.map((list) => list.genre));
+    $('genre').hidden = !(genres.has('classical') && genres.has('modern'));
+    $('search').hidden = lists.reduce((n, list) => n + list.pieces.length, 0) <= SEARCH_FROM;
+    $('guest-tools').hidden = $('genre').hidden && $('search').hidden;
+    renderSwitch();
+    renderLists();
   }
 
   load();

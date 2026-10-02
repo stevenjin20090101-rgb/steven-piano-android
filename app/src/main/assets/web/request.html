@@ -25,6 +25,10 @@
     <p class="note">Pick a piece. It joins the queue.</p>
     <p class="eyebrow">One request every five minutes</p>
   </header>
+  <div class="guest-tools" id="guest-tools" hidden>
+    <div class="segmented" id="genre" role="group" aria-label="Genre" hidden></div>
+    <input class="field" id="search" type="search" placeholder="Search pieces" aria-label="Search pieces" autocomplete="off" maxlength="200" hidden>
+  </div>
   <div id="catalogue"></div>
   <p class="empty" id="closed" hidden>Requests are closed right now.</p>
   <section class="guest-thanks" id="thanks" hidden aria-live="polite">

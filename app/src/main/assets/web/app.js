@@ -910,11 +910,62 @@
 
   // ---- Library -------------------------------------------------------------------------------------
 
-  const library = { category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, loaded: false };
+  // The genre switch (v1.14 — M37): All · Classical · Modern above the search, kept per browser as Appearance is.
+  // Pieces, playlists, composers and a composer's page follow it; a playlist opens whole.
+  const LIBRARY_SCOPE = 'libraryScope';
+  const GENRES = [['all', 'All'], ['classical', 'Classical'], ['modern', 'Modern']];
+  const SEARCH_WORDS = { all: 'Search titles and composers', classical: 'Search Classical titles and composers', modern: 'Search Modern titles and artists' };
+
+  function storedGenre() {
+    try {
+      const value = localStorage.getItem(LIBRARY_SCOPE);
+      return value === 'classical' || value === 'modern' ? value : 'all';
+    } catch (e) {
+      return 'all';
+    }
+  }
+
+  const library = { category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, loaded: false, genre: storedGenre() };
   const PAGE = 50;
 
+  /** Under Modern the Library says artist where it says composer (v1.14 — M37). */
+  const artists = () => library.genre === 'modern';
+  const unknownName = () => (artists() ? 'Unknown artist' : 'Unknown composer');
+
+  /** [path] as the switch asks for it: with `?genre=` unless it is on All. */
+  const scoped = (path) => (library.genre === 'all' ? path : `${path}?genre=${library.genre}`);
+
+  /**
+   * A segmented control (v1.14 — M37, the tablet's): [options] as [key, label] pairs in [holder]'s capsule, the one
+   * [current] names pressed; a press calls [onChoose] with its key. Built once, then marked in place, so the thumb fades.
+   */
+  function segmented(holder, options, current, onChoose) {
+    if (holder.childElementCount !== options.length) {
+      holder.replaceChildren(...options.map(([key, label]) => h('button', { type: 'button', 'data-key': key, onclick: () => onChoose(key) }, label)));
+    }
+    for (const button of holder.children) button.setAttribute('aria-pressed', button.dataset.key === current ? 'true' : 'false');
+  }
+
+  function renderGenre() {
+    segmented($('lib-genre'), GENRES, library.genre, chooseGenre);
+    $('lib-search').placeholder = SEARCH_WORDS[library.genre];
+  }
+
+  /** Another genre: remembered in this browser; a playlist or composer open closes, the chip and the search stay. */
+  function chooseGenre(value) {
+    if (value === library.genre) return;
+    try {
+      localStorage.setItem(LIBRARY_SCOPE, value);
+    } catch (e) {
+      // Private browsing: it holds for this page only.
+    }
+    library.genre = value;
+    library.view = null;
+    libraryLoad(true);
+  }
+
   function renderChips() {
-    const chips = [['all', 'All'], ['playlists', 'Playlists'], ['composers', 'Composers'], ['favorites', 'Favorites'], ['recent', 'Recent']];
+    const chips = [['all', 'Pieces'], ['playlists', 'Playlists'], ['composers', artists() ? 'Artists' : 'Composers'], ['favorites', 'Favorites'], ['recent', 'Recent']];
     $('lib-chips').replaceChildren(...chips.map(([key, label]) => chip(label, library.category === key && !library.query, () => {
       library.category = key;
       library.query = '';
@@ -935,6 +986,7 @@
   async function libraryLoad(force) {
     if (library.loaded && !force) return;
     library.loaded = true;
+    renderGenre();
     renderChips();
     $('lib-crumb').hidden = true;
     if (library.query) return libraryPage(0);
@@ -946,6 +998,7 @@
   async function libraryPage(offset) {
     const params = new URLSearchParams({ category: library.query ? 'all' : library.category, offset: String(offset), limit: String(PAGE) });
     if (library.query) params.set('q', library.query);
+    if (library.genre !== 'all') params.set('genre', library.genre);
     try {
       const page = await get(ROOT + `/api/library?${params}`);
       library.pieces = offset === 0 ? page.pieces : library.pieces.concat(page.pieces);
@@ -972,7 +1025,7 @@
       art(h('div', { class: 'art' }), piece, 'row', true),
       h('div', { class: 'text' },
         h('p', { class: 'title', text: piece.title }),
-        h('p', { class: 'meta', text: [piece.composerShort || 'Unknown composer', clock(piece.durationMs)].join(' · ') })),
+        h('p', { class: 'meta', text: [piece.composerShort || unknownName(), clock(piece.durationMs)].join(' · ') })),
       h('button', { class: 'icon-button', type: 'button', 'aria-label': `More for ${piece.title}`, 'aria-haspopup': 'menu', onclick: (e) => { e.stopPropagation(); openMenu(e.currentTarget, piece, queue); } }, glyph('i-more')));
     row.addEventListener('click', () => play(piece.id, queue));
     return row;
@@ -1025,7 +1078,7 @@
 
   async function playlistsLoad() {
     try {
-      const { playlists } = await get(ROOT + '/api/playlists');
+      const { playlists } = await get(scoped(ROOT + '/api/playlists'));
       $('lib-more').hidden = true;
       $('lib-rows').replaceChildren(...playlists.map((list) => {
         const row = h('li', { class: 'row clickable' },
@@ -1056,7 +1109,7 @@
 
   async function composersLoad() {
     try {
-      const { composers } = await get(ROOT + '/api/composers');
+      const { composers } = await get(scoped(ROOT + '/api/composers'));
       $('lib-more').hidden = true;
       $('lib-rows').replaceChildren(...composers.map((composer) => {
         const box = h('div', { class: 'art' });
@@ -1065,14 +1118,14 @@
         const row = h('li', { class: 'row clickable' },
           box,
           h('div', { class: 'text' },
-            h('p', { class: 'title', text: composer.name || 'Unknown composer' }),
+            h('p', { class: 'title', text: composer.name || unknownName() }),
             h('p', { class: 'meta', text: plural(composer.pieceCount, 'piece', 'pieces') })),
           glyph('i-chevron'));
         row.addEventListener('click', () => openComposer(composer));
         return row;
       }));
       $('lib-empty').hidden = composers.length > 0;
-      $('lib-empty').textContent = 'No composers yet.';
+      $('lib-empty').textContent = artists() ? 'No artists yet.' : 'No composers yet.';
     } catch (e) {
       failed(e);
     }
@@ -1080,9 +1133,9 @@
 
   async function openComposer(composer) {
     try {
-      const detail = await get(ROOT + `/api/composers/${encodeURIComponent(composer.key)}`);
+      const detail = await get(scoped(ROOT + `/api/composers/${encodeURIComponent(composer.key)}`));
       const ids = detail.pieces.map((p) => p.id);
-      showGroup(detail.composer.name || 'Unknown composer', plural(detail.pieces.length, 'piece', 'pieces'), detail.pieces,
+      showGroup(detail.composer.name || unknownName(), plural(detail.pieces.length, 'piece', 'pieces'), detail.pieces,
         (shuffle) => post(ROOT + '/api/play-all', { ids, shuffle }));
     } catch (e) {
       failed(e);
@@ -1708,6 +1761,7 @@
     library.loaded = true;   // the playlist itself shows, not the list beneath it first
     $('lib-search').value = '';
     show('library');
+    renderGenre();
     renderChips();
     openPlaylist(playlist);
   }
