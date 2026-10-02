@@ -7377,3 +7377,10 @@ stops stay in `ui/theme/Aura.kt`); glass only through `GlassSurface` and `GlassS
 `StudioStageTest` (3: the stage's card, else idle; History newest first with its eyebrows and a removed turn staying
 out; the one-minute rule on an injected clock). 1,567 → 1,570 unit tests (12 skipped), none failing. `lintDebug`:
 0 errors, the same 30 warnings, none in a touched file.
+
+## The release: 1.13.1 (versionCode 23)
+
+Cut from `main` at `ed51fb8`: Studio's stage (M36) and the Recognisable and Popular channels (`c8b6a6d`). The
+integrator's smoke pass on the tablet-size emulator: the stage idle with the aura and its glow, "A bright waltz,
+2 minutes" composed with the box in the upper third and the one card under it, and the History sheet listing
+three turns. No crash in the log.

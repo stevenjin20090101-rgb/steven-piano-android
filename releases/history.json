@@ -163,5 +163,14 @@
     "minSdk": 26,
     "tag": "v1.13",
     "publishedAt": "2026-10-02"
+  },
+  {
+    "versionCode": 23,
+    "versionName": "1.13.1",
+    "notes": "Studio's create box now sits in the middle of the screen under \"What should the piano play?\", with the aura moving and glowing around it. The piece being made shows under the box, and everything made before is behind the new History button and in the Made in Studio playlist. Channels gain Recognisable and Popular, each playing its list without end.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.13.1/steven-piano-1.13.1.apk",
+    "minSdk": 26,
+    "tag": "v1.13.1",
+    "draft": true
   }
 ]
