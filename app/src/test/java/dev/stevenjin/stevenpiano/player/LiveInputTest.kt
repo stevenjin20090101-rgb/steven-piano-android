@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano.player
 
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
+import dev.stevenjin.stevenpiano.midi.InstrumentProfile
+import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
@@ -232,5 +234,75 @@ class LiveInputTest {
         assertEquals(1L shl 19, router.activeHigh)
         engine.liveNoteOff(60)
         assertEquals(0L, router.activeLow)
+    }
+
+    // ---- A MIDI keyboard through the engine (v1.11 — M29) -------------------------------------------
+
+    private fun keyboard(vararg events: Triple<Int, Int, Int>): IntArray {
+        val buffer = KeyEvents()
+        for ((type, key, value) in events) buffer.add(type, key, value)
+        return buffer.toPacked()
+    }
+
+    @Test
+    fun `a keyboard's buffer goes out as one batch through the live lane, its keys as played`() {
+        router.transpose = 3
+        val chord = keyboard(Triple(KeyEvents.DOWN, 60, 100), Triple(KeyEvents.DOWN, 64, 90), Triple(KeyEvents.PEDAL, 64, 127))
+        engine.external(chord, chord.size, now, now)
+        assertEquals(listOf("90 3C 64", "90 40 5A", "B0 40 7F"), link.messages)
+        assertTrue(link.sent.all { it.live && !it.dropPending })
+        assertEquals("one batch: one moment", 1, link.sent.map { it.atNanos }.distinct().size)
+        link.clear()
+        at(300)
+        val release = keyboard(Triple(KeyEvents.UP, 60, 0), Triple(KeyEvents.UP, 64, 0), Triple(KeyEvents.PEDAL, 64, 0))
+        engine.external(release, release.size, now, now)
+        assertEquals(listOf("300 80 3C 00", "300 80 40 00", "300 B0 40 00"), sent())
+    }
+
+    @Test
+    fun `letting go of the keyboard leaves the piece's keys and the screen's`() {
+        engine.load(piece { noteOn(0, 64); noteOff(5_000, 64) }, now)
+        engine.play(now)
+        runUntil(200)
+        engine.liveNoteOn(67, 100, now)
+        val keys = keyboard(Triple(KeyEvents.DOWN, 60, 100), Triple(KeyEvents.DOWN, 64, 100), Triple(KeyEvents.DOWN, 67, 100))
+        engine.external(keys, keys.size, now, now)
+        link.clear()
+        engine.silenceExternal()
+        assertEquals(listOf("200 80 3C 00"), sent())
+        assertTrue(router.isSounding(64))
+        assertTrue(router.isSounding(67))
+        assertEquals(PlaybackStatus.Playing, engine.status)
+    }
+
+    @Test
+    fun `a Live session's times are kept for the trail when it ends`() {
+        val keys = keyboard(Triple(KeyEvents.DOWN, 60, 100), Triple(KeyEvents.DOWN, 62, 100))
+        engine.external(keys, keys.size, arrivalNanos = 0L, nowNanos = 3 * ms)
+        val more = keyboard(Triple(KeyEvents.DOWN, 64, 100))
+        engine.external(more, more.size, arrivalNanos = 10 * ms, nowNanos = 19 * ms)
+        assertEquals(null, engine.liveTiming.take())
+        engine.silenceExternal()
+        assertEquals(LiveTiming.Run(notes = 3, medianMs = 3, worstMs = 9), engine.liveTiming.take())
+        assertEquals("once", null, engine.liveTiming.take())
+        assertEquals(
+            "Live: 3 notes, 3 ms median and 9 ms at most from the keyboard to the piano's queue",
+            Player.liveLine(LiveTiming.Run(3, 3, 9)),
+        )
+        assertEquals("Live: 1 note, 0 ms median and 0 ms at most from the keyboard to the piano's queue", Player.liveLine(LiveTiming.Run(1, 0, 0)))
+    }
+
+    @Test
+    fun `another instrument silences the old one first, and a piece plays on with its pedal`() {
+        engine.load(piece { cc(0, 64, 127); noteOn(0, 60); noteOff(5_000, 60) }, now)
+        engine.play(now)
+        runUntil(200)
+        link.clear()
+        engine.setProfile(InstrumentProfile.StandardPiano, now)
+        assertEquals(listOf("B0 40 00", "B0 7B 00", "B0 40 7F"), link.messages)
+        assertEquals(InstrumentProfile.StandardPiano, router.profile)
+        link.clear()
+        engine.stop(now)
+        assertEquals("the new instrument's stop sequence", listOf("B0 40 00", "B0 42 00", "B0 43 00", "B0 7B 00"), link.messages)
     }
 }

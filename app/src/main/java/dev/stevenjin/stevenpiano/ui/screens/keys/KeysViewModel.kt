@@ -19,6 +19,7 @@ import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.LiveState
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import kotlinx.coroutines.Job
@@ -47,6 +48,18 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** The MIDI keyboard (v1.11 — M29): its state for the eyebrow, and what it holds for the keys to show. */
     val keyboard: StateFlow<KeyboardState> = graph.keyboard.state
     val external: MidiKeyboard = graph.keyboard
+
+    /** Live (v1.11 — M29): whether the keyboard plays the instrument now, the switch, and why it is off. */
+    val live: StateFlow<LiveState> = graph.liveThru.state
+
+    /** The Live pill: the gate follows at once, and the switch is remembered. Free in kiosk mode, as the Keys tab is. */
+    fun setLive(on: Boolean) {
+        graph.liveThru.setWanted(on)
+        graph.appScope.launch { graph.settingsRepository.setLiveToPiano(on) }
+    }
+
+    /** The Keys tab is on screen with the app in the foreground: Live may play. */
+    fun onScreen(on: Boolean) = graph.liveThru.setOnScreen(on)
 
     /** The sustain as the piano was last told; a stop elsewhere lifts it. */
     val sustain: StateFlow<Boolean> = player.liveSustain

@@ -264,6 +264,9 @@ class KeyEvents {
     /** A key's velocity, or a pedal's value. */
     fun value(i: Int): Int = packed[i] and 0xFF
 
+    /** A copy of the events, packed (type, key, value), for another thread to read later. */
+    fun toPacked(): IntArray = packed.copyOf(size)
+
     /** Note Ons in the buffer. */
     fun downs(): Int {
         var n = 0

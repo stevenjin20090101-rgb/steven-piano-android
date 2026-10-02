@@ -200,4 +200,154 @@ class NoteRouterTest {
         assertEquals(0L, router.activeLow)
         assertTrue(router.isSounding(107))
     }
+
+    // ---- A MIDI keyboard's bank and the instrument's profile (v1.11 — M29) -----------------------
+
+    private fun ext(atMs: Long = 0, block: NoteRouter.(Long) -> Unit): List<String> {
+        out.clear()
+        router.block(atMs * 1000)
+        return out.hex()
+    }
+
+    @Test
+    fun `a keyboard's notes keep their pitch, transpose never applies, the velocity percentage does`() {
+        router.transpose = 5
+        router.velocityPct = 50
+        assertEquals(listOf("90 3C 32"), ext { externalNoteOn(60, 100, it, out) })
+        assertEquals(listOf("80 3C 00"), ext(300) { externalNoteOff(60, out) })
+        assertEquals(emptyList<String>(), ext(400) { externalNoteOff(60, out) })
+    }
+
+    @Test
+    fun `keys 21 to 23 and 108 fold in by an octave on Steven Piano, or are dropped with folding off`() {
+        assertEquals(listOf("90 21 50", "90 22 50", "90 23 50", "90 60 50"), ext {
+            externalNoteOn(21, 80, it, out)
+            externalNoteOn(22, 80, it, out)
+            externalNoteOn(23, 80, it, out)
+            externalNoteOn(108, 80, it, out)
+        })
+        assertEquals(listOf("80 21 00", "80 60 00"), ext(200) {
+            externalNoteOff(21, out)
+            externalNoteOff(108, out)
+        })
+        router.fold = false
+        assertEquals(emptyList<String>(), ext(400) {
+            externalNoteOn(21, 80, it, out)
+            externalNoteOn(108, 80, it, out)
+            externalNoteOff(21, out)
+        })
+        assertEquals(listOf("90 18 50"), ext(500) { externalNoteOn(24, 80, it, out) })
+    }
+
+    @Test
+    fun `a keyboard key and a piece's note on one key share it on Steven Piano`() {
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80))
+        assertEquals(emptyList<String>(), ext(150) { externalNoteOn(60, 90, it, out) })
+        assertEquals(emptyList<String>(), send(0x80, 60, 0, atMs = 200))
+        assertTrue(router.isSounding(60))
+        assertEquals(listOf("80 3C 00"), ext(300) { externalNoteOff(60, out) })
+    }
+
+    @Test
+    fun `a key pressed again while held keeps holding within 100 ms on Steven Piano, and strikes again after`() {
+        assertEquals(listOf("90 3C 50"), ext { externalNoteOn(60, 80, it, out) })
+        assertEquals("a lost release, too soon: it keeps holding", emptyList<String>(), ext(50) { externalNoteOn(60, 90, it, out) })
+        assertEquals(listOf("80 3C 00", "90 3C 5A"), ext(150) { externalNoteOn(60, 90, it, out) })
+        send(0x90, 60, 80, atMs = 300)   // the piece shares it now
+        assertEquals("shared: never re-struck", emptyList<String>(), ext(500) { externalNoteOn(60, 70, it, out) })
+        assertTrue(router.externalHeld)
+        assertEquals(emptyList<String>(), ext(600) { externalNoteOff(60, out) })
+        assertTrue(!router.externalHeld)
+    }
+
+    @Test
+    fun `the keyboard's pedal goes at once when it crosses 64, the values between are paced`() {
+        assertEquals("from up, crossing: at once", listOf("B0 40 50"), ext { externalPedal(64, 80, it, out) })
+        assertEquals(listOf("B0 40 5A"), ext(1) { externalPedal(64, 90, it, out) })
+        assertEquals(listOf("B0 40 64"), ext(2) { externalPedal(64, 100, it, out) })
+        assertEquals(listOf("B0 40 6E"), ext(3) { externalPedal(64, 110, it, out) })
+        assertEquals("three paced changes spent the bucket: the fourth waits", emptyList<String>(), ext(4) { externalPedal(64, 120, it, out) })
+        assertTrue(router.pedalDueMicros != Long.MAX_VALUE)
+        assertEquals("crossing 64 goes at once, and the waiting value with it", listOf("B0 40 00"), ext(5) { externalPedal(64, 0, it, out) })
+        assertEquals(Long.MAX_VALUE, router.pedalDueMicros)
+        assertEquals(listOf("B0 40 7F"), ext(6) { externalPedal(64, 127, it, out) })
+        assertEquals("sostenuto and soft: not Steven Piano's", emptyList<String>(), ext(7) {
+            externalPedal(66, 127, it, out)
+            externalPedal(67, 127, it, out)
+        })
+    }
+
+    @Test
+    fun `letting go of the keyboard leaves the piece's keys, and its pedal goes back to the higher of the piece's and the screen's`() {
+        send(0x90, 64, 80)
+        send(0xB0, 64, 40, atMs = 1)
+        ext(2) {
+            externalNoteOn(60, 80, it, out)
+            externalNoteOn(64, 80, it, out)
+            externalPedal(64, 127, it, out)
+        }
+        assertEquals(listOf("80 3C 00", "B0 40 28"), ext(200) { silenceExternal(out) })
+        assertTrue(router.isSounding(64))
+        assertTrue(!router.isSounding(60))
+        ext(300) {
+            liveSustain(true, out)
+            externalPedal(64, 0, it, out)
+        }
+        assertEquals("the screen's sustain wins over the piece's 40", listOf("B0 40 7F"), ext(400) { silenceExternal(out) })
+        assertEquals("nothing left to let go", emptyList<String>(), ext(500) { silenceExternal(out) })
+    }
+
+    @Test
+    fun `keys outside the screen's 84 light it an octave in, counted`() {
+        router.profile = InstrumentProfile.StandardPiano
+        ext {
+            externalNoteOn(21, 80, it, out)
+            externalNoteOn(33, 80, it, out)
+            externalNoteOn(108, 80, it, out)
+        }
+        assertEquals(1L shl (33 - 24), router.activeLow)
+        assertEquals(1L shl (96 - 88), router.activeHigh)
+        ext(200) { externalNoteOff(21, out) }
+        assertEquals("33 still sounds itself", 1L shl (33 - 24), router.activeLow)
+        ext(300) { externalNoteOff(33, out) }
+        assertEquals(0L, router.activeLow)
+    }
+
+    @Test
+    fun `a MIDI piano takes 21 to 108, strikes a held key again, and its three pedals pass unpaced`() {
+        router.profile = InstrumentProfile.StandardPiano
+        router.transpose = 2
+        assertEquals("21 is its own; a piece's note transposes", listOf("90 15 50", "90 6C 50"), ext {
+            externalNoteOn(21, 80, it, out)
+            route(0x90, 106, 80, it, out)
+        })
+        assertEquals("125 + 2 = 127 folds by octaves to 103", listOf("90 67 50"), send(0x90, 125, 80, atMs = 1))
+        assertEquals("struck again at once: no 100 ms on a digital piano", listOf("80 15 00", "90 15 5A"), ext(2) { externalNoteOn(21, 90, it, out) })
+        assertEquals("a key another source holds is struck again", listOf("80 6C 00", "90 6C 46"), ext(3) { externalNoteOn(108, 70, it, out) })
+        assertEquals(listOf("B0 40 7F", "B0 42 7F", "B0 43 40", "B0 40 00", "B0 40 7F"), ext(4) {
+            externalPedal(64, 127, it, out)
+            externalPedal(66, 127, it, out)
+            externalPedal(67, 64, it, out)
+            externalPedal(67, 64, it, out)
+            externalPedal(64, 0, it, out)
+            externalPedal(64, 127, it, out)
+        })
+        assertEquals("a piece's sostenuto passes too", listOf("B0 42 00"), send(0xB0, 66, 0, atMs = 5))
+    }
+
+    @Test
+    fun `a MIDI piano's stop sequence is a Note Off for every key held, its pedals up, then All Notes Off`() {
+        router.profile = InstrumentProfile.StandardPiano
+        ext {
+            externalNoteOn(21, 80, it, out)
+            externalNoteOn(60, 80, it, out)
+            route(0x90, 108, 80, it, out)
+            externalPedal(64, 127, it, out)
+        }
+        out.clear()
+        router.silence(out)
+        assertEquals(listOf("80 15 00", "80 3C 00", "80 6C 00", "B0 40 00", "B0 42 00", "B0 43 00", "B0 7B 00"), out.hex())
+        assertEquals(0L, router.activeLow)
+        assertEquals("forgotten", emptyList<String>(), ext(100) { externalNoteOff(60, out) })
+    }
 }

@@ -25,7 +25,10 @@ import androidx.compose.ui.unit.dp
 
 /**
  * "● Sent to piano" with the live dot (breathing while a piece plays), or "○ Not connected" —
- * or [notConnected], where a screen needs to say more — which opens the Piano tab.
+ * or [notConnected], where a screen needs to say more — which opens the Piano tab. [sent] is the
+ * connected line's words, where a screen needs other ones, and [live] whether its dot is the live one
+ * (v1.11 — M29: the Keys tab's "○ Keyboard connected. Live is off.", whose keyboard is not sent: red
+ * means sent to the piano, nothing else).
  */
 @Composable
 fun ConnectionLine(
@@ -34,6 +37,8 @@ fun ConnectionLine(
     onOpenPiano: () -> Unit,
     modifier: Modifier = Modifier,
     notConnected: String = "Not connected",
+    sent: String = "Sent to piano",
+    live: Boolean = connected,
 ) {
     val tap = if (connected) Modifier else Modifier.clickable(onClickLabel = "Open the Piano tab", role = Role.Button, onClick = onOpenPiano)
     Row(
@@ -43,10 +48,10 @@ fun ConnectionLine(
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LiveDot(live = connected, breathing = playing)
+        LiveDot(live = connected && live, breathing = playing)
         Spacer(Modifier.width(8.dp))
         Text(
-            if (connected) "Sent to piano" else notConnected,
+            if (connected) sent else notConnected,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

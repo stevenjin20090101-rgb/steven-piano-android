@@ -439,4 +439,17 @@ class SettingsRepositoryTest {
         assertEquals("a name alone is no keyboard", null, repository.settings.first().keyboardName)
         scope.cancel()
     }
+
+    @Test
+    fun `Live starts off and is remembered (v1_11 M29)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "live.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(false, repository.settings.first().liveToPiano)
+        repository.setLiveToPiano(true)
+        assertEquals(true, SettingsRepository(store).settings.first().liveToPiano)
+        repository.setLiveToPiano(false)
+        assertEquals(PianoSettings(), repository.settings.first())
+        scope.cancel()
+    }
 }

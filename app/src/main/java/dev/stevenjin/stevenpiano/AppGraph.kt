@@ -69,9 +69,13 @@ import dev.stevenjin.stevenpiano.instruments.AndroidMidiPorts
 import dev.stevenjin.stevenpiano.instruments.CombinedMidiPorts
 import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.LivePlayer
+import dev.stevenjin.stevenpiano.instruments.LiveThru
+import dev.stevenjin.stevenpiano.instruments.LiveTimingHold
 import dev.stevenjin.stevenpiano.instruments.MidiDevices
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.library.LibraryOverride
+import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
@@ -268,6 +272,22 @@ class AppGraph(private val app: Application) {
     }
 
     private val midiBluetooth: AndroidMidiBluetooth by lazy { AndroidMidiBluetooth(app) }
+
+    /**
+     * The gate between the MIDI keyboard and the instrument (v1.11 — M29): Live on the Keys tab, with the flood
+     * breaker, which switches Live off and remembers so.
+     */
+    val liveThru: LiveThru by lazy {
+        LiveThru(
+            player = object : LivePlayer {
+                override fun external(events: KeyEvents, arrivalNanos: Long) = player.external(events, arrivalNanos)
+
+                override fun silenceExternal() = player.silenceExternal()
+            },
+            log = LinkLog::warn,
+            onTrip = { appScope.launch { settingsRepository.setLiveToPiano(false) } },
+        ).also { keyboard.listen(it) }
+    }
 
     /** The MIDI keyboard the person chose (Piano › Keyboard, v1.11 — M29): what it holds lights the Keys tab. */
     val keyboard: MidiKeyboard by lazy {
@@ -711,8 +731,30 @@ class AppGraph(private val app: Application) {
             // The keyboard first (v1.11 — M29): its address is foreign to the piano's link before that link scans.
             midiDevices.start()
             keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
+            followLive()
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
             if (s.autoConnect && BlePermissions.missing(app).isEmpty()) pianoLink.connect(s.lastDeviceAddress)
+        }
+    }
+
+    /**
+     * Live (v1.11 — M29) follows its switch as remembered, the keyboard's connection, and whether anything can play
+     * the keys (the piano connected, or the tablet's own sound); while it plays Steven Piano, the piano's timing
+     * scatter is held at 0 ([LiveTimingHold]).
+     */
+    private fun followLive() {
+        val live = liveThru
+        appScope.launch { settingsRepository.settings.map { it.liveToPiano }.distinctUntilChanged().collect(live::setWanted) }
+        appScope.launch { keyboard.state.map { it.connected }.distinctUntilChanged().collect(live::setKeyboard) }
+        appScope.launch {
+            combine(pianoLink.state, tabletSound.state) { link, sound -> link is LinkState.Connected || sound.active }
+                .distinctUntilChanged()
+                .collect(live::setTarget)
+        }
+        val scatter = LiveTimingHold(pianoSettings::holdTemporarily, pianoSettings::releaseTemporary)
+        appScope.launch {
+            combine(live.state.map { it.open }.distinctUntilChanged(), pianoSettings.state) { open, piano -> open to piano }
+                .collect { (open, piano) -> scatter.update(open, piano) }
         }
     }
 

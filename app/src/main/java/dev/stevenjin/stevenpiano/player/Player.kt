@@ -13,6 +13,8 @@ import dev.stevenjin.stevenpiano.audio.TeeSink
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.channels.ChannelDeck
+import dev.stevenjin.stevenpiano.midi.InstrumentProfile
+import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.MidiSink
 import dev.stevenjin.stevenpiano.midi.NoteList
@@ -268,7 +270,11 @@ class Player(
         }
     }
 
-    /** A key pressed on the Keys screen ([key] 24-107): sent at once, with the velocity percentage applied. */
+    /**
+     * A key pressed on the Keys screen ([key] 24-107): sent at once, with the velocity percentage applied.
+     * This and the other live calls ([liveNoteOff], [liveSustain], [silenceLive], [external], [silenceExternal])
+     * are safe from any thread: they read the volatile lock and queue a command for the scheduler.
+     */
     fun liveNoteOn(key: Int, velocity: Int) {
         if (locked) return
         scheduler.submit { engine.liveNoteOn(key, velocity, it) }
@@ -285,6 +291,26 @@ class Player(
 
     /** Lets go of every key the Keys screen holds, and its sustain; a playing piece keeps its keys. */
     fun silenceLive() = scheduler.submit { engine.silenceLive() }
+
+    /**
+     * A MIDI keyboard's keys (v1.11 — M29): one buffer's [events], copied, become one scheduler command and
+     * one batch through the live lane. [arrivalNanos]: when the buffer arrived (`System.nanoTime`), for the
+     * Live line in the link's trail. Refused while locked for a firmware update. Any thread.
+     */
+    fun external(events: KeyEvents, arrivalNanos: Long) {
+        if (locked || events.isEmpty()) return
+        val packed = events.toPacked()
+        scheduler.submit { engine.external(packed, packed.size, arrivalNanos, it) }
+    }
+
+    /** Lets go of every key the keyboard holds through the player, its pedal back where the piece wants it (v1.11 — M29). Any thread. */
+    fun silenceExternal() = scheduler.submit { engine.silenceExternal() }
+
+    /**
+     * The instrument that plays (v1.11 — M29): Steven Piano or any MIDI piano ([InstrumentProfile]). The old one
+     * is silenced first; a piece playing goes on. Any thread.
+     */
+    fun setProfile(profile: InstrumentProfile) = scheduler.submit { engine.setProfile(profile, it) }
 
     /** Live tempo, 25-200 %. */
     fun setTempo(pct: Int) = scheduler.submit { engine.setTempo(pct, it) }
@@ -615,6 +641,7 @@ class Player(
         }
         // Last, after what the UI reads: a run that just ended leaves its timing on the link's trail.
         engine.timing.take()?.let { run -> trail(timingLine(run)) }
+        engine.liveTiming.take()?.let { run -> trail(liveLine(run)) }   // and a Live session, its keyboard's times (v1.11 — M29)
     }
 
     /**
@@ -654,6 +681,11 @@ class Player(
             val at = String.format(Locale.ROOT, "%d:%02d.%d", tenths / 600, tenths / 10 % 60, tenths % 10)
             return "Timing: ${run.events} events, the latest ${run.latestMicros / 1_000} ms after its time, at $at"
         }
+
+        /** A Live session's figures (v1.11 — M29): "Live: 412 notes, 2 ms median and 9 ms at most from the keyboard to the piano's queue". */
+        fun liveLine(run: LiveTiming.Run): String =
+            "Live: ${run.notes} note" + (if (run.notes == 1) "" else "s") +
+                ", ${run.medianMs} ms median and ${run.worstMs} ms at most from the keyboard to the piano's queue"
 
         private const val AUTO_ADVANCE_DELAY_MS = 1_500L
         private const val NANOS_PER_MS = 1_000_000L

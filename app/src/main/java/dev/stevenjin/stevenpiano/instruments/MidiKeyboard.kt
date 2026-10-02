@@ -67,6 +67,9 @@ interface KeyboardListener {
 
     /** Everything the keyboard held was let go ([reason] for the log): whatever was passed on from it must go too. */
     fun onLetGo(reason: String) {}
+
+    /** [count] malformed bytes came in one buffer (the flood breaker counts them). */
+    fun onMalformed(count: Long) {}
 }
 
 /**
@@ -355,7 +358,11 @@ class MidiKeyboard(
             val parser = parsers[port]
             val before = parser.malformed
             parser.feed(data, offset, count)
-            malformedPending += parser.malformed - before
+            val malformed = parser.malformed - before
+            if (malformed > 0) {
+                malformedPending += malformed
+                for (listener in listeners) listener.onMalformed(malformed)
+            }
             if (events.isEmpty()) return
             publishHeld()
             for (listener in listeners) listener.onKeys(events, now, stamp)

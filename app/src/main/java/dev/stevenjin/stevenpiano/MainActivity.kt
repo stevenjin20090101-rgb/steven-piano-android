@@ -182,7 +182,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * In the background nothing may hold a key down: the Keys screen's keys and sustain let go.
+     * In the background nothing may hold a key down: the Keys screen's keys and sustain let go, and so do a
+     * MIDI keyboard's (v1.11 — M29: Live closes until the Keys tab is in front again).
      * Not when the activity only stops to be recreated for a configuration change (a rotation
      * never gets here: the activity handles it without stopping); the Keys screen lets go of
      * whatever its own window held as that window goes. Left after "Unlock for now", the next
@@ -192,6 +193,7 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         if (!isChangingConfigurations) {
             graph.player.silenceLive()
+            graph.liveThru.setOnScreen(false)   // v1.11 — M29: the keyboard's keys let go too; Live waits for the Keys tab
             graph.kiosk.appLeft()
         }
     }

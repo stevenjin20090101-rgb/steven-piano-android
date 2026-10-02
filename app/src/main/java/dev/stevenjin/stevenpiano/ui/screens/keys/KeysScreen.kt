@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
@@ -53,10 +54,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.instruments.LiveState
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
@@ -93,6 +96,7 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     val playing by vm.playing.collectAsStateWithLifecycle()
     val tablet by vm.tabletSound.collectAsStateWithLifecycle()
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
+    val live by vm.live.collectAsStateWithLifecycle()
     val visible = frame.keysVisibleWhites
     val touches = remember(vm) { KeyTouches(vm) }
     val pressed = remember { mutableIntStateOf(0) }
@@ -104,6 +108,18 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
         vm.letGo()
     }
     DisposableEffect(vm) { onDispose { vm.letGo() } }
+    // Live plays only while this tab is on screen and the app is in front (v1.11 — M29).
+    LifecycleStartEffect(vm) {
+        vm.onScreen(true)
+        onStopOrDispose { vm.onScreen(false) }
+    }
+    // The screen stays on while Live is on: a timeout would stop the app mid-performance.
+    val view = LocalView.current
+    val keepOn = live.wanted && keyboard.connected
+    DisposableEffect(view, keepOn) {
+        view.keepScreenOn = keepOn
+        onDispose { view.keepScreenOn = false }
+    }
     HoldOrientationWhileHeld(touches, pressed)
     // What a MIDI keyboard holds lights the keys too (v1.11 — M29): looked at once a frame while one is chosen.
     if (keyboard.chosen != null) {
@@ -175,7 +191,24 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                     } else {
                         OctavePills(canGoDown = first > 0f, canGoUp = first < (KeyLayout.WHITE_KEYS - visible).toFloat()) { vm.shiftOctave(it, visible) }
                     }
-                    KeysPills(sustain, vm::setSustain, octaves)
+                    KeysPills(
+                        sustain,
+                        vm::setSustain,
+                        octaves,
+                        live = if (keyboard.connected) LivePill(on = live.wanted, enabled = !live.looped, onToggle = vm::setLive) else null,
+                    )
+                    // One quiet line under the pills (v1.11 — M29): why Live is off, or the piano's 2 s rule while it plays.
+                    keysNote(live, keyboard.connected, steven = link is LinkState.Connected)?.let { note ->
+                        Eyebrow(
+                            note,
+                            Modifier
+                                .padding(horizontal = 16.dp)
+                                .padding(top = 8.dp)
+                                .semantics { liveRegion = LiveRegionMode.Polite },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uppercase = false,
+                        )
+                    }
                     PlayableKeyboard(
                         touches,
                         pressed,
@@ -205,6 +238,8 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                     playing = playing,
                     onOpenPiano = onOpenPiano,
                     notConnected = if (tablet.active) "Not connected. The tablet plays these keys." else "Not connected. The piano won't play these keys.",
+                    sent = if (keyboard.connected && !live.open) InstrumentCopy.KEYBOARD_LIVE_OFF else "Sent to piano",
+                    live = !(keyboard.connected && !live.open),
                 )
             }
         }
@@ -236,6 +271,18 @@ private fun HoldOrientationWhileHeld(touches: KeyTouches, pressedVersion: Mutabl
             activity.requestedOrientation = free
         }
     }
+}
+
+/**
+ * The line under the pills (v1.11 — M29): why Live switched itself off (until it is on again), that the keyboard
+ * is the instrument too, or, while Live plays Steven Piano ([steven]), that the piano lets a held key go after
+ * 2 seconds; else none.
+ */
+internal fun keysNote(live: LiveState, keyboardConnected: Boolean, steven: Boolean): String? = when {
+    live.tripped != null -> InstrumentCopy.tripped(live.tripped)
+    keyboardConnected && live.looped -> InstrumentCopy.LOOPED
+    live.open && steven -> InstrumentCopy.COILS_NOTE
+    else -> null
 }
 
 /** The keys' tallest: 320 dp, or 45 % of the screen's height where that is less (a phone on its side). */

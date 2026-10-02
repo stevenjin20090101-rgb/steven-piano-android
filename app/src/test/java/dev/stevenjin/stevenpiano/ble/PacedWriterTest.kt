@@ -210,8 +210,8 @@ class PacedWriterTest {
     }
 
     /**
-     * The lane's promise, against the router itself: a piece's notes and pedal, live keys and the live
-     * sustain, now and then a stop, queued at random and drained at random (four messages a packet). Each
+     * The lane's promise, against the router itself: a piece's notes and pedal, the screen's keys and its
+     * sustain, a MIDI keyboard's keys and pedal (v1.11 — M29), now and then a stop, queued at random and drained at random (four messages a packet). Each
      * slot's messages reach the wire in the order they were queued (less the backlog's dropped Note Ons),
      * and a key the router has let go is never left down on the wire; with nothing dropped, the wire leaves
      * down exactly the keys the router holds.
@@ -258,13 +258,18 @@ class PacedWriterTest {
             repeat(500) {
                 batch.clear()
                 val key = 48 + random.nextInt(8)   // few keys, so the piece and the fingers meet on them
-                when (random.nextInt(11)) {
+                when (random.nextInt(15)) {
                     0, 1 -> router.liveNoteOn(key, 90, nowMicros, batch).also { queue(live = true) }
                     2, 3 -> router.liveNoteOff(key, batch).also { queue(live = true) }
                     4 -> router.liveSustain(random.nextBoolean(), batch).also { queue(live = true) }
                     5, 6 -> router.route(0x90 or random.nextInt(2), key, 70, nowMicros, batch).also { queue(live = false) }
                     7, 8 -> router.route(0x80 or random.nextInt(2), key, 0, nowMicros, batch).also { queue(live = false) }
                     9 -> router.route(0xB0, 64, random.nextInt(128), nowMicros, batch).also { queue(live = false) }
+                    // A MIDI keyboard's keys and pedal (v1.11 — M29), as live as the screen's.
+                    10, 11 -> router.externalNoteOn(key, 100, nowMicros, batch).also { queue(live = true) }
+                    12 -> router.externalNoteOff(key, batch).also { queue(live = true) }
+                    13 -> (if (random.nextInt(4) == 0) router.silenceExternal(batch) else router.externalPedal(64, random.nextInt(128), nowMicros, batch))
+                        .also { queue(live = true) }
                     else -> if (random.nextInt(8) == 0) router.silence(batch).also { queue(live = false, dropPending = true) }
                 }
                 nowMicros += random.nextLong(0, 60_000)

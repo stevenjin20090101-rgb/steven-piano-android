@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.player
 
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
+import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
 import dev.stevenjin.stevenpiano.midi.SmfException
@@ -190,6 +191,26 @@ class PlayerTest {
         withTimeout(2_000) { player.liveSustain.first { !it } }
         assertEquals(listOf("90 3C 64", "B0 40 7F", "80 3C 00", "B0 40 00"), link.messages)
         assertEquals(0L, player.activeKeysLow)
+    }
+
+    @Test
+    fun `a keyboard's keys go out through the player from any thread, and are refused while locked (v1_11 M29)`() = runBlocking {
+        val chord = KeyEvents().apply {
+            add(KeyEvents.DOWN, 60, 100)
+            add(KeyEvents.DOWN, 64, 100)
+        }
+        Thread { player.external(chord, System.nanoTime()) }.apply { start() }.join()
+        withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
+        assertEquals(listOf("90 3C 64", "90 40 64"), link.messages)
+        player.silenceExternal()
+        withTimeout(2_000) { while (link.messages.size < 4) delay(5) }
+        assertEquals(listOf("80 3C 00", "80 40 00"), link.messages.drop(2))
+        link.clear()
+        onMain { player.lock("The piano's firmware is being updated.") }
+        player.external(chord, System.nanoTime())
+        delay(100)
+        assertEquals(emptyList<String>(), link.messages)
+        onMain { player.unlock() }
     }
 
     @Test

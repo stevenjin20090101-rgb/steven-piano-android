@@ -173,6 +173,8 @@ data class PianoSettings(
     val keyboardId: String? = null,
     /** The chosen keyboard's name as shown (cleaned when chosen), with [keyboardId]. */
     val keyboardName: String? = null,
+    /** Live on the Keys tab (v1.11 — M29): the keyboard plays the instrument while the tab is on screen; off at first, remembered. */
+    val liveToPiano: Boolean = false,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -366,6 +368,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The Playlists listing's order (v1.10.1 — M28). */
     suspend fun setPlaylistSort(sort: PlaylistSort) = edit { it[PLAYLIST_SORT] = sort.name }
 
+    /** Live on the Keys tab (v1.11 — M29); the flood breaker turns it off. */
+    suspend fun setLiveToPiano(on: Boolean) = edit { it[LIVE_TO_PIANO] = on }
+
     /** The MIDI keyboard chosen (v1.11 — M29): its identity and name, both at once; null forgets it. */
     suspend fun setKeyboard(id: String?, name: String?) = edit {
         if (id == null) {
@@ -460,6 +465,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             playlistSort = PlaylistSort.entries.firstOrNull { it.name == this[PLAYLIST_SORT] } ?: defaults.playlistSort,
             keyboardId = this[KEYBOARD_ID],
             keyboardName = this[KEYBOARD_ID]?.let { this[KEYBOARD_NAME] },
+            liveToPiano = this[LIVE_TO_PIANO] ?: defaults.liveToPiano,
         )
     }
 
@@ -516,6 +522,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val PLAYLIST_SORT = stringPreferencesKey("playlistSort")
         val KEYBOARD_ID = stringPreferencesKey("keyboardId")
         val KEYBOARD_NAME = stringPreferencesKey("keyboardName")
+        val LIVE_TO_PIANO = booleanPreferencesKey("liveToPiano")
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256

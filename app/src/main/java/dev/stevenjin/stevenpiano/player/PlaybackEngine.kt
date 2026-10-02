@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.player
 
+import dev.stevenjin.stevenpiano.midi.InstrumentProfile
+import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.midi.MidiBatch
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.MidiSink
@@ -58,6 +60,9 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
 
     /** How late this run's events went out (v1.7 — M23): the player writes each run's figures to the link's trail. */
     val timing = PlaybackTiming()
+
+    /** How long a keyboard's keys took from arriving to leaving for the instrument (v1.11 — M29), one run per Live session. */
+    val liveTiming = LiveTiming()
 
     /** The song position at [nowNanos]; below zero while the pause before a piece runs. */
     fun positionMicros(nowNanos: Long): Long =
@@ -186,6 +191,49 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
     /** Lets go of the Keys screen's keys and its sustain; the piece's keys stay down. */
     fun silenceLive() = live { router.silenceLive(it) }
 
+    /**
+     * One buffer of a MIDI keyboard's events (v1.11 — M29), packed as [KeyEvents] packs them, [count] of
+     * them, sent now as one batch through the live lane: keys and pedals as the keyboard played them.
+     * [arrivalNanos]: when the buffer arrived, for [liveTiming].
+     */
+    fun external(events: IntArray, count: Int, arrivalNanos: Long, nowNanos: Long) {
+        val nowMicros = nowNanos / 1000
+        var downs = 0
+        live { out ->
+            for (i in 0 until count) {
+                val event = events[i]
+                val key = (event ushr 8) and 0xFF
+                val value = event and 0xFF
+                when (event ushr 16) {
+                    KeyEvents.DOWN -> {
+                        downs++
+                        router.externalNoteOn(key, value, nowMicros, out)
+                    }
+                    KeyEvents.UP -> router.externalNoteOff(key, out)
+                    KeyEvents.PEDAL -> router.externalPedal(key, value, nowMicros, out)
+                }
+            }
+        }
+        if (downs > 0) liveTiming.record(downs, nowNanos - arrivalNanos)
+    }
+
+    /** Lets go of the keyboard's keys and puts its pedal back (v1.11 — M29); the piece's and the screen's stay. Ends the Live run. */
+    fun silenceExternal() {
+        live { router.silenceExternal(it) }
+        liveTiming.close()
+    }
+
+    /**
+     * Another instrument plays from now on (v1.11 — M29): the old one is silenced first, as its profile
+     * says, then the router takes [profile]; a piece playing goes on, re-synced (its pedal again).
+     */
+    fun setProfile(profile: InstrumentProfile, nowNanos: Long) {
+        if (router.profile === profile) return
+        silence()
+        router.profile = profile
+        if (status == PlaybackStatus.Playing) restorePedal(nowNanos)
+    }
+
     private inline fun live(route: (MidiBatch) -> Unit) {
         batch.clear()
         route(batch)
@@ -244,14 +292,16 @@ class PlaybackEngine(private val sink: MidiSink, val router: NoteRouter = NoteRo
         send(dropPending = true)
     }
 
-    /** Re-sends the last pedal value before the cursor, if any. */
+    /** Re-sends the last value before the cursor of each pedal the instrument takes (Steven Piano: CC64), if any. */
     private fun restorePedal(nowNanos: Long) {
         val events = piece?.events ?: return
         batch.clear()
-        for (i in cursor - 1 downTo 0) {
-            if (events.command(i) == 0xB0 && events.data1(i) == NoteRouter.SUSTAIN && router.accepts(events.channel(i))) {
-                router.route(events.status(i), events.data1(i), events.data2(i), nowNanos / 1000, batch)
-                break
+        for (controller in router.profile.pedals) {
+            for (i in cursor - 1 downTo 0) {
+                if (events.command(i) == 0xB0 && events.data1(i) == controller && router.accepts(events.channel(i))) {
+                    router.route(events.status(i), events.data1(i), events.data2(i), nowNanos / 1000, batch)
+                    break
+                }
             }
         }
         send(dropPending = false)
@@ -312,4 +362,55 @@ class PlaybackTiming {
 
     /** The last run's figures, once. */
     fun take(): Run? = finished.also { finished = null }
+}
+
+/**
+ * How long a MIDI keyboard's keys took through the app (v1.11 — M29): from the buffer arriving on the port's
+ * thread to its batch leaving for the instrument's live lane, per buffer, in whole milliseconds (the
+ * Bluetooth write after that is the link's). A run is one Live session; [close] keeps its figures for [take]:
+ * the notes, the median and the worst. No allocation per buffer. Owned by the scheduler thread.
+ */
+class LiveTiming {
+    /** One Live session: [notes] Note Ons, the [medianMs] and [worstMs] of their buffers' times through the app. */
+    data class Run(val notes: Int, val medianMs: Int, val worstMs: Int)
+
+    private val buckets = IntArray(BUCKETS)
+    private var notes = 0
+    private var worstNanos = 0L
+    private var finished: Run? = null
+
+    /** [count] Note Ons whose buffer took [nanos] from arriving to leaving. */
+    fun record(count: Int, nanos: Long) {
+        val ms = (nanos.coerceAtLeast(0L) / 1_000_000L).coerceAtMost((BUCKETS - 1).toLong()).toInt()
+        buckets[ms] += count
+        notes += count
+        if (nanos > worstNanos) worstNanos = nanos
+    }
+
+    /** The session is over: its figures are kept for [take] (none when nothing was played). */
+    fun close() {
+        if (notes > 0) {
+            var seen = 0
+            var median = 0
+            for (ms in 0 until BUCKETS) {
+                seen += buckets[ms]
+                if (seen * 2 >= notes) {
+                    median = ms
+                    break
+                }
+            }
+            finished = Run(notes, median, (worstNanos / 1_000_000L).toInt())
+        }
+        buckets.fill(0)
+        notes = 0
+        worstNanos = 0L
+    }
+
+    /** The last session's figures, once. */
+    fun take(): Run? = finished.also { finished = null }
+
+    private companion object {
+        /** Whole milliseconds counted one by one; slower buffers fall in the last. */
+        const val BUCKETS = 1_000
+    }
 }

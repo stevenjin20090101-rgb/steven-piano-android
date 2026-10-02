@@ -118,6 +118,7 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import dev.stevenjin.stevenpiano.ui.theme.rememberGlassAccessibility
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlin.math.min
 
@@ -171,6 +172,22 @@ fun PianoNavHost(
     val kiosk = settings.kioskEnabled
     val idle = rememberIdle(enabled = DisplayRule.watched(settings.displayModeAfterMinute, kiosk), timeoutMs = DisplayModeTimeout.ms)
     val onTouch = remember(idle) { { idle.touch() } }
+    // A MIDI keyboard played counts as a touch (v1.11 — M29): display mode stays away while someone plays it.
+    val keyboard = LocalContext.current.graph.keyboard
+    val keyboardState by keyboard.state.collectAsStateWithLifecycle()
+    if (keyboardState.connected) {
+        LaunchedEffect(idle, keyboard) {
+            var seen = keyboard.changes.get()
+            while (true) {
+                delay(KEYBOARD_TOUCH_MS)
+                val now = keyboard.changes.get()
+                if (now != seen) {
+                    seen = now
+                    idle.touch()
+                }
+            }
+        }
+    }
     var kioskSheet by rememberSaveable { mutableStateOf(false) }
     val openKioskSheet = remember { { kioskSheet = true } }
     LaunchedEffect(kiosk) { if (!kiosk) kioskSheet = false }   // kiosk mode ended some other way: no sheet left to come back
@@ -503,6 +520,9 @@ private fun labelScaleThatFits(itemWidth: Dp): Float {
 }
 
 private const val MAX_LABEL_SCALE = 1.5f
+
+/** How often the nav host looks whether a MIDI keyboard was played (v1.11 — M29), as a touch for display mode. */
+private const val KEYBOARD_TOUCH_MS = 500L
 
 /** A label may use this share of its item's width, so it never touches its neighbour. */
 private const val LABEL_FILL = 0.92f

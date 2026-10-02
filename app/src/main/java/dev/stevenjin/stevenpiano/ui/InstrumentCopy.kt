@@ -11,6 +11,8 @@ package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.instruments.LiveThru
+import dev.stevenjin.stevenpiano.instruments.LiveTrip
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
 
 /**
@@ -105,6 +107,26 @@ object InstrumentCopy {
         "$name, ${transport(transport)}" + if (current) ", chosen" else ""
 
     // ---- The Keys tab -----------------------------------------------------------------------
+
+    /** The Live pill, off and on. */
+    const val LIVE = "Live"
+    const val LIVE_ON = "Live on"
+
+    /** The connection line while a keyboard is connected and Live is off. */
+    const val KEYBOARD_LIVE_OFF = "Keyboard connected. Live is off."
+
+    /** Under the pills while Live plays Steven Piano. */
+    const val COILS_NOTE = "The piano lets a held key go after 2 seconds to keep its coils cool."
+
+    /** Under the pills when the keyboard is the instrument too. */
+    const val LOOPED = "Live stays off: this keyboard is the instrument too, so it already plays its own keys."
+
+    /** Under the pills after the flood breaker switched Live off. */
+    fun tripped(trip: LiveTrip): String = "Live turned off: " + when (trip) {
+        LiveTrip.TooManyNotes -> "the keyboard sent more than ${LiveThru.MAX_NOTES_PER_SECOND} notes in a second."
+        LiveTrip.TooManyKeys -> "the keyboard held ${LiveThru.MAX_HELD} keys at once."
+        LiveTrip.Garbled -> "the keyboard sent garbled data."
+    } + " Turn it on to play again."
 
     /** Under the Keys header while a keyboard is set: "Keyboard · Roland FP-30X", with its state when not connected. */
     fun keysEyebrow(state: KeyboardState): String? {
