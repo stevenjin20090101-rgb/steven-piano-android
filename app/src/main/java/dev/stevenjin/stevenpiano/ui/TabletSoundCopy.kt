@@ -17,14 +17,15 @@ import dev.stevenjin.stevenpiano.studio.ModelEntry
 import java.util.Locale
 
 /**
- * What the app says about the tablet's piano sound (DESIGN.md › v1.8 — M25): the Playback page's TABLET
- * SOUND section, the speaker on Now playing and in the panel, its popover, and Now playing's note while
- * the sound waits for its download. One line each, in words, sentence case; nothing red.
+ * What the app says about the tablet's piano sound (DESIGN.md › v1.8 — M25): the Tablet sound page (PLAYING,
+ * its own page since v1.13), the speaker on Now playing and in the panel, its popover, and Now playing's note
+ * while the sound waits for its download. One line each, in words, sentence case; nothing red. Its volume is
+ * "Tablet volume" wherever it shows (v1.13: one name per thing).
  */
 object TabletSoundCopy {
     const val EYEBROW = "Tablet sound"
     const val CHOICE = "Piano sound on the tablet"
-    const val VOLUME = "Volume"
+    const val VOLUME = "Tablet volume"
 
     /** The chips, in [TabletSoundMode]'s order. */
     val MODES = listOf("Off", "When the piano isn't connected", "Always")
@@ -64,7 +65,7 @@ object TabletSoundCopy {
      * piano to go (or for its download), or off.
      */
     fun status(state: TabletSoundState): String = when {
-        state.mode == TabletSoundMode.OFF -> "Off. Piano › Playback turns it on."
+        state.mode == TabletSoundMode.OFF -> "Off. Piano › Tablet sound turns it on."
         state.needsDownload -> "The piano sound isn't on this tablet yet."
         state.active && state.mode == TabletSoundMode.ALWAYS -> "Playing on this tablet with the piano."
         state.active -> "Playing on this tablet while the piano isn't connected."

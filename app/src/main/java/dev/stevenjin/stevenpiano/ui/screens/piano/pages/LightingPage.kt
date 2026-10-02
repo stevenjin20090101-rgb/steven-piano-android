@@ -16,10 +16,11 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoReport
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoSettingsActions
 
 /**
- * Lighting: the LED strip over the keys and the piano's own screen. STRIP (on or off, mode,
- * brightness, reactive palette) · LAYOUT (length, offset, scale, the unlit end, direction, glow, Test
- * LED) · MOTION (brightness following velocity, fade and rainbow speeds) · PIANO'S SCREEN (when it
- * dims, and how far). The hub's row reads "Off" or "Reactive · 62%".
+ * Lights and screen (Lighting until v1.13): the LED strip over the keys and the piano's own screen. STRIP
+ * (on or off, mode, brightness, reactive palette) · the Strip set-up disclosure, closed at first: LAYOUT
+ * (length, offset, scale, the unlit end, direction, glow, Test LED) · MOTION (brightness following
+ * velocity, fade and rainbow speeds) · THE PIANO'S SCREEN (when it dims, and how far). The hub's row reads
+ * "Off" or "Reactive · 62%".
  */
 @Composable
 fun LightingPage(report: PianoReport, actions: PianoSettingsActions) = PianoPageContent(PianoPage.Lighting, report, actions)

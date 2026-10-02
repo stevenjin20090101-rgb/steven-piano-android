@@ -43,7 +43,7 @@ class TabletSoundCopyTest {
 
     @Test
     fun `the popover says what the sound is doing`() {
-        assertEquals("Off. Piano › Playback turns it on.", TabletSoundCopy.status(waiting.copy(mode = TabletSoundMode.OFF)))
+        assertEquals("Off. Piano › Tablet sound turns it on.", TabletSoundCopy.status(waiting.copy(mode = TabletSoundMode.OFF)))
         assertEquals("The piano sound isn't on this tablet yet.", TabletSoundCopy.status(waiting))
         assertEquals("Playing on this tablet while the piano isn't connected.", TabletSoundCopy.status(waiting.copy(installed = true)))
         assertEquals("Silent while the piano is connected.", TabletSoundCopy.status(waiting.copy(installed = true, connected = true)))

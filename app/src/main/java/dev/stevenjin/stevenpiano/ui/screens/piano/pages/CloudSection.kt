@@ -63,6 +63,9 @@ import dev.stevenjin.stevenpiano.ui.components.QrTile
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
+import dev.stevenjin.stevenpiano.ui.SettingNotes
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
@@ -80,13 +83,13 @@ const val ENROL_FIRST = "Enrol this tablet first"
 const val GET_A_CODE = "Get a code from the console"
 
 /**
- * The Remote page's CLOUD section (DESIGN.md › v1.10 — M26, Steven Piano Cloud): **Remote access
- * over the internet** (a switch, disabled with "Set a PIN first" until the panel has a PIN and "Enrol
- * this tablet first" until it is enrolled) and under it, while it is on, how the connection stands
- * ([CloudLine]); the panel's public link with its QR at 96 dp (a tap shows it large); **Cloud
+ * The Web panel page's OVER THE INTERNET section (CLOUD until v1.13; DESIGN.md › v1.10 — M26, Steven Piano
+ * Cloud): **Web panel over the internet** (a switch, disabled with "Set a PIN first" until the panel has a
+ * PIN and "Enrol this tablet first" until it is enrolled) and under it, while it is on, how the connection
+ * stands ([CloudLine]); the panel's public link with its QR at 96 dp (a tap shows it large); **Relay
  * address** (the relay's host as typed, or "Not set"); **Enrol with code** ([EnrolSheet]); and, once
- * enrolled, **Forget this cloud** after a confirmation. In kiosk mode the whole page waits behind
- * the kiosk's PIN, as every settings page does.
+ * enrolled, **Forget this cloud** after a confirmation. In kiosk mode the whole page waits behind the
+ * kiosk's PIN, as every settings page does.
  */
 @Composable
 fun CloudSection(settings: PianoSettings, vm: PianoViewModel) {
@@ -95,18 +98,20 @@ fun CloudSection(settings: PianoSettings, vm: PianoViewModel) {
     var forgetting by rememberSaveable { mutableStateOf(false) }
     var largeQr by rememberSaveable { mutableStateOf(false) }
 
-    SectionEyebrow("Cloud")
-    SwitchRow(
-        "Remote access over the internet",
-        settings.cloudEnabled,
-        vm::setCloudEnabled,
-        enabled = settings.webPinSet && settings.cloudEnrolled,
-        note = when {
-            !settings.webPinSet -> SET_A_PIN_FIRST
-            !settings.cloudEnrolled -> ENROL_FIRST
-            else -> null
-        },
-    )
+    SectionEyebrow(PageRows.OVER_THE_INTERNET)
+    Anchored(PageRows.OVER_INTERNET.anchor) {
+        SwitchRow(
+            PageRows.OVER_INTERNET.label,
+            settings.cloudEnabled,
+            vm::setCloudEnabled,
+            enabled = settings.webPinSet && settings.cloudEnrolled,
+            note = when {
+                !settings.webPinSet -> SET_A_PIN_FIRST
+                !settings.cloudEnrolled -> ENROL_FIRST
+                else -> null
+            },
+        )
+    }
     if (settings.cloudEnabled && settings.cloudEnrolled) {
         CloudLine(cloud)
         // The link while it can lead somewhere: not once the console has revoked or removed this tablet, or its key is gone.
@@ -114,13 +119,19 @@ fun CloudSection(settings: PianoSettings, vm: PianoViewModel) {
             vm.cloudLink(settings, cloud)?.let { link -> LinkRow(link, onShowLarge = { largeQr = true }) }
         }
     }
-    ReadingRow("Cloud address", settings.cloudHost ?: "Not set")
-    ActionRow(note = if (settings.cloudEnrolled) "A new code enrols this tablet again" else GET_A_CODE) {
-        ActionButton("Enrol with code", onClick = { enrolling = true })
+    Anchored(PageRows.RELAY_ADDRESS.anchor) {
+        ReadingRow(PageRows.RELAY_ADDRESS.label, settings.cloudHost ?: "Not set", note = SettingNotes.RELAY_ADDRESS)
+    }
+    Anchored(PageRows.ENROL.anchor) {
+        ActionRow(note = if (settings.cloudEnrolled) "A new code enrols this tablet again" else GET_A_CODE) {
+            ActionButton(PageRows.ENROL.label, onClick = { enrolling = true })
+        }
     }
     if (settings.cloudEnrolled) {
-        ActionRow(note = "Remote access stops and this tablet's key is deleted; its row in the console stays until removed there") {
-            ActionButton("Forget this cloud", onClick = { forgetting = true })
+        Anchored(PageRows.FORGET_CLOUD.anchor) {
+            ActionRow(note = "The web panel stops working over the internet and this tablet's key is deleted; its row in the console stays until removed there") {
+                ActionButton(PageRows.FORGET_CLOUD.label, onClick = { forgetting = true })
+            }
         }
     }
 
@@ -319,9 +330,9 @@ object CloudCopy {
      * About's line on Steven Piano Cloud (audit delta 3: About said nothing of it): off unless turned on,
      * and then exactly what the relay sees, as README › Cloud › What the relay sees says it.
      */
-    const val ABOUT = "Remote access over the internet is off unless you turn it on. Then your own relay carries the panel's pages " +
+    const val ABOUT = "The web panel over the internet is off unless you turn it on. Then your own relay carries the panel's pages " +
         "and requests, and every 30 s the app's and the piano's versions, whether the piano is connected, what plays, the guests' " +
-        "switches, whether Web control is on, the library's size and the channels' names. Never a device identifier."
+        "switches, whether the web panel is on, the library's size and the channels' names. Never a device identifier."
 
     /** The status line under the switch; [now] counts a wait down. */
     fun line(status: CloudStatus, now: Long): String = when (status) {

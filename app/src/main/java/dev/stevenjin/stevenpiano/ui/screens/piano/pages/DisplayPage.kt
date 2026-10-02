@@ -14,51 +14,55 @@ import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
-import dev.stevenjin.stevenpiano.settings.WideLayout
-import dev.stevenjin.stevenpiano.ui.ArtworkCopy
-import dev.stevenjin.stevenpiano.ui.LocalAppFrame
+import dev.stevenjin.stevenpiano.ui.SettingNotes
 import dev.stevenjin.stevenpiano.ui.components.ChoiceRow
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.label
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 
-/** Under the Hand colours switch: what it colours, and what it leaves alone. */
-private const val HAND_COLOURS_NOTE = "Colours the two hands on the waterfall and the keyboard strip"
-
-/** Under Display mode after a minute: what it is, and for whom (the art and the notes, or the roll: Standby shows). */
-private const val DISPLAY_MODE_NOTE = "The piece's art and title fill the screen for passers-by"
+/** Under Resting screen after a minute: what it is, and for whom (the art and the notes, or the roll: What it shows). */
+private const val RESTING_NOTE = "The piece's art and title fill the screen for passers-by"
 
 /**
- * Display: how the app and Now playing look. APPEARANCE (Follow system, Light, Dark: the app's
- * whole look, at once) · NOTES (Note display as chips: Paper roll, Falling notes, and Score on
- * phones; on wide screens, where the score has its own place, the roll's style, with Wide layout
- * under it; Fingering, Chord names, Hand colours) · ARTWORK (black and white, and fetching it
- * automatically, with what that sends) · STANDBY (display mode after a minute without a touch, its
- * canvas: black, or the app's own, and what it shows: the art and notes, or the paper roll). The hub's
- * row reads the note display's name.
+ * Display (THIS TABLET since v1.13 — M31b): how the app looks on this tablet. APPEARANCE (Follow system,
+ * Light, Dark: the app's whole look, at once; Artwork in black and white) · RESTING SCREEN ("Display mode"
+ * and STANDBY until v1.13: the resting screen after a minute without a touch, its background: black, or
+ * the app's own, and what it shows: the art and notes, or the paper roll). The note views and their
+ * options live in Now playing's View menu (M31a); fetching artwork is under Library and artwork. The hub's
+ * row reads the appearance.
  */
 @Composable
 fun DisplayPage(settings: PianoSettings, vm: PianoViewModel) {
-    val frame = LocalAppFrame.current
-    SectionEyebrow("Appearance")
-    ChoiceRow("Appearance", Appearance.entries.map { it.label }, settings.appearance.ordinal, { vm.setAppearance(Appearance.entries[it]) })
-    SectionEyebrow("Notes")
-    // On wide screens the score has its own place, so Note display picks the roll's style there.
-    val choices = frame.noteDisplayChoices
-    val display = if (frame.wide) settings.noteDisplay.rollStyle else settings.noteDisplay
-    ChoiceRow("Note display", choices.map { it.label }, choices.indexOf(display).takeIf { it >= 0 }, { vm.setNoteDisplay(choices[it]) })
-    if (frame.wide) {
-        ChoiceRow("Wide layout", WideLayout.entries.map { it.label }, settings.wideLayout.ordinal, { vm.setWideLayout(WideLayout.entries[it]) })
+    SectionEyebrow(PageRows.APPEARANCE_SECTION)
+    Anchored(PageRows.APPEARANCE.anchor) {
+        ChoiceRow(PageRows.APPEARANCE.label, Appearance.entries.map { it.label }, settings.appearance.ordinal, { vm.setAppearance(Appearance.entries[it]) })
     }
-    SwitchRow("Fingering", settings.fingering, vm::setFingering)
-    SwitchRow("Chord names", settings.chordNames, vm::setChordNames)
-    SwitchRow("Hand colours", settings.handColours, vm::setHandColours, note = HAND_COLOURS_NOTE)
-    SectionEyebrow("Artwork")
-    SwitchRow("Artwork in black and white", settings.artworkMonochrome, vm::setArtworkMonochrome)
-    SwitchRow("Fetch artwork automatically", settings.fetchArtworkAutomatically, vm::setFetchArtworkAutomatically, note = ArtworkCopy.TRANSPARENCY)
-    SectionEyebrow("Standby")
-    SwitchRow("Display mode after a minute", settings.displayModeAfterMinute, vm::setDisplayModeAfterMinute, note = DISPLAY_MODE_NOTE)
-    ChoiceRow("Standby canvas", StandbyCanvas.entries.map { it.label }, settings.standbyCanvas.ordinal, { vm.setStandbyCanvas(StandbyCanvas.entries[it]) })
-    ChoiceRow("Standby shows", StandbyShows.entries.map { it.label }, settings.standbyShows.ordinal, { vm.setStandbyShows(StandbyShows.entries[it]) })
+    Anchored(PageRows.MONOCHROME.anchor) {
+        SwitchRow(PageRows.MONOCHROME.label, settings.artworkMonochrome, vm::setArtworkMonochrome)
+    }
+    SectionEyebrow(PageRows.RESTING_SECTION)
+    Anchored(PageRows.RESTING.anchor) {
+        SwitchRow(PageRows.RESTING.label, settings.displayModeAfterMinute, vm::setDisplayModeAfterMinute, note = RESTING_NOTE)
+    }
+    Anchored(PageRows.RESTING_BACKGROUND.anchor) {
+        ChoiceRow(
+            PageRows.RESTING_BACKGROUND.label,
+            StandbyCanvas.entries.map { it.label },
+            settings.standbyCanvas.ordinal,
+            { vm.setStandbyCanvas(StandbyCanvas.entries[it]) },
+            note = SettingNotes.RESTING_BACKGROUND,
+        )
+    }
+    Anchored(PageRows.RESTING_SHOWS.anchor) {
+        ChoiceRow(
+            PageRows.RESTING_SHOWS.label,
+            StandbyShows.entries.map { it.label },
+            settings.standbyShows.ordinal,
+            { vm.setStandbyShows(StandbyShows.entries[it]) },
+            note = SettingNotes.RESTING_SHOWS,
+        )
+    }
 }

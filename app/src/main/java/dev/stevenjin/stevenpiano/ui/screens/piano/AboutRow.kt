@@ -28,7 +28,7 @@ private const val LIBRARY_SOURCES =
         "Mutopia Project (public domain)"
 
 /**
- * The very bottom of the Piano tab: who made the app, the sources' credit, Studio's models and their
+ * Help and about's lines (THIS TABLET, v1.13 — M31b; the very bottom of the hub until then): who made the app, the sources' credit, Studio's models and their
  * licences (v1.7 — M23), the tablet's piano sound (v1.8 — M25), what the app sends to the internet (nothing about the person), what
  * the relay sees when remote access over the internet is on (v1.10, audit delta 3) and the credit
  * for Wikipedia's text and Wikimedia Commons' portraits, in the eyebrow style. The provenance line

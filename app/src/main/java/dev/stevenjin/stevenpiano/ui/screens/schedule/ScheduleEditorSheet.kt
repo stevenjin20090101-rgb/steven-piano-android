@@ -165,7 +165,7 @@ fun ScheduleEditorSheet(initial: ScheduleDraft, onDismiss: () -> Unit) {
             )
             current.volumePct?.let { volume ->
                 SliderRow(
-                    label = "Volume",
+                    label = "Schedule volume",
                     value = volume.toFloat(),
                     range = 0f..100f,
                     step = 1f,

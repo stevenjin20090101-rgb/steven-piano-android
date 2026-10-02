@@ -48,15 +48,20 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
+import dev.stevenjin.stevenpiano.ui.components.SwitchRow
+import dev.stevenjin.stevenpiano.ui.SettingNotes
+import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.MidiPickerSheet
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 
 /**
  * Piano › Instrument (DESIGN.md › v1.11): what plays. THIS INSTRUMENT: its name, its kind ("The school piano"
- * or "Standard MIDI piano") with its state in words, and Connect or Disconnect. CHOOSE: "Steven Piano" and
- * "Another MIDI piano…", a check on the one playing; the second opens the MIDI picker. Under a MIDI piano the
- * note that Feel, Lighting, Pedal and Firmware are Steven Piano's and hidden meanwhile. ACTIONS: All keys off. In
- * kiosk mode the page waits for the PIN as every page does, so choosing an instrument asks for it.
+ * or "Standard MIDI piano") with its state in words, Connect or Disconnect, and Auto-connect on launch (from
+ * the hub's APP group, v1.13). CHOOSE: "Steven Piano" and "Another MIDI piano…", a check on the one playing;
+ * the second opens the MIDI picker. Under a MIDI piano the note that THE PIANO's pages are Steven Piano's and
+ * hidden meanwhile. ACTIONS: All keys off, with what it does. In kiosk mode the page waits for the PIN as every
+ * page does, so choosing an instrument asks for it.
  */
 @Composable
 fun InstrumentPage(vm: PianoViewModel) {
@@ -80,29 +85,40 @@ fun InstrumentPage(vm: PianoViewModel) {
         Eyebrow("${InstrumentCopy.kindLine(kind)} · ${InstrumentCopy.linkWords(kind, link)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     HairlineDivider(startInset = 16.dp)
-    ActionRow(note = (link as? LinkState.Error)?.message) {
-        if (link is LinkState.Connected) {
-            ActionButton(InstrumentCopy.DISCONNECT, onClick = vm::disconnect, description = "${InstrumentCopy.DISCONNECT} $name")
-        } else {
-            ActionButton(InstrumentCopy.CONNECT, onClick = vm::connect, description = "${InstrumentCopy.CONNECT} $name")
+    Anchored(PageRows.CONNECTION.anchor) {
+        ActionRow(note = (link as? LinkState.Error)?.message) {
+            if (link is LinkState.Connected) {
+                ActionButton(InstrumentCopy.DISCONNECT, onClick = vm::disconnect, description = "${InstrumentCopy.DISCONNECT} $name")
+            } else {
+                ActionButton(InstrumentCopy.CONNECT, onClick = vm::connect, description = "${InstrumentCopy.CONNECT} $name")
+            }
         }
+    }
+    Anchored(PageRows.AUTO_CONNECT.anchor) {
+        SwitchRow(PageRows.AUTO_CONNECT.label, settings.autoConnect, vm::setAutoConnect, note = SettingNotes.AUTO_CONNECT)
     }
 
     SectionEyebrow(InstrumentCopy.CHOOSE)
     Column(Modifier.selectableGroup()) {
-        ChoiceLine(InstrumentCopy.STEVEN_PIANO, InstrumentCopy.kindLine(InstrumentKind.StevenPiano), selected = kind == InstrumentKind.StevenPiano) {
-            if (kind != InstrumentKind.StevenPiano) vm.chooseStevenPiano()
+        Anchored(PageRows.STEVEN_PIANO.anchor) {
+            ChoiceLine(InstrumentCopy.STEVEN_PIANO, InstrumentCopy.kindLine(InstrumentKind.StevenPiano), selected = kind == InstrumentKind.StevenPiano) {
+                if (kind != InstrumentKind.StevenPiano) vm.chooseStevenPiano()
+            }
         }
-        ChoiceLine(
-            InstrumentCopy.ANOTHER_MIDI_PIANO,
-            if (kind == InstrumentKind.MidiPiano) name else InstrumentCopy.kindLine(InstrumentKind.MidiPiano),
-            selected = kind == InstrumentKind.MidiPiano,
-        ) { picking = true }
+        Anchored(PageRows.ANOTHER_PIANO.anchor) {
+            ChoiceLine(
+                InstrumentCopy.ANOTHER_MIDI_PIANO,
+                if (kind == InstrumentKind.MidiPiano) name else InstrumentCopy.kindLine(InstrumentKind.MidiPiano),
+                selected = kind == InstrumentKind.MidiPiano,
+            ) { picking = true }
+        }
     }
     if (kind == InstrumentKind.MidiPiano) NoteLine(InstrumentCopy.hiddenNote(name))
 
     SectionEyebrow(InstrumentCopy.ACTIONS)
-    ActionRow { ActionButton(InstrumentCopy.ALL_KEYS_OFF, onClick = vm::allKeysOff) }
+    Anchored(PageRows.ALL_KEYS_OFF.anchor) {
+        ActionRow(note = SettingNotes.ALL_KEYS_OFF) { ActionButton(InstrumentCopy.ALL_KEYS_OFF, onClick = vm::allKeysOff) }
+    }
 
     if (picking) {
         DisposableEffect(Unit) {

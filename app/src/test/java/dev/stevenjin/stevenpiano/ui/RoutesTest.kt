@@ -40,16 +40,25 @@ class RoutesTest {
 
     @Test
     fun `every page has its own route under the Piano tab`() {
-        assertEquals(listOf("instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "display", "schedule", "remote", "kiosk", "studio"), SettingsPage.entries.map { it.key })
+        assertEquals(
+            listOf(
+                "instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "tablet-sound", "schedule", "remote", "guests",
+                "display", "kiosk", "updates", "artwork", "help",
+            ),
+            SettingsPage.entries.map { it.key },
+        )
         assertEquals("piano/keyboard", PianoRoutes.page(SettingsPage.Keyboard))
         assertEquals("Keyboard", SettingsPage.Keyboard.title)
         assertNull(SettingsPage.Keyboard.piano)
-        assertEquals("piano/studio", PianoRoutes.page(SettingsPage.Studio))
-        assertEquals("Studio", SettingsPage.Studio.title)
-        assertNull(SettingsPage.Studio.piano)
+        assertNull("Studio has its own tab (M30): no page here", SettingsPage.of("studio"))
         assertEquals("piano/remote", PianoRoutes.page(SettingsPage.Remote))
-        assertEquals("Remote control", SettingsPage.Remote.title)
+        assertEquals("one name per thing (v1.13)", "Web panel", SettingsPage.Remote.title)
         assertNull(SettingsPage.Remote.piano)
+        assertEquals("piano/tablet-sound", PianoRoutes.page(SettingsPage.TabletSound))
+        assertEquals("piano/guests", PianoRoutes.page(SettingsPage.Guests))
+        assertEquals("piano/updates", PianoRoutes.page(SettingsPage.Updates))
+        assertEquals("piano/artwork", PianoRoutes.page(SettingsPage.Artwork))
+        assertEquals("piano/help", PianoRoutes.page(SettingsPage.Help))
         assertEquals("piano/schedule", PianoRoutes.page(SettingsPage.Schedule))
         assertEquals("Schedule", SettingsPage.Schedule.title)
         assertNull(SettingsPage.Schedule.piano)
@@ -83,14 +92,18 @@ class RoutesTest {
     }
 
     @Test
-    fun `four pages are the piano's, eight are the app's`() {
+    fun `four pages are the piano's, twelve are the app's, each with the one name the person reads (v1_13 M31b)`() {
         assertEquals(
-            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware, null, null, null, null, null, null),
+            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware) + List(10) { null },
             SettingsPage.entries.map { it.piano },
         )
         assertEquals(
-            listOf("Instrument", "Keyboard", "Feel", "Lighting", "Pedal", "Firmware and status", "Playback", "Display", "Schedule", "Remote control", "Kiosk", "Studio"),
+            listOf(
+                "Instrument", "Keyboard", "Sound and touch", "Lights and screen", "Pedal", "Firmware and status", "Playback", "Tablet sound",
+                "Schedule", "Web panel", "Guests", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about",
+            ),
             SettingsPage.entries.map { it.title },
         )
+        for (page in SettingsPage.entries) page.piano?.let { assertEquals("the piano page's own title", it.title, page.title) }
     }
 }

@@ -165,7 +165,8 @@ class WebAssetsTest {
         for (copy in listOf("No schedules yet.", "Choose at least one day.", "Choose what to play.", "The tablet starts them: keep it on, charged and near the piano.")) {
             assertTrue(copy, text("app.js").contains(copy))
         }
-        assertTrue("the tablet's piano sound (1.8)", index.contains("Piano sound on the tablet") && text("app.js").contains("tabletVolume"))
+        assertTrue("the tablet's piano sound (1.8), its volume by its one name (1.13)", index.contains("Tablet volume") && text("app.js").contains("tabletVolume"))
+        assertTrue("places named as the tablet names them (1.13)", index.contains("Piano › Web panel") && text("app.js").contains("Piano › Tablet sound") && !text("app.js").contains("Remote control"))
         // What plays and what is played from (1.11 — M29): two read-only lines, the piano's pages hidden under a MIDI piano.
         assertTrue(index.contains("id=\"instrument-line\"") && index.contains("id=\"keyboard-line\""))
         for (copy in listOf("Instrument: ", "Keyboard: ", "'Live'", "'Recording'", "belong to Steven Piano and are hidden while")) {

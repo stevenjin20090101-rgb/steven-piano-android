@@ -34,25 +34,30 @@ enum class Route(val path: String, val label: String, @param:DrawableRes val ico
 }
 
 /**
- * The Piano tab's pages (DESIGN.md › v1.5), each opened from a row of the hub: `piano/{key}` on
- * phones, beside the hub on wide screens. [piano] is the piano page it shows, for the four whose rows
- * come from the piano's settings table. Remote control (the web panel) came in v1.5.1, Kiosk in
- * v1.6.1, Schedule in v1.6.2, Studio in v1.7, Instrument and Keyboard in v1.11 (M29: what plays, and a MIDI
- * keyboard, under INSTRUMENTS).
+ * The Piano tab's pages (DESIGN.md › v1.5, reorganised in v1.13 — M31b), each opened from a row of the
+ * hub, in the hub's order: `piano/{key}` on phones, beside the hub on wide screens. [piano] is the piano
+ * page it shows, for the four whose rows come from the piano's settings table. The constants keep their
+ * older names where the page was renamed (Feel is Sound and touch, Lighting is Lights and screen, Remote
+ * is Web panel), so the other runs' code still meets them; the [title] is the one name the person reads.
+ * Studio left for its own tab (M30): no page here.
  */
 enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?) {
     Instrument("instrument", "Instrument", null),
     Keyboard("keyboard", "Keyboard", null),
-    Feel("feel", "Feel", PianoPage.Feel),
-    Lighting("lighting", "Lighting", PianoPage.Lighting),
-    Pedal("pedal", "Pedal", PianoPage.Pedal),
-    Firmware("firmware", "Firmware and status", PianoPage.Firmware),
+    Feel("feel", PianoPage.Feel.title, PianoPage.Feel),
+    Lighting("lighting", PianoPage.Lighting.title, PianoPage.Lighting),
+    Pedal("pedal", PianoPage.Pedal.title, PianoPage.Pedal),
+    Firmware("firmware", PianoPage.Firmware.title, PianoPage.Firmware),
     Playback("playback", "Playback", null),
-    Display("display", "Display", null),
+    TabletSound("tablet-sound", "Tablet sound", null),
     Schedule("schedule", "Schedule", null),
-    Remote("remote", "Remote control", null),
+    Remote("remote", "Web panel", null),
+    Guests("guests", "Guests", null),
+    Display("display", "Display", null),
     Kiosk("kiosk", "Kiosk", null),
-    Studio("studio", "Studio", null),
+    Updates("updates", "Updates", null),
+    Artwork("artwork", "Library and artwork", null),
+    Help("help", "Help and about", null),
     ;
 
     companion object {

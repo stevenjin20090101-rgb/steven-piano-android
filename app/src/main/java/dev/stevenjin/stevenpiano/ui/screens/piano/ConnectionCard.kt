@@ -72,7 +72,8 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
  * answered, the phone connects to it only if the person taps Connect to it ([onConnectTo] with its
  * address). Monochrome throughout: the only red is the [LiveDot]. Under a MIDI piano (v1.11 — M29) it names that
  * instrument ([name]) with its own words ([status]), and asks for no Bluetooth permission for one on a cable
- * ([bluetooth] false).
+ * ([bluetooth] false). [showButton] false (v1.13 — M31b: the Instrument page is open beside the hub, with
+ * Connect and Disconnect of its own): the card names the instrument and its state, so no action shows twice.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -87,6 +88,7 @@ fun ConnectionCard(
     name: String = PianoBluetooth.NAME,
     status: String = statusOf(link),
     bluetooth: Boolean = true,
+    showButton: Boolean = true,
 ) {
     val context = LocalContext.current
     val activity = LocalActivity.current
@@ -158,6 +160,7 @@ fun ConnectionCard(
                     }
                 }
             }
+            if (!showButton) return@Column
             Spacer(Modifier.height(16.dp))
             when {
                 link is LinkState.Connected -> OutlinedButton(onClick = onDisconnect, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {

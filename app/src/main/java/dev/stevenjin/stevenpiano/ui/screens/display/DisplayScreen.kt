@@ -187,8 +187,8 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
  */
 private fun Modifier.leaveOnTouch(title: String?, onLeave: () -> Unit): Modifier = this
     .semantics {
-        contentDescription = if (title != null) "Display mode: $title" else "Display mode"
-        onClick(label = "Leave display mode") {
+        contentDescription = if (title != null) "Resting screen: $title" else "Resting screen"
+        onClick(label = "Leave the resting screen") {
             onLeave()
             true
         }

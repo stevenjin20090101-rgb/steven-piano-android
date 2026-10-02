@@ -293,7 +293,7 @@ fun PianoNavHost(
                                             tab,
                                             onOpenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page)) },
                                             onReopenPage = { page -> if (nav.isTop(hub)) nav.navigate(PianoRoutes.page(page, cut = true)) },
-                                            onListen = listen,
+                                            onOpenTab = open,
                                         )
                                     }
                                     composable(
@@ -308,7 +308,7 @@ fun PianoNavHost(
                                     ) { page ->
                                         val tab = remember(page) { nav.getBackStackEntry(Route.Piano.path) }
                                         val shown = page.arguments?.let { PianoRoutes.PageType[it, PianoRoutes.PAGE_KEY] } ?: SettingsPage.Feel
-                                        PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() }, onListen = listen)
+                                        PianoPageScreen(tab, shown, onBack = { if (nav.isTop(page)) nav.popBackStack() })
                                     }
                                 }
                             }

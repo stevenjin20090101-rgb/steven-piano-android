@@ -533,7 +533,7 @@ object WebApi {
         .put("lastError", p.lastError ?: JSONObject.NULL)
         .put("errorAbout", p.errorAbout ?: JSONObject.NULL)
 
-    /** `/api/piano`: the state and report, the presets, and the table the page draws its controls from (Feel · Lighting · Pedal). */
+    /** `/api/piano`: the state and report, the presets, and the table the page draws its controls from (Sound and touch · Lights and screen · Pedal). */
     fun piano(p: WebPiano): JSONObject = pianoState(p.state)
         .put("statusText", p.statusText ?: JSONObject.NULL)
         .put("statusReading", p.statusReading)
@@ -542,7 +542,7 @@ object WebApi {
 
     private fun page(page: PianoPage): JSONObject = JSONObject()
         .put("key", page.name.lowercase())
-        .put("title", page.name)
+        .put("title", page.title)   // the page's one name, as the app has it (v1.13)
         .put(
             "sections",
             JSONArray().apply {
