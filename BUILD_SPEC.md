@@ -6971,3 +6971,99 @@ side, the width, a hidden roll). `AdaptiveFrameTest` (the new plan; 0 and 1 the 
 removed), `GroupSummariesTest` (Display reads the appearance), `DiagnosticsExporterTest` (47 lines). The existing score
 tests are untouched. **1,503 → 1,513** (12 skipped). `lintDebug`: 0 errors, the same 30 warnings as M29. The UI-contract
 greps as M29's (`m31a/greps.txt`): no colour added, the divider no glass, the View menu a `GlassPopover`.
+
+# v1.13 — M32: the web panel's notes and score
+
+Read `DESIGN.md › v1.13 — the panel's notes and score` first. Fable's brief (`m32-web-brief.md`) with the plan's decisions
+and §§ 1, 2, 4, 5 (`plans/plan-web-split.md`), built by Opus in the worktree `android-wt-m32` (branch `m32-web`) from
+`m31a-split` (`0380a10`), beside other runs. A lean run: critical tests, one browser smoke check, short documents; no
+version bump, no provenance signing, nothing in `cloud/` (the relay needs no change).
+
+## Files
+
+`M` = `app/src/main/java/dev/stevenjin/stevenpiano`, `W` = `app/src/main/assets/web`. Added: `M/score/ScoreStyle.kt` (the
+score's sizes, glyphs, tempo-mark proportions and caps, moved from `ScorePages.kt` and `NoteCanvas.kt`, which now read
+them), `M/score/ScoreMarks.kt` (`ScoreText`, tempo-mark and chord-name placement, moved out of the painter, which calls
+it), `M/score/ScoreDisplayList.kt` (the three formats, `WebText`, the browser's `metrics`), `M/web/NowViews.kt`,
+`W/clock.js`, `W/wire.js`, `W/roll.js`, `W/score.js`, `W/views.js`. Changed: `ScoreLayout.kt` (`ScoreBars.microsAt`),
+`Player.kt` (`positionJumps`), `WebSocketHub.kt` (a progress message at once on a jump), `WebService.kt` (`at` on the
+monotonic clock, the jumps), `WebAssets.kt` (the modules, `FONT`, `FONT_VERSION`), `WebPanel.kt` (turning off clears the
+layouts); shared with other runs: `WebApi.kt`, `WebBackend.kt`, `AppWebBackend.kt`, `WebServer.kt`, `W/app.js`,
+`W/index.html`, `W/style.css`, `M/ui/components/ScorePages.kt`, `NoteCanvas.kt`.
+
+## What was built
+
+- **Routes** (all `Access.READ`, the piece playing only, 404 on the guests' listener): `GET /api/now/notes?rev=`,
+  `GET /api/now/score?rev=&w=&h=` (202 `{status:"working", retryAfterMs}` while laid out), `GET
+  /api/now/score/{id}/page/{n}` (never starts a layout), `GET /api/font/bravura.otf?v=cdf0f893` (`font/otf`, `private,
+  max-age=31536000, immutable`, the `res/font` file's bytes as they are). Answers: `application/octet-stream`,
+  `no-store`; 404 `no-piece`, 409 `stale`, 413 `too-large`, 429 with `Retry-After`, 400 for any input not a bounded
+  whole number (`rev` and the layout id fit an Int, `w`/`h` 1–8,192, the page up to five digits).
+- **`NowViews`**: a revision moves on when the notes, hands, fingering or chords (by reference), the transpose or
+  folding change; notes encoded once per revision (≤ 200,000 notes); one low-priority thread lays out one size at a time,
+  shared by every request for it; sizes floored to 16 px and held to 280–2,000 × 160–2,000; a request waits ≤ 1.5 s then
+  202; a layout past 8 s stops and its size is too large; ≤ 6 fresh layouts per 30 s; ≤ 60,000 notes and 20,000 bars;
+  two sizes kept with ≤ 1 MB of pages; a change of piece cancels at the engine's checkpoint and clears it all.
+- **State and settings**: the player gains `at` (the tablet's monotonic ms, sampled with the position), `fold` and
+  `views {rev, notes, hands, fingers, chords, score}`; the state gains `display {noteDisplay, rollStyle, fingering,
+  chordNames, handColours}`; `PUT /api/settings` takes `noteDisplay` (`paperRoll` or `falling` only), `fingering`,
+  `chordNames`, `handColours`. The progress message carries `playing` and `tempoPct`, and is sent at once whenever
+  the player replaces its position clock (play, pause, seek, stop, tempo, load).
+- **The panel**: `views.js` (imported the first time a view shows) mounts the score and the roll; on wide screens both
+  with the divider, on phones Art · Notes · Score; the View control; frames only while needed. `clock.js` (offset at
+  the least delay over 30 samples; a jump over 120 ms snaps, a smaller one fades over 250 ms). `roll.js` (the app's
+  NoteCanvas and KeyboardStrip). `score.js` (pages painted once from the ops, an overlay for the cursor and the
+  sounding heads, PageTurn, ‹ ›, Follow, tap to seek, Bravura through `FontFace`).
+
+## The wire formats
+
+Little-endian; every section 4-byte aligned; each opens with a u32 magic and a u16 version (1), then u16 flags.
+
+| Format | Header | Then |
+|---|---|---|
+| Notes `SPNT` | 32 B: flags (1 hands, 2 fingers, 4 chords cut), rev, n, m, durationMs, nameBytes | u32 startMs[n], u32 endMs[n], u8 key[n] (transposed and folded, 255 unplayable), u8 hand[n]?, u8 finger[n]?, u32 chordStartMs[m], u32 nameEnd[m], UTF-8 names (transposed) |
+| Index `SPSI` | 96 B: flags (1 engraved, 2 two pages), rev, layoutId, pages, systemsPerPage, systemCount, pageCount, barsPerSystem; f32 pageWidth, pageHeight, pageGap, slot 1's left, firstSystemTop, space, hairline, cursor width, numberHeight, tempoSpace, the number, chord and numeral font sizes | u32 systemStartMs[systemCount] |
+| Page `SPSP` | 40 B: flags (1 truncated), layoutId, page, systems, bars, heads, opWords, strings, stringBytes | systems (10 words: index, first bar, bars, final; f32 left, right, trebleTop, bassBottom, bandTop, bandBottom); bars (20 words: startMs, f32 right, nine (ms, f32 x) cursor points); heads (5 words: note, tiedStartMs or −1, op from, op to, system row; sorted by note); ops; u32 stringEnd[]; UTF-8 strings |
+
+Ops: word 0 is `op | role << 8 | style << 16 | align << 24`; RECT x y w h; GLYPH codepoint x baseline; TEXT string x
+baseline maxWidth; QUAD four corners (beams); CURVE x1 y1 cx cy x2 y2 (ties, a hairline); CLIP top bottom … END per
+system. Roles: line, glyph, number, note; styles: music, tempo music, number, chord, numeral. A page past 256 KB stops
+adding notes and sets its flag; each system keeps the painter's 4,000-a-system caps. Clair de lune at 628 × 320 px:
+notes 18 KB, index 168 B, pages 11–21 KB; its layout 67 ms on the emulator.
+
+## Deviations from the brief and the plan, and why
+
+- **The formats are simpler than the plan's**: f32 geometry, not i16 sixteenths; u32 name ends; 20-byte heads (with the
+  system row); nine fixed cursor points a bar, not up to nine. Typed arrays read them directly; pages stay small.
+- **app.js keeps its own 250 ms clock** for the scrubber and the time (it now honours the progress message's
+  `playing`); `clock.js` runs the views. The views' module loads only when a view shows, and the text clock needs no
+  smoothing.
+- **Text on the score is placed from estimated widths** (`ScoreDisplayList.WebText`, per-character shares of the em,
+  erring wide) and drawn within them (`fillText`'s `maxWidth`); the roll's chord names are untracked (canvas
+  `letterSpacing` left off), at the eyebrow's size.
+- **The page buttons** sit at the score pane's bottom right, over the page, translucent; Follow at its top right.
+- **Not added**: a WebSocketHubTest case for the jump (the smoke check's tap-to-seek exercised it); no tick on the
+  divider's stops (browsers have no haptics).
+
+## Tests added in M32
+
+`ScoreMarksTest` 1 (the moved placement equals the painter's arithmetic at `0380a10` over three densities, 20+ marks),
+`ScoreDisplayListTest` 2 (an engraved page's op order and replayable heads; a performance's hairlines, the per-system
+cap, a page truncated under a small cap), `NowWireTest` 3 (`NowWire`, wire.js's Kotlin twin: the three formats round
+trip; cut, extended, re-versioned, re-magicked and miscounted bytes refused), `NowViewsTest` 4 (shared layouts and the
+grid, 202 then ready, the deadline remembered, six fresh layouts a half minute, a change of piece), `WebServerTest` +1
+(binary answers, every bound, the statuses, the font's headers, 401 and the guests' 404), `WebServerRelayTest` +1 (the
+bytes and the font through `serveRelayed`), `WebAssetsTest` +2 (the font's pinned hash, size, version and licence
+lines, its banner exemption; the modules' bans and the roll's constants pinned to the app's); `WebApiTest` (the state's
+new keys, the four settings keys). The existing score tests are untouched. **1,513 → 1,527** (12 skipped). `lintDebug`:
+0 errors, the same 30 warnings (an `@SuppressLint("ResourceType")` on reading the font from `res/font`).
+
+## The smoke check
+
+`steven_piano_audit` headless (`emulator-5590`), the debug build, the panel through `adb forward tcp:8738 tcp:8737` and a
+scratchpad proxy setting the panel's Host and Origin (as M28 and M29), headless Chrome. Clair de lune on the emulated
+piano; screenshots in `scratchpad/m32/shots/`: `m32-1280-now-a` and `-now-b` (3 s apart), `m32-1280-divider`,
+`m32-1280-view-menu`, `m32-1280-falling`, `m32-390-notes`, `m32-390-score`, and `m32-1280-sync-browser` beside
+`m32-tablet-sync` (the same moment: the same system, bar and sounding heads). Bravura loaded (`document.fonts`), yellow
+heads under the cursor, no horizontal scroll at 390 px, no console error but the panel's old `favicon.ico` 404. Not run:
+through the real relay, on a phone's browser, in dark mode.

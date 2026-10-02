@@ -759,7 +759,18 @@ piano plays, only a note that they are Steven Piano's). Now playing and Piano al
 read-only, the instrument and the keyboard ("Instrument: Steven Piano", "Keyboard:
 FP-30X · Live · Recording"); Live and recording are the tablet's alone. It updates as
 things change on the tablet, and it follows the browser's light or dark, or its own
-**Appearance** chips. A session lasts until it has
+**Appearance** chips.
+
+From 1.13 the panel's **Now playing** shows the music as the tablet does, in step with it:
+the **sheet music** (its cursor, the notes sounding turning yellow, fingering and chord
+names) and the **notes** moving down the paper roll or falling onto a strip of keys. On a
+computer both show, one above the other (side by side on a wide window); drag the bar
+between them to give either more room, and the browser remembers it. On a phone choose
+**Art**, **Notes** or **Score** at the top. **View** changes the tablet's own Paper roll or
+Falling notes, Fingering, Chord names and Hand colours. The score turns its pages by itself;
+‹ and › look ahead or back, **Follow** catches up, and a tap on a bar plays from there. It
+works through Steven Piano Cloud too; the first time, the score's font (about 0.9 MB) comes
+from the tablet, then the browser keeps it. A session lasts until it has
 gone a day unused; a new PIN, turning Web control off or restarting the app signs every
 browser out. Five wrong PINs close the gate for 30 seconds, then longer each time, up
 to ten minutes.

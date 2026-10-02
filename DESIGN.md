@@ -2469,3 +2469,24 @@ Designed by Fable with the `apple-design` lenses (`split-views.md`, `settings.md
   music 33 percent", adjusted as a slider, with the actions Reset, Show sheet music only, Show notes only. **Keys**:
   the arrows along the axis move it 2 %, Page keys jump between the stops, Home and End hide a pane. Short screens
   that scroll keep their fixed heights and no divider.
+
+# v1.13 — the panel's notes and score
+
+Designed by Fable (`plans/plan-web-split.md` §§ 2, 4); built in M32. The web panel's Now playing shows what the tablet's
+shows, in step with it.
+
+- **The views**: the score and the moving notes (paper roll or falling notes, with the keyboard strip), drawn from what
+  the tablet laid out: the same engraving, the same bars a system for a page as wide, the cursor and the sounding yellow,
+  the left hand outlined, fingering, chord names and Hand colours as the tablet's settings say. Content, never glass: each
+  view is a 12 px card on the elevated surface, in the panel's own ink and paper tokens (`--sounding`, `--hand-left`,
+  `--hand-right` are the app's colours).
+- **From 900 px** both views show above the title, stacked (the score over the notes) or side by side once the column is
+  840 px wide, split by the tablet's divider (a third and a half by default, the same stops, minimums and hiding);
+  the share is remembered in this browser only, per arrangement: a remote viewer never rearranges the tablet.
+- **Below 900 px** one view at a time: **Art · Notes · Score**, Art first, remembered in the browser; a phone that never
+  opens a view loads nothing for it. Every page still fits 390 px without sideways scrolling.
+- **The View control** (beside the views) shows and changes the tablet's own settings: Paper roll · Falling notes,
+  Fingering, Chord names, Hand colours. The score's pages turn by themselves; ‹ and › (or the arrow keys) look ahead or
+  back, **Follow** comes back, and a tap on a bar plays from there. Nothing on the panel moves the tablet's own split.
+- **Motion**: frames run only while Now playing shows, the page is visible and the piece plays (and 400 ms after a
+  change); with reduced motion the roll still scrolls and everything else cuts.

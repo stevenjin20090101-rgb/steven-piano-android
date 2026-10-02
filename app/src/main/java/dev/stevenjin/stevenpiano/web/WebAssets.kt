@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Resources
 import dev.stevenjin.stevenpiano.R
@@ -22,6 +23,8 @@ fun interface AssetSource {
 
 /** The app's own `assets/web/` folder, and (v1.13 — M32) the score's font from `res/font`, the one copy the app carries. */
 class AndroidAssets(private val context: Context) : AssetSource {
+    // openRawResource reads any file resource's bytes as stored; a font's is the file itself, unchanged.
+    @SuppressLint("ResourceType")
     override fun read(name: String): ByteArray? = try {
         if (name == WebAssets.FONT.name) {
             context.resources.openRawResource(R.font.bravura).use { it.readBytes() }
