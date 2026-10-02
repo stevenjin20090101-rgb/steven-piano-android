@@ -29,7 +29,7 @@ import kotlin.math.roundToLong
 interface StudioLibrary {
     /**
      * Imports the MIDI file [bytes] as a piece called [title] by [composer], through the importer's own
-     * path ([fileName] names the file); its id, or null when it wasn't added.
+     * path ([fileName] names the file), quietly (v1.14 — M37: no import bar); its id, or null when it wasn't added.
      */
     suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long?
 

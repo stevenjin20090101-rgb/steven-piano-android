@@ -198,6 +198,15 @@ class ImporterTest {
     }
 
     @Test
+    fun `a quiet import leaves the shared progress at Idle and still returns its tally`() = runTest {
+        val source = OpenedSource(listOf(item("Recording 2026-10-02 14-05-33.mid", midi(60)), item("broken.mid", "no".toByteArray())))
+        val result = importer.importOpened(source, quiet = true)
+        assertEquals(ImportProgress(done = 2, total = 2, imported = 1, failed = 1, finished = true), result)
+        assertEquals("no bar, no panel line, no notification", ImportProgress.Idle, progress.value)
+        assertEquals(1, store.pieces.size)
+    }
+
+    @Test
     fun `an opened source whose listing throws still finishes, closed, with the rest counted as failed`() = runTest {
         var closed = false
         val bad = object : AbstractList<ImportItem>() {

@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
+import dev.stevenjin.stevenpiano.data.db.PieceHead
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
@@ -188,17 +190,24 @@ fun RollCardImage(pieceId: Long, modifier: Modifier = Modifier, framed: Boolean 
 }
 
 /**
- * A composer without a portrait: the roll cards of their first four pieces, two by two, so Bach,
- * Beethoven and Brahms never collapse into three "B" tiles. Two or three pieces repeat to fill the
- * four (two as a checkerboard, so no row simply repeats the other); a single piece shows its card
- * whole rather than four times.
+ * A composer without a portrait: their first four pieces, two by two, so Bach, Beethoven and Brahms
+ * never collapse into three "B" tiles; each its own cover when it has one (v1.14 — M37: Made in Studio's
+ * and Recorded live's), else its roll card. Two or three pieces repeat to fill the four (two as a
+ * checkerboard, so no row simply repeats the other); a single piece shows whole rather than four times.
+ * [size] is the frame's, for the covers.
  */
 @Composable
-fun MosaicTile(pieceIds: List<Long>, modifier: Modifier = Modifier, framed: Boolean = true) {
+fun MosaicTile(pieceIds: List<Long>, modifier: Modifier = Modifier, framed: Boolean = true, size: ArtSize = ArtSize.Tile) {
     ArtSurface(modifier, framed) {
         if (pieceIds.isEmpty()) return@ArtSurface
-        Mosaic(pieceIds.size, Modifier.fillMaxSize()) { i, cell -> RollCard(pieceIds[i], cell) }
+        Mosaic(pieceIds.size, Modifier.fillMaxSize()) { i, cell -> PieceCell(pieceIds[i], size, cell) }
     }
+}
+
+/** One piece in a mosaic's cell: its own cover, cropped about its centre, else its roll card (v1.14 — M37). */
+@Composable
+private fun PieceCell(pieceId: Long, size: ArtSize, modifier: Modifier) {
+    ArtworkImage(ArtworkEntity.forPiece(pieceId), size, modifier, framed = false, alignment = Alignment.Center) { RollCard(pieceId, it) }
 }
 
 /**
@@ -244,7 +253,7 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
         when {
             ids == null -> ArtSurface(frame, framed) { }
             ids!!.isEmpty() -> MonogramTile(name, frame, framed)
-            else -> MosaicTile(ids!!, frame, framed)
+            else -> MosaicTile(ids!!, frame, framed, size)
         }
     }
 }
@@ -265,26 +274,33 @@ fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifi
 }
 
 /**
- * A playlist's cover: the person's photo, else the portrait of its first piece's composer, else
- * the monogram of [name].
+ * A playlist's cover: the person's photo; else, when its first piece has a cover of its own (v1.14 —
+ * M37: Recordings, Made in Studio), the covers among its first four pieces ([Mosaic]: one fills the
+ * frame, two stand as a checkerboard, three or four fill the cells); else the portrait of its first
+ * piece's composer; else the monogram of [name].
  */
 @Composable
 fun PlaylistCover(playlistId: Long, name: String, size: ArtSize, modifier: Modifier = Modifier) {
     ArtworkImage(ArtworkEntity.forPlaylist(playlistId), size, modifier) { frame ->
-        val artwork = LocalContext.current.graph.artwork
-        val first by remember(playlistId) { artwork.firstComposerKey(playlistId).map { FirstComposer(it) } }
+        val library = LocalContext.current.graph.library
+        val head by remember(playlistId) { library.playlistHead(playlistId).map { Head(it) } }
             .collectAsStateWithLifecycle(initialValue = null)
-        val composerKey = first?.key
+        val pieces = head?.pieces
+        // Followed as the artwork changes: the start draws the older recordings' covers while the tile shows.
+        val covered = pieces.orEmpty().filter { piece -> key(piece.id) { rememberArtworkRow(ArtworkEntity.forPiece(piece.id))?.imagePath != null } }
         when {
-            first == null -> ArtFrame(frame)
-            composerKey == null -> MonogramTile(name, frame)
-            else -> ArtworkImage(ArtworkEntity.forComposer(composerKey), size, frame) { MonogramTile(name, it) }
+            pieces == null -> ArtFrame(frame)
+            pieces.isEmpty() -> MonogramTile(name, frame)
+            covered.firstOrNull()?.id == pieces.first().id -> ArtFrame(frame) {
+                Mosaic(covered.size, Modifier.fillMaxSize()) { i, cell -> PieceCell(covered[i].id, size, cell) }
+            }
+            else -> ArtworkImage(ArtworkEntity.forComposer(pieces.first().composerKey), size, frame) { MonogramTile(name, it) }
         }
     }
 }
 
-/** Loaded: the composer of a playlist's first piece, or null for an empty playlist. */
-private class FirstComposer(val key: String?)
+/** Loaded: a playlist's first pieces (none for an empty playlist). */
+private class Head(val pieces: List<PieceHead>)
 
 /** A roll card as it comes: being drawn, [Drawn], or [Missing] (the piece's file gone or unreadable: there will be none). */
 private sealed interface RollCardState {

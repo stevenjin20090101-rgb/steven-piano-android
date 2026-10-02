@@ -82,6 +82,7 @@ import dev.stevenjin.stevenpiano.instruments.MidiDevices
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.library.LibraryOverride
 import dev.stevenjin.stevenpiano.midi.KeyEvents
+import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
@@ -659,7 +660,7 @@ class AppGraph(private val app: Application) {
      */
     val recorder: Recorder by lazy { Recorder().also { keyboard.listen(it) } }
 
-    /** A take from the Record control to the sheet; saved into Recordings, waiting for Keep or Discard. */
+    /** A take from the Record control to the sheet; saved into Recordings with a cover of its own, waiting for Keep or Discard. */
     val recording: RecordingSession by lazy {
         val store = object : RecordingStore {
             override suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long? = studioLibrary.add(fileName, bytes, title, composer)
@@ -675,6 +676,12 @@ class AppGraph(private val app: Application) {
             override suspend fun undecided(): Set<Long> = studioReview.undecided.value
 
             override suspend fun discard(pieceId: Long) = studioReview.discard(pieceId)
+
+            override suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = studioLibrary.setCover(pieceId, png)
+
+            override suspend fun withoutCover(): List<Long> = library.recordingsWithoutCover()
+
+            override suspend fun notes(pieceId: Long): NoteList = library.load(pieceId).midi.notes
         }
         RecordingSession(
             recorder,
@@ -852,7 +859,10 @@ class AppGraph(private val app: Application) {
             keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
             restoreInstrument(s)
             followLive()
-            launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
+            launch {
+                recording.recoverPending()   // takes a crash left behind (v1.11 — M29), beside the rest
+                recording.drawMissingCovers()   // then a cover for each recording made before 1.14 (v1.14 — M37)
+            }
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
             // connects with the same switch; by cable it needs no permission.
             if (s.autoConnect) {

@@ -88,7 +88,9 @@ object ComposerNames {
      * name everywhere, as [STUDIO] does ("Recorded live · 0:42").
      */
     const val RECORDED_LIVE = "Recorded live"
-    private val RECORDED_LIVE_KEY = TextKeys.fold(RECORDED_LIVE)
+
+    /** Its key: a recording's row shows its own cover (v1.14 — M37), as a Studio piece's does. */
+    val RECORDED_LIVE_KEY = TextKeys.fold(RECORDED_LIVE)
 
     fun normalize(raw: String): Name {
         val text = TitleHeuristics.cleanText(raw)

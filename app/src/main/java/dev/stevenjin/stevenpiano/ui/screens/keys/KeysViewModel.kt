@@ -118,9 +118,9 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** How long the take running has run, for the Record control. */
     fun elapsedNanos(): Long = graph.recorder.elapsedNanos()
 
-    /** Keep: under the [title] typed (the date's if left blank), and not asked about again. */
+    /** Keep: under the [title] typed (the date's if left blank), and not asked about again; "Kept in Recordings." for a moment. */
     fun keep(saved: SavedRecording, title: String) {
-        graph.recording.answered()
+        graph.recording.kept()
         graph.appScope.launch {
             val typed = title.trim()
             if (typed.isNotEmpty() && typed != saved.title) graph.library.rename(saved.pieceId, typed, ComposerNames.RECORDED_LIVE)

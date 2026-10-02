@@ -284,10 +284,11 @@ fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
     }
 }
 
-/** After a take: the line under the pills when nothing was played or nothing could be saved; else none. */
+/** After a take: the line under the pills when nothing was played, nothing could be saved, or it was kept; else none. */
 internal fun recordingNote(state: RecordingState): String? = when (state) {
     RecordingState.Empty -> InstrumentCopy.NOTHING_PLAYED
     RecordingState.Failed -> InstrumentCopy.NOT_SAVED
+    RecordingState.Kept -> InstrumentCopy.KEPT
     else -> null
 }
 

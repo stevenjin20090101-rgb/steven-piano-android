@@ -51,6 +51,9 @@ data class PieceEntity(
 /** What a queue or a list needs to name a piece without loading all of it. */
 data class PieceSummary(val id: Long, val title: String, val composerShort: String, val durationMs: Long, val composerKey: String)
 
+/** One of a playlist's first pieces: what its cover is made of (v1.14 — M37). */
+data class PieceHead(val id: Long, val composerKey: String)
+
 /** A piece's id by its bytes' SHA-256: how an import finds the pieces it brought, new or there already. */
 data class PieceSha(val id: Long, val sha256: String)
 

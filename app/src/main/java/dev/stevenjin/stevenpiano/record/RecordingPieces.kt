@@ -9,7 +9,13 @@
 
 package dev.stevenjin.stevenpiano.record
 
+import dev.stevenjin.stevenpiano.data.art.CoverInput
+import dev.stevenjin.stevenpiano.data.art.CoverNote
+import dev.stevenjin.stevenpiano.data.art.Png
+import dev.stevenjin.stevenpiano.data.art.StudioCover
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.midi.NoteList
+import dev.stevenjin.stevenpiano.midi.SmfParser
 import dev.stevenjin.stevenpiano.midi.SmfWriter
 import kotlinx.coroutines.CancellationException
 import java.io.File
@@ -43,6 +49,15 @@ interface RecordingStore {
 
     /** The piece leaves the library, as Discard does. */
     suspend fun discard(pieceId: Long)
+
+    /** [png] becomes the piece's own cover (v1.14 — M37); false when it could not be kept. */
+    suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = false
+
+    /** The recordings without a cover of their own (made before 1.14), newest first. */
+    suspend fun withoutCover(): List<Long> = emptyList()
+
+    /** The piece's notes as its file holds them (null: none to read; it may throw when the file can't be read). */
+    suspend fun notes(pieceId: Long): NoteList? = null
 }
 
 /** A recording saved: the piece, its title, how long it lasts and how many notes it has. */
@@ -55,9 +70,10 @@ data class SavedRecording(val pieceId: Long, val title: String, val durationMicr
  * loses nothing ([recoverPending] imports what is left at the next start); then it goes in through the importer
  * ([RecordingStore.add]: its caps, its parse, its lock) as "Recording · <medium date> <short time>" by
  * [ComposerNames.RECORDED_LIVE] (once more with " (2)" in its text should the library already hold those bytes),
- * described "Recorded live · <date>", first in the built-in playlist Recordings, waiting for Keep or Discard. In
- * kiosk mode ([kiosk]) at most [KIOSK_UNDECIDED] recordings wait: past that, the oldest waiting one is discarded.
- * Nothing of a take is in a file name but the time.
+ * described "Recorded live · <date>", with a cover of its own (v1.14 — M37: Studio's generator, from its notes, the
+ * key and the mood read from them, seeded by the take's time), first in the built-in playlist Recordings, waiting for
+ * Keep or Discard. In kiosk mode ([kiosk]) at most [KIOSK_UNDECIDED] recordings wait: past that, the oldest waiting
+ * one is discarded. Nothing of a take is in a file name but the time.
  */
 class RecordingPieces(
     private val store: RecordingStore,
@@ -77,7 +93,7 @@ class RecordingPieces(
             log("Recording: the library did not take a ${take.durationMicros / 1_000_000} s take; its file stays for the next start")
             return null
         }
-        finish(id, at)
+        finish(id, at) { seed -> CoverInput(take.notes.map { CoverNote(it.onMicros / 1_000, it.offMicros / 1_000, it.key, it.velocity) }, null, null, null, seed) }
         pending?.delete()
         log("Recording: ${take.notes.size} notes, ${take.durationMicros / 1_000_000} s, ended by ${take.ended.name.lowercase()}")
         return SavedRecording(id, title, take.durationMicros, take.notes.size)
@@ -107,7 +123,7 @@ class RecordingPieces(
                 null
             }
             if (id != null) {
-                finish(id, at)
+                finish(id, at) { seed -> CoverInput.of(SmfParser.parse(bytes).notes, null, null, null, seed) }   // the importer's parser
                 saved++
             }
             file.delete()   // saved, or a file the library will never take: not tried at every start
@@ -119,9 +135,14 @@ class RecordingPieces(
     private suspend fun add(title: String, bytes: ByteArray, at: ZonedDateTime): Long? =
         store.add(fileName(at), bytes, title, ComposerNames.RECORDED_LIVE)
 
-    /** Described, first in Recordings, waiting for Keep or Discard; in kiosk mode, the oldest waiting past the cap discarded. */
-    private suspend fun finish(id: Long, at: ZonedDateTime) {
+    /**
+     * Described, its cover drawn from the take's notes ([input], seeded by the take's time, so the same take always gives
+     * the same cover), first in Recordings, waiting for Keep or Discard; in kiosk mode, the oldest waiting past the cap
+     * discarded.
+     */
+    private suspend fun finish(id: Long, at: ZonedDateTime, input: (seed: Long) -> CoverInput) {
         store.describe(id, description(at))
+        cover(id) { input(at.toInstant().toEpochMilli()) }
         store.addToRecordings(id)
         store.markUndecided(id)
         if (!kiosk()) return
@@ -131,6 +152,42 @@ class RecordingPieces(
             log("Recording: more than $KIOSK_UNDECIDED wait for the PIN in kiosk mode: the oldest discarded")
             store.discard(old)
         }
+    }
+
+    /**
+     * At start (v1.14 — M37): a cover for each recording made before covers were drawn, from its own notes (seeded by
+     * its id), newest first, one at a time; one whose file can't be read is left for the next start. Returns how many.
+     */
+    suspend fun drawMissingCovers(): Int {
+        var drawn = 0
+        for (id in store.withoutCover()) {
+            val notes = try {
+                store.notes(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            } catch (e: OutOfMemoryError) {
+                null
+            } ?: continue
+            if (cover(id) { CoverInput.of(notes, null, null, null, id * MISSING_SEED) }) drawn++
+        }
+        if (drawn > 0) log("Recording: $drawn cover" + (if (drawn == 1) "" else "s") + " drawn for recordings made before them")
+        return drawn
+    }
+
+    /**
+     * Piece [id]'s own cover, drawn by Studio's generator ([StudioCover], 768 px, a PNG) from what [input] reads. False
+     * when it could not be drawn or kept: the recording is saved all the same.
+     */
+    private suspend fun cover(id: Long, input: () -> CoverInput): Boolean = try {
+        store.setCover(id, Png.encode(StudioCover.render(input()), StudioCover.SIZE, StudioCover.SIZE))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    } catch (e: OutOfMemoryError) {
+        false
     }
 
     /** The take's file, kept until the library has it; null when it could not be written (the save goes on). */
@@ -169,6 +226,9 @@ class RecordingPieces(
     companion object {
         /** In kiosk mode, the most recordings that wait for someone with the PIN. */
         const val KIOSK_UNDECIDED = 30
+
+        /** A recording made before covers is seeded by its id times this, as Studio's older pieces are. */
+        private const val MISSING_SEED = 7_919L
 
         private const val PENDING = "pending-"
         private const val MID = ".mid"

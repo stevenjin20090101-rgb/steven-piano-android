@@ -41,9 +41,10 @@ class KeysNoteTest {
     }
 
     @Test
-    fun `after a take, nothing played or nothing saved says so under the pills`() {
+    fun `after a take, nothing played, nothing saved or kept says so under the pills`() {
         assertEquals("Nothing was played.", recordingNote(RecordingState.Empty))
         assertEquals("The recording couldn't be saved. The app tries again when it next starts.", recordingNote(RecordingState.Failed))
+        assertEquals("Kept in Recordings.", recordingNote(RecordingState.Kept))
         assertNull(recordingNote(RecordingState.Idle))
         assertNull(recordingNote(RecordingState.Recording(0L)))
     }

@@ -62,7 +62,7 @@ interface ImportStore {
  * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
  * (an [OutOfMemoryError]) counts as failed, and so does a file whose sender or database throws
  * anything else: one bad file never ends the import, nor the app. One import runs at a time;
- * [progress] follows it, and always finishes.
+ * [progress] follows it, and always finishes; a quiet one ([importOpened]) keeps a progress of its own.
  */
 class Importer(
     private val store: ImportStore,
@@ -89,36 +89,38 @@ class Importer(
                 log("Couldn't open the import: $TOO_LARGE")
                 return@withContext ImportProgress(done = 1, total = 1, failed = 1).also { progress.value = it }
             }
-            runOpened(opened)
+            runOpened(opened, progress)
         }
     }
 
     /**
      * Imports a source already opened (the web panel's upload: one MIDI file in memory, or a zip
      * saved in the cache), as [import] does once it has opened its own: one import at a time, the
-     * same caps, [progress] kept, and [source] closed at the end whatever happens.
+     * same caps, [progress] kept, and [source] closed at the end whatever happens. [quiet] (v1.14 —
+     * M37): what the tablet makes itself (a recording, a take a crash left, Studio's pieces) follows a
+     * progress of its own, so no import bar, panel import line or notification tells of it.
      */
-    suspend fun importOpened(source: OpenedSource): ImportProgress = running.withLock {
+    suspend fun importOpened(source: OpenedSource, quiet: Boolean = false): ImportProgress = running.withLock {
         withContext(io) {
-            progress.value = ImportProgress(finished = false)
-            runOpened(source)
+            val sink = if (quiet) MutableStateFlow(ImportProgress(finished = false)) else progress.apply { value = ImportProgress(finished = false) }
+            runOpened(source, sink)
         }
     }
 
     /** [run] over [opened], then closes it; a failure that is no file's fault counts the rest as failed. */
-    private suspend fun runOpened(opened: OpenedSource): ImportProgress = try {
-        opened.use { run(it) }
+    private suspend fun runOpened(opened: OpenedSource, sink: MutableStateFlow<ImportProgress>): ImportProgress = try {
+        opened.use { run(it, sink) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: RuntimeException) {   // not a file's fault (each is caught on its own): the rest count as failed
         log("The import stopped" + detail(e))
-        val last = progress.value
+        val last = sink.value
         last.copy(done = last.total, failed = last.failed + (last.total - last.done), current = null, finished = true)
-            .also { progress.value = it }
+            .also { sink.value = it }
     }
 
-    /** Imports everything [source] lists and returns the final tally. */
-    suspend fun run(source: OpenedSource): ImportProgress {
+    /** Imports everything [source] lists and returns the final tally; [sink] follows it. */
+    suspend fun run(source: OpenedSource, sink: MutableStateFlow<ImportProgress> = progress): ImportProgress {
         source.limited?.let(log)
         // What a Mac adds beside the music is neither a piece nor a failure: it is not counted at all (D1).
         val listed = source.items.filterNot { isMacMetadata(it.relativePath) }
@@ -126,7 +128,7 @@ class Importer(
         val folders = ImportFolders(listed.map { it.relativePath })
         val names = BatchNames(store, folders)
         var state = ImportProgress(total = items.size, finished = false)
-        progress.value = state
+        sink.value = state
         val seen = HashSet<String>()
         val batch = ArrayList<PieceEntity>(BATCH_SIZE)
         // D2: every piece of a zip, a folder or a loose upload goes into its playlist, those already there too,
@@ -151,7 +153,7 @@ class Importer(
         for (item in items) {
             currentCoroutineContext().ensureActive()
             state = state.copy(current = item.name)
-            progress.value = state
+            sink.value = state
             val outcome = try {
                 prepare(item, source.rowFor(item), seen, names)
             } catch (e: CancellationException) {
@@ -173,12 +175,12 @@ class Importer(
             }
             state = state.copy(done = state.done + 1)
             if (batch.size == BATCH_SIZE) flush()
-            progress.value = state
+            sink.value = state
         }
         flush()
         val playlist = link(source.batch, folders.root, found, placed)
         state = state.copy(current = null, finished = true, playlist = playlist)
-        progress.value = state
+        sink.value = state
         log("Import: ${state.imported} new, ${state.duplicates} already there, ${state.failed} failed" + (playlist?.let { ", in a playlist" + named(it.name) } ?: ""))
         return state
     }

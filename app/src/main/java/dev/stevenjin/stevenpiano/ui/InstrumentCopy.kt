@@ -181,6 +181,9 @@ object InstrumentCopy {
     /** Under the pills when the library would not take a take. */
     const val NOT_SAVED = "The recording couldn't be saved. The app tries again when it next starts."
 
+    /** Under the pills for a moment after Keep (v1.14 — M37). */
+    const val KEPT = "Kept in Recordings."
+
     /** "0:42 · 318 notes" (one note: "1 note"), the length in tabular digits. */
     fun takeLine(durationMicros: Long, notes: Int): String =
         "${RecordingSession.clock(durationMicros * 1000)} · " + String.format(Locale.ROOT, "%,d", notes) + if (notes == 1) " note" else " notes"

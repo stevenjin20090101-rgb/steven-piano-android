@@ -74,8 +74,8 @@ fun PieceRow(
             onClick = onPlay,
             onLongClick = { menu = true },
             leading = {
-                // A piece Studio made shows its own cover (v1.12 — M30), not the "Made in Studio" mosaic every one shared.
-                if (piece.composerKey == ComposerNames.STUDIO_KEY) {
+                // A piece Studio made (v1.12 — M30) or a recording (v1.14 — M37) shows its own cover, not the mosaic every one shared.
+                if (piece.composerKey == ComposerNames.STUDIO_KEY || piece.composerKey == ComposerNames.RECORDED_LIVE_KEY) {
                     PieceArt(piece.id, piece.composerKey, ArtSize.Row, Modifier.size(PORTRAIT), title = piece.title)
                 } else {
                     ComposerArt(piece.composerKey, piece.composerShort.ifBlank { piece.title }, ArtSize.Row, Modifier.size(PORTRAIT))

@@ -60,12 +60,19 @@ interface PieceDao {
     @Query("SELECT id FROM pieces WHERE composerKey = :composerKey ORDER BY titleKey LIMIT :limit")
     suspend fun idsByComposer(composerKey: String, limit: Int): List<Long>
 
-    /** The composer of a playlist's first piece (its order, then title), for its cover; null when it is empty. */
+    /** A playlist's first [limit] pieces in its order (position, then title): its cover (v1.14 — M37). */
     @Query(
-        "SELECT p.composerKey FROM pieces p JOIN collection_pieces cp ON cp.pieceId = p.id " +
-            "WHERE cp.collectionId = :playlistId ORDER BY cp.position, p.titleKey LIMIT 1",
+        "SELECT p.id, p.composerKey FROM pieces p JOIN collection_pieces cp ON cp.pieceId = p.id " +
+            "WHERE cp.collectionId = :playlistId ORDER BY cp.position, p.titleKey LIMIT :limit",
     )
-    fun firstComposerKey(playlistId: Long): Flow<String?>
+    fun head(playlistId: Long, limit: Int): Flow<List<PieceHead>>
+
+    /** The pieces by [composerKey] without a cover of their own (no picture in their `piece:<id>` artwork row), newest first (v1.14 — M37). */
+    @Query(
+        "SELECT p.id FROM pieces p LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
+            "WHERE p.composerKey = :composerKey AND a.imagePath IS NULL ORDER BY p.id DESC",
+    )
+    suspend fun withoutCover(composerKey: String): List<Long>
 
     @Query("SELECT COUNT(*) FROM pieces")
     fun count(): Flow<Int>

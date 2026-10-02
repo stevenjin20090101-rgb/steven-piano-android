@@ -15,6 +15,7 @@ import dev.stevenjin.stevenpiano.data.builtin.BuiltInStore
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
+import dev.stevenjin.stevenpiano.data.db.PieceHead
 import dev.stevenjin.stevenpiano.data.db.PiecePosition
 import dev.stevenjin.stevenpiano.data.db.PieceSummary
 import dev.stevenjin.stevenpiano.data.db.PlaylistEntity
@@ -91,8 +92,11 @@ class LibraryRepository(
     /** A composer's first [limit] pieces by title (a composer's mosaic of roll cards). */
     suspend fun firstPieceIds(composerKey: String, limit: Int): List<Long> = pieces.idsByComposer(composerKey, limit)
 
-    /** The composer of a playlist's first piece: its cover when it has no photo. Null while it is empty. */
-    fun firstComposerKey(playlistId: Long): Flow<String?> = pieces.firstComposerKey(playlistId)
+    /** A playlist's first [limit] pieces in its order (v1.14 — M37): its cover, when the first has one of its own. */
+    fun playlistHead(playlistId: Long, limit: Int = 4): Flow<List<PieceHead>> = pieces.head(playlistId, limit)
+
+    /** The recordings without a cover of their own (made before 1.14), newest first: the start's drawing (v1.14 — M37). */
+    suspend fun recordingsWithoutCover(): List<Long> = pieces.withoutCover(ComposerNames.RECORDED_LIVE_KEY)
 
     /** Every playlist by name, with its size and total length. */
     fun playlists(): Flow<List<PlaylistSummary>> = playlists.summaries()

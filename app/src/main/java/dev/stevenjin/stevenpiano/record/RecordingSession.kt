@@ -40,6 +40,9 @@ sealed interface RecordingState {
     /** The take held no note: nothing was saved ("Nothing was played." for a moment). */
     data object Empty : RecordingState
 
+    /** Keep was answered: "Kept in Recordings." for a moment (v1.14 — M37). */
+    data object Kept : RecordingState
+
     /** The library would not take it (its file stays for the next start). */
     data object Failed : RecordingState
 }
@@ -48,7 +51,7 @@ sealed interface RecordingState {
  * The take running, from the Record control to the sheet (v1.11 — M29): [start] begins one on the [recorder];
  * once a second it looks whether the take should end by itself ([Recorder.due]: an hour, 200,000 events, five
  * minutes of silence); [stop] (the control, the app leaving the foreground) ends it and saves it off the main
- * thread through [pieces], then says what came of it ([state]); [answered] puts the sheet away. Main thread.
+ * thread through [pieces], then says what came of it ([state]); [answered] puts the sheet away, [kept] after Keep. Main thread.
  */
 class RecordingSession(
     private val recorder: Recorder,
@@ -108,9 +111,19 @@ class RecordingSession(
         }
     }
 
-    /** The sheet was answered (Keep, Discard, Listen, Done) or put away: back to no take. */
+    /** The sheet was answered (Discard, Listen, Done) or put away: back to no take. */
     fun answered() {
         if (_state.value !is RecordingState.Recording && _state.value != RecordingState.Saving) _state.value = RecordingState.Idle
+    }
+
+    /** The sheet was answered Keep (v1.14 — M37): "Kept in Recordings." for a moment, then no take. */
+    fun kept() {
+        if (_state.value is RecordingState.Recording || _state.value == RecordingState.Saving) return
+        _state.value = RecordingState.Kept
+        scope.launch {
+            delay(KEPT_SHOWN_MS)
+            if (_state.value == RecordingState.Kept) _state.value = RecordingState.Idle
+        }
     }
 
     /** At start: takes a crash left behind go into the library. */
@@ -121,6 +134,19 @@ class RecordingSession(
             throw e
         } catch (e: Exception) {
             log("Recording: takes left by a crash couldn't be read (${e.javaClass.simpleName})")
+        }
+    }
+
+    /** At start, after [recoverPending] (v1.14 — M37): a cover for each recording made before covers were drawn. */
+    suspend fun drawMissingCovers() {
+        withContext(io) {
+            try {
+                pieces.drawMissingCovers()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("Recording: the older recordings' covers couldn't be drawn (${e.javaClass.simpleName})")
+            }
         }
     }
 
@@ -139,6 +165,9 @@ class RecordingSession(
 
         /** How long "Nothing was played." shows. */
         const val EMPTY_SHOWN_MS = 3_000L
+
+        /** How long "Kept in Recordings." shows. */
+        const val KEPT_SHOWN_MS = 4_000L
 
         /** "0:42", "12:05", "1:00:00": a take's length in whole seconds, tabular. */
         fun clock(nanos: Long): String {

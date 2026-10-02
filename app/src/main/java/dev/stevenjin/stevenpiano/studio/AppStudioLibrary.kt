@@ -26,15 +26,16 @@ import java.security.MessageDigest
 /**
  * [StudioLibrary] over the app: a new piece goes in through the importer's own path
  * ([dev.stevenjin.stevenpiano.data.imports.Importer.importOpened]: its caps, its parse, its lock), with
- * an INDEX.csv row that names its title and composer exactly; its sheet's line is an artwork row with no
- * source; Discard lets the player go of it (silenced first when it plays it), then deletes it and its
- * artwork, as the Library's Delete does.
+ * an INDEX.csv row that names its title and composer exactly, quietly (v1.14 — M37: only Studio's pieces and the
+ * tablet's recordings come this way, and what the tablet makes itself raises no import bar); its sheet's line is
+ * an artwork row with no source; Discard lets the player go of it (silenced first when it plays it), then deletes
+ * it and its artwork, as the Library's Delete does.
  */
 class AppStudioLibrary(private val graph: AppGraph) : StudioLibrary {
     override suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long? {
         val index = IndexCsv.parse("collection,composer,title,size_kb,path\n,${csv(composer)},${csv(title)},,${csv(fileName)}\n")
         val source = OpenedSource(listOf(ImportItem(fileName, fileName) { bytes.inputStream() }), index, "")
-        val result = graph.importer.importOpened(source)
+        val result = graph.importer.importOpened(source, quiet = true)
         if (result.imported != 1) return null
         val sha = VerifiedDownloader.hex(MessageDigest.getInstance("SHA-256").digest(bytes))
         return graph.library.findBySha(sha)?.id

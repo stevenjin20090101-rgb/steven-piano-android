@@ -219,7 +219,7 @@ class ArtworkRepository(
         }
     }
 
-    /** The pieces with a cover of their own (Studio's), by id, with when it was drawn: the web panel's art kind and version. */
+    /** The pieces with a cover of their own (Studio's and the recordings'), by id, with when it was drawn: the web panel's art kind and version. */
     suspend fun pieceCovers(): Map<Long, Long> = readOr(emptyMap()) {
         rows.filterNotNull().first().values.asSequence()
             .filter { it.imagePath != null && it.key.startsWith(PIECE_PREFIX) }
@@ -267,9 +267,6 @@ class ArtworkRepository(
 
     /** [mosaicPieces], only if already known. */
     fun peekMosaic(composerKey: String): List<Long>? = mosaics[composerKey]
-
-    /** The composer of a playlist's first piece, for its cover when it has no photo. */
-    fun firstComposerKey(playlistId: Long): Flow<String?> = library.firstComposerKey(playlistId)
 
     /** A playlist or a piece is gone: its artwork row goes, and its file with it (and a piece's roll card). */
     fun forget(key: String) {
