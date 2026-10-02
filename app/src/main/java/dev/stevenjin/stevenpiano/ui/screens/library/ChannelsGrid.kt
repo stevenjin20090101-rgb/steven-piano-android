@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +31,10 @@ import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.easedIn
+import dev.stevenjin.stevenpiano.ui.components.ListEntrance
+import dev.stevenjin.stevenpiano.ui.components.placement
+import dev.stevenjin.stevenpiano.ui.components.rememberEntrance
 
 /**
  * Every channel (See all, DESIGN.md › v1.5 — M17): a page of the Library as a playlist's is, with
@@ -58,7 +62,10 @@ fun ChannelsHeader(count: Int, onBack: () -> Unit) {
     }
 }
 
-/** The channels' grid, as rows of [columns] cards in the Library's list. */
+/**
+ * The channels' grid, as rows of [columns] cards in the Library's list; its first rows ease in with the listing's
+ * [entrance] and rows find their places on the settle spring (v1.14 — motion; cuts when [reduced]).
+ */
 fun LazyListScope.channelsGrid(
     channels: List<ChannelSummary>,
     columns: Int,
@@ -67,9 +74,12 @@ fun LazyListScope.channelsGrid(
     onPlay: (String) -> Unit,
     onSetVolume: (String) -> Unit,
     onSchedule: (String) -> Unit,
+    entrance: ListEntrance,
+    reduced: Boolean,
 ) {
-    items(channels.chunked(columns), key = { row -> "channels-${row.first().key}" }) { row ->
-        TileRow(columns, row.size) {
+    itemsIndexed(channels.chunked(columns), key = { _, row -> "channels-${row.first().key}" }) { index, row ->
+        val eased = rememberEntrance(entrance, "channels-${row.first().key}", index)
+        TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise)) {
             row.forEach { channel ->
                 ChannelCard(
                     channel,

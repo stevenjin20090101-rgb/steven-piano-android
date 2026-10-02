@@ -10,8 +10,10 @@
 package dev.stevenjin.stevenpiano.ui.components
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -123,17 +125,19 @@ fun FloatingPlayLayer(slot: FloatingPlaySlot, shown: Boolean) {
 /**
  * The circle: filled in the content colour, the play glyph in the surface colour (the pair reads
  * 17:1 and 16:1), with glass or without (DESIGN.md › v1.9: the primary action is never glass).
- * Pressing it gives the play tick.
+ * Pressing it gives the play tick, and it scales to 0.97 while pressed (v1.14 — motion).
  */
 @Composable
 fun FloatingPlayButton(onPlay: () -> Unit, modifier: Modifier = Modifier) {
     val view = LocalView.current
+    val press = remember { MutableInteractionSource() }
     Box(
         modifier
             .size(FloatingPlaySize)
+            .pressScale(press)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.onSurface)
-            .clickable(role = Role.Button) {
+            .clickable(interactionSource = press, indication = LocalIndication.current, role = Role.Button) {
                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                 onPlay()
             }

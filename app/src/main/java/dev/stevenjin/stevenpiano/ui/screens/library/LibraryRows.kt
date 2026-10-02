@@ -9,7 +9,9 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +48,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
+import dev.stevenjin.stevenpiano.ui.components.pressScale
 
 /**
  * A piece: its composer's 40 dp portrait (else the mosaic of their roll cards, else a monogram),
@@ -154,9 +157,9 @@ fun composerName(composer: ComposerGroup): String = composer.name.ifBlank { "Unk
 
 /** One row of a grid of [columns] tiles with 8 dp gutters; a short last row keeps the tiles' width. */
 @Composable
-fun TileRow(columns: Int, count: Int, content: @Composable RowScope.() -> Unit) {
+fun TileRow(columns: Int, count: Int, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -166,7 +169,10 @@ fun TileRow(columns: Int, count: Int, content: @Composable RowScope.() -> Unit) 
     }
 }
 
-/** A tile: square [art], the name in Body, the count as an eyebrow. [menu] is its long-press menu. */
+/**
+ * A tile: square [art], the name in Body, the count as an eyebrow. [menu] is its long-press menu. Pressed, the
+ * tile scales to 0.97 ([pressScale], v1.14 — motion).
+ */
 @Composable
 private fun Tile(
     name: String,
@@ -177,11 +183,15 @@ private fun Tile(
     modifier: Modifier,
     menu: @Composable () -> Unit,
 ) {
+    val press = remember { MutableInteractionSource() }
     Box(modifier) {
         Column(
             Modifier
                 .fillMaxWidth()
+                .pressScale(press)
                 .combinedClickable(
+                    interactionSource = press,
+                    indication = LocalIndication.current,
                     onClickLabel = "Open",
                     onLongClickLabel = "Show options",
                     onLongClick = onLongPress,

@@ -50,7 +50,7 @@ fun PlaybackPage(settings: PianoSettings, vm: PianoViewModel) {
     }
     Anchored(PageRows.DEFAULT_TEMPO.anchor) {
         StepperRow(PageRows.DEFAULT_TEMPO.label, note = SettingNotes.DEFAULT_TEMPO) {
-            StepperControl(settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo)
+            StepperControl(settings.defaultTempoPct, PlaybackLimits.TempoPct, 5, Format::percent, "Slower default tempo", "Faster default tempo", vm::setDefaultTempo, rolling = true)
         }
     }
     Anchored(PageRows.TRANSPOSE.anchor) {

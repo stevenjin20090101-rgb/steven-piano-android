@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,7 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 /**
  * A compact "−  100%  +" stepper over [range] in steps of [step]. The value is set in tabular
  * figures at a fixed minimum width, so nothing shifts as it changes; each end disables its button.
+ * With [rolling] (the tempo, v1.14 — motion) its digits roll as they change ([RollingText]).
  */
 @Composable
 fun StepperControl(
@@ -35,18 +37,29 @@ fun StepperControl(
     increaseLabel: String,
     onChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    rolling: Boolean = false,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         GlyphButton(R.drawable.ic_remove, decreaseLabel, enabled = value > range.first) {
             onChange((value - step).coerceIn(range))
         }
-        Text(
-            format(value),
-            modifier = Modifier.widthIn(min = 56.dp),
-            style = MaterialTheme.typography.labelLarge.merge(Tabular),
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-        )
+        if (rolling) {
+            RollingText(
+                format(value),
+                Modifier.widthIn(min = 56.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                arrangement = Arrangement.Center,
+            )
+        } else {
+            Text(
+                format(value),
+                modifier = Modifier.widthIn(min = 56.dp),
+                style = MaterialTheme.typography.labelLarge.merge(Tabular),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+            )
+        }
         GlyphButton(R.drawable.ic_add, increaseLabel, enabled = value < range.last) {
             onChange((value + step).coerceIn(range))
         }

@@ -12,7 +12,6 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,6 +22,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
+import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
@@ -83,7 +83,7 @@ fun UpdateRow(state: UpdateState, canInstall: Boolean, onUpdate: () -> Unit, onR
                 ProgressHairline(if (state.total > 0) state.bytes.toFloat() / state.total else null, Modifier.padding(top = 8.dp))
             }
             is UpdateState.Installing -> ProgressHairline(null, Modifier.padding(top = 12.dp))
-            is UpdateState.Installed -> if (state.restartNeeded) Button(onClick = onRestart, modifier = Modifier.padding(top = 12.dp)) { Text("Restart") }
+            is UpdateState.Installed -> if (state.restartNeeded) FilledButton(onClick = onRestart, modifier = Modifier.padding(top = 12.dp)) { Text("Restart") }
             else -> {
                 if (!canInstall) {
                     Text(
@@ -94,7 +94,7 @@ fun UpdateRow(state: UpdateState, canInstall: Boolean, onUpdate: () -> Unit, onR
                     )
                     TextButton(onClick = onAllowInstalls) { Text("Open settings") }
                 }
-                Button(onClick = onUpdate, modifier = Modifier.padding(top = if (canInstall) 12.dp else 4.dp)) { Text("Update") }
+                FilledButton(onClick = onUpdate, modifier = Modifier.padding(top = if (canInstall) 12.dp else 4.dp)) { Text("Update") }
                 if (state is UpdateState.Failed) {
                     Text(
                         state.message,

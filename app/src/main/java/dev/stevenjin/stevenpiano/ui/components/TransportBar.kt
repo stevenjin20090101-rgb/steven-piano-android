@@ -11,11 +11,17 @@ package dev.stevenjin.stevenpiano.ui.components
 
 import android.view.HapticFeedbackConstants
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +63,7 @@ internal val TransportMinWidth = CONTROLS_WIDTH + MIN_GAP * 4 + SIDE_ROOM * 2
 
 /**
  * shuffle · previous · play/pause · next · repeat. Play/pause is the 72 dp circle in the content
- * colour with a surface glyph; its glyph crossfades over 320 ms (a cut when motion is reduced) and
+ * colour with a surface glyph; its glyph cross-fades with a small scale over 200 ms (v1.14; a cut when motion is reduced) and
  * it gives the app's one haptic, a light tick, on play and on pause. Shuffle and Repeat sit at the
  * two ends: the tertiary grey when off, the content colour with a 4 dp dot beneath when on; Repeat
  * cycles off, all, one (a small "1" in its glyph). The gaps shrink to fit a narrow phone. On glass
@@ -112,28 +119,36 @@ fun TransportBar(
 private fun ModeToggle(@DrawableRes glyph: Int, on: Boolean, description: String, switch: Boolean, onClick: () -> Unit) {
     val ink = MaterialTheme.colorScheme.onSurface
     val off = if (LocalOnGlass.current) MaterialTheme.colorScheme.onSurfaceVariant else LocalTertiary.current
+    val press = remember { MutableInteractionSource() }
+    val ripple = LocalIndication.current
     val action = if (switch) {
-        Modifier.toggleable(value = on, role = Role.Switch, onValueChange = { onClick() })
+        Modifier.toggleable(value = on, interactionSource = press, indication = ripple, role = Role.Switch, onValueChange = { onClick() })
     } else {
-        Modifier.clickable(role = Role.Button, onClick = onClick)
+        Modifier.clickable(interactionSource = press, indication = ripple, role = Role.Button, onClick = onClick)
     }
     Box(
         Modifier
             .size(48.dp)
+            .pressScale(press)
             .clip(CircleShape)
             .then(action)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(glyph), contentDescription = null, tint = if (on) ink else off, modifier = Modifier.size(24.dp))
-        if (on) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 4.dp)
-                    .size(4.dp)
-                    .background(ink, CircleShape),
-            )
+        // A change of mode (on, off; repeat all, repeat one) cross-fades over 200 ms (v1.14 — motion), a cut when reduced.
+        Crossfade(targetState = glyph to on, animationSpec = Motion.timed(Motion.StandardMs, rememberReducedMotion()), label = "mode") { (shown, lit) ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(painterResource(shown), contentDescription = null, tint = if (lit) ink else off, modifier = Modifier.size(24.dp))
+                if (lit) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 4.dp)
+                            .size(4.dp)
+                            .background(ink, CircleShape),
+                    )
+                }
+            }
         }
     }
 }
@@ -146,27 +161,39 @@ private fun PlayPauseButton(playing: Boolean, onClick: () -> Unit) {
         onClick()
     }
     val description = if (playing) "Pause" else "Play"
+    val touch = remember { MutableInteractionSource() }
     // The filled circle wherever it stands, on the glass band or solid (DESIGN.md › v1.9).
     Surface(
         onClick = press,
         modifier = Modifier
             .size(PLAY_SIZE)
+            .pressScale(touch)
             .semantics { contentDescription = description },
         shape = CircleShape,
         color = MaterialTheme.colorScheme.onSurface,
         contentColor = MaterialTheme.colorScheme.surface,
+        interactionSource = touch,
     ) {
         PlayPauseGlyph(playing, MaterialTheme.colorScheme.surface)
     }
 }
 
-/** The play or pause glyph, 32 dp, crossfading over 320 ms as it changes (a cut when motion is reduced). */
+/**
+ * The play or pause glyph, 32 dp: the new one fades in growing from 0.85 as the old fades out shrinking, over 200 ms
+ * (v1.14 — motion; a cut when motion is reduced).
+ */
 @Composable
 private fun PlayPauseGlyph(playing: Boolean, tint: androidx.compose.ui.graphics.Color) {
     val reduced = rememberReducedMotion()
-    Crossfade(
+    AnimatedContent(
         targetState = playing,
-        animationSpec = if (reduced) snap() else tween(Motion.RollStartMs, easing = Motion.EaseOut),
+        transitionSpec = {
+            Motion.change(
+                fadeIn(tween(Motion.StandardMs, easing = Motion.Enter)) + scaleIn(tween(Motion.StandardMs, easing = Motion.Enter), initialScale = GLYPH_FROM),
+                fadeOut(tween(Motion.StandardMs, easing = Motion.Leave)) + scaleOut(tween(Motion.StandardMs, easing = Motion.Leave), targetScale = GLYPH_FROM),
+                reduced,
+            ) using null
+        },
         label = "play-pause",
     ) { showPause ->
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -181,3 +208,6 @@ private fun PlayPauseGlyph(playing: Boolean, tint: androidx.compose.ui.graphics.
 }
 
 private val PLAY_SIZE = 72.dp
+
+/** How small the play and pause glyphs are as they change places. */
+private const val GLYPH_FROM = 0.85f

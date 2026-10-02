@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.library.PackState
 import dev.stevenjin.stevenpiano.ui.LibraryCopy
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 
 /**
@@ -88,7 +88,7 @@ fun LibraryLicenceSheet(offer: PackState.Offered?, onLoad: () -> Unit, onDismiss
             ) {
                 TextButton(onClick = onDismiss) { Text(LibraryCopy.NOT_NOW) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = onLoad) { Text(LibraryCopy.loadButton(offer)) }
+                FilledButton(onClick = onLoad) { Text(LibraryCopy.loadButton(offer)) }
             }
             Spacer(Modifier.height(24.dp))
         }

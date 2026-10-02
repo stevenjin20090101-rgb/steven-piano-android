@@ -305,7 +305,7 @@ private fun ColumnScope.PieceView(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Eyebrow("Tempo")
             Spacer(Modifier.width(4.dp))
-            StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo)
+            StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo, rolling = true)
             TabletSoundSpeaker()   // v1.8 — M25: the tablet's piano sound and its volume
         }
         ConnectionLine(connected, playing, onOpenPiano)

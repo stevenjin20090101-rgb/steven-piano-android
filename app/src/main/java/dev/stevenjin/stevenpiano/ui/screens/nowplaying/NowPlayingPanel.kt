@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.nowplaying
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -60,6 +63,7 @@ import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.easedIn
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
@@ -74,6 +78,8 @@ import dev.stevenjin.stevenpiano.ui.components.screenHeaderHeight
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
+import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
 /** The connection line's row at the panel's foot (declared before PANEL_FIXED, which counts it). */
 private val CONNECTION_ROW = 40.dp
@@ -205,7 +211,8 @@ private fun ColumnScope.PanelPiece(
                 ArtSize.Full,
                 Modifier
                     .align(Alignment.CenterHorizontally)
-                    .size(art),
+                    .size(art)
+                    .easedIn(rememberArtEntrance(piece.pieceId, playback), from = Motion.GrowFrom),
                 title = piece.title,
             )
             Spacer(Modifier.height(16.dp))
@@ -250,6 +257,21 @@ private fun ColumnScope.PanelPiece(
             // strip keeps the height that lets the transport float on its history.
         }
     }
+}
+
+/**
+ * The art of a piece just started from a library row or tile (v1.14 — motion, [PlaybackStarter.artEntrance]): its
+ * progress as it fades in and grows from 0.92 over 320 ms, decelerating, laid out at its size from the start
+ * ([easedIn]). Any other piece's art, and every art under reduced motion: null, simply there.
+ */
+@Composable
+private fun rememberArtEntrance(pieceId: Long, playback: PlaybackStarter): Animatable<Float, AnimationVector1D>? {
+    val reduced = rememberReducedMotion()
+    val grow = remember(pieceId) { if (!reduced && playback.artEntrance.take()) Animatable(0f) else null }
+    if (grow != null) {
+        LaunchedEffect(grow) { grow.animateTo(1f, Motion.timed(Motion.EmphasisedMs, reduced = false, easing = Motion.Enter)) }
+    }
+    return grow
 }
 
 /**

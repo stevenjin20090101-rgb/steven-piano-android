@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -22,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +56,7 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
@@ -300,10 +303,12 @@ private fun PresetsRow(enabled: Boolean, actions: PianoSettingsActions) {
 
 @Composable
 private fun PresetChip(preset: Preset, enabled: Boolean, onClick: () -> Unit) {
+    val press = remember { MutableInteractionSource() }
     SuggestionChip(
         onClick = onClick,
         label = { Text(preset.label) },
-        modifier = Modifier.semantics { contentDescription = "Apply the ${preset.label} preset" },
+        modifier = Modifier.pressScale(press).semantics { contentDescription = "Apply the ${preset.label} preset" },
+        interactionSource = press,
         enabled = enabled,
         colors = SuggestionChipDefaults.suggestionChipColors(disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant),
         border = SuggestionChipDefaults.suggestionChipBorder(enabled, borderColor = LocalTertiary.current, disabledBorderColor = LocalHairline.current),

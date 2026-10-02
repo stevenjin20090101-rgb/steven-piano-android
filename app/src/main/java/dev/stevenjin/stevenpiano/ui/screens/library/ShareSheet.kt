@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.GlassSheet
 import dev.stevenjin.stevenpiano.ui.ImportCopy
 
@@ -59,7 +59,7 @@ fun ShareSheet(count: Int, onAdd: () -> Unit, onCancel: () -> Unit) {
             ) {
                 TextButton(onClick = onCancel) { Text("Cancel") }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = onAdd) { Text("Add") }
+                FilledButton(onClick = onAdd) { Text("Add") }
             }
             Spacer(Modifier.height(24.dp))
         }

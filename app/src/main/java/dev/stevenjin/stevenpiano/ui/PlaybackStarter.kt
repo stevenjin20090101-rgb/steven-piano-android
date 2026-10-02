@@ -13,6 +13,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -37,6 +38,9 @@ class PlaybackStarter(
     private val channels: ChannelPlayer,
     private val askForNotifications: () -> Unit,
 ) {
+    /** A piece started from a library row or tile (v1.14 — motion): the now-playing art grows in when it shows it. */
+    val artEntrance = ArtEntrance()
+
     fun play(pieceId: Long, queue: List<Long>) {
         player.play(pieceId, queue)
         started()
@@ -101,6 +105,30 @@ class PlaybackStarter(
         fun markAsked() {
             askedForNotifications = true
         }
+    }
+}
+
+/**
+ * The now-playing art's entrance (DESIGN.md › v1.14 — motion): [ask]ed for when a piece starts from a library row or
+ * a tile, [take]n by the art the first time it shows a new piece, if that is within [WINDOW_MS] of the ask (the piece
+ * loading). A piece that follows by itself, Next, or a piece started anywhere else just appears.
+ */
+class ArtEntrance(private val now: () -> Long = SystemClock::uptimeMillis) {
+    private var askedAt: Long? = null
+
+    fun ask() {
+        askedAt = now()
+    }
+
+    /** Whether the art showing a new piece grows in; the ask is spent either way. */
+    fun take(): Boolean {
+        val asked = askedAt ?: return false
+        askedAt = null
+        return now() - asked <= WINDOW_MS
+    }
+
+    companion object {
+        const val WINDOW_MS = 3_000L
     }
 }
 

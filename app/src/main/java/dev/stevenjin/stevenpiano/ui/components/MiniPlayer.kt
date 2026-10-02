@@ -85,6 +85,7 @@ fun MiniPlayer(
             if (playing) R.drawable.ic_pause else R.drawable.ic_play,
             if (playing) "Pause" else "Play",
             enabled = piece != null,
+            crossfade = true,
             onClick = onPlayPause,
         )
         GlyphButton(R.drawable.ic_skip_next, "Next", enabled = state.queue.hasNext, onClick = onNext)

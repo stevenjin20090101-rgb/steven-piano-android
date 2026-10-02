@@ -22,6 +22,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -50,6 +51,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -299,11 +301,13 @@ fun ChoiceRow(
         ) {
             options.forEachIndexed { index, option ->
                 val chosen = index == selected
+                val press = remember { MutableInteractionSource() }
                 FilterChip(
                     selected = chosen,
                     onClick = { onSelect(index) },
                     label = { Text(option) },
-                    modifier = Modifier.semantics { contentDescription = "$label, $option" },
+                    modifier = Modifier.pressScale(press).semantics { contentDescription = "$label, $option" },
+                    interactionSource = press,
                     enabled = enabled,
                     leadingIcon = if (chosen) {
                         { Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }

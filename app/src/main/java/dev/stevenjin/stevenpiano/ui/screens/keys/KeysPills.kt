@@ -9,10 +9,13 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.keys
 
+import android.view.HapticFeedbackConstants
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -33,8 +36,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -45,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
+import dev.stevenjin.stevenpiano.ui.components.RollingText
+import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.theme.LocalDisabledGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
@@ -113,8 +120,9 @@ fun KeysPills(
 @Composable
 private fun LiveButton(pill: LivePill) {
     val ink = MaterialTheme.colorScheme.onSurface
+    val press = remember { MutableInteractionSource() }
     GlassSurface(
-        Modifier,
+        Modifier.pressScale(press),
         shape = CircleShape,
         blur = false,
         outline = when {
@@ -126,7 +134,14 @@ private fun LiveButton(pill: LivePill) {
         Box(
             Modifier
                 .heightIn(min = PillHeight)
-                .toggleable(value = pill.on && pill.enabled, enabled = pill.enabled, role = Role.Switch, onValueChange = pill.onToggle)
+                .toggleable(
+                    value = pill.on && pill.enabled,
+                    interactionSource = press,
+                    indication = LocalIndication.current,
+                    enabled = pill.enabled,
+                    role = Role.Switch,
+                    onValueChange = pill.onToggle,
+                )
                 .semantics { contentDescription = InstrumentCopy.LIVE }
                 .padding(horizontal = 20.dp),
             contentAlignment = Alignment.Center,
@@ -143,15 +158,18 @@ private fun LiveButton(pill: LivePill) {
 
 /**
  * Record (v1.11 — M29): a glass pill in the content colour, never red (red means sent to the piano): a filled
- * circle and "Record"; while a take runs, a filled square and its [elapsed] time in tabular digits ("0:42").
+ * circle and "Record"; while a take runs, a filled square and its [elapsed] time in tabular digits ("0:42"), each
+ * digit rolling as it changes (v1.14 — motion). Starting and stopping a take gives the light tick play gives.
  * TalkBack reads "Record" with its state ("Recording" or "Off"), never the ticking time: the sheet after Stop
  * says how long the take was.
  */
 @Composable
 fun RecordButton(recording: Boolean, elapsed: String, enabled: Boolean, onToggle: (Boolean) -> Unit) {
     val ink = if (enabled) MaterialTheme.colorScheme.onSurface else LocalDisabledGlyph.current
+    val view = LocalView.current
+    val press = remember { MutableInteractionSource() }
     GlassSurface(
-        Modifier,
+        Modifier.pressScale(press),
         shape = CircleShape,
         blur = false,
         outline = when {
@@ -163,7 +181,10 @@ fun RecordButton(recording: Boolean, elapsed: String, enabled: Boolean, onToggle
         Row(
             Modifier
                 .heightIn(min = PillHeight)
-                .toggleable(value = recording, enabled = enabled, role = Role.Switch, onValueChange = onToggle)
+                .toggleable(value = recording, interactionSource = press, indication = LocalIndication.current, enabled = enabled, role = Role.Switch) { on ->
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    onToggle(on)
+                }
                 .semantics {
                     contentDescription = InstrumentCopy.RECORD
                     stateDescription = if (recording) InstrumentCopy.RECORDING_ON else InstrumentCopy.RECORDING_OFF
@@ -177,12 +198,11 @@ fun RecordButton(recording: Boolean, elapsed: String, enabled: Boolean, onToggle
                     .background(ink, if (recording) RoundedCornerShape(2.dp) else CircleShape),
             )
             Spacer(Modifier.width(8.dp))
-            Text(
-                if (recording) elapsed else InstrumentCopy.RECORD,
-                modifier = Modifier.clearAndSetSemantics { },
-                style = MaterialTheme.typography.labelLarge.merge(Tabular),
-                color = ink,
-            )
+            if (recording) {
+                RollingText(elapsed, Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelLarge, color = ink)
+            } else {
+                Text(InstrumentCopy.RECORD, modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelLarge.merge(Tabular), color = ink)
+            }
         }
     }
 }
@@ -193,11 +213,13 @@ private val RecordGlyph = 12.dp
 /**
  * An octave button: a 48 dp glass circle, its glyph in the content colour and its ring in the action
  * outline's grey; disabled, the disabled glyph and the hairline. Glass without a blur, as the pedal.
+ * Like Live and Record it scales to 0.97 while pressed (v1.14 — motion); the pedal's button is left as it is.
  */
 @Composable
 private fun OctavePill(@DrawableRes glyph: Int, description: String, enabled: Boolean, onClick: () -> Unit) {
+    val press = remember { MutableInteractionSource() }
     GlassSurface(
-        Modifier.size(PillHeight),
+        Modifier.size(PillHeight).pressScale(press),
         shape = CircleShape,
         blur = false,
         outline = if (enabled) LocalTertiary.current else LocalHairline.current,
@@ -205,7 +227,7 @@ private fun OctavePill(@DrawableRes glyph: Int, description: String, enabled: Bo
         Box(
             Modifier
                 .fillMaxSize()
-                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                .clickable(interactionSource = press, indication = LocalIndication.current, enabled = enabled, role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = description },
             contentAlignment = Alignment.Center,
         ) {

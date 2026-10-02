@@ -37,9 +37,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
@@ -103,15 +103,19 @@ import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.DragHandle
+import dev.stevenjin.stevenpiano.ui.components.easedIn
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayRequest
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
+import dev.stevenjin.stevenpiano.ui.components.ListEntrance
 import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.CrashBanner
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
+import dev.stevenjin.stevenpiano.ui.components.placement
+import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.actionButtonColors
 import dev.stevenjin.stevenpiano.ui.components.moved
@@ -119,6 +123,7 @@ import dev.stevenjin.stevenpiano.ui.components.readingPadding
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
 import dev.stevenjin.stevenpiano.ui.components.rememberDragReorderState
+import dev.stevenjin.stevenpiano.ui.components.rememberEntrance
 import dev.stevenjin.stevenpiano.ui.components.scrollEdges
 import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
@@ -134,6 +139,7 @@ import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -416,22 +422,30 @@ private const val LIST_SHARE = 0.55f
 /** Where the library pack's offer shows (the `+` sheet, the empty Library), its manifest is asked for again when older than this. */
 private const val LIBRARY_CHECK_AGE_MS = 10 * 60_000L
 
-/** Playing from the library: the playback service starts, and Now playing is shown ([onPlaying]; not on wide frames, whose panel shows the piece). */
+/**
+ * Playing from the library: the playback service starts, and Now playing is shown ([onPlaying]; not on wide frames,
+ * whose panel shows the piece, its art growing in: v1.14 — motion).
+ */
 private class LibraryPlay(private val playback: PlaybackStarter, private val onPlaying: () -> Unit) {
     fun piece(pieceId: Long, queue: List<Long>) {
         playback.play(pieceId, queue)
-        onPlaying()
+        started()
     }
 
     fun all(pieceIds: List<Long>, shuffle: Boolean) {
         if (pieceIds.isEmpty()) return
         playback.playAll(pieceIds, shuffle)
-        onPlaying()
+        started()
     }
 
     /** A channel's card: endless play from its pool (nothing when the pool is too small). */
     fun channel(key: String) {
-        if (playback.playChannel(key)) onPlaying()
+        if (playback.playChannel(key)) started()
+    }
+
+    private fun started() {
+        playback.artEntrance.ask()
+        onPlaying()
     }
 }
 
@@ -468,6 +482,10 @@ private fun LibraryItems(
     val listing = state.listing
     val group = state.group
     val playlistId = (group as? Group.Playlist)?.id
+    // The listing's entrance (v1.14 — motion): a new one for each visit to a listing (a category, a playlist, a
+    // composer, the channels); its first ten rows ease in once. Rows find their places on the settle spring.
+    val reduced = rememberReducedMotion()
+    val entrance = remember(playlistId ?: (group as? Group.Composer)?.key ?: group ?: state.category) { ListEntrance() }
     val pieces = (listing as? Listing.Pieces)?.pieces.orEmpty()
     // A built-in playlist's order and pieces are the app's: no handles, no Move or Remove in its rows.
     val builtIn = (listing as? Listing.Pieces)?.playlist?.builtIn == true
@@ -558,7 +576,8 @@ private fun LibraryItems(
                     piece,
                     rowActions,
                     onPlay = { play.piece(piece.id, shown.map { it.id }) },
-                    modifier = if (reorderable) Modifier.reorderable(drag, key, this) else Modifier,
+                    modifier = (if (reorderable) Modifier.reorderable(drag, key, this) else Modifier.placement(this, reduced))
+                        .easedIn(rememberEntrance(entrance, key, index), rise = ListEntrance.Rise),
                     place = if (reorderable) place else null,
                     trailing = if (reorderable) {
                         {
@@ -594,8 +613,9 @@ private fun LibraryItems(
                 } else {
                     item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 }
-                items(listing.playlists.chunked(columns), key = { row -> "tiles-pl-${row.first().id}" }) { row ->
-                    TileRow(columns, row.size) {
+                itemsIndexed(listing.playlists.chunked(columns), key = { _, row -> "tiles-pl-${row.first().id}" }) { index, row ->
+                    val eased = rememberEntrance(entrance, "tiles-pl-${row.first().id}", index)
+                    TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise)) {
                         row.forEach { playlist ->
                             PlaylistTile(
                                 playlist,
@@ -608,11 +628,12 @@ private fun LibraryItems(
                     }
                 }
             }
-            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, onSchedule)
+            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, onSchedule, entrance, reduced)
             is Listing.Composers -> {
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
-                items(listing.composers.chunked(columns), key = { row -> "tiles-k-${row.first().composerKey}" }) { row ->
-                    TileRow(columns, row.size) {
+                itemsIndexed(listing.composers.chunked(columns), key = { _, row -> "tiles-k-${row.first().composerKey}" }) { index, row ->
+                    val eased = rememberEntrance(entrance, "tiles-k-${row.first().composerKey}", index)
+                    TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise)) {
                         row.forEach { composer ->
                             ComposerTile(
                                 composer,
@@ -663,10 +684,13 @@ private fun CategoryChips(selected: Category, onSelect: (Category) -> Unit) {
     ) {
         Category.entries.forEach { category ->
             val isSelected = category == selected
+            val press = remember { MutableInteractionSource() }
             FilterChip(
                 selected = isSelected,
                 onClick = { onSelect(category) },
                 label = { Text(category.label) },
+                modifier = Modifier.pressScale(press),
+                interactionSource = press,
                 leadingIcon = if (isSelected) {
                     { Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else {

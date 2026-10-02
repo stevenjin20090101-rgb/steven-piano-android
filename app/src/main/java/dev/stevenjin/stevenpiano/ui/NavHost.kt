@@ -15,8 +15,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -132,7 +130,7 @@ import kotlin.math.min
 /**
  * The app's frame: five destinations (Library, Now playing, Keys, Studio, Piano; Studio since v1.12 — M30) in a bottom navigation
  * bar on compact widths, or a navigation rail on the left on medium and expanded ones ([frame]),
- * with a 240 ms fade-through between them, or a cut when motion is reduced. The bar and the rail
+ * with a fade-through between them (out 120 ms, in 200 ms), or a cut when motion is reduced. The bar and the rail
  * are glass (DESIGN.md › v1.5 — M16, v1.9): the content fills the window and draws beneath them, the
  * status bar included (each pane's glass header reaches up under it), recorded as the glass's source
  * ([hazeSource], which [content] is: the sheets, menus and dialogs blur it too), and each screen keeps
@@ -389,7 +387,7 @@ private enum class FrameSlot { Rail, Content }
  * Compact widths: the glass along the bottom, holding the tab bar and above it, on phones, the mini
  * player whenever a piece is loaded or loading (not on Now playing itself, which is the full
  * player), a hairline between them, or while a piece loads the moving hairline. The mini player
- * grows in from the bar and gives way into it over 240 ms (a cut when motion is reduced); the
+ * grows in from the bar and gives way into it over 200 ms (a cut when motion is reduced); the
  * floating padding follows it.
  */
 @Composable
@@ -417,7 +415,7 @@ private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: Playb
     }
 }
 
-/** The mini player coming and going: its height and its opacity together, 240 ms, standard easing. */
+/** The mini player coming and going: its height and its opacity together, 200 ms, standard easing. */
 private object MiniPlayerMotion {
     val enter = expandVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeIn(tween(Motion.StandardMs, easing = Motion.Standard))
     val exit = shrinkVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeOut(tween(Motion.StandardMs, easing = Motion.Standard))
@@ -599,7 +597,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.popsPage(frame: Ap
 
 /**
  * Phones, inside the Piano tab: a page slides in from the end edge over the hub, which gives way by
- * a quarter of its width; back reverses it. 240 ms, standard easing; a cut when motion is reduced.
+ * a quarter of its width; back reverses it. 200 ms, standard easing; a cut when motion is reduced.
  */
 private object PagePush {
     private const val GIVE_WAY = 4
@@ -618,13 +616,15 @@ private object PagePush {
         scope.slideOutOfContainer(SlideDirection.End, spec)
 }
 
-/** Material fade-through in 240 ms: the old tab fades out, then the new one fades and scales in. */
+/**
+ * The fade-through between tabs (DESIGN.md › v1.14 — motion): the old tab fades out in 120 ms, accelerating, then
+ * the new one fades and grows in from 0.92 in 200 ms, decelerating.
+ */
 private object FadeThrough {
-    private const val OUT_MS = Motion.StandardMs * 35 / 100
-    private const val IN_MS = Motion.StandardMs - OUT_MS
-    private const val SCALE_FROM = 0.92f
+    private const val OUT_MS = Motion.QuickMs
+    private const val IN_MS = Motion.StandardMs
 
-    val enter = fadeIn(tween(IN_MS, delayMillis = OUT_MS, easing = LinearOutSlowInEasing)) +
-        scaleIn(tween(IN_MS, delayMillis = OUT_MS, easing = LinearOutSlowInEasing), initialScale = SCALE_FROM)
-    val exit = fadeOut(tween(OUT_MS, easing = FastOutLinearInEasing))
+    val enter = fadeIn(tween(IN_MS, delayMillis = OUT_MS, easing = Motion.Enter)) +
+        scaleIn(tween(IN_MS, delayMillis = OUT_MS, easing = Motion.Enter), initialScale = Motion.GrowFrom)
+    val exit = fadeOut(tween(OUT_MS, easing = Motion.Leave))
 }

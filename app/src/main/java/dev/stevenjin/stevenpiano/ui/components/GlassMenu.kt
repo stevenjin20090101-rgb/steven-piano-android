@@ -10,9 +10,9 @@
 package dev.stevenjin.stevenpiano.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,12 +34,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
@@ -80,7 +86,9 @@ fun GlassMenuContainer(
 
 /**
  * A row's or a tile's menu (Material's dropdown menu, its placement and its items) on the menus'
- * glass ([GlassMenuContainer]'s material); its shadow as before.
+ * glass ([GlassMenuContainer]'s material); its shadow as before. Its motion is Material's own: it
+ * grows from the anchor's corner with a fade, and goes quicker (v1.14 — motion: Material gives no
+ * way to set it, so 160 ms from 0.92 is the popover's alone).
  */
 @Composable
 fun GlassDropdownMenu(
@@ -189,8 +197,9 @@ fun GlassDialogSurface(modifier: Modifier = Modifier, content: @Composable BoxSc
  * width). Its end is at the anchor's end; [alignment] [Alignment.Start] puts its start at the anchor's
  * start instead, for a control at the start of a pane, so the popover opens within the pane rather
  * than across its edge (both mirror in right to left). Outside taps and Back close it
- * ([onDismissRequest]). It fades in and out over 120 ms, a cut when motion is reduced. For a control's
- * small settings, such as a volume, in the place it is used.
+ * ([onDismissRequest]). It grows from its anchor's corner, 0.92 to full with a fade over 160 ms, and
+ * goes in 120 ms (v1.14 — motion), a cut when motion is reduced. For a control's small settings, such
+ * as a volume, in the place it is used.
  */
 @Composable
 fun GlassPopover(
@@ -207,29 +216,61 @@ fun GlassPopover(
     val reduced = rememberReducedMotion()
     val density = LocalDensity.current
     val provider = remember(alignment, offset, density) { PopoverPosition(alignment, offset, density) }
+    val direction = LocalLayoutDirection.current
     Popup(popupPositionProvider = provider, onDismissRequest = onDismissRequest, properties = PopupProperties(focusable = true)) {
         AnimatedVisibility(
             visibleState = state,
-            enter = if (reduced) EnterTransition.None else fadeIn(tween(Motion.FastMs)),
-            exit = if (reduced) ExitTransition.None else fadeOut(tween(Motion.FastMs)),
+            enter = Motion.enter(fadeIn(tween(Motion.PopMs, easing = Motion.Enter)), reduced),
+            exit = Motion.exit(fadeOut(tween(Motion.QuickMs, easing = Motion.Leave)), reduced),
         ) {
-            GlassMenuContainer(modifier) {
+            val grow = transition.animateFloat(
+                transitionSpec = {
+                    if (targetState == EnterExitState.Visible) {
+                        Motion.timed(Motion.PopMs, reduced, Motion.Enter)
+                    } else {
+                        Motion.timed(Motion.QuickMs, reduced, Motion.Leave)
+                    }
+                },
+                label = "grow",
+            ) { shown -> if (shown == EnterExitState.Visible) 1f else Motion.GrowFrom }
+            GlassMenuContainer(
+                modifier.graphicsLayer {
+                    scaleX = grow.value
+                    scaleY = grow.value
+                    transformOrigin = provider.anchorCorner(direction)
+                },
+            ) {
                 Column(Modifier.padding(16.dp), content = content)
             }
         }
     }
 }
 
-/** [GlassPopover]'s place, in the window's pixels: [popoverPosition] with its offset and margin in pixels. */
+/**
+ * [GlassPopover]'s place, in the window's pixels: [popoverPosition] with its offset and margin in pixels; and the
+ * corner it grows from, the one beside its anchor ([anchorCorner]): its top below the anchor, its bottom above it,
+ * on the side its [alignment] lines up with the anchor.
+ */
 private class PopoverPosition(
     private val alignment: Alignment.Horizontal,
     private val offset: DpOffset,
     private val density: Density,
 ) : PopupPositionProvider {
+    /** Whether the popover went above its anchor (no room below), as last placed. */
+    private var above by mutableStateOf(false)
+
     override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
         val margin = with(density) { WINDOW_MARGIN.roundToPx() }
         val shift = with(density) { IntOffset(offset.x.roundToPx(), offset.y.roundToPx()) }
-        return popoverPosition(anchorBounds, windowSize, popupContentSize, layoutDirection, alignment, shift, margin)
+        val place = popoverPosition(anchorBounds, windowSize, popupContentSize, layoutDirection, alignment, shift, margin)
+        above = place.y < anchorBounds.top
+        return place
+    }
+
+    fun anchorCorner(direction: LayoutDirection): TransformOrigin {
+        val atStart = alignment == Alignment.Start
+        val left = if (direction == LayoutDirection.Ltr) atStart else !atStart
+        return TransformOrigin(if (left) 0f else 1f, if (above) 1f else 0f)
     }
 }
 

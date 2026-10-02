@@ -10,7 +10,9 @@
 package dev.stevenjin.stevenpiano.ui.screens.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +51,7 @@ import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.Mosaic
 import dev.stevenjin.stevenpiano.ui.components.MonogramTile
+import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 
@@ -84,11 +87,15 @@ fun ChannelCard(
 ) {
     var menu by remember { mutableStateOf(false) }
     val meta = ChannelCopy.cardMeta(summary, playing)
+    val press = remember { MutableInteractionSource() }
     Box(modifier) {
         Box(
             Modifier
                 .fillMaxWidth()
+                .pressScale(press)   // a tile: 0.97 while pressed (v1.14 — motion)
                 .combinedClickable(
+                    interactionSource = press,
+                    indication = LocalIndication.current,
                     onClickLabel = if (summary.playable) "Play ${summary.name}" else null,
                     onLongClickLabel = "Show options",
                     onLongClick = { menu = true },

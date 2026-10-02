@@ -9,6 +9,11 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -33,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -87,10 +93,15 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SchedulePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.TabletSoundPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.UpdatesPage
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import dev.stevenjin.stevenpiano.web.WebStatus
 
 /** The hub's column beside the open page on wide screens. */
 private val HubWidth = 360.dp
+
+/** How far a page beside the hub rises as it comes in. */
+private val PAGE_RISE = 8.dp
 
 /**
  * The Piano tab's hub (DESIGN.md › v1.5, reorganised in v1.13 — M31b): the header and byline, the search
@@ -147,7 +158,23 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
                 gate = gate,
             )
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
-            SettingsPageView(selected, vm, onBack = null, Modifier.weight(1f).fillMaxHeight(), gate)
+            // Another page beside the hub cross-fades in, rising 8 dp (v1.14 — motion); a cut when motion is reduced.
+            val reduced = rememberReducedMotion()
+            val rise = with(LocalDensity.current) { PAGE_RISE.roundToPx() }
+            AnimatedContent(
+                targetState = selected,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                transitionSpec = {
+                    Motion.change(
+                        fadeIn(tween(Motion.StandardMs, easing = Motion.Enter)) + slideInVertically(tween(Motion.StandardMs, easing = Motion.Enter)) { rise },
+                        fadeOut(tween(Motion.QuickMs, easing = Motion.Leave)),
+                        reduced,
+                    ) using null
+                },
+                label = "piano page",
+            ) { page ->
+                SettingsPageView(page, vm, onBack = null, Modifier.fillMaxSize(), gate)
+            }
         }
     } else {
         PianoHub(

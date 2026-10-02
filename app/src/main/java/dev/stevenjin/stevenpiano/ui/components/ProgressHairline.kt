@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -27,21 +28,30 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
+import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
 private const val SWEEP_MS = 1_400
 private const val SEGMENT = 0.3f
 
 /**
- * Progress as a hairline, never a spinner. [progress] runs 0..1; null means indeterminate: a
- * short segment sweeps across, and holds still when motion is reduced (the copy beside it says
- * what is happening).
+ * Progress as a hairline, never a spinner. [progress] runs 0..1, and the line eases to each new value
+ * over 200 ms (v1.14 — motion; it jumps when motion is reduced); null means indeterminate: a short
+ * segment sweeps across, and holds still when motion is reduced (the copy beside it says what is
+ * happening).
  */
 @Composable
 fun ProgressHairline(progress: Float?, modifier: Modifier = Modifier) {
     val track = LocalHairline.current
     val ink = MaterialTheme.colorScheme.onSurface
-    val sweep = if (progress == null && !rememberReducedMotion()) {
+    val reduced = rememberReducedMotion()
+    // From the first value it shows, not from nothing: a line that becomes determinate starts where it is.
+    val eased = if (progress != null) {
+        animateFloatAsState(progress.coerceIn(0f, 1f), Motion.timed(Motion.StandardMs, reduced), label = "progress")
+    } else {
+        null
+    }
+    val sweep = if (progress == null && !reduced) {
         rememberInfiniteTransition(label = "hairline")
             .animateFloat(0f, 1f, infiniteRepeatable(tween(SWEEP_MS, easing = LinearEasing)), label = "sweep")
     } else {
@@ -56,8 +66,8 @@ fun ProgressHairline(progress: Float?, modifier: Modifier = Modifier) {
             }
             .drawBehind {
                 drawRect(track)
-                if (progress != null) {
-                    drawRect(ink, size = Size(size.width * progress.coerceIn(0f, 1f), size.height))
+                if (eased != null) {
+                    drawRect(ink, size = Size(size.width * eased.value, size.height))
                 } else if (sweep != null) {
                     val width = size.width * SEGMENT
                     drawRect(ink, topLeft = Offset((size.width + width) * sweep.value - width, 0f), size = Size(width, size.height))

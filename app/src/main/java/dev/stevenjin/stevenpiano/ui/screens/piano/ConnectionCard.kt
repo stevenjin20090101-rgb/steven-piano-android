@@ -18,7 +18,13 @@ import android.provider.Settings
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -28,13 +34,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +48,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -54,12 +66,14 @@ import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoBluetooth
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.actionButtonColors
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
 /**
  * The piano: its name, the status with the dot, and one button that says what it will do:
@@ -70,7 +84,8 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
  * device holds it, with Retry and, when Location is off, Open Location settings. Permission is
  * asked for here, in context, with a one-line reason. When only another piano called Steven Piano
  * answered, the phone connects to it only if the person taps Connect to it ([onConnectTo] with its
- * address). Monochrome throughout: the only red is the [LiveDot]. Under a MIDI piano (v1.11 — M29) it names that
+ * address); while looking, a thin arc also sweeps round the dot ([rememberSearchTurn], v1.14). Monochrome
+ * throughout: the only red is the [LiveDot]. Under a MIDI piano (v1.11 — M29) it names that
  * instrument ([name]) with its own words ([status]), and asks for no Bluetooth permission for one on a cable
  * ([bluetooth] false). [showButton] false (v1.13 — M31b: the Instrument page is open beside the hub, with
  * Connect and Disconnect of its own): the card names the instrument and its state, so no action shows twice.
@@ -114,7 +129,10 @@ fun ConnectionCard(
         Column(Modifier.padding(16.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                LiveDot(live = link is LinkState.Connected, breathing = playing)
+                // While looking, a thin arc sweeps round the dot (v1.14 — motion): drawn beside it, never on it.
+                Box(Modifier.searchArc(if (searching) rememberSearchTurn() else null, MaterialTheme.colorScheme.onSurfaceVariant)) {
+                    LiveDot(live = link is LinkState.Connected, breathing = playing)
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     status,
@@ -169,11 +187,49 @@ fun ConnectionCard(
                 searching -> OutlinedButton(onClick = onCancel, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
                     Text("Cancel")
                 }
-                else -> Button(onClick = { if (!bluetooth || missing.isEmpty()) onConnect() else askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
+                else -> FilledButton(onClick = { if (!bluetooth || missing.isEmpty()) onConnect() else askPermission.launch(missing.toTypedArray()) }) { Text("Connect") }
             }
         }
     }
 }
+
+/**
+ * While the card looks for the piano (v1.14 — motion): the angle of a quarter arc turning round the status dot once
+ * every [SWEEP_MS]. Status, not decoration: it is remembered only while the search lasts, so it stops the moment the
+ * state changes. Null under reduced motion: no arc (the hairline and the words say it).
+ */
+@Composable
+private fun rememberSearchTurn(): State<Float>? {
+    if (rememberReducedMotion()) return null
+    return rememberInfiniteTransition(label = "search").animateFloat(0f, 360f, infiniteRepeatable(tween(SWEEP_MS, easing = LinearEasing)), label = "arc")
+}
+
+/**
+ * The search's arc at [turn]: 1 dp in [color], 3 dp outside the dot, a quarter of the way round; drawn outside the
+ * dot's bounds, so nothing beside it moves. Null: nothing drawn.
+ */
+private fun Modifier.searchArc(turn: State<Float>?, color: Color): Modifier =
+    if (turn == null) {
+        this
+    } else {
+        drawWithContent {
+            drawContent()
+            val radius = size.minDimension / 2 + ARC_GAP.toPx()
+            drawArc(
+                color,
+                startAngle = turn.value - 90f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = Offset(center.x - radius, center.y - radius),
+                size = Size(radius * 2, radius * 2),
+                style = Stroke(1.dp.toPx(), cap = StrokeCap.Round),
+            )
+        }
+    }
+
+/** One turn of the search's arc, and its gap outside the dot. */
+private const val SWEEP_MS = 1_400
+private val ARC_GAP = 3.dp
 
 /**
  * Under "Can't find Steven Piano": the piano's own screen names its Bluetooth state (firmware

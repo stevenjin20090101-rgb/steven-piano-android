@@ -10,8 +10,16 @@
 package dev.stevenjin.stevenpiano.ui.screens.studio
 
 import android.net.Uri
+import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -75,12 +83,16 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -115,6 +127,8 @@ import dev.stevenjin.stevenpiano.ui.components.AuraHairline
 import dev.stevenjin.stevenpiano.ui.components.AuraRing
 import dev.stevenjin.stevenpiano.ui.components.AuraState
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.easedIn
+import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.GlassSheet
@@ -124,17 +138,22 @@ import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.RollingText
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SheetChip
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
+import dev.stevenjin.stevenpiano.ui.components.placement
+import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.components.readingWidth
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.components.secondaryText
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -194,6 +213,9 @@ fun StudioScreen(onListen: (Long) -> Unit) {
     // preview fills, keep the newest in view; the header's glass shows once older turns pass beneath it.
     val listState = rememberLazyListState()
     val headerScroll = remember(listState) { FromTheBottom(listState) }
+    // The turns shown during this visit (v1.14 — motion): one sent now arrives with its card rising; the history doesn't.
+    val reduced = rememberReducedMotion()
+    val visit = remember { StudioVisit() }
     LaunchedEffect(turns.size) { if (turns.isNotEmpty()) listState.animateScrollToItem(0) }
 
     GlassHeaderPane(
@@ -232,6 +254,7 @@ fun StudioScreen(onListen: (Long) -> Unit) {
                     items(turns.asReversed(), key = { it.key }) { turn ->
                         TurnView(
                             turn,
+                            modifier = Modifier.placement(this, reduced).easedIn(rememberArrival(turn, visit, reduced), rise = ARRIVAL_RISE),
                             locked = locked,
                             waiting = waiting,
                             installed = installed,
@@ -306,6 +329,41 @@ private class FromTheBottom(private val list: androidx.compose.foundation.lazy.L
     override val canScrollBackward: Boolean get() = list.canScrollForward
     override val canScrollForward: Boolean get() = list.canScrollBackward
 }
+
+/** The turns one visit to Studio has shown, and when it began: what is there as it opens is no arrival. */
+private class StudioVisit {
+    private val start = SystemClock.uptimeMillis()
+    val shown = HashSet<String>()
+
+    /** Past the visit's first moments, when its history has come: a turn appearing now is a new one. */
+    fun settled(): Boolean = SystemClock.uptimeMillis() - start > VISIT_SETTLE_MS
+}
+
+/**
+ * A turn's card arriving (v1.14 — motion): a turn that appears while Studio is open (sent, Another like it, Try
+ * again), made in the last [ARRIVAL_MS], fades in and rises 12 dp over 320 ms, decelerating, once ([easedIn]). Shown
+ * under its key and its job's ([StudioVisit.shown]), so a turn that becomes its history row doesn't arrive twice. The
+ * history, a turn scrolled back into view, and everything under reduced motion: null, simply there.
+ */
+@Composable
+private fun rememberArrival(turn: Turn, visit: StudioVisit, reduced: Boolean): Animatable<Float, AnimationVector1D>? {
+    val rising = remember(turn.key) {
+        val names = listOfNotNull(turn.key, turn.job?.let { "job:${it.id}" })
+        val seen = names.any { it in visit.shown }
+        visit.shown += names
+        // A turn shown from its job alone has no row yet: it was made just now.
+        val recent = turn.createdAt == Long.MAX_VALUE || System.currentTimeMillis() - turn.createdAt in 0..ARRIVAL_MS
+        if (!seen && recent && visit.settled() && !reduced) Animatable(0f) else null
+    }
+    if (rising != null) {
+        LaunchedEffect(rising) { rising.animateTo(1f, Motion.timed(Motion.EmphasisedMs, reduced = false, easing = Motion.Enter)) }
+    }
+    return rising
+}
+
+private const val ARRIVAL_MS = 5_000L
+private const val VISIT_SETTLE_MS = 600L
+private val ARRIVAL_RISE = 12.dp
 
 /** The prompt bar's room above the list's last turn, and the shelf's width beside the conversation. */
 private val BAR_ROOM = 132.dp
@@ -407,11 +465,19 @@ private fun PromptBar(
 
 private const val COUNTER_FROM = 160
 
-/** Send: a filled circle in the content colour, the arrow in the surface's; off while there is nothing to send. */
+/**
+ * Send: a filled circle in the content colour, the arrow in the surface's; off while there is nothing to send. Sending
+ * gives the light tick play gives, and the circle scales to 0.97 while pressed (v1.14 — motion).
+ */
 @Composable
 private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
+    val view = LocalView.current
+    val press = remember { MutableInteractionSource() }
     IconButton(
-        onClick = onClick,
+        onClick = {
+            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            onClick()
+        },
         enabled = enabled,
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = MaterialTheme.colorScheme.onSurface,
@@ -419,7 +485,8 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
             disabledContainerColor = LocalHairline.current,
             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
-        modifier = Modifier.size(48.dp).padding(2.dp),
+        modifier = Modifier.size(48.dp).padding(2.dp).pressScale(press),
+        interactionSource = press,
     ) {
         Icon(painterResource(R.drawable.ic_send), contentDescription = "Send")
     }
@@ -436,6 +503,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun TurnView(
     turn: Turn,
+    modifier: Modifier = Modifier,
     locked: Boolean,
     waiting: Int,
     installed: Set<String>,
@@ -450,7 +518,7 @@ private fun TurnView(
     onRemove: () -> Unit,
     onRetry: () -> Unit,
 ) {
-    Column(Modifier.readingWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(modifier.readingWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Eyebrow("You")
         val asked = if (turn.typed && !StudioAccess.showsTypedText(locked)) StudioAccess.HIDDEN else turn.asked
         Text(asked, Modifier.padding(top = 4.dp, bottom = 10.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
@@ -485,29 +553,39 @@ private fun TurnView(
                 val roll by preview.collectAsStateWithLifecycle()
                 GenerationRoll(roll, job.targetMs, Modifier.padding(horizontal = 14.dp).fillMaxWidth().height(ROLL))
             }
-            FlowRow(
-                Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp, top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                when {
-                    !turn.finished -> ActionButton("Cancel", onClick = onCancel, description = "Cancel ${turn.title ?: workingTitle(turn)}")
-                    turn.listenable -> {
-                        ListenButton(onListen)
-                        if (turn.state == TurnState.Made) {
-                            ActionButton("Keep", onClick = onKeep)
-                            ActionButton("Discard", onClick = onDiscard)
+            // The finished card's actions fade in where Cancel was (v1.14 — motion); a cut when motion is reduced.
+            val reducedMotion = rememberReducedMotion()
+            AnimatedContent(
+                targetState = turn.finished,
+                transitionSpec = {
+                    Motion.change(fadeIn(tween(Motion.StandardMs, easing = Motion.Enter)), fadeOut(tween(Motion.QuickMs, easing = Motion.Leave)), reducedMotion) using null
+                },
+                label = "turn actions",
+            ) { finished ->
+                FlowRow(
+                    Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp, top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    when {
+                        !finished -> ActionButton("Cancel", onClick = onCancel, description = "Cancel ${turn.title ?: workingTitle(turn)}")
+                        turn.listenable -> {
+                            ListenButton(onListen)
+                            if (turn.state == TurnState.Made) {
+                                ActionButton("Keep", onClick = onKeep)
+                                ActionButton("Discard", onClick = onDiscard)
+                            }
+                            if (!turn.transcription) {
+                                ActionButton("Another like it", onClick = onAgain, enabled = StudioAccess.canAgain(waiting))
+                                ActionButton("Adjust…", onClick = onAdjust)
+                            }
                         }
-                        if (!turn.transcription) {
-                            ActionButton("Another like it", onClick = onAgain, enabled = StudioAccess.canAgain(waiting))
-                            ActionButton("Adjust…", onClick = onAdjust)
-                        }
+                        turn.state == TurnState.Failed || turn.state == TurnState.Cancelled || turn.state == TurnState.Interrupted ->
+                            if (!turn.transcription) ActionButton("Try again", onClick = onRetry, enabled = StudioAccess.canAgain(waiting))
+                        else -> if (!turn.transcription) ActionButton("Another like it", onClick = onAgain, enabled = StudioAccess.canAgain(waiting))
                     }
-                    turn.state == TurnState.Failed || turn.state == TurnState.Cancelled || turn.state == TurnState.Interrupted ->
-                        if (!turn.transcription) ActionButton("Try again", onClick = onRetry, enabled = StudioAccess.canAgain(waiting))
-                    else -> if (!turn.transcription) ActionButton("Another like it", onClick = onAgain, enabled = StudioAccess.canAgain(waiting))
+                    if (finished && turn.rowId != null) ActionButton("Remove", onClick = onRemove, description = "Remove this turn from the history")
                 }
-                if (turn.finished && turn.rowId != null) ActionButton("Remove", onClick = onRemove, description = "Remove this turn from the history")
             }
             if (turn.listenable || turn.state == TurnState.Discarded) {
                 Eyebrow(StudioCopy.credits(turn.seedTitle, turn.seedComposer, turn.transcription), Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp))
@@ -537,7 +615,7 @@ private val ROLL = 120.dp
 /** Listen, the card's filled action. */
 @Composable
 private fun ListenButton(onClick: () -> Unit) {
-    androidx.compose.material3.Button(
+    FilledButton(
         onClick = onClick,
         colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface, contentColor = MaterialTheme.colorScheme.surface),
     ) { Text("Listen") }
@@ -571,7 +649,14 @@ private fun Steps(job: StudioJob, jobs: List<StudioJob>, installed: Set<String>)
         val measured = job.step == JobStep.Composing || job.step == JobStep.Transcribing
         ProgressHairline(if (measured) job.progress ?: 0f else null, Modifier.padding(top = 10.dp))
         if (job.step == JobStep.Composing) {
-            Text(StudioCopy.figures(job), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium.merge(Tabular), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // The figures roll as they change (v1.14 — motion), each part whole on its line; TalkBack reads the line.
+            val figures = StudioCopy.figures(job)
+            val parts = figures.split(" · ")
+            FlowRow(Modifier.padding(top = 6.dp).clearAndSetSemantics { text = AnnotatedString(figures) }) {
+                parts.forEachIndexed { i, part ->
+                    RollingText(if (i < parts.lastIndex) "$part · " else part, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     } else if (job.state == JobState.Queued && !waitingForModel) {
         Text("Waiting", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

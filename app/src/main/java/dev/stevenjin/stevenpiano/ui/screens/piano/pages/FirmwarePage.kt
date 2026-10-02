@@ -13,7 +13,6 @@ import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +32,7 @@ import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.LockedFirmware
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
+import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
@@ -159,7 +159,7 @@ private fun UpdateBlock(state: FirmwareState, canSend: Boolean, onUpdate: () -> 
 private fun Offer(version: String, notes: String, canSend: Boolean, onUpdate: () -> Unit) {
     Line(FirmwareCopy.available(version))
     Notes(notes)
-    Button(onClick = onUpdate, enabled = canSend, modifier = Modifier.padding(top = 12.dp)) { Text(FirmwareCopy.update(version)) }
+    FilledButton(onClick = onUpdate, enabled = canSend, modifier = Modifier.padding(top = 12.dp)) { Text(FirmwareCopy.update(version)) }
     Secondary(if (canSend) FirmwareCopy.QUIET else FirmwareCopy.CONNECT_FIRST, top = 8.dp)
 }
 
@@ -192,7 +192,7 @@ private fun Failure(state: FirmwareState.Failed, canSend: Boolean, onRetry: () -
     Line(state.message)
     state.hint?.let { Secondary(it, top = 4.dp) }
     if (!locked && state.retryable && state.manifest != null) {
-        Button(onClick = onRetry, enabled = canSend, modifier = Modifier.padding(top = 12.dp)) { Text("Retry") }
+        FilledButton(onClick = onRetry, enabled = canSend, modifier = Modifier.padding(top = 12.dp)) { Text("Retry") }
         Secondary(if (canSend) FirmwareCopy.QUIET else FirmwareCopy.CONNECT_FIRST, top = 8.dp)
     }
 }
