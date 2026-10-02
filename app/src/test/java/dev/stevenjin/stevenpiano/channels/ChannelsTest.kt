@@ -31,8 +31,8 @@ class ChannelsTest {
 
     @Test
     fun `the channels in their order on screen`() {
-        assertEquals(listOf("calm", "epic", "baroque", "romantic", "impressionist", "nocturnes", "etudes", "everything"), channels.map { it.key })
-        assertEquals(listOf("Calm", "Epic", "Baroque", "Romantic", "Impressionist", "Nocturnes", "Études", "Everything"), channels.map { it.name })
+        assertEquals(listOf("calm", "epic", "recognisable", "popular", "baroque", "romantic", "impressionist", "nocturnes", "etudes", "everything"), channels.map { it.key })
+        assertEquals(listOf("Calm", "Epic", "Recognisable", "Popular", "Baroque", "Romantic", "Impressionist", "Nocturnes", "Études", "Everything"), channels.map { it.name })
     }
 
     @Test

@@ -55,7 +55,7 @@ on the tablet*). Made by Steven Jin. Version 1.13.
   can't be renamed, reordered or deleted; Change photo still works. A list that
   finds nothing is not shown. From Steven's `midi` folder they hold 17, 29 and 49 pieces.
 - **Channels**: a row of wide cards above the playlists (**See all** shows them
-  all as a grid): Calm, Epic, Baroque, Romantic, Impressionist, Nocturnes,
+  all as a grid): Calm, Epic, Recognisable, Popular, Baroque, Romantic, Impressionist, Nocturnes,
   Études and Everything, each faced with its four most frequent composers. A tap
   plays the channel without end: 25 of its pieces shuffled into Up next, ten
   more whenever fewer than five are left, and nothing again until the whole pool

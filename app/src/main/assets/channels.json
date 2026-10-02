@@ -31,6 +31,16 @@
       "builtIn": "epic"
     },
     {
+      "key": "recognisable",
+      "name": "Recognisable",
+      "builtIn": "recognisable"
+    },
+    {
+      "key": "popular",
+      "name": "Popular",
+      "builtIn": "popular"
+    },
+    {
       "key": "baroque",
       "name": "Baroque",
       "composers": [
