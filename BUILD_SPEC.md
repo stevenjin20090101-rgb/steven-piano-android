@@ -7324,3 +7324,13 @@ sit beside the views' routes, `at`, `fold`, `views`, `display` and the four sett
 keys, `WebAssetsTest` both sides' checks. **1,545 → 1,559** (12 skipped); `lintDebug` 0 errors, the same 30
 warnings. Re-checked on `steven_piano_audit` with the merged debug build: `merged-1280-now`, `merged-1280-library`
 (artist photos; no Studio cover on that emulator) and `merged-390-now` in `scratchpad/m32/shots/`.
+
+## The release: 1.13 (versionCode 22)
+
+Cut from `main` at `b77fa2b`: M32 (the web panel's notes and score) and M33 (motion) together; the release the
+plan called 1.14 is folded into this one. The integrator's smoke pass on the tablet-size emulator: the merged
+build installed over 1.12's, tabs switched, a piece started from the Library with the panel's art and roll; the
+panel on the loopback answered the state with `views`, `display` and `instruments`, the notes (18 KB), the score
+index, the font (889,228 bytes) and the five modules with a session, and 401 without one; the coder's browser
+screenshots after its merge with 1.12 show the score and roll at 1280 px and 390 px. No crash in the log.
+Designer's change to M33: the arc round the connection dot is removed (the hairline already says "looking").

@@ -152,5 +152,14 @@
     "minSdk": 26,
     "tag": "v1.12",
     "publishedAt": "2026-10-02"
+  },
+  {
+    "versionCode": 22,
+    "versionName": "1.13",
+    "notes": "The web panel now shows what the tablet shows: on Now playing, the sheet music with the notes turning yellow as they sound and the moving paper roll or falling notes with the keyboard strip, in step with the piano. Drag the divider between them, turn pages or tap a bar to jump there, and use View for the note style, fingering, chord names and hand colours. On a phone, pick Art, Notes or Score. It works over Tailscale, Wi-Fi and the internet link. The app also moves more smoothly: screens fade between tabs, buttons respond to touch, lists ease in, numbers roll, progress glides and menus grow from where you tapped. All of it is cut when the tablet's \"remove animations\" setting is on.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.13/steven-piano-1.13.apk",
+    "minSdk": 26,
+    "tag": "v1.13",
+    "draft": true
   }
 ]
