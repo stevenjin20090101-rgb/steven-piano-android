@@ -7141,3 +7141,14 @@ moved, a MIDI piano, the notes' rules); `PianoPagesTest`, `RoutesTest`, `GroupSu
 copy tests updated (`InstrumentCopyTest`, `TabletSoundCopyTest`, `CloudCopyTest`, `WebAssetsTest`,
 `PianoSettingsTableTest`). 1,503 → 1,509 unit tests before the merge; 1,545 after it (`main`'s 1,537, plus the seven
 of `SettingsIndexTest` and one more in `GroupSummariesTest`); lint: no errors, no warning in a touched file.
+
+## The release: 1.12 (versionCode 21)
+
+Cut from `main` at `75367b9`: M30 (the Studio tab), M31a (the split and the View menu) and M31b (the Piano tab
+reorganised, with search) together. `versionCode` 21, `versionName` "1.12". From this release the runs are lean
+at the owner's request: coders write only the critical tests and do no emulator work, and the integrator makes
+one smoke pass on the merged build. That pass (tablet-size emulator, the 1.10 debug build's library upgraded in
+place): the database upgraded with the library intact; Studio composed "Calm and slow" end to end (model
+download, steps, preview, cover, the shelf) and "Another like it"; Now playing showed the divider dragged to a
+third with the score re-laid at two bars, and the View menu; the Piano tab showed the new groups, the folded
+Fine tuning, and the search finding the three volumes. No crash in the log.
