@@ -136,7 +136,7 @@ class StudioService : Service() {
             .setSmallIcon(R.drawable.ic_stat_piano)
             .setContentTitle(job?.let(StudioCopy::notificationTitle) ?: "Studio")
             .setContentText(job?.let { StudioCopy.jobLine(it, review.undecided.value, review.discardedNow.value) })
-            .setContentIntent(open(Route.Piano))
+            .setContentIntent(open(Route.Studio))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -159,14 +159,15 @@ class StudioService : Service() {
                 else -> null
             },
         )
-        .setContentIntent(open(if (job.kind != JobKind.Download && job.state == JobState.Done) Route.Library else Route.Piano))
+        // v1.12 (M30): both open the Studio tab, where the piece's card is.
+        .setContentIntent(open(Route.Studio))
         .setAutoCancel(true)
         .setSilent(true)
         .build()
 
     private fun open(tab: Route): PendingIntent = PendingIntent.getActivity(
         this,
-        if (tab == Route.Library) OPEN_LIBRARY_REQUEST else OPEN_PIANO_REQUEST,
+        OPEN_STUDIO_REQUEST,
         Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_TAB, tab.path)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -184,11 +185,12 @@ class StudioService : Service() {
         const val CHANNEL_ID = "studio"
         private const val ID = 8
         private const val RESULT_ID = 9
-        private const val OPEN_PIANO_REQUEST = 8
-        private const val OPEN_LIBRARY_REQUEST = 9
         private const val CANCEL_REQUEST = 10
+
+        /** The Studio tab (v1.12 — M30); 8 and 9 were the Piano and Library tabs' before it. */
+        private const val OPEN_STUDIO_REQUEST = 11
         private const val TAG = "Studio"
-        private const val UPDATE_MS = 400L
+        private const val UPDATE_MS = 1_000L
         private const val PROGRESS_MAX = 1_000
         private const val ACTION_CANCEL = "dev.stevenjin.stevenpiano.action.CANCEL_STUDIO"
 

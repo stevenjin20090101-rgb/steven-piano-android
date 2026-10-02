@@ -35,11 +35,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.data.art.ArtSize
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
+import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -68,7 +70,14 @@ fun PieceRow(
             onClickLabel = "Play",
             onClick = onPlay,
             onLongClick = { menu = true },
-            leading = { ComposerArt(piece.composerKey, piece.composerShort.ifBlank { piece.title }, ArtSize.Row, Modifier.size(PORTRAIT)) },
+            leading = {
+                // A piece Studio made shows its own cover (v1.12 — M30), not the "Made in Studio" mosaic every one shared.
+                if (piece.composerKey == ComposerNames.STUDIO_KEY) {
+                    PieceArt(piece.id, piece.composerKey, ArtSize.Row, Modifier.size(PORTRAIT), title = piece.title)
+                } else {
+                    ComposerArt(piece.composerKey, piece.composerShort.ifBlank { piece.title }, ArtSize.Row, Modifier.size(PORTRAIT))
+                }
+            },
             trailing = trailing,
         )
         PieceMenu(piece, actions, place, expanded = menu) { menu = false }

@@ -20,7 +20,6 @@ import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
-import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.web.WebStatus
 import java.time.ZonedDateTime
@@ -44,7 +43,6 @@ data class GroupSummaries(
     val remote: String,
     val kiosk: String,
     val schedule: String = ScheduleCopy.NONE,
-    val studio: String = StudioCopy.hub(0, emptyList()),
     /** The MIDI keyboard (v1.11 — M29): "None", its name, or its name and "not connected". */
     val keyboard: String = InstrumentCopy.NONE,
     /** The instrument (v1.11 — M29): "Steven Piano", or the MIDI piano's name. */
@@ -63,7 +61,6 @@ data class GroupSummaries(
         SettingsPage.Remote -> remote
         SettingsPage.Kiosk -> kiosk
         SettingsPage.Schedule -> schedule
-        SettingsPage.Studio -> studio
     }
 
     companion object {
@@ -74,8 +71,8 @@ data class GroupSummaries(
          * Every row's value; [wide] when the window shows the score beside the notes (Note display
          * then picks the roll's style); [web] where the web panel listens; [firmwareUpdate] and
          * [firmwareVersion] (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule]
-         * when the next schedule starts; [studio] Studio's own value ([StudioCopy.hub], v1.7 — M23); [keyboard] the MIDI
-         * keyboard's state (v1.11 — M29).
+         * when the next schedule starts; [keyboard] the MIDI keyboard's state (v1.11 — M29). Studio is a tab of its
+         * own since v1.12 (M30).
          */
         fun from(
             piano: PianoState,
@@ -85,7 +82,6 @@ data class GroupSummaries(
             firmwareUpdate: FirmwareState = FirmwareState.Idle,
             firmwareVersion: String? = null,
             nextSchedule: ZonedDateTime? = null,
-            studio: String = StudioCopy.hub(0, emptyList()),
             keyboard: KeyboardState = KeyboardState(),
             instrument: String = InstrumentCopy.STEVEN_PIANO,
         ): GroupSummaries = GroupSummaries(
@@ -98,7 +94,6 @@ data class GroupSummaries(
             remote = remote(settings, web),
             kiosk = kiosk(settings),
             schedule = schedule(nextSchedule),
-            studio = studio,
             keyboard = InstrumentCopy.keyboardValue(keyboard),
             instrument = instrument,
         )

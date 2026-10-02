@@ -121,7 +121,7 @@ class GroupSummariesTest {
             web = WebStatus(running = true, tailnet = "100.101.2.3"),
         )
         assertEquals(
-            listOf("Steven Piano", "None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off", "No models"),
+            listOf("Steven Piano", "None", "Volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Falling notes", "None", "On · 100.101.2.3", "Off"),
             SettingsPage.entries.map { rows.of(it) },
         )
     }
@@ -200,12 +200,6 @@ class GroupSummariesTest {
         assertEquals("On · 100.101.2.3", GroupSummaries.remote(enrolled.copy(webEnabled = true), lan))
         assertEquals("not enrolled: no Cloud yet", "Off", GroupSummaries.remote(PianoSettings(cloudEnabled = true, cloudHost = "relay.example.dev"), WebStatus()))
         assertEquals("Off", GroupSummaries.remote(enrolled, WebStatus()))
-    }
-
-    @Test
-    fun `Studio reads its job, or how many models it has, with or without the piano`() {
-        assertEquals("No models", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = false).of(SettingsPage.Studio))
-        assertEquals("2 models", GroupSummaries.from(PianoState.Unknown, PianoSettings(), wide = true, studio = "2 models").of(SettingsPage.Studio))
     }
 
     @Test

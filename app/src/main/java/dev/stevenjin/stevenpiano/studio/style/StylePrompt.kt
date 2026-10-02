@@ -224,6 +224,15 @@ object StylePrompt {
 
     fun parse(text: String, library: StyleLibrary, previous: PreviousTurn? = null): StyleResult = Parse(StyleWords.cut(text, MAX_WORDS), library, previous).run()
 
+    /** The seed candidates [spec] names in [library] now ("Another like it" asks its turn's spec again). */
+    fun candidates(spec: StyleSpec, library: StyleLibrary): List<Long> =
+        Parse(emptyList(), library, null).candidatesOf(spec.seed, spec.mood).take(MAX_CANDIDATES).map { it.id }
+
+    /** The composer the library holds most pieces by, for the empty screen's last suggestion; null for an empty library. */
+    fun favouriteComposer(library: StyleLibrary): String? =
+        library.pieces.filter { it.composerKey.isNotEmpty() }.groupingBy { it.composerKey }.eachCount()
+            .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).firstOrNull()?.key?.let(library::composerName)
+
     private class Parse(val words: List<StyleWord>, val library: StyleLibrary, val previous: PreviousTurn?) {
         val n = words.size
         val claimed = BooleanArray(n)

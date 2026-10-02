@@ -69,7 +69,6 @@ import dev.stevenjin.stevenpiano.ui.LockedFirmware
 import dev.stevenjin.stevenpiano.ui.LockedPage
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.SettingsPage
-import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
@@ -98,7 +97,6 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SchedulePage
-import dev.stevenjin.stevenpiano.ui.screens.piano.pages.StudioPage
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.WebStatus
@@ -124,7 +122,7 @@ private val HubWidth = 360.dp
  * page, a switch of the APP group, Check now and Disconnect wait for the kiosk PIN ([KioskGate]).
  */
 @Composable
-fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onReopenPage: (SettingsPage) -> Unit, onListen: (Long) -> Unit = {}) {
+fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onReopenPage: (SettingsPage) -> Unit) {
     val vm = pianoViewModel(tab)
     val frame = LocalAppFrame.current
     val hubScroll = rememberScrollState()
@@ -145,7 +143,7 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
         ) {
             PianoHub(vm, hubScroll, selected, { page -> gate.openPage(vm, page) { vm.pick(page) } }, Modifier.width(HubWidth).fillMaxHeight(), gate)
             VerticalDivider(thickness = Hairline, color = LocalHairline.current)
-            SettingsPageView(selected, vm, onBack = null, Modifier.weight(1f).fillMaxHeight(), gate, onListen)
+            SettingsPageView(selected, vm, onBack = null, Modifier.weight(1f).fillMaxHeight(), gate)
         }
     } else {
         PianoHub(
@@ -187,7 +185,7 @@ private fun floatingSides(): PaddingValues {
  * scrolled where it was ([onBack] takes this one off).
  */
 @Composable
-fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Unit, onListen: (Long) -> Unit = {}) {
+fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Unit) {
     val vm = pianoViewModel(tab)
     val frame = LocalAppFrame.current
     val gate = rememberKioskGate()
@@ -206,7 +204,6 @@ fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Un
             .background(MaterialTheme.colorScheme.background)
             .padding(floatingSides()),
         gate,
-        onListen,
     )
     KioskGateSheet(gate)
 }
@@ -231,14 +228,10 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val firmwarePiano by vm.firmwarePiano.collectAsStateWithLifecycle()
     val nextSchedule by vm.nextSchedule.collectAsStateWithLifecycle()
-    val studioSupport by vm.studioSupport.collectAsStateWithLifecycle()
-    val studioModels by vm.studioModels.collectAsStateWithLifecycle()
-    val studioJobs by vm.studioJobs.collectAsStateWithLifecycle()
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     val kind by vm.instrumentKind.collectAsStateWithLifecycle()
     val midi = kind == InstrumentKind.MidiPiano
     val instrument = InstrumentCopy.instrumentValue(kind, settings.midiOutName)
-    LaunchedEffect(Unit) { vm.checkStudio() }
     val frame = LocalAppFrame.current
     val context = LocalContext.current
     var canInstall by remember { mutableStateOf(vm.canInstall()) }
@@ -246,7 +239,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
         canInstall = vm.canInstall()   // the person may come back from the Install unknown apps setting
         onPauseOrDispose { }
     }
-    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, studioModels, studioJobs, keyboard, instrument) {
+    val summaries = remember(piano, settings, frame.wide, web, firmware, firmwarePiano, nextSchedule, keyboard, instrument) {
         GroupSummaries.from(
             piano,
             settings,
@@ -255,7 +248,6 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
             firmware,
             (firmwarePiano as? FirmwarePiano.Connected)?.text,
             nextSchedule?.occurrence?.at,
-            StudioCopy.hub(studioModels.size, studioJobs),
             keyboard,
             instrument,
         )
@@ -295,11 +287,7 @@ private fun PianoHub(vm: PianoViewModel, scroll: ScrollState, selected: Settings
                 )
                 for (group in HubGroups.shown(midi)) {
                     SectionEyebrow(group.title)
-                    for (row in group.rows) {
-                        // Studio on a device it can't run on: the reason where its row would be, nothing to open.
-                        val unsupported = if (row == HubRow.Page(SettingsPage.Studio)) StudioCopy.unsupported(studioSupport) else null
-                        if (unsupported != null) UnsupportedRow(SettingsPage.Studio.title, unsupported) else HubRowView(row, summaries, settings, update, firmware, vm, selected, onPage, gate)
-                    }
+                    for (row in group.rows) HubRowView(row, summaries, settings, update, firmware, vm, selected, onPage, gate)
                 }
                 AboutRow(Modifier.padding(16.dp))
                 Spacer(Modifier.height(floating.calculateBottomPadding()))
@@ -345,30 +333,13 @@ private fun HubRowView(
     }
 }
 
-/** A row that only reads: [label] in Body, and under it why there is nothing to open (Studio on a device it can't run on). */
-@Composable
-private fun UnsupportedRow(label: String, note: String) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .semantics(mergeDescendants = true) { }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-        Eyebrow(note, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
-    }
-    HairlineDivider(startInset = 16.dp)
-}
-
 /**
  * A page: its header (the back glyph on phones, [onBack]; the title alone beside the hub), a glass
  * navigation bar of its own (DESIGN.md › v1.9), then its sections in a column that scrolls from
  * anywhere across the pane, at the reading width, beneath the header.
  */
 @Composable
-private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (() -> Unit)?, modifier: Modifier, gate: KioskGate, onListen: (Long) -> Unit) {
+private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (() -> Unit)?, modifier: Modifier, gate: KioskGate) {
     val scroll = vm.scrollOf(page)
     GlassHeaderPane(scroll = scroll, modifier = modifier, header = { PageHeader(page.title, onBack, Modifier.readingWidth()) }) {
         val floating = LocalFloatingPadding.current
@@ -400,7 +371,6 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                     SettingsPage.Schedule -> SchedulePage()
                     SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
                     SettingsPage.Kiosk -> KioskPage(appSettings(vm))
-                    SettingsPage.Studio -> StudioPage(vm, onListen)
                 }
                 Spacer(Modifier.height(24.dp))
                 Spacer(Modifier.height(floating.calculateBottomPadding()))

@@ -46,7 +46,7 @@ object HubGroups {
         HubGroup("Instruments", pages(SettingsPage.Instrument, SettingsPage.Keyboard)),
         HubGroup("Piano", pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.Display, SettingsPage.Schedule)),
-        HubGroup("Control", pages(SettingsPage.Remote, SettingsPage.Kiosk, SettingsPage.Studio)),
+        HubGroup("Control", pages(SettingsPage.Remote, SettingsPage.Kiosk)),
         HubGroup("App", listOf(HubRow.AutoConnect, HubRow.CheckForUpdates, HubRow.CheckNow, HubRow.ShareDiagnostics)),
     )
 

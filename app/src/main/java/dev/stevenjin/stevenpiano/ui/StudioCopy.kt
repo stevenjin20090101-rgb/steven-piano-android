@@ -27,6 +27,9 @@ object StudioCopy {
 
     /** Composing (v1.7 — M24): the page's button, the + sheet's entry, and what it takes. */
     const val COMPOSE = "Compose a piece…"
+
+    /** The Library's + sheet entry since v1.12 (M30): it opens the Studio tab. */
+    const val COMPOSE_IN_STUDIO = "Compose in Studio…"
     const val COMPOSE_NOTE = "Runs on this tablet. About a minute for a two-minute piece."
 
     /** Under the + sheet's entry and the page's button while the model isn't here yet: "Downloads the transcription model (125 MB) first." */
@@ -232,6 +235,18 @@ object StudioCopy {
         val from = seedTitle?.takeIf { it.isNotBlank() }?.let { title -> ", from $title" + (seedComposer?.takeIf { it.isNotBlank() }?.let { " by $it" } ?: "") }.orEmpty()
         return "$made$from · cover drawn from the music"
     }
+
+    /**
+     * The understood line of a piece asked for in the options sheet or the web panel's form (v1.12 — M30): "Calm · D♭
+     * major · 72 bpm · 2 min · in the manner of Clair de lune (Debussy)"; the seed's own key and tempo are not named.
+     */
+    fun optionsLine(request: dev.stevenjin.stevenpiano.studio.compose.ComposeRequest, seedTitle: String?, seedComposer: String?): String = buildList {
+        add(request.mood.label)
+        request.key?.let { add(it.label) }
+        request.bpm?.let { add("$it bpm") }
+        add("${request.minutes} min")
+        seedTitle?.let { title -> add("in the manner of " + dev.stevenjin.stevenpiano.studio.compose.PromptBuilder.mannerOf(title, seedComposer)) }
+    }.joinToString(" · ")
 
     /** The Library bar's hairline while a job runs: the job's own measure, which is null exactly when its step has none. */
     fun libraryProgress(job: StudioJob): Float? = job.progress

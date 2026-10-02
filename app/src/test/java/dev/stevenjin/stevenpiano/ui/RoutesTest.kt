@@ -19,9 +19,9 @@ import org.junit.Test
 
 class RoutesTest {
     @Test
-    fun `the four tabs keep their paths, labels and order`() {
-        assertEquals(listOf("library", "now-playing", "keys", "piano"), Route.entries.map { it.path })
-        assertEquals(listOf("Library", "Now playing", "Keys", "Piano"), Route.entries.map { it.label })
+    fun `the five tabs keep their paths, labels and order - Studio between Keys and Piano (v1_12)`() {
+        assertEquals(listOf("library", "now-playing", "keys", "studio", "piano"), Route.entries.map { it.path })
+        assertEquals(listOf("Library", "Now playing", "Keys", "Studio", "Piano"), Route.entries.map { it.label })
         for (route in Route.entries) assertEquals(route, Route.of(route.path))
     }
 
@@ -36,17 +36,16 @@ class RoutesTest {
         assertNull(Route.of(""))
         assertNull(Route.of(null))
         assertEquals(Route.NowPlaying, Route.of("now-playing"))
+        assertEquals("a notification's EXTRA_TAB opens Studio", Route.Studio, Route.of("studio"))
     }
 
     @Test
     fun `every page has its own route under the Piano tab`() {
-        assertEquals(listOf("instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "display", "schedule", "remote", "kiosk", "studio"), SettingsPage.entries.map { it.key })
+        assertEquals(listOf("instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "display", "schedule", "remote", "kiosk"), SettingsPage.entries.map { it.key })
         assertEquals("piano/keyboard", PianoRoutes.page(SettingsPage.Keyboard))
         assertEquals("Keyboard", SettingsPage.Keyboard.title)
         assertNull(SettingsPage.Keyboard.piano)
-        assertEquals("piano/studio", PianoRoutes.page(SettingsPage.Studio))
-        assertEquals("Studio", SettingsPage.Studio.title)
-        assertNull(SettingsPage.Studio.piano)
+        assertNull("Studio is a tab now: a saved page key reads as none", SettingsPage.of("studio"))
         assertEquals("piano/remote", PianoRoutes.page(SettingsPage.Remote))
         assertEquals("Remote control", SettingsPage.Remote.title)
         assertNull(SettingsPage.Remote.piano)
@@ -83,13 +82,13 @@ class RoutesTest {
     }
 
     @Test
-    fun `four pages are the piano's, eight are the app's`() {
+    fun `four pages are the piano's, seven are the app's`() {
         assertEquals(
-            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware, null, null, null, null, null, null),
+            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware, null, null, null, null, null),
             SettingsPage.entries.map { it.piano },
         )
         assertEquals(
-            listOf("Instrument", "Keyboard", "Feel", "Lighting", "Pedal", "Firmware and status", "Playback", "Display", "Schedule", "Remote control", "Kiosk", "Studio"),
+            listOf("Instrument", "Keyboard", "Feel", "Lighting", "Pedal", "Firmware and status", "Playback", "Display", "Schedule", "Remote control", "Kiosk"),
             SettingsPage.entries.map { it.title },
         )
     }
