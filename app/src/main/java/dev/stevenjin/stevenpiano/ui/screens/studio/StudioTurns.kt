@@ -35,9 +35,9 @@ enum class TurnState {
 }
 
 /**
- * One turn of the conversation (v1.12 — M30): what was asked ([asked], [typed] when it is a person's own words),
- * and the card: [title], what was understood, the words not used, the live [job] while it runs, the piece it made,
- * the seed for the credits, and what the cover is drawn from.
+ * One turn of Studio (v1.12 — M30; on the stage or in History since v1.13.1): what was asked ([asked], [typed] when
+ * it is a person's own words), and the card: [title], what was understood, the words not used, the live [job] while
+ * it runs, the piece it made, the seed for the credits, and what the cover is drawn from.
  */
 data class Turn(
     val key: String,
@@ -70,10 +70,10 @@ data class Turn(
 }
 
 /**
- * The conversation from Studio's history ([rows], newest first as the history gives them) and its live [jobs]: a
+ * Studio's turns from its history ([rows], newest first as the history gives them) and its live [jobs]: a
  * job's live state wins over its turn's row while it waits or runs; the review's in-memory sets ([undecided],
- * [discarded]) win over a row the database has not caught up with. Oldest first, so the newest is at the bottom.
- * Pure.
+ * [discarded]) win over a row the database has not caught up with. Oldest first ([StudioStage] picks the stage's card
+ * and turns them round for History). Pure.
  */
 object StudioTurns {
     fun of(rows: List<GenerationEntity>, jobs: List<StudioJob>, undecided: Set<Long>, discarded: Set<Long>): List<Turn> {
@@ -82,8 +82,9 @@ object StudioTurns {
         val out = ArrayList<Turn>()
         for (row in rows) out += fromRow(row, byTurn[row.id], undecided, discarded)
         val shown = rows.mapTo(HashSet()) { it.id }
-        // A job whose turn is not written yet (or can't be): shown from the job alone.
-        for (job in studioJobs) if (job.turnId == null || job.turnId !in shown) if (!job.state.finished || job.pieceId != null) out += fromJob(job, undecided, discarded)
+        // A job whose turn is not written yet (or can't be): shown from the job alone. A finished job whose turn was
+        // written and has left the history (removed in History) stays out: it doesn't come back from memory.
+        for (job in studioJobs) if (job.turnId == null || job.turnId !in shown) if (!job.state.finished || job.pieceId != null && job.turnId == null) out += fromJob(job, undecided, discarded)
         return out.sortedWith(compareBy({ it.createdAt }, { it.rowId ?: Long.MAX_VALUE }, { it.job?.id ?: 0L }))
     }
 

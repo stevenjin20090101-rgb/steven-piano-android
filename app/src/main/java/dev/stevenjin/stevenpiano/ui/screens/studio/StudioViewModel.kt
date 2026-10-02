@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ui.screens.studio
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
@@ -40,6 +41,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -47,17 +49,19 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The Studio tab's state (v1.12 — M30): whether Studio runs here, its models and jobs, the conversation
- * ([turns], from Studio's history and the live jobs), the preview of the piece being written, the library as the
- * idea box reads it, and what the box understands as the person types (250 ms after the last key, off the main
- * thread). Sending an idea, "Another like it", Adjust…, Listen, Keep, Discard and the models all go through here.
+ * The Studio tab's state (v1.12 — M30): whether Studio runs here, its models and jobs, its turns ([turns], from
+ * Studio's history and the live jobs: the stage's card and History, v1.13.1), what the stage remembers between visits
+ * ([stageMemory], the one-minute rule on [clock], a monotonic clock), the preview of the piece being written, the
+ * library as the idea box reads it, and what the box understands as the person types (250 ms after the last key, off
+ * the main thread). Sending an idea, "Another like it", Adjust…, Listen, Keep, Discard and the models all go through here.
  */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class StudioViewModel(private val graph: AppGraph) : ViewModel() {
+class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long = SystemClock::elapsedRealtime) : ViewModel() {
     private val studio = graph.studio
 
     val support: StateFlow<StudioSupport> = studio.availability.support
@@ -66,13 +70,36 @@ class StudioViewModel(private val graph: AppGraph) : ViewModel() {
     val preview: StateFlow<PreviewRoll?> = studio.preview
     val locked: StateFlow<Boolean> = graph.kiosk.settingsLocked
 
-    private val rows: StateFlow<List<GenerationEntity>> = studio.generations.recent(HISTORY)
+    /** Studio's history, newest first; null until it has been read. */
+    private val rows: StateFlow<List<GenerationEntity>?> = studio.generations.recent(HISTORY)
         .catch { e -> if (e is CancellationException) throw e else emit(emptyList()) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_MS), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_MS), null)
 
     val turns: StateFlow<List<Turn>> = combine(rows, studio.jobs.jobs, studio.review.undecided, studio.review.discardedNow) { rows, jobs, undecided, discarded ->
-        StudioTurns.of(rows, jobs, undecided, discarded)
+        StudioTurns.of(rows.orEmpty(), jobs, undecided, discarded)
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_MS), emptyList())
+
+    /** Nothing made yet: the history read, and empty (the stage's quiet line waits for the read, so it never flickers). */
+    val nothingYet: StateFlow<Boolean> = rows.map { it?.isEmpty() == true }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_MS), false)
+
+    private val stage = MutableStateFlow(StageMemory())
+
+    /** What the stage remembers between visits: the results set aside, and when the tab was left ([StudioStage]). */
+    val stageMemory: StateFlow<StageMemory> = stage.asStateFlow()
+
+    /** The tab left (another tab, the app in the background, the resting screen over it): remembered with the stage's card. */
+    fun stageLeft() {
+        stage.update { it.left(StudioStage.card(turns.value, it), clock()) }
+    }
+
+    /** The tab shown again: a result shown when it was left a minute or more ago is set aside. */
+    fun stageShown() {
+        stage.update { it.returned(clock()) }
+    }
+
+    /** The stage's card for [turns]; while the tab is [inSight], the one-minute rule as of now, already (before [stageShown] records it). */
+    fun stageCard(turns: List<Turn>, memory: StageMemory, inSight: Boolean): Turn? =
+        StudioStage.card(turns, if (inSight) memory.returned(clock()) else memory)
 
     /** The library as the idea box reads it, built again half a second after the library last changed. */
     val library: StateFlow<StyleLibrary?> = graph.library.all()
@@ -106,7 +133,7 @@ class StudioViewModel(private val graph: AppGraph) : ViewModel() {
     fun waiting(jobs: List<StudioJob>): Int = jobs.count { it.state == JobState.Queued && it.kind != dev.stevenjin.stevenpiano.studio.JobKind.Download }
 
     /** The last composition's turn, which an idea without a seed of its own refines. */
-    private fun previousRow(): GenerationEntity? = rows.value.firstOrNull { it.kind == GenerationEntity.COMPOSE && it.spec != null }
+    private fun previousRow(): GenerationEntity? = rows.value.orEmpty().firstOrNull { it.kind == GenerationEntity.COMPOSE && it.spec != null }
 
     private fun previous(): PreviousTurn? = previousRow()?.let { row ->
         StyleSpec.decode(row.spec)?.let { PreviousTurn(it, row.bpm, row.seedPieceId) }
@@ -132,7 +159,7 @@ class StudioViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    /** "Another like it": [turn]'s idea again, a new random seed; its own turn, under it. */
+    /** "Another like it": [turn]'s idea again, a new random seed; its own turn, which takes the stage. */
     fun again(turn: Turn) {
         viewModelScope.launch {
             val spec = StyleSpec.decode(turn.spec)

@@ -7,13 +7,26 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- The shelf: a grid of covers. Tinted where it is used. -->
+<!-- History: a clock face with the hands turned back, an arrow at its open end. Tinted where it is used. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M5,12A8,8 0 1,1 7.34,17.66" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M13,8v4.5l3,2" />
+    <path
         android:fillColor="#FF000000"
-        android:pathData="M3,3h8v8H3z M13,3h8v8h-8z M3,13h8v8H3z M13,13h8v8h-8z" />
+        android:pathData="M1.8,10.6h6.4L5,14.6z" />
 </vector>

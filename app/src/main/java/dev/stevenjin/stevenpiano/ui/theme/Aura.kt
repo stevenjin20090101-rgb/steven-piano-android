@@ -24,15 +24,21 @@ val AuraLight = listOf(Color(0xFF3F6BF0), Color(0xFF8A58F0), Color(0xFFF0558F), 
 /** The aura's stops for this appearance; PianoTheme provides them. */
 val LocalAuraStops = staticCompositionLocalOf { AuraDark }
 
-/** The aura's measures and pace: rest 30 % (a turn in 12 s), focused 60 %, working 100 % (a turn in 4 s). */
+/**
+ * The aura's measures and pace (DESIGN.md › v1.13.1 — the stage): a 2.5 dp ring; at rest 65 %, a turn in 8 s;
+ * focused 85 %, a turn in 6 s; working 100 %, a turn in 2.5 s. Its glow reaches [Glow], and while it works breathes
+ * out to [GlowBreath] and back every [BreathMs].
+ */
 object AuraTokens {
-    const val RestAlpha = 0.30f
-    const val FocusedAlpha = 0.60f
+    const val RestAlpha = 0.65f
+    const val FocusedAlpha = 0.85f
     const val WorkingAlpha = 1f
-    const val RestTurnMs = 12_000
-    const val WorkingTurnMs = 4_000
-    val Ring = 2.dp
-    val Glow = 6.dp
-    val GlowRoom = 10.dp
+    const val RestTurnMs = 8_000
+    const val FocusedTurnMs = 6_000
+    const val WorkingTurnMs = 2_500
+    const val BreathMs = 1_800
+    val Ring = 2.5.dp
+    val Glow = 28.dp
+    val GlowBreath = 40.dp
     val Dot = 6.dp
 }
