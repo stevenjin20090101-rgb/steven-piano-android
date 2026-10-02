@@ -7434,7 +7434,36 @@ emulator, three new tests, no version bump, no signing. Nothing about how notes 
 
 ## The Library
 
-Run 2 writes this.
+Run 2, on `main` beside run 3's worktree: `ui/**`, `settings/Settings.kt` and one line of the diagnostics; no data change.
+
+- **The control**: `ui/components/SegmentedControl.kt`, one `Layout` of `selectable(role = RadioButton)` segments (no
+  ripple; the label `pressScale`d) under a `drawBehind` track and thumb; segment widths from a `TextMeasurer` in the
+  chosen weight, so the width never moves with the choice; a fixed width (a phone's row) is shared equally.
+- **Where it sits**: `LibraryScreen`'s header is a `BoxWithConstraints` in the reading width: the switch goes in
+  `ScreenHeader`'s actions at `maxWidth >= 560.dp` and `fontScale <= 1.3`, else its own row (16 dp sides); shown when
+  the list is (`listed`) and the remembered genre has been read. `Settings.libraryScope` (key `libraryScope`,
+  `setLibraryScope`, All by default) holds it; the diagnostics list it after `playlistSort`.
+- **What follows it**: `Selection.scope` and `LibraryState.scope`; the selection is null until `rememberedScope.first()`
+  (the stored setting, not the settings' defaults) is read; `vm.scope` is the choice at once, for the thumb.
+  `selectScope` saves through `saveScope`, closes a group, keeps the chip and the query. `listing` asks the repository's
+  scoped lists (a playlist opens whole); `GenreListing.channels` filters the row and See all; `composerPieces` is scoped.
+- **The words**: `Category.label(scope)` ("Pieces"; "Artists" under Modern), `searchPlaceholder` (a playlist's search is
+  All's), `EmptyListing`, `composerName(composer, scope)`, `ComposerHeader(backLabel)`, the Rename field.
+- **Move**: `PieceActions.setGenre` (kept by `forPlaylist`), `PieceMenu`'s item after Rename, `ComposerTile(scope,
+  genre, onMove)` with `Listing.Composers.genreByKey` (`GenreListing.byKey`: each key's majority over `library.all()`,
+  never the blank or a made-here key); `moveTarget`, `moveLabel`, `movedLine`; `vm.setGenre`, `vm.setComposerGenre`.
+- **Kiosk**: Move runs through `gate.run` as Rename does; the switch never does.
+- **Accessibility**: the control's `selectableGroup()` with `contentDescription` "Genre"; `LocalReducedTransparency`
+  (high contrast text) gives the thumb its 1.5 dp edge; `View.announceMoved` calls `announceForAccessibility`
+  (deprecated in API 36 and suppressed there: a move shows no text a live region could carry).
+- **Motion**: the thumb on `Motion.settle` (`Motion.sprung`, a cut when reduced), read in the draw; `LibraryItems` keeps
+  one `Animatable` alpha in a `graphicsLayer` on every listing item (rows, tiles, the channel row, group headers, the
+  empty message), 0 while the listing shown is not the chosen genre's, `PopMs / 2` each way; a snap when reduced. The
+  entrance is not keyed on the genre.
+- **Tests**: `LibraryStatesTest` +1 (the chips' words, the listing asked for the genre and the state carrying it, the
+  channels under each genre, each name's Move), `SettingsRepositoryTest` +1 (All until chosen, then remembered);
+  `DiagnosticsExporterTest`'s line count 47 → 48. 1,577 → 1,579 unit tests (12 skipped), none failing. `lintDebug`:
+  0 errors, the same 30 warnings.
 
 ## The web panel and guests
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
@@ -133,13 +134,23 @@ const val BUILT_IN = "Built in"
 
 /**
  * A composer's tile, by full name: their portrait, else the mosaic of their pieces' roll cards.
- * Tap opens their pieces; long-press plays them all or shuffled.
+ * Tap opens their pieces; long-press plays them all or shuffled (those of the genre shown, [scope]),
+ * then moves every piece by the name to the other genre than [genre], the one most of their pieces
+ * have (v1.14 — M37: Move to Modern or Move to Classical; not offered without one).
  */
 @Composable
-fun ComposerTile(composer: ComposerGroup, onOpen: () -> Unit, onPlayAll: (shuffle: Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun ComposerTile(
+    composer: ComposerGroup,
+    scope: LibraryScope,
+    genre: Int?,
+    onOpen: () -> Unit,
+    onPlayAll: (shuffle: Boolean) -> Unit,
+    onMove: (genre: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var menu by remember { mutableStateOf(false) }
     Tile(
-        name = composerName(composer),
+        name = composerName(composer, scope),
         meta = Format.count(composer.pieceCount, "piece", "pieces"),
         art = { ComposerArt(composer.composerKey, composer.shortName.ifBlank { composer.name }, ArtSize.Tile, it) },
         onOpen = onOpen,
@@ -149,11 +160,17 @@ fun ComposerTile(composer: ComposerGroup, onOpen: () -> Unit, onPlayAll: (shuffl
         GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Play all", { menu = false }) { onPlayAll(false) }
             MenuItem("Shuffle", { menu = false }) { onPlayAll(true) }
+            moveTarget(genre)?.let { target ->
+                HairlineDivider()
+                MenuItem(moveLabel(target), { menu = false }) { onMove(target) }
+            }
         }
     }
 }
 
-fun composerName(composer: ComposerGroup): String = composer.name.ifBlank { "Unknown composer" }
+/** A composer's name, or for the pieces that name none "Unknown composer" ("Unknown artist" under Modern, v1.14 — M37). */
+fun composerName(composer: ComposerGroup, scope: LibraryScope = LibraryScope.All): String =
+    composer.name.ifBlank { if (scope == LibraryScope.Modern) "Unknown artist" else "Unknown composer" }
 
 /** One row of a grid of [columns] tiles with 8 dp gutters; a short last row keeps the tiles' width. */
 @Composable

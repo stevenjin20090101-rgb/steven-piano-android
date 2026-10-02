@@ -17,7 +17,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.channels.ChannelSummary
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryRepository
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistOrder
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.data.TextKeys
@@ -37,6 +39,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -47,12 +50,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** The chips, Synthesia-style. */
-enum class Category(val label: String) {
-    All("All"),
+enum class Category(private val word: String) {
+    All("Pieces"),
     Playlists("Playlists"),
     Composers("Composers"),
     Favorites("Favorites"),
     Recent("Recent"),
+    ;
+
+    /**
+     * The chip's word under the genre [scope] (v1.14 — M37): every piece is "Pieces" (never a second "All" beside the
+     * switch's), and under Modern the composers are "Artists".
+     */
+    fun label(scope: LibraryScope): String = if (this == Composers && scope == LibraryScope.Modern) ARTISTS else word
+
+    private companion object {
+        const val ARTISTS = "Artists"
+    }
 }
 
 /** A second-level list: one playlist's pieces, one composer's, or every channel (the Playlists' See all). */
@@ -91,7 +105,11 @@ sealed interface Listing {
         override val isEmpty: Boolean get() = channels.isEmpty()
     }
 
-    data class Composers(val composers: List<ComposerGroup>) : Listing {
+    /**
+     * The composers' (or artists') grid; [genreByKey] is each name's genre, the one most of all its pieces have, for
+     * its tile's Move (v1.14 — M37: none for the blank name, a made-here one, or a tie).
+     */
+    data class Composers(val composers: List<ComposerGroup>, val genreByKey: Map<String, Int> = emptyMap()) : Listing {
         override val isEmpty: Boolean get() = composers.isEmpty()
     }
 }
@@ -100,17 +118,20 @@ data class LibraryState(
     val category: Category = Category.All,
     val group: Group? = null,
     val listing: Listing = Listing.Pieces(emptyList()),
+    /** Every piece's count, whatever the genre shown. */
     val pieceCount: Int = 0,
     val loaded: Boolean = false,
     /** The library could not be read (a damaged database, a row too large to read): the tab says so instead of crashing. */
     val unreadable: Boolean = false,
+    /** The genre the [listing] is of (v1.14 — M37). */
+    val scope: LibraryScope = LibraryScope.All,
 ) {
     /** Nothing imported yet. */
     val empty: Boolean get() = loaded && !unreadable && pieceCount == 0
 }
 
-/** What the Library shows: a category, or a group inside it. */
-internal data class Selection(val category: Category, val group: Group?)
+/** What the Library shows: a category, or a group inside it, of one genre or all ([scope], v1.14 — M37). */
+internal data class Selection(val category: Category, val group: Group?, val scope: LibraryScope = LibraryScope.All)
 
 /**
  * The Library's state from the [selections] (with the search text) and the piece [count]: each
@@ -128,11 +149,11 @@ internal fun libraryStates(
     selections
         .flatMapLatest { (sel, q) ->
             listing(sel, q)
-                .map { LibraryState(sel.category, sel.group, it, loaded = true) }
+                .map { LibraryState(sel.category, sel.group, it, loaded = true, scope = sel.scope) }
                 .catch { e ->
                     if (e is CancellationException) throw e
                     log(e)
-                    emit(LibraryState(sel.category, sel.group, loaded = true, unreadable = true))
+                    emit(LibraryState(sel.category, sel.group, loaded = true, unreadable = true, scope = sel.scope))
                 }
         }
         .combine(count) { state, pieces -> state.copy(pieceCount = pieces) }
@@ -146,7 +167,9 @@ internal fun libraryStates(
  * The Library tab: the chosen category or group, filtered by the search field (title and
  * composer, case and accents ignored), and the menus' edits. Edits run in [writes], the app's
  * scope, so leaving the tab never cuts one short. A deleted piece or playlist takes its artwork
- * with it ([forgetArtwork]).
+ * with it ([forgetArtwork]). Everything shown is of the genre chosen (v1.14 — M37: All, Classical
+ * or Modern), which starts as the one chosen last ([rememberedScope], read once) and is remembered
+ * through [saveScope].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
@@ -157,8 +180,28 @@ class LibraryViewModel(
     private val channels: Flow<List<ChannelSummary>?> = flowOf(null),
     private val playlistSort: Flow<PlaylistSort> = flowOf(PlaylistSort.NEWEST),
     private val builtInOrder: () -> List<String> = { emptyList() },
+    rememberedScope: Flow<LibraryScope> = flowOf(LibraryScope.All),
+    private val saveScope: suspend (LibraryScope) -> Unit = {},
 ) : ViewModel() {
-    private val selection = MutableStateFlow(Selection(Category.All, null))
+    /** Null until the genre remembered has been read: nothing is listed before, so the genre never changes as the tab opens. */
+    private val selection = MutableStateFlow<Selection?>(null)
+
+    init {
+        viewModelScope.launch {
+            val remembered = try {
+                rememberedScope.first()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "The Library's genre couldn't be read", e)
+                LibraryScope.All
+            }
+            selection.update { it ?: Selection(Category.All, null, remembered) }
+        }
+    }
+
+    /** The genre chosen, at once (the switch's thumb moves as it is touched; the list follows when it has been read). */
+    val scope: StateFlow<LibraryScope?> = selection.map { it?.scope }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** The search field's text. Compose state, so typing never waits on the database. */
     var query by mutableStateOf("")
@@ -170,7 +213,7 @@ class LibraryViewModel(
 
     val state: StateFlow<LibraryState> =
         libraryStates(
-            combine(selection, snapshotFlow { query.trim() }.distinctUntilChanged()) { sel, q -> sel to q },
+            combine(selection.filterNotNull(), snapshotFlow { query.trim() }.distinctUntilChanged()) { sel, q -> sel to q },
             library.count(),
             log = { Log.w(TAG, "The library couldn't be read", it) },
             listing = ::listing,
@@ -186,16 +229,26 @@ class LibraryViewModel(
     }
 
     fun selectCategory(category: Category) {
-        selection.value = Selection(category, null)
+        selection.update { Selection(category, null, it?.scope ?: LibraryScope.All) }
+    }
+
+    /**
+     * The genre (v1.14 — M37): remembered across restarts; an open playlist, composer or the channels close, and the
+     * chip and the search text stay. Choosing the one already chosen changes nothing.
+     */
+    fun selectScope(scope: LibraryScope) {
+        if (selection.value?.scope == scope) return
+        selection.update { (it ?: Selection(Category.All, null)).copy(group = null, scope = scope) }
+        write { saveScope(scope) }
     }
 
     fun openGroup(group: Group) {
         query = ""
-        selection.update { it.copy(group = group) }
+        selection.update { it?.copy(group = group) }
     }
 
     fun closeGroup() {
-        selection.update { it.copy(group = null) }
+        selection.update { it?.copy(group = null) }
     }
 
     fun dismissImport(progress: ImportProgress) {
@@ -205,6 +258,12 @@ class LibraryViewModel(
     fun setFavorite(piece: PieceEntity, favorite: Boolean) = write { library.setFavorite(piece.id, favorite) }
 
     fun rename(piece: PieceEntity, title: String, composer: String) = write { library.rename(piece.id, title, composer) }
+
+    /** The piece moves to Classical or Modern (v1.14 — M37); a list of the other genre lets it go. */
+    fun setGenre(piece: PieceEntity, genre: Int) = write { library.setGenre(piece.id, genre) }
+
+    /** Every piece by [composerKey] moves to Classical or Modern, so the artist's later uploads follow. */
+    fun setComposerGenre(composerKey: String, genre: Int) = write { library.setComposerGenre(composerKey, genre) }
 
     fun delete(piece: PieceEntity) {
         write { library.delete(piece.id) }
@@ -224,7 +283,7 @@ class LibraryViewModel(
 
     /** Deletes the playlist (never its pieces); its page closes if it is open. */
     fun deletePlaylist(id: Long) {
-        if ((selection.value.group as? Group.Playlist)?.id == id) closeGroup()
+        if ((selection.value?.group as? Group.Playlist)?.id == id) closeGroup()
         write { library.deletePlaylist(id) }
         forgetArtwork(ArtworkEntity.forPlaylist(id))
     }
@@ -237,11 +296,15 @@ class LibraryViewModel(
     /** A drag in the playlist ended with its pieces in [orderedIds]' order. */
     fun reorderPlaylist(playlistId: Long, orderedIds: List<Long>) = write { library.reorderPlaylist(playlistId, orderedIds) }
 
-    /** A composer's pieces, by title, for Play all and Shuffle on the composer's tile. Nothing plays if they can't be read. */
+    /**
+     * A composer's pieces of the genre shown, by title, for Play all and Shuffle on the composer's tile. Nothing plays
+     * if they can't be read.
+     */
     fun composerPieces(composerKey: String, then: (List<Long>) -> Unit) {
+        val scope = selection.value?.scope ?: LibraryScope.All
         viewModelScope.launch {
             val ids = try {
-                library.byComposer(composerKey).first().map { it.id }
+                library.byComposer(composerKey, scope).first().map { it.id }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: RuntimeException) {
@@ -252,28 +315,37 @@ class LibraryViewModel(
         }
     }
 
+    /**
+     * The listing for [sel] of its genre (v1.14 — M37): the pieces, favorites, recent ones and a search of that genre;
+     * the composers with a piece of it, each page that genre's pieces; the playlists that show under it, each opening
+     * whole; the channels listed under it.
+     */
     private fun listing(sel: Selection, query: String): Flow<Listing> {
         val key = TextKeys.fold(query)
+        val scope = sel.scope
         return when (val group = sel.group) {
             is Group.Playlist -> combine(library.inPlaylist(group.id), library.playlists()) { pieces, all ->
                 Listing.Pieces(pieces.matching(key), all.firstOrNull { it.id == group.id })
             }
-            is Group.Composer -> library.byComposer(group.key).map { Listing.Pieces(it.matching(key)) }
-            Group.Channels -> channels.map { all -> Listing.Channels(all.orEmpty().filter { key in TextKeys.fold(it.name) }) }
+            is Group.Composer -> library.byComposer(group.key, scope).map { Listing.Pieces(it.matching(key)) }
+            Group.Channels -> channels.map { all -> Listing.Channels(GenreListing.channels(all.orEmpty(), scope).filter { key in TextKeys.fold(it.name) }) }
             null -> when (sel.category) {
-                Category.All -> (if (key.isEmpty()) library.all() else library.search(query)).map { Listing.Pieces(it) }
-                Category.Favorites -> library.favorites().map { Listing.Pieces(it.matching(key)) }
-                Category.Recent -> library.recent().map { Listing.Pieces(it.matching(key)) }
+                Category.All -> (if (key.isEmpty()) library.all(scope) else library.search(query, scope)).map { Listing.Pieces(it) }
+                Category.Favorites -> library.favorites(scope).map { Listing.Pieces(it.matching(key)) }
+                Category.Recent -> library.recent(scope).map { Listing.Pieces(it.matching(key)) }
                 // The channels' row stands above the playlists; a search narrows the playlists alone. Their order is the
                 // person's choice (v1.10.1 — M28, D6); the built-in lists' order is read off the main thread.
-                Category.Playlists -> combine(library.playlists(), channels, playlistSort) { all, cards, sort ->
+                Category.Playlists -> combine(library.playlists(scope), channels, playlistSort) { all, cards, sort ->
                     Listing.Playlists(
                         PlaylistShelf.shown(all, sort, builtInOrder()).filter { key in TextKeys.fold(it.name) },
-                        if (key.isEmpty()) cards.orEmpty() else emptyList(),
+                        if (key.isEmpty()) GenreListing.channels(cards.orEmpty(), scope) else emptyList(),
                         sort,
                     )
                 }.flowOn(Dispatchers.Default)
-                Category.Composers -> library.composers().map { all -> Listing.Composers(all.filter { key in TextKeys.fold(it.name) }) }
+                // Each name's genre for its tile's Move, counted over all its pieces (whatever the genre shown).
+                Category.Composers -> combine(library.composers(scope), library.all()) { all, pieces ->
+                    Listing.Composers(all.filter { key in TextKeys.fold(it.name) }, GenreListing.byKey(pieces))
+                }.flowOn(Dispatchers.Default)
             }
         }
     }
@@ -302,6 +374,30 @@ class LibraryViewModel(
     private companion object {
         const val TAG = "Library"
         const val STOP_TIMEOUT_MS = 5_000L
+    }
+}
+
+/** What the genre chosen does to a listing (v1.14 — M37). Pure. */
+internal object GenreListing {
+    /** The channels listed under [scope]: every one under All, else those of its genre (so Everything only under All). */
+    fun channels(all: List<ChannelSummary>, scope: LibraryScope): List<ChannelSummary> {
+        val genre = scope.genre ?: return all
+        return all.filter { it.genre == genre }
+    }
+
+    /** Each composer's or artist's genre, the one most of their [pieces] have; never the blank name or a made-here one, nor a tie. */
+    fun byKey(pieces: List<PieceEntity>): Map<String, Int> {
+        val counts = HashMap<String, IntArray>()
+        for (piece in pieces) {
+            val key = piece.composerKey
+            if (key.isBlank() || Genres.madeHere(key)) continue
+            val count = counts.getOrPut(key) { IntArray(2) }
+            when (piece.genre) {
+                Genres.CLASSICAL -> count[0]++
+                Genres.MODERN -> count[1]++
+            }
+        }
+        return buildMap { counts.forEach { (key, count) -> Genres.majority(count[0], count[1])?.let { put(key, it) } } }
     }
 }
 

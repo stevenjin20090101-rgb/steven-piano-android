@@ -33,9 +33,10 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.WikipediaLink
 
 /**
- * A composer's page head: back, the [portrait] at 96 dp beside the name in Title over [meta]
- * ("12 pieces"), then [blurb] (the first two sentences of their Wikipedia text, when there is
- * one) with a "From Wikipedia" link to [sourceUrl], since that text is Wikipedia's.
+ * A composer's page head: back ([backLabel], "Back to composers", or under Modern "Back to artists":
+ * v1.14 — M37), the [portrait] at 96 dp beside the name in Title over [meta] ("12 pieces"), then
+ * [blurb] (the first two sentences of their Wikipedia text, when there is one) with a "From
+ * Wikipedia" link to [sourceUrl], since that text is Wikipedia's.
  */
 @Composable
 fun ComposerHeader(
@@ -45,10 +46,11 @@ fun ComposerHeader(
     blurb: String?,
     sourceUrl: String?,
     onBack: () -> Unit,
+    backLabel: String = "Back to composers",
 ) {
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            GlyphButton(R.drawable.ic_back, "Back to composers", onClick = onBack)
+            GlyphButton(R.drawable.ic_back, backLabel, onClick = onBack)
         }
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             portrait(Modifier.size(PORTRAIT))

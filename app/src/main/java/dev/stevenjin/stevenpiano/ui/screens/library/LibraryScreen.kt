@@ -10,10 +10,12 @@
 package dev.stevenjin.stevenpiano.ui.screens.library
 
 import android.content.Intent
+import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,21 +67,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selectableGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
@@ -117,6 +123,7 @@ import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 import dev.stevenjin.stevenpiano.ui.components.placement
 import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import dev.stevenjin.stevenpiano.ui.components.SegmentedControl
 import dev.stevenjin.stevenpiano.ui.components.actionButtonColors
 import dev.stevenjin.stevenpiano.ui.components.moved
 import dev.stevenjin.stevenpiano.ui.components.readingPadding
@@ -138,6 +145,7 @@ import dev.stevenjin.stevenpiano.studio.StudioSupport
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -167,7 +175,10 @@ import java.time.LocalTime
  * › v1.6.1 — M20): adding music (the + and its sheet), deleting, renaming, adding to and taking out of
  * playlists, reordering them, a playlist's photo, a channel's volume and scheduling a channel wait for
  * the kiosk PIN ([KioskGate]); playing, queueing, favourites and browsing never do. A channel's
- * Schedule opens the schedule editor with the channel chosen (DESIGN.md › v1.6.2 — M19).
+ * Schedule opens the schedule editor with the channel chosen (DESIGN.md › v1.6.2 — M19). In the
+ * header, once there are pieces, the genre switch All · Classical · Modern (DESIGN.md › v1.14 — M37):
+ * everything listed follows it, it is remembered, and it is free in kiosk mode; a piece's or a
+ * name's Move to the other genre waits for the PIN as Rename does.
  */
 @Composable
 fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano: () -> Unit, onImport: (ImportSource) -> Unit, onOpenStudio: () -> Unit = {}) {
@@ -181,9 +192,13 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             graph.channelPools.summaries,
             playlistSort = graph.settings.map { it.playlistSort }.distinctUntilChanged(),
             builtInOrder = { graph.builtIns.keys },
+            // The genre chosen last, as stored (never the settings' defaults before they are read), and where a choice goes.
+            rememberedScope = graph.settingsRepository.settings.map { it.libraryScope },
+            saveScope = graph.settingsRepository::setLibraryScope,
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    val chosenScope by vm.scope.collectAsStateWithLifecycle()
     val importProgress by vm.importProgress.collectAsStateWithLifecycle()
     val artworkProgress by graph.artwork.progress.collectAsStateWithLifecycle()
     val studioJobs by graph.studio.jobs.jobs.collectAsStateWithLifecycle()
@@ -225,7 +240,8 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     val loadLibrary: (Boolean) -> Unit = { everything ->
         gate.run { if (appSettings.libraryPackVersion == 0) licenceFor = everything else pack.load(everything) }
     }
-    val actions = remember(vm, playback, gate) {
+    val view = LocalView.current
+    val actions = remember(vm, playback, gate, view) {
         PieceActions(
             playNext = { playback.playNext(listOf(it.id)) },
             addToQueue = { playback.addToQueue(listOf(it.id)) },
@@ -234,6 +250,13 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             setFavorite = vm::setFavorite,
             rename = { piece -> gate.run { dialog = LibraryDialog.Rename(piece) } },
             delete = { piece -> gate.run { dialog = LibraryDialog.Delete(piece) } },
+            // A move changes the library, so in kiosk mode it waits for the PIN as Rename does; no dialog: moving back undoes it.
+            setGenre = { piece, genre ->
+                gate.run {
+                    vm.setGenre(piece, genre)
+                    view.announceMoved(genre)
+                }
+            },
         )
     }
     val frame = LocalAppFrame.current
@@ -254,17 +277,28 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             scroll = if (listed) listState else null,
             modifier = modifier,
             header = {
-                Column(Modifier.readingWidth()) {
-                    ScreenHeader("Library") {
-                        // Settings locked in kiosk: a padlock beside the +, which then asks for the PIN.
-                        if (gate.locked) LockGlyph(description = null)
-                        GlyphButton(R.drawable.ic_add, if (gate.locked) "Add MIDI files, ${KioskLockCopy.LOCKED.lowercase()}" else "Add MIDI files", onClick = addMusic)
+                // The genre switch (v1.14 — M37), once there are pieces: in the title row before the padlock and the +
+                // when the header is wide enough and the text not too large (the tablet's library pane), otherwise a row
+                // of its own under the title, still pinned. Choosing a genre is changing the view: no kiosk PIN.
+                val genre = chosenScope.takeIf { listed }
+                BoxWithConstraints(Modifier.readingWidth()) {
+                    val inline = maxWidth >= GENRE_INLINE_WIDTH && LocalDensity.current.fontScale <= GENRE_INLINE_FONT_SCALE
+                    Column(Modifier.fillMaxWidth()) {
+                        ScreenHeader("Library") {
+                            if (genre != null && inline) GenreSwitch(genre, vm::selectScope, Modifier.padding(end = 8.dp))
+                            // Settings locked in kiosk: a padlock beside the +, which then asks for the PIN.
+                            if (gate.locked) LockGlyph(description = null)
+                            GlyphButton(R.drawable.ic_add, if (gate.locked) "Add MIDI files, ${KioskLockCopy.LOCKED.lowercase()}" else "Add MIDI files", onClick = addMusic)
+                        }
+                        if (genre != null && !inline) {
+                            GenreSwitch(genre, vm::selectScope, Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+                        }
+                        // What runs in the background stays in sight in the bar: an import, artwork arriving, a Studio job.
+                        ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
+                        LibraryBar(packState, onDismiss = pack::dismiss)
+                        ArtworkBar(artworkProgress)
+                        StudioBar(studioJobs)
                     }
-                    // What runs in the background stays in sight in the bar: an import, artwork arriving, a Studio job.
-                    ImportBar(importProgress, vm.dismissedImport, vm::dismissImport)
-                    LibraryBar(packState, onDismiss = pack::dismiss)
-                    ArtworkBar(artworkProgress)
-                    StudioBar(studioJobs)
                 }
             },
         ) {
@@ -289,7 +323,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                             .padding(top = top),
                     ) {
                         banners()
-                        CategoryChips(state.category, vm::selectCategory)
+                        CategoryChips(state.category, state.scope, vm::selectCategory)
                         OutlinedBanner(UNREADABLE, Modifier.padding(16.dp))
                     }
                     state.empty -> Column(
@@ -331,7 +365,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                             }
                             // The Playlists' order is how the person looks at them, not a change to the library: no kiosk PIN.
                             val sortPlaylists: (PlaylistSort) -> Unit = { sort -> graph.appScope.launch { graph.settingsRepository.setPlaylistSort(sort) } }
-                            LibraryItems(state, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog, banners, sortPlaylists)
+                            LibraryItems(state, chosenScope, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, schedule, gate, openDialog, banners, sortPlaylists)
                         }
                     }
                 }
@@ -460,6 +494,7 @@ private fun isPieceKey(key: Any): Boolean = key is String && key.length > 1 && k
 @Composable
 private fun LibraryItems(
     state: LibraryState,
+    chosenScope: LibraryScope?,
     vm: LibraryViewModel,
     listState: LazyListState,
     padding: PaddingValues,
@@ -486,6 +521,17 @@ private fun LibraryItems(
     // composer, the channels); its first ten rows ease in once. Rows find their places on the settle spring.
     val reduced = rememberReducedMotion()
     val entrance = remember(playlistId ?: (group as? Group.Composer)?.key ?: group ?: state.category) { ListEntrance() }
+    // The genre's fade-through (v1.14 — M37): from the touch on the switch what is listed fades out, and the new genre's
+    // listing fades in once it has been read, half of a popover's 160 ms each way; the search field and the chips stay.
+    // A genre is no new visit (the entrance is not keyed on it), so no rows ease in again; a group the switch closes is
+    // left as Back leaves it. Under reduced motion the list simply changes.
+    val fade = remember { Animatable(1f) }
+    val showsChosen = chosenScope == null || chosenScope == state.scope
+    LaunchedEffect(showsChosen, reduced) {
+        if (reduced) fade.snapTo(1f) else fade.animateTo(if (showsChosen) 1f else 0f, Motion.timed(Motion.PopMs / 2, reduced = false, easing = if (showsChosen) Motion.Enter else Motion.Leave))
+    }
+    val faded = remember(fade) { Modifier.graphicsLayer { alpha = fade.value } }
+    val view = LocalView.current
     val pieces = (listing as? Listing.Pieces)?.pieces.orEmpty()
     // A built-in playlist's order and pieces are the app's: no handles, no Move or Remove in its rows.
     val builtIn = (listing as? Listing.Pieces)?.playlist?.builtIn == true
@@ -536,35 +582,41 @@ private fun LibraryItems(
     // The list draws beneath the header, the bar and beside the rail, and fades into them where it meets them.
     LazyColumn(Modifier.fillMaxSize().scrollEdges(listState), state = listState, contentPadding = listPadding) {
         item(key = "banners") { banners() }
-        item(key = "search") { SearchField(vm.query, vm::search) }
-        item(key = "categories") { CategoryChips(state.category, vm::selectCategory) }
+        // A playlist opens whole, so its search is of every genre.
+        item(key = "search") { SearchField(vm.query, vm::search, searchPlaceholder(if (group is Group.Playlist) LibraryScope.All else state.scope)) }
+        item(key = "categories") { CategoryChips(state.category, state.scope, vm::selectCategory) }
         when (group) {
             is Group.Playlist -> item(key = "header") {
                 val summary = (listing as? Listing.Pieces)?.playlist
                     ?: PlaylistSummary(group.id, group.name, false, pieces.size, pieces.sumOf { it.durationMs })
-                PlaylistHeader(
-                    summary,
-                    cover = { PlaylistCover(summary.id, summary.name, ArtSize.Tile, it) },
-                    onBack = vm::closeGroup,
-                    onShuffle = { play.all(shown.map { it.id }, shuffle = true) },
-                    onRename = { onDialog(LibraryDialog.RenamePlaylist(summary)) },
-                    onChangePhoto = { onChangePhoto(summary.id) },
-                    onDelete = { onDialog(LibraryDialog.DeletePlaylist(summary)) },
-                )
+                Box(faded) {
+                    PlaylistHeader(
+                        summary,
+                        cover = { PlaylistCover(summary.id, summary.name, ArtSize.Tile, it) },
+                        onBack = vm::closeGroup,
+                        onShuffle = { play.all(shown.map { it.id }, shuffle = true) },
+                        onRename = { onDialog(LibraryDialog.RenamePlaylist(summary)) },
+                        onChangePhoto = { onChangePhoto(summary.id) },
+                        onDelete = { onDialog(LibraryDialog.DeletePlaylist(summary)) },
+                    )
+                }
             }
             Group.Channels -> item(key = "header") {
-                ChannelsHeader((listing as? Listing.Channels)?.channels?.size ?: 0, onBack = vm::closeGroup)
+                Box(faded) { ChannelsHeader((listing as? Listing.Channels)?.channels?.size ?: 0, onBack = vm::closeGroup) }
             }
             is Group.Composer -> item(key = "group") {
                 val artwork = rememberArtworkRow(ArtworkEntity.forComposer(group.key))
-                ComposerHeader(
-                    portrait = { ComposerArt(group.key, group.name, ArtSize.Tile, it) },
-                    name = group.name,
-                    meta = Format.count(pieces.size, "piece", "pieces"),
-                    blurb = artwork?.description?.let(Sentences::firstTwo),
-                    sourceUrl = artwork?.sourceUrl,
-                    onBack = vm::closeGroup,
-                )
+                Box(faded) {
+                    ComposerHeader(
+                        portrait = { ComposerArt(group.key, group.name, ArtSize.Tile, it) },
+                        name = group.name,
+                        meta = Format.count(pieces.size, "piece", "pieces"),
+                        blurb = artwork?.description?.let(Sentences::firstTwo),
+                        sourceUrl = artwork?.sourceUrl,
+                        onBack = vm::closeGroup,
+                        backLabel = if (state.scope == LibraryScope.Modern) "Back to artists" else "Back to composers",
+                    )
+                }
             }
             null -> Unit
         }
@@ -577,7 +629,8 @@ private fun LibraryItems(
                     rowActions,
                     onPlay = { play.piece(piece.id, shown.map { it.id }) },
                     modifier = (if (reorderable) Modifier.reorderable(drag, key, this) else Modifier.placement(this, reduced))
-                        .easedIn(rememberEntrance(entrance, key, index), rise = ListEntrance.Rise),
+                        .easedIn(rememberEntrance(entrance, key, index), rise = ListEntrance.Rise)
+                        .then(faded),
                     place = if (reorderable) place else null,
                     trailing = if (reorderable) {
                         {
@@ -596,26 +649,28 @@ private fun LibraryItems(
             is Listing.Playlists -> {
                 if (listing.channels.isNotEmpty()) {
                     item(key = "channels") {
-                        ChannelRow(
-                            listing.channels,
-                            playing = playingChannel,
-                            connected = connected,
-                            onPlay = play::channel,
-                            onSetVolume = onSetVolume,
-                            onSchedule = onSchedule,
-                            onSeeAll = { vm.openGroup(Group.Channels) },
-                        )
+                        Box(faded) {
+                            ChannelRow(
+                                listing.channels,
+                                playing = playingChannel,
+                                connected = connected,
+                                onPlay = play::channel,
+                                onSetVolume = onSetVolume,
+                                onSchedule = onSchedule,
+                                onSeeAll = { vm.openGroup(Group.Channels) },
+                            )
+                        }
                     }
                 }
                 // The header row: the eyebrow PLAYLISTS and the pop-up button of their order (v1.10.1 — M28, D6).
                 if (listing.playlists.isNotEmpty()) {
-                    item(key = "playlists-head") { PlaylistsHeader(listing.sort, onSortPlaylists) }
+                    item(key = "playlists-head") { Box(faded) { PlaylistsHeader(listing.sort, onSortPlaylists) } }
                 } else {
                     item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 }
                 itemsIndexed(listing.playlists.chunked(columns), key = { _, row -> "tiles-pl-${row.first().id}" }) { index, row ->
                     val eased = rememberEntrance(entrance, "tiles-pl-${row.first().id}", index)
-                    TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise)) {
+                    TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise).then(faded)) {
                         row.forEach { playlist ->
                             PlaylistTile(
                                 playlist,
@@ -628,17 +683,26 @@ private fun LibraryItems(
                     }
                 }
             }
-            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, onSchedule, entrance, reduced)
+            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, onSchedule, entrance, reduced, faded)
             is Listing.Composers -> {
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 itemsIndexed(listing.composers.chunked(columns), key = { _, row -> "tiles-k-${row.first().composerKey}" }) { index, row ->
                     val eased = rememberEntrance(entrance, "tiles-k-${row.first().composerKey}", index)
-                    TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise)) {
+                    TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise).then(faded)) {
                         row.forEach { composer ->
                             ComposerTile(
                                 composer,
-                                onOpen = { vm.openGroup(Group.Composer(composer.composerKey, composerName(composer))) },
+                                scope = state.scope,
+                                genre = listing.genreByKey[composer.composerKey],
+                                onOpen = { vm.openGroup(Group.Composer(composer.composerKey, composerName(composer, state.scope))) },
                                 onPlayAll = { shuffle -> vm.composerPieces(composer.composerKey) { play.all(it, shuffle) } },
+                                // Every piece by the name moves; in kiosk mode after the PIN, as a piece's Move.
+                                onMove = { genre ->
+                                    gate.run {
+                                        vm.setComposerGenre(composer.composerKey, genre)
+                                        view.announceMoved(genre)
+                                    }
+                                },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -646,12 +710,13 @@ private fun LibraryItems(
                 }
             }
         }
-        if (listing.isEmpty) item(key = "none") { EmptyListing(state, vm.query.trim()) }
+        if (listing.isEmpty) item(key = "none") { Box(faded) { EmptyListing(state, vm.query.trim()) } }
     }
 }
 
+/** The search field; its [placeholder] names what it searches (v1.14 — M37: the genre's titles and composers or artists). */
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit) {
+private fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: String) {
     val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = query,
@@ -659,7 +724,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        placeholder = { Text("Search titles and composers") },
+        placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
         trailingIcon = if (query.isEmpty()) null else {
             { GlyphButton(R.drawable.ic_close, "Clear search") { onQuery("") } }
@@ -672,9 +737,10 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
     )
 }
 
+/** The chips, in the genre [scope]'s words (v1.14 — M37: Composers reads Artists under Modern). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CategoryChips(selected: Category, onSelect: (Category) -> Unit) {
+private fun CategoryChips(selected: Category, scope: LibraryScope, onSelect: (Category) -> Unit) {
     FlowRow(
         Modifier
             .fillMaxWidth()
@@ -688,7 +754,7 @@ private fun CategoryChips(selected: Category, onSelect: (Category) -> Unit) {
             FilterChip(
                 selected = isSelected,
                 onClick = { onSelect(category) },
-                label = { Text(category.label) },
+                label = { Text(category.label(scope)) },
                 modifier = Modifier.pressScale(press),
                 interactionSource = press,
                 leadingIcon = if (isSelected) {
@@ -736,18 +802,65 @@ private fun EmptyLibrary(onAdd: () -> Unit, onLoadLibrary: () -> Unit, libraryLi
     }
 }
 
+/** What an empty listing says; under a genre (v1.14 — M37) the pieces, favorites, playlists and names it has none of. */
 @Composable
 private fun EmptyListing(state: LibraryState, query: String) {
+    // "Classical" or "Modern" for a category's own listing under a genre; null under All and inside a group.
+    val genre = state.scope.takeIf { it != LibraryScope.All && state.group == null }?.let(::genreWord)
     val (title, body) = when {
         query.isNotEmpty() -> "Nothing matches “$query”." to "Try part of a title or a composer's name."
         (state.listing as? Listing.Pieces)?.playlist?.builtIn == true -> "This playlist is empty." to "It fills itself from the library's pieces."
         state.group is Group.Playlist -> "This playlist is empty." to "Long-press a piece to add it here."
-        state.category == Category.Favorites -> "No favorites yet." to "Long-press a piece to make it a favorite."
-        state.category == Category.Playlists -> "No playlists yet." to "Long-press a piece to add it to a playlist."
+        genre != null && state.category == Category.All -> "No $genre pieces yet." to
+            if (state.scope == LibraryScope.Modern) "Songs you add that are not classical appear here." else "Steven's library and classical composers appear here."
+        state.category == Category.Favorites -> (if (genre != null) "No $genre favorites yet." else "No favorites yet.") to "Long-press a piece to make it a favorite."
+        state.category == Category.Playlists -> (if (genre != null) "No $genre playlists yet." else "No playlists yet.") to "Long-press a piece to add it to a playlist."
+        genre != null && state.category == Category.Composers ->
+            (if (state.scope == LibraryScope.Modern) "No artists yet." else "No composers yet.") to "Pieces by them appear here."
         else -> "Nothing here yet." to "Add a MIDI file to begin."
     }
     EmptyMessage(title, body)
 }
+
+/**
+ * The Library's genre (v1.14 — M37): All · Classical · Modern as a segmented control, a different level from the chips
+ * under it (genre first, then how to look at it); TalkBack reads it as "Genre".
+ */
+@Composable
+private fun GenreSwitch(scope: LibraryScope, onSelect: (LibraryScope) -> Unit, modifier: Modifier) {
+    SegmentedControl(
+        options = LibraryScope.entries.map(::genreWord),
+        selected = scope.ordinal,
+        onSelect = { onSelect(LibraryScope.entries[it]) },
+        label = "Genre",
+        modifier = modifier,
+    )
+}
+
+/** A genre's word, as the switch, the search field and the empty listings say it. */
+private fun genreWord(scope: LibraryScope): String = when (scope) {
+    LibraryScope.All -> "All"
+    LibraryScope.Classical -> "Classical"
+    LibraryScope.Modern -> "Modern"
+}
+
+/** What the search field says it searches under each genre. */
+private fun searchPlaceholder(scope: LibraryScope): String = when (scope) {
+    LibraryScope.All -> "Search titles and composers"
+    LibraryScope.Classical -> "Search Classical titles and composers"
+    LibraryScope.Modern -> "Search Modern titles and artists"
+}
+
+/** The header this wide or wider takes the genre switch in its title row, unless the text is larger than [GENRE_INLINE_FONT_SCALE]. */
+private val GENRE_INLINE_WIDTH = 560.dp
+private const val GENRE_INLINE_FONT_SCALE = 1.3f
+
+/**
+ * TalkBack hears where a piece or a name went ("Moved to Modern.", v1.14 — M37). The row simply leaves a list of the
+ * other genre, so there is no line on screen to make a live region of.
+ */
+@Suppress("DEPRECATION")   // deprecated in API 36 for live regions and pane titles, both of which need something shown
+private fun View.announceMoved(genre: Int) = announceForAccessibility(movedLine(genre))
 
 @Composable
 private fun EmptyMessage(title: String, body: String, action: (@Composable () -> Unit)? = null) {

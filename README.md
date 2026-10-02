@@ -38,6 +38,13 @@ on the tablet*). Made by Steven Jin. Version 1.13.1.
   arrives as a playlist of its own, and its artist folders name the artists
   (see *Importing*). A piece's menu plays it next, adds it to the queue or to a
   playlist, favorites, renames or deletes it, and opens *About this piece*.
+- **Classical and Modern** (from 1.14): a switch at the top of the Library,
+  **All · Classical · Modern**, and everything under it follows: pieces, search,
+  playlists, composers (**Artists** under Modern), favorites, recent and the
+  channels. It is remembered. Your uploads are Modern, Steven's library and the
+  classical composers Classical; a piece's menu moves it (*Move to Modern*, *Move
+  to Classical*), and a composer's or artist's tile moves every piece by them. In
+  kiosk mode the switch is free and a move asks for the PIN.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
   composer's portrait), **Shuffle**, and its pieces in the order you give them:
   drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**

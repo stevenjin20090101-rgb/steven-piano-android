@@ -64,7 +64,8 @@ fun ChannelsHeader(count: Int, onBack: () -> Unit) {
 
 /**
  * The channels' grid, as rows of [columns] cards in the Library's list; its first rows ease in with the listing's
- * [entrance] and rows find their places on the settle spring (v1.14 — motion; cuts when [reduced]).
+ * [entrance] and rows find their places on the settle spring (v1.14 — motion; cuts when [reduced]); [fade] is the
+ * listing's when the genre changes (v1.14 — M37).
  */
 fun LazyListScope.channelsGrid(
     channels: List<ChannelSummary>,
@@ -76,10 +77,11 @@ fun LazyListScope.channelsGrid(
     onSchedule: (String) -> Unit,
     entrance: ListEntrance,
     reduced: Boolean,
+    fade: Modifier = Modifier,
 ) {
     itemsIndexed(channels.chunked(columns), key = { _, row -> "channels-${row.first().key}" }) { index, row ->
         val eased = rememberEntrance(entrance, "channels-${row.first().key}", index)
-        TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise)) {
+        TileRow(columns, row.size, Modifier.placement(this, reduced).easedIn(eased, rise = ListEntrance.Rise).then(fade)) {
             row.forEach { channel ->
                 ChannelCard(
                     channel,

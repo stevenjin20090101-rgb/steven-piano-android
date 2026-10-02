@@ -9,8 +9,13 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.library
 
+import dev.stevenjin.stevenpiano.channels.ChannelSummary
+import dev.stevenjin.stevenpiano.data.Genres
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
+import dev.stevenjin.stevenpiano.data.builtin.LibraryFixture
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -25,7 +30,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The Library's state when the database fails to read (the v1.2 audit, F1): an error state, never a crash. */
+/**
+ * The Library's state when the database fails to read (the v1.2 audit, F1): an error state, never a crash. And what
+ * the genre chosen does to it (v1.14 — M37).
+ */
 class LibraryStatesTest {
     private val all = Selection(Category.All, null) to ""
     private val logged = mutableListOf<Throwable>()
@@ -97,5 +105,48 @@ class LibraryStatesTest {
         assertEquals(listOf(14L, 5L, 2L, 8L, 9L), PlaylistShelf.shown(all, PlaylistSort.NEWEST, listOf("popular", "recognisable", "epic")).map { it.id })
         assertEquals("the sort's pop-up button reads it to TalkBack", "Sort playlists, Newest first", sortDescription(PlaylistSort.NEWEST))
         assertEquals("Sort playlists, Name", sortDescription(PlaylistSort.NAME))
+    }
+
+    @Test
+    fun `the genre names the chips, is what the listing is asked for and narrows the channels, and a name's Move follows its pieces`() = runTest {
+        // No second "All" beside the switch's; the composers are artists under Modern only.
+        assertEquals(listOf("Pieces", "Playlists", "Composers", "Favorites", "Recent"), Category.entries.map { it.label(LibraryScope.All) })
+        assertEquals("Composers", Category.Composers.label(LibraryScope.Classical))
+        assertEquals(listOf("Pieces", "Playlists", "Artists", "Favorites", "Recent"), Category.entries.map { it.label(LibraryScope.Modern) })
+
+        val asked = mutableListOf<LibraryScope>()
+        val state = libraryStates(flowOf(Selection(Category.Favorites, null, LibraryScope.Modern) to ""), flowOf(5), { logged += it }) { sel, _ ->
+            asked += sel.scope
+            flowOf(Listing.Pieces(emptyList()))
+        }.first()
+        assertEquals(listOf(LibraryScope.Modern), asked)
+        assertEquals(LibraryScope.Modern, state.scope)
+        assertFalse("a genre with nothing in it is not an empty library: the switch stays", state.empty)
+
+        // The channels listed under a genre are its own; Everything (no genre) only under All.
+        val cards = listOf(
+            ChannelSummary("classical", "Classical", listOf(1L), emptyList(), Genres.CLASSICAL),
+            ChannelSummary("modern", "Modern", listOf(2L), emptyList(), Genres.MODERN),
+            ChannelSummary("calm", "Calm", listOf(1L), emptyList(), Genres.CLASSICAL),
+            ChannelSummary("everything", "Everything", listOf(1L, 2L), emptyList()),
+        )
+        assertEquals(cards, GenreListing.channels(cards, LibraryScope.All))
+        assertEquals(listOf("classical", "calm"), GenreListing.channels(cards, LibraryScope.Classical).map { it.key })
+        assertEquals(listOf("modern"), GenreListing.channels(cards, LibraryScope.Modern).map { it.key })
+
+        // A name's Move is to the genre other than the one most of its pieces have; none without one.
+        fun piece(id: Long, key: String, genre: Int) = LibraryFixture.piece(id, "Piece $id", "").copy(composerKey = key, genre = genre)
+        val pieces = listOf(
+            piece(1, "ed sheeran", Genres.MODERN), piece(2, "ed sheeran", Genres.MODERN), piece(3, "ed sheeran", Genres.CLASSICAL),
+            piece(4, "chopin", Genres.CLASSICAL),
+            piece(5, "", Genres.CLASSICAL),
+            piece(6, ComposerNames.STUDIO_KEY, Genres.NONE),
+            piece(7, "satie", Genres.CLASSICAL), piece(8, "satie", Genres.MODERN),
+        )
+        val genres = GenreListing.byKey(pieces)
+        assertEquals(mapOf("ed sheeran" to Genres.MODERN, "chopin" to Genres.CLASSICAL), genres)
+        assertEquals(listOf("Move to Classical", "Move to Modern"), listOf("ed sheeran", "chopin").map { moveLabel(moveTarget(genres[it])!!) })
+        assertEquals("the blank name, a made-here one and a tie offer no Move", listOf(null, null, null), listOf("", ComposerNames.STUDIO_KEY, "satie").map { moveTarget(genres[it]) })
+        assertEquals("Moved to Modern.", movedLine(Genres.MODERN))
     }
 }

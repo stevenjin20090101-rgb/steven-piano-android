@@ -2629,7 +2629,32 @@ Modern. Designed by Fable (apple-design lenses; the plan's decisions by multiple
 
 ## The Library
 
-Run 2 writes this.
+- **The switch.** A segmented control, new to the app: **All · Classical · Modern**, three equal segments in a capsule
+  track (the content colour at 8 %, a hairline), the chosen one a lighter thumb (paper's elevated surface; on ink the
+  content colour at 18 %) with a hairline, its label in the content colour and medium weight, the others secondary.
+  Solid, never glass; 36 dp inside a 48 dp target, segments at least 88 dp. All at first, then the last one chosen.
+- **Where it sits.** In the pinned header's title row, before the padlock and `+`, when the header is 560 dp or wider and
+  the text at most 1.3×; otherwise a full-width row of its own under the title, still pinned. Not there until the
+  library has pieces, nor while it can't be read.
+- **What follows it.** Pieces, Favorites, Recent and search: that genre's pieces (playing one queues the list shown).
+  Composers or Artists: the names with a piece of it, counted within it; a name's page and Play all, that genre's.
+  Playlists: those that show under it (Recordings and Made in Studio always); a playlist opens whole. The channels row
+  and See all: the genre's channels (Everything only under All). Changing it closes an open page; chip and search stay.
+- **The words.** The chip "All" is **Pieces**; under Modern "Composers" is **Artists**, with "Unknown artist" and "Back
+  to artists", and Rename's second field is "Artist" for a Modern piece. The search field names its scope ("Search
+  Classical titles and composers", "Search Modern titles and artists"; in a playlist, which is whole, the plain one).
+  Empty: "No Modern pieces yet." / "Songs you add that are not classical appear here."; "No Classical pieces yet." /
+  "Steven's library and classical composers appear here."; "No Modern favorites yet."; "No Classical playlists yet.";
+  "No artists yet." / "No composers yet." with "Pieces by them appear here."
+- **Move.** A piece's menu, after Rename: "Move to Modern" or "Move to Classical", never for a piece made here. A name's
+  tile, after Play all · Shuffle and a hairline: the same for every piece by them, by the genre most of their pieces
+  have (not for the blank name, a made-here one or a tie). No confirmation: moving back undoes it; the row leaves a list
+  of the other genre.
+- **Kiosk.** The switch is free, like changing the view; Move asks for the PIN, as Rename does.
+- **Accessibility.** TalkBack reads "Genre", then each segment as a radio button ("Classical, selected", 2 of 3); with
+  high contrast text the thumb's edge is the content colour at 1.5 dp; a move is heard: "Moved to Modern."
+- **Motion.** The thumb slides on the settle spring (about 200 ms); the list fades out from the touch and the genre's
+  fades in once read (160 ms in all); both cuts under reduced motion. No haptic, and no rows ease in again.
 
 ## The web panel and guests
 

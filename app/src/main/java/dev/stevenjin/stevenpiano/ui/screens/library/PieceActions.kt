@@ -13,6 +13,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -31,6 +32,8 @@ class PieceActions(
     val setFavorite: (PieceEntity, Boolean) -> Unit,
     val rename: (PieceEntity) -> Unit,
     val delete: (PieceEntity) -> Unit,
+    /** Move to Classical or Modern ([Genres.CLASSICAL], [Genres.MODERN]; v1.14 — M37). */
+    val setGenre: (PieceEntity, Int) -> Unit,
     /** Inside a playlist: take the piece out of it (the piece stays in the library). */
     val removeFromPlaylist: ((PieceEntity) -> Unit)? = null,
     /** Inside a playlist: Move up (-1) or Move down (+1). */
@@ -38,7 +41,7 @@ class PieceActions(
 ) {
     /** These actions, with the two a playlist adds. */
     fun forPlaylist(remove: (PieceEntity) -> Unit, move: (PieceEntity, Int) -> Unit): PieceActions =
-        PieceActions(playNext, addToQueue, about, addToPlaylist, setFavorite, rename, delete, remove, move)
+        PieceActions(playNext, addToQueue, about, addToPlaylist, setFavorite, rename, delete, setGenre, removeFromPlaylist = remove, move = move)
 }
 
 /** A row's place in a reorderable playlist: which of Move up and Move down it can offer. */
@@ -49,9 +52,10 @@ data class RowPlace(val index: Int, val count: Int) {
 
 /**
  * A piece's menu, in three groups set apart by hairlines, destructive items last: Play next · Add
- * to queue · About this piece | Add to playlist · Favorite · Rename (· Move up · Move down, inside
- * a playlist that can be reordered) | Remove from playlist (inside a playlist) · Delete. A move the
- * row cannot make is left out rather than shown disabled.
+ * to queue · About this piece | Add to playlist · Favorite · Rename · Move to Modern or Move to
+ * Classical (v1.14 — M37; the other genre's) (· Move up · Move down, inside a playlist that can be
+ * reordered) | Remove from playlist (inside a playlist) · Delete. A move the row cannot make is left
+ * out rather than shown disabled: no Move to a genre for a piece made here, which has none.
  */
 @Composable
 fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expanded: Boolean, onDismiss: () -> Unit) {
@@ -63,6 +67,7 @@ fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expan
         MenuItem("Add to playlist", onDismiss) { actions.addToPlaylist(piece) }
         MenuItem(if (piece.favorite) "Unfavorite" else "Favorite", onDismiss) { actions.setFavorite(piece, !piece.favorite) }
         MenuItem("Rename", onDismiss) { actions.rename(piece) }
+        moveTarget(piece.genre)?.let { target -> MenuItem(moveLabel(target), onDismiss) { actions.setGenre(piece, target) } }
         val move = actions.move
         if (move != null && place != null) {
             if (place.canMoveUp) MenuItem("Move up", onDismiss) { move(piece, -1) }
@@ -73,6 +78,21 @@ fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expan
         MenuItem("Delete", onDismiss) { actions.delete(piece) }
     }
 }
+
+/** Where Move takes a piece or a name of [genre] (v1.14 — M37): to the other genre; nowhere for none (made here) or a tie. */
+fun moveTarget(genre: Int?): Int? = when (genre) {
+    Genres.CLASSICAL -> Genres.MODERN
+    Genres.MODERN -> Genres.CLASSICAL
+    else -> null
+}
+
+/** The menu's item for a move to [target]: "Move to Modern", "Move to Classical". */
+fun moveLabel(target: Int): String = "Move to ${genreWord(target)}"
+
+/** What TalkBack hears once the move is made: "Moved to Modern." */
+fun movedLine(target: Int): String = "Moved to ${genreWord(target)}."
+
+private fun genreWord(genre: Int): String = if (genre == Genres.MODERN) "Modern" else "Classical"
 
 /** A menu item that closes the menu, then acts. */
 @Composable

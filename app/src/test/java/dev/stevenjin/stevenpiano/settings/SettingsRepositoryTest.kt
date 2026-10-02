@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.CoroutineScope
@@ -444,6 +445,18 @@ class SettingsRepositoryTest {
         assertEquals(PlaylistSort.NAME, SettingsRepository(store).settings.first().playlistSort)
         store.edit { it[stringPreferencesKey("playlistSort")] = "BY_COLOUR" }
         assertEquals(PlaylistSort.NEWEST, repository.settings.first().playlistSort)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the Library's genre is All until one is chosen, then the one chosen, across restarts`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "genre.preferences_pb") }
+        val repository = SettingsRepository(store)
+        assertEquals(LibraryScope.All, repository.settings.first().libraryScope)
+        repository.setLibraryScope(LibraryScope.Modern)
+        assertEquals(LibraryScope.Modern, repository.settings.first().libraryScope)
+        assertEquals(LibraryScope.Modern, SettingsRepository(store).settings.first().libraryScope)
         scope.cancel()
     }
 

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
@@ -139,6 +140,7 @@ private fun AddToPlaylistDialog(piece: PieceEntity, vm: LibraryViewModel, onClos
     )
 }
 
+/** A piece's title and composer; a Modern piece's "Artist" (v1.14 — M37). Renaming never changes its genre. */
 @Composable
 private fun RenamePieceDialog(piece: PieceEntity, onClose: () -> Unit, onRename: (String, String) -> Unit) {
     var title by rememberSaveable { mutableStateOf(piece.title) }
@@ -149,7 +151,7 @@ private fun RenamePieceDialog(piece: PieceEntity, onClose: () -> Unit, onRename:
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NameField(title, { title = it }, "Title")
-                NameField(composer, { composer = it }, "Composer")
+                NameField(composer, { composer = it }, if (piece.genre == Genres.MODERN) "Artist" else "Composer")
             }
         },
         confirmButton = { TextButton(onClick = { onRename(title, composer) }, enabled = title.isNotBlank()) { Text("Rename") } },

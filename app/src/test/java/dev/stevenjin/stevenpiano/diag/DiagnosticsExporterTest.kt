@@ -93,8 +93,8 @@ class DiagnosticsExporterTest {
         assertFalse("nor anything of its secret", "cloudSecret" in prefs)
         assertTrue("the library pack loaded (v1.10 — M27)", "cloudEnrolled = true\nlibraryPackVersion = 1\n" in prefs)
         assertEquals(
-            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a)",
-            47,
+            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a), the Library's genre (v1.14 — M37)",
+            48,
             prefs.lines().count { it.isNotEmpty() },
         )
         assertTrue(
