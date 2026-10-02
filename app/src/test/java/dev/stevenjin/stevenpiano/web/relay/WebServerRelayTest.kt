@@ -61,6 +61,7 @@ class WebServerRelayTest {
         "request.html" to "<!doctype html><title>Ask the piano</title>",
         "request.js" to "/* the request page */",
         "poster.html" to "<!doctype html><p>{{URL}}</p>{{QR}}",
+        "bravura.otf" to "OTTO the font as the app carries it",
     )
     private val assets = AssetSource { name -> files[name]?.toByteArray() }
     private val sockets = object : WebSockets {
@@ -107,6 +108,30 @@ class WebServerRelayTest {
             }
             assertSameAnswer(what, lanAnswer, relayed)
         }
+    }
+
+    @Test
+    fun `the views' bytes and the font come through the relay as over a listener (v1_13 M32)`() {
+        for (path in listOf("/api/now/notes?rev=3", "/api/now/score?w=800&h=600", "/api/now/score/1/page/0", "/api/font/bravura.otf?v=${WebAssets.FONT_VERSION}")) {
+            val lanAnswer = http.get(path, mapOf("Cookie" to "sp_session=${sessions.open()}"))
+            val relayedAnswer = relayed("GET", path, headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+            assertSameAnswer("GET $path", lanAnswer, relayedAnswer)
+            assertEquals(path, 200, relayedAnswer.status)
+            assertTrue(path, relayedAnswer.body.contentEquals(lanAnswer.body))
+            assertEquals("nosniff", relayedAnswer.headers["X-Content-Type-Options"])
+        }
+        val notes = relayed("GET", "/api/now/notes", headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+        assertEquals("application/octet-stream", notes.headers["Content-Type"])
+        assertEquals("no-store", notes.headers["Cache-Control"])
+        assertEquals("SPNT-notes", String(notes.body))
+        val font = relayed("GET", "/api/font/bravura.otf", headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+        assertEquals("font/otf", font.headers["Content-Type"])
+        assertEquals("private, max-age=31536000, immutable", font.headers["Cache-Control"])
+        // 202 while a layout runs comes back as it is; and nothing without a session.
+        backend.scoreAnswer = dev.stevenjin.stevenpiano.web.NowAnswer.Working(500)
+        assertEquals(202, relayed("GET", "/api/now/score?w=800&h=600", headers = mapOf("cookie" to "sp_session=${sessions.open()}")).status)
+        assertEquals(401, relayed("GET", "/api/font/bravura.otf").status)
+        assertEquals(401, relayed("GET", "/api/now/notes").status)
     }
 
     @Test

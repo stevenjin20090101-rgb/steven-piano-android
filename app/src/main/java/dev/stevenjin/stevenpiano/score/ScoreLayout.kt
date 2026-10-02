@@ -68,6 +68,13 @@ class ScoreBars internal constructor(
         val fraction = ((tempo.microsToBeats(micros) - startBeat[bar]) / beats[bar]).coerceIn(0.0, 1.0)
         return contentLeft[bar] + (fraction * (contentRight[bar] - contentLeft[bar])).toFloat()
     }
+
+    /**
+     * When [fraction] (0 to 1) of [bar] sounds, in microseconds: [xAt]'s inverse at the bar's own breakpoints, which the
+     * web panel's cursor runs through without a tempo map of its own (v1.13 — M32).
+     */
+    fun microsAt(bar: Int, fraction: Double): Long =
+        tempo.tickToMicros(Math.round((startBeat[bar] + fraction.coerceIn(0.0, 1.0) * beats[bar]) * tempo.ppq))
 }
 
 /**

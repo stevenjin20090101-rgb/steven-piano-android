@@ -30,11 +30,28 @@ import dev.stevenjin.stevenpiano.ui.theme.PaperSurface
 import dev.stevenjin.stevenpiano.ui.theme.SilverPrimary
 import dev.stevenjin.stevenpiano.ui.theme.SilverSecondary
 import dev.stevenjin.stevenpiano.ui.theme.SilverTertiary
+import dev.stevenjin.stevenpiano.ui.theme.HandLeftDark
+import dev.stevenjin.stevenpiano.ui.theme.HandLeftLight
+import dev.stevenjin.stevenpiano.ui.theme.HandRightDark
+import dev.stevenjin.stevenpiano.ui.theme.HandRightLight
+import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.NoteSoundingDark
+import dev.stevenjin.stevenpiano.ui.theme.NoteSoundingLight
+import dev.stevenjin.stevenpiano.ui.components.HAND_SOUNDING_MIX
+import dev.stevenjin.stevenpiano.ui.components.KeyLayout
+import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
+import dev.stevenjin.stevenpiano.ui.components.MAX_CHORD_DRAWS
+import dev.stevenjin.stevenpiano.ui.components.MAX_NOTE_DRAWS
+import dev.stevenjin.stevenpiano.ui.components.NOTES_DP_PER_SECOND
+import dev.stevenjin.stevenpiano.ui.components.NUMERALS_TALL
+import dev.stevenjin.stevenpiano.ui.components.RAMP_STEPS
+import dev.stevenjin.stevenpiano.ui.components.TRACKER_FROM_BOTTOM
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.security.MessageDigest
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -56,6 +73,9 @@ class WebAssetsTest {
             "--ink-surface" to InkSurface, "--ink-elevated" to InkElevated, "--ink-hairline" to InkHairline,
             "--ink-disabled" to InkDisabledGlyph, "--ink-primary" to SilverPrimary, "--ink-secondary" to SilverSecondary,
             "--ink-tertiary" to SilverTertiary, "--ink-live" to LiveRedDark,
+            // The views (v1.13 — M32): the score's sounding yellow and the two hands, each appearance's own.
+            "--paper-sounding" to NoteSoundingLight, "--paper-hand-left" to HandLeftLight, "--paper-hand-right" to HandRightLight,
+            "--ink-sounding" to NoteSoundingDark, "--ink-hand-left" to HandLeftDark, "--ink-hand-right" to HandRightDark,
         )
         for ((name, color) in tokens) {
             val declared = Regex("${Regex.escape(name)}:\\s*(#[0-9A-Fa-f]{6});").find(css)?.groupValues?.get(1)
@@ -97,7 +117,8 @@ class WebAssetsTest {
 
     @Test
     fun `every file the server may send exists, carries the banner, and has no inline script, style or handler`() {
-        for (name in WebAssets.NAMES) {
+        // The font is the one exception: a binary file, carried unmodified (its licence reserves its name), checked below.
+        for (name in WebAssets.NAMES - WebAssets.FONT.name) {
             val file = File(folder, name)
             assertTrue(name, file.isFile)
             val body = file.readText()
@@ -143,6 +164,56 @@ class WebAssetsTest {
         assertTrue("the relay's offline answer shows the offline card, not the PIN gate", app.contains("data.error === 'offline'") && text("index.html").contains("id=\"offline\""))
         assertTrue(text("index.html").contains("The piano is offline"))
         assertTrue(text("request.js").contains("error === 'offline'"))
+    }
+
+    @Test
+    fun `the score's font is Bravura as the app carries it, unmodified, named in AUTHORS and its licence (v1_13 M32)`() {
+        val font = File("src/main/res/font/bravura.otf")
+        assertTrue(font.isFile)
+        assertFalse("one copy only: not in assets/web", File(folder, WebAssets.FONT.name).exists())
+        val bytes = font.readBytes()
+        assertEquals(889_228, bytes.size)
+        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        assertEquals("cdf0f893ee1fdb64b7f6713d71ee0dcfc349c0ac01429a8e451b01a9e79f5f3b", sha)
+        assertEquals(sha.take(8), WebAssets.FONT_VERSION)
+        assertTrue("the panel asks for the same version", text("app.js").contains("const FONT_VERSION = '${WebAssets.FONT_VERSION}';"))
+        assertEquals("font/otf", WebAssets.FONT.contentType)
+        assertTrue(WebAssets.FONT.name in WebAssets.NAMES && WebAssets.FONT !in WebAssets.PANEL.values && WebAssets.FONT !in WebAssets.PUBLIC.values)
+        assertTrue(File("../AUTHORS").readText().contains("Bravura music font (app/src/main/res/font/bravura.otf"))
+        assertTrue(File("../third_party/bravura/OFL.txt").readText().contains("with Reserved Font Name \"Bravura\""))
+        assertTrue("the font face keeps its name", text("score.js").contains("new FontFace('Bravura'"))
+    }
+
+    @Test
+    fun `the views' modules ask nothing of their own and write styles only through the CSSOM (v1_13 M32)`() {
+        val modules = listOf("clock.js", "wire.js", "roll.js", "score.js", "views.js")
+        for (name in modules) {
+            assertTrue("$name is on the panel's list", WebAssets.PANEL["/$name"] == WebAssets.Asset(name, WebAssets.JS))
+            val js = text(name)
+            for (banned in listOf("/api/", "fetch(", "WebSocket(", "XMLHttpRequest", "innerHTML", "setAttribute('style'", "cssText", "eval(", "document.write")) {
+                assertFalse("$name holds $banned", js.contains(banned))
+            }
+            assertTrue("$name is a module", js.contains("export "))
+        }
+        val app = text("app.js")
+        assertTrue("loaded the first time a view shows", app.contains("import('./views.js')"))
+        assertFalse("never at the page's start", text("index.html").contains("views.js"))
+        assertTrue("the divider is a separator", text("views.js").contains("role: 'separator'") && text("views.js").contains("'aria-valuenow'"))
+        // The roll's numbers are the app's.
+        val roll = text("roll.js")
+        fun pinned(name: String, value: Number) = assertTrue("$name: $value", roll.contains("  $name: $value,"))
+        pinned("PX_PER_SECOND", NOTES_DP_PER_SECOND.toInt())
+        pinned("WHITE_KEYS", KeyLayout.WHITE_KEYS)
+        pinned("BLACK_RATIO", KeyLayout.BLACK_RATIO)
+        pinned("MAX_DRAWS", MAX_NOTE_DRAWS)
+        pinned("RAMP_STEPS", RAMP_STEPS)
+        pinned("HAND_SOUNDING_MIX", HAND_SOUNDING_MIX)
+        pinned("NUMERALS_TALL", NUMERALS_TALL.toInt())
+        pinned("MAX_CHORD_DRAWS", MAX_CHORD_DRAWS)
+        pinned("STRIP_HEIGHT", KeyboardStripHeight.value.toInt())
+        pinned("FLIP_MS", Motion.FastMs)
+        assertEquals(1f / 3f, TRACKER_FROM_BOTTOM)
+        assertTrue(roll.contains("  TRACKER_FROM_BOTTOM: 1 / 3,"))
     }
 
     @Test

@@ -2526,8 +2526,8 @@ replaces › Motion's 240 ms tabs, "system ripple only" and "one haptic"; everyt
 - **Tokens** (`ui/theme/Motion.kt`): 120 quick · 200 standard · 320 emphasised · 480 slow, the most anything takes
   (popovers 160); the press spring (damping 0.8, firm) and the settle spring (0.9, soft); entering decelerates,
   leaving accelerates. Every transition goes through one helper: under reduced motion it is a cut.
-- **Nothing loops by itself** but the aura; status moves only while it lasts (the live dot, an indeterminate hairline,
-  the search arc). No bounce, no parallax, nothing in the way of a touch, everything interruptible.
+- **Nothing loops by itself** but the aura; status moves only while it lasts (the live dot, an indeterminate hairline).
+  One status, one sign: looking for the piano keeps its hairline alone. No bounce, no parallax, nothing in the way of a touch, everything interruptible.
 - **Touch**: glass controls, tiles, chips and filled buttons scale to 0.97 while pressed; rows keep the ripple. A light
   tick on Send and on Record, as on play and pause.
 - **Places**: tabs fade through (out 120, in 200 from 0.92); Piano pages beside the hub cross-fade rising 8 dp, on
@@ -2540,3 +2540,24 @@ replaces › Motion's 240 ms tabs, "system ripple only" and "one haptic"; everyt
 - **Figures**: the tempo, the Record time and Studio's figures roll digit by digit (120 ms, tabular); determinate
   hairlines ease to each value (200 ms); play/pause cross-fades with a small scale (200 ms), shuffle and repeat cross-fade.
 - **Left alone**: the score's page turn and the roll, the live red and the sounding yellow, the aura, the resting screen.
+
+# v1.13 — the panel's notes and score
+
+Designed by Fable (`plans/plan-web-split.md` §§ 2, 4); built in M32. The web panel's Now playing shows what the tablet's
+shows, in step with it.
+
+- **The views**: the score and the moving notes (paper roll or falling notes, with the keyboard strip), drawn from what
+  the tablet laid out: the same engraving, the same bars a system for a page as wide, the cursor and the sounding yellow,
+  the left hand outlined, fingering, chord names and Hand colours as the tablet's settings say. Content, never glass: each
+  view is a 12 px card on the elevated surface, in the panel's own ink and paper tokens (`--sounding`, `--hand-left`,
+  `--hand-right` are the app's colours).
+- **From 900 px** both views show above the title, stacked (the score over the notes) or side by side once the column is
+  840 px wide, split by the tablet's divider (a third and a half by default, the same stops, minimums and hiding);
+  the share is remembered in this browser only, per arrangement: a remote viewer never rearranges the tablet.
+- **Below 900 px** one view at a time: **Art · Notes · Score**, Art first, remembered in the browser; a phone that never
+  opens a view loads nothing for it. Every page still fits 390 px without sideways scrolling.
+- **The View control** (beside the views) shows and changes the tablet's own settings: Paper roll · Falling notes,
+  Fingering, Chord names, Hand colours. The score's pages turn by themselves; ‹ and › (or the arrow keys) look ahead or
+  back, **Follow** comes back, and a tap on a bar plays from there. Nothing on the panel moves the tablet's own split.
+- **Motion**: frames run only while Now playing shows, the page is visible and the piece plays (and 400 ms after a
+  change); with reduced motion the roll still scrolls and everything else cuts.

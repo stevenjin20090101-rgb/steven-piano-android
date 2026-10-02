@@ -1965,3 +1965,46 @@ input releases the keys and the pedal. Where each is held:
   there is the platform's.
 - **The breaker's numbers are first guesses**, to be tuned on the piano.
 - Not run on the school tablet or with real keyboards yet (BUILD_SPEC.md › v1.11 — M29 › *Residuals*).
+
+## 1.13 — the panel's notes and score (pre-audit notes, M32)
+
+2026-10-01, notes written with M32 for the next audit, not an audit (BUILD_SPEC.md › v1.13 — M32). The panel's Now
+playing draws the piece playing as the tablet lays it out: new routes on the panel's listeners and through the relay,
+new work on the tablet for a signed-in browser, binary answers. Nothing new listens and no new host is reached; the
+relay is unchanged. Where each is held, and the test that holds it:
+
+- **Every new route needs a session; the guests never see them.** `GET /api/now/notes`, `/api/now/score`,
+  `/api/now/score/{id}/page/{n}` and `/api/font/bravura.otf` are `Access.READ`: 401 without a valid `sp_session`, 404 on
+  the Wi-Fi guests' listener (`WebServerTest`: the READ-route loop, the guests' loop, and the views' own test).
+- **Nothing new changes state** but the four display keys of `PUT /api/settings` (`noteDisplay` as `paperRoll` or
+  `falling` only, `fingering`, `chordNames`, `handColours`), which pass the existing write checks (session, the panel's
+  header, its origin). The new routes answer 405 to anything but GET; the split stays the tablet's alone
+  (`WebServerTest`, `WebApiTest`: `"score"`, `notesSplitStacked` and `wideLayout` refused).
+- **Every input is a bounded whole number**: `rev` and the layout id fit an Int, `w` and `h` are 1–8,192 (then gridded to
+  16 px and held to 280–2,000 × 160–2,000), the page at most five digits; anything else is 400 or no route, before the
+  app is asked (`WebServerTest`).
+- **The tablet's work is bounded** (`NowViews`, `NowViewsTest`): one low-priority thread, one layout at a time and shared
+  by every request for its size; a request holds a server thread at most 1.5 s, then 202; a layout past 8 s stops and
+  its size is refused from then on (413); at most six fresh layouts every 30 s (429 with `Retry-After`); at most 60,000
+  notes and 20,000 bars for a score (the crafted files of `ScoreLayoutBudgetTest` cost seconds and up to 96 MB past
+  that), 200,000 for the notes; two sizes and 1 MB of pages kept; a change of piece cancels the layout at its
+  checkpoint. A page never starts a layout.
+- **Bodies are small and inert**: `application/octet-stream`, `no-store`, under the security headers' `nosniff`; a page
+  past 256 KB stops adding notes and says so; the largest answer is the notes of a 200,000-note file (about 2.2 MB) or
+  the font (889 KB), far under the relay's 16 MB (`ScoreDisplayListTest`, `WebServerTest`, `WebServerRelayTest`).
+- **The browser's readers check every length first** (`wire.js`; its Kotlin twin `NowWire` in `NowWireTest`): magic,
+  version (another asks for a reload), each count against fixed ceilings and against the bytes left, UTF-8 strictly,
+  nothing left over, every op whole and known, every string index and head range inside the page.
+- **The modules ask nothing of their own**: `clock.js`, `wire.js`, `roll.js`, `score.js`, `views.js` hold no `/api/`, no
+  `fetch(`, no `WebSocket(`, no `innerHTML`, no `eval`; `app.js` builds every address from `ROOT` and hands them over; they
+  write styles only through the CSSOM (`WebAssetsTest`). Text from MIDI files (chord names) reaches the canvas as text.
+- **The font** is Bravura exactly as the app carries it (`res/font/bravura.otf`, SHA-256 `cdf0f893…9f5f3b`, 889,228 bytes,
+  pinned by `WebAssetsTest` with its AUTHORS and OFL lines): never subset, converted or renamed (its licence reserves the
+  name). It needs a session, so the largest file on the panel is never pulled by an unsigned client, and is cached
+  `private, max-age=31536000, immutable` under its versioned address (the relay forwards no validators).
+
+### Residuals (stated honestly)
+
+- A signed-in browser can still keep the layout thread busy for six layouts every half minute, each up to 8 s.
+- The notes answer for a 200,000-note file is about 2.2 MB per revision, sent raw over the relay.
+- Not run through the real relay or on the school tablet yet.

@@ -50,6 +50,7 @@ class WebServerTest {
         "request.html" to "<!doctype html><title>Ask the piano</title>",
         "request.js" to "/* the request page */",
         "poster.html" to "<!doctype html><p>{{URL}}</p>{{QR}}",
+        "bravura.otf" to "OTTO the font as the app carries it",
     )
     private val assets = AssetSource { name ->
         asked += name
@@ -359,6 +360,64 @@ class WebServerTest {
     }
 
     @Test
+    fun `the views of the piece playing are read-only bytes, every input bounded, every answer mapped (v1_13 M32)`() {
+        val (_, http) = start()
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        backend.calls.clear()
+        val notes = http.get("/api/now/notes?rev=12", cookie)
+        assertEquals(200, notes.status)
+        assertEquals("application/octet-stream", notes.header("content-type"))
+        assertEquals("no-store", notes.header("cache-control"))
+        assertEquals("nosniff", notes.header("x-content-type-options"))
+        assertEquals("SPNT-notes", notes.text)
+        assertEquals(200, http.get("/api/now/score?w=1280&h=720", cookie).status)
+        assertEquals(200, http.get("/api/now/score/7/page/3", cookie).status)
+        assertEquals(listOf("notes rev=12", "score rev=null 1280x720", "page 7/3"), backend.viewsAsked.toList())
+        // Every input a bounded whole number; nothing out of range reaches the app.
+        backend.viewsAsked.clear()
+        for (path in listOf(
+            "/api/now/notes?rev=abc", "/api/now/notes?rev=-1", "/api/now/notes?rev=99999999999", "/api/now/notes?rev=1.5",
+            "/api/now/score", "/api/now/score?w=800", "/api/now/score?w=0&h=600", "/api/now/score?w=800&h=9000",
+            "/api/now/score?w=800&h=600&rev=x", "/api/now/score?w=1e3&h=600", "/api/now/score/9999999999/page/0",
+        )) {
+            assertEquals(path, 400, http.get(path, cookie).status)
+        }
+        for (path in listOf("/api/now/score/1/page/123456", "/api/now/score/99999999999/page/0", "/api/now/score/x/page/0", "/api/now/score/1/page/-1", "/api/now/notes/1")) {
+            assertEquals(path, 404, http.get(path, cookie).status)
+        }
+        assertEquals(emptyList<String>(), backend.viewsAsked.toList())
+        // Nothing here changes anything.
+        assertEquals(405, http.api("POST", "/api/now/notes", "{}", session = token).status)
+        assertEquals(405, http.api("PUT", "/api/now/score?w=800&h=600", "{}", session = token).status)
+        assertEquals(405, http.api("DELETE", "/api/font/bravura.otf", null, session = token).status)
+        // The answers a layout gives, as HTTP.
+        backend.scoreAnswer = NowAnswer.Working(700)
+        val working = http.get("/api/now/score?w=800&h=600", cookie)
+        assertEquals(202, working.status)
+        assertEquals("working", working.json().getString("status"))
+        assertEquals(700, working.json().getLong("retryAfterMs"))
+        backend.scoreAnswer = NowAnswer.Busy(12_000)
+        val busy = http.get("/api/now/score?w=800&h=600", cookie)
+        assertEquals(429, busy.status)
+        assertEquals("12", busy.header("retry-after"))
+        for ((answer, status) in listOf(NowAnswer.Stale to 409, NowAnswer.NoPiece to 404, NowAnswer.TooLarge to 413)) {
+            backend.scoreAnswer = answer
+            assertEquals("$answer", status, http.get("/api/now/score?w=800&h=600", cookie).status)
+        }
+        // The font: the app's own file, as is, for a year under its versioned address; a session first.
+        val font = http.get("/api/font/bravura.otf?v=${WebAssets.FONT_VERSION}", cookie)
+        assertEquals(200, font.status)
+        assertEquals("font/otf", font.header("content-type"))
+        assertEquals("private, max-age=31536000, immutable", font.header("cache-control"))
+        assertEquals("OTTO the font as the app carries it", font.text)
+        assertEquals(401, http.get("/api/font/bravura.otf").status)
+        assertEquals(401, http.get("/api/now/notes").status)
+        assertEquals("not a static file either", 404, http.get("/bravura.otf").status)
+        assertEquals("nothing the views asked was a change", emptyList<String>(), backend.calls.toList())
+    }
+
+    @Test
     fun `a request must name this listener, its address or a name the person gave`() {
         val (server, http) = start(names = listOf("piano-tablet"))
         val port = server.listeningPort
@@ -658,7 +717,7 @@ class WebServerTest {
     fun `a Wi-Fi listener without Panel on Wi-Fi too serves guests only`() {
         val (server, http) = start(guestOnly = true)
         backend.pin = PIN
-        for (path in listOf("/", "/app.js", "/api/state", "/api/library", "/api/piano")) assertEquals(path, 404, http.get(path).status)
+        for (path in listOf("/", "/app.js", "/api/state", "/api/library", "/api/piano", "/views.js", "/api/now/notes", "/api/font/bravura.otf")) assertEquals(path, 404, http.get(path).status)
         assertEquals("no logging in here", 404, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
         assertEquals(404, http.api("POST", "/api/play", """{"pieceId":1}""").status)
         assertEquals(200, http.get("/request").status)
@@ -735,13 +794,20 @@ class WebServerTest {
         assertEquals(204, put("""{"webGuests":true,"preRollMs":1500}"""))
         assertEquals(204, put("""{"webHostName":"Piano-Tablet"}"""))
         assertEquals(204, put("""{"tabletVolume":45}"""))
-        for (bad in listOf("""{"tabletVolume":-1}""", """{"tabletSound":"off"}""", """{"webEnabled":true}""", """{"webOnWifi":true}""", """{"webPinHash":"x"}""", "{}", """{"preRollMs":9000}""", """{"webHostName":"100.101.2.3"}""", """{"webHostName":"piano tablet"}""", """{"webGuests":"yes"}""")) {
+        // The View control's four (v1.13 — M32).
+        assertEquals(204, put("""{"noteDisplay":"falling","fingering":false,"chordNames":true,"handColours":true}"""))
+        for (bad in listOf(
+            """{"tabletVolume":-1}""", """{"tabletSound":"off"}""", """{"webEnabled":true}""", """{"webOnWifi":true}""", """{"webPinHash":"x"}""", "{}",
+            """{"preRollMs":9000}""", """{"webHostName":"100.101.2.3"}""", """{"webHostName":"piano tablet"}""", """{"webGuests":"yes"}""",
+            """{"noteDisplay":"score"}""", """{"noteDisplay":"STAFF"}""", """{"fingering":"on"}""", """{"notesSplitSide":0.5}""", """{"wideLayout":"NOTES_ONLY"}""",
+        )) {
             assertEquals(bad, 400, put(bad))
         }
-        assertEquals(3, backend.calls.size)
+        assertEquals(4, backend.calls.size)
         assertTrue(backend.calls[0], "webGuests=true" in backend.calls[0] && "preRollMs=1500" in backend.calls[0])
         assertTrue(backend.calls[1], "webHostName=piano-tablet" in backend.calls[1])
         assertTrue(backend.calls[2], "tabletVolume=45" in backend.calls[2])
+        assertTrue(backend.calls[3], listOf("noteDisplay=FALLING", "fingering=false", "chordNames=true", "handColours=true").all { it in backend.calls[3] })
     }
 
     @Test

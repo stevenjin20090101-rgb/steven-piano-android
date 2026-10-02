@@ -22,6 +22,7 @@ import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.schedule.SaveResult
 import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
+import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import java.io.File
 import java.util.Locale
@@ -160,6 +161,18 @@ interface WebBackend {
 
     /** Composes a piece from [order] (its seed a piece of the library): queued, refused when Studio can't run here, or no such piece. */
     suspend fun compose(order: ComposeOrder): StudioCompose
+
+    /**
+     * The panel's views (v1.13 — M32, [NowViews]): the notes of the piece playing as revision [rev] shows them (the
+     * current one when null), in [dev.stevenjin.stevenpiano.score.ScoreDisplayList]'s notes format.
+     */
+    suspend fun nowNotes(rev: Int?): NowAnswer
+
+    /** The score's index for a browser panel [width] × [height] CSS px, of revision [rev]: laid out within the bounds [NowViews] keeps. */
+    suspend fun nowScore(rev: Int?, width: Int, height: Int): NowAnswer
+
+    /** Page [page] of the score's layout [layoutId], once laid out; never starts a layout. */
+    suspend fun nowScorePage(layoutId: Int, page: Int): NowAnswer
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
@@ -335,6 +348,8 @@ data class WebPlayer(
     val loading: Boolean = false,
     val piece: WebPiece? = null,
     val positionMs: Long = 0,
+    /** When [positionMs] was sampled, on the tablet's monotonic clock in ms (v1.13 — M32): the panel's clock runs from it. */
+    val at: Long = 0,
     val tempoPct: Int = 100,
     val transpose: Int = 0,
     val velocityPct: Int = 100,
@@ -344,6 +359,30 @@ data class WebPlayer(
     val queue: QueueSnapshot = QueueSnapshot(),
     val items: List<WebQueueItem> = emptyList(),
     val problem: String? = null,
+    /** Folding out-of-range notes (v1.13 — M32: the views' keys follow it). */
+    val fold: Boolean = true,
+    /** What the panel's views show of the piece playing (v1.13 — M32); null with nothing loaded. */
+    val views: WebViews? = null,
+)
+
+/**
+ * The panel's views of the piece playing (v1.13 — M32): their revision [rev] (it moves on whenever what they show
+ * changes, and the routes refuse an old one), how many [notes], whether the [hands], the [fingers] and the [chords]
+ * come with them, and whether a [score] can be laid out (within [NowViews]' caps).
+ */
+data class WebViews(val rev: Int, val notes: Int, val hands: Boolean, val fingers: Boolean, val chords: Boolean, val score: Boolean)
+
+/**
+ * The tablet's display settings the panel's View control shows and changes (v1.13 — M32): [noteDisplay]
+ * ("paperRoll", "falling", or "score", a phone-sized tablet's choice), the roll's style ("paperRoll" or "falling"),
+ * Fingering, Chord names and Hand colours.
+ */
+data class WebDisplay(
+    val noteDisplay: String = "paperRoll",
+    val rollStyle: String = "paperRoll",
+    val fingering: Boolean = true,
+    val chordNames: Boolean = true,
+    val handColours: Boolean = false,
 )
 
 /** The piano link: its state's name ("connected", "scanning"…) and the piano's name while connected. */
@@ -396,6 +435,8 @@ data class WebState(
     val studio: WebStudio = WebStudio(),
     /** What plays and what is played from (v1.11 — M29), read-only. */
     val instruments: WebInstruments = WebInstruments(),
+    /** The display settings the panel's View control mirrors (v1.13 — M32). */
+    val display: WebDisplay = WebDisplay(),
 )
 
 /**
@@ -470,6 +511,11 @@ data class SettingsChange(
     val webHostName: String? = null,
     /** The tablet's piano sound's volume, 0–100 % (v1.8 — M25); its mode is the tablet's alone. */
     val tabletVolume: Int? = null,
+    /** The View control's four (v1.13 — M32): the roll's style (paper roll or falling notes only), Fingering, Chord names, Hand colours. */
+    val noteDisplay: NoteDisplay? = null,
+    val fingering: Boolean? = null,
+    val chordNames: Boolean? = null,
+    val handColours: Boolean? = null,
 ) {
     val isEmpty: Boolean get() = this == SettingsChange()
 }
@@ -484,4 +530,7 @@ object WebLimits {
 
     /** Piece ids in one request (a list played, a queue given, pieces added). */
     const val IDS_MAX = 5_000
+
+    /** A views panel's width or height as a request may give it, in CSS px (v1.13 — M32; [NowViews] then holds it to its own bounds). */
+    val VIEW_SIZE = 1..8_192
 }

@@ -256,4 +256,25 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         record("studio cancel $id")
         return studioJobs.remove(id)
     }
+
+    /** The views (v1.13 — M32): what each of their routes answers, and what they were asked (never a change: not in [calls]). */
+    var notesAnswer: NowAnswer = NowAnswer.Ready("SPNT-notes".toByteArray())
+    var scoreAnswer: NowAnswer = NowAnswer.Ready("SPSI-index".toByteArray())
+    var pageAnswer: NowAnswer = NowAnswer.Ready("SPSP-page".toByteArray())
+    val viewsAsked: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    override suspend fun nowNotes(rev: Int?): NowAnswer {
+        viewsAsked += "notes rev=$rev"
+        return notesAnswer
+    }
+
+    override suspend fun nowScore(rev: Int?, width: Int, height: Int): NowAnswer {
+        viewsAsked += "score rev=$rev ${width}x$height"
+        return scoreAnswer
+    }
+
+    override suspend fun nowScorePage(layoutId: Int, page: Int): NowAnswer {
+        viewsAsked += "page $layoutId/$page"
+        return pageAnswer
+    }
 }
