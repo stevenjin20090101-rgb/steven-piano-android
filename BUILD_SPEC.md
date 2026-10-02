@@ -7152,3 +7152,68 @@ place): the database upgraded with the library intact; Studio composed "Calm and
 download, steps, preview, cover, the shelf) and "Another like it"; Now playing showed the divider dragged to a
 third with the score re-laid at two bars, and the View menu; the Piano tab showed the new groups, the folded
 Fine tuning, and the search finding the three volumes. No crash in the log.
+
+# v1.14 — M33: motion, smooth and responsive
+
+Fable's design (DESIGN.md › v1.14 — motion), Opus coding, a lean run: the app only, no emulator, two tests. Nothing
+about how notes or the pedal reach the piano changed, nor the Keys tab's live playing; the score's page turn, the
+roll, the aura, the live red and the sounding yellow are as they were. No new colour; glass only through its wrappers.
+
+## What was built
+
+- **Tokens and the helper** (`ui/theme/Motion.kt`): `QuickMs` 120, `PopMs` 160, `StandardMs` 200 (was 240: the
+  mini player, the phone's page push and the disclosures follow it), `EmphasisedMs` 320, `SlowMs` 480 (`timed` holds
+  anything longer to it); `FastMs` and `RollStartMs` stay as names for 120 and 320. The `press` spring (0.8, stiffness
+  3,000) and the `settle` spring (0.9, 400); `Enter` decelerates, `Leave` accelerates. `timed`, `sprung`, `enter`,
+  `exit` and `change` return cuts when motion is reduced; `reducedMotion(resolver)` is the rule outside composition.
+  The live dot's 2 s breath moved into `LiveDot.kt` as its own constant (status, not a transition), unchanged.
+- **Press** (`ui/components/PressScale.kt`): `Modifier.pressScale(interaction)`, a modifier node following the
+  control's own interaction source and drawing it at 0.97 on the press spring (its layer only; nothing is laid out
+  again; nothing under reduced motion); `FilledButton` is Material's `Button` with it. On every `GlyphButton` (the
+  glass headers' and the transport's glyphs among them), play/pause, Shuffle and Repeat, the floating Play, Send, the
+  Keys pills Live, ‹ › and Record, the Library's tiles and channel cards, the chips (`SheetChip`, the Library's
+  categories, `ChoiceRow`, the presets) and the filled buttons (Connect, Update, Restart, the firmware's Update and
+  Retry, Load, Add, Listen). The play tick (`CLOCK_TICK`) on Send and on starting or stopping a take.
+- **Tabs and pages**: `NavHost.FadeThrough` out 120, in 200 from 0.92; on wide frames `PianoScreen` sets the page
+  beside the hub in an `AnimatedContent` (in: fade and an 8 dp rise over 200 ms; out: a 120 ms fade).
+- **Art**: `PlaybackStarter.artEntrance` (`ArtEntrance`): the Library's rows, tiles and cards ask; the now-playing
+  panel's art takes the ask for the next piece it shows within 3 s and grows in from 0.92 over 320 ms.
+- **Lists** (`ui/components/ListEntrance.kt`): `ListEntrance` (pure: rows composed within 100 ms of the visit's
+  first, index under 10, each key once), `rememberEntrance` with `Modifier.easedIn` (fade and 8 dp rise, 200 ms
+  after index × 12 ms), and `Modifier.placement` (`animateItem`, the settle spring, placement only). On the Library's
+  piece rows, playlist and composer tile rows and the channels grid, one entrance per listing (a category, a
+  playlist, a composer, the channels) and per visit; Studio's turns take the placement too.
+- **Play/pause**: the transport's glyph in an `AnimatedContent` (fade and scale from 0.85, 200 ms), the mini player's
+  through `GlyphButton(crossfade = true)`; Shuffle and Repeat cross-fade (200 ms).
+- **Rolling digits** (`ui/components/RollingText.kt`): each digit its own `AnimatedContent`, 120 ms up or down; a
+  plain swap whenever anything but a digit changes; one semantics text. On the tempo (`StepperControl(rolling =
+  true)`: Now playing and Playback › Default tempo), the Record pill's time and Studio's figures (a `RollingText` per
+  " · " part in a `FlowRow`, so the line still wraps).
+- **Progress**: `ProgressHairline` eases a determinate value over 200 ms, from the first value it shows, not from 0.
+- **Popovers**: `GlassPopover` fades in over 160 ms growing 0.92 → 1 from the corner beside its anchor (its position
+  provider records whether it went above), and leaves in 120 ms.
+- **The connection card**: `rememberSearchTurn` and `Modifier.searchArc`: a 90° arc, 1 dp, the secondary grey, 3 dp
+  round the dot, a turn every 1.4 s, composed only while looking; none under reduced motion.
+- **Studio**: `rememberArrival`: a turn first shown at least 0.6 s into the visit and made in the last 5 s (or shown
+  from its job alone) fades in rising 12 dp over 320 ms, remembered under its key and its job's so the job's card
+  becoming its history row doesn't arrive again; the card's actions sit in an `AnimatedContent` on `finished` (in
+  200, out 120).
+
+## Skipped, and why
+
+- **Material's dropdown menus** (`GlassDropdownMenu`) keep Material's motion, which already grows from the anchor's
+  corner with a fade (120 ms in, 75 out): `DropdownMenu` takes no animation spec, and replacing it would mean
+  re-implementing its placement. The 160 ms from 0.92 is `GlassPopover`'s alone.
+- **The art on phones**: a phone's Now playing shows no art (the title and the notes), so the moment is the
+  tablet panel's.
+- **Not pressed**: rows (the ripple), the tab bar and the rail (Material's indicator answers already) and the Sustain
+  button (the Keys tab's live playing is untouched).
+- The resting screen's fades (1.5 s, 0.6 s, 1.2 s, DESIGN.md › v1.7.1) are its own and stay outside the tokens.
+- Not done (no emulator in this run): on-device checks of any moment.
+
+## Tests
+
+`MotionTokensTest` (3: no duration over 480 ms and both springs at rest inside it; every helper a cut under reduced
+motion; otherwise as asked) and `ListEntranceTest` (5: the first ten rows, 12 ms apart; each once; never a row that
+comes later; a visit that opens scrolled down; a new visit). 1,545 → 1,553 unit tests (12 skipped), none failing.
+`lintDebug`: 0 errors, the same 30 warnings as 1.12, none in a touched file.

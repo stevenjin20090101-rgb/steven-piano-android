@@ -2517,3 +2517,26 @@ Steven chose the hub: INSTRUMENTS · THE PIANO · PLAYING · SHARING · THIS TAB
   the row, opens its fold and fills the row with the elevated surface for about a second; what moved off the tab
   opens its new screen. In kiosk searching is free and a locked page still asks for the PIN.
 - **No action twice**: beside the Instrument page the card shows the name and state only.
+
+# v1.14 — motion
+
+Steven chose "smooth and responsive"; designed by Fable (`motion.md`: purposeful, optional, brief, cancellable). It
+replaces › Motion's 240 ms tabs, "system ripple only" and "one haptic"; everything else there stands.
+
+- **Tokens** (`ui/theme/Motion.kt`): 120 quick · 200 standard · 320 emphasised · 480 slow, the most anything takes
+  (popovers 160); the press spring (damping 0.8, firm) and the settle spring (0.9, soft); entering decelerates,
+  leaving accelerates. Every transition goes through one helper: under reduced motion it is a cut.
+- **Nothing loops by itself** but the aura; status moves only while it lasts (the live dot, an indeterminate hairline,
+  the search arc). No bounce, no parallax, nothing in the way of a touch, everything interruptible.
+- **Touch**: glass controls, tiles, chips and filled buttons scale to 0.97 while pressed; rows keep the ripple. A light
+  tick on Send and on Record, as on play and pause.
+- **Places**: tabs fade through (out 120, in 200 from 0.92); Piano pages beside the hub cross-fade rising 8 dp, on
+  phones they push; popovers grow from their anchor's corner (0.92, 160 ms; gone in 120). Sheets and Material's menus
+  keep the platform's motion.
+- **Content**: a listing's first ten rows fade in rising 8 dp, 12 ms apart, once a visit (never on scroll, never after
+  a sheet); rows added, removed or moved settle into place; the now-playing panel's art of a piece started from a row
+  or a tile grows in from 0.92 (320 ms; a phone's Now playing has no art); a new Studio turn rises 12 dp (320 ms) and a
+  finished card's actions fade in.
+- **Figures**: the tempo, the Record time and Studio's figures roll digit by digit (120 ms, tabular); determinate
+  hairlines ease to each value (200 ms); play/pause cross-fades with a small scale (200 ms), shuffle and repeat cross-fade.
+- **Left alone**: the score's page turn and the roll, the live red and the sounding yellow, the aura, the resting screen.
