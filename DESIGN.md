@@ -2658,4 +2658,20 @@ Modern. Designed by Fable (apple-design lenses; the plan's decisions by multiple
 
 ## The web panel and guests
 
-Run 3 writes this.
+- **The panel's switch.** The Library page has the tablet's switch, **All · Classical · Modern**, above its search: a
+  segmented control drawn as the tablet's (a capsule track, the content colour at 8 % with a hairline; the chosen
+  segment a lighter thumb with a hairline, its label primary and medium, the others secondary; 36 px tall, equal
+  segments; the thumb's change fades in 160 ms, a cut under reduced motion; a 1.5 px primary edge with more contrast).
+  The browser remembers it, as it remembers Appearance; All the first time. Pieces, Favorites, Recent, search,
+  Playlists (the same majority rule), Composers and a composer's page follow it; a playlist opens whole; Channels is a
+  page of its own and lists every channel. Changing it closes an open playlist or composer and keeps the chip and the
+  search. No Move in the panel.
+- **Words.** The chip "All" is **Pieces**; under Modern "Composers" reads **Artists**, and a row with no name "Unknown
+  artist"; the search names its scope: "Search titles and composers", "Search Classical titles and composers",
+  "Search Modern titles and artists".
+- **Guests.** The request page's lists name their genre: Popular, Recognisable and Epic on piano are Classical, and a
+  new list, **Modern**, holds every Modern piece by title, at most 2,000, titles and artists only (Recordings and
+  Studio's pieces have no genre and stay off every list). The same switch shows above the lists when there are both; a
+  search box ("Search pieces") shows when there are more than 20 pieces and filters the rows already on the phone; a
+  list shows 200 rows, then **Show more**. Request, the five-minute rule and approval are unchanged. The Modern list
+  is worked out when the library changes, without pictures, and kept: anyone with the QR code can ask for it.

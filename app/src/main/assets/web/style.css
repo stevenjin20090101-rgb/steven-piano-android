@@ -55,6 +55,9 @@
   --sounding: var(--paper-sounding);
   --hand-left: var(--paper-hand-left);
   --hand-right: var(--paper-hand-right);
+  /* The segmented control's thumb (v1.14 — M37): lighter than its track in both appearances, the paper's elevated
+     surface here, the content colour at 18 % on the camera body. */
+  --thumb: var(--paper-elevated);
   color-scheme: light;
 
   /* The glass (ui/theme/Glass.kt's GlassTokens): the fills, the blur, the scroll-edge band and the
@@ -89,6 +92,7 @@
     --sounding: var(--ink-sounding);
     --hand-left: var(--ink-hand-left);
     --hand-right: var(--ink-hand-right);
+    --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
     color-scheme: dark;
   }
 }
@@ -106,6 +110,7 @@
   --sounding: var(--ink-sounding);
   --hand-left: var(--ink-hand-left);
   --hand-right: var(--ink-hand-right);
+  --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
   color-scheme: dark;
 }
 
@@ -262,6 +267,46 @@ button, input, select { font: inherit; color: inherit; }
 
 .chip:disabled { color: var(--disabled); cursor: default; }
 
+/* The genre switch (v1.14 — M37), the tablet's segmented control: a capsule track (the content colour at 8 % over
+   the surface) with a hairline, three equal segments; the pressed one is a lighter thumb with a hairline, its label
+   in the primary colour and medium weight, the others secondary. Solid, never glass. */
+.segmented {
+  display: flex;
+  gap: 2px;
+  min-height: 36px;
+  padding: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.segmented button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 160ms, border-color 160ms, color 160ms;
+}
+
+.segmented button[aria-pressed="true"] {
+  border-color: var(--hairline);
+  background: var(--thumb);
+  color: var(--primary);
+  font-weight: 500;
+}
+
 /* Monochrome switches, as the app's: an outlined track when off, the content colour when on. */
 .switch {
   position: relative;
@@ -375,6 +420,12 @@ button, input, select { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .dot.live.breathing { animation: none; }
   .switch::after { transition: none; }
+  .segmented button { transition: none; }
+}
+
+/* More contrast: the thumb's edge in the content colour, so it never rests on its fill alone. */
+@media (prefers-contrast: more) {
+  .segmented button[aria-pressed="true"] { border: 1.5px solid var(--primary); }
 }
 
 /* ---- Rows ------------------------------------------------------------------------------------ */
@@ -1201,6 +1252,9 @@ button, input, select { font: inherit; color: inherit; }
 .guest-head { display: flex; flex-direction: column; gap: 8px; padding: 0 var(--inset) 16px; }
 
 .guest-head h1 { font-size: 28px; line-height: 34px; }
+
+/* The genre switch and the search over the lists (v1.14 — M37), each shown only when it helps. */
+.guest-tools { display: flex; flex-direction: column; gap: 12px; padding: 0 var(--inset) 8px; }
 
 .guest-thanks { padding: 32px var(--inset); display: flex; flex-direction: column; gap: 12px; }
 

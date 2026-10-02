@@ -328,6 +328,7 @@ object WebApi {
         .put("favorite", p.favorite)
         .put("art", if (p.cover) "cover" else if (p.portrait) "portrait" else "roll")
         .apply { if (p.cover) put("artVersion", p.artVersion) }
+        .apply { p.genre?.let { put("genre", it) } }   // v1.14 — M37: only when it has one
 
     fun pieces(list: List<WebPiece>): JSONArray = JSONArray().apply { list.forEach { put(piece(it)) } }
 
@@ -349,7 +350,8 @@ object WebApi {
                         JSONObject()
                             .put("key", c.key).put("name", c.name).put("size", c.size).put("playable", c.playable)
                             .put("playing", c.playing).put("volume", c.volume)
-                            .put("composers", JSONArray().apply { c.composers.forEach { put(JSONObject().put("key", it.key).put("name", it.name).put("portrait", it.portrait)) } }),
+                            .put("composers", JSONArray().apply { c.composers.forEach { put(JSONObject().put("key", it.key).put("name", it.name).put("portrait", it.portrait)) } })
+                            .apply { c.genre?.let { put("genre", it) } },
                     )
                 }
             },
@@ -370,8 +372,17 @@ object WebApi {
         .put(
             "lists",
             JSONArray().apply {
-                // Guests see titles and composers only: no ids but the one they send back, no art, no lengths.
-                if (open) lists.forEach { l -> put(JSONObject().put("key", l.key).put("name", l.name).put("pieces", JSONArray().apply { l.pieces.forEach { put(JSONObject().put("id", it.id).put("title", it.title).put("composer", it.composerShort)) } })) }
+                // Guests see titles and composers only: no ids but the one they send back, no art, no lengths. A list
+                // names its genre (v1.14 — M37), for the page's switch; its pieces don't.
+                if (open) {
+                    lists.forEach { l ->
+                        put(
+                            JSONObject().put("key", l.key).put("name", l.name)
+                                .apply { l.genre?.let { put("genre", it) } }
+                                .put("pieces", JSONArray().apply { l.pieces.forEach { put(JSONObject().put("id", it.id).put("title", it.title).put("composer", it.composerShort)) } }),
+                        )
+                    }
+                }
             },
         )
 

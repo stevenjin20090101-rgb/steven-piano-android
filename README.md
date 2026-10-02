@@ -261,8 +261,8 @@ on the tablet*). Made by Steven Jin. Version 1.13.1.
   live (see *Web panel*).
 - **Guests' requests**: a printed poster's QR code opens a request page on the
   tablet's Wi-Fi, where anyone can ask the piano for a piece from Popular,
-  Recognisable or Epic on piano, one every five minutes; it joins Up next, or
-  waits for your Approve.
+  Recognisable or Epic on piano, or (from 1.14) the Modern list, one every five
+  minutes; it joins Up next, or waits for your Approve.
 - **Updates**: the app looks for a newer release when it opens and once a day,
   and the Piano tab offers it under **UPDATE**: one tap downloads it, checks it
   and hands it to Android's installer. On the school tablet it installs without
@@ -765,8 +765,9 @@ internet or any server of ours.
    Tailscale, and enter the PIN.
 
 **The panel** has what the app has: Now playing (the time running, the transport,
-tempo, a channel's volume), Up next (reorder, remove, clear), the Library (search,
-playlists, composers; Play, Play next, Add to queue), Channels, Schedule (see
+tempo, a channel's volume), Up next (reorder, remove, clear), the Library (the
+**All · Classical · Modern** switch, which the browser remembers; search, playlists,
+composers, or artists under Modern; Play, Play next, Add to queue), Channels, Schedule (see
 *Schedules*), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
 to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
 tally; a zip becomes a playlist and loose files go into **Uploads**, and under the
@@ -802,9 +803,12 @@ opened.
 
 - **Guests can request** (off at first) opens the request page, served on the tablet's
   Wi-Fi address, such as `http://192.168.1.20:8737/request`: a phone on the same Wi-Fi,
-  with no Tailscale and no PIN, sees Popular, Recognisable and Epic on piano and taps
-  **Request**. One request a phone every five minutes; nothing to type, nothing but
-  those lists. While it is off the page says requests are closed.
+  with no Tailscale and no PIN, sees Popular, Recognisable and Epic on piano and, from
+  1.14, **Modern** (every Modern piece by title and artist, up to 2,000), with the
+  **All · Classical · Modern** switch and, for long lists, a search box that searches on
+  the phone itself; a tap on **Request** asks. One request a phone every five minutes;
+  nothing is sent but the piece, nothing but those lists. While it is off the page says
+  requests are closed.
 - **Approve requests first** (on at first): a request waits for **Approve** or
   **Dismiss**, on the panel's Requests page or on the tablet, where the Library shows
   "1 request waiting". Off, it goes straight into Up next (and plays at once if nothing

@@ -237,6 +237,23 @@ class WebApiTest {
     }
 
     @Test
+    fun `a piece and a channel carry their genre only when they have one (v1_14 M37)`() {
+        val modern = WebPiece(4, "Shape of You", "Ed Sheeran", "ed sheeran", 233_000, composerShort = "Ed Sheeran", genre = "modern")
+        val json = WebApi.piece(modern)
+        assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "genre"), json.keys().asSequence().toSet())
+        assertEquals("modern", json.getString("genre"))
+        assertFalse("made on the tablet: no genre at all, not null", WebApi.piece(modern.copy(genre = null)).has("genre"))
+        val channels = WebApi.channels(
+            listOf(
+                WebChannel("classical", "Classical", 1_726, playable = true, playing = false, volume = 70, composers = emptyList(), genre = "classical"),
+                WebChannel("everything", "Everything", 1_992, playable = true, playing = false, volume = 70, composers = emptyList()),
+            ),
+        ).getJSONArray("channels")
+        assertEquals("classical", channels.getJSONObject(0).getString("genre"))
+        assertFalse("Everything is both: no genre", channels.getJSONObject(1).has("genre"))
+    }
+
+    @Test
     fun `a composition's choices are read strictly, and nothing but choices is taken`() {
         val full = WebApi.composeOrder(JSONObject("""{"pieceId":12,"mood":"wild","key":{"tonic":9,"minor":true},"bpm":132,"minutes":1}"""))
         assertEquals(ComposeOrder(12L, ComposeRequest(Mood.Wild, MusicKey(9, true), 132, 1)), full)

@@ -27,6 +27,8 @@ import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.data.Genres
+import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistOrder
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
@@ -47,7 +49,15 @@ import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.service.PlaybackService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -80,6 +90,22 @@ class AppWebBackend(
 
     /** The panel's notes and score of the piece playing (v1.13 — M32): one layout thread, bounded, cleared with the panel. */
     private val views = NowViews(source = ::nowSource)
+
+    /**
+     * The guests' Modern list (v1.14 — M37): every Modern piece by title, at most [WebLimits.GUEST_MODERN], title and
+     * artist only. Anyone with the request page's address may ask for it, so it is worked out off the main thread half
+     * a second after the library last changed (as the channels are) and kept: a request costs no more than writing it out.
+     */
+    @OptIn(FlowPreview::class)
+    private val guestModern: StateFlow<List<WebPiece>> = graph.library.all(LibraryScope.Modern)
+        .debounce(SETTLE_MS)
+        .map { pieces -> pieces.asSequence().take(WebLimits.GUEST_MODERN).map { it.toGuest() }.toList() }
+        .flowOn(Dispatchers.Default)
+        .catch { e ->
+            if (e is CancellationException) throw e
+            Log.w(TAG, "The guests' Modern list couldn't be read")
+        }
+        .stateIn(graph.appScope, SharingStarted.Eagerly, emptyList())
 
     /** What the views are drawn from now: the piece playing as Now playing shows it, at the transpose and folding played. */
     private fun nowSource(): NowSource? {
@@ -195,13 +221,13 @@ class AppWebBackend(
         )
     }
 
-    override suspend fun library(query: String?, category: LibraryCategory, offset: Int, limit: Int): WebPage {
+    override suspend fun library(query: String?, category: LibraryCategory, offset: Int, limit: Int, scope: LibraryScope): WebPage {
         val pieces = library {
             when {
-                !query.isNullOrBlank() -> graph.library.search(query).first()
-                category == LibraryCategory.FAVORITES -> graph.library.favorites().first()
-                category == LibraryCategory.RECENT -> graph.library.recent().first()
-                else -> graph.library.all().first()
+                !query.isNullOrBlank() -> graph.library.search(query, scope).first()
+                category == LibraryCategory.FAVORITES -> graph.library.favorites(scope).first()
+                category == LibraryCategory.RECENT -> graph.library.recent(scope).first()
+                else -> graph.library.all(scope).first()
             }
         }.orEmpty()
         val portraits = portraits()
@@ -211,9 +237,12 @@ class AppWebBackend(
         return WebPage(pieces.size, from, page)
     }
 
-    /** Every playlist, in the order the app's Playlists listing has chosen (v1.10.1 — M28, D6: newest first, or by name). */
-    override suspend fun playlists(): List<WebPlaylist> {
-        val all = library { graph.library.playlists().first() }.orEmpty()
+    /**
+     * Every playlist, in the order the app's Playlists listing has chosen (v1.10.1 — M28, D6: newest first, or by name);
+     * under a genre's [scope], those the repository shows under it (v1.14 — M37).
+     */
+    override suspend fun playlists(scope: LibraryScope): List<WebPlaylist> {
+        val all = library { graph.library.playlists(scope).first() }.orEmpty()
         return PlaylistOrder.listing(all, graph.settings.value.playlistSort, graph.builtIns.keys)
             .map { WebPlaylist(it.id, it.name, it.pieceCount, it.durationMs, it.builtIn) }
     }
@@ -226,14 +255,14 @@ class AppWebBackend(
         return WebPlaylistDetail(playlist, pieces)
     }
 
-    override suspend fun composers(): List<WebComposer> {
+    override suspend fun composers(scope: LibraryScope): List<WebComposer> {
         val portraits = portraits()
-        return library { graph.library.composers().first() }.orEmpty()
+        return library { graph.library.composers(scope).first() }.orEmpty()
             .map { WebComposer(it.composerKey, it.name, it.pieceCount, it.composerKey in portraits) }
     }
 
-    override suspend fun composer(key: String): WebComposerDetail? {
-        val pieces = library { graph.library.byComposer(key).first() }.orEmpty()
+    override suspend fun composer(key: String, scope: LibraryScope): WebComposerDetail? {
+        val pieces = library { graph.library.byComposer(key, scope).first() }.orEmpty()
         if (pieces.isEmpty()) return null
         val portraits = portraits()
         val covers = covers()
@@ -368,6 +397,7 @@ class AppWebBackend(
                 playing = card.key == playing,
                 volume = settings.channelVolume(card.key),
                 composers = card.composers.map { WebCardComposer(it.key, it.name, it.key in portraits) },
+                genre = Genres.name(card.genre),
             )
         }
     }
@@ -470,17 +500,28 @@ class AppWebBackend(
         importInBackground(source)
     }
 
+    /** The built-in lists, Classical, each piece once; then Modern as last worked out ([guestModern]). Guests see titles and composers only, so no art is looked up. */
     override suspend fun catalogue(): List<CatalogueList> {
-        val portraits = portraits()
-        val covers = covers()
         val seen = HashSet<Long>()
-        return graph.builtIns.lists.mapNotNull { list ->
+        val builtIn = graph.builtIns.lists.mapNotNull { list ->
             val id = library { graph.library.builtInId(list.key) } ?: return@mapNotNull null
             val pieces = library { graph.library.inPlaylist(id).first() }.orEmpty()
                 .filter { seen.add(it.id) }
-                .map { it.toWeb(portraits, covers) }
-            CatalogueList(list.key, list.name, pieces).takeIf { pieces.isNotEmpty() }
+                .map { it.toGuest() }
+            CatalogueList(list.key, list.name, pieces, CLASSICAL).takeIf { pieces.isNotEmpty() }
         }
+        val modern = guestModern.value.takeIf { it.isNotEmpty() }?.let { CatalogueList(MODERN_LIST, MODERN_LIST_NAME, it, MODERN) }
+        return builtIn + listOfNotNull(modern)
+    }
+
+    /** On offer: on the Modern list as guests were last shown it, or in one of the built-in lists ([catalogue]'s two sources). */
+    override suspend fun offered(pieceId: Long): WebPiece? {
+        guestModern.value.firstOrNull { it.id == pieceId }?.let { return it }
+        val piece = library { graph.library.piece(pieceId) } ?: return null
+        val inLists = library { graph.library.playlistIdsOf(pieceId).first() }.orEmpty()
+        if (inLists.isEmpty()) return null
+        val builtIn = graph.builtIns.lists.mapNotNull { library { graph.library.builtInId(it.key) } }
+        return if (inLists.any { it in builtIn }) piece.toGuest() else null
     }
 
     override suspend fun guestSettings(): GuestSettings = guests()
@@ -676,8 +717,12 @@ class AppWebBackend(
     private fun PieceEntity.toWeb(portraits: Set<String>, covers: Map<Long, Long>): WebPiece =
         WebPiece(
             id, title, composer, composerKey, durationMs, composerShort = composerShort, favorite = favorite, portrait = composerKey in portraits,
-            cover = id in covers, artVersion = covers[id] ?: 0,
+            cover = id in covers, artVersion = covers[id] ?: 0, genre = Genres.name(genre),
         )
+
+    /** A piece as guests are offered it (v1.14 — M37): what its row says, nothing looked up. */
+    private fun PieceEntity.toGuest(): WebPiece =
+        WebPiece(id, title, composer, composerKey, durationMs, composerShort = composerShort, genre = Genres.name(genre))
 
     /** A library read; null when it fails (the library unreadable), which the panel shows as an empty list or a 404. */
     private suspend fun <T> library(read: suspend () -> T): T? = try {
@@ -705,6 +750,15 @@ class AppWebBackend(
         private const val ART_CACHE_BYTES = 8 * 1024 * 1024
         private const val PNG = "image/png"
         private const val JPEG = "image/jpeg"
+
+        /** How long the library must be quiet before the guests' Modern list is worked out again, as the channels wait. */
+        private const val SETTLE_MS = 500L
+
+        /** The guests' lists' genres, and the Modern list's key and name (v1.14 — M37). */
+        private val CLASSICAL = Genres.name(Genres.CLASSICAL)
+        private val MODERN = Genres.name(Genres.MODERN)
+        private const val MODERN_LIST = "modern"
+        private const val MODERN_LIST_NAME = "Modern"
 
         /** A link state's name on the wire. */
         fun linkOf(state: LinkState): WebLink = when (state) {

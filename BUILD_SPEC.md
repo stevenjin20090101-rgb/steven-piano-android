@@ -7467,4 +7467,35 @@ Run 2, on `main` beside run 3's worktree: `ui/**`, `settings/Settings.kt` and on
 
 ## The web panel and guests
 
-Run 3 writes this.
+- **The API**: `genre=classical|modern` on `/api/library` (beside `q`, `category` and paging), `/api/playlists`,
+  `/api/composers` and `/api/composers/{key}` (`WebServer.scope`, read with `Genres.named`: absent is every piece,
+  anything else 400 "genre must be classical or modern."); `/api/playlists/{id}` stays whole. `WebBackend.library(…,
+  scope)`, `playlists(scope)`, `composers(scope)` and `composer(key, scope)` (`LibraryScope.All` by default) reach the
+  repository's variants. `WebPiece.genre` and `WebChannel.genre` (`Genres.name`) are written only when there is one, so a
+  made-here piece and Everything carry none; the Channels page is not filtered.
+- **Guests**: `CatalogueList.genre`; the built-in lists "classical", then `CatalogueList("modern", "Modern", …, "modern")`
+  from `AppWebBackend.guestModern`, a `StateFlow` over `library.all(LibraryScope.Modern)` in the app scope (debounced
+  500 ms as `ChannelPools` is, mapped on `Dispatchers.Default`, the first `WebLimits.GUEST_MODERN` = 2,000 by title,
+  no art). `catalogue()` reads its value, and no longer looks up portraits or covers for the built-in lists either
+  (guests never received them). The request gate asks `WebBackend.offered(pieceId)` (the cached Modern list, else the
+  piece's playlists against the built-in lists' ids) instead of building the whole catalogue for each POST. A guest's
+  piece is still `{id, title, composer}`; a list gains `genre`.
+- **The panel** (`index.html`, `app.js`, `style.css`): `.segmented` (`div[role=group][aria-label=Genre]`, three
+  `button[aria-pressed]`, built once and marked in place; `--thumb` per appearance: paper's elevated surface, ink's
+  content colour at 18 %); `library.genre` read from `localStorage` key `libraryScope`; `scoped()` adds `?genre=` to
+  the playlists, composers and composer reads and `libraryPage` to its parameters; `chooseGenre` stores it and
+  reloads (the crumb closes). The words: `renderChips`, `SEARCH_WORDS`, `unknownName()`.
+- **The guests' page** (`request.html`, `request.js`): `#guest-tools` holds `#genre` (shown when lists of both genres
+  came) and `#search` (more than 20 pieces), hidden with the catalogue on Thanks and Closed; `fold()` lower-cases and
+  sets accents aside; `renderLists()` filters the loaded rows; `section()` appends 200 rows per Show more.
+- **What a guest can reach** (the focused look), once Guests can request is on, the relay included:
+  - the catalogue: the titles and artists of every Modern piece, at most 2,000, besides the three built-in lists;
+  - capped and cached: worked out off the main thread after the library changes, so a catalogue costs a serialisation;
+  - the request gate unchanged: one request every five minutes per guest and per address, approval first when set;
+  - no new server-side input: the search runs in the browser; `genre` is the panel's, behind its session, an enum;
+  - Recordings and Studio's pieces carry no genre and are on no guest list; a guest's piece is still id, title, artist.
+- **Tests**: `WebServerTest` (2: `genre` on the four reads, its 400s and a Modern-only page; the catalogue's genres
+  and Modern list, the gate taking a Modern piece and refusing an unlisted one), `WebApiTest` (1: a piece with and
+  without `genre`, a channel with and without); `FakeWebBackend` follows the interface (its pieces Classical, its
+  Modern list from its Modern pieces). 1,577 → 1,580 unit tests (12 skipped), none failing. `lintDebug`: 0 errors,
+  the same 30 warnings, none in `web/` or `assets/web/`.
