@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui
 
+import dev.stevenjin.stevenpiano.record.RecordingPieces
 import dev.stevenjin.stevenpiano.studio.JobKind
 import dev.stevenjin.stevenpiano.studio.JobState
 import dev.stevenjin.stevenpiano.studio.JobStep
@@ -149,12 +150,17 @@ object StudioCopy {
     const val REVIEW_TITLE = "Keep this piece?"
     const val REVIEW_LINE = "Made in Studio from a recording. Discard deletes it."
 
+    /** The banner's line for a recording made on the tablet (v1.11 — M29). */
+    const val RECORDING_REVIEW_LINE = "Recorded here. Discard deletes it."
+
     /**
      * The banner's line for the piece whose sheet reads [description]: a composition's says what it is in
      * the manner of ("Composed in Studio in the manner of Clair de lune (Claude Debussy). Discard deletes
-     * it."; [StudioPieces.compositionDescription] wrote it), a transcription's [REVIEW_LINE].
+     * it."; [StudioPieces.compositionDescription] wrote it), a recording's [RECORDING_REVIEW_LINE] (v1.11 —
+     * M29), a transcription's [REVIEW_LINE].
      */
     fun reviewLine(description: String?): String {
+        if (RecordingPieces.isRecording(description)) return RECORDING_REVIEW_LINE
         val manner = StudioPieces.mannerOf(description) ?: return REVIEW_LINE
         return "Composed in Studio in the manner of $manner. Discard deletes it."
     }

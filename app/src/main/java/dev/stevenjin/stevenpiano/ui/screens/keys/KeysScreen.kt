@@ -33,6 +33,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,7 +62,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.instruments.LiveState
+import dev.stevenjin.stevenpiano.record.RecordingSession
+import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
@@ -68,6 +73,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -87,7 +93,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun KeysScreen(onOpenPiano: () -> Unit) {
+fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
     val graph = LocalContext.current.graph
     val frame = LocalAppFrame.current
     val vm = viewModel { KeysViewModel(graph) }
@@ -97,7 +103,9 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
     val tablet by vm.tabletSound.collectAsStateWithLifecycle()
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     val live by vm.live.collectAsStateWithLifecycle()
+    val recording by vm.recording.collectAsStateWithLifecycle()
     val visible = frame.keysVisibleWhites
+    val gate = rememberKioskGate()
     val touches = remember(vm) { KeyTouches(vm) }
     val pressed = remember { mutableIntStateOf(0) }
     val firstWhite = remember(vm, visible) { { vm.firstWhite(visible) } }
@@ -113,9 +121,21 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
         vm.onScreen(true)
         onStopOrDispose { vm.onScreen(false) }
     }
-    // The screen stays on while Live is on: a timeout would stop the app mid-performance.
+    // The screen stays on while Live is on or a take runs: a timeout would stop the app mid-performance.
     val view = LocalView.current
-    val keepOn = live.wanted && keyboard.connected
+    val taking = recording is RecordingState.Recording
+    val keepOn = (live.wanted && keyboard.connected) || taking
+    // The take's time on the Record control, once a second while it runs.
+    var elapsed by remember { mutableStateOf(RecordingSession.clock(0L)) }
+    if (taking) {
+        LaunchedEffect(recording) {
+            while (true) {
+                val nanos = vm.elapsedNanos()
+                elapsed = RecordingSession.clock(nanos)
+                delay(1_000L - (nanos / 1_000_000L) % 1_000L)
+            }
+        }
+    }
     DisposableEffect(view, keepOn) {
         view.keepScreenOn = keepOn
         onDispose { view.keepScreenOn = false }
@@ -196,9 +216,10 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
                         vm::setSustain,
                         octaves,
                         live = if (keyboard.connected) LivePill(on = live.wanted, enabled = !live.looped, onToggle = vm::setLive) else null,
+                        record = { RecordButton(taking, elapsed, enabled = recording != RecordingState.Saving, onToggle = vm::record) },
                     )
                     // One quiet line under the pills (v1.11 — M29): why Live is off, or the piano's 2 s rule while it plays.
-                    keysNote(live, keyboard.connected, steven = link is LinkState.Connected)?.let { note ->
+                    (recordingNote(recording) ?: keysNote(live, keyboard.connected, steven = link is LinkState.Connected))?.let { note ->
                         Eyebrow(
                             note,
                             Modifier
@@ -244,6 +265,28 @@ fun KeysScreen(onOpenPiano: () -> Unit) {
             }
         }
     } }
+    // After Stop: keep, listen or discard (v1.11 — M29); in kiosk mode without the PIN, listen or leave it waiting.
+    (recording as? RecordingState.Saved)?.let { saved ->
+        RecordingSheet(
+            saved.recording,
+            saved.ended,
+            locked = gate.locked,
+            onKeep = { title -> vm.keep(saved.recording, title) },
+            onDiscard = { vm.discard(saved.recording) },
+            onListen = {
+                vm.answered()
+                onListen(saved.recording.pieceId)
+            },
+            onDone = vm::answered,
+        )
+    }
+}
+
+/** After a take: the line under the pills when nothing was played or nothing could be saved; else none. */
+internal fun recordingNote(state: RecordingState): String? = when (state) {
+    RecordingState.Empty -> InstrumentCopy.NOTHING_PLAYED
+    RecordingState.Failed -> InstrumentCopy.NOT_SAVED
+    else -> null
 }
 
 /**

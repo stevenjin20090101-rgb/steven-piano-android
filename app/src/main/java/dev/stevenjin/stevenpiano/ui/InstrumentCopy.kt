@@ -13,6 +13,9 @@ import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.LiveThru
 import dev.stevenjin.stevenpiano.instruments.LiveTrip
+import dev.stevenjin.stevenpiano.record.RecordingSession
+import dev.stevenjin.stevenpiano.record.TakeEnd
+import java.util.Locale
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
 
 /**
@@ -120,6 +123,44 @@ object InstrumentCopy {
 
     /** Under the pills when the keyboard is the instrument too. */
     const val LOOPED = "Live stays off: this keyboard is the instrument too, so it already plays its own keys."
+
+    // ---- Recording ----------------------------------------------------------------------------
+
+    /** The Record control, and what TalkBack says of it. */
+    const val RECORD = "Record"
+    const val RECORDING_ON = "Recording"
+    const val RECORDING_OFF = "Off"
+
+    /** The sheet after Stop. */
+    const val RECORDING_EYEBROW = "Recording"
+    const val KEEP_RECORDING = "Keep this recording?"
+    const val TITLE_FIELD = "Title"
+    const val DISCARD = "Discard"
+    const val LISTEN = "Listen"
+    const val KEEP = "Keep"
+    const val DONE = "Done"
+
+    /** The sheet in kiosk mode without the PIN. */
+    const val KIOSK_SAVED = "Saved to Recordings. Someone with the PIN keeps or discards it."
+
+    /** Under the pills for a moment after a take with no note. */
+    const val NOTHING_PLAYED = "Nothing was played."
+
+    /** Under the pills when the library would not take a take. */
+    const val NOT_SAVED = "The recording couldn't be saved. The app tries again when it next starts."
+
+    /** "0:42 · 318 notes" (one note: "1 note"), the length in tabular digits. */
+    fun takeLine(durationMicros: Long, notes: Int): String =
+        "${RecordingSession.clock(durationMicros * 1000)} · " + String.format(Locale.ROOT, "%,d", notes) + if (notes == 1) " note" else " notes"
+
+    /** Why a take stopped by itself, under the sheet's line; null when the person stopped it. */
+    fun takeEnded(ended: TakeEnd): String? = when (ended) {
+        TakeEnd.Longest -> "It stopped by itself after an hour."
+        TakeEnd.Fullest -> "It stopped by itself: it held as much as one recording can."
+        TakeEnd.Silence -> "It stopped by itself after five minutes with nothing played."
+        TakeEnd.AppLeft -> "It stopped when the app left the screen."
+        TakeEnd.Stopped -> null
+    }
 
     /** Under the pills after the flood breaker switched Live off. */
     fun tripped(trip: LiveTrip): String = "Live turned off: " + when (trip) {

@@ -285,7 +285,7 @@ fun PianoNavHost(
                                 composable(Route.NowPlaying.path) {
                                     NowPlayingScreen(playback, onOpenPiano = { open(Route.Piano) })
                                 }
-                                composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }) }
+                                composable(Route.Keys.path) { KeysScreen(onOpenPiano = { open(Route.Piano) }, onListen = listen) }
                                 navigation(startDestination = PianoRoutes.HUB, route = Route.Piano.path) {
                                     composable(PianoRoutes.HUB) { hub ->
                                         val tab = remember(hub) { nav.getBackStackEntry(Route.Piano.path) }

@@ -34,6 +34,15 @@ class ComposerNamesTest {
     }
 
     @Test
+    fun `a recording made on the tablet keeps its composer whole too (v1_11 M29)`() {
+        for (raw in listOf("Recorded live", "recorded LIVE", "  Recorded   live ")) {
+            assertEquals(raw, Name("Recorded live", "Recorded live", "recorded live"), n(raw))
+            assertEquals(raw, Name("Recorded live", "Recorded live", "recorded live"), ComposerNames.artist(raw))
+        }
+        assertEquals(Name("Recorded live", "Recorded live", "recorded live"), kotlinx.coroutines.runBlocking { ComposerNames.resolve("Recorded live") { true } })
+    }
+
+    @Test
     fun `the 26 lowercase piano-midi de folder names`() {
         val expected = mapOf(
             "albeniz" to "Isaac Albéniz", "bach" to "Johann Sebastian Bach", "balakirew" to "Mily Balakirev",

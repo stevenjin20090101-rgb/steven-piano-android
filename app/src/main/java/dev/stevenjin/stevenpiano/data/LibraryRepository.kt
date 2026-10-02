@@ -243,6 +243,21 @@ class LibraryRepository(
 
     private suspend fun isBuiltIn(playlistId: Long): Boolean = playlists.byId(playlistId)?.builtIn == true
 
+    /**
+     * A recording made on the tablet (v1.11 — M29) joins the built-in playlist Recordings, first: newest first.
+     * The playlist is made the first time. Its key is no catalogue list's, so [BuiltInPlaylists.refresh] never
+     * touches it and the web panel's guests never see it; the Library shows it once it holds a piece.
+     */
+    suspend fun addRecording(pieceId: Long) {
+        val id = ensureBuiltIn(RECORDINGS_KEY, RECORDINGS_NAME)
+        setPlaylistPieces(id, listOf(pieceId) + recordingsIn(id).filter { it != pieceId })
+    }
+
+    /** The recordings, newest first (none before the first). */
+    suspend fun recordings(): List<Long> = builtInId(RECORDINGS_KEY)?.let { recordingsIn(it) }.orEmpty()
+
+    private suspend fun recordingsIn(playlistId: Long): List<Long> = playlists.positions(playlistId).sortedBy { it.position }.map { it.pieceId }
+
     /** Reads and parses the piece. A file too large for the memory left says so instead of taking the app down. */
     override suspend fun load(pieceId: Long): PlayablePiece {
         val piece = pieces.byId(pieceId) ?: throw PieceUnavailableException("This piece is no longer in the library.")
@@ -357,9 +372,13 @@ class LibraryRepository(
 
     private fun playlistName(name: String): String = TextLimits.clip(name.trim(), TextLimits.COLLECTION)
 
-    private companion object {
+    companion object {
         /** Ids per query: under SQLite's 999-variable limit on older Android versions. */
-        const val SQL_CHUNK = 500
-        const val TOO_LARGE = "This piece is too large to play."
+        private const val SQL_CHUNK = 500
+        private const val TOO_LARGE = "This piece is too large to play."
+
+        /** The built-in playlist of recordings (v1.11 — M29): its key, which no catalogue list has, and its name. */
+        const val RECORDINGS_KEY = "recordings"
+        const val RECORDINGS_NAME = "Recordings"
     }
 }

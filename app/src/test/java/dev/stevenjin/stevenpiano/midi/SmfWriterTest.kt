@@ -150,4 +150,25 @@ class SmfWriterTest {
         assertEquals(300_000, SmfWriter.tempoOf(200))
         assertEquals(437_956, SmfWriter.tempoOf(137))
     }
+
+    @Test
+    fun `a recording's controller values round-trip, half pedal and the other pedals too (v1_11 M29)`() {
+        val controls = listOf(
+            SmfWriter.Control(0, 64, 40),
+            SmfWriter.Control(120_000, 64, 100),
+            SmfWriter.Control(120_000, 66, 127),
+            SmfWriter.Control(500_000, 67, 64),
+            SmfWriter.Control(900_000, 64, 0),
+            SmfWriter.Control(900_000, 66, 0),
+            SmfWriter.Control(900_000, 67, 0),
+        )
+        val bytes = SmfWriter.write(listOf(SmfWriter.Note(100_000, 800_000, 60, 90)), controls = controls)
+        val piece = SmfParser.parse(bytes)
+        val read = piece.events.filter { it.command == 0xB0 }.map { Triple(it.data1, it.data2, it.atMicros) }
+        assertEquals(controls.map { it.controller to it.value }, read.map { it.first to it.second })
+        for ((want, have) in controls.zip(read)) assertTrue("at ${have.third}, not ${want.atMicros}", abs(want.atMicros - have.third) <= tolerance)
+        assertEquals(1, piece.noteCount)
+        val clamped = SmfParser.parse(SmfWriter.write(listOf(SmfWriter.Note(0, 10_000, 60, 90)), controls = listOf(SmfWriter.Control(0, 200, 300))))
+        assertEquals(listOf(119 to 127), clamped.events.filter { it.command == 0xB0 }.map { it.data1 to it.data2 })
+    }
 }

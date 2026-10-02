@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
+import dev.stevenjin.stevenpiano.record.TakeEnd
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -72,5 +73,15 @@ class InstrumentCopyTest {
         assertEquals("usb:Roland|FP-30X|", MidiNames.usbKey("Roland", "FP-30X", null))
         assertEquals(MidiTransport.USB, MidiNames.transportOf("usb:a|b|c"))
         assertNull(MidiNames.transportOf("x:y"))
+    }
+
+    @Test
+    fun `a take's line and why it stopped by itself`() {
+        assertEquals("0:42 · 318 notes", InstrumentCopy.takeLine(42_400_000, 318))
+        assertEquals("0:00 · 1 note", InstrumentCopy.takeLine(300_000, 1))
+        assertEquals("1:00:00 · 12,345 notes", InstrumentCopy.takeLine(3_600_000_000, 12_345))
+        assertNull(InstrumentCopy.takeEnded(TakeEnd.Stopped))
+        assertEquals("It stopped by itself after an hour.", InstrumentCopy.takeEnded(TakeEnd.Longest))
+        assertEquals("It stopped by itself after five minutes with nothing played.", InstrumentCopy.takeEnded(TakeEnd.Silence))
     }
 }

@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.ui.screens.keys
 
 import dev.stevenjin.stevenpiano.instruments.LiveState
 import dev.stevenjin.stevenpiano.instruments.LiveTrip
+import dev.stevenjin.stevenpiano.record.RecordingState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -37,5 +38,13 @@ class KeysNoteTest {
         )
         assertNull("the tablet's own sound has no coils", keysNote(LiveState(wanted = true, open = true), keyboardConnected = true, steven = false))
         assertNull(keysNote(LiveState(wanted = true), keyboardConnected = true, steven = true))
+    }
+
+    @Test
+    fun `after a take, nothing played or nothing saved says so under the pills`() {
+        assertEquals("Nothing was played.", recordingNote(RecordingState.Empty))
+        assertEquals("The recording couldn't be saved. The app tries again when it next starts.", recordingNote(RecordingState.Failed))
+        assertNull(recordingNote(RecordingState.Idle))
+        assertNull(recordingNote(RecordingState.Recording(0L)))
     }
 }

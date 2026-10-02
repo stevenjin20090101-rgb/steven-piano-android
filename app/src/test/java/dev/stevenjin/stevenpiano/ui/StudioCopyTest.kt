@@ -120,6 +120,7 @@ class StudioCopyTest {
         assertEquals("Composed in Studio in the manner of Clair de lune (Claude Debussy). Discard deletes it.", StudioCopy.reviewLine(description))
         assertEquals(StudioCopy.REVIEW_LINE, StudioCopy.reviewLine("Made in Studio · Sep 28, 2026"))
         assertEquals(StudioCopy.REVIEW_LINE, StudioCopy.reviewLine(null))
+        assertEquals("a recording made here (v1.11 — M29)", "Recorded here. Discard deletes it.", StudioCopy.reviewLine("Recorded live · Oct 1, 2026"))
         assertEquals(StudioCopy.REVIEW_LINE, StudioCopy.reviewLine("Made in Studio · in the manner of "))
         assertEquals("Für Elise", StudioPieces.mannerOf(StudioPieces.compositionDescription("Für Elise")))
     }

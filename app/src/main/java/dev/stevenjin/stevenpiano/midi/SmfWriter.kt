@@ -17,8 +17,9 @@ import kotlin.math.roundToInt
  * note at one tempo, 120 bpm unless one is given (960 ticks a second, about a millisecond each; a
  * composition is written at the tempo it was composed at, v1.7 — M24, so its beats fall on the file's
  * and the score's bars follow them), 4/4. The track holds the title as its name (FF 03) and an optional
- * text (FF 01), the tempo and time signature, then the notes as Note On / Note Off on channel 1 and the
- * sustain pedal as CC64 127 / 0, then End of Track. Events at one tick go in [SmfParser]'s order
+ * text (FF 01), the tempo and time signature, then the notes as Note On / Note Off on channel 1, the
+ * sustain pedal as CC64 127 / 0, and controller values as they were played ([Control], v1.11 — M29: a
+ * recording's half pedal, CC66 and CC67), then End of Track. Events at one tick go in [SmfParser]'s order
  * (controllers, then note-offs, then note-ons), so what is written is what the parser reads back.
  * Every note lasts at least a tick, velocities are held to 1–127 (a Note On of 0 would be a Note Off),
  * keys to 0–127.
@@ -34,9 +35,13 @@ object SmfWriter {
     /** The sustain pedal down from [downMicros] to [upMicros]. */
     data class Pedal(val downMicros: Long, val upMicros: Long)
 
+    /** Controller [controller] (0-119) at [value] from [atMicros] (v1.11 — M29: a recording's pedals, every value). */
+    data class Control(val atMicros: Long, val controller: Int, val value: Int)
+
     /**
      * The file's bytes. [title] names the track; [text] is a text event beside it; [tempoMicros] is the
-     * file's one tempo, microseconds a quarter note ([tempoOf] a bpm), 120 bpm by default.
+     * file's one tempo, microseconds a quarter note ([tempoOf] a bpm), 120 bpm by default. [controls] go
+     * at the controllers' rank, in their order where they share a tick.
      */
     fun write(
         notes: List<Note>,
@@ -44,9 +49,10 @@ object SmfWriter {
         title: String? = null,
         text: String? = null,
         tempoMicros: Int = TEMPO_MICROS,
+        controls: List<Control> = emptyList(),
     ): ByteArray {
         require(tempoMicros in 1..MAX_TEMPO_MICROS) { "tempo $tempoMicros" }
-        val events = ArrayList<Event>(notes.size * 2 + pedals.size * 2)
+        val events = ArrayList<Event>(notes.size * 2 + pedals.size * 2 + controls.size)
         for (note in notes) {
             val on = ticks(note.onMicros, tempoMicros)
             val off = maxOf(ticks(note.offMicros, tempoMicros), on + 1)
@@ -59,6 +65,13 @@ object SmfWriter {
             val up = maxOf(ticks(pedal.upMicros, tempoMicros), down + 1)
             events += Event(down, RANK_CONTROL, byteArrayOf(0xB0.toByte(), SUSTAIN.toByte(), 127))
             events += Event(up, RANK_CONTROL, byteArrayOf(0xB0.toByte(), SUSTAIN.toByte(), 0))
+        }
+        for (control in controls) {
+            events += Event(
+                ticks(control.atMicros, tempoMicros),
+                RANK_CONTROL,
+                byteArrayOf(0xB0.toByte(), control.controller.coerceIn(0, 119).toByte(), control.value.coerceIn(0, 127).toByte()),
+            )
         }
         events.sortWith(compareBy<Event>({ it.tick }, { it.rank }))   // stable: pedal down before up at one tick
 

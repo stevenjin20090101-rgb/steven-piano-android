@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.stevenjin.stevenpiano.record.RecordingPieces
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
@@ -34,14 +35,15 @@ import kotlinx.coroutines.launch
  * "Keep this piece?", what it is (a composition's line says what it is in the manner of, read from its
  * sheet's own line; a transcription's that it came from a recording), then **Keep** (it stays, and is not asked about again) and
  * **Discard** (the piano is silenced, the player lets go of it, and it leaves the library). Discard
- * changes the library, so in kiosk mode it waits for the kiosk PIN; Keep never does. Nothing when no
- * piece is waiting.
+ * changes the library, so in kiosk mode it waits for the kiosk PIN; Keep does not, but for a recording made
+ * on the tablet (v1.11 — M29: "Recorded here. Discard deletes it."), which waits for someone with the PIN
+ * either way. Nothing when no piece is waiting.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StudioReviewBanner(modifier: Modifier = Modifier) {
     val graph = LocalContext.current.graph
-    val review = graph.studio.review
+    val review = graph.studioReview
     val asking by review.asking.collectAsStateWithLifecycle()
     val pieceId = asking ?: return
     val gate = rememberKioskGate()
@@ -49,7 +51,9 @@ fun StudioReviewBanner(modifier: Modifier = Modifier) {
     OutlinedBanner(StudioCopy.REVIEW_TITLE, modifier) {
         Text(StudioCopy.reviewLine(sheet?.description), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow {
-            TextButton(onClick = { graph.appScope.launch { review.keep(pieceId) } }) { Text("Keep") }
+            // A recording made here waits for someone with the PIN in kiosk mode, Keep as Discard (v1.11 — M29).
+            val keep = { graph.appScope.launch { review.keep(pieceId) }; Unit }
+            TextButton(onClick = { if (RecordingPieces.isRecording(sheet?.description)) gate.run(keep) else keep() }) { Text("Keep") }
             TextButton(onClick = { gate.run { graph.appScope.launch { review.discard(pieceId) } } }) { Text("Discard") }
         }
     }

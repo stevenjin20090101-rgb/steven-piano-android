@@ -20,6 +20,9 @@ import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.LiveState
+import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.record.RecordingState
+import dev.stevenjin.stevenpiano.record.SavedRecording
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import kotlinx.coroutines.Job
@@ -84,16 +87,51 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** The leftmost white key shown when [visibleWhites] fit across the screen: [first], clamped to that width. */
     fun firstWhite(visibleWhites: Int): Float = KeyboardGeometry.clampFirst(first, visibleWhites)
 
-    /** Sent while the piano is connected, or while the tablet plays the piano sound itself (v1.8 — M25). */
+    /** Sent while the piano is connected, or while the tablet plays the piano sound itself (v1.8 — M25); recorded while a take runs (v1.11 — M29). */
     override fun noteOn(key: Int, velocity: Int) {
         if (link.value is LinkState.Connected || graph.tabletSound.active) player.liveNoteOn(key, velocity)
+        graph.recorder.screenKey(down = true, key = key, velocity = velocity)
         showVelocity(velocity)
     }
 
     /** Always sent: letting go of a key the piano never got is harmless. */
-    override fun noteOff(key: Int) = player.liveNoteOff(key)
+    override fun noteOff(key: Int) {
+        player.liveNoteOff(key)
+        graph.recorder.screenKey(down = false, key = key, velocity = 0)
+    }
 
-    fun setSustain(down: Boolean) = player.liveSustain(down)
+    fun setSustain(down: Boolean) {
+        player.liveSustain(down)
+        graph.recorder.screenSustain(down)
+    }
+
+    /** A take, from the Record control to the sheet (v1.11 — M29). Free in kiosk mode, as the Keys tab is. */
+    val recording: StateFlow<RecordingState> = graph.recording.state
+
+    /** The Record control: a take starts, or the one running stops and is saved. */
+    fun record(on: Boolean) = if (on) graph.recording.start() else graph.recording.stop()
+
+    /** How long the take running has run, for the Record control. */
+    fun elapsedNanos(): Long = graph.recorder.elapsedNanos()
+
+    /** Keep: under the [title] typed (the date's if left blank), and not asked about again. */
+    fun keep(saved: SavedRecording, title: String) {
+        graph.recording.answered()
+        graph.appScope.launch {
+            val typed = title.trim()
+            if (typed.isNotEmpty() && typed != saved.title) graph.library.rename(saved.pieceId, typed, ComposerNames.RECORDED_LIVE)
+            graph.studioReview.keep(saved.pieceId)
+        }
+    }
+
+    /** Discard: the take leaves the library. */
+    fun discard(saved: SavedRecording) {
+        graph.recording.answered()
+        graph.appScope.launch { graph.studioReview.discard(saved.pieceId) }
+    }
+
+    /** The sheet put away (Done, Listen, dismissed): the take waits for Keep or Discard. */
+    fun answered() = graph.recording.answered()
 
     /** Every key the screen holds lets go, and the pedal comes up. */
     fun letGo() = player.silenceLive()

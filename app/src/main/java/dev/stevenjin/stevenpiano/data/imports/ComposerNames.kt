@@ -81,10 +81,18 @@ object ComposerNames {
     const val STUDIO = "Made in Studio"
     private val STUDIO_KEY = TextKeys.fold(STUDIO)
 
+    /**
+     * The composer of a recording made on the tablet (v1.11 — M29): not a person either, so it keeps its whole
+     * name everywhere, as [STUDIO] does ("Recorded live · 0:42").
+     */
+    const val RECORDED_LIVE = "Recorded live"
+    private val RECORDED_LIVE_KEY = TextKeys.fold(RECORDED_LIVE)
+
     fun normalize(raw: String): Name {
         val text = TitleHeuristics.cleanText(raw)
         if (text.isEmpty()) return Name.Unknown
         if (TextKeys.fold(text) == STUDIO_KEY) return Name(STUDIO, STUDIO, STUDIO_KEY)
+        if (TextKeys.fold(text) == RECORDED_LIVE_KEY) return Name(RECORDED_LIVE, RECORDED_LIVE, RECORDED_LIVE_KEY)
         val parsed = parse(text)
         val surnameKey = keyOf(parsed.surname)
         val key = VARIANTS[surnameKey] ?: surnameKey
@@ -111,6 +119,7 @@ object ComposerNames {
         val text = TitleHeuristics.cleanText(raw)
         if (text.isEmpty()) return Name.Unknown
         if (TextKeys.fold(text) == STUDIO_KEY) return Name(STUDIO, STUDIO, STUDIO_KEY)
+        if (TextKeys.fold(text) == RECORDED_LIVE_KEY) return Name(RECORDED_LIVE, RECORDED_LIVE, RECORDED_LIVE_KEY)
         canonicalOf(text)?.let { return it }
         return Name(text, text, artistKey(text))
     }

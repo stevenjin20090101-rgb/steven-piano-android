@@ -10,21 +10,25 @@
 package dev.stevenjin.stevenpiano.ui.screens.keys
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
@@ -43,6 +48,7 @@ import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.theme.LocalDisabledGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import dev.stevenjin.stevenpiano.ui.theme.Tabular
 
 /** Where the keyboard scrolls, the ‹ › octave buttons at the pills' two ends. */
 class OctavePills(val canGoDown: Boolean, val canGoUp: Boolean, val onShift: (Int) -> Unit)
@@ -134,6 +140,55 @@ private fun LiveButton(pill: LivePill) {
         }
     }
 }
+
+/**
+ * Record (v1.11 — M29): a glass pill in the content colour, never red (red means sent to the piano): a filled
+ * circle and "Record"; while a take runs, a filled square and its [elapsed] time in tabular digits ("0:42").
+ * TalkBack reads "Record" with its state ("Recording" or "Off"), never the ticking time: the sheet after Stop
+ * says how long the take was.
+ */
+@Composable
+fun RecordButton(recording: Boolean, elapsed: String, enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val ink = if (enabled) MaterialTheme.colorScheme.onSurface else LocalDisabledGlyph.current
+    GlassSurface(
+        Modifier,
+        shape = CircleShape,
+        blur = false,
+        outline = when {
+            !enabled -> LocalHairline.current
+            recording -> ink
+            else -> LocalTertiary.current
+        },
+    ) {
+        Row(
+            Modifier
+                .heightIn(min = PillHeight)
+                .toggleable(value = recording, enabled = enabled, role = Role.Switch, onValueChange = onToggle)
+                .semantics {
+                    contentDescription = InstrumentCopy.RECORD
+                    stateDescription = if (recording) InstrumentCopy.RECORDING_ON else InstrumentCopy.RECORDING_OFF
+                }
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(RecordGlyph)
+                    .background(ink, if (recording) RoundedCornerShape(2.dp) else CircleShape),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (recording) elapsed else InstrumentCopy.RECORD,
+                modifier = Modifier.clearAndSetSemantics { },
+                style = MaterialTheme.typography.labelLarge.merge(Tabular),
+                color = ink,
+            )
+        }
+    }
+}
+
+/** The Record control's glyph: a 12 dp circle, or a square while a take runs. */
+private val RecordGlyph = 12.dp
 
 /**
  * An octave button: a 48 dp glass circle, its glyph in the content colour and its ring in the action

@@ -84,6 +84,10 @@ import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.record.Recorder
+import dev.stevenjin.stevenpiano.record.RecordingPieces
+import dev.stevenjin.stevenpiano.record.RecordingSession
+import dev.stevenjin.stevenpiano.record.RecordingStore
 import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.LibraryService
@@ -537,7 +541,7 @@ class AppGraph(private val app: Application) {
         val source = ModelsOverride.source() ?: UpdateSource.models
         val server = HttpUpdateServer(source, log = debugLog(STUDIO_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         val models = ModelStore(File(app.filesDir, MODELS_DIR))
-        val library = AppStudioLibrary(this)
+        val library = studioLibrary
         Studio(
             scope = appScope,
             availability = StudioAvailability.of(app, appScope),
@@ -545,16 +549,7 @@ class AppGraph(private val app: Application) {
             installer = ModelInstaller(source, server, models, VerifiedDownloader(server)),
             reader = AudioDecoder(app.contentResolver),
             pieces = StudioPieces(library),
-            review = StudioReview(
-                StoredReview(app),
-                object : ReviewPlayer {
-                    override val state = player.state
-
-                    override fun positionMicrosNow(): Long = player.positionMicrosNow()
-                },
-                library,
-                appScope,
-            ),
+            review = studioReview,
             worker = studioThread,
             online = network::isOnline,
             onBusy = { StudioService.start(app) },
@@ -564,6 +559,57 @@ class AppGraph(private val app: Application) {
             log = { Log.i(STUDIO_TAG, it) },
             trail = LinkLog.shared::add,
             seeds = LibrarySeeds(this.library),
+        )
+    }
+
+    /**
+     * Where Studio's pieces and the tablet's recordings go into the library (v1.7 — M23; hoisted for recordings in
+     * v1.11 — M29): through the importer, described on their sheet, discarded as the Library's Delete does.
+     */
+    val studioLibrary: AppStudioLibrary by lazy { AppStudioLibrary(this) }
+
+    /** Keep or Discard after a first listen, for Studio's pieces and the tablet's recordings (hoisted in v1.11 — M29). */
+    val studioReview: StudioReview by lazy {
+        StudioReview(
+            StoredReview(app),
+            object : ReviewPlayer {
+                override val state = player.state
+
+                override fun positionMicrosNow(): Long = player.positionMicrosNow()
+            },
+            studioLibrary,
+            appScope,
+        )
+    }
+
+    /**
+     * The recorder (v1.11 — M29): what the Keys screen and the MIDI keyboard play, captured before the router; it hears
+     * the keyboard whether Live is on or not.
+     */
+    val recorder: Recorder by lazy { Recorder().also { keyboard.listen(it) } }
+
+    /** A take from the Record control to the sheet; saved into Recordings, waiting for Keep or Discard. */
+    val recording: RecordingSession by lazy {
+        val store = object : RecordingStore {
+            override suspend fun add(fileName: String, bytes: ByteArray, title: String, composer: String): Long? = studioLibrary.add(fileName, bytes, title, composer)
+
+            override suspend fun describe(pieceId: Long, description: String) = studioLibrary.describe(pieceId, description)
+
+            override suspend fun addToRecordings(pieceId: Long) = library.addRecording(pieceId)
+
+            override suspend fun recordings(): List<Long> = library.recordings()
+
+            override suspend fun markUndecided(pieceId: Long) = studioReview.made(pieceId)
+
+            override suspend fun undecided(): Set<Long> = studioReview.undecided.value
+
+            override suspend fun discard(pieceId: Long) = studioReview.discard(pieceId)
+        }
+        RecordingSession(
+            recorder,
+            RecordingPieces(store, File(app.filesDir, RECORDINGS_DIR), kiosk = { settings.value.kioskEnabled }, log = LinkLog::warn),
+            appScope,
+            log = LinkLog::warn,
         )
     }
 
@@ -732,6 +778,7 @@ class AppGraph(private val app: Application) {
             midiDevices.start()
             keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
             followLive()
+            launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet.
             if (s.autoConnect && BlePermissions.missing(app).isEmpty()) pianoLink.connect(s.lastDeviceAddress)
         }
@@ -883,6 +930,7 @@ class AppGraph(private val app: Application) {
         const val SOUND_TAG = "TabletSound"
         const val LIBRARY_TAG = "Library"
         const val MODELS_DIR = "models"
+        const val RECORDINGS_DIR = "recordings"
         const val STUDIO_WAKE_MS = 30 * 60_000L
         const val UPDATES_DIR = "updates"
         const val DIAGNOSTICS_DIR = "diagnostics"
