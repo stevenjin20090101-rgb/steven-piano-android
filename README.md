@@ -177,9 +177,9 @@ on the tablet*). Made by Steven Jin. Version 1.11.
     the root: B♭/D), spelled in the key (a file without a key signature in the
     key its notes suggest). A beat is named only when more than one line sounds
     and the notes point to one chord; otherwise the name before holds.
-  - **Piano › Display › Fingering** and **Chord names** (on) show or hide them; **Hand
-    colours** (off) tints the left hand green and the right hand blue on the
-    waterfall and the keyboard strip only: the one place colour enters the app
+  - **Now playing › View › Fingering** and **Chord names** (on) show or hide them; **Hand
+    colours** (off) tints the left hand green and the right hand blue in the
+    notes and on the keyboard strip only: the one place colour enters the app
     besides artwork, and red still means only that the piano is live.
   - Honest limits: the hands of a single-track file are a guess (with
     piano-midi.de's files that name both hands merged into one track, the split
@@ -230,9 +230,9 @@ on the tablet*). Made by Steven Jin. Version 1.11.
   **PLAYING** (**Playback**: the pause before each piece, default tempo,
   transpose, velocity, folding, drum channel, and the tablet's own piano sound;
   **Display**: appearance (follow
-  the system, light or dark), note display, wide layout, fingering, chord names,
-  hand colours, artwork in black and white, fetching artwork automatically, and
-  standby: display mode after a minute, its canvas and what it shows; **Schedule**: timed play,
+  the system, light or dark), artwork in black and white, fetching artwork automatically, and
+  standby: display mode after a minute, its canvas and what it shows (how the notes look moved
+  to Now playing's **View** menu in 1.12); **Schedule**: timed play,
   see *Schedules*), **CONTROL** (**Remote
   control**: the web panel, its PIN, guests and the poster; **Kiosk**: kiosk
   mode and its PIN) and
@@ -282,8 +282,19 @@ on the tablet*). Made by Steven Jin. Version 1.11.
 - **Tablets and phones on their side**: a navigation rail on the left instead of
   the bottom bar. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
-  side; **Piano › Display › Wide layout** can show either alone (*Score only* on a tablet
-  on its side opens two pages). The Library and the Piano tab keep a comfortable
+  side. **Drag the divider** between them to share the screen as you like: it rests
+  at a third, a half and two thirds, drag a view well past its smallest size to hide
+  it (the divider waits at the edge to bring it back), double-tap it to go back to
+  the start (a third for the score stacked, half each side by side); each
+  arrangement remembers its own split. A system holds two bars on a page under 480 dp
+  wide, three under 560, else four. The **View** menu (the split-frame glyph in the
+  header) offers the same without dragging (*Score and notes* · *Notes only* ·
+  *Score only*; *Score only* on a tablet on its side opens two pages), the notes'
+  style (*Paper roll* · *Falling notes*, and *Score* on a phone), and *Fingering*,
+  *Chord names* and *Hand colours*. In kiosk mode the divider and the menu stay
+  free. TalkBack reads the divider as "Sheet music and notes divider" and adjusts
+  it like a slider; with a keyboard the arrows move it, Page keys jump between the
+  stops, Home and End hide a view. The Library and the Piano tab keep a comfortable
   720 dp reading column in the middle of the screen. The Library is two panes: the
   list, and beside it a now-playing panel (the portrait, the title, a small live
   roll, the scrubber and the transport, Up next, and where the piece goes), so playing a piece keeps you in
@@ -1266,7 +1277,8 @@ file to the release `models`.
       re-strike it, and leaving Keys leaves the piece's notes sounding.
 - [ ] On a tablet: the rail replaces the bottom bar; Now playing shows the score
       over the roll upright and beside it on its side, in step with each other;
-      Wide layout › Score only and Notes only work while playing.
+      dragging the divider, hiding a view and bringing it back, and View › Score
+      only and Notes only work while playing.
 - [ ] Shuffle a playlist and skip around while connected: every piece starts
       cleanly, no key is left down between pieces, Previous and Next follow the
       shuffled order, and turning Shuffle off keeps the current piece playing.
@@ -1285,7 +1297,7 @@ file to the release `models`.
       outlined keys and its right hand filled; fingering figures sit in the long
       left-hand bars and over and under the score's heads; the chord names read
       C, Dm7/C, G7/B, C, Am/C over the first bars and arrive at the waterfall's
-      left edge as each bar begins. Piano › Display › Hand colours colours the two hands
+      left edge as each bar begins. Now playing › View › Hand colours colours the two hands
       green and blue, in light and dark; Fingering and Chord names off take each
       away. A MAESTRO performance splits its hands by pitch. The piano plays as
       before whatever is shown.
