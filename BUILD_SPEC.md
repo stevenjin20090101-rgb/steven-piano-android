@@ -6904,3 +6904,96 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, tag `v1.11
 tablet-size screens found the run as designed; for the Piano tab's reorganisation (M31b): with the Instrument page
 open beside the hub, Disconnect shows twice (the hub's card and the page). The relay Worker is redeployed after
 this release so the console's status carries the instrument and keyboard states.
+
+# v1.12 — M30: the Studio tab (typed ideas, live progress, history, drawn covers, the aura)
+
+Read `DESIGN.md › v1.12 — Studio as a tab` first. Fable's brief (`m30-studio-brief.md`) with `plans/PLAN.md` and
+`plans/plan-studio.md` (findings 1–12; (a) StylePrompt, (b) progress, (c) persistence, (d) the tab, (e) the drawn
+cover only), built by Opus on `main` from `7c24ff5` (1.11). Out of this run, as the brief says: no text model, no
+picture model, no `/api/studio/prompt`. Mid-run the owner narrowed verification: core tests only, **no emulator
+work** (the integrator's smoke pass covers it), short documents. **No version bump, no provenance signing, no
+release build, no push**; ONNX Runtime stays 1.28.0, its telemetry check untouched.
+
+## What was built
+
+- **The idea parser** (`studio/style/`): `StyleVocabulary` (moods, tempo words, lengths, keys, 28 forms,
+  comparatives, again and different, negators, stop words), `StyleLibrary` (the library as the parser reads it:
+  Studio's pieces, recordings, pieces under 15 s or 16 notes left out; channels and built-in lists as the
+  catalogue), `StylePrompt` (passes: patterns, titles, negators, names, forms, catalogue, moods; a refinement when no
+  seed-bearing word; the understood line; at most 12 unused words; 200 code points, 40 words, no regular expression
+  from input; `title()` builds titles from what was understood), `SeedPicker` (on the job thread: at most four
+  candidates read; a mode match and the nearest tempo; a tempo word held to 0.67–1.5 × the seed's).
+- **Progress**: `Sampler.generate(onEvent)` after the event is in the history; `PreviewRoll` (append-only, rests
+  skipped, keys folded, `Studio.preview`, never in the job); `ProgressMeter` (at most every 500 ms; time left after 3 s
+  or 5 %, the smaller of the token and music estimates; cold start from `StoredCalibration`, the median ms a token of
+  the last five jobs); `StudioJob` gains `turnId, tokens, budget, musicMs, targetMs, etaMs, steps, notes, stop` and
+  `JobStep.Shaping`. The budget follows the length: `PromptBuilder.MAX_TOKENS` 13,500.
+- **Schema v4** (`GenerationEntity`, `GenerationDao`, `GenerationSql`, `MIGRATION_3_4`, `SchemaV4`): the table
+  `studio_generations` as plan-studio (c) lists it, plus `spec` (the asked `StyleSpec`, encoded); the backfill gives
+  every 1.7–1.11 Studio piece a "kept" turn. `Generations`/`RoomGenerations`; turns written as a job queues and
+  filled as it runs; leftover "pending" turns read "interrupted" at start; the history trimmed to 200 (never a
+  waiting piece's turn).
+- **Keep or Discard on the history** (`RoomReview`, `StoredWaiting` in `studio/StudioStore.kt`): a Studio piece waits
+  while its turn is "made"; the one-off import of the old DataStore set reopens the backfilled turns it names, once
+  (a flag), retried while the set can't be read. In kiosk mode at most 30 Studio pieces wait (the oldest discarded).
+- **Covers and the playlist**: `data/art/StudioCover.kt` (`CoverInput`, `CoverSpec`, `StudioCover.render`: 768 px,
+  `StrictMath`, a paper or ink ground, an accent from the key on the circle of fifths and the mood, twelve
+  pitch-class rays round a disc set by the register, a density band, every note a faint perforation) and `Png.kt`;
+  `ArtworkRepository.setPieceCover` and `pieceCovers`, `describe` now merges; covers drawn at start for pieces made
+  before. `data/builtin/StudioPlaylist.kt`: **Made in Studio** from the history, refreshed after each save and with
+  the built-ins. `PieceArt` takes a piece's own cover first (rows of Studio pieces, the piece sheet, the mini
+  player, the now-playing panel, the resting screen); the panel's `art: "cover"` with `artVersion`.
+- **The tab** (`ui/screens/studio/`: `StudioScreen`, `StudioViewModel`, `StudioTurns`, `StudioAccess`, `ComposeSheet`
+  moved here with `ComposeStart`): `Route.Studio` between Keys and Piano (`ic_tab_studio`), the compact bar's label
+  floor 0.85; Studio out of the Piano hub (`SettingsPage.Studio`, `StudioPage.kt` and the hub's Studio row gone);
+  the Library's + sheet "Compose in Studio…" opens the tab; both notifications open it (`OPEN_STUDIO_REQUEST` 11,
+  updates at most once a second). **The aura**: `ui/theme/Aura.kt` (the four stops, light and dark, and
+  `LocalAuraStops`), `ui/components/Aura.kt` (`AuraRing`, `AuraHairline`, `AuraDot`; a `SweepGradient` turned by a
+  frame clock, a `BlurEffect` glow on API 31+, three fading strokes below).
+- **Smaller fixes**: the Library bar's hairline follows the job's own measure (composing swept before); a Studio
+  piece never joins a channel by its title (`Channels.Match`: "Calm, after Clair de lune" isn't Clair de lune).
+
+## Deviations from the brief, and why
+
+- **No emulator evidence** (the owner's call mid-run): no 1.11 → 1.12 upgrade on `steven_piano_audit`, no
+  screenshots, no `gfxinfo` frame figure. The migration is proven on real SQLite only (`SchemaV4Test`); **the
+  integrator's smoke pass should install the 1.11 debug build, compose a piece, then install this build over it** and
+  check the piece is in Made in Studio with a cover and its turn.
+- **Recordings keep their waiting set in the DataStore.** M29 (after the plan) put the tablet's recordings in the
+  same review. They are not Studio's turns, so a Studio piece waits on its turn and a recording in the old set; a
+  piece is either a turn's or not, so the two stores never speak of the same piece.
+- **A `spec` column** holds the asked spec (encoded, no typed text but a title's folded words), so "Another like
+  it", "different" and refinements work after a restart; the variant lives inside it.
+- **The web panel**: the job JSON's new fields and covers only. The preview's notes route
+  (`/api/studio/jobs/{id}/notes`, plan (b)) waits for M32, which builds the panel's cards.
+- **Listen** plays the piece and opens Now playing, as the old Studio page did. The piece sheet has no credits
+  line (the card carries them). No minutes cap from the calibration: there is no bench figure yet.
+- **Kept simple, as the owner asked**: the shelf's long press is a plain glass menu; refinements are the words in
+  `StyleVocabulary` (slower/faster with "a bit" and "much", longer/shorter, a mood or a comparative, a key, another,
+  different).
+
+## Greps (v1.12 — M30)
+
+The aura's eight hexes: `ui/theme/Aura.kt` alone. `LocalAuraStops`: provided by `Theme.kt`, read by
+`ui/components/Aura.kt` alone. `Color(0x` outside `ui/theme`: none. `BlurEffect`: the aura's glow alone;
+`Modifier.blur`: none. Sheets and menus: `GlassSheet` and `GlassDropdownMenu` (GlassContainersTest still passes).
+
+## Tests added in M30
+
+`StylePromptTest` 12 (a composer with a form; a title with a tempo word; mood, tempo and key; the length cap; the
+refinements; a negated word; unused words never in the line; accents and case; hostile input and 10,000
+characters; a shuffled library; the spec's line; titles). `SchemaV4Test` 5 (4.json's statements; a 1.11 database
+with Studio pieces migrates on real SQLite and is backfilled; the shape Room expects; foreign keys null on delete;
+the history's own statements: the import, Keep and Discard, Made in Studio, interrupted, the trim). `RoomReviewTest`
+3 (the one-off import once; an unreadable set retried; Studio pieces and recordings each in their store).
+`StudioAccessTest` 4 (the kiosk rules). `SamplerTest` +1 (`onEvent` after the history, in order, never a partial
+event). Updated: `PromptBuilderTest` (13,500), `StudioTest`, `StudioReviewTest` (the new store), `RoutesTest` (five
+tabs, no Studio page), `PianoPagesTest`, `GroupSummariesTest`, `WebApiTest` (the job's keys). **1,503 → 1,527**
+(12 skipped), none failing. `lintDebug`: 0 errors, 30 warnings, the same 30 as at `7c24ff5`. The debug APK
+assembles (29.6 MB).
+
+## Residuals
+
+- The 13,500-token budget's time on the school tablet (five minutes of music may take several minutes there), the
+  covers' look by eye, and the aura's frame cost over the glass: none measured in this run.
+- The integrator's upgrade check above, and a first composition from a typed idea on the merged build.

@@ -190,11 +190,14 @@ fun StudioScreen(onListen: (Long) -> Unit) {
     val outer = LocalFloatingPadding.current
     val direction = LocalLayoutDirection.current
     val sides = PaddingValues(start = outer.calculateStartPadding(direction), end = outer.calculateEndPadding(direction))
+    // Newest at the bottom: the list is laid out from the bottom up, so a new turn, and a card growing as its
+    // preview fills, keep the newest in view; the header's glass shows once older turns pass beneath it.
     val listState = rememberLazyListState()
-    LaunchedEffect(turns.size) { if (turns.isNotEmpty()) listState.animateScrollToItem(turns.size) }
+    val headerScroll = remember(listState) { FromTheBottom(listState) }
+    LaunchedEffect(turns.size) { if (turns.isNotEmpty()) listState.animateScrollToItem(0) }
 
     GlassHeaderPane(
-        scroll = listState,
+        scroll = headerScroll,
         modifier = Modifier.padding(sides),
         header = {
             ScreenHeader("Studio") {
@@ -218,6 +221,7 @@ fun StudioScreen(onListen: (Long) -> Unit) {
                 LazyColumn(
                     Modifier.fillMaxSize().hazeSource(barSource),
                     state = listState,
+                    reverseLayout = true,
                     contentPadding = PaddingValues(top = floating.calculateTopPadding(), bottom = barBottom + BAR_ROOM),
                 ) {
                     if (turns.isEmpty()) {
@@ -225,7 +229,7 @@ fun StudioScreen(onListen: (Long) -> Unit) {
                             EmptyState(favourite) { chosen -> text = chosen }
                         }
                     }
-                    items(turns, key = { it.key }) { turn ->
+                    items(turns.asReversed(), key = { it.key }) { turn ->
                         TurnView(
                             turn,
                             locked = locked,
@@ -295,6 +299,12 @@ fun StudioScreen(onListen: (Long) -> Unit) {
     }
     options?.let { open -> ComposeSheet(onDismiss = { options = null }, start = open.start, turn = open.turn) }
     KioskGateSheet(gate)
+}
+
+/** A list laid out from the bottom up, as the header's glass reads it: content beneath the header is what lies further up. */
+private class FromTheBottom(private val list: androidx.compose.foundation.lazy.LazyListState) : androidx.compose.foundation.gestures.ScrollableState by list {
+    override val canScrollBackward: Boolean get() = list.canScrollForward
+    override val canScrollForward: Boolean get() = list.canScrollBackward
 }
 
 /** The prompt bar's room above the list's last turn, and the shelf's width beside the conversation. */
@@ -576,7 +586,7 @@ private fun Steps(job: StudioJob, jobs: List<StudioJob>, installed: Set<String>)
 private fun TurnCover(turn: Turn, modifier: Modifier) {
     val provisional: @Composable (Modifier) -> Unit = { frame -> ProvisionalCover(turn, frame) }
     val pieceId = turn.pieceId
-    if (pieceId != null) ArtworkImage(ArtworkEntity.forPiece(pieceId), ArtSize.Row, modifier, fallback = provisional) else provisional(modifier)
+    if (pieceId != null) ArtworkImage(ArtworkEntity.forPiece(pieceId), ArtSize.Tile, modifier, alignment = Alignment.Center, fallback = provisional) else provisional(modifier)
 }
 
 @Composable
