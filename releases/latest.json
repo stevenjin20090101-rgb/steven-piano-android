@@ -1,9 +1,9 @@
 {
-  "versionCode": 26,
-  "versionName": "1.16",
-  "notes": "Fast repeated notes now sound: the app lifts a key early so every strike can land, and repeats faster than the piano can manage keep the pulse instead of going silent. New rows on Piano › Playback: Re-strike time (Auto takes the piano's own figure), Dynamic range, Quietest note, and Expression, on by default at Light, which shapes loudness and timing as a pianist would: melody above accompaniment, phrases that swell and settle, downbeats that lean, chords that roll. Dynamics are heard with Full power off on Sound and touch; the page says so. Now playing shows the small album art beside the title.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.16/steven-piano-1.16.apk",
-  "sha256": "bd7d2f499f5bf40268d737c6c10cb464507b839432deea58a9c10d516f854f91",
-  "sizeBytes": 14022242,
+  "versionCode": 27,
+  "versionName": "1.17",
+  "notes": "The web panel shows its pictures over the internet link. Covers and portraits now load only for the rows in sight, a few at a time, wait and try again when the link is busy, and are kept by the browser for good, so Now playing and Up next show their art instead of empty tiles. Rows get a small picture instead of the large one, about a tenth of the data. Album covers also match a little wider: a film or game theme takes its soundtrack's cover, classical movements match by the work, and pieces that found nothing before are looked up once more.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.17/steven-piano-1.17.apk",
+  "sha256": "29853fd98ec9b057763c2263fee6e4d36cd1471c31e8ee57e8c59df15e49b291",
+  "sizeBytes": 14027086,
   "minSdk": 26
 }

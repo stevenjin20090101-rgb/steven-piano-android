@@ -213,8 +213,10 @@
     "versionName": "1.17",
     "notes": "The web panel shows its pictures over the internet link. Covers and portraits now load only for the rows in sight, a few at a time, wait and try again when the link is busy, and are kept by the browser for good, so Now playing and Up next show their art instead of empty tiles. Rows get a small picture instead of the large one, about a tenth of the data. Album covers also match a little wider: a film or game theme takes its soundtrack's cover, classical movements match by the work, and pieces that found nothing before are looked up once more.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.17/steven-piano-1.17.apk",
+    "sha256": "29853fd98ec9b057763c2263fee6e4d36cd1471c31e8ee57e8c59df15e49b291",
+    "sizeBytes": 14027086,
     "minSdk": 26,
     "tag": "v1.17",
-    "draft": true
+    "publishedAt": "2026-10-03"
   }
 ]
