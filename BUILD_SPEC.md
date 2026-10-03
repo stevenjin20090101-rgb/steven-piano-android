@@ -7827,3 +7827,12 @@ tribute album refused); `ArtworkPolicyTest` (1: `coverRuleSince`). The loader wa
 the relay's limits (an 86-piece queue, a state message every 0.6 s): 8 picture requests on opening Now playing, none more
 over the state messages, a rebuilt Up next keeping its pictures. 1,615 → 1,622 unit tests (12 skipped), none failing.
 `lintDebug`: 0 errors, the same 30 warnings.
+
+## The release: 1.17 (versionCode 27)
+
+Cut from `main` after M45 (`9a8c016`, `b56e197`, `92126d2`, `fc61332`): 1,622 unit tests green, lint 0 errors. The
+integrator measured the page through a stand-in for the relay's limits over HTTP/2 (120 requests a minute per address,
+8 in flight and 32 waiting), on the tablet-size emulator with an 84-piece queue and a state message every 0.6 s.
+1.16: 2,800 picture requests in 8 s, 39 answered, the page's own files refused. This build: 19 requests, all answered,
+none refused, 35 requests in all, every row in sight showing its cover. A row's cover is 3,977 bytes where it was
+45,580. Not seen on the school tablet's own link yet: that is Steven's.
