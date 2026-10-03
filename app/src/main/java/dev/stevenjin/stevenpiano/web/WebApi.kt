@@ -672,4 +672,123 @@ object WebApi {
 
     /** A slider's value may come a hair past its end (a browser's float); anything further is out of range. */
     private const val SLIDER_SLACK = 1e-6
+
+    // ---- The System page (v1.18 — M46) -------------------------------------------------
+
+    /**
+     * `GET /api/system`: `{at, app{…}, tablet{…, battery{…}, thermal{…}, memory{…}, storage{…}, cpu{…}, network{…}},
+     * piano{link{state, name, mtu}, state, facts, factsAt, diag{…}}, running[{key, title, state, detail, progress}],
+     * web{sessions, sockets, guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting,
+     * blockedUntil}}` (BUILD_SPEC.md › v1.18 — M46). Every key is always there: what is not known is null.
+     */
+    fun system(s: WebSystem): JSONObject {
+        val r = s.reading
+        val a = r.app
+        val b = r.battery
+        val t = r.thermal
+        val p = s.piano
+        return JSONObject()
+            .put("at", s.at)
+            .put(
+                "app",
+                JSONObject().put("version", a.version.orNull()).put("build", a.build.orNull()).put("pid", a.pid.orNull())
+                    .put("threads", a.threads.orNull()).put("uptimeMs", a.uptimeMs.orNull()).put("heapUsed", a.heapUsed.orNull())
+                    .put("heapMax", a.heapMax.orNull()).put("nativeHeap", a.nativeHeap.orNull()).put("cpuPct", a.cpuPct.orNull())
+                    .put("deviceOwner", a.deviceOwner.orNull()).put("kiosk", a.kiosk.orNull()),
+            )
+            .put(
+                "tablet",
+                JSONObject().put("model", r.model.orNull()).put("android", r.android.orNull()).put("uptimeMs", r.uptimeMs.orNull())
+                    .put("screenOn", r.screenOn.orNull())
+                    .put(
+                        "battery",
+                        JSONObject().put("percent", b.percent.orNull()).put("charging", b.charging.orNull()).put("plug", b.plug.orNull())
+                            .put("tempC", b.tempC.orNull()).put("voltageMv", b.voltageMv.orNull()).put("health", b.health.orNull()),
+                    )
+                    .put(
+                        "thermal",
+                        JSONObject().put("status", t.status?.let { dev.stevenjin.stevenpiano.diag.SystemReading.THERMAL_WORDS.getOrNull(it) }.orNull())
+                            .put("headroom", t.headroom.orNull()).put("cpuC", t.cpuC.orNull()).put("skinC", t.skinC.orNull()),
+                    )
+                    .put("memory", JSONObject().put("total", r.memory.total.orNull()).put("available", r.memory.available.orNull()).put("low", r.memory.low.orNull()))
+                    .put("storage", JSONObject().put("total", r.storage.total.orNull()).put("free", r.storage.free.orNull()))
+                    .put("cpu", JSONObject().put("cores", r.cpu.cores.orNull()).put("loadPct", r.cpu.loadPct.orNull()))
+                    .put(
+                        "network",
+                        JSONObject().put("online", r.network.online.orNull()).put("transport", r.network.transport.orNull())
+                            .put("signalDbm", r.network.signalDbm.orNull()).put("downKbps", r.network.downKbps.orNull()),
+                    ),
+            )
+            .put(
+                "piano",
+                JSONObject()
+                    .put("link", JSONObject().put("state", p.link.state).put("name", p.link.name.orNull()).put("mtu", p.mtu.orNull()))
+                    .put("state", p.state)
+                    .put("facts", p.facts?.let { JSONObject(it as Map<*, *>) }.orNull())
+                    .put("factsAt", p.factsAt.orNull())
+                    .put("diag", pianoDiag(p.facts)),
+            )
+            .put(
+                "running",
+                JSONArray().apply {
+                    s.running.forEach { put(JSONObject().put("key", it.key).put("title", it.title).put("state", it.state).put("detail", it.detail).put("progress", it.progress.orNull())) }
+                },
+            )
+            .put(
+                "web",
+                JSONObject().put("sessions", s.web.sessions.orNull()).put("sockets", s.web.sockets.orNull()).put("guests", s.web.guests)
+                    .put("relay", JSONObject().put("state", s.web.relay.state).put("answered", s.web.relay.answered.orNull()).put("refused", s.web.relay.refused.orNull())),
+            )
+            .put(
+                "covers",
+                JSONObject().put("found", s.covers.found.orNull()).put("missing", s.covers.missing.orNull()).put("failed", s.covers.failed.orNull())
+                    .put("waiting", s.covers.waiting.orNull()).put("blockedUntil", s.covers.blockedUntil.orNull()),
+            )
+    }
+
+    /**
+     * The piano's facts as numbers and words (firmware/docs/BLE_DIAG.md), every name of [PianoSettings.diagFacts] in its
+     * order, each null when [facts] lack it or it doesn't read: `temp` (°C) and `loopms` decimals; the counts and bytes
+     * whole numbers; `reset`, `ota`, `fw` and `pedalboard` words; `boards` a list of `ok` / `missing`, one a power board.
+     */
+    fun pianoDiag(facts: Map<String, String>?): JSONObject {
+        val json = JSONObject()
+        for (name in PianoSettings.diagFacts) {
+            val text = facts?.get(name)?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_FACT }
+            val value: Any? = when (name) {
+                in DIAG_DECIMALS -> text?.toDoubleOrNull()?.takeIf { it.isFinite() }
+                in DIAG_WORDS -> text?.takeIf { word -> word.all { it in ' '..'~' } }
+                DIAG_BOARDS -> text?.split(',')?.map { it.trim().lowercase() }?.takeIf { list -> list.all { it.isNotEmpty() && it.all(Char::isLetter) } }?.let { JSONArray(it) }
+                else -> text?.toLongOrNull()
+            }
+            json.put(name, value.orNull())
+        }
+        return json
+    }
+
+    /** `GET /api/system/history`: `{everyMs, samples: [[at, batteryPct, batteryTempC, memAvailPct, thermal, pianoTempC], …]}`, oldest first. */
+    fun systemHistory(samples: List<dev.stevenjin.stevenpiano.diag.SystemSample>): JSONObject = JSONObject()
+        .put("everyMs", dev.stevenjin.stevenpiano.diag.SystemHistory.EVERY_MS)
+        .put(
+            "samples",
+            JSONArray().apply {
+                samples.forEach { x ->
+                    put(
+                        JSONArray().put(x.at).put(x.batteryPct.orNull()).put(x.batteryTenthsC?.let { it / 10.0 }.orNull())
+                            .put(x.memAvailPct.orNull()).put(x.thermal.orNull()).put(x.pianoTenthsC?.let { it / 10.0 }.orNull()),
+                    )
+                }
+            },
+        )
+
+    /** A value for the System page's JSON: itself, or JSON's null (never a missing key). */
+    private fun Any?.orNull(): Any = this ?: JSONObject.NULL
+
+    /** The facts read as decimals, as words, as the boards' list; every other diag fact is a whole number. */
+    private val DIAG_DECIMALS = setOf("temp", "loopms")
+    private val DIAG_WORDS = setOf("reset", "ota", "fw", "pedalboard")
+    private const val DIAG_BOARDS = "boards"
+
+    /** A fact longer than this is no reading. */
+    private const val MAX_FACT = 128
 }

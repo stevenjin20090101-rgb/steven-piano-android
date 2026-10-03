@@ -153,6 +153,7 @@ class WebService : Service() {
         stopRelay()
         hub?.stop()
         hub = null
+        graph.web.reportHub(null)
         callback?.let { runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) } }
         callback = null
         if (wakeLock.isHeld) wakeLock.release()
@@ -212,6 +213,7 @@ class WebService : Service() {
         val client = relayClient() ?: return
         relay = client
         relayFor = key
+        graph.web.reportRelay(client)
         relayState = scope.launch { client.state.collect { graph.web.reportCloud(it) } }
         client.start()
     }
@@ -222,6 +224,7 @@ class WebService : Service() {
         relay?.stop()
         relay = null
         relayFor = null
+        graph.web.reportRelay(null)
         graph.web.reportCloud(CloudStatus.Off)
     }
 
@@ -406,6 +409,7 @@ class WebService : Service() {
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created
+        panel.reportHub(created)
     }
 
     /**
@@ -457,6 +461,7 @@ class WebService : Service() {
         stopRelay()
         hub?.stop()
         hub = null
+        graph.web.reportHub(null)
         graph.web.turnedOff()
         graph.web.report(WebStatus())
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)

@@ -373,6 +373,10 @@ class WebServer(
             now(backend.nowScorePage(id.toInt(), call.groups[1].toInt()))
         },
         Route(Method.GET, Regex("/api/font/bravura\\.otf"), Access.READ, "/api/font/bravura.otf") { font() },
+        // The System page (v1.18 — M46): the tablet, the app and the piano now, a day of it, and Share diagnostics' zip.
+        Route(Method.GET, Regex("/api/system"), Access.READ, "/api/system") { json(WebApi.system(backend.system())) },
+        Route(Method.GET, Regex("/api/system/history"), Access.READ, "/api/system/history") { json(WebApi.systemHistory(backend.systemHistory())) },
+        Route(Method.GET, Regex("/api/system/diagnostics"), Access.READ, "/api/system/diagnostics") { diagnosticsZip() },
 
         // The panel acts.
         Route(Method.POST, Regex("/api/play"), Access.WRITE, "/api/play") { call ->
@@ -498,6 +502,9 @@ class WebServer(
             sessions.close(call.token)
             noContent().also { it.addHeader("Set-Cookie", WebCookies.endSession(call.edge.cookiePath, call.edge.secure)) }
         },
+        // The System page's two (v1.18 — M46): the piano's live facts now (the body is not read), and a tool by name.
+        Route(Method.POST, Regex("/api/system/refresh"), Access.WRITE, "/api/system/refresh") { json(JSONObject().put("refreshed", backend.refreshPiano())) },
+        Route(Method.POST, Regex("/api/system/tool"), Access.WRITE, "/api/system/tool") { call -> systemTool(call) },
 
         // Logging in.
         Route(Method.POST, Regex("/api/login"), Access.LOGIN, "/api/login") { call -> login(call) },
@@ -1038,6 +1045,28 @@ class WebServer(
             return n
         }
     }
+
+    // ---- The System page (v1.18 — M46) ---------------------------------------------------------
+
+    /** `POST /api/system/tool` `{name}`: `covers` or `reconnect` (409 busy while a firmware update runs); any other name 400. */
+    private suspend fun systemTool(call: Call): Response {
+        val body = call.body()
+        WebApi.onlyKeys(body, setOf("name"))
+        val tool = SystemTool.of(WebApi.string(body, "name", 16)) ?: throw ApiError(400, "field", "The tool must be covers or reconnect.")
+        return when (backend.systemTool(tool)) {
+            SystemToolResult.DONE -> noContent()
+            SystemToolResult.BUSY -> refuse(409, "busy", "The piano is being updated. Try again once it has finished.")
+        }
+    }
+
+    /** `GET /api/system/diagnostics`: Share diagnostics' zip, to be saved as [DIAGNOSTICS_FILE], never stored by the browser. */
+    private suspend fun diagnosticsZip(): Response {
+        val bytes = backend.diagnostics() ?: return refuse(503, "diagnostics", "The diagnostics couldn't be gathered. Try again.")
+        return bytesResponse(Response.Status.OK, ZIP, bytes).also {
+            it.addHeader("Cache-Control", "no-store")
+            it.addHeader("Content-Disposition", "attachment; filename=\"$DIAGNOSTICS_FILE\"")
+        }
+    }
 }
 
 /**
@@ -1387,3 +1416,7 @@ private fun closeQuietly(closeable: java.io.Closeable?) {
         // Already closed, or broken: nothing to do.
     }
 }
+
+/** The diagnostics zip's type and the name a browser saves it as (v1.18 — M46). */
+private const val ZIP = "application/zip"
+private const val DIAGNOSTICS_FILE = "steven-piano-diagnostics.zip"

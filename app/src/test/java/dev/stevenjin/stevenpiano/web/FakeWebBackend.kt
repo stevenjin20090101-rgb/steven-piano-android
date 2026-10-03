@@ -289,4 +289,31 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         viewsAsked += "page $layoutId/$page"
         return pageAnswer
     }
+
+    /**
+     * The System page (v1.18 — M46): what its reads answer (fixed, so a listener's answer and the relay's match), the
+     * refresh's floor on [clock] (the app's own [RefreshFloor]), whether a firmware update runs, and the zip. By default
+     * the clock moves 10 s on at each look, so the floor never trips: a test that sets [clock] sees it.
+     */
+    var systemHeld = WebSystem(at = 1_790_000_000_000L, piano = WebSystemPiano(facts = mapOf("proto" to "1", "fw" to "2.0.0+a1b2c3d")))
+    var historyHeld = listOf(dev.stevenjin.stevenpiano.diag.SystemSample(1_790_000_000_000L, batteryPct = 80, batteryTenthsC = 312))
+    private var looks = 0L
+    var clock: () -> Long = { ++looks * RefreshFloor.REFRESH_FLOOR_MS }
+    private val refreshFloor = RefreshFloor { clock() }
+    var firmwareUpdating = false
+    var zip: ByteArray? = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 5, 6) + ByteArray(18)
+
+    override suspend fun system(): WebSystem = systemHeld
+
+    override suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample> = historyHeld
+
+    override suspend fun refreshPiano(): Boolean = refreshFloor.take().also { if (it) record("system refresh") }
+
+    override suspend fun systemTool(tool: SystemTool): SystemToolResult {
+        if (tool == SystemTool.RECONNECT && firmwareUpdating) return SystemToolResult.BUSY
+        record("system tool ${tool.key}")
+        return SystemToolResult.DONE
+    }
+
+    override suspend fun diagnostics(): ByteArray? = zip
 }
