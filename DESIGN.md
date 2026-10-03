@@ -2944,3 +2944,19 @@ run beside the panel's new look (M47): two pages of their own, `settings.js` and
   then they fill in by themselves, and any fact the page doesn't know yet is shown as a plain row under its own name.
 - **Pictures through the relay** get an allowance of their own: 600 a minute from one address, apart from the panel's
   120, which the relay tells the page on every answer.
+
+# v1.18 — M50: System on the tablet
+
+Steven ticked "System page on the tablet too" (2026-10-03): the panel's System page (M47b) as Piano › THIS TABLET ›
+**System**, the group's first row, which reads "Battery 82% · 31 °C · everything running" or the first thing that needs
+attention; search finds it by diagnostics, battery, temperature, memory, running and status.
+- **The page**, in the app's own components on paper or ink: what needs attention first, then cards (one column; two on a
+  tablet on its side, 840 dp and up): Tablet, Controller, Piano (with a row to Firmware and status), Running now, Today, and Tools (Read status, Find
+  missing covers, Reconnect the piano after a word, All keys off, Share diagnostics; the piano's two behind the kiosk gate).
+- **The dial**: a 270° arc of 7 dp over its track and ticks, the figure with its word and ends, its name as an eyebrow;
+  it eases over 480 ms as it shows and on a change (a cut under reduced motion), nothing loops; TalkBack hears "Battery,
+  82 percent, charging".
+- **One amber**: the panel's is the theme's `LocalAttention` (by appearance, as the live red), only where the panel's rule
+  (`diag/Attention.kt`, its thresholds and words) says so, always beside the words; red stays the live dot's.
+- **Read only while seen**: the tablet every 5 s and the piano's facts every 15 s (one round in 10 s at most, with the
+  panel's) while the page is on screen and no resting screen covers it; the hub's line as it shows, then once a minute.
