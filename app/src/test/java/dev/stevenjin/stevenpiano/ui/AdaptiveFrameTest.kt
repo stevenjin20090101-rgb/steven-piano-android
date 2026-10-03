@@ -127,8 +127,11 @@ class AdaptiveFrameTest {
     @Test
     fun `the staff is called the score, under the settings' old names`() {
         assertEquals(listOf("Paper roll", "Falling notes", "Score"), listOf(PAPER_ROLL, FALLING, STAFF).map { it.label })
-        assertEquals(listOf("Score and notes", "Notes only", "Score only"), ViewShow.entries.map { it.label })
+        assertEquals(listOf("Score and notes", "Notes only", "Score only", "Art only"), ViewShow.entries.map { it.label })
         assertEquals(listOf(ViewShow.NOTES, ViewShow.BOTH, ViewShow.BOTH, ViewShow.SCORE), listOf(0f, 0.01f, 0.99f, 1f).map { ViewShow.of(it) })
+        // Art only (v1.18 — M49) whatever the split, and on wide frames alone.
+        assertEquals(ViewShow.ART, ViewShow.of(AppFrame(WindowWidthSizeClass.Expanded).notesPlan(PAPER_ROLL, 0.5f, 0.5f, artOnly = true)))
+        assertFalse(AppFrame(WindowWidthSizeClass.Compact).notesPlan(PAPER_ROLL, null, null, artOnly = true).artOnly)
         assertEquals("STAFF", STAFF.name)   // saved choices carry over
     }
 

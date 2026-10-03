@@ -57,11 +57,15 @@ import dev.stevenjin.stevenpiano.ui.components.switchColors
 import dev.stevenjin.stevenpiano.ui.label
 import kotlinx.coroutines.launch
 
-/** What the View menu's Show rows offer on wide frames: the two panes, or either alone (the split's 0 and 1). */
+/**
+ * What the View menu's Show rows offer on wide frames: the two panes, or either alone (the split's 0 and 1), or neither
+ * (Art only, v1.18 — M49: the cover and its controls alone).
+ */
 enum class ViewShow(val label: String) {
     BOTH("Score and notes"),
     NOTES("Notes only"),
     SCORE("Score only"),
+    ART("Art only"),
     ;
 
     companion object {
@@ -71,6 +75,9 @@ enum class ViewShow(val label: String) {
             split >= 1f -> SCORE
             else -> BOTH
         }
+
+        /** What [plan] shows: Art only, else as its split says. */
+        fun of(plan: NotesPlan): ViewShow = if (plan.artOnly) ART else of(plan.split)
     }
 }
 
@@ -80,7 +87,8 @@ internal const val HAND_COLOURS_NOTE = "Colours the two hands in the notes and o
 /**
  * Now playing's View menu (DESIGN.md › v1.12): a glyph in the header opening a [GlassPopover] whose end
  * stands at the glyph's end, so on the tablet it never crosses the panes' divider. On wide frames SHOW
- * (Score and notes · Notes only · Score only: the split's shares without dragging), then NOTES (the roll's
+ * (Score and notes · Notes only · Score only: the split's shares without dragging; Art only, v1.18 — M49: neither, and
+ * back to Score and notes the split as it was), then NOTES (the roll's
  * style: Paper roll · Falling notes, and Score on a phone), then Fingering, Chord names and Hand colours
  * (with its note), and Album colours (v1.15 — M41: the backdrop, as Piano › Display has it). Free in kiosk, as the
  * divider is. The settings are written as they are chosen.
@@ -103,17 +111,17 @@ fun ViewMenu(settings: PianoSettings, plan: NotesPlan, frame: AppFrame) {
                 if (axis != null) {
                     MenuEyebrow("Show")
                     Column(Modifier.selectableGroup()) {
-                        val shown = ViewShow.of(plan.split)
+                        val shown = ViewShow.of(plan)
                         for (option in ViewShow.entries) {
                             MenuOption(option.label, selected = option == shown) {
-                                if (option != shown) {
-                                    val share = when (option) {
-                                        ViewShow.BOTH -> axis.defaultShare
-                                        ViewShow.NOTES -> 0f
-                                        ViewShow.SCORE -> 1f
-                                    }
-                                    write { setNotesSplit(axis == SplitAxis.Stacked, share) }
+                                if (option == shown) return@MenuOption
+                                val share = when (option) {
+                                    ViewShow.BOTH -> if (ViewShow.of(plan.split) == ViewShow.BOTH) plan.split else axis.defaultShare
+                                    ViewShow.NOTES -> 0f
+                                    ViewShow.SCORE -> 1f
+                                    ViewShow.ART -> null
                                 }
+                                if (share == null) write { setNotesArtOnly(true) } else write { setNotesSplit(axis == SplitAxis.Stacked, share) }
                             }
                         }
                     }

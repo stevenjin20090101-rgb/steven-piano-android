@@ -74,9 +74,10 @@ val StandbyShows.label: String
 /**
  * Now playing's note views: their arrangement and the roll's style (paper roll or falling notes). On wide frames
  * (v1.12 — M31a) also the [axis] the score and the notes share and the score's committed [split] of it (0: the
- * notes alone, 1: the score alone); a phone's plan has no axis.
+ * notes alone, 1: the score alone); a phone's plan has no axis. [artOnly] (wide frames, v1.18 — M49): neither view,
+ * the cover and its controls alone, whatever the split.
  */
-data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay, val split: Float = 0f, val axis: SplitAxis? = null)
+data class NotesPlan(val layout: NotesLayout, val rollStyle: NoteDisplay, val split: Float = 0f, val axis: SplitAxis? = null, val artOnly: Boolean = false)
 
 /**
  * What the window's width class decides (DESIGN.md › v1.1 › Adaptive layout). Nothing else
@@ -144,9 +145,10 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
      * Now playing's note views. Compact: one canvas, chosen by [display]. Medium: the score
      * stacked over the notes, sharing the height as [stacked] says. Expanded: side by side, sharing
      * the width as [side] says (v1.12 — M31a). A share of null is the arrangement's default (a third,
-     * a half), 0 shows the notes alone and 1 the score alone.
+     * a half), 0 shows the notes alone and 1 the score alone. [artOnly] (v1.18 — M49) shows neither, on wide frames
+     * alone: a phone shows its views below the cover whatever it says.
      */
-    fun notesPlan(display: NoteDisplay, stacked: Float?, side: Float?): NotesPlan {
+    fun notesPlan(display: NoteDisplay, stacked: Float?, side: Float?, artOnly: Boolean = false): NotesPlan {
         if (!wide) {
             return if (display == NoteDisplay.STAFF) NotesPlan(NotesLayout.SCORE, display.rollStyle, split = 1f) else NotesPlan(NotesLayout.ROLL, display.rollStyle)
         }
@@ -158,7 +160,7 @@ class AppFrame(width: WindowWidthSizeClass, height: WindowHeightSizeClass = Wind
             axis == SplitAxis.Stacked -> NotesLayout.STACKED
             else -> NotesLayout.SIDE_BY_SIDE
         }
-        return NotesPlan(layout, display.rollStyle, split, axis)
+        return NotesPlan(layout, display.rollStyle, split, axis, artOnly)
     }
 
     override fun equals(other: Any?): Boolean = other is AppFrame && other.widthClass == widthClass
