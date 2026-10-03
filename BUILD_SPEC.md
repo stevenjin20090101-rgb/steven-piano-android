@@ -7517,6 +7517,19 @@ Run 2, on `main` beside run 3's worktree: `ui/**`, `settings/Settings.kt` and on
   Modern list from its Modern pieces). 1,577 → 1,580 unit tests (12 skipped), none failing. `lintDebug`: 0 errors,
   the same 30 warnings, none in `web/` or `assets/web/`.
 
+## The release: 1.15 (versionCode 25)
+
+Cut from `main` after run A (`61d6b1c`, `be41304`, `c665369`), run B (`7dbf563`, `8366324`, `baecf3a`) and the merge of
+`m42-sessions` (`011fac0`, `32a1531`), plus the integrator's one fix: `artPalette` lets only colourful bins decide, after
+the Afterglow cover (paint over an off-white ground) gave no backdrop. 1,605 unit tests green, lint 0 errors. The
+integrator's smoke pass on the tablet-size emulator, upgraded in place from 1.14: covers arriving from Apple one every
+3.5 s (Ed Sheeran's first, the classical ones after), every row with its own art; the backdrop behind the tablet's
+now-playing pane and Now playing while Afterglow played, drifting between two shots 20 s apart, 0 % janky frames
+(modern count; the emulator's own 22 ms frames throughout) over 1,236 frames; "Album colours" in the View menu off
+(plain paper) and on; the resting screen with the Appassionata cover's blue glow on the black canvas; the panel's
+session valid after the app was reinstalled and restarted (stay signed in). Not seen live: Change cover's picker, the
+panel's CSS backdrop in a browser (the built-in browser cannot reach 127.0.0.1). No crash in the log.
+
 # v1.15 — M40: album covers
 
 Fable's design (DESIGN.md › v1.15 — M40), Opus coding, one lean run on `main`: no emulator, two new tests, no version
