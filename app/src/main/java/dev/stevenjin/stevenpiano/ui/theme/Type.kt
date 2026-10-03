@@ -78,3 +78,9 @@ val NowPlayingComposer = TextStyle(
     fontFamily = Sans, fontWeight = FontWeight.SemiBold,
     fontSize = 19.sp, lineHeight = 25.sp, letterSpacing = 0.sp,
 )
+
+// The System page's dials (DESIGN.md › v1.18 — M50): the figure inside the arc, semibold and tight, as the panel's.
+val DialFigure = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight.SemiBold,
+    fontSize = 30.sp, lineHeight = 32.sp, letterSpacing = (-0.6).sp,
+)

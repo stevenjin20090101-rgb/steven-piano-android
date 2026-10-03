@@ -60,6 +60,7 @@ import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.diag.DiagnosticsExporter
 import dev.stevenjin.stevenpiano.diag.DiagnosticsText
 import dev.stevenjin.stevenpiano.diag.LinkLog
+import dev.stevenjin.stevenpiano.diag.RunningNow
 import dev.stevenjin.stevenpiano.diag.SystemHistory
 import dev.stevenjin.stevenpiano.diag.SystemProbe
 import dev.stevenjin.stevenpiano.firmware.FakeFirmwareServer
@@ -100,6 +101,7 @@ import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.record.Recorder
 import dev.stevenjin.stevenpiano.record.RecordingPieces
 import dev.stevenjin.stevenpiano.record.RecordingSession
+import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.record.RecordingStore
 import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
@@ -137,6 +139,9 @@ import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
+import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.StudioCopy
+import dev.stevenjin.stevenpiano.web.RefreshFloor
 import dev.stevenjin.stevenpiano.web.WebPanel
 import dev.stevenjin.stevenpiano.web.relay.CloudAddress
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
@@ -780,6 +785,12 @@ class AppGraph(private val app: Application) {
     /** The System page's day: a sample a minute while the process lives ([startSystemSamples]), in memory only. */
     val systemHistory = SystemHistory()
 
+    /**
+     * The piano's live facts at most once in 10 s, whichever System page asks: the web panel's (`/api/system/refresh`) or the
+     * tablet's own (v1.18 — M50); `firmware/docs/BLE_DIAG.md` promises the piano one round of reads in 10 s at most.
+     */
+    val factsFloor = RefreshFloor(clock = SystemClock::elapsedRealtime)
+
     /** When the newest crash report was written, read once at start (null: none). */
     private val latestCrash = MutableStateFlow<Long?>(null)
 
@@ -1131,6 +1142,66 @@ class AppGraph(private val app: Application) {
     }
 
     /**
+     * What the System pages' running rows ([RunningNow]) are built from now, the wall clock [now]: the app's own state, read
+     * where each part keeps it (v1.18 — M46's gathering for the web panel's `/api/system`, lifted here in M50 so the tablet's
+     * own System page gathers it the same way). A schedule that can't be read is none. Any thread.
+     */
+    suspend fun runningInputs(now: Long = System.currentTimeMillis()): RunningNow.Inputs {
+        val prefs = settings.value
+        val panel = web
+        val cloud = panel.cloud.value
+        val relay = panel.relay
+        val hub = panel.hub
+        val playerState = player.state.value
+        val piece = playerState.piece
+        val kind = pianoLink.kind.value
+        val schedule = try {
+            schedules.nextNow()?.line
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "The next schedule couldn't be read for the System page")
+            null
+        }
+        return RunningNow.Inputs(
+            player = RunningNow.Player(
+                status = playerState.status,
+                loading = playerState.loading,
+                title = piece?.title,
+                composer = piece?.composer,
+                channel = playerState.channel?.let { key -> channelPools.summary(key)?.name ?: channels.firstOrNull { it.key == key }?.name ?: key },
+                positionMs = if (piece == null) 0 else player.positionMicrosAt(System.nanoTime()) / MICROS_PER_MS,
+                durationMs = (piece?.durationMicros ?: 0) / MICROS_PER_MS,
+                problem = playerState.problem,
+            ),
+            link = RunningNow.Link(
+                kind = kind,
+                state = pianoLink.state.value,
+                instrument = InstrumentCopy.instrumentValue(kind, prefs.midiOutName),
+                keyboard = keyboard.state.value,
+                live = liveThru.state.value.open,
+                recording = recording.state.value is RecordingState.Recording,
+            ),
+            web = RunningNow.Web(
+                on = panel.status.value.running || cloud != CloudStatus.Off,
+                sessions = panel.sessions.count(),
+                sockets = hub?.let { it.count + it.memberCount } ?: 0,
+                guests = prefs.webGuests,
+            ),
+            relay = RunningNow.Relay(cloud, relay?.answered, relay?.refused),
+            covers = RunningNow.Covers(artwork.progress.value, artwork.coversBlockedForMs()?.let { now + it }),
+            import = importProgress.value,
+            studio = RunningNow.Studio(studio.jobs.jobs.value, StudioCopy.unsupported(studio.availability.support.value)),
+            pack = libraryPack.state.value,
+            update = updater.state.value,
+            firmware = firmwareUpdater.state.value,
+            schedule = schedule,
+            sound = tabletSound.state.value,
+            now = now,
+        )
+    }
+
+    /**
      * The System page's day (v1.18 — M46): a sample now and every minute after, for as long as the process lives, off
      * the main thread; the piano's temperature only when its facts were read in the last two minutes ([SystemHistory]).
      */
@@ -1164,6 +1235,7 @@ class AppGraph(private val app: Application) {
         const val UPDATES_DIR = "updates"
         const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L
+        const val MICROS_PER_MS = 1_000L
         const val INSTALL_FLUSH_MS = 300L
 
         /** The piano's own volume setting, which a channel holds while it plays. */

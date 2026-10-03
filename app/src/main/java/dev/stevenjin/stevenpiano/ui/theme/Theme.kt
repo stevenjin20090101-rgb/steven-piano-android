@@ -41,6 +41,11 @@ val LocalHandColours = staticCompositionLocalOf { false }
 // the score's overlay (ScorePainter.overlay) is its only reader.
 val LocalNoteSounding = staticCompositionLocalOf { NoteSoundingDark }
 
+// The attention amber (Color.kt, DESIGN.md › v1.18 — M47), kept out of the scheme like the live colour: something
+// needs attention, always beside a word that says it. Read only by the System page (v1.18 — M50) and its Dial: an arc, a
+// meter, a fact, the boards, a dot; never a fill behind text, never decoration.
+val LocalAttention = staticCompositionLocalOf { AttentionInk }
+
 // Hairline and disabled-glyph tokens, also kept out of the scheme.
 val LocalHairline = staticCompositionLocalOf { InkHairline }
 val LocalDisabledGlyph = staticCompositionLocalOf { InkDisabledGlyph }
@@ -101,6 +106,7 @@ fun PianoTheme(
     CompositionLocalProvider(
         LocalLive provides (if (darkTheme) LiveRedDark else LiveRedLight),
         LocalNoteSounding provides (if (darkTheme) NoteSoundingDark else NoteSoundingLight),
+        LocalAttention provides (if (darkTheme) AttentionInk else AttentionPaper),
         LocalGlassEdge provides (if (darkTheme) GlassEdgeDark else GlassEdgeLight),
         LocalHairline provides (if (darkTheme) InkHairline else PaperHairline),
         LocalDisabledGlyph provides (if (darkTheme) InkDisabledGlyph else PaperDisabledGlyph),
