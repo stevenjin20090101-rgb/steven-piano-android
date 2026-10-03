@@ -325,4 +325,9 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     }
 
     override suspend fun diagnostics(): ByteArray? = zip
+
+    /** The Settings page's Playback (v1.18 — M47b): the app's settings at their defaults, a piano with Full power on and a 110 ms repeat period. */
+    var settingsHeld = WebSettings(fullPower = true, repeatMs = 110)
+
+    override suspend fun settings(): WebSettings = settingsHeld
 }

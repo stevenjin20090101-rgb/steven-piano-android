@@ -382,6 +382,8 @@ class WebServer(
         Route(Method.GET, Regex("/api/system"), Access.READ, "/api/system") { json(WebApi.system(backend.system())) },
         Route(Method.GET, Regex("/api/system/history"), Access.READ, "/api/system/history") { json(WebApi.systemHistory(backend.systemHistory())) },
         Route(Method.GET, Regex("/api/system/diagnostics"), Access.READ, "/api/system/diagnostics") { diagnosticsZip() },
+        // The Settings page's Playback and Panel (v1.18 — M47b): the app's own settings, their limits, what the piano says of them.
+        Route(Method.GET, Regex("/api/settings"), Access.READ, "/api/settings") { json(WebApi.settings(backend.settings())) },
 
         // The panel acts.
         Route(Method.POST, Regex("/api/play"), Access.WRITE, "/api/play") { call ->

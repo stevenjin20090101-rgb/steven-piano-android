@@ -28,6 +28,7 @@ import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
+import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -133,6 +134,9 @@ class WebApiTest {
         refused(400) { WebApi.settingsChange(JSONObject("""{"velocityFloor":61}""")) }
         refused(400) { WebApi.settingsChange(JSONObject("""{"restrikeMs":50}""")) }   // between Auto and 60 there is none
         refused(400) { WebApi.settingsChange(JSONObject("""{"restrikeMs":65}""")) }   // in tens
+        // Album colours behind the player (v1.18 — M47b: the Settings page's Panel).
+        assertEquals(SettingsChange(albumBackdrop = false), WebApi.settingsChange(JSONObject("""{"albumBackdrop":false}""")))
+        refused(400) { WebApi.settingsChange(JSONObject("""{"albumBackdrop":"off"}""")) }
         assertEquals(RepeatMode.ALL, WebApi.repeatOf("all"))
         refused(400) { WebApi.repeatOf("ALL") }
     }
@@ -426,5 +430,52 @@ class WebApiTest {
         assertEquals(12, full.getJSONObject("web").getJSONObject("relay").getInt("answered"))
         assertEquals(40, full.getJSONObject("covers").getInt("waiting"))
         assertTrue(full.getJSONObject("covers").isNull("blockedUntil"))
+    }
+
+    @Test
+    fun `the Settings page's read has every key, the PUT's own words, its limits, and the piano's two null without a piano (v1_18 M47b)`() {
+        val bare = WebApi.settings(WebSettings())
+        assertEquals(setOf("values", "limits", "piano"), keys(bare))
+        val values = bare.getJSONObject("values")
+        assertEquals(
+            setOf("defaultTempoPct", "transpose", "velocityPct", "dynamicRange", "velocityFloor", "expression", "restrikeMs", "preRollMs", "foldOutOfRange", "skipDrumChannel", "albumBackdrop"),
+            keys(values),
+        )
+        assertEquals("natural", values.getString("dynamicRange"))
+        assertEquals("light", values.getString("expression"))
+        assertEquals("Auto at first", 0, values.getInt("restrikeMs"))
+        assertTrue(values.getBoolean("albumBackdrop"))
+        // What the page reads it may send back as it is.
+        for (key in keys(values)) WebApi.settingsChange(JSONObject().put(key, values.get(key)))
+        val limits = bare.getJSONObject("limits")
+        assertEquals(setOf("defaultTempoPct", "transpose", "velocityPct", "velocityFloor", "restrikeMs", "preRollMs"), keys(limits))
+        for (key in keys(limits)) assertEquals(key, setOf("min", "max", "step"), keys(limits.getJSONObject(key)))
+        fun limit(key: String) = limits.getJSONObject(key).let { Triple(it.getInt("min"), it.getInt("max"), it.getInt("step")) }
+        assertEquals(Triple(PlaybackLimits.TempoPct.first, PlaybackLimits.TempoPct.last, 5), limit("defaultTempoPct"))
+        assertEquals(Triple(-12, 12, 1), limit("transpose"))
+        assertEquals(Triple(1, 60, 5), limit("velocityFloor"))
+        assertEquals("the times set by hand; 0 is Auto", Triple(60, 250, PlaybackLimits.RESTRIKE_STEP_MS), limit("restrikeMs"))
+        assertEquals(Triple(0, 5_000, 500), limit("preRollMs"))
+        val piano = bare.getJSONObject("piano")
+        assertEquals(setOf("fullPower", "repeatMs"), keys(piano))
+        assertTrue("no piano: both unknown, never absent", piano.isNull("fullPower") && piano.isNull("repeatMs"))
+
+        val set = WebApi.settings(
+            WebSettings(
+                dev.stevenjin.stevenpiano.settings.PianoSettings(
+                    dynamicRange = DynamicRange.WIDE, expression = ExpressionLevel.FULL, restrikeMs = 150, albumBackdrop = false, transpose = -3,
+                ),
+                fullPower = false,
+                repeatMs = 110,
+            ),
+        )
+        val shown = set.getJSONObject("values")
+        assertEquals("wide", shown.getString("dynamicRange"))
+        assertEquals("full", shown.getString("expression"))
+        assertEquals(150, shown.getInt("restrikeMs"))
+        assertEquals(-3, shown.getInt("transpose"))
+        assertFalse(shown.getBoolean("albumBackdrop"))
+        assertFalse(set.getJSONObject("piano").getBoolean("fullPower"))
+        assertEquals(110, set.getJSONObject("piano").getInt("repeatMs"))
     }
 }
