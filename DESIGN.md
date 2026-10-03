@@ -175,7 +175,9 @@ mini player above it on phones; see that section.)*
   repeated inline.
 
 ### Now playing — the signature screen
-- Title in Display, composer line in Eyebrow beneath it.
+- Title in Display, composer line in Eyebrow beneath it. *(v1.16 — M43: the small art beside the
+  title, 72 dp (56 dp on phones), opens the piece sheet as the title does; the title keeps two lines,
+  three on a phone under 360 dp.)*
 - **Note canvas**: fills the middle. Background is `surfaceElevated`. 84 lanes for
   C1–B7 (the piano's real range), black-key lanes narrower and slightly darker.
   Upcoming notes are drawn in `contentSecondary`; the moment a note crosses the line it
@@ -2540,7 +2542,8 @@ replaces › Motion's 240 ms tabs, "system ripple only" and "one haptic"; everyt
 - **Content**: a listing's first ten rows fade in rising 8 dp, 12 ms apart, once a visit (never on scroll, never after
   a sheet); rows added, removed or moved settle into place; the now-playing panel's art of a piece started from a row
   or a tile grows in from 0.92 (320 ms; a phone's Now playing has no art); a new Studio turn rises 12 dp (320 ms) and a
-  finished card's actions fade in.
+  finished card's actions fade in. *(v1.16 — M43 retires "a phone's Now playing has no art": Now playing now has the
+  small art beside its title, which does not grow in.)*
 - **Figures**: the tempo, the Record time and Studio's figures roll digit by digit (120 ms, tabular); determinate
   hairlines ease to each value (200 ms); play/pause cross-fades with a small scale (200 ms), shuffle and repeat cross-fade.
 - **Left alone**: the score's page turn and the roll, the live red and the sounding yellow, the aura, the resting screen.

@@ -7664,3 +7664,11 @@ panel's address is the one on the guests' poster).
   `Max-Age=31536000` and a digest alone in a `FakeSessionStore`, gone at logout; `WebServerRelayTest`'s two cookie
   strings gain `Max-Age`. 1,592 → 1,596 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30
   warnings, none in `web/`.
+
+# v1.16 — M43: the small art beside Now playing's title
+
+- `NowPlayingScreen`'s `PieceView`: a `Row` of `PieceArt(…, ArtSize.Tile)` at 72 dp (`frame.wide`) or 56 dp, 12 dp, then
+  the title (`displayMedium`, 2 lines; 3 where the pane is under 360 dp) over the eyebrow, centred on each other; the
+  art's tap opens the piece sheet (`clearAndSetSemantics` before `clickable`: screen readers meet the title alone), and
+  `StartingLine` sits under the words. 1,605 unit tests (12 skipped), none failing; `lintDebug`: 0 errors, the same 30
+  warnings.

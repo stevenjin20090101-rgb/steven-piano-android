@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -53,6 +54,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.NowPlaying
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
@@ -91,6 +94,7 @@ import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
 import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
+import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.ScorePages
@@ -116,9 +120,17 @@ private val SHORT_BELOW_STACKED = 780.dp
 private val SHORT_ROLL = 240.dp
 private val SHORT_SCORE = 200.dp
 
+/**
+ * The small art beside the title (v1.16 — M43): its side on wide frames and on phones, and the room before the
+ * words. A screen narrower than [NARROW_BELOW] (a small phone upright) keeps the title's third line.
+ */
+private val ART_WIDE = 72.dp
+private val ART_COMPACT = 56.dp
+private val ART_GAP = 12.dp
+private val NARROW_BELOW = 360.dp
 
 /**
- * The signature screen: the title, the composer, the note views, the scrubber, the transport,
+ * The signature screen: the title beside its art, the composer, the note views, the scrubber, the transport,
  * tempo and the connection line. The note views follow the window's width class: on a phone one
  * canvas (paper roll, falling notes or the score, as Note display says); on wider screens the
  * score and the notes together (stacked on medium widths, side by side on expanded ones), sharing
@@ -126,7 +138,7 @@ private val SHORT_SCORE = 200.dp
  * View menu in the header, [ViewMenu], sets the same shares and the notes' style and marks). The roll
  * always keeps its keyboard strip beneath it, lane for key. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through [playback], which keeps the playback service running, with
  * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet, and
- * the title opens the piece sheet. [onOpenPiano] shows the Piano tab. The scrubber and the
+ * the title and its art open the piece sheet. [onOpenPiano] shows the Piano tab. The scrubber and the
  * transport float on glass over the paper roll's history, the third below the tracker bar, above
  * the keyboard strip (DESIGN.md › v1.5 — M16), whenever that third can hold them; otherwise (falling
  * notes, the score alone, a phone on its side, and wherever glass is unavailable: below API 31 or
@@ -193,10 +205,12 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
                         SplitAxis.SideBySide -> true
                         null -> false
                     }
+                    // A small phone upright keeps the title's third line beside its art (v1.16 — M43).
+                    val titleLines = if (maxWidth < NARROW_BELOW) 3 else 2
                     Column(if (short) Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column) else Modifier.fillMaxSize().padding(top = top)) {
                         if (short) Spacer(Modifier.height(top))
                         val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
-                        NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, divided) { about = it }
+                        NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, divided, titleLines) { about = it }
                     }
                 }
             }
@@ -218,13 +232,14 @@ private fun ColumnScope.NowPlayingContent(
     onOpenPiano: () -> Unit,
     short: Boolean,
     divided: Boolean,
+    titleLines: Int,
     onAbout: (Long) -> Unit,
 ) {
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
     if (piece != null) {
-        PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short, divided) { onAbout(piece.pieceId) }
+        PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short, divided, titleLines) { onAbout(piece.pieceId) }
     } else if (!state.loading) {
         Box(
             Modifier
@@ -259,6 +274,7 @@ private fun ColumnScope.PieceView(
     onOpenPiano: () -> Unit,
     short: Boolean,
     divided: Boolean,
+    titleLines: Int,
     onAbout: () -> Unit,
 ) {
     val playing = state.status == PlaybackStatus.Playing
@@ -269,19 +285,39 @@ private fun ColumnScope.PieceView(
     val starting by remember(roll, frame, playing) { derivedStateOf { playing && roll.positionAt(frame.longValue) < 0L } }
 
     Column(Modifier.padding(horizontal = 16.dp)) {
-        // The title opens the piece sheet: its art and notes.
-        Text(
-            piece.title,
-            modifier = Modifier.clickable(onClickLabel = "About this piece", onClick = onAbout),
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        // The composer, and while a channel plays its name: "CLAUDE DEBUSSY · CALM · CHANNEL".
-        val eyebrow = ChannelCopy.eyebrow(piece.composer, rememberChannelName(state.channel))
-        if (eyebrow.isNotEmpty()) Eyebrow(eyebrow, Modifier.padding(top = 4.dp), maxLines = 1)
-        StartingLine(starting, Modifier.padding(top = 2.dp))
+        // The small art beside the title (v1.16 — M43), as on the tablet's panel, centred on the title and the
+        // composer. Both open the piece sheet: its art and notes.
+        val art = if (LocalAppFrame.current.wide) ART_WIDE else ART_COMPACT
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PieceArt(
+                piece.pieceId,
+                piece.composerKey,
+                ArtSize.Tile,
+                // A tap alone: screen readers skip the picture and reach the sheet through the title beside it.
+                Modifier
+                    .size(art)
+                    .clip(MaterialTheme.shapes.medium)
+                    .clearAndSetSemantics { }
+                    .clickable(onClick = onAbout),
+                title = piece.title,
+            )
+            Spacer(Modifier.width(ART_GAP))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    piece.title,
+                    modifier = Modifier.clickable(onClickLabel = "About this piece", onClick = onAbout),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = titleLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // The composer, and while a channel plays its name: "CLAUDE DEBUSSY · CALM · CHANNEL".
+                val eyebrow = ChannelCopy.eyebrow(piece.composer, rememberChannelName(state.channel))
+                if (eyebrow.isNotEmpty()) Eyebrow(eyebrow, Modifier.padding(top = 4.dp), maxLines = 1)
+            }
+        }
+        // Under the composer, in line with the words.
+        StartingLine(starting, Modifier.padding(start = art + ART_GAP, top = 2.dp))
     }
     Spacer(Modifier.height(8.dp))
     // Every seek (the scrubber, a bar of the score) silences the piano first; paused, the picture catches up.
