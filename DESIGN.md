@@ -2820,8 +2820,8 @@ the album art", and for the art to take most of the screen. Designed by Fable an
 in one lean run. It retires in place v1.15 — M41's discs, lightness, veils and bars, and v1.16 — M43's small art.
 
 - **The picture.** The art the piece shows (its own cover, else its composer's portrait; a roll card or a monogram
-  gives none), its row-size decode cropped square and brought to 48 × 48, blurred (three passes of a box blur of radius
-  3) and its saturation raised 1.6 ×, made once a picture, off the main thread, and kept with its dimming. Grey art
+  gives none), its row-size decode cropped square and brought to 48 × 48, blurred (two passes of a box blur of radius
+  2) and its saturation raised 1.6 ×, made once a picture, off the main thread, and kept with its dimming. Grey art
   gives a grey backdrop.
 - **The dimming.** Black over the picture so the light words keep 4.5:1 over its brightest part: of its sixteen
   12 × 12 blocks, the brightest's relative luminance L gives `dim = max(0.18, 1 − (0.14 / L)^(1 / 2.2))` (a white
@@ -2858,3 +2858,9 @@ in one lean run. It retires in place v1.15 — M41's discs, lightness, veils and
   says. Paper roll is unchanged.
 - **When it is gone.** Album colours off, Artwork in black and white, high contrast text or reduced transparency, or no
   picture: no backdrop, and every screen as v1.17 had it but for the layouts.
+
+**After the integrator's look on the tablet-size emulator (M49, 2026-10-03):** the third picture is drawn from a copy
+whose edge fades to nothing (whole within 35 % of its half-side, a smooth step to its edge), at 0.95 of the diagonal,
+because a picture that does not cover the screen showed its square's edges; the blur is two passes of radius 2 (three
+of radius 3 left one flat colour: the cover's separate colours are the point); and the status and navigation bars'
+icons are light while Now playing stands on the backdrop.

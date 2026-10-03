@@ -15,6 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import dev.stevenjin.stevenpiano.ui.theme.AuraDark
@@ -46,6 +49,14 @@ import dev.stevenjin.stevenpiano.ui.theme.NoteSoundingDark
 
 /** Whether what is drawn here stands on the cover's backdrop: its words light, its bars black glass, the roll without a card. */
 val LocalImmersive = staticCompositionLocalOf { false }
+
+/**
+ * Whether the whole screen stands on the backdrop just now (Now playing as a screen of its own): the activity gives
+ * the status and navigation bars light icons while it does, as on the camera body.
+ */
+object ImmersiveBars {
+    var on by mutableStateOf(false)
+}
 
 /** The app's own appearance as it was outside an immersive region; null outside one. */
 private val LocalAppAppearance = staticCompositionLocalOf<AppAppearanceTokens?> { null }

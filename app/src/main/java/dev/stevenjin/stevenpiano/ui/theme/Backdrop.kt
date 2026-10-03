@@ -19,8 +19,11 @@ import androidx.compose.ui.unit.dp
 // exist. Colour still means nothing here: the backdrop is the art's, never a status.
 
 object Backdrop {
-    /** The three pictures' sizes, as shares of the node's diagonal (the square that covers it at any turn). */
-    val Scales = floatArrayOf(1.05f, 1.5f, 0.7f)
+    /**
+     * The three pictures' sizes, as shares of the node's diagonal (the square that covers it at any turn). The third
+     * does not cover it: it is drawn from the picture's soft copy, whose edge fades to nothing.
+     */
+    val Scales = floatArrayOf(1.05f, 1.5f, 0.95f)
 
     /** Their opacities: the first covers, the others lie over it. */
     val Alphas = floatArrayOf(1f, 0.6f, 0.38f)

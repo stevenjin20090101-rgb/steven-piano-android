@@ -270,7 +270,10 @@ class ArtworkRepository(
         small.getPixels(pixels, 0, side, 0, 0, side, side)
         BackdropRules.prepare(pixels, side, side)
         small.setPixels(pixels, 0, side, 0, 0, side, side)
-        return BackdropPicture(small, BackdropRules.dimFor(pixels, side, side))
+        // The same picture fading to nothing at its edge, for the layer drawn smaller than the screen (no edge shows).
+        val soft = createBitmap(side, side)
+        soft.setPixels(BackdropRules.softened(pixels, side, side), 0, side, 0, 0, side, side)
+        return BackdropPicture(small, soft, BackdropRules.dimFor(pixels, side, side))
     }
 
     /**
@@ -473,7 +476,8 @@ class ArtworkRepository(
 }
 
 /**
- * The backdrop's picture (v1.18 — M49): the art, [BackdropRules.SIDE] square, soft and lifted ([bitmap], opaque), and
- * the black laid over it so light words read ([dim], 0.18 or more). One per picture, shared: never recycled.
+ * The backdrop's picture (v1.18 — M49): the art, [BackdropRules.SIDE] square, soft and lifted ([bitmap], opaque), the
+ * same fading to nothing at its edge ([soft], for the layer that does not cover the screen), and the black laid over
+ * them so light words read ([dim], 0.18 or more). One per picture, shared: never recycled.
  */
-class BackdropPicture(val bitmap: Bitmap, val dim: Float)
+class BackdropPicture(val bitmap: Bitmap, val soft: Bitmap, val dim: Float)

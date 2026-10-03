@@ -88,4 +88,17 @@ class BackdropRulesTest {
         assertTrue("softened: ${Integer.toHexString(edge)}", (edge and 0xFF) in 1..254)
         assertEquals(0xFFFF0000.toInt(), prepared(pictures.getValue("saturated red")).first[0])
     }
+
+    @Test
+    fun `the soft copy is whole at its centre and nothing at its edge`() {
+        val side = BackdropRules.SIDE
+        val red = 0xFFCC2030.toInt()
+        val soft = BackdropRules.softened(IntArray(side * side) { red }, side, side)
+        val alphaAt = { x: Int, y: Int -> soft[y * side + x] ushr 24 }
+        assertEquals(255, alphaAt(side / 2, side / 2))
+        assertEquals(0, alphaAt(0, 0))
+        assertTrue(alphaAt(side - 1, side / 2) <= 8)
+        assertTrue(alphaAt(side / 2 + side / 3, side / 2) in 1..254)
+        assertEquals(red and 0xFFFFFF, soft[side / 2 * side + side / 2] and 0xFFFFFF)
+    }
 }

@@ -180,6 +180,7 @@ private class BackdropMotion {
 /** One picture laid out for a box of [size]: each layer's square and centre, and the black over them. */
 private class BackdropLayers(picture: BackdropPicture, size: Size, deeper: Float) {
     private val image: ImageBitmap = picture.bitmap.asImageBitmap()
+    private val soft: ImageBitmap = picture.soft.asImageBitmap()
     private val source = IntSize(image.width, image.height)
     private val sides = IntArray(LAYERS)
     private val lefts = IntArray(LAYERS)
@@ -214,7 +215,7 @@ private class BackdropLayers(picture: BackdropPicture, size: Size, deeper: Float
         for (layer in 0 until LAYERS) {
             rotate(motion.degrees(layer), Offset(centresX[layer], centresY[layer])) {
                 drawImage(
-                    image,
+                    if (layer == LAYERS - 1) soft else image,   // the third does not cover the node: its edge fades
                     srcOffset = IntOffset.Zero,
                     srcSize = source,
                     dstOffset = IntOffset(lefts[layer], tops[layer]),

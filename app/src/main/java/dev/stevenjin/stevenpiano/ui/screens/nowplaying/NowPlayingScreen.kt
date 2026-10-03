@@ -42,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.LongState
@@ -98,6 +99,7 @@ import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.Immersive
+import dev.stevenjin.stevenpiano.ui.components.ImmersiveBars
 import dev.stevenjin.stevenpiano.ui.components.KeyHands
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
@@ -200,6 +202,10 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     // The cover behind everything, edge to edge (v1.18 — M49); while it shows, what stands on it is immersive.
     val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
     val immersive = backdrop != null
+    DisposableEffect(immersive) {
+        ImmersiveBars.on = immersive
+        onDispose { ImmersiveBars.on = false }
+    }
     Box(Modifier.fillMaxSize()) {
         ArtBackdrop(backdrop, state.status == PlaybackStatus.Playing, Modifier.matchParentSize())
         Immersive(immersive) {

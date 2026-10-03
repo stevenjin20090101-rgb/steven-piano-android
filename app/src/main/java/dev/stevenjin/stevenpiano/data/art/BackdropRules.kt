@@ -22,8 +22,8 @@ object BackdropRules {
     const val SIDE = 48
 
     /** The blur: [BLUR_PASSES] passes of a box blur [BLUR_RADIUS] pixels either side, near a Gaussian. */
-    const val BLUR_RADIUS = 3
-    const val BLUR_PASSES = 3
+    const val BLUR_RADIUS = 2
+    const val BLUR_PASSES = 2
 
     /** The saturation, raised this much (a colour matrix, as Android's `ColorMatrix.setSaturation` builds it). */
     const val SATURATION = 1.6f
@@ -41,6 +41,30 @@ object BackdropRules {
     private const val RED_WEIGHT = 0.213f
     private const val GREEN_WEIGHT = 0.715f
     private const val BLUE_WEIGHT = 0.072f
+
+    /** The third picture is whole within this share of its half-side, and fades to nothing at its edge. */
+    const val SOFT_FROM = 0.35
+
+    /**
+     * [pixels] with their alpha falling away from the centre: whole within [SOFT_FROM] of the half-side, nothing at the
+     * edge, a smooth step between. The picture drawn smaller than the screen shows no edge this way. A new array.
+     */
+    fun softened(pixels: IntArray, width: Int, height: Int): IntArray {
+        val out = IntArray(pixels.size)
+        val centreX = (width - 1) / 2.0
+        val centreY = (height - 1) / 2.0
+        val half = min(width, height) / 2.0
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val distance = StrictMath.hypot(x - centreX, y - centreY) / half
+                val t = ((distance - SOFT_FROM) / (1.0 - SOFT_FROM)).coerceIn(0.0, 1.0)
+                val keep = 1.0 - t * t * (3.0 - 2.0 * t)
+                val alpha = StrictMath.round(keep * 255).toInt()
+                out[y * width + x] = (alpha shl 24) or (pixels[y * width + x] and 0xFFFFFF)
+            }
+        }
+        return out
+    }
 
     /** [pixels] ([width] × [height], ARGB) made the backdrop's picture, in place: opaque, blurred, then its saturation raised. */
     fun prepare(pixels: IntArray, width: Int, height: Int) {
