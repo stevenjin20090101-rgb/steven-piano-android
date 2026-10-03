@@ -868,6 +868,31 @@ class WebServerTest {
     }
 
     @Test
+    fun `a piece's art is one kind at a time, and a picture asked for at a version is kept for good (v1_17 M45)`() {
+        val (_, http) = start()
+        val token = login(http)
+        val auth = mapOf("Cookie" to "sp_session=$token")
+        assertEquals("no cover of its own: none, never its roll card in an <img>", 404, http.get("/api/art/piece/1?kind=cover&size=row&v=7", auth).status)
+        backend.pieces[1] = backend.pieces[1].copy(cover = true, artVersion = 7)
+        assertEquals("image/jpeg", http.get("/api/art/piece/2?kind=cover&size=row&v=7", auth).header("content-type"))
+        val roll = http.get("/api/art/piece/1?kind=roll&v=1", auth)
+        assertEquals("the roll card, even beside a portrait", "image/png", roll.header("content-type"))
+        assertEquals("private, max-age=31536000, immutable", roll.header("cache-control"))
+        assertEquals("image/png", http.get("/api/art/piece/2?kind=roll&v=1", auth).header("content-type"))
+        for (query in listOf("kind=portrait", "kind=COVER", "kind=", "size=huge", "size=", "kind=roll&size=512")) {
+            val refused = http.get("/api/art/piece/1?$query", auth)
+            assertEquals(query, 400, refused.status)
+            assertEquals(query, "field", refused.json().getString("error"))
+        }
+        val older = http.get("/api/art/piece/1", auth)
+        assertEquals("no kind and no version (an older page): the chain, for an hour", "private, max-age=3600", older.header("cache-control"))
+        assertEquals("image/png", older.header("content-type"))
+        assertEquals("private, max-age=31536000, immutable", http.get("/api/art/composer/debussy?size=row&v=1780000000000", auth).header("cache-control"))
+        assertEquals("private, max-age=3600", http.get("/api/art/composer/debussy?size=row", auth).header("cache-control"))
+        assertEquals(404, http.get("/api/art/piece/99?kind=roll&v=1", auth).status)
+    }
+
+    @Test
     fun `the Library's reads follow the genre asked for, classical or modern, and refuse any other (v1_14 M37)`() {
         val (_, http) = start()
         val token = login(http)

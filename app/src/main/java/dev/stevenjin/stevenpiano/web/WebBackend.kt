@@ -64,8 +64,12 @@ interface WebBackend {
     /** Composer [key]'s portrait at [size]; null when there is none. */
     suspend fun composerArt(key: String, size: WebArtSize): WebImage?
 
-    /** Piece [id]'s art: its own cover (a Studio piece's), else its composer's portrait, else its own roll card (a mask the page tints); null when none can be had. */
-    suspend fun pieceArt(id: Long): WebImage?
+    /**
+     * Piece [id]'s art at [size] (v1.17 — M45): [WebArtKind.COVER] its own cover alone, [WebArtKind.ROLL] its own roll card
+     * alone (a mask the page tints, at its one size); no [kind] (an older page): its own cover, else its composer's portrait,
+     * else its roll card. Null when there is none.
+     */
+    suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage?
 
     /** Plays piece [pieceId], then [queue] around it (just the piece when null). False when the library has no such piece. */
     suspend fun play(pieceId: Long, queue: List<Long>?): Boolean
@@ -251,7 +255,9 @@ enum class LibraryCategory(val key: String) {
 /**
  * A piece as the panel shows it: [composer] in full (Now playing's eyebrow), [composerShort] as rows
  * show it ("Chopin · 4:31"). [portrait]: its composer has a portrait (the panel shows it), else its
- * art is its own roll card, which the panel tints as the app does.
+ * art is its own roll card, which the panel tints as the app does. [artVersion] (v1.17 — M45): when
+ * the picture it shows was kept, its cover's or else its composer's portrait's; the panel's addresses
+ * carry it, so a picture is cached for good and asked for afresh when it changes.
  */
 data class WebPiece(
     val id: Long,
@@ -262,7 +268,7 @@ data class WebPiece(
     val composerShort: String = composer,
     val favorite: Boolean = false,
     val portrait: Boolean = false,
-    /** Its own cover (v1.12 — M30: a Studio piece's), drawn at [artVersion]: the panel asks for it afresh when that changes. */
+    /** Its own cover (v1.12 — M30: a Studio piece's). */
     val cover: Boolean = false,
     val artVersion: Long = 0,
     /** "classical" or "modern" (v1.14 — M37, `Genres.name`); null for a piece made on the tablet, or one not read from the library. */
@@ -276,14 +282,15 @@ data class WebPlaylist(val id: Long, val name: String, val pieceCount: Int, val 
 
 data class WebPlaylistDetail(val playlist: WebPlaylist, val pieces: List<WebPiece>)
 
-data class WebComposer(val key: String, val name: String, val pieceCount: Int, val portrait: Boolean)
+/** A composer or artist; [artVersion] (v1.17 — M45): when their portrait was kept, 0 with none. */
+data class WebComposer(val key: String, val name: String, val pieceCount: Int, val portrait: Boolean, val artVersion: Long = 0)
 
 data class WebComposerDetail(val composer: WebComposer, val pieces: List<WebPiece>)
 
 /** An image and its type, as the art routes send it. */
 class WebImage(val bytes: ByteArray, val contentType: String)
 
-/** A portrait for a 40 px row (at most 128 px) or a tile (at most 512 px). */
+/** A picture for a 40 px row (at most 128 px) or a tile (at most 512 px). */
 enum class WebArtSize(val key: String) {
     ROW("row"),
     TILE("tile"),
@@ -291,6 +298,17 @@ enum class WebArtSize(val key: String) {
 
     companion object {
         fun of(key: String?): WebArtSize? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/** Which of a piece's pictures the panel asks for (v1.17 — M45): its own cover, or its roll card. */
+enum class WebArtKind(val key: String) {
+    COVER("cover"),
+    ROLL("roll"),
+    ;
+
+    companion object {
+        fun of(key: String?): WebArtKind? = entries.firstOrNull { it.key == key }
     }
 }
 
@@ -329,8 +347,8 @@ sealed interface QueueCommand {
 /** How a channel's start went: it plays, its pool is under three pieces ("Add more pieces"), or there is no such channel. */
 enum class ChannelStart { STARTED, TOO_SMALL, UNKNOWN }
 
-/** A composer on a channel's card: the key finds the portrait, the name the monogram. */
-data class WebCardComposer(val key: String, val name: String, val portrait: Boolean)
+/** A composer on a channel's card: the key finds the portrait (kept at [artVersion], v1.17 — M45), the name the monogram. */
+data class WebCardComposer(val key: String, val name: String, val portrait: Boolean, val artVersion: Long = 0)
 
 /**
  * A channel's card: its pool's size, whether it can play (three pieces or more), whether it plays, its volume, and the

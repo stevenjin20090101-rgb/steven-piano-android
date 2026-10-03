@@ -151,14 +151,14 @@ class ArtworkRepository(
     fun peek(key: String): ArtworkEntity? = rows.value?.get(key)
 
     /**
-     * The composers (by `composerKey`) whose portrait the app holds, as the table reads now: the web
-     * panel shows those portraits and every other piece's roll card. None when it can't be read.
+     * The composers (by `composerKey`) whose portrait the app holds, as the table reads now, with when each was kept (the
+     * web panel's art version, v1.17 — M45): the panel shows those portraits and every other piece's roll card. None when
+     * it can't be read.
      */
-    suspend fun portraitComposers(): Set<String> = readOr(emptySet()) {
+    suspend fun portraitComposers(): Map<String, Long> = readOr(emptyMap()) {
         rows.filterNotNull().first().values.asSequence()
             .filter { it.status == ArtworkStatus.OK && it.imagePath != null && it.key.startsWith(COMPOSER_PREFIX) }
-            .map { it.key.removePrefix(COMPOSER_PREFIX) }
-            .toSet()
+            .associate { it.key.removePrefix(COMPOSER_PREFIX) to it.fetchedAt }
     }
 
     /** Fetches [key] when it is due: first in line when [priority] (a sheet just opened), otherwise last. */

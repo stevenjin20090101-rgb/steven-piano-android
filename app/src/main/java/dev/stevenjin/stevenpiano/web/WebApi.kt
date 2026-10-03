@@ -55,6 +55,9 @@ object WebApi {
     const val MAX_BODY = 64 * 1024
     const val MAX_DEPTH = 4
 
+    /** A roll card's art version (v1.17 — M45): drawn from the piece's own notes, it never changes. */
+    const val ROLL_ART_VERSION = 1L
+
     // ---- In ------------------------------------------------------------------------------
 
     /**
@@ -347,7 +350,7 @@ object WebApi {
         .put("durationMs", p.durationMs)
         .put("favorite", p.favorite)
         .put("art", if (p.cover) "cover" else if (p.portrait) "portrait" else "roll")
-        .apply { if (p.cover) put("artVersion", p.artVersion) }
+        .put("artVersion", if (p.cover || p.portrait) p.artVersion else ROLL_ART_VERSION)   // every kind's (v1.17 — M45)
         .apply { p.genre?.let { put("genre", it) } }   // v1.14 — M37: only when it has one
 
     fun pieces(list: List<WebPiece>): JSONArray = JSONArray().apply { list.forEach { put(piece(it)) } }
@@ -358,7 +361,7 @@ object WebApi {
         .put("id", p.id).put("name", p.name).put("pieceCount", p.pieceCount).put("durationMs", p.durationMs).put("builtIn", p.builtIn)
 
     fun composer(c: WebComposer): JSONObject = JSONObject()
-        .put("key", c.key).put("name", c.name).put("pieceCount", c.pieceCount).put("portrait", c.portrait)
+        .put("key", c.key).put("name", c.name).put("pieceCount", c.pieceCount).put("portrait", c.portrait).put("artVersion", c.artVersion)
 
     fun channels(list: List<WebChannel>): JSONObject = JSONObject()
         .put("playing", list.firstOrNull { it.playing }?.key ?: JSONObject.NULL)
@@ -370,7 +373,7 @@ object WebApi {
                         JSONObject()
                             .put("key", c.key).put("name", c.name).put("size", c.size).put("playable", c.playable)
                             .put("playing", c.playing).put("volume", c.volume)
-                            .put("composers", JSONArray().apply { c.composers.forEach { put(JSONObject().put("key", it.key).put("name", it.name).put("portrait", it.portrait)) } })
+                            .put("composers", JSONArray().apply { c.composers.forEach { put(JSONObject().put("key", it.key).put("name", it.name).put("portrait", it.portrait).put("artVersion", it.artVersion)) } })
                             .apply { c.genre?.let { put("genre", it) } },
                     )
                 }

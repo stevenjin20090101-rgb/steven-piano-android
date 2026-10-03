@@ -197,7 +197,7 @@ class WebApiTest {
         assertEquals("whenNotConnected", tablet.getString("mode"))
         assertEquals(60, tablet.getInt("volume"))
         assertEquals("playing", player.getString("status"))
-        assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art"), player.getJSONObject("piece").keys().asSequence().toSet())
+        assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "artVersion"), player.getJSONObject("piece").keys().asSequence().toSet())
         assertEquals("Calm", player.getJSONObject("channel").getString("name"))
         val queue = player.getJSONObject("queue")
         assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
@@ -254,8 +254,13 @@ class WebApiTest {
     fun `a piece and a channel carry their genre only when they have one (v1_14 M37)`() {
         val modern = WebPiece(4, "Shape of You", "Ed Sheeran", "ed sheeran", 233_000, composerShort = "Ed Sheeran", genre = "modern")
         val json = WebApi.piece(modern)
-        assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "genre"), json.keys().asSequence().toSet())
+        assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "artVersion", "genre"), json.keys().asSequence().toSet())
         assertEquals("modern", json.getString("genre"))
+        // Every kind carries its version (v1.17 — M45): a roll card's is 1, a portrait's or a cover's when it was kept.
+        assertEquals("roll", json.getString("art"))
+        assertEquals(1L, json.getLong("artVersion"))
+        assertEquals(1_780_000_000_000L, WebApi.piece(modern.copy(portrait = true, artVersion = 1_780_000_000_000L)).getLong("artVersion"))
+        assertEquals(42L, WebApi.composer(WebComposer("debussy", "Debussy", 3, portrait = true, artVersion = 42)).getLong("artVersion"))
         assertFalse("made on the tablet: no genre at all, not null", WebApi.piece(modern.copy(genre = null)).has("genre"))
         val channels = WebApi.channels(
             listOf(

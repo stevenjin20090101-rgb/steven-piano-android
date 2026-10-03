@@ -145,7 +145,7 @@ class AppWebBackend(
         val shown = piece?.let {
             WebPiece(
                 it.pieceId, it.title, it.composer, it.composerKey, it.durationMicros / MICROS_PER_MS, portrait = it.composerKey in portraits,
-                cover = it.pieceId in covers, artVersion = covers[it.pieceId] ?: 0,
+                cover = it.pieceId in covers, artVersion = covers[it.pieceId] ?: portraits[it.composerKey] ?: 0,
             )
         }
         val queue = player.queue
@@ -259,7 +259,7 @@ class AppWebBackend(
     override suspend fun composers(scope: LibraryScope): List<WebComposer> {
         val portraits = portraits()
         return library { graph.library.composers(scope).first() }.orEmpty()
-            .map { WebComposer(it.composerKey, it.name, it.pieceCount, it.composerKey in portraits) }
+            .map { WebComposer(it.composerKey, it.name, it.pieceCount, it.composerKey in portraits, portraits[it.composerKey] ?: 0) }
     }
 
     override suspend fun composer(key: String, scope: LibraryScope): WebComposerDetail? {
@@ -268,15 +268,25 @@ class AppWebBackend(
         val portraits = portraits()
         val covers = covers()
         val name = pieces.minOf { it.composer }
-        return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits), pieces.map { it.toWeb(portraits, covers) })
+        return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits, portraits[key] ?: 0), pieces.map { it.toWeb(portraits, covers) })
     }
 
     override suspend fun composerArt(key: String, size: WebArtSize): WebImage? = portrait(key, if (size == WebArtSize.ROW) ArtSize.Row else ArtSize.Tile)
 
-    override suspend fun pieceArt(id: Long): WebImage? {
+    override suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage? {
         val piece = library { graph.library.piece(id) } ?: return null
-        image(ArtworkEntity.forPiece(id), ArtSize.Tile)?.let { return it }   // its own cover first (v1.12 — M30)
-        portrait(piece.composerKey, ArtSize.Tile)?.let { return it }
+        val art = if (size == WebArtSize.ROW) ArtSize.Row else ArtSize.Tile
+        // One kind each (v1.17 — M45): a cover asked for is the piece's own or none, so a roll card never lands in an <img>.
+        return when (kind) {
+            WebArtKind.COVER -> image(ArtworkEntity.forPiece(id), art)
+            WebArtKind.ROLL -> rollCard(id)
+            // An older page: its own cover first (v1.12 — M30), else its composer's portrait, else its roll card.
+            null -> image(ArtworkEntity.forPiece(id), art) ?: portrait(piece.composerKey, art) ?: rollCard(id)
+        }
+    }
+
+    /** Piece [id]'s roll card as a PNG mask, encoded once. */
+    private suspend fun rollCard(id: Long): WebImage? {
         val cacheKey = "roll:$id"
         encoded.get(cacheKey)?.let { return it }
         val card = graph.artwork.rollCard(id) ?: return null
@@ -397,7 +407,7 @@ class AppWebBackend(
                 playable = card.playable,
                 playing = card.key == playing,
                 volume = settings.channelVolume(card.key),
-                composers = card.composers.map { WebCardComposer(it.key, it.name, it.key in portraits) },
+                composers = card.composers.map { WebCardComposer(it.key, it.name, it.key in portraits, portraits[it.key] ?: 0) },
                 genre = Genres.name(card.genre),
             )
         }
@@ -710,8 +720,11 @@ class AppWebBackend(
             out.toByteArray()
         }
 
-    /** The composers with portraits, or none after a moment (the table unreadable): every piece then shows its roll card. */
-    private suspend fun portraits(): Set<String> = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.portraitComposers() }.orEmpty()
+    /**
+     * The composers with portraits, with when each was kept (v1.17 — M45: the art's version), or none after a moment (the
+     * table unreadable): every piece then shows its roll card.
+     */
+    private suspend fun portraits(): Map<String, Long> = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.portraitComposers() }.orEmpty()
 
     /** The pieces with a cover of their own (Studio's), with when it was drawn (v1.12 — M30). */
     private suspend fun covers(): Map<Long, Long> = withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.pieceCovers() }.orEmpty()
@@ -719,10 +732,10 @@ class AppWebBackend(
     private fun channelName(key: String): String? =
         graph.channelPools.summary(key)?.name ?: graph.channels.firstOrNull { it.key == key }?.name
 
-    private fun PieceEntity.toWeb(portraits: Set<String>, covers: Map<Long, Long>): WebPiece =
+    private fun PieceEntity.toWeb(portraits: Map<String, Long>, covers: Map<Long, Long>): WebPiece =
         WebPiece(
             id, title, composer, composerKey, durationMs, composerShort = composerShort, favorite = favorite, portrait = composerKey in portraits,
-            cover = id in covers, artVersion = covers[id] ?: 0, genre = Genres.name(genre),
+            cover = id in covers, artVersion = covers[id] ?: portraits[composerKey] ?: 0, genre = Genres.name(genre),
         )
 
     /** A piece as guests are offered it (v1.14 — M37): what its row says, nothing looked up. */

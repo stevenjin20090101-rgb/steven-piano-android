@@ -354,9 +354,14 @@ class WebServer(
         },
         Route(Method.GET, Regex("/api/art/composer/([^/]{1,120})"), Access.READ, "/api/art/composer/debussy") { call ->
             val size = call.param("size")?.let { WebArtSize.of(it) ?: throw ApiError(400, "field", "size must be row or tile.") } ?: WebArtSize.ROW
-            image(backend.composerArt(composerKey(call.groups[0]), size))
+            image(backend.composerArt(composerKey(call.groups[0]), size), versioned = call.param("v") != null)
         },
-        Route(Method.GET, Regex("/api/art/piece/(\\d{1,18})"), Access.READ, "/api/art/piece/1") { call -> image(backend.pieceArt(call.groups[0].toLong())) },
+        // A piece's art (v1.17 — M45): `kind` cover or roll, one picture each (absent: the chain, for older pages); `size` row or tile (absent: tile).
+        Route(Method.GET, Regex("/api/art/piece/(\\d{1,18})"), Access.READ, "/api/art/piece/1") { call ->
+            val kind = call.param("kind")?.let { WebArtKind.of(it) ?: throw ApiError(400, "field", "kind must be cover or roll.") }
+            val size = call.param("size")?.let { WebArtSize.of(it) ?: throw ApiError(400, "field", "size must be row or tile.") } ?: WebArtSize.TILE
+            image(backend.pieceArt(call.groups[0].toLong(), kind, size), versioned = call.param("v") != null)
+        },
         Route(Method.GET, Regex("/api/channels"), Access.READ, "/api/channels") { json(WebApi.channels(backend.channels())) },
         Route(Method.GET, Regex("/api/requests"), Access.READ, "/api/requests") { json(WebApi.requests(requests.pending.value, backend.guestSettings())) },
         Route(Method.GET, Regex("/api/piano"), Access.READ, "/api/piano") { json(WebApi.piano(backend.piano())) },
@@ -786,9 +791,11 @@ class WebServer(
 
     private fun notFound(): Response = refuse(404, "not-found", "Not here.")
 
-    private fun image(image: WebImage?): Response {
+    /** A picture: asked for at a version ([versioned], v1.17 — M45: its address changes with the art), kept for good; else for an hour. */
+    private fun image(image: WebImage?, versioned: Boolean): Response {
         if (image == null || image.contentType !in IMAGE_TYPES) return notFound()
-        return bytesResponse(Response.Status.OK, image.contentType, image.bytes).also { it.addHeader("Cache-Control", "private, max-age=3600") }
+        val cache = if (versioned) "private, max-age=31536000, immutable" else "private, max-age=3600"
+        return bytesResponse(Response.Status.OK, image.contentType, image.bytes).also { it.addHeader("Cache-Control", cache) }
     }
 
     private fun refuse(status: Int, code: String, message: String): Response =
