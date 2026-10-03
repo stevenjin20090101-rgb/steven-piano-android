@@ -11,8 +11,10 @@
 // and KeyboardStrip drawn from the notes' typed arrays (wire.js). Paper roll: rounded bars through a tracker bar a
 // third up; falling notes: square blocks meeting the strip. Upcoming notes are the secondary grey and brighten to the
 // content colour as they sound (12 steps over 120 ms, a cut with reduced motion); the left hand's bars are outlined,
-// and with Hand colours on each hand takes its colour. Nothing is allocated per note or per frame. The numbers below
-// are the app's (WebAssetsTest pins them to the Kotlin constants).
+// and with Hand colours on each hand takes its colour. Over the cover (v1.18 — M47, look.immersive) there is no card:
+// no lanes, the notes light (the right hand at 92 %, the left at 50 %, filled), a light line where they land, and the
+// strip's keys as keys, a sounding one yellow. Nothing is allocated per note or per frame. The numbers below are the
+// app's (WebAssetsTest pins them to the Kotlin constants).
 
 export const ROLL = {
   PX_PER_SECOND: 120,
@@ -37,6 +39,14 @@ export const ROLL = {
   CHORD_INSET: 4,
   CHORD_PAD: 4,
   MAX_CHORD_DRAWS: 64,
+  // Over the cover (v1.18 — M47): the notes' light, upcoming and sounding, the line's, the chord names' shade.
+  LIGHT_RIGHT: 0.92,
+  LIGHT_LEFT: 0.5,
+  LIGHT_LEFT_SOUNDING: 0.7,
+  LIGHT_LINE: 0.75,
+  CHORD_SHADE: 0.42,
+  KEY_GAP: 1,
+  KEY_RADIUS: 3,
 };
 
 const BLACK_IN_OCTAVE = [false, true, false, true, false, false, true, false, true, false, true, false];
@@ -83,16 +93,30 @@ export function ramp(a, b) {
   return out;
 }
 
+/** "#rrggbb", or "rgb(r g b)" as [css] writes it (a mixed colour handed on to [ramp]), as [r, g, b]; grey otherwise. */
 export function rgb(color) {
   const m = /^\s*#([0-9a-f]{6})\s*$/i.exec(color || '');
-  if (!m) return [128, 128, 128];
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  if (m) {
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const f = /^\s*rgb\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(color || '');
+  return f ? [Number(f[1]), Number(f[2]), Number(f[3])] : [128, 128, 128];
 }
 
 export const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 export const css = (c) => `rgb(${Math.round(c[0])} ${Math.round(c[1])} ${Math.round(c[2])})`;
+
+/** [c] ([r, g, b]) at [alpha]. */
+export const cssAlpha = (c, alpha) => `rgb(${Math.round(c[0])} ${Math.round(c[1])} ${Math.round(c[2])} / ${alpha})`;
+
+/** One colour [c] ([r, g, b]) from alpha [a] to [b] in RAMP_STEPS + 1 css colours: a light note brightening as it sounds. */
+export function fade(c, a, b) {
+  const out = new Array(ROLL.RAMP_STEPS + 1);
+  for (let k = 0; k <= ROLL.RAMP_STEPS; k++) out[k] = cssAlpha(c, Math.round((a + ((b - a) * k) / ROLL.RAMP_STEPS) * 1000) / 1000);
+  return out;
+}
 
 /** The first note starting at or after [ms] (n when none). */
 export function firstAtOrAfter(starts, n, ms) {
@@ -147,9 +171,11 @@ export function createRoll() {
     const hitY = look.paper ? h * (1 - ROLL.TRACKER_FROM_BOTTOM) : h;
     const ahead = hitY / pxPerMs;
     const behind = (h - hitY) / pxPerMs;
-    // The black keys' lanes, in the surface colour.
-    ctx.fillStyle = c.surface;
-    for (let i = 0; i < ROLL.KEY_COUNT; i++) if (keys.black[i]) ctx.fillRect(keys.left[i], 0, keys.right[i] - keys.left[i], h);
+    // The black keys' lanes, in the surface colour (none over the cover).
+    if (!look.immersive) {
+      ctx.fillStyle = c.surface;
+      for (let i = 0; i < ROLL.KEY_COUNT; i++) if (keys.black[i]) ctx.fillRect(keys.left[i], 0, keys.right[i] - keys.left[i], h);
+    }
     const drawn = notesPass(ctx, notes, now, look, keys, hitY, ahead, behind, pxPerMs, 0, ROLL.MAX_DRAWS);
     notesPass(ctx, notes, now, look, keys, hitY, ahead, behind, pxPerMs, 1, ROLL.MAX_DRAWS - drawn);
     if (look.chords && notes.m > 0) {
@@ -159,7 +185,11 @@ export function createRoll() {
       }
       chordNames(ctx, notes, kept, now, hitY, behind, pxPerMs, look);
     }
-    if (look.paper) {
+    if (look.immersive) {
+      // Over the cover, one light line where the notes land: the tracker bar, or the strip's edge.
+      ctx.fillStyle = look.line;
+      ctx.fillRect(0, look.paper ? hitY - 1 : h - 2, w, 2);
+    } else if (look.paper) {
       ctx.fillStyle = c.tertiary;
       ctx.fillRect(0, hitY - 1 - 6 - 1, w, 1);
       ctx.fillStyle = c.primary;
@@ -191,9 +221,10 @@ function notesPass(ctx, notes, now, look, keys, hitY, ahead, behind, pxPerMs, bl
     const top = Math.min(hitY - (end - now) * pxPerMs, bottom - ROLL.MIN_HEIGHT);
     const width = keys.right[lane] - keys.left[lane] - 2 * ROLL.INSET;
     const left = keys.left[lane] + ROLL.INSET;
-    const outlined = hands !== null && hands[i] === LEFT;
+    const leftHand = hands !== null && hands[i] === LEFT;
+    const outlined = leftHand && !look.immersive;
     const level = rampLevel(now, start, end, look.flip);
-    const color = (outlined && look.leftRamp ? look.leftRamp : look.ramp)[level];
+    const color = (leftHand && look.leftRamp ? look.leftRamp : look.ramp)[level];
     if (outlined) {
       ctx.fillStyle = look.colors.elevated;
       bar(ctx, left, top, width, bottom - top, look.paper);
@@ -207,7 +238,7 @@ function notesPass(ctx, notes, now, look, keys, hitY, ahead, behind, pxPerMs, bl
     if (finger > 0 && bottom - top >= ROLL.NUMERALS_TALL * numeralHeight && width >= ROLL.NUMERAL_MIN_WIDTH * numeralWidth) {
       // The leading edge: the bar's bottom, which meets the line first; clear of a perforation's round end.
       const baseline = bottom - 2 - (look.paper ? Math.min(width / 2, numeralHeight / 2) : 0);
-      ctx.fillStyle = outlined ? look.colors.secondary : look.colors.elevated;
+      ctx.fillStyle = look.immersive ? look.colors.surface : outlined ? look.colors.secondary : look.colors.elevated;
       ctx.font = `500 ${look.numeralFont}px ${look.sans}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'alphabetic';
@@ -259,9 +290,9 @@ function chordNames(ctx, notes, kept, now, hitY, behind, pxPerMs, look) {
     if (bottom > 0 && bottom - boxHeight < height) {
       const name = notes.chordNames[i];
       const width = ctx.measureText(name).width;
-      ctx.fillStyle = look.colors.elevated;
+      ctx.fillStyle = look.immersive ? look.chordBox : look.colors.elevated;
       ctx.fillRect(ROLL.CHORD_INSET, bottom - boxHeight, width + 2 * ROLL.CHORD_PAD, boxHeight);
-      ctx.fillStyle = look.colors.secondary;
+      ctx.fillStyle = look.immersive ? look.colors.primary : look.colors.secondary;
       ctx.fillText(name, ROLL.CHORD_INSET + ROLL.CHORD_PAD, bottom - ROLL.CHORD_PAD - 5);
       drawn++;
     }
@@ -300,6 +331,10 @@ export function createStrip() {
     const pressedLeft = look.pressedLeft;
     const blackHeight = h * ROLL.BLACK_KEY_HEIGHT;
     const half = ROLL.KEY_OUTLINE / 2;
+    if (look.immersive) {
+      keysOverCover(ctx, w, h, keys, right, left, look, blackHeight);
+      return;
+    }
     ctx.fillStyle = c.elevated;
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = pressed;
@@ -325,4 +360,39 @@ export function createStrip() {
       if (leftOnly) ctx.strokeRect(keys.left[i] + half, half, kw - ROLL.KEY_OUTLINE, blackHeight - ROLL.KEY_OUTLINE);
     }
   };
+}
+
+/**
+ * The keys over the cover (v1.18 — M47): the backdrop between them, white keys light with rounded feet, black keys
+ * dark, a key sounding in [look.pressed] (yellow, or its hand's colour with Hand colours), one only the left hand plays
+ * outlined in [look.pressedLeft].
+ */
+function keysOverCover(ctx, w, h, keys, right, left, look, blackHeight) {
+  const gap = ROLL.KEY_GAP;
+  const radius = ROLL.KEY_RADIUS;
+  const half = ROLL.KEY_OUTLINE / 2;
+  ctx.clearRect(0, 0, w, h);
+  ctx.lineWidth = ROLL.KEY_OUTLINE;
+  ctx.strokeStyle = look.pressedLeft;
+  for (let i = 0; i < ROLL.KEY_COUNT; i++) {
+    if (keys.black[i]) continue;
+    const x = keys.left[i] + gap;
+    const kw = keys.right[i] - keys.left[i] - 2 * gap;
+    ctx.fillStyle = right[i] ? look.pressed : look.keyWhite;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(x, 0, kw, h, [0, 0, radius, radius]);
+      ctx.fill();
+    } else {
+      ctx.fillRect(x, 0, kw, h);
+    }
+    if (!right[i] && left[i]) ctx.strokeRect(x + half, half, kw - ROLL.KEY_OUTLINE, h - ROLL.KEY_OUTLINE);
+  }
+  for (let i = 0; i < ROLL.KEY_COUNT; i++) {
+    if (!keys.black[i]) continue;
+    const kw = keys.right[i] - keys.left[i];
+    ctx.fillStyle = right[i] ? look.pressed : look.keyBlack;
+    ctx.fillRect(keys.left[i], 0, kw, blackHeight);
+    if (!right[i] && left[i]) ctx.strokeRect(keys.left[i] + half, half, kw - ROLL.KEY_OUTLINE, blackHeight - ROLL.KEY_OUTLINE);
+  }
 }

@@ -8,15 +8,17 @@
    ============================================================================ */
 
 // Now playing's views on the panel (DESIGN.md › v1.13): the score and the moving notes, as the tablet shows them, in
-// step with the playback. From 900 px both show, split by a divider (stacked, or side by side once the column is
-// 840 px wide), its share remembered in this browser per arrangement; below 900 px one view at a time (Art · Notes
-// · Score, Art first, so a phone that never opens a view loads nothing). The View control sets the tablet's own
-// display settings. Frames run only while Now playing shows, the page is visible and the piece plays, and for
-// 400 ms after a change; paused, one frame. Styles are written only through the CSSOM.
+// step with the playback. app.js's switch chooses (v1.18 — M47): Notes, the roll alone; Score, from 900 px the score
+// and the notes split by a divider (stacked, or side by side once the column is 840 px wide), its share remembered in
+// this browser per arrangement, below 900 px the score alone; Art, neither (a browser that never leaves Art loads
+// nothing). While the panel is immersive (the cover behind it) the roll has no card: its notes are drawn light straight
+// over the backdrop and the keys as keys. The View control sets the tablet's own display settings. Frames run only
+// while Now playing shows, the page is visible and the piece plays, and for 400 ms after a change; paused, one frame.
+// Styles are written only through the CSSOM.
 
 import { createClock } from './clock.js';
 import { readNotes, VersionError } from './wire.js';
-import { createRoll, createStrip, ramp, rgb, mix, css, ROLL } from './roll.js';
+import { createRoll, createStrip, ramp, fade, rgb, mix, css, cssAlpha, ROLL } from './roll.js';
 import { createScore } from './score.js';
 
 /** The split's rules, as the tablet's SplitRules: stops, minimums, hiding past them, the 2 % nudge. */
@@ -95,6 +97,7 @@ export function mountViews(holder, api, host) {
   }
   let colours = null;
   let look = null;
+  let immersive = !!(host.immersive && host.immersive());
   let reduced = reducedQuery.matches;
   clock.setReduced(reduced);
   score.setReduced(reduced);
@@ -109,18 +112,52 @@ export function mountViews(holder, api, host) {
       surface: v('--surface'), elevated: v('--elevated'), hairline: v('--hairline'), primary: v('--primary'),
       secondary: v('--secondary'), tertiary: v('--tertiary'), sounding: v('--sounding'),
       handLeft: v('--hand-left'), handRight: v('--hand-right'), sans: v('--sans') || 'system-ui, sans-serif',
+      // Over the cover the roll is the camera body's whatever the appearance (v1.18 — M47).
+      ink: {
+        surface: v('--ink-surface'), elevated: v('--ink-elevated'), primary: v('--ink-primary'),
+        sounding: v('--ink-sounding'), handLeft: v('--ink-hand-left'), handRight: v('--ink-hand-right'),
+      },
     };
     score.setColours(colours);
     look = null;
     kick();
   }
 
-  /** How the roll looks now: its style, the hands, fingering and chords sent, Hand colours. */
+  /** How the roll looks now: its style, the hands, fingering and chords sent, Hand colours, over the cover or not. */
   function lookNow() {
     if (look) return look;
     const display = (state && state.display) || {};
     const handsKnown = !!(notes && notes.hand);
     const tinted = !!display.handColours && handsKnown;
+    if (immersive) {
+      // No card: the notes light over the backdrop (the right hand, or every note when the hands aren't known, at 92 %,
+      // the left at 50 %; with Hand colours the ink's two), a sounding key yellow, a light line where notes land.
+      const ink = colours.ink;
+      const light = rgb(ink.primary);
+      const right = rgb(ink.handRight);
+      const left = rgb(ink.handLeft);
+      look = {
+        immersive: true,
+        paper: display.rollStyle !== 'falling',
+        colors: { ...colours, surface: ink.surface, elevated: ink.elevated, primary: ink.primary },
+        hands: handsKnown,
+        fingers: !!(notes && notes.finger),
+        chords: !!(notes && notes.m > 0),
+        ramp: tinted ? ramp(ink.handRight, css(mix(right, light, ROLL.HAND_SOUNDING_MIX))) : fade(light, ROLL.LIGHT_RIGHT, 1),
+        leftRamp: tinted ? ramp(ink.handLeft, css(mix(left, light, ROLL.HAND_SOUNDING_MIX))) : fade(light, ROLL.LIGHT_LEFT, ROLL.LIGHT_LEFT_SOUNDING),
+        pressed: tinted ? css(mix(right, light, ROLL.HAND_SOUNDING_MIX)) : ink.sounding,
+        pressedLeft: tinted ? css(mix(left, light, ROLL.HAND_SOUNDING_MIX)) : ink.sounding,
+        line: cssAlpha(light, ROLL.LIGHT_LINE),
+        keyWhite: ink.primary,
+        keyBlack: ink.surface,
+        chordBox: cssAlpha(rgb(ink.surface), ROLL.CHORD_SHADE),
+        numeralFont: 11,
+        chordFont: 11,
+        sans: colours.sans,
+        flip: reduced ? 0 : ROLL.FLIP_MS,
+      };
+      return look;
+    }
     const primary = rgb(colours.primary);
     const right = rgb(colours.handRight);
     const left = rgb(colours.handLeft);
@@ -158,16 +195,15 @@ export function mountViews(holder, api, host) {
     return !!(state && state.player.piece && state.player.views);
   }
 
-  /** What shows: on wide screens both views (the split); on phones the one chosen in app.js's switch, or the art. */
+  /** What shows, as app.js's switch says: the notes; the score (from 900 px with the notes, the split); or the art. */
   function layout() {
     const piece = hasPiece();
-    const isWide = wide.matches;
-    const phoneView = host.phoneView();
-    const on = piece && (isWide || phoneView !== 'art');
+    const view = host.view();
+    const on = piece && view !== 'art';
     holder.hidden = !on;
     holder.closest('.now').classList.toggle('views-on', on);
     viewButton.hidden = !on;
-    panes.dataset.mode = isWide ? 'split' : phoneView;
+    panes.dataset.mode = view !== 'score' ? 'notes' : wide.matches ? 'split' : 'score';
     applySplit();
     if (!on) closeMenu();
   }
@@ -208,14 +244,14 @@ export function mountViews(holder, api, host) {
   let live = null;   // the share while a finger or the mouse moves the divider
 
   function applySplit() {
-    const isWide = wide.matches;
+    const split = panes.dataset.mode === 'split';
     const s = live !== null ? live : held(shareNow());
     panes.dataset.axis = axis;
     panes.style.setProperty('--split', String(s));
-    const hidden = !isWide ? null : s <= 0 ? 'score' : s >= 1 ? 'roll' : null;
+    const hidden = !split ? null : s <= 0 ? 'score' : s >= 1 ? 'roll' : null;
     if (hidden) panes.dataset.hidden = hidden;
     else delete panes.dataset.hidden;
-    handle.hidden = !isWide;
+    handle.hidden = !split;
     handle.setAttribute('aria-orientation', axis === 'side' ? 'vertical' : 'horizontal');
     handle.setAttribute('aria-valuenow', String(Math.round(s * 100)));
     handle.setAttribute('aria-valuetext', stateText(s));
@@ -244,7 +280,7 @@ export function mountViews(holder, api, host) {
   let dragging = false;
   let dragFrom = 0;
   handle.addEventListener('pointerdown', (event) => {
-    if (!wide.matches) return;
+    if (panes.dataset.mode !== 'split') return;
     dragging = true;
     handle.setPointerCapture(event.pointerId);
     const box = panes.getBoundingClientRect();
@@ -482,9 +518,16 @@ export function mountViews(holder, api, host) {
       clock.sample({ positionMs: message.positionMs, at: message.at, playing: message.playing !== undefined ? message.playing : state.player.status === 'playing', tempoPct: message.tempoPct, durationMs: piece ? piece.durationMs : 0 });
       kick();
     },
-    /** The phone's choice changed (Art · Notes · Score), or the window crossed 900 px. */
+    /** The switch's choice changed (Art · Notes · Score), or the window crossed 900 px. */
     layout() {
       layout();
+      kick();
+    },
+    /** Whether the panel is immersive (the cover behind it): the roll is drawn for it, or on its card. */
+    immersive(on) {
+      if (on === immersive) return;
+      immersive = on;
+      look = null;
       kick();
     },
     /** Whether Now playing is the section shown. */

@@ -7,15 +7,17 @@
    Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
    ============================================================================ */
 
-/* The web panel, the request page and the poster (DESIGN.md › v1.5.1 — M18): the app's own
-   monochrome language. The two palettes below are ui/theme/Color.kt's tokens, value for value
-   (WebAssetsTest checks them): the paper roll in light, the camera body in dark, as the
-   system says unless the panel's Appearance control says otherwise (data-theme on <html>). No
-   surface is pure black or pure white. Red means one thing: live, and only the dot uses it.
-   Liquid Glass (DESIGN.md › v1.9) as the app has it: the functional layer (the section list, the tab
-   strip, menus, the toast, the PIN gate's card, the editors' sheets) is the surface over a 24 px blur
-   of what lies beneath, at 72 % for bars and 86 % for sheets, menus and dialogs, with a hairline and
-   a faint specular line; content is never glass. */
+/* The web panel, the request page and the poster (DESIGN.md › v1.5.1 — M18; the panel's look, v1.18 — M47): the app's
+   own monochrome language. The two palettes below are ui/theme/Color.kt's tokens, value for value (WebAssetsTest checks
+   them): the paper roll in light, the camera body in dark. The panel starts dark (data-theme="dark" on <html>) unless its
+   Appearance says Light or Follow system; the request page follows the system and the poster is paper. No surface is
+   pure black or pure white. Red means one thing: live, and only the dot uses it; amber (--attention) means one thing:
+   needs attention.
+   Liquid Glass (DESIGN.md › v1.9) as the app has it: the functional layer (the rail, the tab strip and bar, capsules,
+   menus, popovers, the toast, the PIN gate's card, the sheets) is the surface over a 24 px blur of what lies beneath,
+   at 72 % for bars and 86 % for sheets, menus and dialogs, with a hairline and a faint specular line; content is never
+   glass. Over the cover (Now playing's backdrop) the panel is immersive: glass is a black tint at 26 % over a 30 px
+   blur with a light edge, and the words are the ink's primary colour in both appearances. */
 
 :root {
   /* Light: the paper roll */
@@ -27,6 +29,8 @@
   --paper-secondary: #5C5851;
   --paper-tertiary: #6E6A62;
   --paper-live: #C81E28;
+  /* Needs attention (v1.18 — M47), and nothing else: AttentionPaper, 4.8:1 on the paper. */
+  --paper-attention: #9A5B00;
   /* Dark: the camera body */
   --ink-surface: #0E0E0E;
   --ink-elevated: #1A1A1A;
@@ -36,6 +40,8 @@
   --ink-secondary: #A3A3A3;
   --ink-tertiary: #8A8A8A;
   --ink-live: #D9232E;
+  /* AttentionInk, 8.8:1 on the camera body. */
+  --ink-attention: #E6A23C;
   /* The views (v1.13 — M32): the score's sounding yellow, and the two hands (Hand colours), each appearance's own. */
   --paper-sounding: #9C7A00;
   --paper-hand-left: #3D6C50;
@@ -52,15 +58,13 @@
   --secondary: var(--paper-secondary);
   --tertiary: var(--paper-tertiary);
   --live: var(--paper-live);
+  --attention: var(--paper-attention);
   --sounding: var(--paper-sounding);
   --hand-left: var(--paper-hand-left);
   --hand-right: var(--paper-hand-right);
   /* The segmented control's thumb (v1.14 — M37): lighter than its track in both appearances, the paper's elevated
      surface here, the content colour at 18 % on the camera body. */
   --thumb: var(--paper-elevated);
-  /* Now playing's album colours (v1.15 — M41, ui/theme/Backdrop.kt): the discs' lightness and the veil over them. */
-  --bd-l: 45%;
-  --bd-veil: 55%;
   color-scheme: light;
 
   /* The glass (ui/theme/Glass.kt's GlassTokens): the fills, the blur, the scroll-edge band and the
@@ -74,10 +78,28 @@
   --ink-specular: hsl(0 0% 100% / 0.10);
   --specular: var(--paper-specular);
 
+  /* Over the cover (v1.18 — M47): the glass's black tint and blur, its light edge and line; the words' second and third
+     tones (the ink's light at 78 % and 60 %, for text on glass and for large text). */
+  --immersive-glass: hsl(0 0% 0% / 0.26);
+  --immersive-blur: 30px;
+  --immersive-edge: hsl(0 0% 100% / 0.14);
+  --immersive-specular: hsl(0 0% 100% / 0.12);
+  --immersive-secondary: hsl(0 0% 95% / 0.78);
+  --immersive-tertiary: hsl(0 0% 95% / 0.6);
+
+  /* The appearance's own, kept for what stays itself over the cover: the score's sheet. */
+  --sheet-surface: var(--surface);
+  --sheet-elevated: var(--elevated);
+  --sheet-hairline: var(--hairline);
+  --sheet-disabled: var(--disabled);
+  --sheet-primary: var(--primary);
+  --sheet-secondary: var(--secondary);
+  --sheet-tertiary: var(--tertiary);
+
   --row: 56px;
-  --inset: 16px;
-  --radius-control: 8px;
-  --radius-card: 12px;
+  --inset: 20px;
+  --radius-control: 10px;
+  --radius-card: 18px;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
@@ -91,13 +113,12 @@
     --secondary: var(--ink-secondary);
     --tertiary: var(--ink-tertiary);
     --live: var(--ink-live);
+    --attention: var(--ink-attention);
     --specular: var(--ink-specular);
     --sounding: var(--ink-sounding);
     --hand-left: var(--ink-hand-left);
     --hand-right: var(--ink-hand-right);
     --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
-    --bd-l: 32%;
-    --bd-veil: 62%;
     color-scheme: dark;
   }
 }
@@ -111,13 +132,12 @@
   --secondary: var(--ink-secondary);
   --tertiary: var(--ink-tertiary);
   --live: var(--ink-live);
+  --attention: var(--ink-attention);
   --specular: var(--ink-specular);
   --sounding: var(--ink-sounding);
   --hand-left: var(--ink-hand-left);
   --hand-right: var(--ink-hand-right);
   --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
-  --bd-l: 32%;
-  --bd-veil: 62%;
   color-scheme: dark;
 }
 
@@ -170,43 +190,69 @@ button, input, select { font: inherit; color: inherit; }
 
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-.glyph { width: 24px; height: 24px; fill: currentColor; flex: none; }
+.glyph { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
-.glyph-stroke { fill: none; stroke: currentColor; stroke-width: 2; }
+/* The stroke glyphs (the panel's sections and pages, v1.18 — M47; shuffle's and repeat's lines). */
+.glyph-stroke { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---- Controls ------------------------------------------------------------------------------ */
+.stack { display: grid; gap: 16px; }
 
-/* The app's action control: an outlined button, a hairline in the tertiary grey, the label in the content colour. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- Controls (v1.18 — M47: the shared classes the pages and the Settings and System modules use) ---- */
+
+/* The app's action control: an outlined capsule, its label in the content colour; .filled for the one primary action. */
 .outlined {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 40px;
-  padding: 0 20px;
-  border: 1px solid var(--tertiary);
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
   border-radius: 999px;
   background: transparent;
   color: var(--primary);
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 160ms;
 }
 
-.outlined:disabled { border-color: var(--hairline); color: var(--secondary); cursor: default; }
+.outlined:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+
+.outlined .glyph { width: 18px; height: 18px; }
+
+.outlined:disabled { border-color: var(--hairline); background: transparent; color: var(--secondary); cursor: default; }
+
+.filled { border-color: var(--primary); background: var(--primary); color: var(--surface); }
+
+.filled:hover { background: color-mix(in srgb, var(--primary) 88%, var(--surface)); }
+
+.filled:disabled { border-color: var(--disabled); background: var(--disabled); color: var(--surface); }
 
 .text-button {
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--primary);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
+
+.text-button:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
 
 .icon-button {
   display: inline-flex;
@@ -223,9 +269,15 @@ button, input, select { font: inherit; color: inherit; }
   flex: none;
 }
 
+.icon-button .glyph { width: 24px; height: 24px; }
+
+.icon-button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+
 .icon-button:disabled { color: var(--disabled); cursor: default; }
 
 .icon-button.small { width: 40px; height: 40px; }
+
+.icon-button.small .glyph { width: 22px; height: 22px; }
 
 /* Shuffle and Repeat: tertiary when off, primary with a 4 px dot beneath when on. */
 .mode { position: relative; color: var(--tertiary); }
@@ -244,43 +296,40 @@ button, input, select { font: inherit; color: inherit; }
   background: currentColor;
 }
 
-/* A row of chips; the chosen one carries a check. */
+/* A row of chips; the chosen one carries a check on the thumb's tone. */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
+  border-radius: 999px;
   background: transparent;
   color: var(--secondary);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .chip[aria-pressed="true"], .chip[aria-checked="true"] {
-  border-color: var(--tertiary);
-  background: var(--elevated);
+  background: var(--thumb);
   color: var(--primary);
-  padding-left: 8px;
+  padding-left: 10px;
 }
 
 .chip .glyph { width: 18px; height: 18px; }
 
 .chip:disabled { color: var(--disabled); cursor: default; }
 
-/* The genre switch (v1.14 — M37), the tablet's segmented control: a capsule track (the content colour at 8 % over
-   the surface) with a hairline, three equal segments; the pressed one is a lighter thumb with a hairline, its label
-   in the primary colour and medium weight, the others secondary. Solid, never glass. */
+/* The segmented control (v1.14 — M37, the tablet's): a capsule track (the content colour at 8 % over the surface) with a
+   hairline; the pressed segment is a lighter thumb with a hairline, its label in the primary colour and medium weight. */
 .segmented {
-  display: flex;
+  display: inline-flex;
   gap: 2px;
-  min-height: 36px;
   padding: 2px;
   border: 1px solid var(--hairline);
   border-radius: 999px;
@@ -288,22 +337,19 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 .segmented button {
-  flex: 1 1 0;
   min-width: 0;
   min-height: 30px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
   color: var(--secondary);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 20px;
   font-weight: 400;
   letter-spacing: 0.1px;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: background-color 160ms, border-color 160ms, color 160ms;
 }
 
@@ -314,36 +360,37 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 500;
 }
 
-/* Monochrome switches, as the app's: an outlined track when off, the content colour when on. */
+/* A switch: a track of the content colour at 18 %, the knob secondary; on, the content colour with the knob the surface. */
 .switch {
   position: relative;
   flex: none;
-  width: 52px;
-  height: 32px;
+  width: 50px;
+  height: 30px;
   padding: 0;
-  border: 2px solid var(--tertiary);
-  border-radius: 16px;
-  background: var(--surface);
+  border: 0;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface));
   cursor: pointer;
+  transition: background-color 160ms;
 }
 
 .switch::after {
   content: "";
   position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 16px;
-  height: 16px;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--secondary);
-  transition: left 120ms ease-out, width 120ms, height 120ms, top 120ms;
+  transition: transform 160ms, background-color 160ms;
 }
 
-.switch[aria-checked="true"] { border-color: var(--primary); background: var(--primary); }
+.switch[aria-checked="true"] { background: var(--primary); }
 
-.switch[aria-checked="true"]::after { top: 2px; left: 22px; width: 24px; height: 24px; background: var(--surface); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); background: var(--surface); }
 
-.switch:disabled { border-color: var(--disabled); cursor: default; }
+.switch:disabled { background: color-mix(in srgb, var(--disabled) 30%, var(--surface)); cursor: default; }
 
 .switch:disabled::after { background: var(--disabled); }
 
@@ -351,62 +398,192 @@ button, input, select { font: inherit; color: inherit; }
 
 .switch[aria-checked="true"]:disabled::after { background: var(--surface); }
 
-/* A hairline slider with the value beside it. */
+/* A native slider: a 4 px track filled to its value (--fill, set through the CSSOM), a 20 px thumb. */
 .range {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 32px;
+  height: 28px;
   margin: 0;
   background: transparent;
   cursor: pointer;
   --fill: 0%;
+  --track: 4px;
+  --knob: 20px;
+  --rest: color-mix(in srgb, var(--primary) 16%, transparent);
 }
 
 .range::-webkit-slider-runnable-track {
-  height: 2px;
-  border-radius: 1px;
-  background: linear-gradient(to right, var(--primary) var(--fill), var(--hairline) var(--fill));
+  height: var(--track);
+  border-radius: calc(var(--track) / 2);
+  background: linear-gradient(to right, var(--primary) var(--fill), var(--rest) var(--fill));
 }
 
-.range::-moz-range-track { height: 2px; border-radius: 1px; background: var(--hairline); }
+.range::-moz-range-track { height: var(--track); border-radius: calc(var(--track) / 2); background: var(--rest); }
 
-.range::-moz-range-progress { height: 2px; background: var(--primary); }
+.range::-moz-range-progress { height: var(--track); border-radius: calc(var(--track) / 2); background: var(--primary); }
 
 .range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: -5px;
+  width: var(--knob);
+  height: var(--knob);
+  margin-top: calc((var(--track) - var(--knob)) / 2);
   border: 0;
   border-radius: 50%;
   background: var(--primary);
+  box-shadow: 0 1px 4px hsl(0 0% 0% / 0.4);
 }
 
-.range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--primary); }
+.range::-moz-range-thumb { width: var(--knob); height: var(--knob); border: 0; border-radius: 50%; background: var(--primary); box-shadow: 0 1px 4px hsl(0 0% 0% / 0.4); }
 
 .range:disabled { cursor: default; }
 
-.range:disabled::-webkit-slider-thumb { background: var(--disabled); }
+.range:disabled::-webkit-slider-thumb { background: var(--disabled); box-shadow: none; }
 
+.range:disabled::-moz-range-thumb { background: var(--disabled); box-shadow: none; }
+
+/* A field: a capsule on the elevated surface; as a holder (a glyph and an <input>) or as the input itself. */
 .field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  min-height: 48px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 0 16px;
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
+  border-radius: 999px;
   background: var(--elevated);
   color: var(--primary);
+  font-size: 15px;
 }
 
-.field:focus { border-color: var(--tertiary); outline: none; }
+.field:focus, .field:focus-within { border-color: var(--tertiary); }
 
-.stepper { display: inline-flex; align-items: center; }
+.field:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-.stepper .value { min-width: 64px; text-align: center; font-size: 15px; font-weight: 500; }
+.field > .glyph { color: var(--tertiary); }
 
-/* ---- The live dot -------------------------------------------------------------------------- */
+.field > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.field::placeholder, .field > input::placeholder { color: var(--tertiary); }
+
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--hairline); border-radius: 999px; }
+
+.stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stepper button .glyph, .stepper .icon-button .glyph { width: 20px; height: 20px; }
+
+.stepper .value { min-width: 58px; text-align: center; font-size: 14px; font-weight: 600; }
+
+/* A capsule: a small glass pill for a state or a quick control (the page heads' tools, Now playing's row). */
+.capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.capsule .glyph { width: 16px; height: 16px; }
+
+.capsule b { font-weight: 600; }
+
+.capsule.button { cursor: pointer; font-family: inherit; }
+
+/* Glass: the surface at the bar's fill over the blur, a light edge, the specular line. */
+.glass {
+  background: color-mix(in srgb, var(--surface) var(--glass-bar), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  box-shadow: inset 0 1px 0 var(--specular);
+  border: 1px solid color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+/* A card: content on the elevated surface, 18 px corners, a hairline and the specular line. */
+.card {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--elevated);
+  box-shadow: inset 0 1px 0 var(--specular);
+}
+
+.card:empty { display: none; }
+
+.card-head { display: flex; align-items: baseline; gap: 10px; padding: 16px var(--inset) 6px; }
+
+.card-head h2 { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.1px; }
+
+.card-head .meta { margin-left: auto; text-align: right; }
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: var(--row);
+  padding: 10px var(--inset);
+  border-top: 1px solid var(--hairline);
+}
+
+.setting:first-of-type { border-top: 0; }
+
+.setting .label { flex: 1; min-width: 0; }
+
+.setting .label .eyebrow, .setting .label .meta { display: block; }
+
+.setting.stacked { flex-direction: column; align-items: stretch; gap: 6px; }
+
+.setting .with-value { display: flex; align-items: center; gap: 14px; }
+
+.setting .with-value .value { min-width: 60px; text-align: right; font-weight: 600; font-size: 14px; }
+
+.setting.disabled .label { color: var(--secondary); }
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  vertical-align: 1px;
+}
+
+.tag.attention { border-color: color-mix(in srgb, var(--attention) 55%, transparent); color: var(--attention); }
+
+/* ---- The dots: live (red, the dot's alone), on, needs attention ---------------------------------- */
 
 .dot {
   display: inline-block;
@@ -420,15 +597,13 @@ button, input, select { font: inherit; color: inherit; }
 
 .dot.live { border-color: var(--live); background: var(--live); }
 
+.dot.on { border-color: var(--primary); background: var(--primary); }
+
+.dot.attention { border-color: var(--attention); background: var(--attention); }
+
 .dot.live.breathing { animation: breathe 2000ms ease-in-out infinite alternate; }
 
 @keyframes breathe { from { opacity: 1; } to { opacity: 0.55; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .dot.live.breathing { animation: none; }
-  .switch::after { transition: none; }
-  .segmented button { transition: none; }
-}
 
 /* More contrast: the thumb's edge in the content colour, so it never rests on its fill alone. */
 @media (prefers-contrast: more) {
@@ -439,6 +614,8 @@ button, input, select { font: inherit; color: inherit; }
 
 .rows { list-style: none; margin: 0; padding: 0; }
 
+.rows.card { overflow: hidden; }
+
 .row {
   display: flex;
   align-items: center;
@@ -448,6 +625,8 @@ button, input, select { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--hairline);
 }
 
+.card > .row:last-child, .card .rows > .row:last-child { border-bottom: 0; }
+
 .row .text { flex: 1; min-width: 0; }
 
 .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -456,58 +635,18 @@ button, input, select { font: inherit; color: inherit; }
 
 .row.clickable { cursor: pointer; }
 
-.row.clickable:hover { background: var(--elevated); }
+.row.clickable:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); }
 
-.row.dragging { background: var(--elevated); opacity: 0.8; }
+.row.dragging { background: color-mix(in srgb, var(--primary) 8%, transparent); opacity: 0.8; }
 
 .row.drop-before { box-shadow: inset 0 2px 0 var(--primary); }
 
-.tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--tertiary);
-  vertical-align: 1px;
-}
+.section-head { padding: 22px 4px 8px; }
 
-.section-head {
-  padding: 24px var(--inset) 8px;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.setting {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: var(--row);
-  padding: 8px var(--inset);
-  border-bottom: 1px solid var(--hairline);
-  margin-left: var(--inset);
-  padding-left: 0;
-}
-
-.setting .label { flex: 1; min-width: 0; }
-
-.setting .label .eyebrow { display: block; }
-
-.setting.stacked { flex-direction: column; align-items: stretch; gap: 4px; }
-
-.setting.stacked .with-value { display: flex; align-items: center; gap: 12px; }
-
-.setting.stacked .with-value .value { min-width: 56px; text-align: right; font-size: 15px; font-weight: 500; }
-
-.setting.disabled .label { color: var(--secondary); }
-
-.actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px var(--inset); border-bottom: 1px solid var(--hairline); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px var(--inset); }
 
 .banner {
-  margin: 16px var(--inset);
+  margin: 16px 0;
   padding: 16px;
   border: 1px solid var(--primary);
   border-radius: var(--radius-card);
@@ -515,10 +654,10 @@ button, input, select { font: inherit; color: inherit; }
 
 .empty { padding: 48px var(--inset); color: var(--secondary); text-align: center; }
 
-/* A line of the page at the row's 16 px inset. */
+/* A line of the page at the rows' inset. */
 .inset { padding: 8px var(--inset); }
 
-/* A line at the foot of the window for what a tap did. */
+/* A line at the foot of the window for what a tap did: a sheet's glass. */
 .toast {
   position: fixed;
   left: 0;
@@ -527,10 +666,15 @@ button, input, select { font: inherit; color: inherit; }
   z-index: 20;
   max-width: 480px;
   margin: 0 auto;
+  padding: 12px 18px;
+  border-color: var(--hairline);
+  border-radius: 16px;
   background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
-  box-shadow: inset 0 1px 0 var(--specular);
+  box-shadow: inset 0 1px 0 var(--specular), 0 12px 32px -16px hsl(0 0% 0% / 0.5);
+  font-size: 15px;
+  line-height: 21px;
 }
 
 @media (max-width: 511px) {
@@ -544,11 +688,12 @@ button, input, select { font: inherit; color: inherit; }
 
 .art {
   position: relative;
+  display: block;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   overflow: hidden;
-  border-radius: var(--radius-control);
+  border-radius: 9px;
   background: var(--elevated);
 }
 
@@ -556,7 +701,7 @@ button, input, select { font: inherit; color: inherit; }
   content: "";
   position: absolute;
   inset: 0;
-  border: 1px solid var(--hairline);
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
   border-radius: inherit;
   pointer-events: none;
 }
@@ -584,7 +729,7 @@ button, input, select { font: inherit; color: inherit; }
   align-items: center;
   justify-content: center;
   color: var(--secondary);
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 500;
 }
 
@@ -594,11 +739,7 @@ button, input, select { font: inherit; color: inherit; }
 .art .picture.shown { opacity: 1; }
 .art.pictured .monogram { visibility: hidden; transition: visibility 0s linear 160ms; }
 
-@media (prefers-reduced-motion: reduce) {
-  .art .picture, .art.pictured .monogram { transition: none; }
-}
-
-/* ---- The PIN gate -------------------------------------------------------------------------- */
+/* ---- The PIN gate and the offline card -------------------------------------------------------- */
 
 .gate {
   min-height: 100vh;
@@ -607,11 +748,13 @@ button, input, select { font: inherit; color: inherit; }
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 32px var(--inset);
+  padding: 32px 16px;
   text-align: center;
 }
 
 .gate-form { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 16px; }
+
+.gate-form .outlined { min-width: 160px; min-height: 44px; font-size: 15px; }
 
 /* The gate's card: a sheet's glass, laid on the page (nothing passes beneath it, so it is the surface
    with its hairline and specular line). */
@@ -631,12 +774,14 @@ button, input, select { font: inherit; color: inherit; }
   box-shadow: inset 0 1px 0 var(--specular);
 }
 
+.gate-card .display { font-weight: 600; }
+
 .pin-field {
   width: 240px;
   height: 56px;
   padding: 0 16px;
   border: 1px solid var(--tertiary);
-  border-radius: var(--radius-control);
+  border-radius: 16px;
   background: var(--elevated);
   color: var(--primary);
   font-size: 28px;
@@ -644,193 +789,413 @@ button, input, select { font: inherit; color: inherit; }
   text-align: center;
 }
 
-.pin-field:focus { border-color: var(--primary); outline: none; }
-
-/* ---- The panel's frame ----------------------------------------------------------------------- */
-
-.panel { min-height: 100vh; }
-
-/* The tab strip (narrow) and the section list (wide) are the panel's bar and rail, on glass. Narrow,
-   the page scrolls beneath the strip: the bar's fill over the blur, the hairline and the specular line
-   along its bottom edge. The scroll-edge effect: once the page is scrolled (.scrolled, app.js), the
-   content fades into the strip over 24 px and the frost thickens inside its edge. */
-.sections {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background-color: color-mix(in srgb, var(--surface) var(--glass-bar), transparent);
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
-  border-bottom: 1px solid var(--hairline);
-  box-shadow: inset 0 -1px 0 var(--specular);
-}
-
-.sections::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
-  height: var(--glass-band);
-  margin-top: 1px;
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--surface) var(--glass-sheet), transparent), color-mix(in srgb, var(--surface) 0%, transparent));
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease-out;
-}
-
-.panel.scrolled .sections::after { opacity: 1; }
-
-.panel.scrolled .sections {
-  background-image: linear-gradient(to bottom, transparent calc(100% - var(--glass-band)), color-mix(in srgb, var(--surface) 50%, transparent));
-}
-
-/* Text on a bar's glass with content beneath it is the content colour, as the app's (the secondary grey
-   reads 3.1:1 over the worst backdrop there); the chosen tab keeps its underline. At rest, today's greys. */
-.panel.scrolled .section-tab, .panel.scrolled .connection { color: var(--primary); }
+.pin-field:focus { border-color: var(--primary); }
 
 /* On a sheet's glass the tertiary grey gives way to the secondary, which reads 4.5:1 there, as the app's. */
-.gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow { color: var(--secondary); }
+.gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow, .sheet .eyebrow { color: var(--secondary); }
 
-.identity { padding: 12px var(--inset) 4px; }
+/* ---- Menus, popovers, the sheets and the dialog ---------------------------------------------- */
 
-.piano-name { font-size: 17px; font-weight: 500; }
-
-.connection { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 13px; line-height: 18px; }
-
-.section-list {
-  display: flex;
-  gap: 4px;
-  margin: 0;
-  padding: 0 8px;
-  list-style: none;
-  overflow-x: auto;
-  scrollbar-width: none;
+/* A row's menu: Play, Play next, Add to queue. */
+.menu {
+  position: fixed;
+  z-index: 10;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
+  font-size: 15px;
+  line-height: 22px;
 }
 
-.section-list::-webkit-scrollbar { display: none; }
-
-.section-tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.menu button {
+  display: block;
+  width: 100%;
   min-height: 44px;
-  padding: 0 10px;
+  padding: 0 14px;
   border: 0;
+  border-radius: 9px;
   background: transparent;
-  color: var(--secondary);
+  color: var(--primary);
   font-size: 15px;
-  font-weight: 500;
-  white-space: nowrap;
+  text-align: left;
   cursor: pointer;
 }
 
-.section-tab[aria-selected="true"] { color: var(--primary); }
+.menu button:hover, .menu button:focus-visible { background: color-mix(in srgb, var(--primary) 8%, transparent); }
 
-.section-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
-  height: 2px;
-  background: var(--primary);
+/* A volume's popover (v1.18 — M47): its slider over its capsule, positioned through the CSSOM. */
+.popover {
+  position: fixed;
+  z-index: 12;
+  display: grid;
+  gap: 6px;
+  width: 280px;
+  max-width: calc(100vw - 16px);
+  padding: 14px 18px 12px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  box-shadow: inset 0 1px 0 var(--specular), 0 18px 40px -18px hsl(0 0% 0% / 0.55);
 }
 
+.popover-title { font-size: 13px; line-height: 18px; font-weight: 600; }
+
+/* The sheets (the editors' glass): the phone's More sheet, and the dialog the modules ask for (host.confirm). */
+.sheet, .confirm {
+  padding: 0;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 0 var(--specular), 0 24px 60px -24px hsl(0 0% 0% / 0.55);
+  color: var(--primary);
+  font: 400 15px/22px var(--sans);
+}
+
+.sheet::backdrop, .confirm::backdrop { background: hsl(0 0% 0% / 0.32); }
+
+.confirm { width: min(400px, calc(100vw - 32px)); border-radius: 22px; }
+
+.confirm-body { display: grid; gap: 8px; padding: 22px 22px 18px; }
+
+.confirm-body h2 { font-size: 19px; line-height: 24px; font-weight: 600; }
+
+.confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+
+/* ---- The frame (v1.18 — M47) ------------------------------------------------------------------------
+   From 900 px a glass rail at the left (236 px, 22 px corners, 12 px from the window's edges): the piano's name and the
+   connection line, the sections in four groups under engraved headings, each a glyph and a label, the selected one on
+   the content colour at 12 %, and at its foot the System module's vitals. Below 900 px today's sticky glass strip of
+   tabs, 44 px tall; below 600 px the name over the page and the sections in a glass bar at the foot. */
+
+.panel { position: relative; isolation: isolate; min-height: 100vh; color: var(--primary); font: 400 15px/22px var(--sans); }
+
+.sections { z-index: 3; }
+
+.identity { padding: 12px var(--inset) 4px; }
+
+.piano-name { font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -0.2px; }
+
+.connection { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 13px; line-height: 18px; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms, color 160ms;
+}
+
+.nav-item:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); color: var(--primary); }
+
+.nav-item[aria-current="page"], .nav-item[aria-selected="true"] { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
+
 .count {
+  margin-left: auto;
   min-width: 20px;
   padding: 0 6px;
-  border: 1px solid var(--tertiary);
   border-radius: 10px;
+  background: var(--primary);
+  color: var(--surface);
   font-size: 12px;
   line-height: 18px;
   text-align: center;
-  color: var(--primary);
+  font-weight: 600;
 }
 
-.frame-foot { display: none; }
+.rail-foot { display: none; }
 
-.page-foot { padding: 32px var(--inset) 48px; display: flex; flex-direction: column; gap: 16px; }
+.vital { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 18px; color: var(--secondary); }
 
-.page { min-width: 0; }
+.vital b { color: var(--primary); font-weight: 600; margin-left: auto; }
 
-.page-head { display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 12px var(--inset) 8px; }
+.vital .glyph { width: 18px; height: 18px; }
 
-.page-head h1 { flex: 1; min-width: 0; }
+.tab-bar { display: none; }
 
-.content { max-width: 720px; }
+.page { min-width: 0; padding: 8px 16px 40px; }
 
-/* Wide screens: the sections as a 200 px list at the left, the page beside it. */
-@media (min-width: 900px) {
-  .panel { display: grid; grid-template-columns: 200px minmax(0, 1fr); }
-  /* Wide, the section list is the rail: nothing passes beneath it, so it is glass without a blur (the
-     surface, as the app's rail), its hairline and specular line along its end, today's greys on it; the
-     page meets it over its own 16 px margin, fading into it. */
+.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 56px; margin-bottom: 6px; }
+
+.page-head h1 { flex: 1; min-width: 0; font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.4px; }
+
+.head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+
+.head-tools:empty { display: none; }
+
+.content { max-width: 760px; }
+
+.page-foot { padding: 32px 4px 8px; }
+
+.now:not([hidden]) ~ .page-foot { display: none; }
+
+/* Below 900 px: the strip. Narrow, the page scrolls beneath it: the bar's fill over the blur, the hairline and the
+   specular line along its bottom edge. The scroll-edge effect: once the page is scrolled (.scrolled, app.js), the
+   content fades into the strip over 24 px and the frost thickens inside its edge. */
+@media (max-width: 899px) {
   .sections {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    border-bottom: 0;
-    border-right: 1px solid var(--hairline);
-    background-color: var(--surface);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: inset -1px 0 0 var(--specular);
+    position: sticky;
+    top: 0;
+    background-color: color-mix(in srgb, var(--surface) var(--glass-bar), transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+    border-bottom: 1px solid var(--hairline);
+    box-shadow: inset 0 -1px 0 var(--specular);
   }
   .sections::after {
-    left: 100%;
-    right: auto;
-    top: 0;
-    bottom: 0;
-    width: var(--glass-rail-band);
-    height: auto;
-    margin-top: 0;
-    margin-left: 1px;
-    background: linear-gradient(to right, color-mix(in srgb, var(--surface) var(--glass-sheet), transparent), color-mix(in srgb, var(--surface) 0%, transparent));
-    opacity: 1;
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: var(--glass-band);
+    margin-top: 1px;
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--surface) var(--glass-sheet), transparent), color-mix(in srgb, var(--surface) 0%, transparent));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease-out;
   }
-  .panel.scrolled .sections { background-image: none; }
-  .panel.scrolled .section-tab { color: var(--secondary); }
-  .panel.scrolled .section-tab[aria-selected="true"] { color: var(--primary); }
-  .panel.scrolled .connection { color: var(--secondary); }
-  .identity { padding: 24px var(--inset) 16px; }
-  .section-list { flex-direction: column; gap: 0; padding: 8px 0; overflow: visible; }
-  .section-tab { width: 100%; min-height: 44px; padding: 0 var(--inset); justify-content: space-between; }
-  .section-tab[aria-selected="true"] { background: var(--elevated); }
-  .section-tab[aria-selected="true"]::after { display: none; }
-  .frame-foot { display: flex; flex-direction: column; gap: 16px; margin-top: auto; padding: 16px var(--inset) 24px; }
-  .page-foot { display: none; }
+  .panel.scrolled .sections::after { opacity: 1; }
+  .panel.scrolled .sections {
+    background-image: linear-gradient(to bottom, transparent calc(100% - var(--glass-band)), color-mix(in srgb, var(--surface) 50%, transparent));
+  }
+  /* Text on a bar's glass with content beneath it is the content colour, as the app's. */
+  .panel.scrolled .sections .nav-item, .panel.scrolled .connection { color: var(--primary); }
+  /* The rail's card is the strip itself here. */
+  .panel .sections .rail-card.glass {
+    border: 0;
+    border-radius: 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .section-list {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    padding: 0 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .section-list::-webkit-scrollbar { display: none; }
+  .nav-group { display: flex; flex: none; gap: 4px; }
+  .nav-group > .eyebrow { display: none; }
+  .sections .nav-item { width: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; white-space: nowrap; }
+  .sections .nav-item .glyph { display: none; }
 }
 
-/* ---- Now playing ------------------------------------------------------------------------------ */
+/* From 900 px: the rail. */
+@media (min-width: 900px) {
+  .panel { display: grid; grid-template-columns: 236px minmax(0, 1fr); }
+  .sections { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: 12px; }
+  .rail-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 18px 10px 14px;
+    border-radius: 22px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .identity { padding: 2px 10px 16px; }
+  .piano-name { font-size: 18px; }
+  .connection { margin-top: 4px; }
+  .nav-group { margin-top: 14px; }
+  .nav-group:first-child { margin-top: 0; }
+  .nav-group > .eyebrow { padding: 0 10px 6px; }
+  .rail-foot {
+    display: grid;
+    gap: 8px;
+    margin-top: auto;
+    padding: 12px 10px 0;
+    border-top: 1px solid color-mix(in srgb, var(--primary) 9%, transparent);
+  }
+  .rail-foot:empty { display: none; }
+  .page { padding: 14px 28px 40px 16px; }
+}
 
-.now { display: grid; gap: 24px; padding-bottom: 24px; }
+/* Up next is a section of its own only below 1100 px: from there it stands beside Now playing. */
+@media (min-width: 1100px) {
+  .nav-item.up-next-item { display: none; }
+}
 
-.now-main { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px var(--inset) 0; min-width: 0; }
+/* Phones: the name over the page, the sections in a glass bar at the foot (each a glyph over a label, 56 px tall), the
+   others in the More sheet; the page keeps the bar's height free at its foot. */
+@media (max-width: 599px) {
+  .sections {
+    position: static;
+    background: none;
+    border-bottom: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .sections::after { display: none; }
+  .section-list { display: none; }
+  .identity { padding: 14px 16px 0; }
+  .page { padding-bottom: calc(56px + 32px + env(safe-area-inset-bottom)); }
+  .page-head h1 { font-size: 24px; line-height: 30px; }
+  .toast { bottom: calc(56px + 12px + env(safe-area-inset-bottom)); }
+  .tab-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    height: calc(56px + env(safe-area-inset-bottom));
+    padding: 0 4px env(safe-area-inset-bottom);
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+  .tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--secondary);
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tab-pill { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 28px; border-radius: 14px; transition: background-color 160ms; }
+  .tab-item .glyph { width: 22px; height: 22px; }
+  .tab-item[aria-current="page"] { color: var(--primary); }
+  .tab-item[aria-current="page"] .tab-pill { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+  .more-sheet {
+    position: fixed;
+    inset: auto 8px calc(56px + 8px + env(safe-area-inset-bottom)) 8px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 56px - 32px);
+    margin: 0;
+    overflow: auto;
+    border-radius: 24px;
+  }
+  .sheet-body { display: grid; gap: 2px; padding: 14px 8px 8px; }
+  .sheet-body > .eyebrow { padding: 0 12px 6px; }
+  .more-sheet .nav-item { min-height: 48px; padding: 0 12px; }
+}
 
-.now-art { width: 160px; height: 160px; border-radius: var(--radius-card); margin-bottom: 8px; }
+/* ---- Now playing (v1.18 — M47) ------------------------------------------------------------------------
+   Art: a centred block as wide as the cover (min(54vh, 560px)): the cover (22 px corners, a deep soft shadow), the title
+   (34/40, 700, two lines at most), the composer (19 px, 600) and the channel after it, the scrubber (a 6 px track), the
+   transport (a 76 px play circle in the content colour), one row of glass capsules (Tempo, the volumes, the views'
+   switch), the instrument's lines beneath, small. Notes and Score: the strip at the top (the cover at 132 px, the title
+   38 px, the transport at the right), then the views. From 1100 px Up next beside it, a glass card. */
 
-.now-title { max-width: 100%; }
+.now-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 
-.starting { min-height: 16px; }
+.now-main {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  /* min(54vh, 560px), and on a window shorter than about 850 px no more than leaves the words and controls (392 px) in
+     sight, never under 240 px; never wider than the column. */
+  grid-template-columns: min(max(240px, min(54vh, 100vh - 392px)), 560px, 100%);
+  justify-content: center;
+  align-content: center;
+  padding: 0 12px 8px;
+}
 
-.scrubber { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; max-width: 560px; margin-top: 8px; }
+.now-hero { display: grid; min-width: 0; }
 
-.scrubber .time { font-size: 13px; color: var(--secondary); min-width: 40px; }
+.now-art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 22px;
+  box-shadow: 0 44px 90px -34px hsl(0 0% 0% / 0.8), 0 6px 18px hsl(0 0% 0% / 0.35);
+}
+
+.now-art .monogram { font-size: 96px; font-weight: 600; }
+
+.now-words { min-width: 0; }
+
+.now-title {
+  margin-top: 22px;
+  font-size: 34px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-wrap: balance;
+}
+
+.now-by {
+  margin-top: 2px;
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 600;
+  color: var(--secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.now-by:empty, .starting:empty { display: none; }
+
+.scrubber { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; margin-top: 14px; }
+
+.scrubber .time { min-width: 36px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--primary); }
 
 .scrubber .time:last-child { text-align: right; }
 
-.transport { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 560px; }
+/* The scrubber: a 6 px track, its thumb showing while hovered, held or focused. */
+.scrubber .range { --track: 6px; --knob: 14px; --rest: color-mix(in srgb, var(--primary) 22%, transparent); }
 
-/* The play control, the primary action: a 56 px circle filled in the content colour, the glyph in the
-   surface colour, as the app's (DESIGN.md › v1.9: never glass). */
+.scrubber .range::-webkit-slider-thumb { transform: scale(0); transition: transform 120ms ease-out; }
+
+.scrubber .range::-moz-range-thumb { transform: scale(0); transition: transform 120ms ease-out; }
+
+.scrubber .range:hover::-webkit-slider-thumb, .scrubber .range:active::-webkit-slider-thumb, .scrubber .range:focus-visible::-webkit-slider-thumb { transform: scale(1); }
+
+.scrubber .range:hover::-moz-range-thumb, .scrubber .range:active::-moz-range-thumb, .scrubber .range:focus-visible::-moz-range-thumb { transform: scale(1); }
+
+.transport { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+
+.transport .icon-button { width: 52px; height: 52px; }
+
+.transport .icon-button .glyph { width: 28px; height: 28px; }
+
+/* The play control, the primary action: a circle filled in the content colour, the glyph in the surface colour, as the
+   app's (DESIGN.md › v1.9: never glass). */
 .play-circle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  flex: none;
+  width: 76px;
+  height: 76px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -839,106 +1204,257 @@ button, input, select { font: inherit; color: inherit; }
   cursor: pointer;
 }
 
-.play-circle .glyph { width: 28px; height: 28px; }
+.play-circle .glyph { width: 34px; height: 34px; }
 
 .play-circle:disabled { background: var(--disabled); cursor: default; }
 
-.now-controls { width: 100%; max-width: 560px; margin-top: 8px; border-top: 1px solid var(--hairline); }
+/* The capsules share the block's width (a row that wraps stays even). */
+.quick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
 
-.now-controls .setting { margin-left: 0; padding-left: 0; padding-right: 0; }
+.quick > * { flex: 1 1 auto; }
 
-.link-line { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--secondary); font-size: 15px; }
+.quick .capsule { justify-content: center; min-height: 42px; padding: 0 16px; gap: 10px; font-size: 14px; }
 
-.now-side { min-width: 0; border-top: 1px solid var(--hairline); }
+.quick .segmented { display: flex; }
 
-/* Phones have Up next and Add as sections of their own; wide screens keep them beside Now playing. */
-@media (max-width: 899px) {
-  .now-side { display: none; }
+.quick .segmented button { flex: 1 1 auto; }
+
+.quick .capsule .glyph { width: 18px; height: 18px; }
+
+.quick .tempo-capsule { gap: 6px; padding: 0 4px 0 16px; }
+
+.tempo-capsule .stepper { border: 0; }
+
+.tempo-capsule .stepper button { width: 32px; }
+
+.tempo-capsule .stepper .value { min-width: 48px; }
+
+.segmented.glass { padding: 3px; border-color: color-mix(in srgb, var(--primary) 9%, transparent); }
+
+.quick .segmented button { min-height: 34px; padding: 0 16px; }
+
+/* The instrument's two lines, side by side where they fit. */
+.now-lines { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 14px; margin-top: 8px; text-align: center; }
+
+.now-lines:not(:has(> :not([hidden]))) { display: none; }
+
+/* Nothing loaded: today's line, centred, and the next schedule under it. */
+.now.unloaded .now-art, .now.unloaded .scrubber, .now.unloaded .transport, .now.unloaded .quick { display: none; }
+
+.now.unloaded .now-main { text-align: center; }
+
+.now.unloaded .now-title { margin-top: 0; font-size: 28px; line-height: 34px; font-weight: 500; letter-spacing: -0.3px; }
+
+.now.unloaded .now-by { font-size: 15px; line-height: 21px; font-weight: 400; white-space: normal; }
+
+/* Notes and Score: the strip over the views. */
+.now.views-on .now-main { grid-template-columns: minmax(0, 1fr); justify-content: stretch; align-content: start; row-gap: 16px; padding: 0 0 4px; }
+
+.now.views-on .now-hero { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 22px; padding: 0 8px; }
+
+.now.views-on .now-art { width: 132px; border-radius: 16px; box-shadow: 0 24px 50px -24px hsl(0 0% 0% / 0.7), 0 4px 12px hsl(0 0% 0% / 0.3); }
+
+.now.views-on .now-art .monogram { font-size: 48px; }
+
+.now.views-on .now-title { margin-top: 0; font-size: 38px; line-height: 42px; letter-spacing: -0.9px; }
+
+.now.views-on .now-by { margin-top: 4px; font-size: 18px; line-height: 24px; }
+
+.now.views-on .scrubber { margin-top: 12px; }
+
+.now.views-on .transport { margin-top: 0; gap: 8px; }
+
+.now.views-on .play-circle { width: 64px; height: 64px; }
+
+.now.views-on .play-circle .glyph { width: 30px; height: 30px; }
+
+.now.views-on .quick { margin-top: 0; }
+
+.now.views-on .quick > * { flex: none; }
+
+.now.views-on .now-lines { justify-content: flex-start; margin-top: 0; text-align: left; }
+
+/* From 900 px Now playing fills the window: the views take what the strip and the capsules leave (360 px at least). */
+@media (min-width: 900px) {
+  /* The page's foot is the mock's 26 px here (its 40 less 26 by the negative margin), so the whole fits 100vh. */
+  .now { display: grid; grid-template-rows: auto 1fr; min-height: calc(100vh - 28px); margin-bottom: -26px; }
+  .now.views-on .now-main { grid-template-rows: auto minmax(340px, 1fr); }
+  .now.views-on .views { display: flex; flex-direction: column; min-height: 0; }
+  /* Size containment: the canvases' own pixel sizes never feed back into the row they fill. */
+  .now.views-on .views-panes { flex: 1 1 auto; height: auto; min-height: 0; contain: size; }
 }
+
+/* Up next beside it: a glass card, a row 60 px with a 44 px cover. */
+.now-side { display: none; }
 
 @media (min-width: 1100px) {
-  .now { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
-  .now-side { border-top: 0; border-left: 1px solid var(--hairline); min-height: calc(100vh - 1px); }
+  .now-body { grid-template-columns: minmax(0, 1fr) 380px; }
+  .now-side {
+    display: block;
+    align-self: start;
+    min-width: 0;
+    max-height: calc(100vh - 90px);   /* the window less the page's padding here (14 + 14) and its head (62) */
+    padding: 6px 0 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 22px;
+    scrollbar-width: thin;
+  }
 }
 
-/* From 1280 px Up next widens with the window (three fifths of Now playing's column), never below 360 px. */
-@media (min-width: 1280px) {
-  .now { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.6fr); }
+/* Phones (below 600 px): the cover as wide as the page less its margins, at most 360 px. */
+@media (max-width: 599px) {
+  .now-main { grid-template-columns: min(100%, 360px); padding: 0 0 12px; }
+  .now-title { font-size: 28px; line-height: 34px; letter-spacing: -0.5px; }
 }
 
-/* ---- Now playing's album colours (v1.15 — M41) ------------------------------------------------------
-   The playing piece's art colours behind .now-main, as the tablet's Now playing has them: four soft discs, each a radial
-   gradient from its colour to nothing (no blur), 60 % of the window's shorter side in radius, drifting on a transform-only
-   path (each its own pace, a turn in 20–26 s) while a piece plays and still otherwise, under a veil of the surface (55 % on
-   paper, 62 % on the camera body) so the words, in the primary colour over it, keep 4.5:1 over any hue. The colours are the
-   art's (--bd1 … --bd4: hue and saturation, set by app.js from a 32 × 32 sample of the loaded picture); the lightness is
-   the appearance's. None in black and white, with Album colours off on the tablet, with reduced transparency or more
-   contrast; still with reduced motion. */
+/* Below 900 px the strip folds: the cover and the words, the transport under them. */
+@media (max-width: 899px) {
+  .now.views-on .now-hero { grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; padding: 0; }
+  .now.views-on .now-art { width: 72px; border-radius: 12px; }
+  .now.views-on .now-title { font-size: 24px; line-height: 28px; letter-spacing: -0.4px; }
+  .now.views-on .now-by { font-size: 15px; line-height: 20px; }
+  .now.views-on .transport { grid-column: 1 / -1; justify-content: space-between; }
+}
 
-.now-main { position: relative; isolation: isolate; }
+/* ---- Now playing over the cover (v1.18 — M47) -----------------------------------------------------------
+   The backdrop: the cover three times, each a 240 px copy blurred 12 px and saturated 1.75 that its transform scales to
+   cover the window (--bd-scale: the window's diagonal over the copy's clear 192 px, set by app.js), so the blurred
+   texture stays small and the compositor does the enlarging. The first at 1.05 × turns in 60 s; the second, half again
+   as large at 60 %, in 84 s the other way, set off by (12 %, −6 %) of the window; the third, smaller at 38 %, in 48 s off
+   centre toward the top right. Transform-only keyframes, running only while a piece plays (.playing), none under reduced
+   motion. Over them a black dimming, from dim − 0.06 at the top to dim + 0.10 at the foot, where dim (set by app.js
+   from the cover's brightest 4 × 4 block of a 16 × 16 reading) keeps the light words at 4.5:1. */
 
-.backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.backdrop {
+  --bd-scale: 8;
+  --dim: 0.45;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--ink-surface);
+}
 
-.bd {
-  --bd: 0 0%;
+.backdrop i {
   position: absolute;
-  width: 120vmin;
-  height: 120vmin;
-  margin: -60vmin 0 0 -60vmin;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, hsl(var(--bd) var(--bd-l)), hsl(var(--bd) var(--bd-l) / 0.82) 30%,
-    hsl(var(--bd) var(--bd-l) / 0.42) 60%, hsl(var(--bd) var(--bd-l) / 0.12) 85%, hsl(var(--bd) var(--bd-l) / 0));
-  animation: bd-sway 10s ease-in-out infinite alternate, bd-rise 7s ease-in-out infinite alternate;
-  animation-play-state: paused;
+  left: 50%;
+  top: 50%;
+  width: 240px;
+  height: 240px;
+  margin: -120px 0 0 -120px;
+  background: center / cover no-repeat var(--art, none);
+  filter: blur(12px) saturate(1.75);
+  will-change: transform;
+  animation: 60s linear infinite paused;
 }
 
-.bd1 { --bd: var(--bd1); left: 30%; top: 50%; animation-duration: 10s, 7s; }
-.bd2 { --bd: var(--bd2); left: 70%; top: 58%; animation-duration: 11.25s, 7.9s; animation-direction: alternate-reverse, alternate; }
-.bd3 { --bd: var(--bd3); left: 45%; top: 66%; animation-duration: 12s, 8.4s; animation-direction: alternate, alternate-reverse; }
-.bd4 { --bd: var(--bd4); left: 60%; top: 62%; animation-duration: 13s, 9.1s; animation-direction: alternate-reverse; }
+.backdrop i:nth-child(1) { scale: calc(var(--bd-scale) * 1.05); rotate: 8deg; animation-name: bd-turn-a; }
 
-.bd-veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--surface) var(--bd-veil), transparent); }
+.backdrop i:nth-child(2) { scale: calc(var(--bd-scale) * 1.575); rotate: 150deg; translate: 12vw -6vh; opacity: 0.6; animation-name: bd-turn-b; animation-duration: 84s; }
 
-.backdrop.playing .bd { animation-play-state: running; }
+.backdrop i:nth-child(3) { scale: calc(var(--bd-scale) * 0.735); rotate: -30deg; translate: 22vw -20vh; opacity: 0.38; animation-name: bd-turn-c; animation-duration: 48s; }
 
-@keyframes bd-sway { from { translate: -25% 0; } to { translate: 25% 0; } }
+.backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, hsl(0 0% 0% / calc(var(--dim) - 0.06)), hsl(0 0% 0% / calc(var(--dim) + 0.1)));
+}
 
-@keyframes bd-rise { from { transform: translateY(-18%); } to { transform: translateY(18%); } }
+.backdrop.playing i { animation-play-state: running; }
+
+@keyframes bd-turn-a { from { rotate: 8deg; } to { rotate: 368deg; } }
+
+@keyframes bd-turn-b { from { rotate: 150deg; } to { rotate: -210deg; } }
+
+@keyframes bd-turn-c { from { rotate: -30deg; } to { rotate: 330deg; } }
+
+/* Immersive (while the backdrop shows): the words are the ink's primary colour in both appearances, nothing secondary or
+   tertiary stands on the backdrop below 18 px, glass is the black tint over its blur with a light edge, and the live dot
+   carries a light ring so red reads on a red cover. */
+.panel.immersive {
+  --surface: var(--ink-surface);
+  --elevated: var(--ink-elevated);
+  --hairline: var(--immersive-edge);
+  --disabled: var(--ink-disabled);
+  --primary: var(--ink-primary);
+  --secondary: var(--immersive-secondary);
+  --tertiary: var(--immersive-tertiary);
+  --specular: var(--immersive-specular);
+  color-scheme: dark;
+}
+
+.panel.immersive .glass {
+  background: var(--immersive-glass);
+  -webkit-backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
+  border-color: var(--immersive-edge);
+  box-shadow: inset 0 1px 0 var(--immersive-specular);
+}
+
+.panel.immersive .dot.live { box-shadow: 0 0 0 1.5px hsl(0 0% 100% / 0.9); }
+
+.panel.immersive .connection, .panel.immersive .now-main .eyebrow, .panel.immersive .now-lines .meta, .panel.immersive .views-note { color: var(--primary); }
+
+.panel.immersive .now-art::after { display: none; }
+
+.panel.immersive .segmented button[aria-pressed="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink-primary) 94%, transparent);
+  color: var(--ink-surface);
+  font-weight: 600;
+}
+
+/* The roll has no card over the cover (views.js draws it for it); the score keeps its opaque sheet in its own colours. */
+.panel.immersive .pane-roll { background: transparent; border-radius: 0; }
+
+.panel.immersive .strip-canvas { height: 64px; border-top: 0; }
+
+.panel.immersive .pane-score {
+  --surface: var(--sheet-surface);
+  --elevated: var(--sheet-elevated);
+  --hairline: var(--sheet-hairline);
+  --disabled: var(--sheet-disabled);
+  --primary: var(--sheet-primary);
+  --secondary: var(--sheet-secondary);
+  --tertiary: var(--sheet-tertiary);
+  background: var(--sheet-elevated);
+  color: var(--primary);
+  box-shadow: 0 30px 70px -30px hsl(0 0% 0% / 0.7);
+}
+
+/* Below 900 px the strip over the cover is the same glass. */
+@media (max-width: 899px) {
+  .panel.immersive .sections {
+    background-color: var(--immersive-glass);
+    -webkit-backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
+    backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
+    border-bottom-color: var(--immersive-edge);
+    box-shadow: inset 0 -1px 0 var(--immersive-specular);
+  }
+  .panel.immersive.scrolled .sections { background-image: none; }
+  .panel.immersive .sections::after { display: none; }
+}
+
+@media (max-width: 599px) {
+  .panel.immersive .sections { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+}
 
 body.mono .backdrop, body.no-backdrop .backdrop { display: none; }
 
-/* Over the colours, nothing secondary or tertiary: the primary colour alone keeps 4.5:1 through the veil. The views keep
-   their own cards. */
-body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-title, .eyebrow, .scrubber, .transport, .now-controls) {
-  --secondary: var(--primary);
-  --tertiary: var(--primary);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bd { animation: none; }
-}
-
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .backdrop { display: none; }
-}
-
 /* ---- Now playing's views (v1.13 — M32) ------------------------------------------------------------
-   The score and the moving notes, as the tablet's Now playing shows them: content, never glass; each view a 12 px
-   card on the elevated surface. From 900 px both show, split by a divider (a hairline with a 36 × 4 grabber in an
-   8 px gap, a 48 px target); below, one at a time (Art · Notes · Score). Sizes the scripts set go through the CSSOM
-   (--split, a page's place), never an inline style. */
+   The score and the moving notes, as the tablet's Now playing shows them: content, never glass; each view a card on the
+   elevated surface (no card for the roll over the cover). Notes: the roll alone; Score: from 900 px the score and the
+   notes split by a divider (a hairline with a 36 × 4 grabber in an 8 px gap, a 48 px target), below 900 px the score
+   alone. Sizes the scripts set go through the CSSOM (--split, a page's place), never an inline style. */
 
-.views-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
-
-.views-view { margin-left: auto; }
-
-.views { width: 100%; }
-
-.now.views-on .now-art { display: none; }
+.views { width: 100%; min-width: 0; }
 
 .views-panes {
   --split: 0.3333;
-  --views-height: clamp(420px, 62vh, 780px);
+  --views-height: clamp(320px, 56vh, 640px);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -959,6 +1475,11 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
 .pane-score { flex: 0 0 calc((100% - 8px) * var(--split)); }
 
 .pane-roll { flex: 1 1 0; display: flex; flex-direction: column; }
+
+.views-panes[data-mode="notes"] .pane-score, .views-panes[data-mode="notes"] .split-handle,
+.views-panes[data-mode="score"] .pane-roll, .views-panes[data-mode="score"] .split-handle { display: none; }
+
+.views-panes[data-mode="notes"] .pane-roll, .views-panes[data-mode="score"] .pane-score { flex: 1 1 0; }
 
 .views-panes[data-hidden="score"] .pane-score, .views-panes[data-hidden="roll"] .pane-roll { display: none; }
 
@@ -1031,47 +1552,35 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   width: min(320px, calc(100vw - 16px));
   padding: 12px 0 4px;
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
+  border-radius: 16px;
   background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
   box-shadow: inset 0 1px 0 var(--specular), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
+  font-size: 15px;
+  line-height: 22px;
 }
 
 .view-menu .eyebrow { padding: 0 var(--inset) 8px; }
 
 .view-menu .chips { padding: 0 var(--inset) 8px; }
 
-.view-menu .setting { margin-left: var(--inset); padding-right: var(--inset); }
-
-.view-menu .setting:last-child { border-bottom: 0; }
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* Phones: one view at a time, a little shorter, no divider. */
+/* Below 900 px no divider. */
 @media (max-width: 899px) {
-  .views-panes { --views-height: clamp(320px, 56vh, 640px); }
   .views-panes .split-handle { display: none; }
-  .views-panes[data-mode="notes"] .pane-score, .views-panes[data-mode="score"] .pane-roll { display: none; }
-  .views-panes[data-mode="notes"] .pane-roll, .views-panes[data-mode="score"] .pane-score { flex: 1 1 0; }
 }
 
 /* ---- Up next ------------------------------------------------------------------------------- */
 
-.queue-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px var(--inset); border-bottom: 1px solid var(--hairline); }
+.queue-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 10px 18px 6px; }
 
-.queue-row { padding-right: 4px; }
+.queue-head .eyebrow { color: var(--secondary); }
 
-.queue-row .handle { cursor: grab; color: var(--tertiary); }
+.queue-row { min-height: 60px; }
 
-/* Up next's titles take a second line rather than an ellipsis; the composer · length line stays single. */
+.queue-row .handle { display: inline-flex; cursor: grab; color: var(--tertiary); }
+
+/* Up next's titles take a second line rather than an ellipsis; the composer line stays single. */
 .queue-row .title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1081,7 +1590,44 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   overflow: hidden;
 }
 
-.queue-row.current { background: var(--elevated); }
+.queue-row .time { flex: none; font-size: 13px; line-height: 18px; color: var(--secondary); }
+
+.queue-row.current { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+
+.queue-card .row, .now-side .row { padding: 8px 18px; }
+
+.now-side .row { border-bottom: 0; }
+
+.now-side .row + .row { border-top: 1px solid color-mix(in srgb, var(--primary) 8%, transparent); }
+
+/* The playing row's mark: three bars, still. */
+.bars { display: inline-flex; flex: none; align-items: flex-end; gap: 2px; height: 14px; margin-right: 4px; }
+
+.bars i { width: 3px; border-radius: 1px; background: var(--primary); }
+
+.bars i:nth-child(1) { height: 6px; }
+
+.bars i:nth-child(2) { height: 13px; }
+
+.bars i:nth-child(3) { height: 9px; }
+
+/* A row's move and remove buttons: with a fine pointer they take the length's place on hover or focus; always shown on
+   a touch screen, where the length gives way to them. */
+.row-tools { display: flex; flex: none; align-items: center; }
+
+@media (hover: hover) and (pointer: fine) {
+  .queue-row .row-tools { width: 0; margin-left: -12px; overflow: hidden; }
+  .queue-row:hover .row-tools, .queue-row:focus-within .row-tools { width: auto; margin-left: 0; overflow: visible; }
+  .queue-row:hover .time, .queue-row:focus-within .time { display: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .queue-row .meta-time { display: none; }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .queue-row .time { display: none; }
+}
 
 /* ---- The drop zone ---------------------------------------------------------------------------- */
 
@@ -1090,7 +1636,7 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin: 16px var(--inset);
+  margin: 0 0 12px;
   padding: 24px 16px;
   border: 1px dashed var(--tertiary);
   border-radius: var(--radius-card);
@@ -1098,7 +1644,9 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   color: var(--secondary);
 }
 
-.drop.over { border-style: solid; border-color: var(--primary); background: var(--elevated); color: var(--primary); }
+.drop.over { border-style: solid; border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); color: var(--primary); }
+
+.now-side .drop { margin: 12px 14px 8px; }
 
 .uploads .row .meta { white-space: normal; }
 
@@ -1113,51 +1661,52 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
 .progress.waiting { position: relative; overflow: hidden; }
 .progress.waiting > span { position: absolute; width: 30%; animation: sweep 1.4s linear infinite; }
 @keyframes sweep { from { left: -30%; } to { left: 100%; } }
-@media (prefers-reduced-motion: reduce) { .progress.waiting > span { animation: none; left: 0; } }
 #studio-models .row .meta, #studio-jobs .row .meta { white-space: normal; }
 
 /* ---- Library ----------------------------------------------------------------------------------- */
 
-.lib-tools { display: flex; flex-direction: column; gap: 12px; padding: 0 var(--inset) 12px; border-bottom: 1px solid var(--hairline); }
+/* The tools as one row (v1.18 — M47): the genre switch, the search field with its glyph, Covers · List; then the chips. */
+.lib-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
 
-.crumb { display: flex; align-items: center; gap: 8px; padding: 8px 4px 8px 4px; border-bottom: 1px solid var(--hairline); }
+.lib-tools .segmented { flex: none; }
+
+.search-field { flex: 1 1 260px; max-width: 580px; }
+
+.lib-chips { margin-bottom: 16px; }
+
+.crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 
 .crumb .text { flex: 1; min-width: 0; }
 
+.crumb .title { font-size: 20px; line-height: 26px; font-weight: 600; }
+
 .more-button { display: flex; justify-content: center; padding: 16px; }
 
-/* A row's menu: Play, Play next, Add to queue. */
-.menu {
-  position: fixed;
-  z-index: 10;
-  min-width: 180px;
-  padding: 6px 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
-  box-shadow: inset 0 1px 0 var(--specular), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
-}
+/* Covers: a grid of tiles, each the cover (14 px corners), the title and the composer; its More button a small glass
+   circle at the cover's top right, shown on hover or focus and always on a touch screen. */
+.cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; margin: 0; padding: 0; list-style: none; }
 
-.menu button {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 0;
-  background: transparent;
-  color: var(--primary);
-  font-size: 15px;
-  text-align: left;
-  cursor: pointer;
-}
+.cover-tile { position: relative; min-width: 0; }
 
-.menu button:hover, .menu button:focus-visible { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.tile-play { display: block; width: 100%; padding: 0; border: 0; border-radius: 14px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+
+.tile-play .art { width: 100%; height: auto; aspect-ratio: 1; border-radius: 14px; box-shadow: 0 14px 30px -16px hsl(0 0% 0% / 0.6); }
+
+.tile-play .art .monogram { font-size: 56px; }
+
+.tile-play .title { display: block; margin-top: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tile-play .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tile-more { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; opacity: 0; transition: opacity 120ms; }
+
+.tile-more .glyph { width: 20px; height: 20px; }
+
+.cover-tile:hover .tile-more, .cover-tile:focus-within .tile-more { opacity: 1; }
 
 /* ---- Channels -------------------------------------------------------------------------------- */
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; padding: 16px var(--inset); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 16px; padding: 4px 0 0; }
 
 .tile {
   position: relative;
@@ -1200,28 +1749,27 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   right: 0;
   bottom: 0;
   min-height: 56px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-top: 1px solid var(--hairline);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
-.band .name { font-size: 20px; line-height: 26px; font-weight: 500; }
+.band .name { font-size: 20px; line-height: 26px; font-weight: 600; }
 
 .band .eyebrow { display: flex; align-items: center; gap: 6px; color: var(--primary); }
 
 /* ---- Schedule (v1.6.2) -------------------------------------------------------------------------- */
 
-.schedule-next { padding-top: 16px; }
+.schedule-next { padding: 4px 4px 8px; }
 
 .schedule-row .switch { margin-left: 4px; }
 
 .row .title.off { color: var(--secondary); }
 
-/* The editor opens over the list, in the page's own rows: the tablet's sheet, laid flat (the schedule's; composing's, v1.7 — M24). */
-/* The editors are the tablet's sheets laid flat: a sheet's glass (nothing passes beneath them in the page,
-   so the surface), its hairline round it and the specular line along its top. */
+/* The editors are the tablet's sheets laid flat (the schedule's; composing's, v1.7 — M24): a sheet's glass (nothing
+   passes beneath them in the page, so the surface), its hairline round it and the specular line along its top. */
 .schedule-editor, .compose-editor {
-  margin: 8px var(--inset) 16px;
+  margin: 8px 0 16px;
   border: 1px solid var(--hairline);
   border-radius: 24px;
   background: color-mix(in srgb, var(--surface) var(--glass-sheet), transparent);
@@ -1231,37 +1779,42 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   overflow: hidden;
 }
 
-.schedule-editor > .eyebrow:first-child, .compose-editor > .eyebrow:first-child { padding-top: 16px; padding-bottom: 0; }
+.schedule-editor > .eyebrow:first-child, .compose-editor > .eyebrow:first-child { padding-top: 18px; padding-bottom: 0; }
 
-.editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 500; }
+.schedule-editor .section-head, .compose-editor .section-head { padding: 18px var(--inset) 6px; }
 
-.schedule-editor .actions, .compose-editor .actions { flex-direction: column; }
+.editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 600; }
 
-.schedule-editor .editor-actions, .compose-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-bottom: 0; }
+.schedule-editor .actions, .compose-editor .actions { flex-direction: column; padding-top: 8px; }
+
+.schedule-editor .editor-actions, .compose-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-top: 1px solid var(--hairline); }
 
 /* Studio's COMPOSE, closed: the button, its note under it, as the tablet's action row. */
-.actions.compose-start { flex-direction: column; align-items: flex-start; gap: 4px; }
-
-.setting .label .meta { display: block; }
+.actions.compose-start { flex-direction: column; align-items: flex-start; gap: 4px; padding-left: 4px; padding-right: 4px; }
 
 /* A time as two selects, hour and minutes, on the 24-hour clock whatever the browser's own. */
 .time-field { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 
-.time-part { width: auto; min-width: 64px; min-height: 40px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+.time-part { width: auto; min-width: 64px; min-height: 40px; padding: 0 12px; font-variant-numeric: tabular-nums; }
 
 .time-colon { font-weight: 500; }
 
-.schedule-list { border-top: 1px solid var(--hairline); margin-top: 8px; }
-
-.schedule-editor + .schedule-list { border-top: 0; margin-top: 0; }
+.schedule-list { margin-top: 8px; }
 
 .choice .glyph { color: var(--primary); }
 
 .choice.off { color: var(--secondary); cursor: default; }
 
-/* ---- Piano ------------------------------------------------------------------------------------ */
+/* ---- Settings, built in (while settings.js is not there) --------------------------------------------- */
 
-.disclosure { border-bottom: 1px solid var(--hairline); }
+.disclosure {
+  margin-top: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--elevated);
+  box-shadow: inset 0 1px 0 var(--specular);
+  overflow: hidden;
+}
 
 .disclosure > summary {
   display: flex;
@@ -1269,7 +1822,8 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   justify-content: space-between;
   min-height: var(--row);
   padding: 0 var(--inset);
-  font-weight: 500;
+  font-size: 17px;
+  font-weight: 600;
   cursor: pointer;
   list-style: none;
 }
@@ -1278,10 +1832,20 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
 
 .disclosure > summary .glyph { transition: transform 120ms; }
 
+.disclosure[open] > summary { border-bottom: 1px solid var(--hairline); }
+
 .disclosure[open] > summary .glyph { transform: rotate(90deg); }
 
+.disclosure .section-head { padding: 16px var(--inset) 6px; }
+
+.link-line { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--secondary); font-size: 15px; }
+
+.builtin-settings > .actions { padding-left: 0; padding-right: 0; }
+
+.appearance-card { margin-top: 20px; }
+
 .status-report {
-  margin: 0 var(--inset) 12px;
+  margin: 12px 0;
   padding: 12px;
   border-radius: var(--radius-control);
   background: var(--elevated);
@@ -1289,24 +1853,38 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   white-space: pre-wrap;
 }
 
+/* ---- Touch screens: every control at least 44 px ---------------------------------------------------------- */
+
+@media (pointer: coarse) {
+  .nav-item, .sections .nav-item { min-height: 44px; }
+  .outlined, .text-button, .chip, .field, .quick .capsule, .capsule.button { min-height: 44px; }
+  .segmented button, .quick .segmented button { min-height: 38px; }
+  .icon-button.small, .tile-more { width: 44px; height: 44px; }
+  .stepper button, .tempo-capsule .stepper button { width: 44px; height: 44px; }
+  .range { height: 44px; }
+  .tile-more { opacity: 1; }
+}
+
 /* ---- The glass's accessibility states (DESIGN.md › v1.9) ------------------------------------------ */
 
-/* Reduce transparency, or more contrast: solid surfaces and their hairlines, no scroll-edge bands. */
+/* Reduce transparency, or more contrast: solid surfaces and their hairlines, no scroll-edge bands, no backdrop. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .sections, .menu, .view-menu, .toast, .gate-card, .schedule-editor, .compose-editor {
+  .sections, .glass, .menu, .view-menu, .toast, .gate-card, .schedule-editor, .compose-editor, .sheet, .confirm, .popover {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     box-shadow: none;
   }
   .sections { background-color: var(--surface); }
+  .glass { background: var(--elevated); border-color: var(--hairline); }
   .panel.scrolled .sections { background-image: none; }
   .sections::after { display: none; }
-  .menu, .view-menu, .toast { background: var(--elevated); }
-  .gate-card, .schedule-editor, .compose-editor { background: var(--surface); }
-  .panel.scrolled .section-tab { color: var(--secondary); }
-  .panel.scrolled .section-tab[aria-selected="true"] { color: var(--primary); }
+  .menu, .view-menu, .toast, .popover { background: var(--elevated); }
+  .gate-card, .schedule-editor, .compose-editor, .sheet, .confirm { background: var(--surface); }
+  .panel.scrolled .sections .nav-item { color: var(--secondary); }
+  .panel.scrolled .sections .nav-item[aria-current="page"] { color: var(--primary); }
   .panel.scrolled .connection { color: var(--secondary); }
-  .gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow { color: var(--tertiary); }
+  .gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow, .sheet .eyebrow { color: var(--tertiary); }
+  .backdrop { display: none; }
 }
 
 /* More contrast: every hairline in the content colour at 40 %, as the app's. */
@@ -1318,14 +1896,35 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
   :root:not([data-theme="light"]) { --hairline: color-mix(in srgb, var(--primary) 40%, var(--surface)); }
 }
 
-/* Reduced motion: the bands come and go as a cut. */
+/* Reduced motion: the bands come and go as a cut; nothing turns, breathes or sweeps; every change is a cut. */
 @media (prefers-reduced-motion: reduce) {
   .sections::after { transition: none; }
+  .backdrop i, .dot.live.breathing { animation: none; }
+  .progress.waiting > span { animation: none; left: 0; }
+  *, *::before, *::after { transition: none !important; }
 }
 
 /* ---- The request page -------------------------------------------------------------------------- */
 
-.guest-page { max-width: 640px; margin: 0 auto; padding: 32px 0 48px; }
+/* The guests' page keeps 1.17's controls (v1.18 — M47 changed the panel's alone): its insets, corners, field, buttons,
+   genre switch, section heads and note as they were. */
+.guest-page { --inset: 16px; --radius-control: 8px; --radius-card: 12px; max-width: 640px; margin: 0 auto; padding: 32px 0 48px; }
+
+.guest-page .field { display: block; min-height: 48px; padding: 0 14px; border-radius: var(--radius-control); font-size: inherit; }
+
+.guest-page .field:focus { border-color: var(--tertiary); outline: none; }
+
+.guest-page .outlined { min-height: 40px; padding: 0 20px; border-color: var(--tertiary); font-size: 15px; line-height: inherit; }
+
+.guest-page .outlined:hover { background: transparent; }
+
+.guest-page .segmented { display: flex; min-height: 36px; }
+
+.guest-page .segmented button { flex: 1 1 0; min-height: 30px; padding: 0 12px; font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+
+.guest-page .section-head { padding: 24px var(--inset) 8px; border-bottom: 1px solid var(--hairline); }
+
+.guest-page .toast { margin: 0 auto; padding: 16px; border-color: var(--primary); border-radius: var(--radius-card); box-shadow: inset 0 1px 0 var(--specular); font-size: inherit; line-height: inherit; }
 
 .guest-head { display: flex; flex-direction: column; gap: 8px; padding: 0 var(--inset) 16px; }
 

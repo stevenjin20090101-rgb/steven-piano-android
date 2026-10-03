@@ -7,18 +7,20 @@
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark light">
 <meta name="referrer" content="no-referrer">
 <title>Steven Piano</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="system.css">
 <script src="app.js" defer></script>
 </head>
 <body>
-<!-- The app's own glyphs (res/drawable), drawn in the content colour. -->
+<!-- The app's own glyphs (res/drawable), drawn in the content colour; then the panel's stroke glyphs (v1.18 — M47),
+     the sections' and the pages' own, for app.js and the modules (host.glyph('g-…')). -->
 <svg class="sprite" aria-hidden="true" focusable="false">
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M8,5L19,12L8,19Z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7,5h3.5v14H7z M13.5,5H17v14h-3.5z"/></symbol>
@@ -37,6 +39,36 @@
   <symbol id="i-more" viewBox="0 0 24 24"><path d="M10,5a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z M10,12a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z M10,19a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z"/></symbol>
   <symbol id="i-up" viewBox="0 0 24 24"><path d="M7.41,15.41L12,10.83l4.59,4.58L18,14l-6,-6 -6,6z"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6z"/></symbol>
+  <symbol id="g-now" viewBox="0 0 24 24"><circle class="glyph-stroke" cx="12" cy="12" r="8.5"/><path d="M10.3 8.9v6.2l4.9-3.1z"/></symbol>
+  <symbol id="g-queue" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 7h14M5 12h14M5 17h9"/></symbol>
+  <symbol id="g-library" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5.5 5v14M9.5 5v14M13.5 6.2l4.6 12.3"/></symbol>
+  <symbol id="g-channels" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4.5 13.5a7.5 7.5 0 0 1 15 0M8 13.5a4 4 0 0 1 8 0"/><circle cx="12" cy="14" r="1.1"/></symbol>
+  <symbol id="g-schedule" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 6.5h14V19H5zM5 10.5h14M8.5 4.5v3.5M15.5 4.5v3.5"/></symbol>
+  <symbol id="g-requests" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4.5 13.5l2.6-7h9.8l2.6 7v5h-15zM4.5 13.5h4.6l1 2h3.8l1-2h4.6"/></symbol>
+  <symbol id="g-add" viewBox="0 0 24 24"><path class="glyph-stroke" d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="g-studio" viewBox="0 0 24 24"><path class="glyph-stroke" d="M12 4l1.9 5.1L19 11l-5.1 1.9L12 18l-1.9-5.1L5 11l5.1-1.9z"/></symbol>
+  <symbol id="g-piano" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 7h7M18 7h1M5 12h1M12 12h7M5 17h9M19 17h0"/><circle class="glyph-stroke" cx="15" cy="7" r="2"/><circle class="glyph-stroke" cx="9" cy="12" r="2"/><circle class="glyph-stroke" cx="16.5" cy="17" r="2"/></symbol>
+  <symbol id="g-system" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 16.5a7 7 0 1 1 14 0M12 16.5l3.4-5.2"/></symbol>
+  <symbol id="g-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></symbol>
+  <symbol id="g-battery" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4 8.5h13.5v7H4zM19.8 10.8v2.4"/><path d="M6 10.5h8v3H6z"/></symbol>
+  <symbol id="g-temp" viewBox="0 0 24 24"><path class="glyph-stroke" d="M10.5 13.8V6a1.5 1.5 0 0 1 3 0v7.8a3.2 3.2 0 1 1-3 0z"/></symbol>
+  <symbol id="g-cloud" viewBox="0 0 24 24"><path class="glyph-stroke" d="M7.6 17.5h8.9a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6 1.2 2.9 2.9 0 0 0 .3 5.6z"/></symbol>
+  <symbol id="g-bolt" viewBox="0 0 24 24"><path d="M13 3L6 13h5l-1 8 7-10h-5z"/></symbol>
+  <symbol id="g-search" viewBox="0 0 24 24"><circle class="glyph-stroke" cx="11" cy="11" r="6.2"/><path class="glyph-stroke" d="M15.8 15.8L20 20"/></symbol>
+  <symbol id="g-download" viewBox="0 0 24 24"><path class="glyph-stroke" d="M12 4.5v10M8 11l4 4 4-4M5 19h14"/></symbol>
+  <symbol id="g-refresh" viewBox="0 0 24 24"><path class="glyph-stroke" d="M19 12a7 7 0 1 1-2.2-5.1M19 4.5V8h-3.5"/></symbol>
+  <symbol id="g-off" viewBox="0 0 24 24"><circle class="glyph-stroke" cx="12" cy="12" r="8"/><path class="glyph-stroke" d="M6.5 6.5l11 11"/></symbol>
+  <symbol id="g-save" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 5h11l3 3v11H5zM8.5 5v4.5h6.5V5M8.5 19v-5.5h7V19"/></symbol>
+  <symbol id="g-link" viewBox="0 0 24 24"><path class="glyph-stroke" d="M10 14a4 4 0 0 0 5.7 0l2.5-2.5a4 4 0 0 0-5.7-5.7l-.9.9M14 10a4 4 0 0 0-5.7 0l-2.5 2.5a4 4 0 0 0 5.7 5.7l.9-.9"/></symbol>
+  <symbol id="g-image" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 5h14v14H5zM5 15.5l4-4 4 4 2.5-2.5 3.5 3.5"/><circle class="glyph-stroke" cx="15" cy="9" r="1.3"/></symbol>
+  <symbol id="g-alert" viewBox="0 0 24 24"><path class="glyph-stroke" d="M12 4.5l8.5 14.5h-17zM12 10v4M12 16.4v.1"/></symbol>
+  <symbol id="g-chip" viewBox="0 0 24 24"><path class="glyph-stroke" d="M8 8h8v8H8zM10 4.5V8M14 4.5V8M10 16v3.5M14 16v3.5M4.5 10H8M4.5 14H8M16 10h3.5M16 14h3.5"/></symbol>
+  <symbol id="g-tablet" viewBox="0 0 24 24"><path class="glyph-stroke" d="M6.5 4h11v16h-11zM11 17h2"/></symbol>
+  <symbol id="g-keys" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4 6.5h16v11H4zM9.3 6.5v6.5M14.7 6.5v6.5M9.3 13v4.5M14.7 13v4.5"/></symbol>
+  <symbol id="g-chevron" viewBox="0 0 24 24"><path class="glyph-stroke" d="M9.5 6l6 6-6 6"/></symbol>
+  <symbol id="g-minus" viewBox="0 0 24 24"><path class="glyph-stroke" d="M6 12h12"/></symbol>
+  <symbol id="g-plus" viewBox="0 0 24 24"><path class="glyph-stroke" d="M12 6v12M6 12h12"/></symbol>
+  <symbol id="g-grid" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z"/></symbol>
 </svg>
 
 <main id="gate" class="gate" hidden>
@@ -46,7 +78,7 @@
     <p class="note">The six digits set on the tablet, in Piano › Web panel. Enter it once: this device stays signed in.</p>
     <form id="gate-form" class="gate-form" novalidate>
       <input id="pin" class="pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN" aria-describedby="gate-note">
-      <button class="outlined" type="submit" id="gate-open">Open</button>
+      <button class="outlined filled" type="submit" id="gate-open">Open</button>
     </form>
     <p id="gate-note" class="note" role="status" aria-live="polite"></p>
   </div>
@@ -62,134 +94,156 @@
 </main>
 
 <div id="panel" class="panel" hidden>
+  <!-- Now playing over the cover (v1.18 — M47): the cover three times, blurred and turning, under the dimming its
+       brightest part needs. Behind the whole panel while Now playing shows a piece with a picture. -->
+  <div class="backdrop" id="now-backdrop" aria-hidden="true" hidden><i></i><i></i><i></i></div>
+
+  <!-- The rail (from 900 px a glass card, its groups under engraved headings), the tab strip below it; on phones the
+       name and the connection line over the page, the sections in the bar at the foot. -->
   <nav class="sections" aria-label="Sections">
-    <div class="identity">
-      <p class="piano-name">Steven Piano</p>
-      <p class="connection"><span class="dot" id="conn-dot"></span><span id="conn-text">Connecting…</span></p>
-    </div>
-    <ul class="section-list" role="tablist" aria-label="Sections">
-      <li><button class="section-tab" role="tab" type="button" data-section="now">Now playing</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="queue">Up next</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="library">Library</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="channels">Channels</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="schedule">Schedule</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="requests">Requests <span class="count" id="requests-count" hidden>0</span></button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="add">Add</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="studio">Studio</button></li>
-      <li><button class="section-tab" role="tab" type="button" data-section="piano">Piano</button></li>
-    </ul>
-    <div class="frame-foot">
-      <div class="appearance" data-appearance></div>
-      <p class="eyebrow">Player piano · by Steven Jin</p>
+    <div class="rail-card glass">
+      <div class="identity">
+        <p class="piano-name">Steven Piano</p>
+        <p class="connection"><span class="dot" id="conn-dot"></span><span id="conn-text">Connecting…</span></p>
+      </div>
+      <div class="section-list">
+        <div class="nav-group" role="group" aria-labelledby="rail-play">
+          <p class="eyebrow" id="rail-play">Play</p>
+          <button class="nav-item" type="button" data-section="now"><svg class="glyph" aria-hidden="true"><use href="#g-now"/></svg><span>Now playing</span></button>
+          <button class="nav-item up-next-item" type="button" data-section="queue"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg><span>Up next</span></button>
+          <button class="nav-item" type="button" data-section="library"><svg class="glyph" aria-hidden="true"><use href="#g-library"/></svg><span>Library</span></button>
+          <button class="nav-item" type="button" data-section="channels"><svg class="glyph" aria-hidden="true"><use href="#g-channels"/></svg><span>Channels</span></button>
+        </div>
+        <div class="nav-group" role="group" aria-labelledby="rail-plan">
+          <p class="eyebrow" id="rail-plan">Plan</p>
+          <button class="nav-item" type="button" data-section="schedule"><svg class="glyph" aria-hidden="true"><use href="#g-schedule"/></svg><span>Schedule</span></button>
+          <button class="nav-item" type="button" data-section="requests"><svg class="glyph" aria-hidden="true"><use href="#g-requests"/></svg><span>Requests</span><span class="count" id="requests-count" data-count="requests" hidden>0</span></button>
+        </div>
+        <div class="nav-group" role="group" aria-labelledby="rail-make">
+          <p class="eyebrow" id="rail-make">Make</p>
+          <button class="nav-item" type="button" data-section="add"><svg class="glyph" aria-hidden="true"><use href="#g-add"/></svg><span>Add</span></button>
+          <button class="nav-item" type="button" data-section="studio"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span></button>
+        </div>
+        <div class="nav-group" role="group" aria-labelledby="rail-piano">
+          <p class="eyebrow" id="rail-piano">Piano</p>
+          <button class="nav-item" type="button" data-section="piano"><svg class="glyph" aria-hidden="true"><use href="#g-piano"/></svg><span>Settings</span></button>
+          <button class="nav-item" type="button" data-section="system" hidden><svg class="glyph" aria-hidden="true"><use href="#g-system"/></svg><span>System</span></button>
+        </div>
+      </div>
+      <div class="rail-foot" id="rail-vitals"></div>
     </div>
   </nav>
 
   <main class="page" id="page">
-    <!-- Now playing (on wide screens with Up next and the drop zone beside it) -->
+    <!-- Now playing: the art view (the cover large, the words, the transport, the capsules) or, with Notes or Score,
+         the strip over the views; Up next beside it from 1100 px. -->
     <section id="section-now" data-page="now" class="now" hidden>
-      <div class="now-main">
-        <!-- The album's colours behind Now playing (v1.15 — M41): four soft discs, drifting while a piece plays, under a veil. -->
-        <div class="backdrop" id="now-backdrop" aria-hidden="true" hidden>
-          <div class="bd bd1"></div>
-          <div class="bd bd2"></div>
-          <div class="bd bd3"></div>
-          <div class="bd bd4"></div>
-          <div class="bd-veil"></div>
-        </div>
-        <!-- The score and the moving notes (v1.13 — M32): the views' module fills them the first time they show. -->
-        <div class="views-bar" id="now-views-bar" hidden>
-          <div class="chips views-switch" id="now-switch" role="group" aria-label="Show"></div>
-          <button class="chip views-view" id="now-view" type="button" aria-haspopup="dialog" aria-expanded="false" hidden>View</button>
-        </div>
-        <div class="views" id="now-views" hidden></div>
-        <div class="art now-art" id="now-art"></div>
-        <h1 class="display now-title" id="now-title">Choose a piece from the library.</h1>
-        <p class="eyebrow" id="now-eyebrow"></p>
-        <p class="eyebrow starting" id="now-starting" aria-live="polite"></p>
-        <div class="scrubber">
-          <span class="time" id="now-position">0:00</span>
-          <input class="range" id="now-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position">
-          <span class="time" id="now-duration">0:00</span>
-        </div>
-        <div class="transport">
-          <button class="icon-button mode" id="now-shuffle" type="button" aria-pressed="false" aria-label="Shuffle"><svg class="glyph"><use href="#i-shuffle"/></svg></button>
-          <button class="icon-button" id="now-previous" type="button" aria-label="Previous"><svg class="glyph"><use href="#i-previous"/></svg></button>
-          <button class="play-circle" id="now-play" type="button" aria-label="Play"><svg class="glyph"><use href="#i-play" id="now-play-glyph"/></svg></button>
-          <button class="icon-button" id="now-next" type="button" aria-label="Next"><svg class="glyph"><use href="#i-next"/></svg></button>
-          <button class="icon-button mode" id="now-repeat" type="button" aria-pressed="false" aria-label="Repeat off"><svg class="glyph"><use href="#i-repeat" id="now-repeat-glyph"/></svg></button>
-        </div>
-        <div class="now-controls">
-          <div class="setting">
-            <div class="label">Tempo</div>
-            <div class="stepper">
-              <button class="icon-button" id="tempo-down" type="button" aria-label="Slower"><svg class="glyph"><use href="#i-remove"/></svg></button>
-              <span class="value" id="tempo-value">100%</span>
-              <button class="icon-button" id="tempo-up" type="button" aria-label="Faster"><svg class="glyph"><use href="#i-add"/></svg></button>
-            </div>
-          </div>
-          <div class="setting stacked" id="channel-volume" hidden>
-            <div class="label"><span id="channel-volume-label">Channel volume</span><span class="eyebrow">%</span></div>
-            <div class="with-value">
-              <input class="range" id="channel-volume-range" type="range" min="0" max="100" step="1" aria-label="Channel volume">
-              <span class="value" id="channel-volume-value">70%</span>
-            </div>
-          </div>
-          <div class="setting stacked" id="tablet-volume" hidden>
-            <div class="label"><span>Tablet volume</span><span class="eyebrow">%</span></div>
-            <div class="with-value">
-              <input class="range" id="tablet-volume-range" type="range" min="0" max="100" step="1" aria-label="Tablet sound volume">
-              <span class="value" id="tablet-volume-value">60%</span>
-            </div>
-            <p class="meta" id="tablet-volume-note"></p>
-          </div>
-          <p class="link-line"><span class="dot" id="link-dot"></span><span id="link-text">Not connected</span></p>
-          <p class="meta" id="instrument-line" hidden></p>
-          <p class="meta" id="keyboard-line" hidden></p>
+      <div class="page-head">
+        <h1>Now playing</h1>
+        <div class="head-tools">
+          <p class="capsule glass link-capsule"><span class="dot" id="link-dot"></span><span id="link-text">Not connected</span></p>
         </div>
       </div>
-      <aside class="now-side" id="now-side" aria-label="Up next"></aside>
+      <div class="now-body">
+        <div class="now-main" id="now-main">
+          <div class="now-hero">
+            <div class="art now-art" id="now-art"></div>
+            <div class="now-words">
+              <h2 class="now-title" id="now-title">Choose a piece from the library.</h2>
+              <p class="now-by" id="now-eyebrow"></p>
+              <p class="eyebrow starting" id="now-starting" aria-live="polite"></p>
+              <div class="scrubber">
+                <span class="time" id="now-position">0:00</span>
+                <input class="range" id="now-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position">
+                <span class="time" id="now-duration">0:00</span>
+              </div>
+            </div>
+            <div class="transport">
+              <button class="icon-button mode" id="now-shuffle" type="button" aria-pressed="false" aria-label="Shuffle"><svg class="glyph"><use href="#i-shuffle"/></svg></button>
+              <button class="icon-button" id="now-previous" type="button" aria-label="Previous"><svg class="glyph"><use href="#i-previous"/></svg></button>
+              <button class="play-circle" id="now-play" type="button" aria-label="Play"><svg class="glyph"><use href="#i-play" id="now-play-glyph"/></svg></button>
+              <button class="icon-button" id="now-next" type="button" aria-label="Next"><svg class="glyph"><use href="#i-next"/></svg></button>
+              <button class="icon-button mode" id="now-repeat" type="button" aria-pressed="false" aria-label="Repeat off"><svg class="glyph"><use href="#i-repeat" id="now-repeat-glyph"/></svg></button>
+            </div>
+          </div>
+          <!-- The score and the moving notes (v1.13 — M32): the views' module fills them the first time they show. -->
+          <div class="views" id="now-views" hidden></div>
+          <div class="quick" id="now-quick">
+            <div class="capsule glass tempo-capsule">
+              <span>Tempo</span>
+              <div class="stepper">
+                <button class="icon-button" id="tempo-down" type="button" aria-label="Slower"><svg class="glyph"><use href="#i-remove"/></svg></button>
+                <span class="value" id="tempo-value">100%</span>
+                <button class="icon-button" id="tempo-up" type="button" aria-label="Faster"><svg class="glyph"><use href="#i-add"/></svg></button>
+              </div>
+            </div>
+            <button class="capsule glass button" id="channel-volume" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="channel-volume-pop" hidden><svg class="glyph" aria-hidden="true"><use href="#g-keys"/></svg><span>Volume</span><b id="channel-volume-value">70%</b></button>
+            <button class="capsule glass button" id="tablet-volume" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="tablet-volume-pop" hidden><svg class="glyph" aria-hidden="true"><use href="#g-tablet"/></svg><span>Tablet</span><b id="tablet-volume-value">60%</b></button>
+            <div class="segmented glass views-switch" id="now-switch" role="group" aria-label="Show" hidden></div>
+            <button class="capsule glass button views-view" id="now-view" type="button" aria-haspopup="dialog" aria-expanded="false" hidden>View</button>
+          </div>
+          <div class="now-lines">
+            <p class="meta" id="instrument-line" hidden></p>
+            <p class="meta" id="keyboard-line" hidden></p>
+          </div>
+          <!-- The volumes' sliders, each in a small popover over its capsule. -->
+          <div class="popover glass" id="channel-volume-pop" role="dialog" aria-labelledby="channel-volume-label" hidden>
+            <p class="popover-title" id="channel-volume-label">Channel volume</p>
+            <input class="range" id="channel-volume-range" type="range" min="0" max="100" step="1" aria-label="Channel volume">
+          </div>
+          <div class="popover glass" id="tablet-volume-pop" role="dialog" aria-labelledby="tablet-volume-title" hidden>
+            <p class="popover-title" id="tablet-volume-title">Tablet volume</p>
+            <input class="range" id="tablet-volume-range" type="range" min="0" max="100" step="1" aria-label="Tablet sound volume">
+            <p class="meta" id="tablet-volume-note"></p>
+          </div>
+        </div>
+        <aside class="now-side glass" id="now-side" aria-label="Up next"></aside>
+      </div>
     </section>
 
     <section id="section-queue" data-page="queue" hidden>
       <div class="page-head"><h1>Up next</h1></div>
-      <div id="queue-full"></div>
+      <div class="content card queue-card" id="queue-full"></div>
     </section>
 
     <section id="section-library" data-page="library" hidden>
       <div class="page-head"><h1>Library</h1></div>
-      <div class="lib-tools content">
+      <div class="lib-tools">
         <div class="segmented" id="lib-genre" role="group" aria-label="Genre"></div>
-        <input class="field" id="lib-search" type="search" placeholder="Search titles and composers" aria-label="Search the library" autocomplete="off" maxlength="200">
-        <div class="chips" id="lib-chips" role="group" aria-label="Show"></div>
+        <label class="field search-field"><svg class="glyph" aria-hidden="true"><use href="#g-search"/></svg><input id="lib-search" type="search" placeholder="Search titles and composers" aria-label="Search the library" autocomplete="off" maxlength="200"></label>
+        <div class="segmented" id="lib-view" role="group" aria-label="Show as"></div>
       </div>
-      <div class="content">
-        <div class="crumb" id="lib-crumb" hidden></div>
-        <ul class="rows" id="lib-rows"></ul>
-        <p class="empty" id="lib-empty" hidden></p>
-        <div class="more-button" id="lib-more" hidden><button class="outlined" type="button">Show more</button></div>
-      </div>
+      <div class="chips lib-chips" id="lib-chips" role="group" aria-label="Show"></div>
+      <div class="crumb" id="lib-crumb" hidden></div>
+      <ul class="rows card" id="lib-rows"></ul>
+      <p class="empty" id="lib-empty" hidden></p>
+      <div class="more-button" id="lib-more" hidden><button class="outlined" type="button">Show more</button></div>
     </section>
 
     <section id="section-channels" data-page="channels" hidden>
-      <div class="page-head"><h1>Channels</h1><button class="outlined" id="channel-stop" type="button" hidden>Stop the channel</button></div>
+      <div class="page-head"><h1>Channels</h1><div class="head-tools"><button class="outlined" id="channel-stop" type="button" hidden>Stop the channel</button></div></div>
       <div class="tiles" id="channel-tiles"></div>
       <p class="empty" id="channels-empty" hidden>The channels are being worked out from the library.</p>
     </section>
 
     <section id="section-schedule" data-page="schedule" hidden>
-      <div class="page-head"><h1>Schedule</h1><button class="outlined" id="schedule-add" type="button">Add schedule</button></div>
+      <div class="page-head"><h1>Schedule</h1><div class="head-tools"><button class="outlined" id="schedule-add" type="button">Add schedule</button></div></div>
       <div class="content" id="schedule-body"></div>
     </section>
 
     <section id="section-requests" data-page="requests" hidden>
       <div class="page-head"><h1>Requests</h1></div>
-      <div class="content">
-        <ul class="rows" id="requests-rows"></ul>
-        <p class="empty" id="requests-empty">No requests waiting.</p>
-        <h2 class="section-head eyebrow">Guests</h2>
-        <div class="setting"><div class="label">Guests can request</div><button class="switch" role="switch" type="button" id="guests-open" aria-checked="false" aria-label="Guests can request"></button></div>
-        <div class="setting"><div class="label">Approve requests first</div><button class="switch" role="switch" type="button" id="guests-approve" aria-checked="false" aria-label="Approve requests first"></button></div>
-        <p class="note inset" id="guests-address"></p>
+      <div class="content stack">
+        <div>
+          <ul class="rows card" id="requests-rows"></ul>
+          <p class="empty" id="requests-empty">No requests waiting.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Guests</h2></div>
+          <div class="setting"><div class="label">Guests can request</div><button class="switch" role="switch" type="button" id="guests-open" aria-checked="false" aria-label="Guests can request"></button></div>
+          <div class="setting"><div class="label">Approve requests first</div><button class="switch" role="switch" type="button" id="guests-approve" aria-checked="false" aria-label="Approve requests first"></button></div>
+          <p class="note inset" id="guests-address"></p>
+        </div>
       </div>
     </section>
 
@@ -203,16 +257,43 @@
       <div class="content" id="studio-body"></div>
     </section>
 
+    <!-- Settings (the section's key stays piano): settings.js fills it when it is there (v1.18 — M47b); until then the
+         built-in page shows. -->
     <section id="section-piano" data-page="piano" hidden>
-      <div class="page-head"><h1>Piano</h1></div>
-      <div class="content" id="piano-body"></div>
+      <div class="page-head"><h1>Settings</h1><div class="head-tools" id="piano-tools"></div></div>
+      <div id="piano-body"></div>
+    </section>
+
+    <!-- System: system.js fills it; its item stays hidden until the module is there. -->
+    <section id="section-system" data-page="system" hidden>
+      <div class="page-head"><h1>System</h1><div class="head-tools" id="system-tools"></div></div>
+      <div id="system-body"></div>
     </section>
 
     <footer class="page-foot">
-      <div class="appearance" data-appearance></div>
       <p class="eyebrow">Player piano · by Steven Jin</p>
     </footer>
   </main>
+
+  <!-- Phones: the four places in a glass bar at the foot, the other sections in the More sheet. -->
+  <nav class="tab-bar glass" aria-label="Sections">
+    <button class="tab-item" type="button" data-section="now"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-now"/></svg></span><span>Now playing</span></button>
+    <button class="tab-item" type="button" data-section="queue"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg></span><span>Up next</span></button>
+    <button class="tab-item" type="button" data-section="library"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-library"/></svg></span><span>Library</span></button>
+    <button class="tab-item" type="button" id="tab-more" aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-more"/></svg></span><span>More</span></button>
+  </nav>
+  <dialog class="sheet more-sheet" id="more-sheet" aria-labelledby="more-title">
+    <div class="sheet-body">
+      <p class="eyebrow" id="more-title">More</p>
+      <button class="nav-item" type="button" data-section="channels"><svg class="glyph" aria-hidden="true"><use href="#g-channels"/></svg><span>Channels</span></button>
+      <button class="nav-item" type="button" data-section="schedule"><svg class="glyph" aria-hidden="true"><use href="#g-schedule"/></svg><span>Schedule</span></button>
+      <button class="nav-item" type="button" data-section="requests"><svg class="glyph" aria-hidden="true"><use href="#g-requests"/></svg><span>Requests</span><span class="count" data-count="requests" hidden>0</span></button>
+      <button class="nav-item" type="button" data-section="add"><svg class="glyph" aria-hidden="true"><use href="#g-add"/></svg><span>Add</span></button>
+      <button class="nav-item" type="button" data-section="studio"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span></button>
+      <button class="nav-item" type="button" data-section="piano"><svg class="glyph" aria-hidden="true"><use href="#g-piano"/></svg><span>Settings</span></button>
+      <button class="nav-item" type="button" data-section="system" hidden><svg class="glyph" aria-hidden="true"><use href="#g-system"/></svg><span>System</span></button>
+    </div>
+  </dialog>
 </div>
 </body>
 </html>

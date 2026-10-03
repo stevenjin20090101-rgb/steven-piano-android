@@ -106,6 +106,9 @@
     } catch (e) {
       throw new ApiError(0, { message: "The tablet can't be reached." });
     }
+    // The relay's allowance for pictures (v1.18 — M47), on every answer it relays: the last one seen widens the budget.
+    const artLimit = Number(response.headers.get('X-Relay-Art-Limit'));
+    if (artLimit > 0) artAllowance(artLimit);
     let data = null;
     if ((response.headers.get('Content-Type') || '').includes('application/json')) {
       try {
@@ -215,16 +218,20 @@
     toast(e && e.message ? e.message : 'That did not work.');
   }
 
-  // ---- Appearance (the panel's own, as the app's: Follow system · Light · Dark) ----------------
+  // ---- Appearance (the panel's own: Dark · Light · Follow system) --------------------------------
+  //
+  // Dark by default (v1.18 — M47: "Ink", the camera body, never pure black): the page starts with data-theme="dark" and
+  // nothing stored keeps it; Follow system removes the attribute. The control is the Settings page's (host.appearance).
 
   const APPEARANCE = 'steven-piano-appearance';
+  const APPEARANCES = [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']];
 
   function appearance() {
     try {
       const value = localStorage.getItem(APPEARANCE);
-      return value === 'light' || value === 'dark' ? value : 'system';
+      return value === 'light' || value === 'system' ? value : 'dark';
     } catch (e) {
-      return 'system';
+      return 'dark';
     }
   }
 
@@ -234,12 +241,13 @@
   }
 
   function setAppearance(value) {
+    const chosen = value === 'light' || value === 'system' ? value : 'dark';
     try {
-      localStorage.setItem(APPEARANCE, value);
+      localStorage.setItem(APPEARANCE, chosen);
     } catch (e) {
       // Private browsing: it holds for this page only.
     }
-    applyAppearance(value);
+    applyAppearance(chosen);
     renderAppearance();
   }
 
@@ -248,17 +256,10 @@
     return h('button', { class: 'chip', type: 'button', 'aria-pressed': chosen ? 'true' : 'false', disabled, onclick: onClick }, chosen ? glyph('i-check') : null, label);
   }
 
+  /** The built-in Settings page's Appearance switch (while settings.js is not there), marked in place. */
   function renderAppearance() {
-    const current = appearance();
-    for (const holder of document.querySelectorAll('[data-appearance]')) {
-      holder.replaceChildren(
-        h('p', { class: 'eyebrow', text: 'Appearance' }),
-        h('div', { class: 'chips', role: 'group', 'aria-label': 'Appearance' },
-          chip('Follow system', current === 'system', () => setAppearance('system')),
-          chip('Light', current === 'light', () => setAppearance('light')),
-          chip('Dark', current === 'dark', () => setAppearance('dark'))),
-      );
-    }
+    const holder = $('appearance-switch');
+    if (holder) segmented(holder, APPEARANCES, appearance(), setAppearance);
   }
 
   applyAppearance(appearance());
@@ -431,30 +432,80 @@
 
   // ---- Sections ---------------------------------------------------------------------------------
 
-  const SECTIONS = ['now', 'queue', 'library', 'channels', 'schedule', 'requests', 'add', 'studio', 'piano'];
+  // The frame (v1.18 — M47): the rail's groups (Play, Plan, Make, Piano), the tab strip below 900 px, the bar and the
+  // More sheet below 600 px; every item names its section in data-section, the one shown carries aria-current. Up next
+  // is a section of its own only below 1100 px: from there it stands beside Now playing.
+  const SECTIONS = ['now', 'queue', 'library', 'channels', 'schedule', 'requests', 'add', 'studio', 'piano', 'system'];
+  /** The sections the phone's More sheet holds (the bar has Now playing, Up next and Library). */
+  const MORE = ['channels', 'schedule', 'requests', 'add', 'studio', 'piano', 'system'];
+  const besideQuery = window.matchMedia('(min-width: 1100px)');
   let section = 'now';
 
   function show(name) {
-    section = SECTIONS.includes(name) ? name : 'now';
-    for (const tab of document.querySelectorAll('.section-tab')) tab.setAttribute('aria-selected', tab.dataset.section === section ? 'true' : 'false');
+    let next = SECTIONS.includes(name) ? name : 'now';
+    if (next === 'queue' && besideQuery.matches) next = 'now';
+    if (next === 'system' && modules.system.failed) next = 'now';   // no System page without its module
+    const before = section;
+    section = next;
+    closeMore();
+    closePopover();
+    for (const item of document.querySelectorAll('[data-section]')) {
+      if (item.dataset.section === section) item.setAttribute('aria-current', 'page');
+      else item.removeAttribute('aria-current');
+    }
+    if (MORE.includes(section)) $('tab-more').setAttribute('aria-current', 'page');
+    else $('tab-more').removeAttribute('aria-current');
     for (const page of document.querySelectorAll('[data-page]')) page.hidden = page.dataset.page !== section;
     if (location.hash !== '#' + section) history.replaceState(null, '', '#' + section);
+    for (const key of Object.keys(modules)) if (key !== section) moduleHide(modules[key]);
     if (section === 'library') libraryLoad();
     if (section === 'channels') channelsLoad();
     if (section === 'schedule') scheduleLoad();
     if (section === 'requests') requestsLoad();
-    if (section === 'piano') pianoLoad();
+    if (section === 'piano') openSettings();
+    if (section === 'system') openSystem();
     if (section === 'add') renderAdd();
     if (section === 'studio') renderStudio();
     render(state);
     if (views) views.show(section === 'now');
+    if (before !== section) window.scrollTo(0, 0);
   }
 
-  for (const tab of document.querySelectorAll('.section-tab')) {
-    tab.addEventListener('click', () => show(tab.dataset.section));
+  for (const item of document.querySelectorAll('[data-section]')) {
+    item.addEventListener('click', () => show(item.dataset.section));
   }
 
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+
+  // From 1100 px Up next is beside Now playing: its own section gives way to it.
+  besideQuery.addEventListener('change', () => {
+    if (besideQuery.matches && section === 'queue') show('now');
+  });
+
+  // ---- The More sheet (phones) ---------------------------------------------------------------------
+
+  /** The sections the bar has no room for, in the editors' sheet over it; a choice, Escape or a tap outside closes it. */
+  function openMore() {
+    const sheet = $('more-sheet');
+    if (sheet.open) return;
+    sheet.showModal();
+    $('tab-more').setAttribute('aria-expanded', 'true');
+  }
+
+  function closeMore() {
+    const sheet = $('more-sheet');
+    if (sheet.open) sheet.close();
+  }
+
+  $('tab-more').addEventListener('click', openMore);
+  // Past 600 px the bar gives way to the strip, and the sheet goes with it.
+  window.matchMedia('(max-width: 599px)').addEventListener('change', closeMore);
+  // Closing gives the focus back to More (the dialog's own rule).
+  $('more-sheet').addEventListener('close', () => $('tab-more').setAttribute('aria-expanded', 'false'));
+  // A tap on the scrim (the dialog itself, outside its body) closes it.
+  $('more-sheet').addEventListener('click', (event) => {
+    if (event.target === $('more-sheet')) closeMore();
+  });
 
   // The scroll-edge effect (DESIGN.md › v1.9): once the page is scrolled, the content fades into the
   // tab strip's glass (style.css, .scrolled). At the top of the page there is no band.
@@ -477,7 +528,11 @@
     if (section === 'schedule' && before && before.schedule.revision !== state.schedule.revision && !scheduling.editing) scheduleLoad();
     if (section === 'add') renderTally();
     if (section === 'studio') renderStudioState();
-    if (section === 'piano') renderPiano();
+    if (section === 'piano') {
+      if (modules.piano.page) moduleRender(modules.piano);
+      else if (modules.piano.failed) renderPiano();   // the built-in page, while settings.js is not there
+    }
+    if (section === 'system') moduleRender(modules.system);
   }
 
   const channelOf = (s) => (s && s.player.channel ? s.player.channel.key : null);
@@ -494,6 +549,15 @@
   /** Through the relay, a budget: 40 pictures at once, one more each second. */
   const ART_BUDGET = 40;
   const ART_REFILL_MS = 1000;
+  /**
+   * The relay's own allowance for pictures (v1.18 — M47, `X-Relay-Art-Limit`, a minute's): from 300 a minute the budget
+   * through it is 120 at once, six more a second, six loads at a time; below that, or with no such header, M45's numbers.
+   */
+  const ART_WIDE_FROM = 300;
+  const ART_NARROW = { parallel: ART_PARALLEL, budget: ART_BUDGET, refillMs: ART_REFILL_MS };
+  const ART_WIDE = { parallel: 6, budget: 120, refillMs: 1000 / 6 };
+  /** The numbers in force. */
+  let artLimits = ART_NARROW;
   /** A failed address is asked again after 4 s, then 20 s, then 60 s, then no more. */
   const ART_RETRY_MS = [4000, 20000, 60000];
   /** Three failures in a row pause every load for 20 s: the relay's refusal lasts up to a minute. */
@@ -547,7 +611,8 @@
   }
 
   /**
-   * Fills an .art box for [piece] at [size] ('row' for the 40 px boxes, 'tile' for Now playing's and the larger ones):
+   * Fills an .art box for [piece] at [size] ('row' for the 44 px boxes, 'tile' for the Library's covers and the larger
+   * ones, 'full' for Now playing's, v1.18 — M47):
    * its title's monogram at once, then over it its cover, its composer's portrait, or its own roll card tinted as the
    * app tints it. A box already showing that picture is left as it is. [options.priority]: asked for at once, ahead of
    * the rest (Now playing's); [options.onPicture]: given the <img> once it shows, or null for a roll card, a monogram or
@@ -619,7 +684,7 @@
       artWake(artPausedUntil - now);
       return;
     }
-    artTokens = Math.min(ART_BUDGET, artTokens + (now - artTokensAt) / ART_REFILL_MS);
+    artTokens = Math.min(artLimits.budget, artTokens + (now - artTokensAt) / artLimits.refillMs);
     artTokensAt = now;
     while (artQueue.length > 0) {
       const { box, s } = artQueue[0];
@@ -636,9 +701,9 @@
         under.add(box);
         continue;
       }
-      if (artLoads.size >= ART_PARALLEL) return;   // the next starts when one ends
+      if (artLoads.size >= artLimits.parallel) return;   // the next starts when one ends
       if (ROOT !== '' && !s.priority && artTokens < 1) {
-        artWake((1 - artTokens) * ART_REFILL_MS);
+        artWake((1 - artTokens) * artLimits.refillMs);
         return;
       }
       artQueue.shift();
@@ -646,6 +711,20 @@
       if (ROOT !== '') artTokens -= 1;   // Now playing's takes one too, but never waits for it
       artLoad(box, s);
     }
+  }
+
+  /**
+   * The relay's allowance [limit] (a minute's pictures, from `X-Relay-Art-Limit`): 300 or more through the relay gives
+   * the wide numbers, the wider budget there at once; less gives M45's again. On the tablet's own address nothing changes.
+   */
+  function artAllowance(limit) {
+    const next = ROOT !== '' && limit >= ART_WIDE_FROM ? ART_WIDE : ART_NARROW;
+    if (next === artLimits) return;
+    const now = performance.now();
+    artTokens = next === ART_WIDE ? next.budget : Math.min(next.budget, artTokens + (now - artTokensAt) / artLimits.refillMs);
+    artTokensAt = now;
+    artLimits = next;
+    artPump();
   }
 
   /** Runs [artPump] again in [ms]: a pause's end, or the budget's next picture. */
@@ -758,6 +837,10 @@
   }
 
   // ---- Now playing --------------------------------------------------------------------------------
+  //
+  // v1.18 — M47: the art view (the cover large, the title, the composer, the scrubber, the transport, a row of glass
+  // capsules) or, with Notes or Score, the strip over the views; Up next beside it from 1100 px; the cover's own
+  // colours behind the whole panel while it shows (the backdrop, below).
 
   let seeking = false;
   let shownProblem = null;
@@ -766,13 +849,13 @@
     const player = state.player;
     const piece = player.piece;
     const playing = player.status === 'playing';
-    // Asked for at once, ahead of the rest; its picture gives the backdrop its colours (the same picture: left as it is).
-    art($('now-art'), piece, 'tile', { priority: true, onPicture: backdropFrom });
+    // Asked for at once, ahead of the rest, at the full size; its picture is the backdrop (the same picture: left as it is).
+    art($('now-art'), piece, 'full', { priority: true, onPicture: backdropFrom });
     $('now-art').hidden = !piece;
-    $('now-backdrop').classList.toggle('playing', playing);
+    $('section-now').classList.toggle('unloaded', !piece && !player.loading);
     $('now-title').textContent = piece ? piece.title : 'Choose a piece from the library.';
     $('now-eyebrow').textContent = piece
-      ? [piece.composer, player.channel && player.channel.name, player.channel && 'Channel'].filter(Boolean).join(' · ')
+      ? [piece.composer, player.channel && `${player.channel.name} channel`].filter(Boolean).join(' · ')
       : state.schedule.next || '';   // with nothing loaded, the next schedule (DESIGN.md › v1.6.2 — M19)
     const play = $('now-play');
     play.disabled = !piece && !player.loading;
@@ -791,6 +874,8 @@
     $('tempo-value').textContent = `${player.tempoPct}%`;
     $('tempo-down').disabled = !piece || player.tempoPct <= 25;
     $('tempo-up').disabled = !piece || player.tempoPct >= 200;
+    // The volumes there are, each a capsule opening its slider: the channel's while one plays, and (v1.8 — M25) the
+    // tablet's piano sound while its mode isn't Off (the mode is set on the tablet).
     const channel = player.channel;
     $('channel-volume').hidden = !channel;
     if (channel && !volumeDragging) {
@@ -798,7 +883,6 @@
       setRange($('channel-volume-range'), channel.volume, 100);
       $('channel-volume-value').textContent = `${channel.volume}%`;
     }
-    // The tablet's piano sound (v1.8 — M25): its volume, while its mode isn't Off; the mode is set on the tablet.
     const tablet = player.tablet;
     $('tablet-volume').hidden = !tablet || tablet.mode === 'off';
     if (tablet && !tabletDragging) {
@@ -806,6 +890,8 @@
       $('tablet-volume-value').textContent = `${tablet.volume}%`;
     }
     if (tablet) $('tablet-volume-note').textContent = tabletLine(tablet);
+    if (popoverOpen && popoverOpen.button.hidden) closePopover();
+    // "Sent to piano", a capsule in the page's head: the dot live while connected, breathing while it plays.
     const connected = state.link.state === 'connected';
     $('link-dot').classList.toggle('live', connected);
     $('link-dot').classList.toggle('breathing', connected && playing);
@@ -817,106 +903,124 @@
     $('keyboard-line').hidden = !keyboardLine;
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
+    updateImmersive();
     tick();
   }
 
-  // ---- Now playing's album colours (v1.15 — M41) ----------------------------------------------------
+  // ---- Now playing over the cover (v1.18 — M47) ------------------------------------------------------------
+  //
+  // The backdrop is the cover itself: three small copies (240 px, blurred 12 px, saturated 1.75) that their transform
+  // scales up to cover the window, each turning at its own pace while a piece plays, under a black dimming that keeps
+  // the light words at 4.5:1 over the cover's brightest part. While it shows, the panel is immersive (style.css). None
+  // for a roll card or a monogram, with Album colours off, in black and white, with reduced transparency or more
+  // contrast; only while Now playing shows.
 
   /**
-   * The art's colours behind Now playing, as the tablet has them: read from the picture Now playing's box shows, which
-   * the art loader hands over once it is in ([img]: a cover or a portrait), the last colours kept meanwhile, and none
-   * ([img] null) for a roll card, a monogram or a failure. They go in as --bd1 … --bd4 on the backdrop (hue and
-   * saturation; the stylesheet gives the lightness and the veil of the page's appearance), and .has-backdrop puts the
-   * words over them in the primary colour.
+   * Of each copy's 240 px (style.css: its transform does the enlarging, so the blurred texture stays small), the clear
+   * middle inside the blur's soft edge: what must cover the window's diagonal at every turn.
+   */
+  const BACKDROP_CLEAR = 192;
+  const BACKDROP_MIN_DIM = 0.18;
+  /** The luminance light words may stand on at 4.5:1, and sRGB's exponent the black's alpha works through. */
+  const BACKDROP_WORDS_L = 0.14;
+  const BACKDROP_GAMMA = 2.2;
+  const plainQuery = window.matchMedia('(prefers-reduced-transparency: reduce), (prefers-contrast: more)');
+
+  /** The address of the cover Now playing shows (its picture, not a roll card or a monogram), or null. */
+  let backdropAddress = null;
+  let immersive = false;
+
+  /**
+   * Now playing's picture, as the art loader hands it over once it is in ([img]: a cover or a portrait), or null for a
+   * roll card, a monogram or a failure; the last picture stays meanwhile. Its address (the same, so from the cache) and
+   * its dimming go in through the CSSOM.
    */
   function backdropFrom(img) {
-    const backdrop = $('now-backdrop');
-    const show = (palette) => {
-      if (palette) palette.forEach(([hue, saturation], i) => backdrop.style.setProperty(`--bd${i + 1}`, `${hue.toFixed(1)} ${(saturation * 100).toFixed(1)}%`));
-      backdrop.hidden = !palette;
-      backdrop.parentElement.classList.toggle('has-backdrop', !!palette);
-    };
     if (!img) {
-      show(null);
+      backdropAddress = null;
+      updateImmersive();
       return;
     }
     const read = () => {
-      if (img.isConnected) show(artPalette(img));
+      if (!img.isConnected) return;
+      const address = img.currentSrc || img.src;
+      const backdrop = $('now-backdrop');
+      backdrop.style.setProperty('--art', `url("${address.replace(/["\\\n]/g, encodeURIComponent)}")`);
+      backdrop.style.setProperty('--dim', dimFor(img).toFixed(3));
+      backdropAddress = address;
+      updateImmersive();
     };
     if (img.complete && img.naturalWidth > 0) read();
     else {
       img.addEventListener('load', read, { once: true });
-      img.addEventListener('error', () => show(null), { once: true });
+      img.addEventListener('error', () => backdropFrom(null), { once: true });
     }
   }
 
   /**
-   * The backdrop's four colours of a loaded picture, [hue, saturation] each, or null for grey art: the tablet's rule
-   * (data/art/ArtPalette.kt) over a 32 × 32 sample. A 4-bit histogram, near-black and near-white skipped (lightness
-   * outside 0.08–0.92); each bin scored by its count × (0.3 + its saturation); the best kept, each 25° from the others
-   * in hue or 0.25 in saturation, four at most; saturation × 1.35, at most 1; fewer than four padded from the first
-   * hue ± 30°, then + 60°; none when the best bin's chroma is under 0.12. The picture comes from this page's own
-   * address, so the canvas may read it; one it can't read gives none.
+   * The black a picture needs under light words: the loaded cover read on a 16 × 16 canvas, the brightest of its sixteen
+   * 4 × 4 block means (relative luminance L), dim = max(0.18, 1 − (0.14 / L)^(1 / 2.2)). The picture comes from this
+   * page's own address, so the canvas may read it; one it can't read gives the middle of the range.
    */
-  function artPalette(img) {
-    const size = 32;
-    const canvas = h('canvas', { width: size, height: size });
+  function dimFor(img) {
+    const canvas = h('canvas', { width: 16, height: 16 });
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return null;
+    if (!context) return 0.45;
     let data;
     try {
-      context.drawImage(img, 0, 0, size, size);
-      data = context.getImageData(0, 0, size, size).data;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(img, 0, 0, 16, 16);
+      data = context.getImageData(0, 0, 16, 16).data;
     } catch (e) {
-      return null;
+      return 0.45;
     }
-    const counts = new Uint32Array(4096);
-    const sums = new Float64Array(4096 * 3);
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] < 128) continue;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 510;
-      if (lightness < 0.08 || lightness > 0.92) continue;
-      const bin = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
-      counts[bin] += 1;
-      sums[bin * 3] += r;
-      sums[bin * 3 + 1] += g;
-      sums[bin * 3 + 2] += b;
-    }
-    const bins = [];
-    for (let bin = 0; bin < 4096; bin++) {
-      const n = counts[bin];
-      if (!n) continue;
-      const r = sums[bin * 3] / n / 255;
-      const g = sums[bin * 3 + 1] / n / 255;
-      const b = sums[bin * 3 + 2] / n / 255;
-      const hi = Math.max(r, g, b);
-      const lo = Math.min(r, g, b);
-      const chroma = hi - lo;
-      const saturation = chroma === 0 ? 0 : Math.min(1, chroma / (1 - Math.abs(hi + lo - 1)));
-      let hue = 0;
-      if (chroma > 0) hue = hi === r ? 60 * ((g - b) / chroma) : hi === g ? 60 * ((b - r) / chroma + 2) : 60 * ((r - g) / chroma + 4);
-      bins.push({ bin, chroma, hue: ((hue % 360) + 360) % 360, saturation, score: n * (0.3 + saturation) });
-    }
-    bins.sort((a, b) => b.score - a.score || a.bin - b.bin);
-    if (bins.length === 0 || bins[0].chroma < 0.12) return null;
-    const apart = (a, b) => {
-      const d = Math.abs(a.hue - b.hue) % 360;
-      return Math.min(d, 360 - d) >= 25 || Math.abs(a.saturation - b.saturation) >= 0.25;
+    const linear = (v) => {
+      const c = v / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
     };
-    const picks = [];
-    for (const bin of bins) {
-      if (picks.length === 4) break;
-      if (picks.every((p) => apart(p, bin))) picks.push(bin);
+    let brightest = 0;
+    for (let by = 0; by < 16; by += 4) {
+      for (let bx = 0; bx < 16; bx += 4) {
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        for (let y = by; y < by + 4; y++) {
+          for (let x = bx; x < bx + 4; x++) {
+            const i = (y * 16 + x) * 4;
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+          }
+        }
+        brightest = Math.max(brightest, 0.2126 * linear(r / 16) + 0.7152 * linear(g / 16) + 0.0722 * linear(b / 16));
+      }
     }
-    const colours = picks.map((p) => [p.hue, Math.min(1, p.saturation * 1.35)]);
-    for (const turn of [30, -30, 60]) {
-      if (colours.length < 4) colours.push([(((colours[0][0] + turn) % 360) + 360) % 360, colours[0][1]]);
-    }
-    return colours;
+    if (brightest <= 0) return BACKDROP_MIN_DIM;
+    return Math.max(BACKDROP_MIN_DIM, 1 - (BACKDROP_WORDS_L / brightest) ** (1 / BACKDROP_GAMMA));
   }
+
+  /** The backdrop and the immersive panel, as the section, the picture, the tablet's switches and the browser allow. */
+  function updateImmersive() {
+    const on = section === 'now' && !!state && !!state.player.piece && !!backdropAddress
+      && !state.monochrome && state.albumBackdrop !== false && !plainQuery.matches;
+    const backdrop = $('now-backdrop');
+    backdrop.hidden = !on;
+    backdrop.classList.toggle('playing', on && state.player.status === 'playing');
+    $('panel').classList.toggle('immersive', on);
+    if (on !== immersive) {
+      immersive = on;
+      if (views) views.immersive(on);
+    }
+  }
+
+  /** The copies' scale: the window's diagonal over their clear middle, through the CSSOM. */
+  function backdropScale() {
+    $('now-backdrop').style.setProperty('--bd-scale', (Math.hypot(window.innerWidth, window.innerHeight) / BACKDROP_CLEAR).toFixed(3));
+  }
+
+  backdropScale();
+  window.addEventListener('resize', debounce(backdropScale, 100));
+  plainQuery.addEventListener('change', updateImmersive);
 
   /**
    * What plays and what is played from (v1.11 — M29), in two read-only lines: "Instrument: Steven Piano" and
@@ -978,12 +1082,15 @@
 
   // ---- Now playing's views (v1.13 — M32) ----------------------------------------------------------------------
   //
-  // The score and the moving notes, as the tablet shows them (views.js and its modules, imported the first time
-  // they show). On a phone one view at a time, Art first; from 900 px both, with the divider.
+  // The score and the moving notes, as the tablet shows them (views.js and its modules, imported the first time they
+  // show). The views' switch, Art · Notes · Score, is a glass capsule under the transport at every width (v1.18 — M47):
+  // Art is the cover; Notes the roll alone; Score, from 900 px, the score beside or over the notes with the divider, and
+  // below 900 px the score alone. A browser that never leaves Art loads nothing for them.
 
   /** Bravura's version: the first eight hex digits of its SHA-256 (WebAssetsTest pins it to the file). */
   const FONT_VERSION = 'cdf0f893';
   const NOW_VIEW = 'steven-piano-now-view';
+  const VIEW_CHOICES = [['art', 'Art'], ['notes', 'Notes'], ['score', 'Score']];
   const wideQuery = window.matchMedia('(min-width: 900px)');
   let views = null;
   let viewsLoading = false;
@@ -1016,29 +1123,24 @@
     renderViews();
   }
 
-  /** The switch (phones) and the views: loaded the first time a view shows, then told every state. */
+  /** The switch and the views: the art view or the strip over the views; the module loaded the first time a view shows. */
   function renderViews() {
     if (!state) return;
     const piece = !!(state.player.piece && state.player.views);
-    const isWide = wideQuery.matches;
-    $('now-views-bar').hidden = !piece;
-    $('now-switch').hidden = isWide;
-    if (!isWide) {
-      $('now-switch').replaceChildren(
-        chip('Art', nowView === 'art', () => chooseView('art')),
-        chip('Notes', nowView === 'notes', () => chooseView('notes')),
-        chip('Score', nowView === 'score', () => chooseView('score')),
-      );
-    }
+    $('now-switch').hidden = !piece;
+    if (piece) segmented($('now-switch'), VIEW_CHOICES, nowView, chooseView);
+    $('section-now').classList.toggle('views-on', piece && nowView !== 'art');
     if (views) {
       views.state(state);
       return;
     }
     $('now-view').hidden = true;
-    if (!piece || (!isWide && nowView === 'art') || viewsLoading) return;
+    if (!piece || nowView === 'art' || viewsLoading) return;
     viewsLoading = true;
     import('./views.js').then((module) => {
-      views = module.mountViews($('now-views'), viewsApi, { h, glyph, chip, failed, viewButton: $('now-view'), phoneView: () => nowView });
+      views = module.mountViews($('now-views'), viewsApi, {
+        h, glyph, chip, failed, viewButton: $('now-view'), view: () => nowView, immersive: () => immersive,
+      });
       views.show(section === 'now');
       views.state(state);
     }, () => {
@@ -1137,6 +1239,49 @@
     if (state.player.channel) sendVolume(state.player.channel.key, pct);
   });
 
+  // The volumes' popovers (v1.18 — M47): a capsule opens its slider in a small glass popover over it (under it near the
+  // window's top); the capsule again, Escape, a tap outside, a scroll or another section closes it.
+  let popoverOpen = null;
+
+  function openPopover(button, panel) {
+    closePopover();
+    popoverOpen = { button, panel };
+    panel.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    const box = button.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    panel.style.left = `${Math.max(8, Math.min(box.left + box.width / 2 - width / 2, window.innerWidth - width - 8))}px`;
+    panel.style.top = `${box.top - height - 8 >= 8 ? box.top - height - 8 : box.bottom + 8}px`;
+    const range = panel.querySelector('input');
+    if (range) range.focus();
+  }
+
+  function closePopover(refocus) {
+    if (!popoverOpen) return;
+    const { button, panel } = popoverOpen;
+    popoverOpen = null;
+    panel.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    if (refocus) button.focus();
+  }
+
+  for (const [button, panel] of [[$('channel-volume'), $('channel-volume-pop')], [$('tablet-volume'), $('tablet-volume-pop')]]) {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (popoverOpen && popoverOpen.panel === panel) closePopover();
+      else openPopover(button, panel);
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    if (popoverOpen && !popoverOpen.panel.contains(event.target)) closePopover();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && popoverOpen) closePopover(true);
+  });
+  window.addEventListener('scroll', () => closePopover(), { passive: true });
+
   // ---- Up next --------------------------------------------------------------------------------------
 
   async function queueCommand(body) {
@@ -1187,22 +1332,27 @@
       upcoming.length > 0 ? h('button', { class: 'text-button', type: 'button', onclick: () => queueCommand({ action: 'clear' }), text: 'Clear' }) : null);
     const list = h('ul', { class: 'rows' });
     if (current) {
+      // The playing row, tinted, with a small three-bar mark (still: nothing loops but the backdrop).
       list.append(h('li', { class: 'row queue-row current' },
         artFor(current),
         h('div', { class: 'text' },
           h('p', { class: 'title', text: current.title }),
-          h('p', { class: 'meta', text: `Playing · ${current.composerShort || current.composer || 'Unknown composer'}` }))));
+          h('p', { class: 'meta', text: `Playing · ${current.composerShort || current.composer || 'Unknown composer'}` })),
+        h('span', { class: 'bars', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'))));
     }
     upcoming.forEach((item, index) => {
+      // Its length at the right; its move and remove buttons over it on hover or focus (always on a touch screen).
       const row = h('li', { class: 'row queue-row clickable', draggable: 'true', 'data-uid': item.uid },
         compact ? null : h('span', { class: 'handle', 'aria-hidden': 'true' }, glyph('i-handle')),
         artFor(item),
         h('div', { class: 'text' },
           h('p', { class: 'title' }, item.title, item.requested ? h('span', { class: 'tag', text: 'Requested' }) : null),
-          h('p', { class: 'meta', text: [item.composerShort || 'Unknown composer', clock(item.durationMs)].join(' · ') })),
-        h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} up`, disabled: index === 0, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index - 1 }); } }, glyph('i-up')),
-        h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} down`, disabled: index === upcoming.length - 1, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index + 1 }); } }, glyph('i-down')),
-        h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Remove ${item.title} from the queue`, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'remove', uid: item.uid }); } }, glyph('i-close')));
+          h('p', { class: 'meta' }, item.composerShort || 'Unknown composer', h('span', { class: 'meta-time', text: ` · ${clock(item.durationMs)}` }))),
+        h('span', { class: 'time', text: clock(item.durationMs) }),
+        h('span', { class: 'row-tools' },
+          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} up`, disabled: index === 0, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index - 1 }); } }, glyph('i-up')),
+          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} down`, disabled: index === upcoming.length - 1, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index + 1 }); } }, glyph('i-down')),
+          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Remove ${item.title} from the queue`, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'remove', uid: item.uid }); } }, glyph('i-close'))));
       row.addEventListener('click', () => queueCommand({ action: 'skip', uid: item.uid }));
       row.addEventListener('dragstart', (event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -1250,7 +1400,21 @@
     }
   }
 
-  const library = { category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, loaded: false, genre: storedGenre() };
+  // Covers · List (v1.18 — M47), remembered in this browser: covers from 900 px, the rows below, until one is chosen.
+  const LIBRARY_VIEW = 'steven-piano-library-view';
+  const LIBRARY_VIEWS = [['covers', 'Covers'], ['list', 'List']];
+
+  function storedLibraryView() {
+    try {
+      const value = localStorage.getItem(LIBRARY_VIEW);
+      if (value === 'covers' || value === 'list') return value;
+    } catch (e) {
+      // Private browsing: the width decides.
+    }
+    return window.matchMedia('(min-width: 900px)').matches ? 'covers' : 'list';
+  }
+
+  const library = { category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, loaded: false, genre: storedGenre(), shows: storedLibraryView(), emptyText: '' };
   const PAGE = 50;
 
   /** Under Modern the Library says artist where it says composer (v1.14 — M37). */
@@ -1273,7 +1437,21 @@
 
   function renderGenre() {
     segmented($('lib-genre'), GENRES, library.genre, chooseGenre);
+    segmented($('lib-view'), LIBRARY_VIEWS, library.shows, chooseLibraryView);
     $('lib-search').placeholder = SEARCH_WORDS[library.genre];
+  }
+
+  /** Covers or rows for the lists of pieces: remembered in this browser, the pieces shown laid out again. */
+  function chooseLibraryView(value) {
+    if (value === library.shows) return;
+    try {
+      localStorage.setItem(LIBRARY_VIEW, value);
+    } catch (e) {
+      // Private browsing: it holds for this page only.
+    }
+    library.shows = value;
+    segmented($('lib-view'), LIBRARY_VIEWS, library.shows, chooseLibraryView);
+    if (!$('lib-view').hidden) renderPieces(library.pieces, library.emptyText);
   }
 
   /** Another genre: remembered in this browser; a playlist or composer open closes, the chip and the search stay. */
@@ -1336,12 +1514,38 @@
     }
   }
 
+  /** A list of pieces (a category's, a playlist's, a composer's, a search's): a grid of covers, or the rows. */
   function renderPieces(pieces, emptyText) {
-    artForgetIn($('lib-rows'));   // the rows go: nothing keeps watching them
+    const list = $('lib-rows');
+    artForgetIn(list);   // the rows go: nothing keeps watching them
+    library.pieces = pieces;
+    library.emptyText = emptyText;
+    const covers = library.shows === 'covers';
+    list.className = covers ? 'cover-grid' : 'rows card';
+    $('lib-view').hidden = false;
     const ids = pieces.map((p) => p.id);
-    $('lib-rows').replaceChildren(...pieces.map((piece) => pieceRow(piece, ids)));
+    list.replaceChildren(...pieces.map((piece) => (covers ? pieceTile(piece, ids) : pieceRow(piece, ids))));
     $('lib-empty').hidden = pieces.length > 0;
     $('lib-empty').textContent = emptyText;
+  }
+
+  /** The playlists' and the composers' lists stay rows; Covers · List is for pieces. */
+  function rowsOnly() {
+    $('lib-rows').className = 'rows card';
+    $('lib-view').hidden = true;
+  }
+
+  /**
+   * A piece's tile: its cover (the tile's size, 14 px corners), title and composer; a tap plays it (and the list after
+   * it) as a row's does; its More button, a small glass circle at the cover's top right, plays it next or adds it.
+   */
+  function pieceTile(piece, queue) {
+    return h('li', { class: 'cover-tile' },
+      h('button', { class: 'tile-play', type: 'button', onclick: () => play(piece.id, queue) },
+        art(h('span', { class: 'art' }), piece, 'tile'),
+        h('span', { class: 'title', text: piece.title }),
+        h('span', { class: 'meta', text: piece.composerShort || unknownName() })),
+      h('button', { class: 'icon-button tile-more glass', type: 'button', 'aria-label': `More for ${piece.title}`, 'aria-haspopup': 'menu', onclick: (e) => { e.stopPropagation(); openMenu(e.currentTarget, piece, queue); } }, glyph('i-more')));
   }
 
   /** A piece's row: its art, title and composer with its length; a tap plays it (and the list after it); its menu plays it next or adds it. */
@@ -1406,6 +1610,7 @@
       const { playlists } = await get(scoped(ROOT + '/api/playlists'));
       $('lib-more').hidden = true;
       artForgetIn($('lib-rows'));
+      rowsOnly();
       $('lib-rows').replaceChildren(...playlists.map((list) => {
         const row = h('li', { class: 'row clickable' },
           h('div', { class: 'art' }, monogram(list.name)),
@@ -1438,6 +1643,7 @@
       const { composers } = await get(scoped(ROOT + '/api/composers'));
       $('lib-more').hidden = true;
       artForgetIn($('lib-rows'));
+      rowsOnly();
       $('lib-rows').replaceChildren(...composers.map((composer) => {
         const row = h('li', { class: 'row clickable' },
           art(h('div', { class: 'art' }), portraitOf(composer), 'row'),
@@ -1575,7 +1781,7 @@
       data.last && data.schedules.length ? h('p', { class: 'note inset', text: data.last }) : null,
       data.exactAlarms ? null : h('div', { class: 'banner', role: 'status', text: 'Exact alarms are off on the tablet, so no schedule will start. Allow them there: Piano › Schedule › Allow exact alarms.' }),
       scheduling.editing ? scheduleEditor() : null,
-      h('ul', { class: 'rows schedule-list' }, data.schedules.map(scheduleRow)),
+      h('ul', { class: 'rows card schedule-list' }, data.schedules.map(scheduleRow)),
       data.schedules.length === 0 && !scheduling.editing ? h('p', { class: 'empty', text: 'No schedules yet. The piano can play by itself at set times: a channel, a playlist or a piece.' }) : null,
       h('p', { class: 'note inset', text: 'The tablet starts them: keep it on, charged and near the piano.' }));
   }
@@ -1819,10 +2025,13 @@
 
   // ---- Requests ------------------------------------------------------------------------------------
 
+  /** The number waiting, on the rail's Requests and the More sheet's. */
   function renderRequestsCount() {
     const count = state.requests.pending;
-    $('requests-count').hidden = count === 0;
-    $('requests-count').textContent = String(count);
+    for (const badge of document.querySelectorAll('[data-count="requests"]')) {
+      badge.hidden = count === 0;
+      badge.textContent = String(count);
+    }
   }
 
   async function requestsLoad() {
@@ -1928,7 +2137,7 @@
   function renderAdd() {
     $('add-body').replaceChildren(
       dropZone(),
-      h('ul', { class: 'rows uploads', id: 'upload-rows' }),
+      h('ul', { class: 'rows card uploads', id: 'upload-rows' }),
       h('p', { class: 'note inset', id: 'import-tally' }),
       h('div', { class: 'import-playlist inset', id: 'import-playlist', hidden: true }));
     renderUploads();
@@ -2094,7 +2303,7 @@
       h('p', { class: 'empty', id: 'studio-unavailable', hidden: true }),
       h('div', { id: 'studio-parts' },
         h('h2', { class: 'section-head eyebrow', text: 'Models' }),
-        h('ul', { class: 'rows', id: 'studio-models' }),
+        h('ul', { class: 'rows card', id: 'studio-models' }),
         h('h2', { class: 'section-head eyebrow', text: 'Transcribe' }),
         zoneFor({
           accept: 'audio/*,' + AUDIO_EXTENSIONS.map((e) => '.' + e).join(','),
@@ -2104,11 +2313,11 @@
           button: 'Choose recordings',
           onFiles: addRecordings,
         }),
-        h('ul', { class: 'rows uploads', id: 'studio-upload-rows' }),
+        h('ul', { class: 'rows card uploads', id: 'studio-upload-rows' }),
         h('h2', { class: 'section-head eyebrow', text: 'Compose' }),
         h('div', { id: 'studio-compose' }),
         h('h2', { class: 'section-head eyebrow', id: 'studio-jobs-head', text: 'Jobs', hidden: true }),
-        h('ul', { class: 'rows', id: 'studio-jobs' })));
+        h('ul', { class: 'rows card', id: 'studio-jobs' })));
     renderUploads();
     renderCompose();
     renderStudioState();
@@ -2524,7 +2733,8 @@
     ];
     // Another MIDI piano plays (v1.11 — M29): the piano's pages and actions are Steven Piano's, hidden meanwhile.
     if (state.instruments && state.instruments.instrument && state.instruments.instrument.kind === 'midi') {
-      fill(body, lines, h('p', { class: 'note inset', text: `Sound and touch, Lights and screen, Pedal and Firmware belong to Steven Piano and are hidden while ${state.instruments.instrument.name} plays.` }));
+      fill(body, h('div', { class: 'content builtin-settings' }, lines, h('p', { class: 'note inset', text: `Sound and touch, Lights and screen, Pedal and Firmware belong to Steven Piano and are hidden while ${state.instruments.instrument.name} plays.` }), appearanceCard()));
+      renderAppearance();
       return;
     }
     const status = !connected
@@ -2576,13 +2786,180 @@
     } }, label);
     nodes.push(h('h3', { class: 'section-head eyebrow', text: 'Actions' }), h('div', { class: 'actions' }, act('status', 'Read status'), act('off', 'All keys off'), act('save', 'Save to the piano now')));
     if (pianoTable.statusText) nodes.push(h('pre', { class: 'status-report', text: pianoTable.statusText }));
-    fill(body, nodes);
+    nodes.push(appearanceCard());
+    fill(body, h('div', { class: 'content builtin-settings' }, nodes));
+    renderAppearance();
+  }
+
+  /**
+   * The panel's own Appearance (v1.18 — M47), on the built-in page: the frame no longer holds it, and settings.js offers
+   * it on its Panel page through host.appearance. Dark · Light · Follow system, kept in this browser.
+   */
+  function appearanceCard() {
+    return h('div', { class: 'card appearance-card' },
+      h('div', { class: 'card-head' }, h('h2', { text: 'Panel' })),
+      h('div', { class: 'setting' },
+        h('div', { class: 'label' }, 'Appearance', h('span', { class: 'meta', text: 'In this browser only' })),
+        h('div', { class: 'segmented', id: 'appearance-switch', role: 'group', 'aria-label': 'Appearance' })));
+  }
+
+  // ---- The Settings and System pages' modules (v1.18 — M47) ----------------------------------------------
+  //
+  // settings.js (the section piano) and system.js (the section system) are ES modules written apart from this file.
+  // Each loads the first time its section shows (system.js also after the first state, for the rail's foot), and each
+  // exports create(host, body, tools) → { show(), hide(), render(state) }; system.js also vitals(host, node). While
+  // settings.js is not there the built-in page shows; while system.js is not there the System item stays hidden and
+  // the rail's foot empty. Nothing a module does can stop the panel: every call into one is caught.
+
+  /** What a module may use: the panel's helpers, its calls (every address from ROOT), the art loader, the sections. */
+  const host = Object.freeze({
+    ROOT,
+    RELAYED: ROOT !== '',
+    h,
+    fill,
+    glyph,
+    chip,
+    get,
+    put,
+    post,
+    toast,
+    failed,
+    state: () => state,
+    clock,
+    plural,
+    signed,
+    debounce,
+    art,
+    show: (name) => show(name),
+    appearance: Object.freeze({ get: appearance, set: setAppearance }),
+    confirm,
+  });
+
+  const modules = {
+    piano: { body: 'piano-body', tools: 'piano-tools', loading: null, module: null, page: null, showing: false, failed: false },
+    system: { body: 'system-body', tools: 'system-tools', loading: null, module: null, page: null, showing: false, failed: false },
+  };
+
+  /** [key]'s module, imported once: it, or null (and failed) while it is not there or not one. */
+  function loadModule(key) {
+    const m = modules[key];
+    if (!m.loading) {
+      m.loading = (key === 'piano' ? import('./settings.js') : import('./system.js')).then((module) => {
+        if (!module || typeof module.create !== 'function') throw new Error(`${key}: no create()`);
+        m.module = module;
+        return module;
+      }).catch(() => {
+        m.failed = true;
+        return null;
+      });
+    }
+    return m.loading;
+  }
+
+  /** Runs [fn] for a module; what it throws is kept from the panel. */
+  function guarded(fn) {
+    try {
+      return fn();
+    } catch (e) {
+      if (window.console) console.error(e);
+      return undefined;
+    }
+  }
+
+  /** The module's page, made the first time it shows, in its section's body and head tools; null when it fails. */
+  function modulePage(m) {
+    if (!m.page && m.module && !m.failed) {
+      m.page = guarded(() => m.module.create(host, $(m.body), $(m.tools))) || null;
+      if (!m.page) m.failed = true;
+    }
+    return m.page;
+  }
+
+  function moduleShow(m) {
+    if (!modulePage(m) || m.showing) return;
+    m.showing = true;
+    guarded(() => m.page.show());
+    moduleRender(m);
+  }
+
+  function moduleHide(m) {
+    if (!m.page || !m.showing) return;
+    m.showing = false;
+    guarded(() => m.page.hide());
+  }
+
+  function moduleRender(m) {
+    if (m.page && m.showing && state) guarded(() => m.page.render(state));
+  }
+
+  /** Settings: settings.js's page once it is in; the built-in page (today's) when it is not there. */
+  function openSettings() {
+    const m = modules.piano;
+    if (m.failed) {
+      pianoLoad();
+      return;
+    }
+    loadModule('piano').then(() => {
+      if (section !== 'piano') return;
+      if (modulePage(m)) moduleShow(m);
+      else pianoLoad();
+    });
+  }
+
+  /** System: system.js's page; without it, Now playing. */
+  function openSystem() {
+    const m = modules.system;
+    loadModule('system').then(() => {
+      if (section !== 'system') return;
+      if (modulePage(m)) moduleShow(m);
+      else show('now');
+    });
+  }
+
+  /** After the first state: system.js, if it is there, shows its item and keeps the rail's foot. */
+  let systemStarted = false;
+  function startSystem() {
+    if (systemStarted) return;
+    systemStarted = true;
+    loadModule('system').then((module) => {
+      if (!module) return;
+      for (const item of document.querySelectorAll('[data-section="system"]')) item.hidden = false;
+      if (typeof module.vitals === 'function') guarded(() => module.vitals(host, $('rail-vitals')));
+    });
+  }
+
+  /**
+   * A small glass dialog: [title], [message], Cancel and [action]'s button; [run] is called on the action. Escape, a tap
+   * outside and Cancel close it; the focus starts on Cancel and goes back where it was.
+   */
+  function confirm({ title, message, action, run }) {
+    const cancel = h('button', { class: 'outlined', type: 'button', text: 'Cancel' });
+    const act = h('button', { class: 'outlined filled', type: 'button', text: action || 'OK' });
+    const dialog = h('dialog', { class: 'confirm', 'aria-labelledby': 'confirm-title', 'aria-describedby': message ? 'confirm-message' : null },
+      h('div', { class: 'confirm-body' },
+        h('h2', { id: 'confirm-title', text: title || '' }),
+        message ? h('p', { class: 'note', id: 'confirm-message', text: message }) : null,
+        h('div', { class: 'confirm-actions' }, cancel, act)));
+    const close = () => {
+      if (dialog.open) dialog.close();
+    };
+    dialog.addEventListener('close', () => dialog.remove());
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) close();   // the scrim
+    });
+    cancel.addEventListener('click', close);
+    act.addEventListener('click', () => {
+      close();
+      if (typeof run === 'function') Promise.resolve().then(run).catch(failed);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    cancel.focus();
   }
 
   // ---- Start ----------------------------------------------------------------------------------------------
 
   async function start() {
-    renderAppearance();
     try {
       onState(await get(ROOT + '/api/state'));
     } catch (e) {
@@ -2597,6 +2974,7 @@
     $('offline').hidden = true;
     $('gate').hidden = true;
     $('panel').hidden = false;
+    startSystem();
     show(location.hash.slice(1) || 'now');
     openSocket();
   }

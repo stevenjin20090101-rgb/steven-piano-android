@@ -66,6 +66,8 @@ object WebAssets {
         "/roll.js" to Asset("roll.js", JS),
         "/score.js" to Asset("score.js", JS),
         "/views.js" to Asset("views.js", JS),
+        // The Settings and System pages' styles (v1.18 — M47): linked by the page, filled by their modules' run.
+        "/system.css" to Asset("system.css", CSS),
     )
 
     val PUBLIC: Map<String, Asset> = mapOf(
