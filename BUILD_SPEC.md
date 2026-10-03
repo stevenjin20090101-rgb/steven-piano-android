@@ -7631,7 +7631,6 @@ version bump, no signing.
   `BackdropContrastTest` (3: every hue 0–359 at saturation 1 through each veil ≥ 4.5:1, worst 5.7 paper, 8.6 ink, 5.1
   on black; the values), the setting's round trip; `DiagnosticsExporterTest` 49 → 50 lines, `WebApiTest`'s key set.
   1,592 → 1,601 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.
-=======
 # v1.15 — M42: sessions remembered
 
 Fable's design (the plan's M42; DESIGN.md › v1.5.1 — M18 › The PIN gate), Opus coding, one lean run in a worktree beside
@@ -7740,3 +7739,11 @@ Full at least Light), `DynamicsTest` (2: the arithmetic; a piece's own mean). Up
 `../midi` at fourteen settings (Light and Full; T from 20 to 250 ms; a MIDI piano): the order, the length, the pedal,
 the onsets, the spacing and the release gap all hold, 5 ms at most a piece on the Mac.
 1,605 → 1,615 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.
+
+# v1.16 — M43: the small art beside Now playing's title
+
+- `NowPlayingScreen`'s `PieceView`: a `Row` of `PieceArt(…, ArtSize.Tile)` at 72 dp (`frame.wide`) or 56 dp, 12 dp, then
+  the title (`displayMedium`, 2 lines; 3 where the pane is under 360 dp) over the eyebrow, centred on each other; the
+  art's tap opens the piece sheet (`clearAndSetSemantics` before `clickable`: screen readers meet the title alone), and
+  `StartingLine` sits under the words. 1,605 unit tests (12 skipped), none failing; `lintDebug`: 0 errors, the same 30
+  warnings.
