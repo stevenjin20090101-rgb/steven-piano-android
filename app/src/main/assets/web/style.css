@@ -58,6 +58,9 @@
   /* The segmented control's thumb (v1.14 — M37): lighter than its track in both appearances, the paper's elevated
      surface here, the content colour at 18 % on the camera body. */
   --thumb: var(--paper-elevated);
+  /* Now playing's album colours (v1.15 — M41, ui/theme/Backdrop.kt): the discs' lightness and the veil over them. */
+  --bd-l: 45%;
+  --bd-veil: 55%;
   color-scheme: light;
 
   /* The glass (ui/theme/Glass.kt's GlassTokens): the fills, the blur, the scroll-edge band and the
@@ -93,6 +96,8 @@
     --hand-left: var(--ink-hand-left);
     --hand-right: var(--ink-hand-right);
     --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
+    --bd-l: 32%;
+    --bd-veil: 62%;
     color-scheme: dark;
   }
 }
@@ -111,6 +116,8 @@
   --hand-left: var(--ink-hand-left);
   --hand-right: var(--ink-hand-right);
   --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
+  --bd-l: 32%;
+  --bd-veil: 62%;
   color-scheme: dark;
 }
 
@@ -847,6 +854,62 @@ button, input, select { font: inherit; color: inherit; }
 /* From 1280 px Up next widens with the window (three fifths of Now playing's column), never below 360 px. */
 @media (min-width: 1280px) {
   .now { grid-template-columns: minmax(0, 1fr) minmax(360px, 0.6fr); }
+}
+
+/* ---- Now playing's album colours (v1.15 — M41) ------------------------------------------------------
+   The playing piece's art colours behind .now-main, as the tablet's Now playing has them: four soft discs, each a radial
+   gradient from its colour to nothing (no blur), 60 % of the window's shorter side in radius, drifting on a transform-only
+   path (each its own pace, a turn in 20–26 s) while a piece plays and still otherwise, under a veil of the surface (55 % on
+   paper, 62 % on the camera body) so the words, in the primary colour over it, keep 4.5:1 over any hue. The colours are the
+   art's (--bd1 … --bd4: hue and saturation, set by app.js from a 32 × 32 sample of the loaded picture); the lightness is
+   the appearance's. None in black and white, with Album colours off on the tablet, with reduced transparency or more
+   contrast; still with reduced motion. */
+
+.now-main { position: relative; isolation: isolate; }
+
+.backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+
+.bd {
+  --bd: 0 0%;
+  position: absolute;
+  width: 120vmin;
+  height: 120vmin;
+  margin: -60vmin 0 0 -60vmin;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, hsl(var(--bd) var(--bd-l)), hsl(var(--bd) var(--bd-l) / 0.82) 30%,
+    hsl(var(--bd) var(--bd-l) / 0.42) 60%, hsl(var(--bd) var(--bd-l) / 0.12) 85%, hsl(var(--bd) var(--bd-l) / 0));
+  animation: bd-sway 10s ease-in-out infinite alternate, bd-rise 7s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+
+.bd1 { --bd: var(--bd1); left: 30%; top: 50%; animation-duration: 10s, 7s; }
+.bd2 { --bd: var(--bd2); left: 70%; top: 58%; animation-duration: 11.25s, 7.9s; animation-direction: alternate-reverse, alternate; }
+.bd3 { --bd: var(--bd3); left: 45%; top: 66%; animation-duration: 12s, 8.4s; animation-direction: alternate, alternate-reverse; }
+.bd4 { --bd: var(--bd4); left: 60%; top: 62%; animation-duration: 13s, 9.1s; animation-direction: alternate-reverse; }
+
+.bd-veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--surface) var(--bd-veil), transparent); }
+
+.backdrop.playing .bd { animation-play-state: running; }
+
+@keyframes bd-sway { from { translate: -25% 0; } to { translate: 25% 0; } }
+
+@keyframes bd-rise { from { transform: translateY(-18%); } to { transform: translateY(18%); } }
+
+body.mono .backdrop, body.no-backdrop .backdrop { display: none; }
+
+/* Over the colours, nothing secondary or tertiary: the primary colour alone keeps 4.5:1 through the veil. The views keep
+   their own cards. */
+body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-title, .eyebrow, .scrubber, .transport, .now-controls) {
+  --secondary: var(--primary);
+  --tertiary: var(--primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bd { animation: none; }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .backdrop { display: none; }
 }
 
 /* ---- Now playing's views (v1.13 — M32) ------------------------------------------------------------

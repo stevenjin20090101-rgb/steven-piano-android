@@ -357,6 +357,7 @@
     clockBase.tempo = player.tempoPct;
     clockBase.duration = player.piece ? player.piece.durationMs : 0;
     document.body.classList.toggle('mono', !!next.monochrome);
+    document.body.classList.toggle('no-backdrop', next.albumBackdrop === false);   // Album colours off on the tablet (v1.15 — M41)
     render(before);
     renderViews();
   }
@@ -568,8 +569,10 @@
     if (artKey !== shownArt) {
       shownArt = artKey;
       art($('now-art'), piece, 'tile');
+      backdropFrom($('now-art'));
     }
     $('now-art').hidden = !piece;
+    $('now-backdrop').classList.toggle('playing', playing);
     $('now-title').textContent = piece ? piece.title : 'Choose a piece from the library.';
     $('now-eyebrow').textContent = piece
       ? [piece.composer, player.channel && player.channel.name, player.channel && 'Channel'].filter(Boolean).join(' · ')
@@ -618,6 +621,104 @@
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
     tick();
+  }
+
+  // ---- Now playing's album colours (v1.15 — M41) ----------------------------------------------------
+
+  /**
+   * The art's colours behind Now playing, as the tablet has them: read from the picture [box] shows (a cover or a
+   * portrait; a roll card or a monogram has none) once it has loaded, the last colours kept meanwhile, and none when it
+   * fails. They go in as --bd1 … --bd4 on the backdrop (hue and saturation; the stylesheet gives the lightness and the
+   * veil of the page's appearance), and .has-backdrop puts the words over them in the primary colour.
+   */
+  function backdropFrom(box) {
+    const backdrop = $('now-backdrop');
+    const show = (palette) => {
+      if (palette) palette.forEach(([hue, saturation], i) => backdrop.style.setProperty(`--bd${i + 1}`, `${hue.toFixed(1)} ${(saturation * 100).toFixed(1)}%`));
+      backdrop.hidden = !palette;
+      backdrop.parentElement.classList.toggle('has-backdrop', !!palette);
+    };
+    const img = box.querySelector('img');
+    if (!img) {
+      show(null);
+      return;
+    }
+    const read = () => {
+      if (box.contains(img)) show(artPalette(img));
+    };
+    if (img.complete && img.naturalWidth > 0) read();
+    else {
+      img.addEventListener('load', read, { once: true });
+      img.addEventListener('error', () => show(null), { once: true });
+    }
+  }
+
+  /**
+   * The backdrop's four colours of a loaded picture, [hue, saturation] each, or null for grey art: the tablet's rule
+   * (data/art/ArtPalette.kt) over a 32 × 32 sample. A 4-bit histogram, near-black and near-white skipped (lightness
+   * outside 0.08–0.92); each bin scored by its count × (0.3 + its saturation); the best kept, each 25° from the others
+   * in hue or 0.25 in saturation, four at most; saturation × 1.35, at most 1; fewer than four padded from the first
+   * hue ± 30°, then + 60°; none when the best bin's chroma is under 0.12. The picture comes from this page's own
+   * address, so the canvas may read it; one it can't read gives none.
+   */
+  function artPalette(img) {
+    const size = 32;
+    const canvas = h('canvas', { width: size, height: size });
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    let data;
+    try {
+      context.drawImage(img, 0, 0, size, size);
+      data = context.getImageData(0, 0, size, size).data;
+    } catch (e) {
+      return null;
+    }
+    const counts = new Uint32Array(4096);
+    const sums = new Float64Array(4096 * 3);
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 510;
+      if (lightness < 0.08 || lightness > 0.92) continue;
+      const bin = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      counts[bin] += 1;
+      sums[bin * 3] += r;
+      sums[bin * 3 + 1] += g;
+      sums[bin * 3 + 2] += b;
+    }
+    const bins = [];
+    for (let bin = 0; bin < 4096; bin++) {
+      const n = counts[bin];
+      if (!n) continue;
+      const r = sums[bin * 3] / n / 255;
+      const g = sums[bin * 3 + 1] / n / 255;
+      const b = sums[bin * 3 + 2] / n / 255;
+      const hi = Math.max(r, g, b);
+      const lo = Math.min(r, g, b);
+      const chroma = hi - lo;
+      const saturation = chroma === 0 ? 0 : Math.min(1, chroma / (1 - Math.abs(hi + lo - 1)));
+      let hue = 0;
+      if (chroma > 0) hue = hi === r ? 60 * ((g - b) / chroma) : hi === g ? 60 * ((b - r) / chroma + 2) : 60 * ((r - g) / chroma + 4);
+      bins.push({ bin, chroma, hue: ((hue % 360) + 360) % 360, saturation, score: n * (0.3 + saturation) });
+    }
+    bins.sort((a, b) => b.score - a.score || a.bin - b.bin);
+    if (bins.length === 0 || bins[0].chroma < 0.12) return null;
+    const apart = (a, b) => {
+      const d = Math.abs(a.hue - b.hue) % 360;
+      return Math.min(d, 360 - d) >= 25 || Math.abs(a.saturation - b.saturation) >= 0.25;
+    };
+    const picks = [];
+    for (const bin of bins) {
+      if (picks.length === 4) break;
+      if (picks.every((p) => apart(p, bin))) picks.push(bin);
+    }
+    const colours = picks.map((p) => [p.hue, Math.min(1, p.saturation * 1.35)]);
+    for (const turn of [30, -30, 60]) {
+      if (colours.length < 4) colours.push([(((colours[0][0] + turn) % 360) + 360) % 360, colours[0][1]]);
+    }
+    return colours;
   }
 
   /**

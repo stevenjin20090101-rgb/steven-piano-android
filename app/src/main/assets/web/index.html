@@ -88,6 +88,14 @@
     <!-- Now playing (on wide screens with Up next and the drop zone beside it) -->
     <section id="section-now" data-page="now" class="now" hidden>
       <div class="now-main">
+        <!-- The album's colours behind Now playing (v1.15 — M41): four soft discs, drifting while a piece plays, under a veil. -->
+        <div class="backdrop" id="now-backdrop" aria-hidden="true" hidden>
+          <div class="bd bd1"></div>
+          <div class="bd bd2"></div>
+          <div class="bd bd3"></div>
+          <div class="bd bd4"></div>
+          <div class="bd-veil"></div>
+        </div>
         <!-- The score and the moving notes (v1.13 — M32): the views' module fills them the first time they show. -->
         <div class="views-bar" id="now-views-bar" hidden>
           <div class="chips views-switch" id="now-switch" role="group" aria-label="Show"></div>
