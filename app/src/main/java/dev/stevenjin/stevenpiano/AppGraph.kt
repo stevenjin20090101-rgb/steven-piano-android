@@ -843,6 +843,7 @@ class AppGraph(private val app: Application) {
                 if (was?.velocityPct != s.velocityPct) player.setVelocity(s.velocityPct)
                 if (was?.foldOutOfRange != s.foldOutOfRange) player.setFold(s.foldOutOfRange)
                 if (was?.skipDrumChannel != s.skipDrumChannel) player.setSkipDrums(s.skipDrumChannel)
+                if (was?.performance != s.performance) player.setPerformance(s.performance)   // v1.16 — M44: from the next piece
                 applied = s
             }
         }

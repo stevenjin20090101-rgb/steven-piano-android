@@ -22,6 +22,9 @@ import dev.stevenjin.stevenpiano.piano.PianoPage
 import dev.stevenjin.stevenpiano.piano.PianoSetting
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.piano.SettingKind
+import dev.stevenjin.stevenpiano.player.DynamicRange
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
+import dev.stevenjin.stevenpiano.player.Performance
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -235,6 +238,14 @@ object WebApi {
             velocityPct = if (json.has("velocityPct")) int(json, "velocityPct", PlaybackLimits.VelocityPct) else null,
             foldOutOfRange = boolOrNull(json, "foldOutOfRange"),
             skipDrumChannel = boolOrNull(json, "skipDrumChannel"),
+            dynamicRange = stringOrNull(json, "dynamicRange", 16)?.let {
+                DYNAMIC_RANGES[it] ?: throw ApiError(400, "field", "dynamicRange must be narrow, natural or wide.")
+            },
+            velocityFloor = if (json.has("velocityFloor")) int(json, "velocityFloor", PlaybackLimits.VelocityFloor) else null,
+            expression = stringOrNull(json, "expression", 16)?.let {
+                EXPRESSIONS[it] ?: throw ApiError(400, "field", "expression must be off, light or full.")
+            },
+            restrikeMs = if (json.has("restrikeMs")) restrikeMs(json) else null,
             webGuests = boolOrNull(json, "webGuests"),
             webApproveFirst = boolOrNull(json, "webApproveFirst"),
             webHostName = host,
@@ -246,6 +257,15 @@ object WebApi {
         )
         if (change.isEmpty) throw ApiError(400, "field", "Nothing to change.")
         return change
+    }
+
+    /** The re-strike time as the Playback page offers it: 0 (Auto), or 60 to 250 ms in tens. */
+    private fun restrikeMs(json: JSONObject): Int {
+        val ms = int(json, "restrikeMs", Performance.AUTO..PlaybackLimits.RestrikeMs.last)
+        if (ms != Performance.AUTO && (ms !in PlaybackLimits.RestrikeMs || ms % PlaybackLimits.RESTRIKE_STEP_MS != 0)) {
+            throw ApiError(400, "range", "restrikeMs must be 0 (Auto), or 60 to 250 in tens.")
+        }
+        return ms
     }
 
     /**
@@ -623,9 +643,14 @@ object WebApi {
 
     private val SETTINGS_KEYS = setOf(
         "preRollMs", "defaultTempoPct", "transpose", "velocityPct", "foldOutOfRange", "skipDrumChannel",
+        "dynamicRange", "velocityFloor", "expression", "restrikeMs",
         "webGuests", "webApproveFirst", "webHostName", "tabletVolume",
         "noteDisplay", "fingering", "chordNames", "handColours",
     )
+
+    /** Dynamic range and Expression on the wire (v1.16 — M44): the Playback page's choices, in lower case. */
+    private val DYNAMIC_RANGES = DynamicRange.entries.associateBy { it.name.lowercase() }
+    private val EXPRESSIONS = ExpressionLevel.entries.associateBy { it.name.lowercase() }
 
     /** The roll styles the panel may choose (v1.13 — M32): never Score, a phone-sized tablet's own choice. */
     private val NOTE_DISPLAYS = mapOf("paperRoll" to NoteDisplay.PAPER_ROLL, "falling" to NoteDisplay.FALLING)

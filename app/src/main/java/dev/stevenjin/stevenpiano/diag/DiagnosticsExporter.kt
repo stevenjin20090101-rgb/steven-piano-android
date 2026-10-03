@@ -178,6 +178,11 @@ object DiagnosticsText {
         line("velocityPct", s.velocityPct)
         line("foldOutOfRange", s.foldOutOfRange)
         line("skipDrumChannel", s.skipDrumChannel)
+        // How a piece is played (v1.16 — M44): the range, the quietest note, expression, the re-strike time (0: Auto).
+        line("dynamicRange", s.dynamicRange)
+        line("velocityFloor", s.velocityFloor)
+        line("expression", s.expression)
+        line("restrikeMs", s.restrikeMs)
         line("keysViewportStart", s.keysViewportStart)
         line("shuffle", s.shuffle)
         line("repeat", s.repeat)

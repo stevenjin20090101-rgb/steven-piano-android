@@ -26,6 +26,10 @@ import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.midi.KeyMap
+import dev.stevenjin.stevenpiano.player.DynamicRange
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
+import dev.stevenjin.stevenpiano.player.Performance
+import dev.stevenjin.stevenpiano.player.PerformanceSettings
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.flow.Flow
@@ -111,6 +115,14 @@ data class PianoSettings(
     val velocityPct: Int = 100,
     val foldOutOfRange: Boolean = true,
     val skipDrumChannel: Boolean = true,
+    /** How far soft and loud notes spread apart (Piano › Playback › Dynamic range, v1.16 — M44). */
+    val dynamicRange: DynamicRange = DynamicRange.NATURAL,
+    /** The quietest note's velocity, 1–60: softer notes are raised to it, so they still strike (Quietest note). */
+    val velocityFloor: Int = Performance.DEFAULT_FLOOR,
+    /** Loudness and timing shaped as a pianist would: Off, Light (at first) or Full (Expression). */
+    val expression: ExpressionLevel = ExpressionLevel.LIGHT,
+    /** The least time between two strikes of one key, ms: 0 is Auto (the piano's own), else 60–250 in tens (Re-strike time). */
+    val restrikeMs: Int = Performance.AUTO,
     /**
      * Now playing's split on wide frames (v1.12 — M31a): the score's share of the room it shares with the notes,
      * stacked (medium widths) and side by side (expanded), each remembered; 0 hides the score, 1 the notes; null:
@@ -211,6 +223,9 @@ data class PianoSettings(
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
 
+    /** The four that shape how a piece is played (v1.16 — M44), as the player takes them. */
+    val performance: PerformanceSettings get() = PerformanceSettings(dynamicRange, velocityFloor, expression, restrikeMs)
+
     /** Enrolled with a relay: an address, a piano's id and a secret kept. */
     val cloudEnrolled: Boolean get() = cloudHost != null && cloudPianoId != null && cloudSecretSet
 
@@ -260,6 +275,15 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setFoldOutOfRange(on: Boolean) = edit { it[FOLD_OUT_OF_RANGE] = on }
 
     suspend fun setSkipDrumChannel(on: Boolean) = edit { it[SKIP_DRUM_CHANNEL] = on }
+
+    suspend fun setDynamicRange(range: DynamicRange) = edit { it[DYNAMIC_RANGE] = range.name }
+
+    suspend fun setVelocityFloor(velocity: Int) = edit { it[VELOCITY_FLOOR] = velocity.coerceIn(PlaybackLimits.VelocityFloor) }
+
+    suspend fun setExpression(level: ExpressionLevel) = edit { it[EXPRESSION] = level.name }
+
+    /** The re-strike time: 0 (or below) is Auto; anything else is held to 60–250 ms in tens. */
+    suspend fun setRestrike(ms: Int) = edit { it[RESTRIKE_MS] = PlaybackLimits.restrikeMs(ms) }
 
     /**
      * Now playing's split for one arrangement (v1.12 — M31a): [stacked] or side by side, held to 0-1; a share that
@@ -497,6 +521,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             velocityPct = (this[VELOCITY_PCT] ?: defaults.velocityPct).coerceIn(PlaybackLimits.VelocityPct),
             foldOutOfRange = this[FOLD_OUT_OF_RANGE] ?: defaults.foldOutOfRange,
             skipDrumChannel = this[SKIP_DRUM_CHANNEL] ?: defaults.skipDrumChannel,
+            dynamicRange = DynamicRange.entries.firstOrNull { it.name == this[DYNAMIC_RANGE] } ?: defaults.dynamicRange,
+            velocityFloor = (this[VELOCITY_FLOOR] ?: defaults.velocityFloor).coerceIn(PlaybackLimits.VelocityFloor),
+            expression = ExpressionLevel.entries.firstOrNull { it.name == this[EXPRESSION] } ?: defaults.expression,
+            restrikeMs = PlaybackLimits.restrikeMs(this[RESTRIKE_MS] ?: defaults.restrikeMs),
             notesSplitStacked = this[NOTES_SPLIT_STACKED].asShare() ?: legacySplit(),
             notesSplitSide = this[NOTES_SPLIT_SIDE].asShare() ?: legacySplit(),
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
@@ -553,6 +581,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val VELOCITY_PCT = intPreferencesKey("velocityPct")
         val FOLD_OUT_OF_RANGE = booleanPreferencesKey("foldOutOfRange")
         val SKIP_DRUM_CHANNEL = booleanPreferencesKey("skipDrumChannel")
+        val DYNAMIC_RANGE = stringPreferencesKey("dynamicRange")
+        val VELOCITY_FLOOR = intPreferencesKey("velocityFloor")
+        val EXPRESSION = stringPreferencesKey("expression")
+        val RESTRIKE_MS = intPreferencesKey("restrikeMs")
         /** v1.1-1.11's Wide layout, read only to seed the split (v1.12 — M31a). */
         val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
         val NOTES_SPLIT_STACKED = floatPreferencesKey("notesSplitStacked")

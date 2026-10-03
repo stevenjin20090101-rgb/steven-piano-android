@@ -50,6 +50,10 @@ object PageRows {
     val DEFAULT_TEMPO = AppRow("playback.tempo", "Default tempo", SettingsPage.Playback, null, listOf("speed", "faster", "slower"))
     val TRANSPOSE = AppRow("playback.transpose", "Transpose", SettingsPage.Playback, null, listOf("key", "semitone", "pitch"))
     val VELOCITY = AppRow("playback.velocity", "Velocity", SettingsPage.Playback, null, listOf("loudness", "louder", "softer", "dynamics"))
+    val DYNAMIC_RANGE = AppRow("playback.range", "Dynamic range", SettingsPage.Playback, null, listOf("dynamics", "soft notes", "loud and soft", "contrast"))
+    val QUIETEST_NOTE = AppRow("playback.floor", "Quietest note", SettingsPage.Playback, null, listOf("soft notes", "dynamics", "velocity floor", "minimum"))
+    val EXPRESSION = AppRow("playback.expression", "Expression", SettingsPage.Playback, null, listOf("humanize", "humanise", "dynamics", "phrasing", "musical"))
+    val RESTRIKE = AppRow("playback.restrike", "Re-strike time", SettingsPage.Playback, null, listOf("repeat", "repeated notes", "re-strike", "trill", "tremolo"))
     val FOLD = AppRow("playback.fold", "Fold notes outside C1–B7", SettingsPage.Playback, null, listOf("range", "octave", "low notes", "high notes"))
     val SKIP_DRUMS = AppRow("playback.drums", "Skip drum channel", SettingsPage.Playback, null, listOf("percussion", "channel 10"))
 
@@ -113,7 +117,7 @@ object PageRows {
         CONNECTION, AUTO_CONNECT, STEVEN_PIANO, ANOTHER_PIANO, ALL_KEYS_OFF,
         CHOOSE_KEYBOARD, FORGET_KEYBOARD,
         CHECK_PIANO_UPDATES,
-        PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, FOLD, SKIP_DRUMS,
+        PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
         ADD_SCHEDULE, EXACT_ALARMS,
         WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,

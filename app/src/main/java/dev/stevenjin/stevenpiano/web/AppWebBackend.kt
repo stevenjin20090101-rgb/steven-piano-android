@@ -463,6 +463,10 @@ class AppWebBackend(
         change.velocityPct?.let { settings.setVelocity(it) }
         change.foldOutOfRange?.let { settings.setFoldOutOfRange(it) }
         change.skipDrumChannel?.let { settings.setSkipDrumChannel(it) }
+        change.dynamicRange?.let { settings.setDynamicRange(it) }
+        change.velocityFloor?.let { settings.setVelocityFloor(it) }
+        change.expression?.let { settings.setExpression(it) }
+        change.restrikeMs?.let { settings.setRestrike(it) }
         // The View control's four (v1.13 — M32), as the tablet's own View menu sets them.
         change.noteDisplay?.let { settings.setNoteDisplay(it) }
         change.fingering?.let { settings.setFingering(it) }

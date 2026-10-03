@@ -181,6 +181,7 @@ object SettingsIndex {
         "burstboost" to listOf("fast notes", "runs"),
         "hold" to listOf("coils", "sustain"),
         "restrike" to listOf("repeat", "held notes"),
+        "repeatms" to listOf("repeat", "re-strike", "trill"),
         "freq" to listOf("PWM", "hum", "coils"),
         "leds" to listOf("LEDs", "lights"),
         "ledmode" to listOf("rainbow", "reactive", "static"),

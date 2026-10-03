@@ -18,6 +18,8 @@ import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.player.DynamicRange
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -527,6 +529,11 @@ data class SettingsChange(
     val velocityPct: Int? = null,
     val foldOutOfRange: Boolean? = null,
     val skipDrumChannel: Boolean? = null,
+    /** How a piece is played (v1.16 — M44): Dynamic range, Quietest note, Expression, Re-strike time (0: Auto). */
+    val dynamicRange: DynamicRange? = null,
+    val velocityFloor: Int? = null,
+    val expression: ExpressionLevel? = null,
+    val restrikeMs: Int? = null,
     val webGuests: Boolean? = null,
     val webApproveFirst: Boolean? = null,
     val webHostName: String? = null,

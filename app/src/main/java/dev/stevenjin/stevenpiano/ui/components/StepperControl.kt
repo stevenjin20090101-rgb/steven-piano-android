@@ -25,6 +25,8 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 /**
  * A compact "−  100%  +" stepper over [range] in steps of [step]. The value is set in tabular
  * figures at a fixed minimum width, so nothing shifts as it changes; each end disables its button.
+ * A long value wraps onto a second line within [MAX_VALUE_WIDTH] ("Auto · 110 ms / from the piano", v1.16 — M44)
+ * rather than squeeze the row's label.
  * With [rolling] (the tempo, v1.14 — motion) its digits roll as they change ([RollingText]).
  */
 @Composable
@@ -54,7 +56,7 @@ fun StepperControl(
         } else {
             Text(
                 format(value),
-                modifier = Modifier.widthIn(min = 56.dp),
+                modifier = Modifier.widthIn(min = 56.dp, max = MAX_VALUE_WIDTH),
                 style = MaterialTheme.typography.labelLarge.merge(Tabular),
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
@@ -65,3 +67,6 @@ fun StepperControl(
         }
     }
 }
+
+/** The widest a stepper's value runs before it wraps. */
+private val MAX_VALUE_WIDTH = 120.dp

@@ -25,6 +25,17 @@ object PlaybackLimits {
 
     /** The pause before each piece, in milliseconds (Piano › Playback, "Pause before each piece"). */
     val PreRollMs = 0..5_000
+
+    /** The quietest note's velocity (Piano › Playback, "Quietest note", v1.16 — M44). */
+    val VelocityFloor = 1..60
+
+    /** The re-strike time set by hand, in milliseconds, in tens ([Performance.AUTO], 0, is Auto). */
+    val RestrikeMs = 60..250
+    const val RESTRIKE_STEP_MS = 10
+
+    /** [ms] as the re-strike time takes it: Auto at 0 or below, else in tens within [RestrikeMs]. */
+    fun restrikeMs(ms: Int): Int =
+        if (ms <= Performance.AUTO) Performance.AUTO else ((ms + RESTRIKE_STEP_MS / 2) / RESTRIKE_STEP_MS * RESTRIKE_STEP_MS).coerceIn(RestrikeMs)
 }
 
 /**

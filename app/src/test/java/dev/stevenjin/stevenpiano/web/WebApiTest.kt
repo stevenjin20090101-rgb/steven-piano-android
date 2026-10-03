@@ -22,6 +22,8 @@ import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.piano.PianoSettings
+import dev.stevenjin.stevenpiano.player.DynamicRange
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
@@ -116,6 +118,17 @@ class WebApiTest {
         refused(400) { WebApi.settingsChange(JSONObject("""{"noteDisplay":"PAPER_ROLL"}""")) }
         refused(400) { WebApi.settingsChange(JSONObject("""{"handColours":1}""")) }
         refused(400) { WebApi.settingsChange(JSONObject("""{"notesSplitStacked":0.4}""")) }   // the split is the tablet's alone
+        // How a piece is played (v1.16 — M44): the Playback page's four, with its choices.
+        assertEquals(
+            SettingsChange(dynamicRange = DynamicRange.WIDE, velocityFloor = 30, expression = ExpressionLevel.OFF, restrikeMs = 0),
+            WebApi.settingsChange(JSONObject("""{"dynamicRange":"wide","velocityFloor":30,"expression":"off","restrikeMs":0}""")),
+        )
+        assertEquals(SettingsChange(restrikeMs = 250), WebApi.settingsChange(JSONObject("""{"restrikeMs":250}""")))
+        refused(400) { WebApi.settingsChange(JSONObject("""{"dynamicRange":"WIDE"}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"expression":"humane"}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"velocityFloor":61}""")) }
+        refused(400) { WebApi.settingsChange(JSONObject("""{"restrikeMs":50}""")) }   // between Auto and 60 there is none
+        refused(400) { WebApi.settingsChange(JSONObject("""{"restrikeMs":65}""")) }   // in tens
         assertEquals(RepeatMode.ALL, WebApi.repeatOf("all"))
         refused(400) { WebApi.repeatOf("ALL") }
     }

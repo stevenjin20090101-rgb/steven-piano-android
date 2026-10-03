@@ -72,6 +72,10 @@ object SettingNotes {
 
     const val DEFAULT_TEMPO = "How fast pieces start; Now playing can change it"
     const val VELOCITY = "Plays every piece louder or softer"
+    const val DYNAMIC_RANGE = "How far soft and loud notes spread apart"
+    const val QUIETEST_NOTE = "Softer notes are raised to this, so they still strike"
+    const val EXPRESSION = "Shapes loudness and timing as a pianist would"
+    const val RESTRIKE = "The least time between two strikes of one key"
     const val FOLD = "Moves notes the piano lacks into its range"
     const val SKIP_DRUMS = "Skips the drum part of a file"
 
@@ -93,7 +97,8 @@ object SettingNotes {
 
     /** Every note above, for the rules' test. */
     val all: List<String> = piano.values + listOf(
-        TEST_LED, READ_STATUS, SAVE_TO_PIANO, ALL_KEYS_OFF, AUTO_CONNECT, DEFAULT_TEMPO, VELOCITY, FOLD, SKIP_DRUMS,
+        TEST_LED, READ_STATUS, SAVE_TO_PIANO, ALL_KEYS_OFF, AUTO_CONNECT, DEFAULT_TEMPO, VELOCITY,
+        DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         WEB_PANEL, GUESTS_CAN_REQUEST, APPROVE_FIRST, RELAY_ADDRESS, ALBUM_BACKDROP, RESTING_BACKGROUND, RESTING_SHOWS,
         CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES, FETCH_EVERY_COMPOSER,
     )

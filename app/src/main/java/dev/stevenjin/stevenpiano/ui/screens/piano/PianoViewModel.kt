@@ -36,6 +36,8 @@ import dev.stevenjin.stevenpiano.instruments.MidiScan
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.player.DynamicRange
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.schedule.NextSchedule
 import dev.stevenjin.stevenpiano.settings.Appearance
@@ -274,6 +276,14 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     fun setFold(on: Boolean) = edit { setFoldOutOfRange(on) }
 
     fun setSkipDrums(on: Boolean) = edit { setSkipDrumChannel(on) }
+
+    fun setDynamicRange(range: DynamicRange) = edit { setDynamicRange(range) }
+
+    fun setVelocityFloor(velocity: Int) = edit { setVelocityFloor(velocity) }
+
+    fun setExpression(level: ExpressionLevel) = edit { setExpression(level) }
+
+    fun setRestrike(ms: Int) = edit { setRestrike(ms) }
 
     fun setArtworkMonochrome(on: Boolean) = edit { setArtworkMonochrome(on) }
 

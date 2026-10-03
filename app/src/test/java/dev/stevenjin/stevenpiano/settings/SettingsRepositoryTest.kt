@@ -15,6 +15,8 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
+import dev.stevenjin.stevenpiano.player.DynamicRange
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,11 @@ class SettingsRepositoryTest {
         repository.setSkipDrumChannel(false)
         repository.setNotesSplit(stacked = true, share = 0f)
         repository.setKeysViewportStart(3)
+        // How a piece is played (v1.16 — M44): the four keys, the quietest note held to 1-60, the re-strike time to tens.
+        repository.setDynamicRange(DynamicRange.WIDE)
+        repository.setVelocityFloor(0)
+        repository.setExpression(ExpressionLevel.FULL)
+        repository.setRestrike(123)
         assertEquals(
             PianoSettings(
                 autoConnect = false,
@@ -60,6 +67,10 @@ class SettingsRepositoryTest {
                 velocityPct = 50,
                 foldOutOfRange = false,
                 skipDrumChannel = false,
+                dynamicRange = DynamicRange.WIDE,
+                velocityFloor = 1,
+                expression = ExpressionLevel.FULL,
+                restrikeMs = 120,
                 notesSplitStacked = 0f,
                 keysViewportStart = 24,
             ),
@@ -69,6 +80,11 @@ class SettingsRepositoryTest {
         assertEquals(107, repository.settings.first().keysViewportStart)
         repository.setKeysViewportStart(60)
         assertEquals(60, repository.settings.first().keysViewportStart)
+        repository.setVelocityFloor(99)
+        repository.setRestrike(45)
+        assertEquals(60 to 60, repository.settings.first().let { it.velocityFloor to it.restrikeMs })
+        repository.setRestrike(0)
+        assertEquals("Auto", 0, repository.settings.first().restrikeMs)
         scope.cancel()
     }
 
