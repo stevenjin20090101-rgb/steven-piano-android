@@ -8023,3 +8023,118 @@ ink's primary over the dimmed brightest block ≥ 4.5:1 and deeper at the foot; 
 deterministic, the edge softened, a pure red kept). `ArtPaletteTest` and `BackdropContrastTest` removed;
 `AdaptiveFrameTest` takes Art only. 1,622 → 1,617 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the
 same 30 warnings.
+
+# v1.18 — M47: the panel's new look
+
+Fable's design (DESIGN.md › v1.18 — M47, the mocks `panel.css`/`panel.html` and `now2.html`), Opus coding, one lean run
+in a worktree: no emulator, no version bump, no signing. Settings and System (M47b) are written apart, as modules.
+
+## Tokens (`ui/theme/Color.kt`, `style.css`)
+- `AttentionInk` #E6A23C and `AttentionPaper` #9A5B00; `--ink-attention`/`--paper-attention`, `--attention` in each
+  appearance block (`WebAssetsTest`'s parity list). Every other palette token, the glass's (72 %, 86 %, 24 px), the
+  scroll-edge bands and the specular lines as before; `--radius-card` 18 px, `--radius-control` 10 px, `--inset` 20 px.
+- Immersive: `--immersive-glass` hsl(0 0% 0% / 0.26), `--immersive-blur` 30 px, `--immersive-edge` and the specular
+  line hsl(0 0% 100% / 0.14 and 0.12), `--immersive-secondary`/`-tertiary` the ink's light at 78 % and 60 %. `--sheet-*`
+  hold the appearance's own surface and text colours (declared on :root, so they keep the root's values inside
+  `.immersive`) for the score's sheet.
+- Dark by default: `<html lang="en" data-theme="dark">`, `<meta name="color-scheme" content="dark light">`;
+  `appearance()` gives `dark` with nothing stored, `light` or `system` when chosen (`system` removes the attribute).
+  The guests' page and the poster keep theirs; `.guest-page` restores 1.17's insets, corners, field, buttons, genre
+  switch, section heads and note, so the shared classes' new shapes never reach it.
+
+## The frame (`index.html`, `style.css` › The frame, `app.js` › Sections)
+- `<nav class="sections">` holds `.rail-card.glass`: `.identity`, `.section-list` of four `.nav-group` (`role="group"`,
+  an `.eyebrow` heading) of `.nav-item` buttons (`data-section`, a `g-…` stroke glyph, a label), `#rail-vitals`
+  (`.rail-foot`, hidden while empty). From 900 px the panel is a 236 px grid column for it (sticky, 100vh, 12 px
+  padding); below 900 px the nav is today's sticky strip (`.sections::after`, `.panel.scrolled` as before), the groups
+  in one scrolling row of 36 px pills without headings or glyphs; below 600 px `.sections` is static (the name and the
+  connection) and `.tab-bar.glass` is fixed at the foot (4 × `.tab-item`, 56 px + the safe area), More opening
+  `<dialog class="sheet more-sheet">` with `showModal()` (closed by a choice, Escape, the scrim, or crossing 600 px).
+- `SECTIONS` adds `system`. `show()` sets `aria-current="page"` on every `[data-section]` (rail, bar, sheet) and on More
+  for the sheet's sections; `queue` from 1100 px (`besideQuery`) and `system` without its module fall back to `now`; a
+  change of section hides the other module page and scrolls to the top. `.nav-item.up-next-item` is hidden from
+  1100 px. Requests' count is every `[data-count="requests"]`.
+- The sprite adds the mock's `g-…` symbols (paths with `class="glyph-stroke"`: no fill, a 1.7 stroke, round caps and
+  joins; filled parts without it); `.glyph` is 20 px, 24 px in icon buttons.
+- Shared classes (the mock's names; the modules use them): `.card` `.card-head` `.capsule` `.glass` `.outlined`
+  `.filled` `.segmented` `.switch` `.range` (native: a 4 px track filled to `--fill`, a 20 px thumb) `.stepper`
+  `.setting` (`.stacked`, `.with-value`) `.tag` (`.attention`) `.dot` (`.on`, `.live`, `.attention`) `.eyebrow` `.meta`
+  `.nav-item` (`[aria-current="page"]` or `[aria-selected="true"]`) `.stack` `.field` (a capsule; a holder of a glyph and
+  an `<input>`, or the input), `.vital`. Controls are 36 px at least, 44 px under `(pointer: coarse)`.
+
+## Now playing (`index.html`, `style.css` › Now playing, `app.js` › Now playing)
+- One markup for both layouts: `.now-hero` (`#now-art`, `.now-words`, `.transport`), `#now-views`, `.quick` (the
+  tempo capsule, `#channel-volume`/`#tablet-volume` capsules, `#now-switch` `.segmented.glass`, `#now-view`),
+  `.now-lines`, and the volumes' `.popover.glass` (positioned through the CSSOM over the capsule, closed by the capsule,
+  Escape, a tap outside, a scroll or a section change). `#section-now.views-on` (the switch on Notes or Score) gives the
+  strip; `.unloaded` (no piece, none loading) the centred line.
+- Art: `.now-main` is one column `min(max(240px, min(54vh, 100vh − 392px)), 560px, 100%)`, centred both ways. From
+  900 px `.now` is a grid `auto 1fr` of `min-height: calc(100vh − 28px)` with a −26 px bottom margin (the page's foot
+  is 14 px there), the views' row `minmax(340px, 1fr)` and `.views-panes` under `contain: size` (the canvases' pixel
+  sizes never feed back into the row). From 1100 px `.now-body` is `1fr 380px`: `.now-side.glass`, at most
+  `calc(100vh − 90px)`, scrolling inside.
+- `art(#now-art, piece, 'full', {priority, onPicture: backdropFrom})`. `nowView` (`steven-piano-now-view`) drives the
+  switch at every width; `views.js` loads when it is not Art.
+- Up next rows: the cover, the title (two lines) with Requested, the composer, `.time` at the right, `.row-tools` (up,
+  down, remove); `@media (hover: hover) and (pointer: fine)` shows the tools in the time's place on hover or focus
+  (width 0 otherwise, so the keyboard still reaches them); elsewhere the time moves into the meta line (`.meta-time`).
+  The playing row: `.current`, `.bars` (three still bars).
+
+## The backdrop (`index.html` `#now-backdrop`, `style.css` › Now playing over the cover, `app.js`)
+- `.backdrop` is `position: fixed; inset: 0; z-index: -1` inside `.panel` (`isolation: isolate`), the ink surface
+  under three `<i>`: 240 px squares, `background: center / cover var(--art)`, `filter: blur(12px) saturate(1.75)`,
+  `will-change: transform`, individual transform properties: `scale: calc(var(--bd-scale) × 1.05 | 1.575 | 0.735)`,
+  `translate` 0 · (12vw, −6vh) · (22vw, −20vh), opacity 1 · 0.6 · 0.38, keyframes on `rotate` alone (8°→368° in 60 s,
+  150°→−210° in 84 s, −30°→330° in 48 s), `animation-play-state` running only with `.playing`; `animation: none` under
+  reduced motion. `--bd-scale` = the window's diagonal / 192 (the copy's clear middle inside the blur's edge), set on
+  resize. `::after`: `linear-gradient(to bottom, hsl(0 0% 0% / calc(var(--dim) − 0.06)), … calc(var(--dim) + 0.1))`.
+- `backdropFrom(img)`: `--art: url("<img.currentSrc>")` (the loader's full-size address, so from the cache) and
+  `--dim` = `dimFor(img)`: the image drawn on a 16 × 16 canvas (`imageSmoothingQuality` high), each 4 × 4 block's mean
+  sRGB → linear → L = 0.2126 R + 0.7152 G + 0.0722 B, the largest L, `max(0.18, 1 − (0.14 / L)^(1/2.2))` (0.18 for
+  L ≤ 0; 0.45 if the canvas can't read). Null (a roll card, a monogram, a failure): no backdrop.
+- `updateImmersive()` (each state, each section change, the media query's change): on when the section is `now`, a
+  piece plays with a picture, `monochrome` is false, `albumBackdrop` is not false and
+  `(prefers-reduced-transparency: reduce), (prefers-contrast: more)` doesn't match. It shows the backdrop, sets
+  `.playing`, puts `.immersive` on `.panel` (style.css overrides `--surface`, `--elevated`, `--hairline`, `--primary`,
+  `--secondary`, `--tertiary`, `--specular`, the glass, the live dot's ring, the pressed segment) and tells the views.
+- `views.js`: `host.view()` replaces `phoneView()`; `panes.dataset.mode` is `notes`, `score` (below 900 px) or `split`
+  (Score from 900 px), the divider only in `split`; `immersive(on)` rebuilds the look: no lanes, notes filled
+  (`fade(light, 0.92 → 1)`, the left hand `0.5 → 0.7`; Hand colours: the ink's ramps), numerals in the ink surface,
+  chord names on a 42 % shade, the line at the tracker or the strip's edge at 75 %, the strip `keysOverCover` (white
+  keys the ink's light with 1 px gaps and 3 px feet, black keys the ink surface, sounding ones `--ink-sounding` or the
+  hand's mix). `roll.js` adds `fade`, `cssAlpha` and the constants; `rgb()` also reads `rgb(r g b)` (the hand ramps'
+  mixed end colour fell back to grey before). `.immersive .pane-roll` has no card, the strip 64 px; `.immersive
+  .pane-score` keeps `--sheet-*`.
+
+## The Library (`index.html`, `app.js` › Library, `style.css` › Library)
+- `.lib-tools`: `#lib-genre`, `label.field.search-field` (the `g-search` glyph, `#lib-search`), `#lib-view` (Covers ·
+  List, `steven-piano-library-view`; with nothing stored, covers from 900 px); `#lib-chips` under it.
+- `renderPieces` sets `#lib-rows` to `cover-grid` or `rows card`; `pieceTile`: `li.cover-tile` > `button.tile-play`
+  (`span.art` at `tile`, the title, the composer; a click plays the list) and `button.icon-button.tile-more.glass`
+  (the menu), shown on hover or focus, always under `(pointer: coarse)`. Playlists and composers call `rowsOnly()`.
+
+## The seam with M47b (`app.js` › The Settings and System pages' modules)
+- `index.html` links `system.css` after `style.css` (an empty file here, its banner only; `WebAssets.PANEL` serves it);
+  `#piano-tools`, `#piano-body`, `#section-system` with `#system-tools` and `#system-body`, `#rail-vitals`.
+- `host = Object.freeze({ ROOT, RELAYED, h, fill, glyph, chip, get, put, post, toast, failed, state, clock, plural,
+  signed, debounce, art, show, appearance: { get, set }, confirm })`. `confirm({title, message, action, run})`: a
+  `<dialog class="confirm">` with `showModal()`, Cancel focused, the action `.outlined.filled`, removed on close; `run`
+  goes through a promise so its failure becomes a toast.
+- `loadModule(key)` imports `./settings.js` or `./system.js` once (the result cached; a rejection or a module without
+  `create` marks it failed). Pages are made by `create(host, body, tools)` on first show, then `show()`/`hide()`
+  paired on section changes and `render(state)` on each state while shown; every call is guarded. `startSystem()` after
+  the first state: the System items appear and `vitals(host, #rail-vitals)` is called once. Without `settings.js` the
+  built-in page (`pianoLoad`/`renderPiano`, wrapped in `.content.builtin-settings`, with `appearanceCard()`) shows.
+
+## The relay's allowance and the full size
+- `call()` reads `X-Relay-Art-Limit` on every answer; `artAllowance(limit)` switches `artLimits` between M45's numbers
+  (4 at once, 40, 1 a second) and, through the relay from 300, `{parallel: 6, budget: 120, refillMs: 1000 / 6}`, the
+  bucket filled at once; on the tablet's own address nothing changes.
+- `WebArtSize.FULL("full")` → `ArtSize.Full` (1024 px) in both art routes (`AppWebBackend.artSize`); the routes' 400
+  says "row, tile or full".
+
+## Tests
+`WebAssetsTest`: the attention pair in the parity list; Settings and System among the section names; a new test (dark
+by default, `system.css` linked after `style.css` and served, the seam's ids, the two modules imported by `app.js` and
+never by the page, the frozen host, the guests' page keeping its own appearance). `WebServerTest`: `size=full` answered.
+1,631 → 1,632 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings, none in this run's files.

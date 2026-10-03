@@ -59,4 +59,12 @@ val HandRightLight   = Color(0xFF3E6189)   // 5.7:1 / 6.1:1
 val NoteSoundingDark  = Color(0xFFF2C94C)   // 12.2:1 / 11.0:1 on InkSurface / InkElevated
 val NoteSoundingLight = Color(0xFF9C7A00)   //  3.6:1 /  3.8:1 on PaperSurface / PaperElevated
 
+// ---- Needs attention (DESIGN.md › v1.18 — M47) ---------------------------------
+// One amber, and one meaning: something needs attention (the web panel's System page: a dial, a
+// capsule, a missing board), always beside a word that says it. Never a fill, never decoration, and
+// red keeps its single meaning. The web panel's --ink-attention and --paper-attention are these
+// (WebAssetsTest). WCAG contrast on surface / surfaceElevated of its own appearance:
+val AttentionInk      = Color(0xFFE6A23C)   //  8.8:1 / 8.0:1 on InkSurface / InkElevated
+val AttentionPaper    = Color(0xFF9A5B00)   //  4.8:1 / 5.2:1 on PaperSurface / PaperElevated
+
 val DisplayBlack      = Color(0xFF000000)   // display mode's canvas only (DisplayTheme): the one pure black in the app

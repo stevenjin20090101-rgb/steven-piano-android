@@ -11,6 +11,8 @@ package dev.stevenjin.stevenpiano.web
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.stevenjin.stevenpiano.ui.theme.AttentionInk
+import dev.stevenjin.stevenpiano.ui.theme.AttentionPaper
 import dev.stevenjin.stevenpiano.ui.theme.CarbonPrimary
 import dev.stevenjin.stevenpiano.ui.theme.CarbonSecondary
 import dev.stevenjin.stevenpiano.ui.theme.CarbonTertiary
@@ -76,6 +78,8 @@ class WebAssetsTest {
             // The views (v1.13 — M32): the score's sounding yellow and the two hands, each appearance's own.
             "--paper-sounding" to NoteSoundingLight, "--paper-hand-left" to HandLeftLight, "--paper-hand-right" to HandRightLight,
             "--ink-sounding" to NoteSoundingDark, "--ink-hand-left" to HandLeftDark, "--ink-hand-right" to HandRightDark,
+            // Needs attention (v1.18 — M47), and nothing else.
+            "--paper-attention" to AttentionPaper, "--ink-attention" to AttentionInk,
         )
         for ((name, color) in tokens) {
             val declared = Regex("${Regex.escape(name)}:\\s*(#[0-9A-Fa-f]{6});").find(css)?.groupValues?.get(1)
@@ -224,7 +228,7 @@ class WebAssetsTest {
         }
         assertTrue(text("request.js").contains("'Request'") || text("request.js").contains("text: 'Request'"))
         val index = text("index.html")
-        for (section in listOf("Now playing", "Up next", "Library", "Channels", "Schedule", "Requests", "Add", "Studio", "Piano")) assertTrue(section, index.contains(">$section"))
+        for (section in listOf("Now playing", "Up next", "Library", "Channels", "Schedule", "Requests", "Add", "Studio", "Piano", "Settings", "System")) assertTrue(section, index.contains(">$section"))
         for (copy in listOf(
             "Drop a piano recording here", "About a minute per three minutes of audio.", "/api/studio/audio", "/api/studio/jobs/",
             "Compose a piece…", "Runs on this tablet. About a minute for a two-minute piece.", "/api/studio/compose", "/api/studio/seed",
@@ -245,5 +249,22 @@ class WebAssetsTest {
         }
         assertFalse("Live is never offered to the panel", text("app.js").contains("liveToPiano") || text("app.js").contains("/api/live"))
         assertTrue(text("poster.html").contains("data-theme=\"light\""))
+    }
+
+    @Test
+    fun `the panel starts dark and keeps its side of the Settings and System modules' seam (v1_18 M47)`() {
+        val index = text("index.html")
+        assertTrue("dark by default", index.contains("<html lang=\"en\" data-theme=\"dark\">") && index.contains("<meta name=\"color-scheme\" content=\"dark light\">"))
+        assertTrue("the modules' styles after the frame's", index.indexOf("href=\"system.css\"") > index.indexOf("href=\"style.css\""))
+        assertTrue(WebAssets.PANEL["/system.css"] == WebAssets.Asset("system.css", WebAssets.CSS))
+        for (id in listOf("piano-tools", "piano-body", "system-tools", "system-body", "rail-vitals")) assertTrue(id, index.contains("id=\"$id\""))
+        assertTrue(index.contains("<section id=\"section-system\" data-page=\"system\" hidden>"))
+        val app = text("app.js")
+        assertTrue("each module loaded the first time it is needed", app.contains("import('./settings.js')") && app.contains("import('./system.js')"))
+        assertFalse("never at the page's start", Regex("src=\"(settings|system)\\.js\"").containsMatchIn(index))
+        assertTrue("the host is one frozen object", app.contains("const host = Object.freeze({"))
+        assertTrue("nothing stored: dark", app.contains("return value === 'light' || value === 'system' ? value : 'dark';"))
+        // The guests' page and the poster keep their own appearance.
+        assertTrue(text("request.html").contains("<html lang=\"en\">") && text("request.html").contains("content=\"light dark\""))
     }
 }

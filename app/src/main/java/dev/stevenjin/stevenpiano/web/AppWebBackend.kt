@@ -271,11 +271,18 @@ class AppWebBackend(
         return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits, portraits[key] ?: 0), pieces.map { it.toWeb(portraits, covers) })
     }
 
-    override suspend fun composerArt(key: String, size: WebArtSize): WebImage? = portrait(key, if (size == WebArtSize.ROW) ArtSize.Row else ArtSize.Tile)
+    override suspend fun composerArt(key: String, size: WebArtSize): WebImage? = portrait(key, artSize(size))
+
+    /** The decode size a web size asks for: a row's, a tile's, or (v1.18 — M47) Now playing's full one. */
+    private fun artSize(size: WebArtSize): ArtSize = when (size) {
+        WebArtSize.ROW -> ArtSize.Row
+        WebArtSize.TILE -> ArtSize.Tile
+        WebArtSize.FULL -> ArtSize.Full
+    }
 
     override suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage? {
         val piece = library { graph.library.piece(id) } ?: return null
-        val art = if (size == WebArtSize.ROW) ArtSize.Row else ArtSize.Tile
+        val art = artSize(size)
         // One kind each (v1.17 — M45): a cover asked for is the piece's own or none, so a roll card never lands in an <img>.
         return when (kind) {
             WebArtKind.COVER -> image(ArtworkEntity.forPiece(id), art)
