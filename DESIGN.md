@@ -2806,3 +2806,46 @@ aside, and, when nothing fits, taking the album the artist names ("Stay" by "Int
 the work ("Skyrim Theme" by Jeremy Soule) finds four of the other eleven and four of five classical misses on the demo
 tablet, and changes no cover found today except for an earlier result. A lookup that found nothing before this version
 is tried once more.
+
+# v1.18 — M47b: Settings and System on the panel
+
+Steven asked the panel for its settings and for "diagnostics from the piano, the tablet and the ESP: temps, memory, what
+process is running and battery". Designed by Fable from mocks Steven approved on 2026-10-03, built by Opus in one lean
+run beside the panel's new look (M47): two pages of their own, `settings.js` and `system.js`, styled by `system.css`.
+
+- **Settings** (the section `piano`). From 900 px, a list of pages (each its glyph, its name and one line of what is set)
+  with the chosen page's cards beside it; below 900 px the list alone, a page opening over it with a back row.
+  **Playback** is new on the panel: the tablet's ten rows in the tablet's own words (Default tempo, Transpose, Velocity
+  with the Full power line under it, Dynamic range, Quietest note, Expression, Re-strike time with "Auto · 110 ms from the
+  piano", Pause before each piece, Fold notes outside C1–B7, Skip drum channel), under one line, "Changes apply from the
+  next piece." **Sound and touch**, **Lights and screen** and **Pedal** are the piano's own, a card a section, Feel's
+  four presets each with its line (Soft "Quiet, gentle strikes", Cinematic "Wide and unhurried", Expressive "More
+  contrast", Snappy "Fast repeats"); while the piano isn't connected or ready they say so and nothing can be changed, and
+  while another MIDI piano plays they stand aside as before. **Panel**: Appearance for this browser (Dark · Light ·
+  Follow system) and Album colours behind the player, the tablet's own switch. In the head, the piano's name and firmware
+  with the live dot, and on the piano's pages Save to the piano. A held − or + repeats.
+- **System**. Three cards (Tablet, Controller, Piano), then Running now beside Today and Tools; one column below 1180 px.
+  White dials (a 270° arc over its ticks, the figure and its word inside, the two ends under it) for the battery, the
+  tablet's temperature, the controller's chip and its memory; the tablet's memory and storage as meters; the piano's
+  seven power boards as seven octaves of keys, C1 to C7. Running now lists what the app is doing, in its order: the live
+  red dot for the player while it plays to a connected piano, a filled dot for what runs, a hollow one for the rest.
+  Today draws the day: the battery a line over a soft area, the tablet's temperature dashed, the piano's dotted, with one
+  sentence under it for everyone ("Battery between 60 and 100 %, tablet between 27 and 35 °C"). Tools: Read status (its
+  report under the buttons), Find missing covers, Reconnect the piano (after a word that the music stops for a few
+  seconds), All keys off, Download diagnostics. The head says "Everything is running normally", or the first thing that
+  needs attention (and how many more), and how old the figures are. The rail's foot keeps three lines (Tablet,
+  Temperature, Piano) on every page. The figures are read every 5 s while the page is open (10 s over the internet),
+  never while it is closed or the window hidden; an arc eases to its new value in 480 ms, at once under reduced motion,
+  and nothing loops.
+- **Needs attention** is one rule, and the only amber (`--attention`) on the pages, always with a word that says it: the
+  battery under 20 % and not charging, or its health bad; the tablet warm (Android's moderate) or hot (severe and above,
+  or the battery at 42 °C or more); the tablet low on memory; under 1 GB of storage free; a power board missing; the
+  controller's chip at 70 °C or more; its memory once under 30 KB; the internet link down while the panel is on the
+  internet; anything running in trouble; and, last, album covers waiting out Apple's stop.
+- **What waits for the piano's firmware** (`firmware/docs/BLE_DIAG.md`). Firmware 2.0.0 gives its version and update
+  state, its uptime, the boards, the I²C errors, the pedal board and the repeat period. The controller's temperature and
+  memory, its tasks, its speed, why it last started, the Bluetooth signal it hears, the keys held now and the hold
+  watchdog's releases each read "Needs newer firmware" (a dial empty, a fact as a small tag) until a firmware lists them;
+  then they fill in by themselves, and any fact the page doesn't know yet is shown as a plain row under its own name.
+- **Pictures through the relay** get an allowance of their own: 600 a minute from one address, apart from the panel's
+  120, which the relay tells the page on every answer.

@@ -174,7 +174,7 @@ The protocol (`steven-piano-relay-1`) is in `src/shared/protocol.ts`, and the ap
 | Uploads (bodies over 64 KB) | one at a time per piano (409) |
 | The tablet's answer | 15 s (504); a body or an answer may sit still 30 s; an upload 10 minutes |
 | The panel's sockets | 4 per piano (503) |
-| Per client address, a minute | 120 requests to panels, 10 PIN tries, 5 enrolments |
+| Per client address, a minute | 120 requests to panels, 600 pictures (a panel's `GET …/api/art/…`, counted apart from the 120), 10 PIN tries, 5 enrolments |
 | The status in D1 | at most once a minute per piano (the room keeps the latest) |
 
 **Security.** A tablet's secret is 32 random bytes, shown to it once, kept only as its SHA-256.
@@ -190,7 +190,10 @@ issuer, the dates), wants `X-Steven-Piano: 1` and its own origin on its API, and
 CORS header; neither does the relay. Every answer carries HSTS and the panel's security headers; of a
 tablet's answer the relay passes on only the headers the panel sends (its type, caching, cookies, the
 security headers), and a tablet's cookie must stay under its own `/p/<piano>/`: every piano's panel
-shares the relay's address, so nothing one tablet answers may reach beyond its piano's path. The
+shares the relay's address, so nothing one tablet answers may reach beyond its piano's path. Every
+answer the relay carries from a tablet also says `X-Relay-Art-Limit: 600`, the pictures' allowance a
+minute, which the panel reads to widen its own picture budget; it is the relay's word, set after the
+tablet's headers are sifted, so a tablet can't send its own (v1.18 — M47b). The
 tablet checks the PIN with a gate of its own for tries through the relay (ten wrong in a row from
 anywhere, then a minute, doubling to an hour). The audit log (console actions, enrolments, rotations)
 keeps 90 days and holds the owner's email as the actor, never a visitor's address.
