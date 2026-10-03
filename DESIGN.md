@@ -1060,6 +1060,8 @@ holds; the panel speaks the app's own language. This is release 1.5.1.
   CSS variables (a test compares them): the paper roll when the system is light, the camera body
   when it is dark. No surface is pure black or pure white; the only pure black in the product is
   still display mode's canvas. Red is the live dot's alone.
+- *(v1.18 — M47: the panel is dark by default, and Appearance (Dark · Light · Follow system) is on its Settings page,
+  not in the frame.)*
 - **Appearance.** The panel's own control at the foot of the section list (at the foot of the page
   on a phone): APPEARANCE, chips **Follow system** (the default) · **Light** · **Dark**, as the
   app's Display page; the choice is kept in the browser.
@@ -2028,7 +2030,8 @@ connection line.
 The same two layers. Narrow, the tab strip is the bar: the surface at 72 % over a 24 px backdrop blur,
 the hairline and the specular line along its bottom; once the page is scrolled beneath it the content
 fades into it over 24 px, its frost thickens and its text takes the content colour. Wide, the section
-list is the rail: glass without a blur, its end edge, the page fading into it over its margin. Row
+list is the rail: glass without a blur, its end edge, the page fading into it over its margin. *(v1.18 — M47: wide,
+the rail is a glass card 12 px from the window's edges, its sections in four groups; see v1.18 — M47.)* Row
 menus and the toast are the sheets' glass (86 %); the PIN gate's card and the schedule and compose
 editors are sheets laid flat. The play control is the filled circle. *prefers-reduced-transparency*
 and *prefers-contrast: more* give solid surfaces (and more contrast, hairlines in the content colour
@@ -2720,6 +2723,8 @@ and "never animated" for Art and notes, retired in place above.
 - **Where.** Behind **Now playing** (the phone's, and the tablet's Now playing tab), under its header and the tab bar
   too; behind the **tablet's now-playing panel**; and on the **resting screen** behind Art and notes (Paper roll keeps
   its own faded portrait). The **web panel**'s Now playing has it as well, from a sample of the art it shows.
+  *(v1.18 — M47 retires the four discs on the web panel: its backdrop is the cover itself, blurred and turning, under the
+  dimming the cover needs; see v1.18 — M47.)*
 - **The veil and the words.** A veil of the surface over the discs: 55 % on paper, 62 % on ink; on the resting
   screen's black, black at 35 % over the words' side alone, so the art's surroundings keep the full colours. Over the
   backdrop every word is in the **primary colour**, the eyebrows, the times and "Sent to piano" included: through the
@@ -2806,3 +2811,60 @@ aside, and, when nothing fits, taking the album the artist names ("Stay" by "Int
 the work ("Skyrim Theme" by Jeremy Soule) finds four of the other eleven and four of five classical misses on the demo
 tablet, and changes no cover found today except for an earlier result. A lookup that found nothing before this version
 is tried once more.
+
+# v1.18 — M47: the panel's new look
+
+Steven chose (2026-10-03, from mocks) a new look for the web panel: dark by default, a glass side rail, Now playing with
+the album's cover large and its colours behind the whole screen, "like Apple Music, perfectly matched to the album art,
+more punchy", a grid of covers in the Library, white dials with one amber colour for "needs attention". Designed by
+Fable, built by Opus in one lean run. Everything the panel did, it still does; the guests' page and the poster are as
+they were.
+
+- **Dark by default.** The panel starts in the camera body's tokens ("Ink", never pure black); Appearance (Dark · Light ·
+  Follow system, kept in the browser) moves to the Settings page. One new token pair: **attention**, amber
+  (`AttentionInk` #E6A23C, 8.8:1 on the surface; `AttentionPaper` #9A5B00, 4.8:1), meaning "needs attention" and
+  nothing else, always beside a word that says it. Red still means live and only the dot uses it.
+- **The frame.** From 900 px a glass rail, 236 px wide with 22 px corners, 12 px from the window's edges: the piano's
+  name and the connection line, then the sections in four groups under engraved headings, each a glyph and a label:
+  **Play** (Now playing, Library, Channels), **Plan** (Schedule, Requests with the number waiting), **Make** (Add,
+  Studio), **Piano** (Settings; System, once its page is there). The chosen one sits on the content colour at 12 %, its
+  label in the primary colour; 40 px rows, 44 px on a touch screen. At its foot, the system's vitals. Up next is a
+  section of its own only below 1100 px; from there it stands beside Now playing. Below 900 px today's glass strip of
+  tabs, 44 px tall, without headings or glyphs. Page heads are 28 px, weight 600, with their tools as glass capsules at
+  the right; lists and settings sit on 18 px cards; buttons are capsules, the one primary action filled.
+- **Now playing, Art.** A centred block as wide as the cover (54 % of the window's height, at most 560 px, and on a
+  window under about 850 px tall no more than leaves the rest in sight): the cover with 22 px corners and a deep soft
+  shadow, the title (34 px, bold, two lines at most), the composer with the channel after it, the scrubber (a 6 px
+  track), the transport (a 76 px play circle in the content colour), then one row of glass capsules: Tempo, the
+  volumes there are (the channel's, the tablet's, each opening its slider in a small popover) and the views' switch,
+  **Art · Notes · Score**; the instrument's lines beneath, small. "Sent to piano" is a capsule in the head. Nothing
+  loaded: "Choose a piece from the library." centred.
+- **Now playing, Notes and Score.** A strip at the top (the cover at 132 px, the title 38 px, the transport at the
+  right), then the views filling the window: Notes, the roll alone; Score, the score over or beside the notes with the
+  divider (below 900 px the score alone).
+- **The backdrop.** Behind the whole panel while Now playing shows a piece with a picture: the cover itself three times,
+  each blurred and saturated, turning slowly at its own pace (a turn in 60 s; in 84 s the other way, half again as large
+  at 60 %; in 48 s, smaller at 38 % and off centre), only while the piece plays, still when paused, never with reduced
+  motion. Over it a black dimming from top to foot (dim − 0.06 to dim + 0.10) where **dim** keeps light words at 4.5:1
+  over the cover's brightest part: the cover read at 16 × 16, its brightest 4 × 4 block's luminance L,
+  dim = max(0.18, 1 − (0.14 / L)^(1/2.2)). None for a roll card or a monogram, with Album colours off, in black and
+  white, with reduced transparency or more contrast.
+- **Immersive.** While the backdrop shows, the words are the ink's primary colour in both appearances; nothing
+  secondary or tertiary stands directly on it below 18 px; glass (the rail, the capsules, Up next, the switch) is a
+  black tint at 26 % over a 30 px blur with a light edge; the live dot wears a 1.5 px light ring so red reads on a red
+  cover. The roll has no card: its notes are drawn light straight over the cover (the right hand at 92 %, the left at
+  50 %; with Hand colours the ink's two), a light line where they land, the keys as keys with a sounding one yellow.
+  The score keeps its opaque sheet in its own colours.
+- **Up next, beside it.** A glass card: rows 60 px with a 44 px cover and the length at the right, the playing row
+  tinted with a small three-bar mark (still); a row's move and remove buttons show on hover or focus, always on a touch
+  screen.
+- **The Library.** One row of tools: the genre switch, the search field with its glyph, and **Covers · List** (kept in
+  the browser; covers from 900 px, rows below). Covers: a grid of tiles (168 px at least), each the cover with 14 px
+  corners, the title and the composer; a tap plays as a row's does; More is a small glass circle at the cover's top
+  right, on hover or focus and always on a touch screen. Playlists and composers stay rows.
+- **Phones (below 600 px).** The name and the connection over the page; the sections in a glass bar at the foot, 56 px
+  tall, each a glyph over its label: Now playing, Up next, Library, More, which opens a sheet with the others. The art
+  view's cover is as wide as the page less its margins, at most 360 px.
+- **Settings and System.** Their pages are modules loaded the first time they show (M47b); until they are there, the
+  built-in Settings page shows as before, on cards, with Appearance at its foot, and System stays hidden.
+
