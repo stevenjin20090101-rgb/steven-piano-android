@@ -2066,3 +2066,41 @@ the test that holds it:
   are unaffected.
 - **The file is as safe as the tablet's storage**: whoever can read the app's files (a rooted tablet) learns how many
   sessions there are and when each was used, not a cookie that works.
+
+## 1.18 — the System page's routes (pre-audit notes, M46)
+
+2026-10-03, notes written with M46 for the next audit, not an audit (BUILD_SPEC.md › v1.18 — M46). The panel can read
+what the tablet, the app and the piano are doing, and download Share diagnostics' zip. Nothing new listens, no new host
+is reached, the relay is unchanged. Where each part is held, and the test that holds it:
+
+- **Every new route needs a session; the guests never see them.** `GET /api/system`, `/api/system/history` and
+  `/api/system/diagnostics` are `Access.READ` (401 without a valid `sp_session`); `POST /api/system/refresh` and
+  `/api/system/tool` are `Access.WRITE` (the session, `X-Steven-Piano: 1`, the panel's own origin; 403 otherwise); all
+  five are no route (404) on the Wi-Fi guests' listener and over the relay take the relay's gate as every route does
+  (`WebServerTest`: the READ and WRITE loops, the guests' loop, the System test; `WebServerRelayTest`).
+- **What the zip holds.** about.txt (version, device, device owner, the updater's, the link's, the instrument's and the
+  keyboard's state), settings.txt (every preference; of the secrets only `webPinSet`, `kioskPinSet` and the cloud's on,
+  host and enrolled), link.log (the link's last 500 lines: Bluetooth addresses and advertised names, as before), and the
+  last five crash reports (paths and addresses scrubbed, as before). No PIN, PIN hash or salt, session digest
+  (`files/web/sessions.json` is not read), relay secret, piano id or enrolment code: nothing needed taking out
+  (`DiagnosticsExporterTest` pins it: settings.txt's names, no 64-hex digest, no piano id). It was the person's to
+  share from the tablet; a signed-in browser can now fetch it, over the relay too, sent `no-store`. It is built in
+  memory (`exportBytes`), never written where the share sheet's file lives.
+- **The two actions.** Refresh sends the piano `get !<name>` only for facts its dump listed (2.0.0 is never asked one it
+  lacks), never during a firmware update, and at most once in 10 s across every listener and the relay; it reads,
+  never writes, the piano (firmware/docs/BLE_DIAG.md's guarantees). Tool takes `covers` (the artwork worker's forced
+  lookup, Apple's catalogue as before, with its own pacing and stop) or `reconnect` (the player paused and the piano
+  silenced first; refused 409 while a firmware update runs or the player is locked); any other name 400. Bodies are
+  read by the existing JSON reader (`onlyKeys`, 16 characters).
+- **The readings** are Android's own (no new permission): the battery's sticky broadcast, `PowerManager`,
+  `ActivityManager`, `StatFs`, `ConnectivityManager`, `/proc/self/status`. The CPU and skin temperatures and the CPU's
+  counters come from `HardwarePropertiesManager`, which Android gives only to a device owner: asked only when the app is
+  one, null elsewhere. The device-owner and kiosk flags are shown, not changeable.
+
+### Residuals (stated honestly)
+
+- **A signed-in browser learns the tablet's state** (battery, network type and signal, memory, model and Android, the
+  device owner and kiosk flags) and, through the zip, the piano's Bluetooth address and the link's recent lines: what
+  Share diagnostics already gave to whoever it was shared with, now to every session.
+- **The deployed relay drops `Content-Disposition`** (its allow-list, unchanged); the zip still arrives as
+  `application/zip` and the page names the file itself.
