@@ -104,6 +104,17 @@ on the tablet*). Made by Steven Jin. Version 1.15.
   *STARTING* shows under the composer, and the first notes travel down the roll to
   meet the tracker bar as the piano plays them. Resuming after a pause never
   waits; a seek plays at once; two pieces are about 2 s apart.
+- **How a piece is played** (1.16): each piece is shaped as it loads, as a
+  pianist would play it (**Piano › Playback › Expression**: Off, Light at
+  first, or Full): the melody sings over its chord, phrases swell, chords roll,
+  downbeats lean, never more than 25 ms from the file. **Dynamic range** spreads
+  soft and loud apart; **Quietest note** lifts a note too soft to strike.
+  Repeated keys keep the rhythm: each key lifts in time to strike again, and
+  repeats faster than the piano can play keep their pulse, every second (or
+  third) note played a touch louder (**Re-strike time**, Auto: the piano's own
+  repeat period). With Full power on (Sound and touch) every note strikes at
+  full strength: turn it off to hear dynamics. A change counts from the next
+  piece.
 - **The mini player**: on a phone, whatever is playing sits above the tab bar
   with its portrait, title and composer, play/pause and next; tap it for Now
   playing.
@@ -253,7 +264,8 @@ on the tablet*). Made by Steven Jin. Version 1.15.
   *Auto-connect on launch*, *All keys off*; **Keyboard**: the MIDI keyboard; see
   *Instruments*), **THE PIANO** (Sound and touch · Lights and screen · Pedal ·
   Firmware and status, the piano's settings above), **PLAYING** (**Playback**: the
-  pause before each piece, default tempo, transpose, velocity, folding, drum
+  pause before each piece, default tempo, transpose, velocity, dynamic range, the
+  quietest note, expression, the re-strike time, folding, drum
   channel; **Tablet sound**: the tablet's own piano sound and *Tablet volume*;
   **Schedule**: timed play, see *Schedules*), **SHARING** (**Web panel**: the
   panel, its PIN, *Also on Wi-Fi* and the panel over the internet; **Guests**: the

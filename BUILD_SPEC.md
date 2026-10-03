@@ -7664,3 +7664,79 @@ panel's address is the one on the guests' poster).
   `Max-Age=31536000` and a digest alone in a `FakeSessionStore`, gone at logout; `WebServerRelayTest`'s two cookie
   strings gain `Max-Age`. 1,592 → 1,596 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30
   warnings, none in `web/`.
+
+# v1.16 — M44: how a piece is played
+
+Fable's design (DESIGN.md › v1.16 — M44), Opus coding, one lean run on `main`: no emulator, three new test classes,
+no version bump, no signing. A change to the four settings shapes the next piece; nothing is reshaped mid-piece.
+
+## The pre-pass
+- **`player/Performance.kt`**: `Performance.shape(piece, hands: ByteArray?, PerformanceSettings, PianoFacts,
+  checkpoint)` returns the piece with its `events` alone shaped (`MidiPiece.withEvents`), or the piece itself when
+  nothing changed. `NoteTable.read(events)`: note i is the i-th Note On, ended as `SmfParser.pairNotes` ends it (its
+  Note Off, a strike of its channel and key again, else the last event), so `hands` (one per note of `MidiPiece.notes`)
+  line up. `events()` writes back each kept note's On at its onset with its velocity and its Off at its end, the
+  controllers at their own times, sorted by (time, controller < Off < On, file order); a note ended by a re-strike or
+  never ended gets its own Off, an Off that ended nothing goes, and if every note now ends before the last event an Off
+  of a key nothing holds marks it, so `durationMicros` and the last event's time hold. Drum-channel notes are untouched.
+- **Order**: (a) `Expression.shape` → (b) `Dynamics.shape` → (c) `Repeats.shape` (skipped when
+  `PianoFacts.freeRepeats`: a MIDI piano). `checkpoint` between the parts.
+- **(a) Expression** (`Expression.kt`; Light, Full doubles): clusters within 30 ms of their first onset; melody (the
+  highest right-hand note, or the highest with no hands) +0.08, bass (the lowest left-hand note, or the lowest of two
+  or more) −0.03, inner −0.08; phrases of the melody split where the rest before a note exceeds max(a beat, 600 ms);
+  three notes or more: × (1 + 0.12 sin πt) and × (1 + 0.03 an octave from the phrase's mean pitch, within ± 0.06, Full
+  too); on the grid (`Quantize.onGrid`): a downbeat (`barStartsMicros`) +0.06, a beat (`microsToBeats`) +0.02, else
+  −0.02, within 20 ms; identical chords (two pitches or more) in a row: every second −0.04; the product blended by the
+  file's velocity deviation s: 1 below 6, 0.3 from 20, linear between. Timing: lead 8 ms (Full 15) from the cluster's
+  first onset; a cluster of 3+ within 10 ms rolls bottom to top over 12 ms (25), the top note on its time, in place of
+  the lead; a phrase's first note (all but the first phrase) +15 ms (25), at most half its length, its end kept; a
+  phrase's last note held 20 % (40 %) longer, to its key's next onset less G and the last event at most. Every onset
+  within ± 25 ms of the file's, never before the previous note of its channel and key lets go, never past its own end.
+- **(b) Dynamics** (`Dynamics.kt`): m the mean of the shaped velocities; v' = m + (v − m) × 0.7 · 1 · 1.3, then
+  max(v', floor), within 1–127.
+- **(c) Repeats** (`Repeats.kt`): T = `Performance.restrikeMs` (the setting, else `PianoFacts.repeatMs`, else 100);
+  G = max(60, T − 40) ms. Per key (the file's note number, any channel) in onset order: a note is kept if it starts at
+  least T − 1 ms (`ROUNDING_MICROS`) after the last kept one, which for a steady run is the first and every
+  ⌈T / period⌉-th; a kept note gains 6 per note dropped after it (18 at most, 127 at most) and lasts to the latest end
+  among them; then each kept note ends at min(that end, max(next kept onset − G, onset + 30 ms), next kept onset).
+- **The router** (`NoteRouter.restrikeMicros`, `RESTRIKE_SLACK_MICROS` 10 ms): Steven Piano thins a strike of an idle
+  key sooner than `restrikeMicros − 10 ms` after its last, on a piece's and the screen's path (`strike`) and the
+  keyboard's (`externalNoteOn`); a MIDI piano, none. The player sets it to the shorter of the T the loaded piece was shaped with and the settings' T now
+  (`Player.restrike`), so a longer T never thins a piece shaped for a shorter one and a shorter one counts at once.
+- **The player**: `startCurrent` runs `performed(...)` on `compute` after the hands and the fingering, beside the
+  chords, the file's piece kept for `NowPlaying`; the engine loads the shaped one. `setPerformance` and `setPianoFacts`
+  (`AppGraph`: the settings' `performance`, and `PianoFacts.read` of `!repeatms` from `pianoSettings.state`).
+- **The fact**: `PianoSettings.facts` begins with `Fact("repeatms", "Repeat period", TIMING)` ("110 ms");
+  `alsoRead` sends `get !repeatms` after `gap` and `minstrike`, only when the dump reported the fact.
+
+## The settings and the page
+- `Settings`: `dynamicRange` (`DynamicRange`, NATURAL), `velocityFloor` (20, `PlaybackLimits.VelocityFloor` 1–60),
+  `expression` (`ExpressionLevel`, LIGHT), `restrikeMs` (0 Auto, else `PlaybackLimits.restrikeMs`: tens within
+  60–250), keys as named; `PianoSettings.performance`; `PianoViewModel` setters; diagnostics' four lines after
+  `skipDrumChannel`.
+- `PlaybackPage`: after Velocity (whose row now carries the Full power line, `PlaybackCopy.fullPower`): `ChoiceRow`
+  Dynamic range, `StepperRow` Quietest note (in fives: 1, 5 … 60), `ChoiceRow` Expression, `StepperRow` Re-strike time
+  (0, then 60–250 in tens, `PlaybackCopy.restrike`); `PageRows.DYNAMIC_RANGE`, `QUIETEST_NOTE`, `EXPRESSION`,
+  `RESTRIKE`; four `SettingNotes`; `StepperControl` wraps a value past 120 dp.
+- Web: `SETTINGS_KEYS` takes `dynamicRange` (narrow · natural · wide), `velocityFloor` (1–60), `expression` (off ·
+  light · full), `restrikeMs` (0, or 60–250 in tens); `SettingsChange`, `AppWebBackend.applySettings`.
+
+## Simplified, and why
+- The router allows 10 ms under T: a repeat spaced exactly T apart would otherwise lose every other note to the
+  scheduler's few milliseconds; the piano defers so early a strike by its own tick at most.
+- "Every n-th" is kept as "at least T after the last kept": the same for a steady run, never closer for an uneven one.
+- Repeats group by the file's note number; two notes folded onto one key meet the router's guard instead.
+- A rolled chord's top note keeps the beat in place of the melody lead; the breath moves the phrase's first note alone;
+  the repeated-chord softening alternates (second, fourth …).
+- `hands` is the `ByteArray` `Hands.assign` gives, not an `IntArray`.
+
+## Tests
+`RepeatsTest` (4: the release gap and the 30 ms floor; every n-th with the bonus held to 18 and 127; nothing else
+changes, a MIDI piano's repeats stay; Auto takes the fact), `ExpressionTest` (4: Off is the identity; a flat file gains
+variance and the melody rises above the inner notes; onsets within 25 ms, count, length, order and the pedal kept;
+Full at least Light), `DynamicsTest` (2: the arithmetic; a piece's own mean). Updated: `NoteRouterTest`'s and
+`PlaybackEngineTest`'s guards are T; `PlayerTest` plays pieces as written; the four keys' round trip;
+`DiagnosticsExporterTest` 50 → 54 lines; `WebApiTest`'s four. Checked once, not kept: the pass over all 3,454 files of
+`../midi` at fourteen settings (Light and Full; T from 20 to 250 ms; a MIDI piano): the order, the length, the pedal,
+the onsets, the spacing and the release gap all hold, 5 ms at most a piece on the Mac.
+1,605 → 1,615 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.

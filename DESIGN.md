@@ -2362,7 +2362,7 @@ anything about an input is uncertain. Nothing above changes except where this se
 | | Steven Piano | Any other MIDI piano |
 |---|---|---|
 | Keys | 24–107 (folded or dropped as Fold says) | 21–108 |
-| A key struck again within 100 ms | waits, as today | struck again: Note Off, then Note On |
+| A key struck again sooner than the re-strike time (100 ms before v1.16) | a piece's repeats are spaced first to keep the rhythm (v1.16 — M44); a live strike that soon is dropped, and the piano defers one a little early | struck again: Note Off, then Note On |
 | A key another source holds | shared | struck again |
 | Pedals | sustain (CC64), paced | sustain, soft and sostenuto (CC64, 66, 67), at once |
 | Stopping | sustain up, then All Notes Off | every held key's Note Off, the three pedals up, All Notes Off |
@@ -2736,3 +2736,42 @@ and "never animated" for Art and notes, retired in place above.
 - **The switch.** Piano › Display › **Album colours behind the player** (on), after Artwork in black and white: "The
   album's colours drift behind the player while playing". The same switch is **Album colours** at the foot of Now
   playing's View menu, one tap from the player. Search finds it by backdrop, colours, album and Apple Music.
+
+# v1.16 — M44: how a piece is played
+
+Steven asked (2026-10-03): "Some songs where a key is constantly repeated, you can't hear the sound." He chose, by
+multiple choice, repeats that keep the rhythm, expression on by default (Light, dynamics and timing), and a dynamic
+range with a floor for the quietest note. Designed by Fable, built by Opus in one lean run. **A change to any of the four
+settings shapes the next piece, never the one playing.**
+
+- **One pass as a piece loads.** What a piece sounds is shaped once, after its hands are known: expression, then the
+  dynamic range and the floor, then the repeats. The roll, the score, the hands, the fingering and the chords stay the
+  file's; the pedal keeps its times and the piece its length. Only a piece's notes: the Keys screen and keyboards play as
+  before. A drum-channel note is left as it is.
+- **Repeats that keep the rhythm** (always on for Steven Piano). The re-strike time T is **Re-strike time**: Auto, the
+  piano's own repeat period (`!repeatms`, `minstrike + gap + 20 ms`: 110 ms at its defaults, 40 ms with Snappy; 100 ms
+  with no piano or none reported), or 60–250 ms. Each key lifts before its next strike by the release gap, the longer of
+  60 ms and T less 40 ms, so every strike lands (never shorter than 30 ms for it). Repeats faster than T keep the first
+  and every n-th, each a touch louder (6 for every note it stands for, 18 at most): the pulse stays and nothing piles up
+  at the piano. The router's guard follows the same T, 10 ms of timing allowed, the last line of defence for the Keys
+  screen, a keyboard and a faster tempo. A MIDI piano's repeats stay as the file has them.
+- **Dynamic range and the quietest note.** Each velocity spreads from the piece's mean, × 0.7 Narrow, × 1 Natural (at
+  first), × 1.3 Wide; then a softer one is raised to the **Quietest note** (20 at first, 1–60), so it still strikes.
+- **Expression** (Off · Light at first · Full, which doubles every deviation and every millisecond), in six rules:
+  1. In each cluster (onsets within 30 ms) the melody, its highest right-hand note, × 1.08; the bass × 0.97; inner notes × 0.92.
+  2. The melody's phrases (split at a rest longer than a beat and 600 ms) of three notes or more swell, × (1 + 0.12 sin πt), and follow their contour, 0.03 an octave, ± 0.06.
+  3. On the grid alone, a downbeat × 1.06, another beat × 1.02, off the beat × 0.98; of identical chords in a row, the second × 0.96.
+  4. A file that already carries dynamics is shaped lightly: the full effect under a velocity deviation of 6, 30 % of it from 20.
+  5. Timing never accumulates: the melody leads its chord by 8 ms; a chord of three or more within 10 ms rolls up over 12 ms, its top note on the beat; a phrase after a rest starts 15 ms late; its last note holds up to 20 % longer.
+  6. Nothing added or taken away, no onset more than 25 ms from the file's, velocities 1–127, the same every time.
+- **The Full power line.** Full power, on by default, makes the piano ignore velocity, so none of this is heard until it
+  is off. Under Velocity, one line in the secondary colour: with the piano connected and Full power on, "Full power is
+  on: every note strikes at full strength. Turn it off on Sound and touch to hear dynamics and expression."; otherwise
+  "Dynamics are heard with Full power off."
+- **Where the rows are.** Piano › Playback, after Velocity: **Dynamic range** (Narrow · Natural · Wide, "How far soft and
+  loud notes spread apart"), **Quietest note** (a stepper in fives, "Softer notes are raised to this, so they still
+  strike"), **Expression** (Off · Light · Full, "Shapes loudness and timing as a pianist would") and **Re-strike time**
+  ("Auto · 110 ms from the piano" or "Auto · 100 ms", then 60–250 ms in tens, "The least time between two strikes of one
+  key"). Sound and touch › Fine tuning › TIMING shows the piano's **Repeat period** ("110 ms", read-only), read again
+  after the shortest strike or the repeat gap changes. Search finds the four by repeat, re-strike, trill, dynamics,
+  expression, humanize and soft notes; the web panel's settings take them too.
