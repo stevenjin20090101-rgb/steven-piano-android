@@ -2066,3 +2066,11 @@ the test that holds it:
   are unaffected.
 - **The file is as safe as the tablet's storage**: whoever can read the app's files (a rooted tablet) learns how many
   sessions there are and when each was used, not a cookie that works.
+
+## 1.17 — pictures through the relay (pre-audit notes, M45)
+
+- **New query parameters on a read route, validated; no new host.** `GET /api/art/piece/{id}` (a session, as before)
+  takes `kind` (`cover` or `roll`) and `size` (`row` or `tile`), each refused with 400 `field` when it is anything else;
+  `v` on either art route only picks the cache header (`private, max-age=31536000, immutable`; `private` keeps it out of
+  shared caches) and reads nothing. No new route, listener or host: album lookups still reach only Apple's two, now
+  asking for 25 results (was 10) within the same 256 KB cap.

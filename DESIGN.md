@@ -2778,3 +2778,31 @@ settings shapes the next piece, never the one playing.**
   key"). Sound and touch › Fine tuning › TIMING shows the piano's **Repeat period** ("110 ms", read-only), read again
   after the shortest strike or the repeat gap changes. Search finds the four by repeat, re-strike, trill, dynamics,
   expression, humanize and soft notes; the web panel's settings take them too.
+
+# v1.17 — M45: pictures through the relay
+
+Steven saw (2026-10-03) the web panel's art stand empty or show letters over the internet link: Now playing and every
+Up next row. Against a stand-in for the relay's limits (120 requests a minute from one address; 8 in flight and 32
+waiting a piano, the rest refused at once), opening Now playing with an 86-piece queue sent **265** picture requests and
+**39** were answered (75 refused as busy, 151 over the minute's limit, the page's own files caught too); with a state
+message every 0.6 s, **2,800 in 8 s**. On the tablet's own address the same page asked 83 times, every one answered.
+Designed by Fable, built by Opus in one lean run. The panel's pictures now follow six rules:
+
+- **Never empty.** A frame shows its title's letter at once; the picture is laid over it when it arrives (a 160 ms fade,
+  none under reduced motion).
+- **One request a picture.** The piece's cover, its composer's portrait (at a row's size or a tile's) or its roll card,
+  at an address that names its version, so the browser keeps it for good. A picture that fails leaves the letter.
+- **Only what is in sight.** A frame asks once it comes within 200 px of the window; Now playing's asks at once, first.
+- **A few at a time.** Four at once through the relay (six on the tablet's own address), and through the relay 40 at
+  most at once, then one a second, so the page's own requests always have room in the relay's 120 a minute.
+- **Failures wait.** A picture that failed is asked again after 4 s, 20 s and 60 s, only while in sight; three failures
+  in a row pause every picture for 20 s (the relay's refusal lasts up to a minute).
+- **Pictures stay.** A state message that changes nothing Up next shows leaves its rows alone; one that does keeps the
+  pictures already there.
+
+Covers match a little wider too. Measured on Steven's 266 uploaded songs against Apple's search, 255 were found under
+M40's rule; looking at 25 results (was 10), reading "S.T.A.Y." as "Stay", setting a classical title's movement words
+aside, and, when nothing fits, taking the album the artist names ("Stay" by "Interstellar") or the artist's own album of
+the work ("Skyrim Theme" by Jeremy Soule) finds four of the other eleven and four of five classical misses on the demo
+tablet, and changes no cover found today except for an earlier result. A lookup that found nothing before this version
+is tried once more.

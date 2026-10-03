@@ -7757,3 +7757,73 @@ the onsets, the spacing and the release gap all hold, 5 ms at most a piece on th
   art's tap opens the piece sheet (`clearAndSetSemantics` before `clickable`: screen readers meet the title alone), and
   `StartingLine` sits under the words. 1,605 unit tests (12 skipped), none failing; `lintDebug`: 0 errors, the same 30
   warnings.
+
+# v1.17 — M45: pictures through the relay
+
+Fable's design (DESIGN.md › v1.17 — M45), Opus coding, one lean run on `main`: no emulator, no version bump, no signing.
+
+## The tablet (`web/`)
+- `GET /api/art/piece/{id}` takes `kind` (`WebArtKind`: `cover`, the piece's own cover alone,
+  `image(ArtworkEntity.forPiece(id), size)`, else 404, so a roll card never lands in an `<img>`; `roll`, the roll card
+  alone; absent, the chain as before, for older pages) and `size` (`WebArtSize`: `row` → `ArtSize.Row`, `tile` →
+  `ArtSize.Tile`; absent, tile), each refused with 400 `field` otherwise. `WebBackend.pieceArt(id, kind, size)`.
+- Either art route asked for with `v` answers `Cache-Control: private, max-age=31536000, immutable`; without it,
+  `private, max-age=3600` as before (`WebServer.image(image, versioned)`). `v` is only looked for, never read.
+- `artVersion` for every kind (`WebApi.piece`): a cover's is its `piece:<id>` row's `fetchedAt`, a portrait's the
+  `composer:<key>` row's (`ArtworkRepository.portraitComposers()` is now key → `fetchedAt`, as `pieceCovers()` is; the
+  backend's `toWeb` and the piece playing take `covers[id] ?: portraits[composerKey]`), a roll card's
+  `WebApi.ROLL_ART_VERSION`, 1. `WebComposer` and a channel card's `WebCardComposer` carry theirs (`WebApi.composer`,
+  `WebApi.channels`).
+
+## The page (`app.js` › Art, `style.css` › Art)
+- `art(box, piece, size, options)`: the monogram at once; once loaded, `.picture` (the `<img>`, or the `.roll` span with
+  its mask set through the CSSOM to the same address) is appended over it, one style read, then `.shown` (opacity over
+  160 ms) and `.pictured` (the monogram hidden as the fade ends); no transitions under reduced motion. A box already
+  showing its key (`kind:id-or-composerKey:version:size`) is left as it is, its letter brought up to date.
+- Addresses: cover `ROOT + /api/art/piece/{id}?kind=cover&size={row|tile}&v={artVersion}`; portrait
+  `ROOT + /api/art/composer/{key}?size={row|tile}&v={artVersion}`; roll `ROOT + /api/art/piece/{id}?kind=roll&v=1`;
+  `row` for the 40 px boxes, `tile` for Now playing's and the channel mosaics'. Id 0 with art "roll": the monogram alone.
+- One `IntersectionObserver` (`artSight`, rootMargin 200 px) for every box; a box is unobserved once shown or given up,
+  and `artForget`/`artForgetIn` let go of replaced rows (never `disconnect()`). `options.priority` (Now playing) skips it
+  and goes to the head of the queue.
+- `artPump`: at most 4 loads through the relay (`ROOT !== ''`), else 6; through the relay a token bucket of 40, one
+  more a second, which Now playing's draws on without waiting. Skipped: a box gone from the page, out of sight by then,
+  or showing something else. A picture already loading takes the box too (`artLoads`, by address): one load each.
+- `artFailures` (by address): a failed address waits 4 s, 20 s, then 60 s, asked again only while its box is in sight;
+  after the fourth failure the monogram stays. Three failures in a row set `artPausedUntil` 20 s on.
+- `renderQueue`: a JSON signature per container (compact; the current item's uid, id, title, composer, composerShort,
+  art, artVersion; each row's uid, id, title, composerShort, durationMs, requested, art, artVersion; the total) returns
+  early when unchanged; a rebuild moves the old boxes into the new rows by key and forgets the rest.
+- `backdropFrom(img)` is Now playing's `onPicture`: the `<img>`, or null for a roll card, a monogram or a failure. The
+  composers list (`portraitOf`) and the channel mosaics (each cell an `.art` box, `.mosaic .art` filling its quarter
+  without a hairline of its own) use the loader; their `<img loading="lazy">` is gone.
+
+## Covers, a little wider (`data/art/`)
+- `CoverFetcher.RESULTS` 25 (was 10).
+- `CoverMatch.trackFits(title, track, classical)`: also equal with the spaces removed when that is 4 characters or more;
+  for a composer, `1st 2nd 3rd 4th 5th first second third fourth fifth movement mvt mov` are left out of the 70 %.
+- `CoverMatch.pick`: the strict pass, then over the same results (a) the first whose `core(collectionName)` is the
+  artist's words joined and whose track fits, then (b) the first whose `core(artistName)` holds every artist word and
+  whose album core holds, as whole words, every title-core word not among `theme main title song opening ending ost
+  soundtrack from the of a an and in to for`, one of them 4 characters or more. `core()` drops a trailing "(feat. …)".
+- `SettingsRepository.coverRuleSince(now)` (key `coverRuleSince`, 0 unset, 0 when unreadable): `now` the first time it
+  is asked, before this version's first lookup, then kept. `ArtworkPolicy.shouldFetch(…, coverRuleSince)`: a `cover:`
+  row NOT_FOUND with `fetchedAt` before it is due. Passed in by `ArtworkWorker` (`requestAll`, `process`; a constructor
+  lambda, 0 by default), `ArtworkRepository.due()` and `PieceDao.coverCandidates(since)`, which now takes those rows
+  with the never-looked-up and the failed.
+
+## Simplified, and why
+- "Three tries in all" is three more after the first failure, at 4, 20 and 60 s; a pause can only delay them.
+- A box that scrolled out of sight while queued is skipped, as one gone from the page is: it asks again when it is back.
+- Channel cards' composers carry `artVersion` too, so their portraits share the composers list's versioned addresses.
+- `PieceDao.coverCandidates` takes `since`: without it the old not-found lookups would reach only the piece playing.
+- The second look tries (a) over every result before (b), the looser rule.
+
+## Tests
+`WebServerTest` (1: one kind at a time, 400 `field` for a bad `kind` or `size`, the year with `v` and the hour without);
+`WebApiTest`'s pinned key sets take `artVersion` (a roll card's 1, a portrait's and a composer's their own);
+`CoverMatchTest` (5: "S.T.A.Y.", the Pathétique, "Interstellar", "Skyrim Theme", a "feat." album and artist and the
+tribute album refused); `ArtworkPolicyTest` (1: `coverRuleSince`). The loader was checked by hand against a stand-in for
+the relay's limits (an 86-piece queue, a state message every 0.6 s): 8 picture requests on opening Now playing, none more
+over the state messages, a rebuilt Up next keeping its pictures. 1,615 → 1,622 unit tests (12 skipped), none failing.
+`lintDebug`: 0 errors, the same 30 warnings.
