@@ -202,8 +202,10 @@
     "versionName": "1.16",
     "notes": "Fast repeated notes now sound: the app lifts a key early so every strike can land, and repeats faster than the piano can manage keep the pulse instead of going silent. New rows on Piano › Playback: Re-strike time (Auto takes the piano's own figure), Dynamic range, Quietest note, and Expression, on by default at Light, which shapes loudness and timing as a pianist would: melody above accompaniment, phrases that swell and settle, downbeats that lean, chords that roll. Dynamics are heard with Full power off on Sound and touch; the page says so. Now playing shows the small album art beside the title.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.16/steven-piano-1.16.apk",
+    "sha256": "bd7d2f499f5bf40268d737c6c10cb464507b839432deea58a9c10d516f854f91",
+    "sizeBytes": 14022242,
     "minSdk": 26,
     "tag": "v1.16",
-    "draft": true
+    "publishedAt": "2026-10-03"
   }
 ]
