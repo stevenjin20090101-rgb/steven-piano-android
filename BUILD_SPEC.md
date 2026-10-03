@@ -8403,3 +8403,22 @@ item for the library's pieces). The panel was run in a browser against the real 
 backend: a search, a choice and a removal from a tile and a row (the new art showing in place), nothing found, the floor,
 Apple's stop, unreachable, expired results, Escape, the scrim, a phone's width. 1,635 → 1,642 unit tests (12 skipped),
 none failing, the web tests again with `--rerun`. `lintDebug`: 0 errors, the same 30 warnings, none in this run's code.
+
+## The release: 1.18 (versionCode 28)
+
+Cut from `main` after the merges of M46 (`0b38748`), M49 (`56bc3c2`, with the integrator's `5775503`), M47a (`92f74b4`),
+M51 (`27d70b4`), M47a's follow-up (`989d651`), M47b (`cf4d50b`), M50 (`8427e28`) and M48 (`eca56a7`): 1,650 unit tests
+green, lint 0 errors, the relay's 85 tests green. Steven's choices on 2026-10-03: the mocked look (dark Ink by default,
+white dials with one amber colour for attention), then, after seeing M49's blurred-cover backdrop on the real build,
+"the effect before" with the big cover and the layouts kept (M51 on the tablet, the follow-up on the panel).
+
+The integrator's checks. On the tablet-size emulator (debug builds, upgraded in place): Now playing in its three
+layouts with the soft discs back, the System page under Piano › This tablet (both halves), the Library with its
+now-playing pane. The panel in headless Chrome, served by the same emulator: Now playing, Library's covers, Channels,
+Settings (the piano's pages and Playback), System with live readings, the light appearance, 390 px wide with the foot
+bar; through a stand-in for the relay's limits over HTTP/2 with a state message every 0.6 s: Now playing 13 picture
+requests, Library 25, System 1, none refused. The cover picker against Apple's catalogue for real: a search gave
+twelve albums with their pictures, a choice changed the piece's cover and its `artVersion`, a removal brought the
+portrait back. The relay was deployed (`ART_LIMIT`, `X-Relay-Art-Limit: 600`) and the school tablet answered through it.
+Not checked: the resting screen by eye (its code is 1.17's again), the piano's own cards with a piano attached (the
+emulator has none), the controller's temperature, memory and tasks (they wait for firmware, `firmware/docs/BLE_DIAG.md`).

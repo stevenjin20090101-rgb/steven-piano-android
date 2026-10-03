@@ -21,7 +21,7 @@ import androidx.annotation.Keep
 @Keep
 object Provenance {
     const val TAG = "STEVEN-PIANO-PROVENANCE Made by Steven Jin <stevenjin20090101@gmail.com> Ed25519 fp eab16a502f679465"
-    val text = "Made by Steven Jin · v1.17 · eab16a502f679465"
+    val text = "Made by Steven Jin · v1.18 · eab16a502f679465"
 
     /** Under every tab's title, in the eyebrow style (which sets it in capitals). */
     val byline = "Player piano · by Steven Jin"
