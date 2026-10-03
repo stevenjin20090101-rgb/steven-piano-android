@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.stevenjin.stevenpiano.ui.theme.Backdrop
 import dev.stevenjin.stevenpiano.ui.theme.LocalLive
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
@@ -49,14 +48,12 @@ private val Sine = Easing { x -> (1f - cos(PI.toFloat() * x)) / 2f }
  * playing) the dot breathes 100 % to 55 % over 2 s, unless motion is reduced. Always pair it
  * with a word: the dot never carries meaning alone. The breath is the dot's own layer's alpha, so
  * breathing redraws nothing else (drawn in the canvas it re-recorded the whole screen every frame,
- * and with it re-blurred the glass over the screen). Over the cover's backdrop ([LocalImmersive], v1.18 — M49) it
- * carries a 1.5 dp light ring round it ([Backdrop.LiveRing]), so the red reads on a red cover.
+ * and with it re-blurred the glass over the screen).
  */
 @Composable
 fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
     val red = LocalLive.current
     val ring = MaterialTheme.colorScheme.onSurfaceVariant
-    val immersive = LocalImmersive.current
     val reduced = rememberReducedMotion()
     val shown = remember { Animatable(if (live) 1f else 0f) }
     LaunchedEffect(live, reduced) {
@@ -69,18 +66,14 @@ fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
     } else {
         null
     }
-    val halo = if (immersive) Backdrop.LiveRing else 0.dp
     Canvas(
         modifier
-            .size(with(LocalDensity.current) { DotSize.toDp() } + halo * 2)
+            .size(with(LocalDensity.current) { DotSize.toDp() })
             .graphicsLayer { alpha = breath?.value ?: 1f },
     ) {
         val on = shown.value
         val stroke = 1.dp.toPx()
-        val rim = halo.toPx()
-        val dot = size.minDimension / 2 - rim
-        if (rim > 0f && on > 0f) drawCircle(Backdrop.LiveRingColour, alpha = on)
-        if (on < 1f) drawCircle(ring, radius = dot - stroke / 2, alpha = 1f - on, style = Stroke(stroke))
-        if (on > 0f) drawCircle(red, radius = dot, alpha = on)
+        if (on < 1f) drawCircle(ring, radius = size.minDimension / 2 - stroke / 2, alpha = 1f - on, style = Stroke(stroke))
+        if (on > 0f) drawCircle(red, alpha = on)
     }
 }

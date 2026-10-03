@@ -97,7 +97,7 @@ fun GlassDropdownMenu(
     modifier: Modifier = Modifier,
     offset: DpOffset = DpOffset(0.dp, 0.dp),
     content: @Composable ColumnScope.() -> Unit,
-) = AppAppearance {   // opened from over the cover's backdrop, still in the app's appearance (v1.18 — M49)
+) {
     val shape = MenuDefaults.shape
     val look = rememberGlassLook(
         shape,
@@ -139,7 +139,7 @@ fun GlassAlertDialog(
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
     properties: DialogProperties = DialogProperties(),
-) = AppAppearance {   // opened from over the cover's backdrop, still in the app's appearance (v1.18 — M49)
+) {
     BasicAlertDialog(onDismissRequest = onDismissRequest, modifier = modifier, properties = properties) {
         GlassDialogSurface {
             Column(Modifier.padding(DialogPadding)) {
@@ -218,7 +218,7 @@ fun GlassPopover(
     val provider = remember(alignment, offset, density) { PopoverPosition(alignment, offset, density) }
     val direction = LocalLayoutDirection.current
     Popup(popupPositionProvider = provider, onDismissRequest = onDismissRequest, properties = PopupProperties(focusable = true)) {
-        AppAppearance { AnimatedVisibility(
+        AnimatedVisibility(
             visibleState = state,
             enter = Motion.enter(fadeIn(tween(Motion.PopMs, easing = Motion.Enter)), reduced),
             exit = Motion.exit(fadeOut(tween(Motion.QuickMs, easing = Motion.Leave)), reduced),
@@ -242,7 +242,7 @@ fun GlassPopover(
             ) {
                 Column(Modifier.padding(16.dp), content = content)
             }
-        } }   // opened from over the cover's backdrop, still in the app's appearance (v1.18 — M49)
+        }
     }
 }
 

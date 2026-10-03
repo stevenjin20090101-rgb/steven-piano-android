@@ -14,9 +14,13 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,81 +33,100 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
-import dev.stevenjin.stevenpiano.data.art.BackdropPicture
+import dev.stevenjin.stevenpiano.data.art.ArtPalette
 import dev.stevenjin.stevenpiano.ui.LocalIdleState
 import dev.stevenjin.stevenpiano.ui.theme.Backdrop
+import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.discColour
 import dev.stevenjin.stevenpiano.ui.theme.rememberGlassAccessibility
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
-import kotlin.math.hypot
-import kotlin.math.roundToInt
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /*
- * The backdrop made of the cover (DESIGN.md › v1.18 — M49), the one component that draws it: the art the piece shows,
- * small and blurred ([BackdropPicture], data/art/BackdropRules.kt), three times over, each turning slowly about its
- * centre, under the black its brightest part needs for light words, edge to edge behind Now playing, the now-playing
- * panel and the resting screen. No blur effect: the picture is soft already (the blur effect stays the aura's alone).
- * It turns, in the aura's loop, only while a piece plays, the screen is resumed and in sight and motion is not reduced;
- * still otherwise. Under high contrast, reduced transparency, artwork in black and white or Album colours off there is
- * none ([rememberBackdrop]), and what stands on it is immersive only while it shows ([Immersive]).
+ * The album-colour backdrop (DESIGN.md › v1.15 — M41), the one component that draws it: the playing piece's art
+ * colours ([ArtPalette], ui/theme/Backdrop.kt) as four soft discs drifting slowly behind the player on Now playing, the
+ * now-playing panel and the resting screen, under a veil of the surface so the words read. No blur: a radial gradient
+ * fading to nothing is the soft shape (the blur effect stays the aura's alone). It moves on a loop of its own, in the aura's
+ * shape, only while a piece plays, the screen is resumed and in sight and motion is not reduced; still otherwise. Under
+ * high contrast, reduced transparency, artwork in black and white or Album colours off there is none ([rememberBackdrop]).
  */
 
 /**
- * The backdrop's picture for the piece playing ([pieceId], [composerKey]), or null where none shows: Album colours off
- * ([on]), nothing loaded, artwork in black and white, high-contrast text or reduced transparency, or art without a
- * picture (a roll card, a monogram). Non-null is the screens' immersive state.
+ * The palette the backdrop shows for the piece playing ([pieceId], [composerKey]), or null where none shows: Album
+ * colours off ([on]), nothing loaded, artwork in black and white, high-contrast text or reduced transparency, or art
+ * without a colour of its own (a grey portrait, a roll card). Non-null is the screens' `backdropShown`.
  */
 @Composable
-fun rememberBackdrop(pieceId: Long?, composerKey: String?, on: Boolean): BackdropPicture? {
+fun rememberBackdrop(pieceId: Long?, composerKey: String?, on: Boolean): ArtPalette? {
     val glass = rememberGlassAccessibility()
     val wanted = on && !LocalArtworkMonochrome.current && !glass.increasedContrast && !glass.reducedTransparency
-    return if (wanted && pieceId != null) rememberBackdropPicture(pieceId, composerKey.orEmpty()) else null
+    return if (wanted && pieceId != null) rememberArtPalette(pieceId, composerKey.orEmpty()) else null
 }
 
 /**
- * The backdrop in [modifier]'s box (the screen's or the pane's, `matchParentSize`), clipped to it: [picture] three times,
- * each a square [Backdrop.Scales] of the box's diagonal (the first covers the box at any turn) about its own centre (the
- * box's, moved [Backdrop.OffsetsX] and [Backdrop.OffsetsY]), at [Backdrop.Alphas], filtered, each turned as its own
- * loop has come (one turn in [Backdrop.PeriodsMs]); then black over them all from the picture's dim less
- * [Backdrop.TopLighter] at the top to its dim and [Backdrop.FootDeeper] at the foot, [deeper] more on the resting screen.
- * One draw node: the sizes and the black are worked out once per size and picture, and a frame only turns them (no
- * allocation, no recomposition). A new picture cross-fades in over the old, whole, over [fadeMs] (a cut under reduced
- * motion); none fades away.
+ * Over a shown backdrop ([shown]), secondary and tertiary text take the primary colour, as on a bar's glass: through the
+ * veil only the primary colour keeps 4.5:1 over every hue (BackdropContrastTest). Otherwise today's colours. The same
+ * composition either way, so nothing beneath loses its state when the backdrop comes or goes.
+ */
+@Composable
+fun OnBackdrop(shown: Boolean, content: @Composable () -> Unit) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    CompositionLocalProvider(
+        LocalTertiary provides if (shown) ink else LocalTertiary.current,
+        LocalSecondaryText provides if (shown) ink else LocalSecondaryText.current,
+        content = content,
+    )
+}
+
+/** Whether the surface here is ink (or the resting screen's black): the discs' lightness and the veil follow it. */
+@Composable
+@ReadOnlyComposable
+fun backdropDark(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+/**
+ * The backdrop in [modifier]'s box (the pane's, `matchParentSize`), clipped to it: [palette]'s four discs, each
+ * [Backdrop.Radius] of the shorter side, fading from its colour to nothing, on its own slow path (one of
+ * [Backdrop.PeriodsMs]), centred in the lower three quarters; then the surface at [veil] over them all, or with
+ * [veilArea] over that rect alone, feathered at its inner edges (the resting screen's black canvas, behind the words).
+ * One draw node: the brushes are built once per size and palette, and a frame only moves them (no allocation, no
+ * recomposition). A new palette cross-fades over [fadeMs] (a cut under reduced motion); none fades away.
  *
- * It turns while [playing], the screen is resumed and motion is not reduced, and, unless [resting], while the app is
+ * It moves while [playing], the screen is resumed and motion is not reduced, and, unless [resting], while the app is
  * not idle (under the resting screen); the resting screen passes `playing && resting`, so it holds still while it fades.
  */
 @Composable
 fun ArtBackdrop(
-    picture: BackdropPicture?,
+    palette: ArtPalette?,
     playing: Boolean,
     modifier: Modifier = Modifier,
+    veil: Float = Backdrop.veil(backdropDark()),
     resting: Boolean = false,
     fadeMs: Int = Motion.SlowMs,
-    deeper: Float = 0f,
+    veilArea: State<Rect>? = null,
 ) {
     val reduced = rememberReducedMotion()
-    val fade = remember { BackdropFade(picture) }
-    LaunchedEffect(picture) {
+    val dark = backdropDark()
+    val surface = MaterialTheme.colorScheme.surface
+    val fade = remember { BackdropFade(palette) }
+    LaunchedEffect(palette) {
         val spec: AnimationSpec<Float> = when {
             fadeMs <= Motion.SlowMs -> Motion.timed<Float>(fadeMs, reduced)
             reduced -> snap()
             else -> tween(fadeMs, easing = Motion.Standard)   // the resting screen's own pace (RestingMotion.PIECE_MS)
         }
-        fade.to(picture, spec)
+        fade.to(palette, spec)
     }
     val motion = remember { BackdropMotion() }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -124,36 +147,43 @@ fun ArtBackdrop(
         modifier
             .clipToBounds()
             .drawWithCache {
-                val shown = fade.shown?.let { BackdropLayers(it, size, deeper) }
-                val leaving = fade.leaving?.let { BackdropLayers(it, size, deeper) }
-                val group = Paint()
-                val bounds = size.toRect()
+                val radius = Backdrop.Radius * size.minDimension
+                val shown = discs(fade.shown, radius, dark)
+                val leaving = discs(fade.leaving, radius, dark)
+                val cover = surface.copy(alpha = veil)
+                val clear = surface.copy(alpha = 0f)
+                val feather = FEATHER.toPx()
+                val before = Brush.horizontalGradient(listOf(clear, cover), startX = 0f, endX = feather)
+                val after = Brush.horizontalGradient(listOf(cover, clear), startX = 0f, endX = feather)
+                val above = Brush.verticalGradient(listOf(clear, cover), startY = 0f, endY = feather)
                 onDrawBehind {
+                    if (shown == null && leaving == null) return@onDrawBehind
                     val progress = fade.progress.value
-                    val under = leaving?.takeIf { progress < 1f }
-                    val over = shown?.takeIf { progress > 0f }
-                    when {
-                        under != null && over != null -> {
-                            under.draw(this, motion)
-                            over.drawFaded(this, motion, progress, group, bounds)
-                        }
-                        under != null -> under.drawFaded(this, motion, 1f - progress, group, bounds)
-                        over != null -> over.drawFaded(this, motion, progress, group, bounds)
+                    if (leaving != null && progress < 1f) drawDiscs(leaving, radius, motion, 1f - progress)
+                    if (shown != null && progress > 0f) drawDiscs(shown, radius, motion, progress)
+                    val area = veilArea?.value
+                    if (area == null) {
+                        drawRect(cover)
+                    } else if (!area.isEmpty) {
+                        drawRect(cover, area.topLeft, area.size)
+                        if (area.left > 0f) translate(area.left - feather, area.top) { drawRect(before, size = Size(feather, area.height)) }
+                        if (area.right < size.width) translate(area.right, area.top) { drawRect(after, size = Size(feather, area.height)) }
+                        if (area.top > 0f) translate(area.left, area.top - feather) { drawRect(above, size = Size(area.width, feather)) }
                     }
                 }
             },
     )
 }
 
-/** The picture shown and the one fading out, and how far the change has come (1: done). */
+/** The palette shown and the one fading out, and how far the change has come (1: done). */
 @Stable
-private class BackdropFade(initial: BackdropPicture?) {
+private class BackdropFade(initial: ArtPalette?) {
     var shown by mutableStateOf(initial)
-    var leaving by mutableStateOf<BackdropPicture?>(null)
+    var leaving by mutableStateOf<ArtPalette?>(null)
     val progress = Animatable(1f)
 
     /** From what shows now to [next] by [spec]; interrupted, the more visible of the two goes on fading out. */
-    suspend fun to(next: BackdropPicture?, spec: AnimationSpec<Float>) {
+    suspend fun to(next: ArtPalette?, spec: AnimationSpec<Float>) {
         if (next == shown) return
         leaving = if (progress.value >= 0.5f) shown else leaving
         shown = next
@@ -163,84 +193,57 @@ private class BackdropFade(initial: BackdropPicture?) {
     }
 }
 
-/** How far each picture has turned: three turns (0 until 1), read only where they are drawn. */
+/** Where each disc is on its path: four turns (0 until 1), read only where they are drawn. */
 @Stable
 private class BackdropMotion {
-    private val turns = Array(LAYERS) { mutableFloatStateOf(0f) }
+    private val phases = Array(DISCS) { mutableFloatStateOf(0f) }
 
-    /** Picture [layer]'s angle now, in degrees: where it started, and its turn in its own direction. */
-    fun degrees(layer: Int): Float = Backdrop.StartDegrees[layer] + FULL_TURN * Backdrop.Directions[layer] * turns[layer].floatValue
+    fun phase(disc: Int): Float = phases[disc].floatValue
 
-    /** [ms] later: each picture that share of its own period further round. */
+    /** [ms] later: each disc that share of its own period further round. */
     fun advance(ms: Float) {
-        for (layer in 0 until LAYERS) turns[layer].floatValue = (turns[layer].floatValue + ms / Backdrop.PeriodsMs[layer]) % 1f
+        for (disc in 0 until DISCS) phases[disc].floatValue = (phases[disc].floatValue + ms / Backdrop.PeriodsMs[disc]) % 1f
     }
 }
 
-/** One picture laid out for a box of [size]: each layer's square and centre, and the black over them. */
-private class BackdropLayers(picture: BackdropPicture, size: Size, deeper: Float) {
-    private val image: ImageBitmap = picture.bitmap.asImageBitmap()
-    private val soft: ImageBitmap = picture.soft.asImageBitmap()
-    private val source = IntSize(image.width, image.height)
-    private val sides = IntArray(LAYERS)
-    private val lefts = IntArray(LAYERS)
-    private val tops = IntArray(LAYERS)
-    private val centresX = FloatArray(LAYERS)
-    private val centresY = FloatArray(LAYERS)
-    private val shade: Brush
-
-    init {
-        val diagonal = hypot(size.width, size.height)
-        for (layer in 0 until LAYERS) {
-            val side = (Backdrop.Scales[layer] * diagonal).roundToInt().coerceAtLeast(1)
-            val x = size.width * (0.5f + Backdrop.OffsetsX[layer])
-            val y = size.height * (0.5f + Backdrop.OffsetsY[layer])
-            sides[layer] = side
-            lefts[layer] = (x - side / 2f).roundToInt()
-            tops[layer] = (y - side / 2f).roundToInt()
-            centresX[layer] = x
-            centresY[layer] = y
-        }
-        val dim = picture.dim + deeper
-        shade = Brush.verticalGradient(
-            0f to Backdrop.Shade.copy(alpha = (dim - Backdrop.TopLighter).coerceIn(0f, 1f)),
-            1f to Backdrop.Shade.copy(alpha = (dim + Backdrop.FootDeeper).coerceIn(0f, 1f)),
-            startY = 0f,
-            endY = size.height,
+/** [palette]'s four discs as brushes about the origin, [radius] wide: the colour at the centre, nothing at the edge. */
+private fun discs(palette: ArtPalette?, radius: Float, dark: Boolean): Array<Brush>? = palette?.let { p ->
+    Array(DISCS) { disc ->
+        val colour = discColour(p.hues[disc], p.saturations[disc], dark)
+        Brush.radialGradient(
+            *FALLOFF.map { (at, alpha) -> at to colour.copy(alpha = alpha) }.toTypedArray(),
+            center = Offset.Zero,
+            radius = radius.coerceAtLeast(1f),
         )
     }
+}
 
-    /** The three layers as [motion] has turned them, then the black. */
-    fun draw(scope: DrawScope, motion: BackdropMotion) = with(scope) {
-        for (layer in 0 until LAYERS) {
-            rotate(motion.degrees(layer), Offset(centresX[layer], centresY[layer])) {
-                drawImage(
-                    if (layer == LAYERS - 1) soft else image,   // the third does not cover the node: its edge fades
-                    srcOffset = IntOffset.Zero,
-                    srcSize = source,
-                    dstOffset = IntOffset(lefts[layer], tops[layer]),
-                    dstSize = IntSize(sides[layer], sides[layer]),
-                    alpha = Backdrop.Alphas[layer],
-                    filterQuality = FilterQuality.High,
-                )
-            }
-        }
-        drawRect(shade)
-    }
-
-    /** [draw], the whole of it at [alpha] (through [group], a layer [bounds] large, while it fades). */
-    fun drawFaded(scope: DrawScope, motion: BackdropMotion, alpha: Float, group: Paint, bounds: Rect) {
-        if (alpha >= 1f) {
-            draw(scope, motion)
-            return
-        }
-        val canvas = scope.drawContext.canvas
-        group.alpha = alpha
-        canvas.saveLayer(bounds, group)
-        draw(scope, motion)
-        canvas.restore()
+/** The discs at [alpha], each where its turn puts it: an ellipse about its place, a quarter of the size across. */
+private fun DrawScope.drawDiscs(brushes: Array<Brush>, radius: Float, motion: BackdropMotion, alpha: Float) {
+    for (disc in 0 until DISCS) {
+        val turn = 2f * PI.toFloat() * (motion.phase(disc) + START[disc])
+        val x = size.width * (PLACE_X[disc] + SWAY_X * DIRECTION[disc] * sin(turn))
+        val y = size.height * (PLACE_Y[disc] + SWAY_Y * cos(turn))
+        translate(x, y) { drawCircle(brushes[disc], radius, Offset.Zero, alpha) }
     }
 }
 
-private const val LAYERS = 3
-private const val FULL_TURN = 360f
+private const val DISCS = 4
+
+/** Each disc's place, as shares of the width and the height: spread across, in the lower three quarters. */
+private val PLACE_X = floatArrayOf(0.30f, 0.70f, 0.45f, 0.60f)
+private val PLACE_Y = floatArrayOf(0.50f, 0.58f, 0.66f, 0.62f)
+
+/** How far a disc sways from its place, as shares of the width and the height: about a quarter. */
+private const val SWAY_X = 0.25f
+private const val SWAY_Y = 0.22f
+
+/** Where on its path each disc starts, and which way it goes round. */
+private val START = floatArrayOf(0f, 0.25f, 0.5f, 0.75f)
+private val DIRECTION = floatArrayOf(1f, -1f, 1f, -1f)
+
+/** A disc's soft edge: its colour's alpha from the centre (0) to its rim (1), a bell rather than a cone. */
+private val FALLOFF = listOf(0f to 1f, 0.3f to 0.82f, 0.6f to 0.42f, 0.85f to 0.12f, 1f to 0f)
+
+/** The black canvas's words veil fades in over this much before its edge. */
+private val FEATHER = 48.dp

@@ -37,10 +37,8 @@ import dev.stevenjin.stevenpiano.score.ChordTrack
 import dev.stevenjin.stevenpiano.score.Hands
 import dev.stevenjin.stevenpiano.score.ScoreStyle
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
-import dev.stevenjin.stevenpiano.ui.theme.Backdrop
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandTones
-import dev.stevenjin.stevenpiano.ui.theme.LocalNoteSounding
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
@@ -156,12 +154,6 @@ internal fun rampLevel(now: Long, start: Long, end: Long, flipMicros: Long): Int
  * the one before it is left out, and at most [MAX_CHORD_DRAWS] are drawn a frame (the v1.3 delta
  * audit, L3: beats of a quarter of a millisecond once put 20,000 names in one frame).
  *
- * Over the cover's backdrop ([LocalImmersive], v1.18 — M49) the roll has no card: no black keys' lanes, its notes light
- * ([Backdrop.RightHandAlpha] of the light words for the right hand's, or every note's, and [Backdrop.LeftHandAlpha] for
- * the left hand's, filled; with Hand colours on, the ink scheme's two hand colours), a sounding note turning the
- * sounding yellow, and one light line where the notes land ([Backdrop.Landing]: the tracker bar's place, or the foot
- * for falling notes).
- *
  * The only state read is [frameNanos], inside the draw phase, so each frame redraws without
  * recomposing; notes come from start-sorted arrays found by binary search, and nothing is
  * allocated per note or per frame. Notes travel [dpPerSecond] (the now-playing panel's strip runs
@@ -197,15 +189,12 @@ fun NoteCanvas(
             Array(c.size) { i -> c.name(i, transpose).let { name -> measured.getOrPut(name) { measurer.measure(name, chordStyle, maxLines = 1, density = density) } } }
         }
     }
-    val immersive = LocalImmersive.current
     val upcoming = MaterialTheme.colorScheme.onSurfaceVariant
     val sounding = MaterialTheme.colorScheme.onSurface
     val inside = MaterialTheme.colorScheme.surfaceVariant
     val handTones = if (LocalHandColours.current && hands != null) LocalHandTones.current else null
     val blackLane = MaterialTheme.colorScheme.surface
     val edge = LocalTertiary.current
-    val yellow = LocalNoteSounding.current
-    val lanes = blackKeyLanes && !immersive
     val reduced = rememberReducedMotion()
     Spacer(
         modifier
@@ -222,12 +211,9 @@ fun NoteCanvas(
                     inset = 1.dp.toPx(),
                     minHeight = 2.dp.toPx(),
                     flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L,
-                    ramp = handTones?.let { colorRamp(it.right, lerp(it.right, sounding, HAND_SOUNDING_MIX)) }
-                        ?: if (immersive) colorRamp(Backdrop.Words.copy(alpha = Backdrop.RightHandAlpha), yellow) else colorRamp(upcoming, sounding),
-                    leftRamp = handTones?.let { colorRamp(it.left, lerp(it.left, sounding, HAND_SOUNDING_MIX)) }
-                        ?: if (immersive) colorRamp(Backdrop.Words.copy(alpha = Backdrop.LeftHandAlpha), yellow) else null,
+                    ramp = handTones?.let { colorRamp(it.right, lerp(it.right, sounding, HAND_SOUNDING_MIX)) } ?: colorRamp(upcoming, sounding),
+                    leftRamp = handTones?.let { colorRamp(it.left, lerp(it.left, sounding, HAND_SOUNDING_MIX)) },
                     hands = hands?.takeIf { it.size == notes.size },
-                    outlineLeft = !immersive,
                     inside = inside,
                     outline = Stroke(width = Hairline.toPx()),
                     fingers = fingers?.takeIf { it.size == notes.size },
@@ -245,7 +231,7 @@ fun NoteCanvas(
                 val edgeLine = Hairline.toPx()
                 onDrawBehind {
                     val now = clock.positionAt(frameNanos.longValue)
-                    if (lanes) {
+                    if (blackKeyLanes) {
                         for (i in 0 until KeyMap.KEY_COUNT) {
                             if (roll.keys.isBlack(i)) drawRect(blackLane, Offset(roll.keys.left(i), 0f), Size(roll.keys.width(i), size.height))
                         }
@@ -253,9 +239,7 @@ fun NoteCanvas(
                     val drawn = roll.drawNotes(this, now, black = false, budget = MAX_NOTE_DRAWS)
                     roll.drawNotes(this, now, black = true, budget = MAX_NOTE_DRAWS - drawn)
                     roll.drawChords(this, now)
-                    if (immersive) {
-                        drawRect(Backdrop.Landing, Offset(0f, (roll.hitY - bar / 2).coerceAtMost(size.height - bar)), Size(size.width, bar))
-                    } else if (roll.paper) {
+                    if (roll.paper) {
                         drawRect(edge, Offset(0f, roll.hitY - bar / 2 - edgeGap - edgeLine), Size(size.width, edgeLine))
                         drawRect(sounding, Offset(0f, roll.hitY - bar / 2), Size(size.width, bar))
                     }
@@ -282,8 +266,6 @@ private class Roll(
     val leftRamp: Array<Color>?,
     /** Each note's hand, or null to draw every note filled. */
     val hands: ByteArray?,
-    /** Whether the left hand's notes are outlined (on the card) or filled in their own colours (over the backdrop). */
-    val outlineLeft: Boolean,
     /** The inside of a left-hand (outlined) bar. */
     val inside: Color,
     val outline: Stroke,
@@ -382,9 +364,8 @@ private class Roll(
             val top = min(hitY - (end - now) * pxPerMicro, bottom - minHeight)
             val width = keys.width(lane) - 2 * inset
             val left = keys.left(lane) + inset
-            val leftHand = hands != null && hands[i] == Hands.LEFT
-            val outlined = leftHand && outlineLeft
-            val color = (if (leftHand && leftRamp != null) leftRamp else ramp)[rampLevel(now, start, end, flipMicros)]
+            val outlined = hands != null && hands[i] == Hands.LEFT
+            val color = (if (outlined && leftRamp != null) leftRamp else ramp)[rampLevel(now, start, end, flipMicros)]
             if (outlined) {
                 // Outlined: the elevated surface inside a 1 dp line drawn just within the bar's edge.
                 val line = outline.width

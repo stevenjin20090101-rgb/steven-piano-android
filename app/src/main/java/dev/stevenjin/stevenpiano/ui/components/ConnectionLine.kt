@@ -53,7 +53,7 @@ fun ConnectionLine(
         Text(
             if (connected) sent else notConnected,
             style = MaterialTheme.typography.bodyLarge,
-            color = secondaryText(),   // the light words over the cover's backdrop (v1.18 — M49)
+            color = secondaryText(),   // the primary colour over the album-colour backdrop (v1.15 — M41)
         )
     }
 }

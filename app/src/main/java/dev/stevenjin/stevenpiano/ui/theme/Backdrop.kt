@@ -10,96 +10,42 @@
 package dev.stevenjin.stevenpiano.ui.theme
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 
-// THE BACKDROP MADE OF THE COVER (DESIGN.md › v1.18 — M49): the art the piece shows, small and blurred
-// (data/art/BackdropRules.kt), drawn three times turning slowly behind Now playing, the now-playing panel and the
-// resting screen, under the black its brightest part needs for light words; and what stands on it, immersive: the ink
-// scheme's primary for every word and glyph, bars and capsules of black glass. This file is the only place its values
-// exist. Colour still means nothing here: the backdrop is the art's, never a status.
+// THE ALBUM-COLOUR BACKDROP (DESIGN.md › v1.15 — M41): the playing piece's art colours as four soft discs drifting
+// behind the player, Now playing, the now-playing panel and the resting screen. This file is the only place its colour
+// values exist: the art gives each disc a hue and a saturation (data/art/ArtPalette.kt), the appearance its lightness,
+// and a veil of the surface over the discs keeps the words in the primary colour at 4.5:1 or more over any hue
+// (BackdropContrastTest). Colour still means nothing here: the backdrop is the art's, never a status.
 
 object Backdrop {
-    /**
-     * The three pictures' sizes, as shares of the node's diagonal (the square that covers it at any turn). The third
-     * does not cover it: it is drawn from the picture's soft copy, whose edge fades to nothing.
-     */
-    val Scales = floatArrayOf(1.05f, 1.5f, 0.95f)
+    /** The discs' HSL lightness on paper, and on ink (the resting screen's black too). */
+    const val PaperLightness = 0.45f
+    const val InkLightness = 0.32f
 
-    /** Their opacities: the first covers, the others lie over it. */
-    val Alphas = floatArrayOf(1f, 0.6f, 0.38f)
+    /** The surface over the discs: paper 55 %, ink 62 % (5.7:1 and 8.6:1 for the primary colour over the worst hue). */
+    const val PaperVeil = 0.55f
+    const val InkVeil = 0.62f
 
-    /** How long each takes to turn once, and which way: the second the other way. */
-    val PeriodsMs = intArrayOf(60_000, 84_000, 48_000)
-    val Directions = floatArrayOf(1f, -1f, 1f)
+    /** The resting screen's black canvas: black at 35 % over the words' side only (5.1:1 over the worst hue). */
+    const val BlackWordsVeil = 0.35f
 
-    /** Where each stands on its turn at first, in degrees. */
-    val StartDegrees = floatArrayOf(8f, 150f, -30f)
+    /** A disc's radius, as a share of the pane's shorter side; it fades from its colour to nothing at its edge. */
+    const val Radius = 0.6f
 
-    /** Each one's centre off the node's, as shares of its width and height: the second (12 %, −6 %), the third towards the top right. */
-    val OffsetsX = floatArrayOf(0f, 0.12f, 0.27f)
-    val OffsetsY = floatArrayOf(0f, -0.06f, -0.24f)
+    /** How long each disc takes round its path, one each. */
+    val PeriodsMs = intArrayOf(20_000, 22_500, 24_000, 26_000)
 
-    /** The black over them, from the picture's dim less this at the top to its dim and this at the foot. */
-    const val TopLighter = 0.06f
-    const val FootDeeper = 0.10f
-
-    /** The resting screen's black is deeper by this, so a still screen stays gentle. */
-    const val RestingDeeper = 0.10f
-
-    /** The black the dimming and the immersive glass are made of. */
-    val Shade = Color.Black
-
-    /** Every word and glyph on the backdrop, in both appearances: the ink scheme's primary. */
-    val Words = SilverPrimary
-
-    /** Bars and capsules over it (the headers, the tab bar or the rail, the foot's capsules): black at 26 %, no blur... */
-    const val GlassAlpha = 0.26f
-    val Glass = Shade.copy(alpha = GlassAlpha)
-
-    /** ...with an edge of the words at 14 %. */
-    val GlassEdge = Words.copy(alpha = 0.14f)
-
-    /** The chosen tab's pill on the rail or the tab bar over it. */
-    val Pill = Words.copy(alpha = 0.18f)
-
-    /** Hairlines on it (the scrubber's track, the divider's line, the art's frame): the words at 22 %. */
-    val Hairline = Words.copy(alpha = 0.22f)
-
-    /** The roll's notes on it, light: the right hand's (or every note's) at 92 %, the left hand's at 50 %... */
-    const val RightHandAlpha = 0.92f
-    const val LeftHandAlpha = 0.5f
-
-    /** ...and the light line where they land, at 75 %. */
-    val Landing = Words.copy(alpha = 0.75f)
-
-    /** The keyboard strip keeps its keys: white keys light, black keys dark, a sounding key the sounding yellow. */
-    val KeyWhite = SilverPrimary
-    val KeyBlack = CarbonPrimary
-    val KeyLine = SilverTertiary
-    val KeySounding = NoteSoundingDark
-
-    /** With Hand colours on, the light keys take the paper's hand colours, mixed toward [KeyBlack] as they sound. */
-    val KeyHands = HandTones(HandLeftLight, HandRightLight)
-
-    /** The live dot's light ring, so the red reads on a red cover. */
-    val LiveRing = 1.5.dp
-    val LiveRingColour = Words.copy(alpha = 0.9f)
+    /** The veil for the appearance. */
+    fun veil(dark: Boolean): Float = if (dark) InkVeil else PaperVeil
 }
 
-/**
- * The ink scheme as the backdrop's words wear it (v1.18 — M49): every word and glyph the primary, the secondary and
- * tertiary roles too (nothing secondary or tertiary stands on the backdrop); the play circle is filled in the primary
- * with its glyph in the ink surface.
- */
-internal val ImmersiveScheme = DarkScheme.copy(
-    onSurfaceVariant = Backdrop.Words,
-    secondary = Backdrop.Words,
-    tertiary = Backdrop.Words,
-)
+/** A disc's colour: [hue] (degrees) and [saturation] (0 to 1) from the art, the lightness the appearance's ([dark]: ink). */
+fun discColour(hue: Float, saturation: Float, dark: Boolean): Color =
+    Color(hsl(hue.toDouble(), saturation.toDouble(), (if (dark) Backdrop.InkLightness else Backdrop.PaperLightness).toDouble()))
 
 /**
  * HSL to an opaque ARGB colour (hue in degrees), each channel rounded to 8 bits. Deterministic (`StrictMath`): Studio's
- * covers (`data/art/StudioCover.kt`) draw with it, the same pixels on every device.
+ * covers (`data/art/StudioCover.kt`) draw with it too, the same pixels on every device.
  */
 fun hsl(hue: Double, saturation: Double, lightness: Double): Int {
     val l = lightness.coerceIn(0.0, 1.0)

@@ -42,7 +42,6 @@ import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
-import dev.stevenjin.stevenpiano.ui.theme.Backdrop
 import dev.stevenjin.stevenpiano.ui.theme.GlassCanBlur
 import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalGlassEdge
@@ -166,9 +165,9 @@ val GlassHidden: () -> Float = { 0f }
  * surface, as where nothing passes beneath), at once; when it turns false the blur comes back under a
  * veil of the surface that fades away over 120 ms (a cut when motion is reduced).
  *
- * [immersive] (v1.18 — M49: the bars and capsules over the cover's backdrop, [LocalImmersive] by default): black at
- * 26 % ([Backdrop.Glass]) with an edge of the light words at 14 % ([Backdrop.GlassEdge]) and the specular line, never a
- * blur of its own (the picture beneath is soft already, and nothing else passes beneath), on every device.
+ * [translucent] (v1.15 — M41: the bars over the album-colour backdrop): where it draws the glass's look without
+ * blurring, the surface at [fill]'s opacity instead of opaque, so what moves beneath shows through without a blur
+ * redrawn on every frame. The solid fallback stays opaque.
  *
  * Cost: the blur is worked out only inside the surface's own bounds, drawn clipped to its shape,
  * and from a copy of that content at a third of its resolution ([HazeInputScale.Auto]), a ninth of
@@ -194,10 +193,10 @@ fun GlassSurface(
     outline: Color = LocalHairline.current,
     edgeAlpha: () -> Float = GlassShown,
     band: () -> Float = GlassHidden,
-    immersive: Boolean = LocalImmersive.current,
+    translucent: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val look = rememberGlassLook(shape, source, edge, fill, blur, solid, outline, edgeAlpha, band, paused, immersive)
+    val look = rememberGlassLook(shape, source, edge, fill, blur, solid, outline, edgeAlpha, band, paused, translucent)
     Box(modifier.then(look.modifier)) {
         GlassText(look.glass, fill) { content() }
     }
@@ -223,7 +222,7 @@ internal fun rememberGlassLook(
     edgeAlpha: () -> Float,
     band: () -> Float,
     paused: Boolean = false,
-    immersive: Boolean = false,
+    translucent: Boolean = false,
 ): GlassLook {
     val surface = MaterialTheme.colorScheme.surface
     val specular = LocalGlassEdge.current
@@ -239,11 +238,10 @@ internal fun rememberGlassLook(
         }
     }
     val veiled by remember { derivedStateOf { veil.value >= 1f } }
-    // The glass's look (its edge, and what sits on it); blurring only where content can pass beneath. Over the cover's
-    // backdrop, black glass that never blurs, whatever the device (v1.18 — M49).
+    // The glass's look (its edge, and what sits on it); blurring only where content can pass beneath.
     val hasSource = source.areas.isNotEmpty()
-    val glass = immersive || (available && (!blur || hasSource))
-    val blurring = !immersive && available && blur && hasSource && !veiled
+    val glass = available && (!blur || hasSource)
+    val blurring = available && blur && hasSource && !veiled
     val style = remember(surface, fill) {
         HazeStyle(
             backgroundColor = surface,
@@ -254,7 +252,7 @@ internal fun rememberGlassLook(
     }
     val modifier = Modifier
         .clip(shape)
-        .glassEdge(shape, edge, if (immersive) Backdrop.GlassEdge else outline, if (glass) specular else null, edgeAlpha)
+        .glassEdge(shape, edge, outline, if (glass) specular else null, edgeAlpha)
         .then(
             when {
                 blurring -> Modifier
@@ -269,8 +267,7 @@ internal fun rememberGlassLook(
                     }
                     .glassBand(edge, surface, band)
                     .glassVeil(surface) { veil.value }
-                immersive -> Modifier.background(Backdrop.Glass)
-                glass -> Modifier.background(surface)
+                glass -> Modifier.background(if (translucent) surface.copy(alpha = fill.alpha) else surface)
                 else -> Modifier.background(solid)
             },
         )

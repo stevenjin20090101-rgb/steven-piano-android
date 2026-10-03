@@ -42,7 +42,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.LongState
@@ -56,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -98,13 +96,11 @@ import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.Hairline
-import dev.stevenjin.stevenpiano.ui.components.Immersive
-import dev.stevenjin.stevenpiano.ui.components.ImmersiveBars
 import dev.stevenjin.stevenpiano.ui.components.KeyHands
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
-import dev.stevenjin.stevenpiano.ui.components.LocalImmersive
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
+import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
@@ -160,13 +156,13 @@ private val STRIP_BESIDE = 720.dp
 private val FOOT_ROOM = 64.dp
 
 /**
- * The signature screen, over the cover (DESIGN.md › v1.18 — M49): the piece's art large, its title and composer, the
+ * The signature screen (DESIGN.md › v1.18 — M49's layouts): the piece's art large, its title and composer, the
  * scrubber and the transport, the note views as the View menu says ([ViewMenu]: the score, the notes, both, or neither),
  * and at its foot the tempo, the tablet's speaker and the connection line in glass capsules. Behind it all, edge to
- * edge, under the header and the rail or the tab bar too, the cover itself blurred and slowly turning ([ArtBackdrop]);
- * while it shows the screen is immersive ([Immersive]): light words, black glass, the roll without its card over the
- * backdrop, the score on its opaque sheet. Without it (Album colours off, a roll card for art, high contrast) the same
- * layouts on the plain surface.
+ * edge, under the header and the rail or the tab bar too, the playing piece's art colours drift ([ArtBackdrop],
+ * v1.15 — M41), and the words over them take the primary colour ([OnBackdrop]); the score and the roll keep their
+ * opaque cards, and the header, the rail or the tab bar and the capsules let the colours show through. Without them
+ * (Album colours off, grey art, high contrast) the same layouts on the plain surface.
  *
  * On wide frames, the notes without the score: a column 400 dp wide (the cover at its width, smaller where the height
  * is short), the title (40 sp, two lines), the composer, the scrubber and the transport, and the roll filling the rest
@@ -179,7 +175,7 @@ private val FOOT_ROOM = 64.dp
  * [playback], which keeps the playback service running; the queue glyph in the header opens the Up next sheet, and the
  * title and the cover open the piece sheet. [onOpenPiano] shows the Piano tab. The screen stops above the tab bar
  * ([LocalFloatingPadding]) and below its header, a glass navigation bar ([GlassHeaderPane], DESIGN.md › v1.9) that only
- * a short screen's scroll passes beneath, and never over the backdrop.
+ * a short screen's scroll passes beneath.
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
@@ -199,32 +195,31 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val outer = LocalFloatingPadding.current
     val statusBar = outer.calculateTopPadding()
     val column = rememberScrollState()
-    // The cover behind everything, edge to edge (v1.18 — M49); while it shows, what stands on it is immersive.
+    // The album's colours behind the player (v1.15 — M41), edge to edge (v1.18 — M49): the header, and the rail or the
+    // tab bar, let them show through.
     val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
-    val immersive = backdrop != null
-    DisposableEffect(immersive) {
-        ImmersiveBars.on = immersive
-        onDispose { ImmersiveBars.on = false }
-    }
+    val shown = backdrop != null
+    // The backdrop is the pane's sibling: it never scrolls, and it reaches under the header, the rail and the tab bar.
     Box(Modifier.fillMaxSize()) {
         ArtBackdrop(backdrop, state.status == PlaybackStatus.Playing, Modifier.matchParentSize())
-        Immersive(immersive) {
-            // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it,
-            // and over the backdrop not even that. The whole pane keeps clear of the rail, its header too.
-            GlassHeaderPane(
-                scroll = column,
-                modifier = Modifier.padding(outer.sides()),
-                header = {
-                    ScreenHeader("Now playing") {
-                        if (piece != null) {
-                            ViewMenu(settings, plan, frame)   // v1.12 — M31a
-                            GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
-                        }
+        // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it.
+        // The whole pane keeps clear of the rail, its header too.
+        GlassHeaderPane(
+            scroll = column,
+            modifier = Modifier.padding(outer.sides()),
+            translucent = shown,
+            header = {
+                ScreenHeader("Now playing") {
+                    if (piece != null) {
+                        ViewMenu(settings, plan, frame)   // v1.12 — M31a
+                        GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
                     }
-                },
-            ) {
-                val floating = LocalFloatingPadding.current
-                val top = floating.calculateTopPadding()
+                }
+            },
+        ) {
+            val floating = LocalFloatingPadding.current
+            val top = floating.calculateTopPadding()
+            OnBackdrop(shown) {
                 BoxWithConstraints(
                     Modifier
                         .fillMaxSize()
@@ -241,15 +236,14 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
                         SplitAxis.SideBySide -> true
                         null -> false
                     }
-                    // Over the backdrop the scroll starts below the header and never passes beneath it.
-                    val body = when {
-                        !scrolls -> Modifier.fillMaxSize().padding(top = top)
-                        immersive -> Modifier.fillMaxSize().padding(top = top).clipToBounds().verticalScroll(column)
-                        else -> Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column)
+                    val body = if (scrolls) {
+                        Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column)
+                    } else {
+                        Modifier.fillMaxSize().padding(top = top)
                     }
-                    val view = PieceLayout(plan, scrolls, divided, viewport = maxHeight - top)
+                    val view = PieceLayout(plan, scrolls, divided, viewport = maxHeight - top, colours = shown)
                     Column(body) {
-                        if (scrolls && !immersive) Spacer(Modifier.height(top))
+                        if (scrolls) Spacer(Modifier.height(top))
                         val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
                         NowPlayingContent(state, piece, view, marks, link is LinkState.Connected, player, playback, onOpenPiano) { about = it }
                     }
@@ -261,9 +255,18 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     about?.let { PieceDetailSheet(it) { about = null } }
 }
 
-/** How the piece is laid out: its [plan], whether the screen [scrolls], whether the views share a [divided] room, and the scroll's visible height. */
+/**
+ * How the piece is laid out: its [plan], whether the screen [scrolls], whether the views share a [divided] room, the
+ * scroll's visible height, and whether the album's [colours] lie beneath (the foot's capsules let them show through).
+ */
 @Immutable
-private class PieceLayout(val plan: NotesPlan, val scrolls: Boolean, val divided: Boolean, val viewport: Dp)
+private class PieceLayout(
+    val plan: NotesPlan,
+    val scrolls: Boolean,
+    val divided: Boolean,
+    val viewport: Dp,
+    val colours: Boolean,
+)
 
 @Composable
 private fun ColumnScope.NowPlayingContent(
@@ -343,7 +346,7 @@ private fun ColumnScope.PieceView(
         plan.layout == NotesLayout.ROLL -> BesideTheRoll(piece, cover, words, controls, views)
         else -> UnderTheStrip(piece, onAbout, words, controls, views)
     }
-    FootRow(state, connected, playing, player, onOpenPiano)
+    FootRow(state, connected, playing, player, onOpenPiano, translucent = view.colours)
     TabletSoundDownloadNote(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
 }
 
@@ -568,7 +571,7 @@ private fun PieceWords(piece: NowPlaying, channel: String?, starting: Boolean, t
                 line,
                 modifier = Modifier.padding(top = 4.dp),
                 style = NowPlayingComposer,
-                color = secondaryText(),   // the light words over the backdrop
+                color = secondaryText(),   // the primary colour over the album-colour backdrop (v1.15 — M41)
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -579,11 +582,19 @@ private fun PieceWords(piece: NowPlaying, channel: String?, starting: Boolean, t
 
 /**
  * The foot's row in glass capsules (v1.18 — M49): Tempo with its stepper and the tablet's speaker (v1.8 — M25) at the
- * start, "Sent to piano" at the end; over the backdrop black glass, otherwise the bars' glass without a blur.
+ * start, "Sent to piano" at the end; the bars' glass without a blur, [translucent] over the album's colours as the bars
+ * are (v1.15 — M41), so they show through.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FootRow(state: PlayerState, connected: Boolean, playing: Boolean, player: Player, onOpenPiano: () -> Unit) {
+private fun FootRow(
+    state: PlayerState,
+    connected: Boolean,
+    playing: Boolean,
+    player: Player,
+    onOpenPiano: () -> Unit,
+    translucent: Boolean,
+) {
     FlowRow(
         Modifier
             .fillMaxWidth()
@@ -593,23 +604,23 @@ private fun FootRow(state: PlayerState, connected: Boolean, playing: Boolean, pl
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(CAPSULE_GAP), verticalAlignment = Alignment.CenterVertically) {
-            Capsule {
+            Capsule(translucent) {
                 Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Eyebrow("Tempo")
                     Spacer(Modifier.width(4.dp))
                     StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo, rolling = true)
                 }
             }
-            Capsule { TabletSoundSpeaker() }
+            Capsule(translucent) { TabletSoundSpeaker() }
         }
-        Capsule { ConnectionLine(connected, playing, onOpenPiano, Modifier.padding(horizontal = 8.dp)) }
+        Capsule(translucent) { ConnectionLine(connected, playing, onOpenPiano, Modifier.padding(horizontal = 8.dp)) }
     }
 }
 
-/** A capsule of glass round [content], which sets its height (48 dp targets). */
+/** A capsule of glass round [content], which sets its height (48 dp targets); [translucent] over the colours. */
 @Composable
-private fun Capsule(content: @Composable () -> Unit) {
-    GlassSurface(shape = CircleShape, edge = GlassEdge.Outline, blur = false) { content() }
+private fun Capsule(translucent: Boolean, content: @Composable () -> Unit) {
+    GlassSurface(shape = CircleShape, edge = GlassEdge.Outline, blur = false, translucent = translucent) { content() }
 }
 
 private val CAPSULE_GAP = 12.dp
@@ -622,11 +633,11 @@ private fun scrollHeight(layout: NotesLayout, viewport: Dp): Dp = when (layout) 
 }
 
 /**
- * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip on its card ([RollPanel]: none over
- * the backdrop), the score on its sheet ([ScoreSheet], always opaque), or both. [onSeek] is a tap on a bar. [divided]
- * (wide frames with room, v1.12 — M31a): the two share a [SplitPane] whose divider the person drags, a hidden pane's
- * grabber waiting at its edge; the share it settles on is remembered for the arrangement. Otherwise (in the scroll)
- * they keep fixed heights.
+ * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the score, or both, each on the
+ * elevated surface with the card corners ([Panel]), opaque over the album's colours too. [onSeek] is a tap on a bar.
+ * [divided] (wide frames with room, v1.12 — M31a): the two share a [SplitPane] whose divider the person drags, a hidden
+ * pane's grabber waiting at its edge; the share it settles on is remembered for the arrangement. Otherwise (in the
+ * scroll) they keep fixed heights.
  */
 @Composable
 private fun NoteViews(
@@ -655,13 +666,12 @@ private fun NoteViews(
             piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(),
             hands = hands, fingers = fingers, chords = chords,
         )
-        // Over the backdrop the roll's own light line is where its notes land: no hairline before the keys.
-        if (!LocalImmersive.current) HairlineDivider()
+        HairlineDivider()
         KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
     }
-    val notes: @Composable (Modifier) -> Unit = { panel -> RollPanel(panel, rollCard) }
+    val notes: @Composable (Modifier) -> Unit = { panel -> Panel(panel, rollCard) }
     val score: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
-        ScoreSheet(panel) {
+        Panel(panel) {
             ScorePages(
                 notes = piece.notes,
                 tempo = piece.tempoMap,

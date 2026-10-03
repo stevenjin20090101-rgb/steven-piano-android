@@ -59,15 +59,15 @@ import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
  * recorded apart from the other pane's, so a roll playing beside a list never makes the list's header
  * blur again; and with nothing scrolled beneath it the header does not blur at all.
  *
- * [immersive] (v1.18 — M49, [LocalImmersive] by default): the cover's backdrop lies beneath (Now playing, the
- * now-playing panel). The header is black glass ([GlassSurface]'s `immersive`), its light edge always there, never
- * blurring, and its text the light words throughout; nothing scrolls beneath it there.
+ * [translucent] (v1.15 — M41): the album-colour backdrop moves beneath (Now playing, the now-playing panel). Where the
+ * header does not blur it is the surface at the bar's fill, so the colours show through without a blur on every frame,
+ * and its text takes the content colour, as on glass.
  */
 @Composable
 fun GlassHeaderPane(
     scroll: ScrollableState?,
     modifier: Modifier = Modifier,
-    immersive: Boolean = LocalImmersive.current,
+    translucent: Boolean = false,
     header: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -84,7 +84,7 @@ fun GlassHeaderPane(
     val direction = LocalLayoutDirection.current
     SubcomposeLayout(modifier) { constraints ->
         val top = floating.calculateTopPadding()
-        val bar = subcompose(PaneSlot.Header, slots.header(listOf(top, header, scroll, immersive)) { { HeaderBar(source, scroll != null, scrolled, presence, top, immersive, header) } })
+        val bar = subcompose(PaneSlot.Header, slots.header(listOf(top, header, scroll, translucent)) { { HeaderBar(source, scroll != null, scrolled, presence, top, translucent, header) } })
             .map { it.measure(constraints.copy(minHeight = 0)) }
         val height = (bar.maxOfOrNull { it.height } ?: 0).toDp()
         val below = floating.withTop(height, direction)
@@ -144,8 +144,8 @@ private fun PaneBody(source: HazeState, sourced: Boolean, padding: PaddingValues
 
 /**
  * The header's glass: blurring only while content is scrolled beneath ([scrolled]); its edge, its
- * band and its text's colours following [presence] (0 at rest, 1 with content beneath). [immersive]:
- * the cover's backdrop beneath, black glass with its edge, its text in the content colour whatever the presence.
+ * band and its text's colours following [presence] (0 at rest, 1 with content beneath). [translucent]:
+ * the backdrop's colours beneath, its text in the content colour whatever the presence.
  */
 @Composable
 private fun HeaderBar(
@@ -154,7 +154,7 @@ private fun HeaderBar(
     scrolled: State<Boolean>,
     presence: State<Float>,
     top: Dp,
-    immersive: Boolean,
+    translucent: Boolean,
     header: @Composable () -> Unit,
 ) {
     // Today's greys, read outside the glass (which would give them way at once).
@@ -168,13 +168,13 @@ private fun HeaderBar(
         source = source,
         edge = GlassEdge.Bottom,
         blur = scrolls && scrolled.value,
-        edgeAlpha = if (immersive) GlassShown else edge,
+        edgeAlpha = edge,
         band = edge,
-        immersive = immersive,
+        translucent = translucent,
     ) {
         // At rest, today's greys; with content beneath, the content colour (the bar's rule), fading between; over the
         // backdrop, the content colour throughout (the greys fall under 4.5:1 there).
-        val shown = if (immersive) 1f else if (!glass) 0f else presence.value
+        val shown = if (!glass) 0f else if (translucent) 1f else presence.value
         CompositionLocalProvider(
             LocalTertiary provides lerp(tertiary, ink, shown),
             LocalSecondaryText provides lerp(secondary, ink, shown),
