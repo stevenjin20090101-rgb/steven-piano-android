@@ -2030,3 +2030,39 @@ relay is unchanged. Where each is held, and the test that holds it:
   or with either switch off.
 - **By hand.** Change cover uses the photo picker (no storage permission), copies and re-encodes the photo at once
   (`PhotoImport`, a JPEG at most 1024 px), behind the kiosk PIN; no lookup ever replaces it.
+
+## 1.15 — staying signed in (pre-audit notes, M42)
+
+2026-10-02, notes written with M42 for the next audit, not an audit (BUILD_SPEC.md › v1.15 — M42). The panel's sessions
+now outlive the app. Nothing new listens, no route changed, and no new host is reached. Where each part is held, and
+the test that holds it:
+
+- **What is stored.** `files/web/sessions.json`, private to the app: for each session the SHA-256 (hex) of its 32 random
+  bytes and when it was last used, 16 at most. Never a token, the PIN or its hash, and a digest cannot be turned back
+  into a cookie. The app's files stay out of cloud backups and device transfers (`allowBackup="false"`,
+  `data_extraction_rules.xml`), and no FileProvider path or Share diagnostics reaches `files/web/` (`WebAuthTest`: the
+  file holds the digests and never a token).
+- **How long.** A session ends a year unused (was a day), when 16 newer ones push it out, at logout, or when everyone
+  is signed out; a restart of the app or the tablet no longer ends it. 1.5.1's residual "Sessions live in memory" no
+  longer holds, and of delta 3's "the guards' counts and the sessions live in the app's memory" only the counts do (a
+  restart still gives the free tries back). The cookie's `Max-Age=31536000` is set at sign-in with `HttpOnly`,
+  `SameSite=Strict`, its path and, over the relay, `Secure`, all kept: a browser drops it a year after the PIN, but a
+  copied token stays good on the tablet while it is used (`WebAuthTest`, `WebServerTest`, `WebServerRelayTest`).
+- **Signing everyone out.** A new PIN or the web panel turned off empties the table and writes `{}` at once (`closeAll`,
+  its callers unchanged); logout removes one session; a write that fails deletes the file, so an ended session never
+  comes back at the next start (`WebAuthTest`). One device cannot be signed out alone: a new PIN signs out everyone.
+- **Reading it back.** Read once when the app starts, 64 KB at most: a JSON object of 64-hex-digit keys and whole
+  numbers, or nothing at all. Entries a year old, or stamped more than a year ahead of the tablet's clock, are dropped
+  (`WebAuthTest`).
+- **Unchanged.** The PIN gate and both login guards with their limits (the listeners' and the relay's), the relay's
+  path and its cookie checks, the token's size and its digest.
+
+### Residuals (stated honestly)
+
+- **A lost or shared phone stays signed in** until the PIN changes or the web panel is turned off (or it goes a year
+  unused); before, until a day unused or the app's next restart.
+- **A captured cookie lasts longer.** Over Wi-Fi with Panel on Wi-Fi too the PIN and the session cookie cross in the
+  clear (1.5.1); a cookie taken there is now good until the PIN changes, not for a day. Tailscale and the relay's HTTPS
+  are unaffected.
+- **The file is as safe as the tablet's storage**: whoever can read the app's files (a rooted tablet) learns how many
+  sessions there are and when each was used, not a cookie that works.

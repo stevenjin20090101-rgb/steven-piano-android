@@ -804,10 +804,13 @@ between them to give either more room, and the browser remembers it. On a phone 
 Falling notes, Fingering, Chord names and Hand colours. The score turns its pages by itself;
 ‹ and › look ahead or back, **Follow** catches up, and a tap on a bar plays from there. It
 works through Steven Piano Cloud too; the first time, the score's font (about 0.9 MB) comes
-from the tablet, then the browser keeps it. A session lasts until it has
-gone a day unused; a new PIN, turning the web panel off or restarting the app signs every
-browser out. Five wrong PINs close the gate for 30 seconds, then longer each time, up
-to ten minutes.
+from the tablet, then the browser keeps it.
+
+From 1.15 a browser that has entered the PIN **stays signed in** for a year, across
+restarts of the app and of the browser; a new phone or computer still needs the PIN. A
+new PIN or turning the web panel off signs every browser out: do that if a phone that
+had the panel is lost. Five wrong PINs close the gate for 30 seconds, then longer each
+time, up to ten minutes.
 
 While the web panel is on, a quiet notification reads "Web panel on" with the address.
 The panel runs as a foreground service, as playback does: set the app's battery use to
