@@ -8181,3 +8181,111 @@ never by the page, the frozen host, the guests' page keeping its own appearance)
 1,631 → 1,632 unit tests (12 skipped), none failing, after the second run too (run with `--rerun`: the web files are not
 the test task's inputs, so a change to them alone comes back from the build cache untested). `lintDebug`: 0 errors, the
 same 30 warnings, none in this run's files.
+
+# v1.18 — M47b: Settings and System on the panel
+
+Fable's design (DESIGN.md › v1.18 — M47b), Opus coding, one lean run in a worktree (`m47b-settings-system`) beside the
+frame's (M47, `m47a-panel-look`): no emulator, no version bump, no signing, no deploy.
+
+## The modules' contract (the frame's side is M47's)
+- `W/settings.js` and `W/system.js` are ES modules exporting `create(host, body, tools)` → `{ show(), hide(),
+  render(state) }`; `system.js` also `vitals(host, node)` (once, the rail's foot) and `attention(sys, state)` (pure).
+  `host` as the frame freezes it: `ROOT, RELAYED, h, fill, glyph, chip, get, put, post, toast, failed, state(), clock,
+  plural, signed, debounce, art, show, appearance{get, set}, confirm`. The modules ask the tablet only through `host`,
+  every path `host.ROOT + '/api/…'`; build every element with DOM calls; set sizes through the CSSOM (`--fill`, an arc's
+  `stroke-dasharray`) or SVG attributes; keep their state in their own maps and put no `data-` attribute in the page
+  (the frame hides every `[data-page]` that isn't its section). Glyphs are the frame's sprite's (`g-…`, `i-back`, `i-check`).
+- `W/system.css` holds the pages' own classes under `.settings-page` and `.system-page` (the mock's names: `.split`,
+  `.pages`, `.presets`, `.preset`, `.notice`, `.tools`, `.sys-grid`, `.sys-lower`, `.dials`, `.dial`, `.level`, `.meter`,
+  `.facts`, `.fact`, `.task`, `.bar`, `.chart`, `.legend`), and `.vital.attention`; tokens only; the shared classes are
+  `style.css`'s. `WebAssets.PANEL` serves `/settings.js`, `/system.js` (JS) and `/system.css` (CSS).
+
+## Settings (`settings.js`)
+- Pages: Playback, the table's pages (`feel`, `lighting`, `pedal`, titled from `/api/piano`), Panel. Two panes from
+  900 px (the list `clamp(232px, 30%, 300px)`); below, `.split.opened` shows the page under a `.back-row` that takes the
+  focus and gives it back to the page's item. The page chosen is kept in this browser (`steven-piano-settings-page`).
+- The pane is built once per shape (page; another MIDI piano, firmware without settings, or cards; the table read) and
+  brought up to date in place on every state, so a focused or held control keeps its place.
+- The piano's settings: a switch `.switch`; a choice `.segmented` (four or fewer) or `.chips` (the palette's eight); a
+  stepper `.stepper`, with `lowestOn` as `SettingKind.Stepper.next`; a slider `input.range`. A change waits 150 ms for
+  the next, each setting on its own (today's one debounce for all could drop a change to a second setting), its draft
+  standing until the piano's value matches it or 3 s after the write; a slider under a finger is never moved by a state.
+  A held − or + steps again every 70 ms after 400 ms; a click no pointer made (Enter, Space, a screen reader: `detail` 0)
+  steps once. Feel's presets `POST /api/piano/preset`; Save to the piano `POST /api/piano/action {name: "save"}`.
+- Playback: `GET /api/settings` on opening, `PUT /api/settings {name: value}` 150 ms after a change, read again after a
+  refusal. Steps as `PlaybackPage`'s: tempo and velocity 5, transpose 1, the quietest note in fives landing on 1, the
+  re-strike time Auto then 60–250 in tens (Auto and 60 either side of the gap), the pause 500 ms ("Off", "0.5 s"). The
+  Full power line and Auto's "110 ms from the piano" follow the state's piano.
+- Panel: Appearance through `host.appearance`; Album colours `PUT {albumBackdrop}`, shown from the state (a settings
+  change sends a new one).
+
+## System (`system.js`)
+- `GET /api/system` every 5 s while the page shows (10 s when `RELAYED`), one request at a time and shared with the
+  rail's foot, which reads it once a minute otherwise; `POST /api/system/refresh` on opening and every 15 s while the
+  piano is ready, `/api/system` again 1.5 s after a `refreshed: true`; `GET /api/system/history` on opening and every
+  60 s. `hide()` and a hidden document stop them all; coming back starts them again (the day only once a minute old).
+- `attention(sys, state)` → `[{part, text, short}]`, in order: the battery under 20 % and not charging, or its health
+  `overheat`, `cold`, `dead` or `overVoltage`; heat (Android's `moderate` and above; Hot from `severe`, or the battery at
+  42 °C); `memory.low`; storage under 1 GB free; with the piano connected, a board `missing`, `temp` ≥ 70 °C, `heapmin`
+  under 30 KB; `web.relay.state` not `connected` while `state.web.cloud` is set; each running row in `problem`; `covers`
+  `waiting`. The head's capsule shows the first (`+n` more), the dials and rows their own part, the rail its `short` word.
+- Dials: SVG, r 52 on a 132 viewBox, ticks every 9° (major every 45°), the arc a circle's dash over 270° set through the
+  CSSOM so `transition: stroke-dasharray 480ms` eases it (none under reduced motion); `role="meter"` with
+  `aria-valuemin/max/now` and `aria-valuetext` ("82 percent, charging"). Waiting (no figure): the fill hidden, "—", the
+  reason ("Needs newer firmware", "Not connected", "Not in use", "Reading…"). The controller's memory: the used share of
+  `facts.heapsize` with "212 KB free", else the free figure alone, no arc.
+- The piano's boards: seven octaves (an SVG, `role="img"`, its label spoken), each `ok`, `missing` (hollow, amber, its
+  label "C3" over "Missing") or not known. The controller's and the piano's facts read "—" while not connected or
+  reading, and a `.tag` "Needs newer firmware" for a fact the piano doesn't give (or a firmware with no settings); every
+  fact of `piano.facts` with no row of its own, but the protocol's `proto` and `ble`, is a plain row under its name.
+- Running now: `running[]` in its order; the dot live for `player` running while `state.player.status` is `playing` and
+  the link connected, attention for `problem` and for `waiting` on `covers` and `relay`, on for `running`, hollow
+  otherwise; the word by state and row (Playing, Connected, Online, Serving, Fetching…; Paused, Reconnecting, Waiting;
+  Problem; Off; Idle, the player's Stopped). Today: drawn at the chart's own width (a `ResizeObserver` draws it again),
+  from the first sample or a day ago, battery 0–100 on the left, temperatures 10–50 °C on the right, a run broken where a
+  value is missing or the samples stop for three minutes; the sentence from the samples shown.
+- Tools: Read status (`POST /api/piano/action {name: "status"}`, then `/api/piano` until `statusReading` is false, its
+  `statusText` in a `<pre>`), `POST /api/system/tool {name: "covers"}`, `{name: "reconnect"}` after `host.confirm`, All
+  keys off (`{name: "off"}`), Download diagnostics (`<a download="steven-piano-diagnostics.zip">`, the relay dropping
+  `Content-Disposition`). A tool waits for its answer before it can be pressed again; each answers with a toast.
+
+## The tablet (`M/web/`)
+- `GET /api/settings` (READ): `WebApi.settings(WebSettings)`, `{values: {defaultTempoPct, transpose, velocityPct,
+  dynamicRange, velocityFloor, expression, restrikeMs, preRollMs, foldOutOfRange, skipDrumChannel, albumBackdrop},
+  limits: {defaultTempoPct, transpose, velocityPct, velocityFloor, restrikeMs, preRollMs: {min, max, step}}, piano:
+  {fullPower, repeatMs}}`: the choices in the PUT's words, `restrikeMs` 0 for Auto with its limits the times set by
+  hand, the steps `PlaybackPage`'s. `WebBackend.settings()`; `AppWebBackend.settings()` reads the app's settings, Full
+  power (the piano ready and `fullpower` not 0; else null) and `PlaybackCopy.pianoRepeatMs`.
+- `PUT /api/settings` takes `albumBackdrop` (`SettingsChange.albumBackdrop`, `SettingsRepository.setAlbumBackdrop`).
+
+## The relay (`cloud/`)
+- A `GET` under `/p/<id>/api/art/` is counted against `ART_LIMIT` (600 a minute per address, key `art:<address>`,
+  namespace 7304) instead of `PANEL_LIMIT`; any other method there stays the panel's.
+- The room sets `X-Relay-Art-Limit: 600` on every answer it carries from a tablet, after `responseHeaders` has sifted
+  the tablet's own: it is the relay's word, so it is not on the tablet's allow-list (`RESPONSE_HEADERS`) and a tablet's
+  own value never passes. `ART_LIMIT_PER_MINUTE` and `ART_LIMIT_HEADER` are in `src/shared/protocol.ts`. Not deployed.
+
+## Simplified, and why
+- The Playback rows keep the tablet's names (Pause before each piece, Fold notes outside C1–B7, Skip drum channel), as
+  every place on the panel is named as the tablet names it.
+- Album covers waiting out Apple's stop is the last item of attention: its row's dot is amber, and the approved picture
+  of today's firmware shows it in the head. A battery whose health is `unknown` is a tablet that doesn't say, not a fault.
+- The rail's words are short to fit beside their names ("15% low", "Hot", "Board missing"); the memory dial says "Ran
+  low" (its figures spoken in full).
+- Today spans from the first sample when the app has run less than a day ("Since 14:05"), so a fresh day isn't a
+  sliver at the right of 24 hours.
+- The Wi-Fi row is named Network on Ethernet, mobile data or a VPN.
+
+## Tests
+`WebApiTest` (1: the settings read's keys, its words and limits, the piano's two null without one; `albumBackdrop` in
+the PUT's test), `WebServerTest` (1: the route's session, its answer, `albumBackdrop` through the PUT with the header,
+405 for anything but GET and PUT), `WebAssetsTest` (1: the modules on the list, asking only through `host.ROOT`, no
+fetch or socket of their own, `system.css` tokens only, the Playback page in the tablet's words). The relay: `limits`
+(2: the pictures' own 600 apart from the panel's 120, a non-GET staying the panel's; the header on a relayed answer;
+every limit test now waits for a fresh minute when too little of one is left, as the local limiter counts in windows
+aligned to the clock), `forward` (a tablet's own `X-Relay-Art-Limit` never passes, the relay's does), `hygiene` (the
+binding is 600 a minute, each limit its own namespace). The two modules were run in a browser against a stand-in for
+the frame's host and the tablet's answers (made by `WebApi`): every page, the narrow layout, the light appearance,
+firmware 2.0.0, a missing board and the other attention states, not connected, another MIDI piano. 1,631 → 1,634 unit
+tests (12 skipped), none failing; `lintDebug` 0 errors, the same 30 warnings, none in the new code. The relay: 82 → 85
+tests, the type check clean.

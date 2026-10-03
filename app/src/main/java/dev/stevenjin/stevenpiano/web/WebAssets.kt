@@ -60,6 +60,9 @@ object WebAssets {
     val PANEL: Map<String, Asset> = mapOf(
         "/" to Asset("index.html", HTML),
         "/app.js" to Asset("app.js", JS),
+        // The Settings and System pages (v1.18 — M47b): modules the page imports the first time each shows.
+        "/settings.js" to Asset("settings.js", JS),
+        "/system.js" to Asset("system.js", JS),
         // The views of Now playing (v1.13 — M32): modules the page imports the first time it shows them.
         "/clock.js" to Asset("clock.js", JS),
         "/wire.js" to Asset("wire.js", JS),

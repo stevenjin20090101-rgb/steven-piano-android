@@ -489,6 +489,8 @@ class AppWebBackend(
         change.fingering?.let { settings.setFingering(it) }
         change.chordNames?.let { settings.setChordNames(it) }
         change.handColours?.let { settings.setHandColours(it) }
+        // Album colours behind the player (v1.18 — M47b), as Piano › Display and Now playing's View menu set it.
+        change.albumBackdrop?.let { settings.setAlbumBackdrop(it) }
         applyWebSettings(change)
     }
 
@@ -926,4 +928,23 @@ class AppWebBackend(
             null
         }
     }
+
+    // ---- The Settings page (v1.18 — M47b) ---------------------------------------------------------------
+
+    /**
+     * The Playback page's settings as the app holds them, and what the piano says of them: Full power as the line under
+     * Velocity reads it (`PlaybackCopy.fullPower`: the piano ready and its `fullpower` not 0), its repeat period as Re-strike
+     * time's Auto takes it (`PlaybackCopy.pianoRepeatMs`); both null without a ready piano.
+     */
+    override suspend fun settings(): WebSettings {
+        val piano = graph.pianoSettings.state.value
+        return WebSettings(
+            settings = graph.settings.value,
+            fullPower = (piano as? PianoState.Ready)?.values?.get(PIANO_FULL_POWER)?.trim()?.let { it != "0" },
+            repeatMs = dev.stevenjin.stevenpiano.ui.PlaybackCopy.pianoRepeatMs(piano),
+        )
+    }
 }
+
+/** The piano's Full power setting, by its firmware name (v1.18 — M47b: the Settings page's line under Velocity). */
+private const val PIANO_FULL_POWER = "fullpower"

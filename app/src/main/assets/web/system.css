@@ -7,5 +7,451 @@
    Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
    ============================================================================ */
 
-/* The Settings and System pages' own styles (v1.18 — M47b: settings.js and system.js). The page links this file from
-   the start so the link never fails; the shared classes they use are style.css's. */
+/* The Settings and System pages' own styles (DESIGN.md › v1.18 — M47b: settings.js and system.js). Everything here
+   sits under the pages' roots (.settings-page, .system-page) or the rail's vitals; the shared classes (.card,
+   .setting, .stepper, .segmented, .dot, .tag…) are style.css's and are not redefined. Tokens only: amber,
+   var(--attention), means "needs attention" and nothing else, and red stays the live dot's (.dot.live). */
+
+/* ---- Settings: a list of pages and the chosen page beside it from 900 px; below, the list, then a page over it --- */
+
+.settings-page .split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  /* The list is 300 px; on the narrowest two-pane windows it gives the page a little more room. */
+  .settings-page .split { grid-template-columns: clamp(232px, 30%, 300px) minmax(0, 1fr); }
+}
+
+.settings-page .pages { padding: 8px; }
+
+.settings-page .pages .nav-item { min-height: 60px; padding: 8px 14px; align-items: center; }
+
+.settings-page .pages .nav-item + .nav-item { margin-top: 2px; }
+
+.settings-page .pages .nav-item .text { flex: 1; min-width: 0; }
+
+.settings-page .pages .nav-item .t { display: block; color: var(--primary); }
+
+.settings-page .pages .nav-item .meta {
+  display: block;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The page beside the list measures itself: Feel's presets go four in a row only where they fit. */
+.settings-page .page-pane { min-width: 0; container-type: inline-size; }
+
+.settings-page .back-row,
+.settings-page .pane-title { display: none; }
+
+@media (max-width: 899px) {
+  .settings-page .split.opened .pages { display: none; }
+
+  .settings-page .split:not(.opened) .page-pane { display: none; }
+
+  .settings-page .back-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    margin: 0 0 2px -6px;
+    padding: 0 14px 0 6px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--primary);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .settings-page .back-row:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+
+  .settings-page .pane-title {
+    display: block;
+    margin: 0 4px 14px;
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+  }
+}
+
+.settings-page .pane-notes { display: grid; gap: 10px; }
+
+.settings-page .pane-line { padding: 0 4px; }
+
+/* Feel's presets: two by two, or four in a row where the page has room. */
+.settings-page .presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 6px var(--inset) 16px;
+}
+
+@container (min-width: 640px) {
+  .settings-page .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.settings-page .preset {
+  display: grid;
+  gap: 2px;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms, border-color 160ms;
+}
+
+.settings-page .preset:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.settings-page .preset:disabled { color: var(--disabled); cursor: default; }
+
+.settings-page .preset:disabled .meta { color: var(--disabled); }
+
+.settings-page .preset b { font-weight: 600; }
+
+/* The piano's last refusal: an amber line, its glyph and its words. */
+.settings-page .notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--attention) 45%, transparent);
+  border-radius: 12px;
+  color: var(--primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.settings-page .notice .glyph { color: var(--attention); margin-top: 1px; }
+
+/* A setting's unit beside its name, on the name's line. */
+.settings-page .setting .label .unit { display: inline; margin-left: 8px; vertical-align: 1px; }
+
+/* A choice under its label: a few side by side, wrapping rather than spilling out of a narrow pane. */
+.settings-page .setting.stacked .segmented { align-self: flex-start; flex-wrap: wrap; max-width: 100%; }
+
+/* A stepper's buttons repeat while held: a long press is theirs, not the page's. */
+.settings-page .stepper button {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---- System: three cards, then Running now beside Today and Tools; one column below 1180 px --------------------- */
+
+.system-page .sys-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.system-page .sys-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1179px) {
+  .system-page .sys-grid,
+  .system-page .sys-lower { grid-template-columns: minmax(0, 1fr); }
+}
+
+.system-page .card-head > .glyph { align-self: center; }
+
+/* A card's name keeps its line; a long line beside it goes under it, at the right, when the card is narrow. */
+.settings-page .card-head,
+.system-page .card-head { flex-wrap: wrap; row-gap: 2px; }
+
+.settings-page .card-head h2,
+.system-page .card-head h2 { white-space: nowrap; }
+
+/* The dials: a 270° arc over its ticks, the figure and its word inside, the ends under the arc, the name below. */
+.system-page .dials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 0;
+  padding: 6px 10px 4px;
+}
+
+.system-page .dial { position: relative; display: grid; justify-items: center; padding: 6px 0 10px; }
+
+.system-page .dial svg { display: block; width: 132px; height: 132px; }
+
+.system-page .dial .track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--primary) 12%, transparent);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.system-page .dial .fill {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.system-page .dial.attention .fill { stroke: var(--attention); }
+
+.system-page .dial.waiting .fill,
+.system-page .dial.no-arc .fill { display: none; }
+
+.system-page .dial .tick { stroke: color-mix(in srgb, var(--primary) 30%, transparent); stroke-width: 1; }
+
+.system-page .dial .tick.major { stroke: color-mix(in srgb, var(--primary) 60%, transparent); stroke-width: 1.4; }
+
+.system-page .dial .read { position: absolute; top: 44px; left: 0; right: 0; text-align: center; }
+
+.system-page .dial .num { font-size: 30px; line-height: 32px; font-weight: 600; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
+
+.system-page .dial .num small { margin-left: 1px; font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--secondary); }
+
+.system-page .dial .word { margin: 0 auto; max-width: 96px; font-size: 12px; line-height: 16px; color: var(--secondary); }
+
+.system-page .dial.attention .word { color: var(--attention); font-weight: 600; }
+
+.system-page .dial.waiting .num { color: var(--disabled); }
+
+.system-page .dial.waiting .word { max-width: 80px; font-size: 11px; line-height: 13px; }
+
+.system-page .dial .ends {
+  position: absolute;
+  top: 118px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 calc(50% - 47px);
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--tertiary);
+}
+
+.system-page .dial .eyebrow { margin-top: 6px; }
+
+/* Memory and storage: what is in use, and its meter. */
+.system-page .level { padding: 12px var(--inset) 14px; border-top: 1px solid var(--hairline); font-size: 14px; }
+
+.system-page .level .top { display: flex; align-items: baseline; gap: 12px; }
+
+.system-page .level .k { flex: 1; color: var(--secondary); }
+
+.system-page .level .v { font-weight: 500; text-align: right; }
+
+.system-page .level.attention .v { color: var(--attention); font-weight: 600; }
+
+.system-page .meter {
+  height: 6px;
+  margin-top: 9px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  overflow: hidden;
+}
+
+.system-page .meter i { display: block; width: var(--fill, 0%); height: 100%; border-radius: 3px; background: var(--primary); }
+
+.system-page .level.attention .meter i { background: var(--attention); }
+
+/* The facts: a name and its value, a row each. */
+.system-page .facts { padding: 2px 0 8px; }
+
+.system-page .facts.extra { padding-top: 0; margin-top: -8px; }
+
+.system-page .fact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px var(--inset);
+  border-top: 1px solid var(--hairline);
+  font-size: 14px;
+}
+
+.system-page .fact .k { flex: 1; min-width: 0; color: var(--secondary); overflow-wrap: anywhere; }
+
+.system-page .fact .v { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+
+.system-page .fact .v .tag { margin-left: 0; }
+
+.system-page .fact.attention .v { color: var(--attention); font-weight: 600; }
+
+/* The power boards as seven octaves of keys, C1 to C7; a missing board hollow and amber. */
+.system-page .boards { padding: 10px var(--inset) 12px; }
+
+.system-page .octaves { display: block; width: 100%; height: auto; }
+
+.system-page .octave .case { fill: none; stroke: var(--hairline); stroke-width: 1; }
+
+.system-page .octave .natural { fill: color-mix(in srgb, var(--primary) 88%, transparent); }
+
+.system-page .octave .sharp { fill: var(--elevated); }
+
+.system-page .octave .rail { fill: var(--primary); }
+
+.system-page .octave.unknown .natural,
+.system-page .octave.unknown .rail { fill: color-mix(in srgb, var(--primary) 16%, transparent); }
+
+.system-page .octave.missing .case { stroke: var(--attention); }
+
+.system-page .octave.missing .natural { fill: none; stroke: var(--attention); stroke-width: 1; }
+
+.system-page .octave.missing .sharp { fill: var(--elevated); stroke: var(--attention); stroke-width: 1; }
+
+.system-page .octave.missing .rail { fill: none; stroke: var(--attention); stroke-width: 1.5; }
+
+.system-page .board-labels {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: 0.2px;
+  text-align: center;
+  color: var(--tertiary);
+}
+
+.system-page .board-labels span { white-space: nowrap; }
+
+.system-page .board-labels .missing { color: var(--attention); font-weight: 600; }
+
+.system-page .board-labels .word { display: block; }
+
+/* Running now: a dot, the title, the detail (a 3 px bar under it when there is a measure), the state's word. */
+.system-page .task {
+  display: grid;
+  grid-template-columns: 10px 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 46px;
+  padding: 6px var(--inset);
+  border-top: 1px solid var(--hairline);
+  font-size: 14px;
+}
+
+.system-page .task .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.system-page .task .detail { min-width: 0; color: var(--secondary); }
+
+.system-page .task .detail-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.system-page .task .state { min-width: 64px; font-size: 12px; color: var(--tertiary); text-align: right; }
+
+.system-page .task.idle .name { color: var(--secondary); font-weight: 400; }
+
+.system-page .task-empty { padding: 12px var(--inset) 16px; }
+
+.system-page .bar {
+  height: 3px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  overflow: hidden;
+}
+
+.system-page .bar i { display: block; width: var(--fill, 0%); height: 100%; border-radius: 2px; background: var(--primary); }
+
+/* Today: battery a line over a soft area, the tablet's temperature dashed, the piano's dotted. */
+.system-page .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 0 var(--inset) 4px;
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+.system-page .legend i {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 6px;
+  border-top: 2px solid var(--primary);
+  vertical-align: middle;
+}
+
+.system-page .legend i.dash { border-top: 1.5px dashed var(--secondary); }
+
+.system-page .legend i.dot-line { border-top: 2px dotted var(--secondary); }
+
+.system-page .chart { padding: 4px var(--inset) 6px; }
+
+.system-page .chart svg { display: block; width: 100%; height: 190px; overflow: visible; }
+
+.system-page .chart .grid-line { stroke: var(--hairline); stroke-width: 1; }
+
+.system-page .chart .s1 { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+
+.system-page .chart .s1-area { fill: color-mix(in srgb, var(--primary) 9%, transparent); stroke: none; }
+
+.system-page .chart .s2 { fill: none; stroke: var(--secondary); stroke-width: 1.5; stroke-dasharray: 4 4; stroke-linejoin: round; }
+
+.system-page .chart .s3 { fill: none; stroke: var(--secondary); stroke-width: 1.5; stroke-dasharray: 1 3; stroke-linecap: round; }
+
+.system-page .chart text { fill: var(--tertiary); font-size: 10px; }
+
+.system-page .chart-says { padding: 0 var(--inset) 14px; }
+
+/* Tools: a row of outlined buttons, and Read status's report under them. */
+.system-page .tools { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px var(--inset) 18px; }
+
+.system-page a.outlined { text-decoration: none; }
+
+.system-page .tools-report {
+  max-height: 320px;
+  margin: 0 var(--inset) 18px;
+  padding: 12px;
+  overflow: auto;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  font: 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The head's first capsule: what needs attention first, and how many more. */
+.capsule .more { color: var(--secondary); }
+
+/* The rail's foot: a line in amber, its word saying why; the names never break. */
+.vital > span { white-space: nowrap; }
+
+.vital.attention b,
+.vital.attention .glyph { color: var(--attention); }
+
+@media (max-width: 760px) {
+  .system-page .task { grid-template-columns: 10px minmax(0, 1fr) auto; row-gap: 2px; }
+
+  .system-page .task .dot { grid-row: 1; grid-column: 1; }
+
+  .system-page .task .name { grid-row: 1; grid-column: 2; }
+
+  .system-page .task .state { grid-row: 1; grid-column: 3; }
+
+  .system-page .task .detail { grid-row: 2; grid-column: 2 / 4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-page .dial .fill { transition: none; }
+
+  .settings-page .preset { transition: none; }
+}

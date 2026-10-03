@@ -38,6 +38,14 @@ export const DEFAULT_MAX_BODY = 104_857_600;
 /** A request body larger than a JSON body may be (the tablet's 64 KB) is an upload: one at a time. */
 export const UPLOAD_OVER = 64 * 1024;
 
+/**
+ * Pictures (v1.18 — M47b): a panel's GETs under `/api/art/` a minute from one address, on a limit of their own
+ * (wrangler.relay.jsonc › ART_LIMIT, the same number), so a page of covers never spends the panel's 120. Every answer
+ * the room relays says it in [ART_LIMIT_HEADER], and the page widens its picture budget to it.
+ */
+export const ART_LIMIT_PER_MINUTE = 600;
+export const ART_LIMIT_HEADER = 'X-Relay-Art-Limit';
+
 /** Binary frame kinds. */
 export const Kind = {
   ReqChunk: 1,

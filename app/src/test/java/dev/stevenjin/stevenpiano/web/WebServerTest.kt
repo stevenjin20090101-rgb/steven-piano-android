@@ -838,6 +838,29 @@ class WebServerTest {
     }
 
     @Test
+    fun `the Settings page reads the app's settings with a session, and Album colours is one the panel may change (v1_18 M47b)`() {
+        val (_, http) = start()
+        assertEquals("without a session", 401, http.get("/api/settings").status)
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        val read = http.get("/api/settings", cookie)
+        assertEquals(200, read.status)
+        assertEquals("no-store", read.header("cache-control"))
+        val json = read.json()
+        assertEquals(setOf("values", "limits", "piano"), json.keys().asSequence().toSet())
+        assertTrue(json.getJSONObject("piano").getBoolean("fullPower"))
+        assertEquals(110, json.getJSONObject("piano").getInt("repeatMs"))
+        backend.calls.clear()
+        assertEquals("a change still needs the header", 403, http.api("PUT", "/api/settings", """{"albumBackdrop":false}""", session = token, panel = false).status)
+        assertEquals(204, http.api("PUT", "/api/settings", """{"albumBackdrop":false}""", session = token).status)
+        assertEquals(1, backend.calls.size)
+        assertTrue(backend.calls[0], "albumBackdrop=false" in backend.calls[0])
+        val post = http.api("POST", "/api/settings", "{}", session = token)
+        assertEquals("read with GET, changed with PUT", 405, post.status)
+        assertEquals("GET, PUT", post.header("allow"))
+    }
+
+    @Test
     fun `the library, playlists, composers and art answer what the backend holds`() {
         val (_, http) = start()
         val token = login(http)

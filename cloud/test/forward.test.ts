@@ -150,6 +150,8 @@ describe('forwarding a browser request to the tablet', () => {
         'Cross-Origin-Opener-Policy': 'unsafe-none',
         'Content-Encoding': 'identity',
         'X-Anything': 'else',
+        // The pictures' limit is the relay's to say (v1.18 — M47b), never a tablet's.
+        'X-Relay-Art-Limit': '9999',
       },
       length: script.byteLength,
     });
@@ -162,8 +164,10 @@ describe('forwarding a browser request to the tablet', () => {
     expect(names).toEqual([
       'allow', 'cache-control', 'content-length', 'content-security-policy', 'content-type', 'cross-origin-resource-policy',
       'referrer-policy', 'retry-after', 'set-cookie', 'strict-transport-security', 'x-content-type-options', 'x-frame-options',
+      'x-relay-art-limit',
     ]);
     expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'self'");
+    expect(response.headers.get('X-Relay-Art-Limit'), "the relay's own figure").toBe('600');
     tablet.close();
   });
 

@@ -257,6 +257,7 @@ object WebApi {
             fingering = boolOrNull(json, "fingering"),
             chordNames = boolOrNull(json, "chordNames"),
             handColours = boolOrNull(json, "handColours"),
+            albumBackdrop = boolOrNull(json, "albumBackdrop"),
         )
         if (change.isEmpty) throw ApiError(400, "field", "Nothing to change.")
         return change
@@ -649,6 +650,8 @@ object WebApi {
         "dynamicRange", "velocityFloor", "expression", "restrikeMs",
         "webGuests", "webApproveFirst", "webHostName", "tabletVolume",
         "noteDisplay", "fingering", "chordNames", "handColours",
+        // The Settings page's Panel (v1.18 — M47b).
+        "albumBackdrop",
     )
 
     /** Dynamic range and Expression on the wire (v1.16 — M44): the Playback page's choices, in lower case. */
@@ -794,4 +797,52 @@ object WebApi {
 
     /** A fact longer than this is no reading. */
     private const val MAX_FACT = 128
+
+    // ---- The Settings page (v1.18 — M47b) ----------------------------------------------------
+
+    /**
+     * `GET /api/settings`: `{values: {defaultTempoPct, transpose, velocityPct, dynamicRange, velocityFloor, expression,
+     * restrikeMs, preRollMs, foldOutOfRange, skipDrumChannel, albumBackdrop}, limits: {name: {min, max, step}},
+     * piano: {fullPower, repeatMs}}` (BUILD_SPEC.md › v1.18 — M47b). The choices are the PUT's own words (`narrow`,
+     * `light`…); `restrikeMs` 0 is Auto, its limits the times set by hand; the piano's two are null when it doesn't say.
+     */
+    fun settings(s: WebSettings): JSONObject {
+        val v = s.settings
+        return JSONObject()
+            .put(
+                "values",
+                JSONObject()
+                    .put("defaultTempoPct", v.defaultTempoPct)
+                    .put("transpose", v.transpose)
+                    .put("velocityPct", v.velocityPct)
+                    .put("dynamicRange", v.dynamicRange.name.lowercase())
+                    .put("velocityFloor", v.velocityFloor)
+                    .put("expression", v.expression.name.lowercase())
+                    .put("restrikeMs", v.restrikeMs)
+                    .put("preRollMs", v.preRollMs)
+                    .put("foldOutOfRange", v.foldOutOfRange)
+                    .put("skipDrumChannel", v.skipDrumChannel)
+                    .put("albumBackdrop", v.albumBackdrop),
+            )
+            .put(
+                "limits",
+                JSONObject()
+                    .put("defaultTempoPct", limit(PlaybackLimits.TempoPct, TEMPO_STEP))
+                    .put("transpose", limit(PlaybackLimits.Transpose, TRANSPOSE_STEP))
+                    .put("velocityPct", limit(PlaybackLimits.VelocityPct, VELOCITY_STEP))
+                    .put("velocityFloor", limit(PlaybackLimits.VelocityFloor, FLOOR_STEP))
+                    .put("restrikeMs", limit(PlaybackLimits.RestrikeMs, PlaybackLimits.RESTRIKE_STEP_MS))
+                    .put("preRollMs", limit(PlaybackLimits.PreRollMs, PRE_ROLL_STEP_MS)),
+            )
+            .put("piano", JSONObject().put("fullPower", s.fullPower.orNull()).put("repeatMs", s.repeatMs.orNull()))
+    }
+
+    private fun limit(range: IntRange, step: Int): JSONObject = JSONObject().put("min", range.first).put("max", range.last).put("step", step)
+
+    /** The steps the tablet's Playback page takes (`PlaybackPage`): tempo and velocity in fives, the quietest note in fives, the pause in halves of a second. */
+    private const val TEMPO_STEP = 5
+    private const val TRANSPOSE_STEP = 1
+    private const val VELOCITY_STEP = 5
+    private const val FLOOR_STEP = 5
+    private const val PRE_ROLL_STEP_MS = 500
 }

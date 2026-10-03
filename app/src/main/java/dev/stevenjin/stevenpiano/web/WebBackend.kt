@@ -210,6 +210,12 @@ interface WebBackend {
 
     /** Share diagnostics' zip, as bytes; null when it couldn't be made. */
     suspend fun diagnostics(): ByteArray?
+
+    /**
+     * The Settings page's Playback and Panel (v1.18 — M47b): the app's own playback settings and Album colours behind the
+     * player, with what the connected piano says of them (its Full power, its repeat period).
+     */
+    suspend fun settings(): WebSettings
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
@@ -581,6 +587,8 @@ data class SettingsChange(
     val fingering: Boolean? = null,
     val chordNames: Boolean? = null,
     val handColours: Boolean? = null,
+    /** Album colours behind the player (v1.18 — M47b: the Settings page's Panel), the tablet's own switch. */
+    val albumBackdrop: Boolean? = null,
 ) {
     val isEmpty: Boolean get() = this == SettingsChange()
 }
@@ -679,3 +687,16 @@ class RefreshFloor(private val gapMs: Long = REFRESH_FLOOR_MS, private val clock
         const val REFRESH_FLOOR_MS = 10_000L
     }
 }
+
+// ---- The Settings page (v1.18 — M47b) ---------------------------------------------------------------
+
+/**
+ * `GET /api/settings`: the app's own [settings], of which the panel reads the Playback page's ten and Album colours behind
+ * the player, and what the connected piano says of them: its Full power ([fullPower]; null while no piano is ready or it
+ * gives none) and its own repeat period ([repeatMs], what Re-strike time's Auto takes; null when it reports none).
+ */
+data class WebSettings(
+    val settings: dev.stevenjin.stevenpiano.settings.PianoSettings = dev.stevenjin.stevenpiano.settings.PianoSettings(),
+    val fullPower: Boolean? = null,
+    val repeatMs: Int? = null,
+)

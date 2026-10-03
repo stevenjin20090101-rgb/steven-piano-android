@@ -24,7 +24,8 @@ export { PianoRoom } from './room';
  * - `GET /tablet` (WebSocket, `Authorization: Bearer <pianoId>.<secret>`, subprotocol
  *   `steven-piano-relay-1`): a tablet connects to its piano's room, which checks the secret.
  * - `ANY /p/<pianoId>/…`: a browser reaches the piano's panel. Per address, [PANEL_LIMIT] a minute,
- *   and [LOGIN_LIMIT] for `…/api/login`; a body must say its length (411; `Transfer-Encoding` 411)
+ *   a `GET …/api/art/…` (a picture, v1.18 — M47b) [ART_LIMIT] instead, and [LOGIN_LIMIT] for
+ *   `…/api/login` too; a body must say its length (411; `Transfer-Encoding` 411)
  *   and be at most `MAX_BODY_BYTES` (413), before a byte of it is read; then the room carries the
  *   request to the tablet with the prefix taken off. `/p/<pianoId>/ws` is the panel's socket.
  *
@@ -100,7 +101,11 @@ async function tablet(request: Request, env: RelayEnv, url: URL): Promise<Respon
 /** A browser's request or socket for a piano's panel. */
 async function panel(request: Request, env: RelayEnv, url: URL, pianoId: string, rest: string): Promise<Response> {
   const address = clientAddress(request);
-  const gate = await env.PANEL_LIMIT.limit({ key: `panel:${address}` });
+  // A picture counts against the pictures' own limit (v1.18 — M47b), so a page of covers leaves the panel its 120.
+  const picture = request.method === 'GET' && rest.startsWith('/api/art/');
+  const gate = picture
+    ? await env.ART_LIMIT.limit({ key: `art:${address}` })
+    : await env.PANEL_LIMIT.limit({ key: `panel:${address}` });
   if (!gate.success) return tooMany('Too many requests. Try again in a minute.');
   if (rest === '/api/login') {
     const login = await env.LOGIN_LIMIT.limit({ key: `login:${address}` });
