@@ -191,8 +191,10 @@
     "versionName": "1.15",
     "notes": "Every piece now gets its real album cover from Apple's catalogue when the title and artist clearly match; long-press a piece for Change cover. While a piece plays, the album's colours drift softly behind the player on Now playing and on the resting screen, like Apple Music; turn it off and on in Now playing's View menu or on Piano › Display. The web panel and your phone stay signed in for a year after one PIN.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.15/steven-piano-1.15.apk",
+    "sha256": "80d04cc4d37d1beda812462651621debe48bb5dbcce75ae7210ca711254b69ef",
+    "sizeBytes": 14010594,
     "minSdk": 26,
     "tag": "v1.15",
-    "draft": true
+    "publishedAt": "2026-10-03"
   }
 ]
