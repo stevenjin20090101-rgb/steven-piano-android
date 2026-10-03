@@ -91,6 +91,7 @@ import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.player.PianoFacts
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.record.Recorder
@@ -845,6 +846,12 @@ class AppGraph(private val app: Application) {
                 applied = s
             }
         }
+        // The piano's repeat period (v1.16 — M44): the re-strike time on Auto, with which the player shapes the next piece.
+        appScope.launch {
+            pianoSettings.state.map { PianoFacts.read((it as? PianoState.Ready)?.facts?.get(REPEAT_FACT)) }
+                .distinctUntilChanged()
+                .collect(player::setPianoFacts)
+        }
         // The tablet's piano sound (v1.8 — M25) follows its mode, its volume and the piano's link, and holds
         // its output open while a piece plays.
         soundOut.start()
@@ -1108,6 +1115,9 @@ class AppGraph(private val app: Application) {
 
         /** The piano's Full power, which the firmware turns off when the volume goes below 100. */
         const val PIANO_FULL_POWER = "fullpower"
+
+        /** The piano's steady repeat period, a fact of its `dump` (v1.16 — M44). */
+        const val REPEAT_FACT = "repeatms"
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L

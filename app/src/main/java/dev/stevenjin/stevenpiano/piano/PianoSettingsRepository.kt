@@ -310,12 +310,16 @@ class PianoSettingsRepository(
             }
         }
 
-        /** `name value`, then `get name` (and whatever that setting changes too) to read back what the piano holds. */
+        /**
+         * `name value`, then `get name` (and whatever that setting changes too) to read back what the piano holds; a
+         * fact only when the piano reported it (an earlier firmware has no `!repeatms`, and would call it unknown).
+         */
         private fun write(name: String) {
             val value = latest.remove(name) ?: return
             val write = Write(++sentWrites, errors, persist = temporaryWrites.remove(name).not())
             send("$name $value")
             for (read in listOf(name) + PianoSettings.alsoRead[name].orEmpty()) {
+                if (read.startsWith("!") && read.removePrefix("!") !in facts) continue
                 awaiting += Awaited(read, if (read == name) write else null)
                 send("get $read")
             }

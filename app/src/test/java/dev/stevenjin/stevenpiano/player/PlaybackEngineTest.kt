@@ -181,7 +181,8 @@ class PlaybackEngineTest {
     }
 
     @Test
-    fun `the 100 ms guard counts real time, so a fast tempo thins repeats`() {
+    fun `the re-strike guard is T and counts real time, so a fast tempo thins repeats (v1_16 M44)`() {
+        engine.router.restrikeMicros = 110_000   // T 110 ms: a strike 100 ms after the last still goes, 60 ms after does not
         engine.load(
             piece {
                 noteOn(0, 60); noteOff(50, 60)

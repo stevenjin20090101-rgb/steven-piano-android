@@ -301,8 +301,12 @@ object PianoSettings {
         Preset("snappy", "Snappy"),
     )
 
-    /** The read-only facts, in the order shown: the version under FIRMWARE, the rest under STATUS. */
+    /**
+     * The read-only facts, in the order shown: the piano's repeat period under TIMING (v1.16 — M44: what the player's
+     * re-strike time takes on Auto), the version under FIRMWARE, the rest under STATUS.
+     */
     val facts: List<Fact> = listOf(
+        Fact("repeatms", "Repeat period", TIMING),
         Fact("fw", "Piano firmware", PianoSection.Firmware),
         Fact("boards", "Power boards", STATUS),
         Fact("i2cfails", "I²C errors", STATUS),
@@ -331,8 +335,15 @@ object PianoSettings {
     /** Facts that change while the piano runs: read again with the status. */
     val liveFacts: List<String> = listOf("boards", "i2cfails", "pedalboard", "uptime")
 
-    /** Writing one of these changes others on the piano, so those are read back too (volume below 100 turns full power off). */
-    val alsoRead: Map<String, List<String>> = mapOf("volume" to listOf("fullpower"))
+    /**
+     * Writing one of these changes others on the piano, so those are read back too: volume below 100 turns full power
+     * off; the shortest strike and the repeat gap make the repeat period (`!repeatms`, read back when the piano reports it).
+     */
+    val alsoRead: Map<String, List<String>> = mapOf(
+        "volume" to listOf("fullpower"),
+        "gap" to listOf("!repeatms"),
+        "minstrike" to listOf("!repeatms"),
+    )
 
     /** The keys the test actions take (the piano's 84), and where they start. */
     val testKeys: IntRange = 24..107

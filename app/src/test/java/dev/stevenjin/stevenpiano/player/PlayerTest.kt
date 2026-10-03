@@ -44,10 +44,12 @@ class PlayerTest {
 
     /**
      * The player saw the link connected as it started: a new connection begins with the stop sequence
-     * (v1.11 — M29), nothing playing. Each test starts after it.
+     * (v1.11 — M29), nothing playing. Each test starts after it, with pieces played as written: these tests are about
+     * the queue and the order of what goes out, and expression (v1.16 — M44, Light at first) would shape the notes.
      */
     @Before
     fun connected() = runBlocking {
+        onMain { player.setPerformance(PerformanceSettings(expression = ExpressionLevel.OFF, velocityFloor = 1)) }
         withTimeout(2_000) { while (link.messages.size < 2) delay(5) }
         assertEquals(listOf("B0 40 00", "B0 7B 00"), link.messages)
         assertEquals(listOf(true, true), link.sent.map { it.dropPending })

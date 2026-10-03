@@ -46,6 +46,15 @@ class MidiPiece(
 ) {
     val sequenceName: String? get() = sequenceNames.firstOrNull()
     val noteCount: Int get() = notes.size
+
+    /**
+     * The same piece sounding [events] instead (v1.16 — M44: the player's pre-pass, `player.Performance`): its notes,
+     * which the roll and the score draw, its time and its length stay the file's.
+     */
+    fun withEvents(events: EventList): MidiPiece = MidiPiece(
+        format, ppq, sequenceNames, texts, copyright, durationMicros, events, notes, warnings, tempoMap,
+        timeSignatures, keySignatures, barStartsMicros, trackNames,
+    )
 }
 
 /** One channel message at an absolute song time. [status] keeps its channel nibble. */

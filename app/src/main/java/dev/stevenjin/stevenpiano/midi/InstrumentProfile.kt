@@ -15,8 +15,9 @@ package dev.stevenjin.stevenpiano.midi
  *
  * - [lowest]..[highest]: its keys; a note outside folds in by octaves, or is dropped, as the Fold setting
  *   says (transpose applies to a piece's notes only, never to keys played).
- * - [minOnsetGapMicros]: the least time between two strikes of one key (Steven Piano's solenoids need
- *   100 ms; a faster strike is dropped, never delayed); 0: none.
+ * - [minOnsetGapMicros]: the least time between two strikes of one key before v1.16 (Steven Piano's 100 ms; a faster
+ *   strike is dropped, never delayed); 0: none. Since v1.16 — M44 the router's re-strike time
+ *   ([NoteRouter.restrikeMicros]) takes its place on an instrument that has one.
  * - [restrike]: a key struck while another source holds it is struck again (Note Off, then Note On), as a
  *   digital piano can; Steven Piano cannot strike a held key, so there the sources share it.
  * - [pedals]: the controllers that pass (CC64 on Steven Piano; CC64, CC66 and CC67 on a MIDI piano), each
@@ -40,7 +41,7 @@ class InstrumentProfile private constructor(
     override fun toString(): String = name
 
     companion object {
-        /** The school piano: keys C1-B7 (MIDI 24-107), 100 ms between strikes of a key, the sustain pedal alone, paced. */
+        /** The school piano: keys C1-B7 (MIDI 24-107), time between strikes of a key (the re-strike time), the sustain pedal alone, paced. */
         val StevenPiano = InstrumentProfile(
             name = "Steven Piano",
             lowest = KeyMap.LOWEST,

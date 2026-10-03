@@ -73,14 +73,22 @@ class NoteRouterTest {
     }
 
     @Test
-    fun `a strike within 100 ms of the previous strike of an idle key is thinned`() {
+    fun `a strike of an idle key sooner than the re-strike time, less 10 ms of timing, is thinned (v1_16 M44)`() {
+        router.restrikeMicros = 110_000   // T: the piano's own repeat period at its defaults
         assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 0))
         assertEquals(listOf("80 3C 00"), send(0x80, 60, 0, atMs = 40))
         assertEquals(emptyList<String>(), send(0x90, 60, 80, atMs = 99))
         assertEquals(emptyList<String>(), send(0x80, 60, 0, atMs = 120))   // its release is ignored too
         assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 130))
         assertEquals(listOf("80 3C 00"), send(0x80, 60, 0, atMs = 170))
-        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 230))   // exactly 100 ms later
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 230))   // exactly T less 10 ms later
+        router.restrikeMicros = 40_000   // Snappy's 40 ms: a strike 30 ms after the last goes
+        assertEquals(listOf("80 3C 00"), send(0x80, 60, 0, atMs = 250))
+        assertEquals(emptyList<String>(), send(0x90, 60, 80, atMs = 259))
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 290))
+        router.silence(out)
+        router.profile = InstrumentProfile.StandardPiano   // a MIDI piano strikes again at will
+        assertEquals(listOf("90 3C 50"), send(0x90, 60, 80, atMs = 292))
     }
 
     @Test

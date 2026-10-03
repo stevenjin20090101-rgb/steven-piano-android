@@ -62,9 +62,14 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * edits it, and its shuffle and repeat modes live with it ([random] shuffles; tests pass their own).
  * The Keys screen plays through here too ([liveNoteOn] and friends): its keys join the queue of
  * scheduler commands and go out through the engine's router, so they share the piece's
- * reference counts, 100 ms guard and silence. A dropped link lets go of them.
+ * reference counts, re-strike guard and silence. A dropped link lets go of them.
  * Each piece's hands, suggested fingering and chord names are worked out on [compute] as it loads,
  * before it is shown and played; the fingering again when transpose or folding changes the keys played.
+ * As it loads, what it sounds is shaped once ([Performance], v1.16 — M44: expression, dynamic range and the quietest
+ * note, repeats that keep the rhythm) with the settings and the piano's facts of that moment ([setPerformance],
+ * [setPianoFacts]); a change while it plays shapes the next piece. The router's re-strike time is the shorter of the
+ * one the piece loaded was shaped with and the one the settings give now, so a longer one never thins a piece
+ * shaped for a shorter one, and a shorter one counts at once.
  * A piece or a fingering replaced while it is worked out stops at the analyses' next checkpoint, and a
  * start that replaces one still running waits [SETTLE_MS] first, so a burst of Next taps or transpose
  * steps reads and works out only the first and the last (the v1.3 delta audit, L1).
@@ -120,6 +125,15 @@ class Player(
     private var queue = Queue.Empty
     private var defaultTempoPct = 100
     private var preRollMs = 0L
+    private var performance = PerformanceSettings()
+    private var pianoFacts = PianoFacts()
+
+    /** The re-strike time the piece loaded was shaped with, µs; [Long.MAX_VALUE] with none loaded. */
+    private var pieceRestrikeMicros = Long.MAX_VALUE
+
+    /** The instrument playing, as [setProfile] last set it: a MIDI piano's repeats stay as the file has them. */
+    @Volatile
+    private var profile: InstrumentProfile = InstrumentProfile.StevenPiano
     private var loadJob: Job? = null
     private var advanceJob: Job? = null
     private var fingerJob: Job? = null
@@ -215,6 +229,7 @@ class Player(
         loadJob?.cancel()
         setQueue(Queue(repeat = kept.repeat, nextUid = kept.nextUid), channel = null)
         scheduler.submit { engine.eject() }
+        loaded(Long.MAX_VALUE)
         _state.update { it.copy(piece = null, loading = false) }
     }
 
@@ -320,7 +335,37 @@ class Player(
      * The instrument that plays (v1.11 — M29): Steven Piano or any MIDI piano ([InstrumentProfile]). The old one
      * is silenced first; a piece playing goes on. Any thread.
      */
-    fun setProfile(profile: InstrumentProfile) = scheduler.submit { engine.setProfile(profile, it) }
+    fun setProfile(profile: InstrumentProfile) {
+        this.profile = profile
+        scheduler.submit { engine.setProfile(profile, it) }
+    }
+
+    /**
+     * How pieces are played (v1.16 — M44, Piano › Playback): the dynamic range, the quietest note, expression and the
+     * re-strike time. The next piece is shaped with them; the router's re-strike time follows at once.
+     */
+    fun setPerformance(settings: PerformanceSettings) {
+        performance = settings
+        restrike()
+    }
+
+    /** What the piano reports of itself that playing needs (v1.16 — M44: its repeat period, `!repeatms`); none with no piano. */
+    fun setPianoFacts(facts: PianoFacts) {
+        pianoFacts = facts
+        restrike()
+    }
+
+    /** The router's guard: the shorter of the piece's re-strike time and the settings' (see the class's notes). */
+    private fun restrike() {
+        val micros = minOf(Performance.restrikeMs(performance, pianoFacts) * MICROS_PER_MS, pieceRestrikeMicros)
+        scheduler.submit { engine.router.restrikeMicros = micros }
+    }
+
+    /** The piece loaded is now one shaped with a re-strike time of [micros] ([Long.MAX_VALUE]: none is loaded). */
+    private fun loaded(micros: Long) {
+        pieceRestrikeMicros = micros
+        restrike()
+    }
 
     /** Live tempo, 25-200 %. */
     fun setTempo(pct: Int) = scheduler.submit { engine.setTempo(pct, it) }
@@ -475,6 +520,7 @@ class Player(
                 throw e
             } catch (e: Exception) {
                 scheduler.submit { engine.eject() }
+                loaded(Long.MAX_VALUE)
                 _state.update { it.copy(loading = false, piece = null, problem = e.message ?: CANT_PLAY) }
                 return@launch
             }
@@ -482,15 +528,22 @@ class Player(
             val tempo = defaultTempoPct
             val transpose = _state.value.transpose
             val fold = _state.value.fold
-            // The chords while the hands and then the fingering are worked out: a long performance takes
-            // tens of milliseconds for each on a phone.
-            val (hands, fingers, chords) = withContext(compute) {
+            val shaping = performance
+            val facts = pianoFacts.copy(freeRepeats = profile.minOnsetGapMicros == 0L)
+            // The chords while the hands, then the fingering and what the piece sounds are worked out: a long
+            // performance takes tens of milliseconds for each on a phone.
+            val worked = withContext(compute) {
                 coroutineScope {
                     val chords = async { chordsOf(midi, checkpoint()) }
                     val hands = handsOf(midi, checkpoint())
-                    Triple(hands, fingersOf(midi.notes, hands, transpose, fold, checkpoint()), chords.await())
+                    val fingers = fingersOf(midi.notes, hands, transpose, fold, checkpoint())
+                    val played = performed(midi, hands, shaping, facts, checkpoint())
+                    Worked(hands, fingers, chords.await(), played)
                 }
             }
+            val hands = worked.hands
+            val fingers = worked.fingers
+            val chords = worked.chords
             _state.update {
                 it.copy(
                     loading = false,
@@ -515,8 +568,10 @@ class Player(
             }
             refinger()   // transpose or folding changed while it loaded
             val preRoll = preRollMs * NANOS_PER_MS
+            val played = worked.played
+            loaded(if (facts.freeRepeats) Long.MAX_VALUE else Performance.restrikeMs(shaping, facts) * MICROS_PER_MS)
             scheduler.submit { now ->
-                engine.load(midi, now)
+                engine.load(played, now)
                 engine.setTempo(tempo, now)
                 engine.play(now, preRoll)
             }
@@ -538,6 +593,23 @@ class Player(
     } catch (e: OutOfMemoryError) {
         ByteArray(0)
     }
+
+    /**
+     * What [midi] sounds as [settings] and [facts] shape it ([Performance]; its notes, which the roll and the score draw,
+     * stay the file's); the file as it is if shaping fails: a way of playing must never stop a piece from playing.
+     */
+    private fun performed(midi: MidiPiece, hands: ByteArray, settings: PerformanceSettings, facts: PianoFacts, checkpoint: () -> Unit): MidiPiece = try {
+        Performance.shape(midi, hands.takeIf { it.size == midi.notes.size }, settings, facts, checkpoint)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        midi
+    } catch (e: OutOfMemoryError) {
+        midi
+    }
+
+    /** What a piece's load works out off the main thread: the hands, the fingering, the chords, and what it sounds. */
+    private class Worked(val hands: ByteArray, val fingers: ByteArray, val chords: ChordTrack, val played: MidiPiece)
 
     /** The suggested fingering on the keys played at [transpose] and [fold]; none without hands or if it fails. */
     private fun fingersOf(notes: NoteList, hands: ByteArray, transpose: Int, fold: Boolean, checkpoint: () -> Unit): ByteArray {
@@ -700,6 +772,7 @@ class Player(
 
         private const val AUTO_ADVANCE_DELAY_MS = 1_500L
         private const val NANOS_PER_MS = 1_000_000L
+        private const val MICROS_PER_MS = 1_000L
         private const val CANT_PLAY = "This piece can't be played."
 
         /** A start that replaces one still running waits this long first: a burst of taps settles on its last. */

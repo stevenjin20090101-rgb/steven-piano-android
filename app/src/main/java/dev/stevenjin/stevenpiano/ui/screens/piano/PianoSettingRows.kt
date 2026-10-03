@@ -459,11 +459,15 @@ private fun Boards(value: String?) {
 /** A value beside its control; blank while not known, since a dash between − and + would read as one more minus. */
 private fun shownBeside(setting: PianoSetting, wire: String?): String = if (wire == null) "" else setting.display(wire)
 
-/** How a fact reads: the firmware's version as it says it ("Unknown" until it has), uptime as h:mm, the others as they come. */
+/**
+ * How a fact reads: the firmware's version as it says it ("Unknown" until it has), uptime as h:mm, the repeat period in
+ * milliseconds ("110 ms"), the others as they come.
+ */
 private fun factText(name: String, value: String?): String {
     if (value == null) return if (name == "fw") "Unknown" else "—"
     return when (name) {
         "uptime" -> value.toLongOrNull()?.let(PianoSettings::uptime) ?: value
+        "repeatms" -> value.trim().toIntOrNull()?.let { "$it ms" } ?: value
         "pedalboard" -> value.replaceFirstChar { it.uppercase() }
         else -> value
     }

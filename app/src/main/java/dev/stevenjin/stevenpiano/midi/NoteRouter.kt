@@ -12,14 +12,16 @@ package dev.stevenjin.stevenpiano.midi
 /**
  * Turns file events, keys played on the Keys screen, and keys played on a MIDI keyboard (v1.11 — M29) into
  * what the instrument can safely play, as its [profile] says ([InstrumentProfile]: Steven Piano, or any MIDI
- * piano). Steven Piano has no per-key reference counting, cannot re-strike a held key, needs ~100 ms
- * between strikes of one key, and treats CC120/121/123 as "everything off". So this router:
+ * piano). Steven Piano has no per-key reference counting, cannot re-strike a held key, needs time between
+ * strikes of one key (its repeat period, 110 ms at its defaults), and treats CC120/121/123 as "everything off".
+ * So this router:
  *  - remembers the key each source note (channel x note, a key of the screen, a key of the keyboard) was
  *    actually sent as, so a transpose change mid-note still releases the right key;
  *  - reference-counts sent keys: one Note On when a key goes 0 -> 1, one Note Off at 1 -> 0, so a live key
  *    and a piece's note on the same key share it (a MIDI piano, which can, strikes a shared key again);
- *  - thins a strike that comes < 100 ms after the previous strike of an idle key, taps included (Steven
- *    Piano only);
+ *  - thins a strike of an idle key that comes sooner than [restrikeMicros] (less [RESTRIKE_SLACK_MICROS]) after its
+ *    previous strike, taps included (Steven Piano only; v1.16 — M44: the re-strike time, 100 ms until then): the last
+ *    line of defence, since a piece's repeats are spaced before they come here (`player.Repeats`);
  *  - forwards the pedals the profile takes (CC64 on Steven Piano; CC64, CC66, CC67 on a MIDI piano), each
  *    once per change; every other controller, program change, pitch bend and aftertouch is dropped. A file's
  *    CC64 on Steven Piano goes out at most 20 a second after a burst of three (the actuator moves a real
@@ -31,13 +33,22 @@ package dev.stevenjin.stevenpiano.midi
  * screen's sustain want it), while the piece's keys stay down. A keyboard's note keeps its pitch (no
  * transpose); one outside the instrument's keys folds in by octaves, or is dropped, as [fold] says.
  * Everything goes out on channel 1: the piano listens in omni mode.
- * Times are wall-clock microseconds, because the 100 ms guard protects the solenoids.
+ * Times are wall-clock microseconds, because the re-strike guard protects the solenoids.
  */
 class NoteRouter {
     var transpose = 0
     var fold = true
     var velocityPct = 100
     var skipDrums = true
+
+    /**
+     * The re-strike time (v1.16 — M44, Piano › Playback › Re-strike time): the least time between two strikes of one
+     * key on an instrument that needs it (Steven Piano), as the player sets it from the same T a piece's repeats were
+     * spaced with (Auto: the piano's own repeat period, else 100 ms). A strike up to [RESTRIKE_SLACK_MICROS] sooner
+     * still goes: the scheduler's wake-ups move a strike by a few milliseconds, and a repeat spaced exactly T apart must
+     * not lose every other note to them (the piano defers so early a strike by its own 10 ms tick at most).
+     */
+    var restrikeMicros: Long = MIN_ONSET_GAP_MICROS
 
     /**
      * The instrument (v1.11 — M29). Change it only with nothing sounding (after [silence]): the keys held
@@ -122,7 +133,7 @@ class NoteRouter {
      * A key pressed on the Keys screen. Keys there are already the piano's (24-107), so there is
      * no transpose or fold, but the velocity percentage applies. A key the screen already holds
      * is not struck again; a key a piece holds is shared, not re-struck (a MIDI piano strikes it again);
-     * a strike within 100 ms of the key's last one is thinned like any other.
+     * a strike sooner than the re-strike time after the key's last one is thinned like any other.
      */
     fun liveNoteOn(key: Int, velocity: Int, nowMicros: Long, out: MidiBatch) {
         if (key !in KeyMap.LOWEST..KeyMap.HIGHEST) return
@@ -157,7 +168,7 @@ class NoteRouter {
      * A key played on a MIDI keyboard (v1.11 — M29), [note] as played: no transpose; outside the
      * instrument's keys it folds in by octaves, or is dropped ([fold]); the velocity percentage applies.
      * Pressed again while this router holds it (a release the keyboard lost): a MIDI piano strikes it again;
-     * Steven Piano lets go and strikes again only when nothing else holds the key and its 100 ms allow,
+     * Steven Piano lets go and strikes again only when nothing else holds the key and its re-strike time allows,
      * else it keeps holding.
      */
     fun externalNoteOn(note: Int, velocity: Int, nowMicros: Long, out: MidiBatch) {
@@ -167,7 +178,7 @@ class NoteRouter {
         val source = EXT + n
         val held = sentKey[source]
         if (held != KeyMap.UNPLAYABLE) {
-            val free = refCount[held] == 1 && nowMicros - lastOnsetMicros[held] >= profile.minOnsetGapMicros
+            val free = refCount[held] == 1 && nowMicros - lastOnsetMicros[held] >= guardMicros()
             if (!profile.restrike && !free) return   // keep holding
             release(source, out)
         }
@@ -258,7 +269,7 @@ class NoteRouter {
     private fun strike(source: Int, key: Int, velocity: Int, nowMicros: Long, out: MidiBatch) {
         val v = ((velocity * velocityPct + 50) / 100).coerceIn(1, 127)
         if (refCount[key] == 0) {
-            if (nowMicros - lastOnsetMicros[key] < profile.minOnsetGapMicros) return   // thinned
+            if (nowMicros - lastOnsetMicros[key] < guardMicros()) return   // thinned
             lastOnsetMicros[key] = nowMicros
             out.add(0x90, key, v)
             setActive(key, true)
@@ -270,6 +281,10 @@ class NoteRouter {
         refCount[key]++
         sentKey[source] = key
     }
+
+    /** The least time between two strikes of a key now: none on an instrument that strikes again at will. */
+    private fun guardMicros(): Long =
+        if (profile.minOnsetGapMicros > 0L) (restrikeMicros - RESTRIKE_SLACK_MICROS).coerceAtLeast(0L) else 0L
 
     /** A controller's new value, once per change. */
     private fun setController(controller: Int, value: Int, out: MidiBatch) {
@@ -335,7 +350,12 @@ class NoteRouter {
         const val SOSTENUTO = 66
         const val SOFT = 67
         const val ALL_NOTES_OFF = 123
+
+        /** The re-strike time with no piano, or none that reports its repeat period (and before v1.16, the only one). */
         const val MIN_ONSET_GAP_MICROS = 100_000L
+
+        /** How much sooner than the re-strike time a strike may come and still go (see [restrikeMicros]). */
+        const val RESTRIKE_SLACK_MICROS = 10_000L
         private const val PEDAL_DOWN = 127
 
         /** Where a pedal goes from up to down (the firmware's switch point). */
