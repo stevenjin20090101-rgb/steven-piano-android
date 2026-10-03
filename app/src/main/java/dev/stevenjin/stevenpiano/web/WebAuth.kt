@@ -9,11 +9,17 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import org.json.JSONException
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
+import kotlin.math.abs
 
 // The web panel's PIN and sessions (BUILD_SPEC.md › v1.5.1 — M18). PinHash and LoginGuard know
 // nothing of the web (no server, no JSON): the kiosk's PIN (M20) uses them as they are.
@@ -89,13 +95,16 @@ object ConstantTime {
 }
 
 /**
- * The panel's sessions, in memory only (a restart of the app logs everyone out): at most [max] at
- * once, the least recently used going first, and each forgotten after [idleMs] without a request.
- * A session is a 32-byte random token from [random] ([open]), sent back as the `sp_session`
- * cookie; only its SHA-256 is kept here, so the table itself holds no usable token. Thread-safe:
- * the server's request threads share it.
+ * The panel's sessions: at most [max] at once, the least recently used going first, and each forgotten after [idleMs]
+ * without a request. A session is a 32-byte random token from [random] ([open]), sent back as the `sp_session` cookie;
+ * only its SHA-256 is kept here, so the table itself holds no usable token. Since 1.15 (M42) the table outlives the
+ * app: it is read from [store] once, here, and given back to it whole when a session opens, when one or every session
+ * is logged out, and when a use moves a session's last-used time more than [SAVE_AFTER_MS] from what the store holds
+ * (so a page's requests do not write it each time). Thread-safe: the server's request threads share it. Blocking
+ * while it saves.
  */
 class Sessions(
+    private val store: SessionStore = SessionStore.NONE,
     private val max: Int = MAX_SESSIONS,
     private val idleMs: Long = IDLE_MS,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -104,60 +113,164 @@ class Sessions(
     /** Digest of a token → when it was last used, least recently used first. */
     private val lastUsed = LinkedHashMap<String, Long>(16, 0.75f, true)
 
-    /** A new session's token. The oldest session goes when [max] are open. */
+    /** The table as [store] last had it. */
+    private var saved: Map<String, Long> = emptyMap()
+
+    init {
+        val now = clock()
+        store.load().entries.filter { fresh(it.value, now) }.sortedBy { it.value }.takeLast(max).forEach { lastUsed[it.key] = it.value }
+        saved = LinkedHashMap(lastUsed)
+    }
+
+    /** A new session's token. The least recently used session goes when [max] are open. */
     @Synchronized
     fun open(): String {
-        prune()
+        val now = clock()
+        prune(now)
         while (lastUsed.size >= max) lastUsed.remove(lastUsed.keys.first())
         val token = ByteArray(TOKEN_BYTES).also(random::nextBytes).let { URL_SAFE.encodeToString(it) }
-        lastUsed[digest(token)] = clock()
+        lastUsed[digest(token)] = now
+        save()
         return token
     }
 
-    /** Whether [token] names an open session; if so it counts as used now. */
+    /** Whether [token] names an open session; if so it counts as used now, saved once that has moved more than [SAVE_AFTER_MS]. */
     @Synchronized
     fun isValid(token: String?): Boolean {
         if (token == null || !TOKEN.matches(token)) return false
-        prune()
+        val now = clock()
+        prune(now)
         val key = digest(token)
         if (lastUsed[key] == null) return false
-        lastUsed[key] = clock()
+        lastUsed[key] = now
+        val was = saved[key]
+        if (was == null || abs(now - was) > SAVE_AFTER_MS) save()
         return true
     }
 
     /** Logs [token]'s session out. */
     @Synchronized
     fun close(token: String?) {
-        if (token != null && TOKEN.matches(token)) lastUsed.remove(digest(token))
+        if (token != null && TOKEN.matches(token) && lastUsed.remove(digest(token)) != null) save()
     }
 
-    /** Everyone out: the PIN changed, or the panel was turned off. */
+    /** Everyone out, and out of the store: the PIN changed, or the panel was turned off. */
     @Synchronized
-    fun closeAll() = lastUsed.clear()
+    fun closeAll() {
+        lastUsed.clear()
+        save()
+    }
 
     /** How many sessions are open now. */
     @Synchronized
     fun count(): Int {
-        prune()
+        prune(clock())
         return lastUsed.size
     }
 
-    private fun prune() {
-        val now = clock()
-        lastUsed.entries.removeAll { now - it.value >= idleMs || now < it.value - idleMs }
+    private fun prune(now: Long) {
+        lastUsed.entries.removeAll { !fresh(it.value, now) }
+    }
+
+    /** Used less than [idleMs] ago, and not stamped more than [idleMs] ahead (the tablet's clock set back). */
+    private fun fresh(at: Long, now: Long): Boolean = now - at < idleMs && now >= at - idleMs
+
+    private fun save() {
+        val table = LinkedHashMap(lastUsed)
+        store.save(table)
+        saved = table
     }
 
     private fun digest(token: String): String =
         MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.US_ASCII)).joinToString("") { "%02x".format(it) }
 
     companion object {
-        const val MAX_SESSIONS = 10
-        const val IDLE_MS = 24 * 60 * 60 * 1000L
+        const val MAX_SESSIONS = 16
+        const val IDLE_MS = 365 * 24 * 60 * 60 * 1000L
+
+        /** How far a use may move a session's last-used time from what the store holds before it is saved. */
+        const val SAVE_AFTER_MS = 60_000L
         const val TOKEN_BYTES = 32
         private val URL_SAFE = Base64.getUrlEncoder().withoutPadding()
 
         /** 32 bytes in URL-safe base64 without padding: 43 characters. */
         val TOKEN = Regex("[A-Za-z0-9_-]{43}")
+    }
+}
+
+/** Where [Sessions] keeps its table between runs of the app (v1.15 — M42): each token's digest → when it was last used (epoch ms). */
+interface SessionStore {
+    /** The table as last saved; none when nothing was saved or what was cannot be read. */
+    fun load(): Map<String, Long>
+
+    /** Keeps [sessions] in place of what was saved before. */
+    fun save(sessions: Map<String, Long>)
+
+    companion object {
+        /** Keeps nothing: every session ends with the process. */
+        val NONE: SessionStore = object : SessionStore {
+            override fun load(): Map<String, Long> = emptyMap()
+
+            override fun save(sessions: Map<String, Long>) = Unit
+        }
+    }
+}
+
+/**
+ * [Sessions]' table in [file], `files/web/sessions.json` ([under]): `{"<SHA-256 of a token, hex>": <last used, epoch ms>,
+ * …}`, digests only, never a token. Written whole each time and atomically: a `.part` file, synced, then renamed over the
+ * old one. A write that fails deletes the file instead, so a session that has ended never comes back at the next start
+ * (everyone enters the PIN again). A file that is missing, over [MAX_BYTES] or not exactly that shape reads as none.
+ * Blocking.
+ */
+class FileSessionStore(private val file: File) : SessionStore {
+    override fun load(): Map<String, Long> = try {
+        if (file.isFile && file.length() <= MAX_BYTES) read(file.readText(Charsets.UTF_8)) else emptyMap()
+    } catch (e: IOException) {
+        emptyMap()
+    }
+
+    override fun save(sessions: Map<String, Long>) {
+        val part = File(file.path + PART)
+        try {
+            file.parentFile?.mkdirs()
+            FileOutputStream(part).use { out ->
+                out.write(JSONObject(sessions).toString().toByteArray(Charsets.UTF_8))
+                out.fd.sync()
+            }
+            if (!part.renameTo(file)) throw IOException("The sessions' file was not replaced")
+        } catch (e: IOException) {
+            part.delete()
+            file.delete()
+        }
+    }
+
+    companion object {
+        /** A table of [Sessions.MAX_SESSIONS] is about 1.4 KB. */
+        const val MAX_BYTES = 64 * 1024L
+        private const val PART = ".part"
+
+        /** A token's digest as [Sessions] keeps it: SHA-256 in 64 lower-case hex digits. */
+        val DIGEST = Regex("[0-9a-f]{64}")
+
+        /** The store at `files/web/sessions.json` under the app's [filesDir]. */
+        fun under(filesDir: File): FileSessionStore = FileSessionStore(File(filesDir, "web/sessions.json"))
+
+        /** The table [text] holds: a JSON object of digests to whole numbers, else none at all. */
+        internal fun read(text: String): Map<String, Long> {
+            val json = try {
+                JSONObject(text)
+            } catch (e: JSONException) {
+                return emptyMap()
+            }
+            val sessions = LinkedHashMap<String, Long>()
+            for (digest in json.keys()) {
+                val lastUsed = json.opt(digest)
+                if (!DIGEST.matches(digest) || (lastUsed !is Int && lastUsed !is Long)) return emptyMap()
+                sessions[digest] = (lastUsed as Number).toLong()
+            }
+            return sessions
+        }
     }
 }
 

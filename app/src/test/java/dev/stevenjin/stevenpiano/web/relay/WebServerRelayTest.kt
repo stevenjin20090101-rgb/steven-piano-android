@@ -221,7 +221,7 @@ class WebServerRelayTest {
         val login = relayed("POST", "/api/login", """{"pin":"482913"}""".toByteArray(), panelHeaders(null))
         assertEquals(204, login.status)
         val cookie = login.headers["Set-Cookie"]!!
-        assertTrue(cookie, Regex("sp_session=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Secure").matches(cookie))
+        assertTrue(cookie, Regex("sp_session=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Max-Age=31536000; Secure").matches(cookie))
         val token = cookie.substringAfter('=').substringBefore(';')
         assertEquals(200, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$token")).status)
         // v1.10.1 — M28: the panel's Add tab hears where an upload went through the relay as on the tablet's own address.
@@ -234,7 +234,7 @@ class WebServerRelayTest {
         val guest = relayed("GET", "/request").headers["Set-Cookie"]!!
         assertTrue(guest, Regex("sp_guest=[A-Za-z0-9_-]{22}; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Max-Age=31536000; Secure").matches(guest))
         val lanCookie = http.api("POST", "/api/login", """{"pin":"482913"}""").all("set-cookie").single()
-        assertTrue("a listener's stay as they were: $lanCookie", lanCookie.endsWith("; HttpOnly; SameSite=Strict; Path=/"))
+        assertTrue("a listener's stay as they were: $lanCookie", lanCookie.endsWith("; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000"))
         // The debug build's local relay is plain HTTP: its origin is http, its cookies not Secure, its socket ws.
         val local = relay.serveRelayed(session("POST", "/api/login", """{"pin":"482913"}""".toByteArray(), panelHeaders(null, origin = "http://localhost:8787") + ("host" to "localhost:8787")), "localhost:8787", PREFIX, WebServer.HTTP)
         val plain = RelayedResponse.write(local)

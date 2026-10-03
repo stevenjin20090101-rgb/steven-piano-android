@@ -1124,8 +1124,8 @@ Centred on the surface: STEVEN PIANO, **Enter the PIN** in the display line, "Th
 on the tablet, in Piano › Remote control.", one 240 × 56 px field of six masked digits (spaced
 wide) and **Open**. A wrong PIN reads "That PIN isn't right."; after five, "That PIN isn't right.
 Try again in 30 s.", counting down, the field and Open disabled until it ends. Before a PIN
-exists: "Set a PIN on the tablet first: Piano › Remote control." A session lasts until a day
-unused, the PIN changes, or Web control turns off; then the gate comes back by itself.
+exists: "Set a PIN on the tablet first: Piano › Remote control." A session lasts a year unused,
+across restarts of the app, until the PIN changes or Web control turns off.
 
 ## The request page
 

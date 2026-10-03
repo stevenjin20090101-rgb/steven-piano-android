@@ -39,7 +39,8 @@ class WebServerTest {
 
     private var now = 1_000_000L
     private lateinit var backend: FakeWebBackend
-    private val sessions = Sessions(clock = { now })
+    private val store = FakeSessionStore()
+    private val sessions = Sessions(store, clock = { now })
     private val guard = LoginGuard(clock = { now })
     private val requests = GuestRequests(clock = { now })
     private val asked: MutableList<String> = Collections.synchronizedList(mutableListOf())
@@ -131,7 +132,7 @@ class WebServerTest {
         val token = login(http)
         assertEquals(200, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
         now += Sessions.IDLE_MS
-        assertEquals("a day without a request", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
+        assertEquals("a year without a request", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
     }
 
     @Test
@@ -158,13 +159,17 @@ class WebServerTest {
         val cookie = right.all("set-cookie").single()
         assertTrue(cookie, cookie.startsWith("sp_session="))
         for (flag in listOf("HttpOnly", "SameSite=Strict", "Path=/")) assertTrue("$flag in $cookie", flag in cookie)
+        assertTrue("kept a year, as the tablet keeps it (M42): $cookie", cookie.endsWith("; Max-Age=31536000"))
         assertFalse("no Domain: this host only", "Domain" in cookie)
         val token = right.cookie("sp_session")!!
         assertTrue(Sessions.TOKEN.matches(token))
+        val remembered = store.saved.keys.single()
+        assertTrue("remembered by its digest alone: $remembered", FileSessionStore.DIGEST.matches(remembered) && token !in remembered)
         val out = http.api("POST", "/api/logout", "{}", session = token)
         assertEquals(204, out.status)
         assertTrue(out.all("set-cookie").single().contains("Max-Age=0"))
         assertEquals("logged out", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
+        assertEquals("and forgotten", emptyMap<String, Long>(), store.saved)
     }
 
     @Test

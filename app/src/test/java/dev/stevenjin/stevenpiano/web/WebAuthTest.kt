@@ -15,7 +15,11 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.Collections
@@ -25,8 +29,11 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import kotlin.concurrent.thread
 
-/** The panel's PIN, sessions and login guard (the audit's point 3). */
+/** The panel's PIN, sessions and login guard (the audit's point 3); the sessions' file (v1.15 — M42). */
 class WebAuthTest {
+    @get:Rule
+    val tmp = TemporaryFolder()
+
     @Test
     fun `a PIN is six digits and nothing else`() {
         assertTrue(PinHash.isValid("123456"))
@@ -84,7 +91,7 @@ class WebAuthTest {
     }
 
     @Test
-    fun `sessions are random 32-byte tokens, at most ten, forgotten after a day unused`() {
+    fun `sessions are random 32-byte tokens, at most sixteen, forgotten after a year unused`() {
         var now = 1_000_000L
         val sessions = Sessions(clock = { now })
         val first = sessions.open()
@@ -94,20 +101,21 @@ class WebAuthTest {
         assertFalse(sessions.isValid(first.dropLast(1) + if (first.last() == 'A') "B" else "A"))
         assertFalse("not a token at all", sessions.isValid("../../etc/passwd"))
 
-        val more = (1..9).map { sessions.open() }
-        assertEquals(10, sessions.count())
+        val more = (1..15).map { sessions.open() }
+        assertEquals(16, sessions.count())
         now += 1_000
         sessions.isValid(more[0])   // used: the least recently used is now `first`
-        val eleventh = sessions.open()
-        assertEquals(10, sessions.count())
+        val seventeenth = sessions.open()
+        assertEquals(16, sessions.count())
         assertFalse("the least recently used went", sessions.isValid(first))
         assertTrue(sessions.isValid(more[0]))
-        assertTrue(sessions.isValid(eleventh))
+        assertTrue(sessions.isValid(seventeenth))
 
+        assertEquals(365 * 24 * 60 * 60 * 1000L, Sessions.IDLE_MS)
         now += Sessions.IDLE_MS - 1
-        assertTrue("used a moment ago", sessions.isValid(eleventh))
+        assertTrue("used a moment ago", sessions.isValid(seventeenth))
         now += Sessions.IDLE_MS
-        assertFalse("a day without a request", sessions.isValid(eleventh))
+        assertFalse("a year without a request", sessions.isValid(seventeenth))
         assertEquals(0, sessions.count())
     }
 
@@ -122,6 +130,106 @@ class WebAuthTest {
         sessions.closeAll()
         assertFalse(sessions.isValid(b))
         assertNotEquals("tokens never repeat", sessions.open(), sessions.open())
+    }
+
+    @Test
+    fun `a session outlives a restart of the app, and one a year unused does not (M42)`() {
+        val start = 1_700_000_000_000L
+        var now = start
+        val file = File(tmp.root, "web/sessions.json")
+        val before = Sessions(FileSessionStore(file), clock = { now })
+        val kept = before.open()
+        now += 1_000
+        val idle = before.open()
+        val text = file.readText()
+        assertTrue("the file holds the tokens' digests…", sha256(kept) in text && sha256(idle) in text)
+        assertFalse("…and never a token", kept in text || idle in text)
+
+        now += 30_000
+        assertTrue(before.isValid(kept))
+        assertEquals("a use within the minute is not written", start, FileSessionStore(file).load()[sha256(kept)])
+        now += 31_000
+        assertTrue(before.isValid(kept))
+        assertEquals("past the minute it is", now, FileSessionStore(file).load()[sha256(kept)])
+
+        val restarted = Sessions(FileSessionStore(file), clock = { now })   // the app starts again
+        assertEquals(2, restarted.count())
+        assertTrue("still signed in", restarted.isValid(kept))
+
+        now = start + 1_000 + Sessions.IDLE_MS   // a year after `idle` was last used
+        val yearOn = Sessions(FileSessionStore(file), clock = { now })
+        assertFalse("a year unused", yearOn.isValid(idle))
+        assertTrue("used since, so still remembered", yearOn.isValid(kept))
+        assertEquals(1, yearOn.count())
+    }
+
+    @Test
+    fun `the seventeenth session sends the least recently used away, from the file too (M42)`() {
+        var now = 1_700_000_000_000L
+        val file = File(tmp.root, "web/sessions.json")
+        val sessions = Sessions(FileSessionStore(file), clock = { now })
+        val tokens = (1..16).map {
+            now += 1_000
+            sessions.open()
+        }
+        now += 1_000
+        assertTrue(sessions.isValid(tokens[0]))   // used: tokens[1] is now the least recently used
+        val seventeenth = sessions.open()
+        val saved = FileSessionStore(file).load()
+        assertEquals(16, saved.size)
+        assertFalse("the least recently used went from the file", sha256(tokens[1]) in saved)
+        assertTrue(sha256(tokens[0]) in saved && sha256(seventeenth) in saved)
+
+        val restarted = Sessions(FileSessionStore(file), clock = { now })
+        assertEquals(16, restarted.count())
+        assertFalse(restarted.isValid(tokens[1]))
+        assertTrue(restarted.isValid(tokens[0]))
+        assertTrue(restarted.isValid(seventeenth))
+        restarted.open()
+        assertFalse("after a restart too, the least recently used goes first", restarted.isValid(tokens[2]))
+        assertTrue(restarted.isValid(tokens[3]))
+    }
+
+    @Test
+    fun `logging out takes a session out of the file, and closing all empties it (M42)`() {
+        val file = File(tmp.root, "web/sessions.json")
+        val sessions = Sessions(FileSessionStore(file))
+        val a = sessions.open()
+        val b = sessions.open()
+        sessions.close(a)
+        assertEquals(setOf(sha256(b)), FileSessionStore(file).load().keys)
+        sessions.closeAll()   // a new PIN, or the web panel turned off
+        assertEquals("{}", file.readText())
+        val restarted = Sessions(FileSessionStore(file))
+        assertFalse("nobody is signed in at the next start", restarted.isValid(a))
+        assertFalse(restarted.isValid(b))
+        assertEquals(0, restarted.count())
+    }
+
+    @Test
+    fun `a missing or corrupt file reads as no sessions (M42)`() {
+        val file = File(tmp.root, "web/sessions.json")
+        assertEquals("missing", emptyMap<String, Long>(), FileSessionStore(file).load())
+        val digest = "ab".repeat(32)
+        file.parentFile!!.mkdirs()
+        val corrupt = listOf(
+            "", "not json", "[]", "{", "{\"$digest\":\"1700000000000\"}", "{\"$digest\":1.5}", "{\"$digest\":null}",
+            "{\"$digest\":{\"at\":1}}", "{\"${digest.uppercase()}\":1}", "{\"$digest\":1,\"token\":2}",
+        )
+        for (text in corrupt) {
+            file.writeText(text)
+            assertEquals(text, emptyMap<String, Long>(), FileSessionStore(file).load())
+        }
+        file.writeText("{\"$digest\":1700000000000}" + " ".repeat(FileSessionStore.MAX_BYTES.toInt()))
+        assertEquals("larger than any table", emptyMap<String, Long>(), FileSessionStore(file).load())
+        file.writeText("{\"$digest\":1700000000000}")
+        assertEquals(mapOf(digest to 1_700_000_000_000L), FileSessionStore(file).load())
+
+        file.writeText("not json")
+        val sessions = Sessions(FileSessionStore(file))
+        assertEquals(0, sessions.count())
+        val token = sessions.open()
+        assertTrue("a corrupt file is written over whole", Sessions(FileSessionStore(file)).isValid(token))
     }
 
     @Test
@@ -271,4 +379,7 @@ class WebAuthTest {
         assertEquals(3, guard.keyCount())
         assertEquals(0L, guard.waitMs("10.0.0.1"))
     }
+
+    private fun sha256(token: String): String =
+        MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.US_ASCII)).joinToString("") { "%02x".format(it) }
 }

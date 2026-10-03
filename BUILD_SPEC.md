@@ -1,4 +1,4 @@
-<!-- ============================================================================
+<!-- =====================================================================
      Steven Piano - Android player for the self-playing acoustic piano
      Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
      Original author & creator: Steven Jin.
@@ -7618,3 +7618,36 @@ version bump, no signing.
   `BackdropContrastTest` (3: every hue 0–359 at saturation 1 through each veil ≥ 4.5:1, worst 5.7 paper, 8.6 ink, 5.1
   on black; the values), the setting's round trip; `DiagnosticsExporterTest` 49 → 50 lines, `WebApiTest`'s key set.
   1,592 → 1,601 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.
+=======
+# v1.15 — M42: sessions remembered
+
+Fable's design (the plan's M42; DESIGN.md › v1.5.1 — M18 › The PIN gate), Opus coding, one lean run in a worktree beside
+M41: `web/` only, no emulator, four new tests, no version bump, no signing. Steven chose Stay signed in: a device that
+has entered the PIN stays signed in for a year, across restarts of the app; a new device still needs the PIN (the
+panel's address is the one on the guests' poster).
+
+- **The table** (`web/WebAuth.kt`): `Sessions(store: SessionStore = SessionStore.NONE, …)`, `MAX_SESSIONS` 16 (was 10),
+  `IDLE_MS` 365 days (was one), the prune rules as before (the least recently used goes first; a time more than a year
+  ahead, the clock set back, is dropped). It reads the store once when made (stale entries dropped, the rest ordered by
+  last use, the newest 16 kept) and saves the whole table on `open`, on `close` of an open session, on `closeAll`, and
+  when `isValid` has moved a session's time more than `SAVE_AFTER_MS` (a minute) from what the store holds, so a page's
+  requests and the sockets' 4 s checks write at most once a minute per session.
+- **The file**: `SessionStore` (`load()`, `save(table)`: a token's digest → last used, epoch ms; `NONE` keeps nothing).
+  `FileSessionStore.under(filesDir)` is `files/web/sessions.json`, a JSON object of SHA-256 hex digests to whole
+  numbers, written whole through `sessions.json.part` (synced, then renamed over); `WebPanel.sessions` uses it. A write
+  that fails deletes the file (everyone enters the PIN again rather than an ended session coming back); a missing file,
+  one over 64 KB, or any key not 64 lower-case hex digits or value not a whole number reads as no sessions.
+- **The cookie**: `WebCookies.session` adds `Max-Age=31536000` (`SESSION_MAX_AGE_S`, `IDLE_MS` in seconds) after the
+  path; `HttpOnly`, `SameSite=Strict` and, over the relay, `Secure` kept; `endSession` unchanged. It is set at sign-in
+  and not renewed, so a browser keeps a session at most a year from its PIN; the tablet forgets one a year unused.
+  `closeAll` still runs on a new PIN (`WebPanel.setPin`) and when the panel turns off (`WebPanel.turnedOff`, from
+  `AppGraph.setWebEnabled(false)` and the service's `stopNow`); a restart of the app or the service ends nothing now.
+- **The gate**: "The six digits set on the tablet, in Piano › Web panel. Enter it once: this device stays signed in."
+  (`index.html`); nothing else in the panel changed. The relay, its gate and its limits are unchanged.
+- **Tests**: `WebAuthTest` (4: a session outlives a restart and one a year unused does not, a use inside the minute is
+  not written and one past it is; the seventeenth session takes the least recently used out of the file, and the order
+  holds after a restart; logging out and closing all take sessions out of the file; a missing or corrupt file reads as
+  none and is written over), its ten-and-a-day test now sixteen and a year; `WebServerTest`'s login sees
+  `Max-Age=31536000` and a digest alone in a `FakeSessionStore`, gone at logout; `WebServerRelayTest`'s two cookie
+  strings gain `Max-Age`. 1,592 → 1,596 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30
+  warnings, none in `web/`.
