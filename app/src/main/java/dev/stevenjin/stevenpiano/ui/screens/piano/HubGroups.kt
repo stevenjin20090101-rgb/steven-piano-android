@@ -27,7 +27,8 @@ data class HubGroup(val title: String, val rows: List<HubRow>)
  * The hub's groups, in order (DESIGN.md › v1.13 — M31b, decided by Steven from a preview): INSTRUMENTS
  * (what plays and what is played from), THE PIANO (the piano's own settings), PLAYING (how the app plays,
  * on the piano and on the tablet), SHARING (the web panel and its guests), THIS TABLET (the app on this
- * tablet: its look and resting screen, kiosk, updates, the library's artwork, help). A later feature adds
+ * tablet: System first (v1.18 — M50: the tablet, the piano and what runs), its look and resting screen, kiosk,
+ * updates, the library's artwork, help). A later feature adds
  * its page to [SettingsPage] and its row here, nowhere else; the search index ([SettingsIndex]) follows.
  */
 object HubGroups {
@@ -36,7 +37,7 @@ object HubGroups {
         HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Schedule)),
         HubGroup("Sharing", pages(SettingsPage.Remote, SettingsPage.Guests)),
-        HubGroup("This tablet", pages(SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help)),
+        HubGroup("This tablet", pages(SettingsPage.System, SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help)),
     )
 
     /** What the hub shows: a group with no rows yet shows nothing, not even its eyebrow. */

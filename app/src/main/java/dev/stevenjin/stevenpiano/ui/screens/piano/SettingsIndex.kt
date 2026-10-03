@@ -158,6 +158,7 @@ object SettingsIndex {
         SettingsPage.Firmware to listOf("version", "status"),
         SettingsPage.Remote to listOf("remote control", "web control", "browser"),
         SettingsPage.Guests to listOf("requests", "visitors"),
+        SettingsPage.System to listOf("diagnostics", "battery", "temperature", "memory", "running", "status"),
         SettingsPage.Display to listOf("theme", "look"),
         SettingsPage.Updates to listOf("upgrade", "new version"),
         SettingsPage.Artwork to listOf("Wikipedia", "portraits"),

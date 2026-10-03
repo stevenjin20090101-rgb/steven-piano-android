@@ -55,6 +55,7 @@ enum class SettingsPage(val key: String, val title: String, val piano: PianoPage
     Schedule("schedule", "Schedule", null),
     Remote("remote", "Web panel", null),
     Guests("guests", "Guests", null),
+    System("system", "System", null),
     Display("display", "Display", null),
     Kiosk("kiosk", "Kiosk", null),
     Updates("updates", "Updates", null),

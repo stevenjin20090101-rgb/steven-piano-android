@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -24,6 +25,8 @@ import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.diag.PianoDiag
+import dev.stevenjin.stevenpiano.diag.RunningNow
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
@@ -49,11 +52,16 @@ import dev.stevenjin.stevenpiano.service.FirmwareService
 import dev.stevenjin.stevenpiano.service.UpdateService
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.FirmwareActions
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SystemDay
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SystemNow
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.PosterPrint
 import dev.stevenjin.stevenpiano.web.WebStatus
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
 import dev.stevenjin.stevenpiano.web.relay.EnrolResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +69,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The Piano tab, its hub and its pages together (one instance for the tab's whole graph): the
@@ -337,6 +346,64 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
         PosterPrint.print(activity, url)
     }
 
+    // ---- System (v1.18 — M50) ------------------------------------------------------------------------
+
+    private val _system = MutableStateFlow<SystemNow?>(null)
+
+    /** The System page's figures and the hub's System row: the tablet's last reading and what runs; null before the first. */
+    val system: StateFlow<SystemNow?> = _system.asStateFlow()
+
+    private val _systemDay = MutableStateFlow<SystemDay?>(null)
+
+    /** The System page's day, the app's minute samples ([AppGraph.systemHistory]) as last read; null before the first read. */
+    val systemDay: StateFlow<SystemDay?> = _systemDay.asStateFlow()
+
+    private var systemRead: Job? = null
+
+    /**
+     * The tablet and what runs ([AppGraph.runningInputs], as the web panel's System page gathers them), read off the main
+     * thread: the page every 5 s, the hub's row once a minute, each only while it shows; one read at a time.
+     */
+    fun readSystem() {
+        if (systemRead?.isActive == true) return
+        systemRead = viewModelScope.launch {
+            try {
+                _system.value = withContext(Dispatchers.IO) {
+                    val at = System.currentTimeMillis()
+                    val reading = graph.systemProbe.read()
+                    val inputs = graph.runningInputs(at)
+                    SystemNow(reading, RunningNow.of(inputs), at, loading = inputs.player.loading)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "The System page couldn't read the tablet", e)
+            }
+        }
+    }
+
+    /** The day's samples as they stand (the page reads them as it opens, then once a minute). */
+    fun readSystemDay() {
+        _systemDay.value = SystemDay(graph.systemHistory.snapshot(), System.currentTimeMillis())
+    }
+
+    /**
+     * The piano's live facts asked again (`firmware/docs/BLE_DIAG.md`): only of Steven Piano, connected and answering, and at
+     * most once in 10 s whichever System page asks ([AppGraph.factsFloor]); the answers come in through [piano].
+     */
+    fun refreshPianoFacts() {
+        if (PianoDiag.of(instrumentKind.value, link.value, piano.value) == null) return
+        if (graph.factsFloor.take()) graph.pianoSettings.refreshFacts()
+    }
+
+    /** Find missing covers: the pieces whose album cover wasn't found are looked up again, in the app's scope. */
+    fun findMissingCovers() {
+        graph.appScope.launch { graph.artwork.lookAgainForCovers() }
+    }
+
+    /** Reconnect the piano: the player paused and the piano silenced, then the link made again; false during a firmware update. */
+    fun reconnectPiano(): Boolean = graph.reconnectPiano()
+
     /** Check now: asks the server whatever the switch says, in the app's scope so leaving the tab does not stop it. */
     fun checkNow() {
         graph.appScope.launch { graph.updateChecker.checkNow() }
@@ -369,6 +436,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     }
 
     private companion object {
+        const val TAG = "PianoTab"
         const val MAX_QUERY = 60
         const val STOP_TIMEOUT_MS = 5_000L
         const val SELECTED = "selectedPage"

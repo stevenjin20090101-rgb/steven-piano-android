@@ -11,6 +11,8 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
+import dev.stevenjin.stevenpiano.diag.Attention
+import dev.stevenjin.stevenpiano.diag.SystemReading
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
@@ -54,6 +56,8 @@ data class GroupSummaries(
     val updates: String = AUTOMATIC,
     val artwork: String = AUTOMATIC,
     val help: String = "",
+    /** System (v1.18 — M50): the battery and the temperature with "everything running", or what needs attention first. */
+    val system: String = UNKNOWN,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -68,6 +72,7 @@ data class GroupSummaries(
         SettingsPage.Schedule -> schedule
         SettingsPage.Remote -> remote
         SettingsPage.Guests -> guests
+        SettingsPage.System -> system
         SettingsPage.Display -> display
         SettingsPage.Kiosk -> kiosk
         SettingsPage.Updates -> updates
@@ -83,8 +88,9 @@ data class GroupSummaries(
          * Every row's value; [web] where the web panel listens; [firmwareUpdate] and [firmwareVersion]
          * (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule] when the next schedule
          * starts; [keyboard] the MIDI keyboard's state (v1.11 — M29); [instrument] the Instrument row's value
-         * ([instrumentLine]); [update] the app's updater; [version] the app's version (Help and about). Studio is a tab
-         * of its own since v1.12 (M30).
+         * ([instrumentLine]); [update] the app's updater; [version] the app's version (Help and about); [systemReading] the
+         * tablet's last reading and [attention] what needs attention now (System, v1.18 — M50). Studio is a tab of its own
+         * since v1.12 (M30).
          */
         fun from(
             piano: PianoState,
@@ -97,6 +103,8 @@ data class GroupSummaries(
             instrument: String = instrumentLine(InstrumentCopy.STEVEN_PIANO, NOT_CONNECTED),
             update: UpdateState = UpdateState.Idle,
             version: String = "",
+            systemReading: SystemReading? = null,
+            attention: List<Attention.Item> = emptyList(),
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -114,6 +122,7 @@ data class GroupSummaries(
             updates = updates(settings, update),
             artwork = artwork(settings),
             help = help(version),
+            system = system(systemReading, attention),
         )
 
         /** The Instrument row (v1.13): the instrument's name and its state, "Steven Piano · Connected". */
@@ -218,6 +227,20 @@ data class GroupSummaries(
 
         /** Library and artwork (v1.13): whether artwork is fetched by itself, "Automatic" or "Off". */
         fun artwork(settings: PianoSettings): String = if (settings.fetchArtworkAutomatically) AUTOMATIC else OFF
+
+        /**
+         * System (v1.18 — M50): "Battery 82% · 31 °C · everything running" (a part the tablet doesn't give left out), or, when
+         * something needs attention, the first thing that does ("The tablet is hot"); "—" before the tablet was read.
+         */
+        fun system(reading: SystemReading?, attention: List<Attention.Item>): String {
+            if (reading == null) return UNKNOWN
+            attention.firstOrNull()?.let { return it.text }
+            return listOfNotNull(
+                reading.battery.percent?.let { "Battery ${Format.percent(it)}" },
+                reading.battery.tempC?.let { "${it.roundToInt()} °C" },
+                "everything running",
+            ).joinToString(" · ").replaceFirstChar { it.uppercase() }
+        }
 
         /** Help and about (v1.13): the app's version, "Version 1.13". */
         fun help(version: String): String = if (version.isBlank()) "" else "Version $version"
