@@ -71,6 +71,8 @@ object WebAssets {
         "/views.js" to Asset("views.js", JS),
         // The Settings and System pages' styles (v1.18 — M47): linked by the page, filled by their modules' run.
         "/system.css" to Asset("system.css", CSS),
+        // The cover picker (v1.18 — M48): a module the page imports the first time a piece's menu asks for it.
+        "/covers.js" to Asset("covers.js", JS),
     )
 
     val PUBLIC: Map<String, Asset> = mapOf(

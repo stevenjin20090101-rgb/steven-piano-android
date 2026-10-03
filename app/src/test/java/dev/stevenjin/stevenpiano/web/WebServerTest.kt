@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.data.art.CoverChange
+import dev.stevenjin.stevenpiano.data.art.CoverSearch
 import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
 import dev.stevenjin.stevenpiano.studio.compose.Mood
@@ -103,7 +105,11 @@ class WebServerTest {
         val token = login(http)
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
-        assertEquals("the table's twenty-seven routes that change something (the schedules' three from 1.6.2, Studio's three from 1.7, the System page's two from 1.18)", 27, writes.size)
+        assertEquals(
+            "the table's thirty routes that change something (the schedules' three from 1.6.2, Studio's three from 1.7, the System page's two and the cover picker's three from 1.18)",
+            30,
+            writes.size,
+        )
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
@@ -1169,6 +1175,86 @@ class WebServerTest {
         if (origin != null) headers["Origin"] = origin
         if (cookie != null) headers["Cookie"] = "sp_session=$cookie"
         return http.send("GET", path, headers = headers, readTimeoutMs = 3_000)
+    }
+
+    @Test
+    fun `the cover picker's routes need a session and the header, check their bodies, and answer as the picker says (v1_18 M48)`() {
+        val (_, http) = start()
+        val routes = listOf(
+            "/api/covers/search" to """{"text":"Interstellar Zimmer"}""",
+            "/api/covers/choose" to """{"pieceId":1,"searchId":"s1","index":0}""",
+            "/api/covers/remove" to """{"pieceId":1}""",
+        )
+        for ((path, body) in routes) assertEquals("$path without a session", 401, http.api("POST", path, body).status)
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        backend.calls.clear()
+        for ((path, body) in routes) {
+            assertEquals("$path without the header", 403, http.api("POST", path, body, session = token, panel = false).status)
+            assertEquals("$path from another site", 403, http.api("POST", path, body, session = token, extra = mapOf("Origin" to "http://evil.example")).status)
+            assertEquals("$path is POST only", 405, http.get(path, cookie).status)
+        }
+
+        // Bodies are checked as every route's are, and a search is 2 to 80 characters once trimmed, with no control character.
+        val bad = listOf(
+            "/api/covers/search" to listOf(
+                "{}", "[]", """{"text":5}""", """{"text":" a "}""", """{"text":"${"x".repeat(81)}"}""", """{"text":"tab\there"}""",
+                """{"text":"interstellar","limit":50}""",
+            ),
+            "/api/covers/choose" to listOf(
+                "{}", """{"pieceId":0,"searchId":"s1","index":0}""", """{"pieceId":1.5,"searchId":"s1","index":0}""",
+                """{"pieceId":1,"index":0}""", """{"pieceId":1,"searchId":2,"index":0}""", """{"pieceId":1,"searchId":"s1","index":"0"}""",
+            ),
+            "/api/covers/remove" to listOf("{}", """{"pieceId":-1}""", """{"pieceId":"1"}""", """{"pieceId":1,"all":true}"""),
+        )
+        for ((path, bodies) in bad) {
+            for (body in bodies) {
+                val answer = http.api("POST", path, body, session = token)
+                assertEquals("$path $body", 400, answer.status)
+            }
+        }
+        assertEquals("an index past the twelve is not there", 404, http.api("POST", "/api/covers/choose", """{"pieceId":1,"searchId":"s1","index":12}""", session = token).status)
+        assertEquals("nothing refused reached the app", emptyList<String>(), backend.calls.toList())
+
+        // The search: its covers as data: pictures, never stored; asked for trimmed.
+        val found = http.api("POST", "/api/covers/search", """{"text":"  Interstellar Zimmer  "}""", session = token)
+        assertEquals(200, found.status)
+        assertEquals("no-store", found.header("cache-control"))
+        assertEquals("s1", found.json().getString("searchId"))
+        val result = found.json().getJSONArray("results").getJSONObject(0)
+        assertEquals(setOf("index", "album", "artist", "picture"), result.keys().asSequence().toSet())
+        assertEquals("data:image/jpeg;base64,/9j/4A==", result.getString("picture"))
+        assertEquals(listOf("cover search Interstellar Zimmer"), backend.calls.toList())
+
+        // The picker's floor, and Apple's hour-long stop with the time it lifts.
+        backend.coverSearchAnswer = CoverSearch.Wait(2_500)
+        val wait = http.api("POST", "/api/covers/search", """{"text":"interstellar"}""", session = token)
+        assertEquals(429, wait.status)
+        assertEquals("wait", wait.json().getString("error"))
+        assertEquals(2_500L, wait.json().getLong("retryAfterMs"))
+        assertEquals("3", wait.header("retry-after"))
+        backend.coverSearchAnswer = CoverSearch.Busy(1_800_000)
+        val busy = http.api("POST", "/api/covers/search", """{"text":"interstellar"}""", session = token)
+        assertEquals(503, busy.status)
+        assertEquals("busy", busy.json().getString("error"))
+        assertEquals(1_800_000L, busy.json().getLong("retryAfterMs"))
+        assertTrue("when it lifts, by the tablet's clock", busy.json().getLong("blockedUntil") > System.currentTimeMillis() + 1_700_000)
+
+        // A choice and a removal: 204, else the picker's word.
+        assertEquals(204, http.api("POST", "/api/covers/choose", """{"pieceId":1,"searchId":"s1","index":0}""", session = token).status)
+        assertEquals(204, http.api("POST", "/api/covers/remove", """{"pieceId":1}""", session = token).status)
+        backend.coverChangeAnswer = CoverChange.NotFound
+        val gone = http.api("POST", "/api/covers/choose", """{"pieceId":1,"searchId":"old","index":3}""", session = token)
+        assertEquals(404, gone.status)
+        assertEquals("not-found", gone.json().getString("error"))
+        backend.coverChangeAnswer = CoverChange.MadeHere
+        val madeHere = http.api("POST", "/api/covers/remove", """{"pieceId":2}""", session = token)
+        assertEquals(409, madeHere.status)
+        assertEquals("made-here", madeHere.json().getString("error"))
+        assertEquals(
+            listOf("cover choose 1 s1 0", "cover remove 1", "cover choose 1 old 3", "cover remove 2"),
+            backend.calls.filter { !it.startsWith("cover search") },
+        )
     }
 
     private companion object {

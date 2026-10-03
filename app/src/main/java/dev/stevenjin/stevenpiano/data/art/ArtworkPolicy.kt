@@ -40,6 +40,18 @@ object ArtworkPolicy {
     fun notesOf(row: ArtworkEntity?): ArtworkEntity? =
         row?.takeUnless { it.status == ArtworkStatus.OK && it.description == null && it.sourceUrl == null && it.sourceTitle == null }
 
-    /** [row] as [key]'s lookup sees it: a piece's notes through [notesOf], anything else as it is. */
-    fun recordOf(key: ArtKey, row: ArtworkEntity?): ArtworkEntity? = if (key is ArtKey.Piece) notesOf(row) else row
+    /**
+     * [row] as [key]'s lookup sees it: a piece's notes through [notesOf]; a cover chosen by hand ([chosenByHand], v1.18 —
+     * M48: one taken away in the web panel is recorded as not found) as found, so no lookup, forced or not, looks for it
+     * again or writes over it; anything else as it is.
+     */
+    fun recordOf(key: ArtKey, row: ArtworkEntity?): ArtworkEntity? = when {
+        key is ArtKey.Piece -> notesOf(row)
+        key is ArtKey.Cover && row != null && chosenByHand(row) -> row.copy(status = ArtworkStatus.OK)
+        else -> row
+    }
+
+    /** Whether a cover's lookup row says the person chose: "Change cover" on the tablet, or the web panel's cover picker. */
+    fun chosenByHand(row: ArtworkEntity?): Boolean =
+        row != null && (row.sourceTitle == ArtworkEntity.CHOSEN_HERE || row.description == ArtworkEntity.CHOSEN_IN_PANEL)
 }

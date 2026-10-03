@@ -944,6 +944,15 @@ class AppWebBackend(
             repeatMs = dev.stevenjin.stevenpiano.ui.PlaybackCopy.pianoRepeatMs(piano),
         )
     }
+
+    // ---- The cover picker (v1.18 — M48) -----------------------------------------------------------------------
+
+    override suspend fun coverSearch(text: String): dev.stevenjin.stevenpiano.data.art.CoverSearch = graph.artwork.coverPicker.search(text)
+
+    override suspend fun coverChoose(pieceId: Long, searchId: String, index: Int): dev.stevenjin.stevenpiano.data.art.CoverChange =
+        graph.artwork.coverPicker.choose(pieceId, searchId, index)
+
+    override suspend fun coverRemove(pieceId: Long): dev.stevenjin.stevenpiano.data.art.CoverChange = graph.artwork.coverPicker.remove(pieceId)
 }
 
 /** The piano's Full power setting, by its firmware name (v1.18 — M47b: the Settings page's line under Velocity). */

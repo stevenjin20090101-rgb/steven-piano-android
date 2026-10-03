@@ -60,5 +60,12 @@ data class ArtworkEntity(
 
         /** A cover row's [sourceTitle] when the person chose the cover ("Change cover"): no lookup ever replaces it. */
         const val CHOSEN_HERE = "Chosen on this tablet"
+
+        /**
+         * A cover row's [description] when the person chose the cover, or took it away, in the web panel's cover picker
+         * (v1.18 — M48). Its [sourceTitle] and [sourceUrl] stay the album's credit, so the piece sheet's "Cover: …" line
+         * reads as a found cover's; no lookup ever looks for that piece's cover again (`ArtworkPolicy.recordOf`).
+         */
+        const val CHOSEN_IN_PANEL = "Chosen in the web panel"
     }
 }

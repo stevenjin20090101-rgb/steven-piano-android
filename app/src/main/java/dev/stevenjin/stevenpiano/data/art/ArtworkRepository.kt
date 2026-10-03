@@ -42,6 +42,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -104,16 +105,20 @@ class ArtworkRepository(
         }
     }
 
-    /** Album covers from Apple's catalogue (v1.15 — M40): its searches 3.5 s apart, its images 1 s apart. */
-    private val covers = CoverFetcher(
+    /**
+     * Apple's catalogue as the lookup has it (v1.15 — M40: searches 3.5 s apart, images 1 s apart), its searches taken one
+     * at a time so the cover picker's wait their turn with the lookup's (v1.18 — M48).
+     */
+    private val apple = OneSearchAtATime(
         PacedAppleCatalog(
             catalog,
             searches = RequestPacer(SystemClock::elapsedRealtime, CoverFetcher.SEARCH_GAP_MS),
             images = RequestPacer(SystemClock::elapsedRealtime, CoverFetcher.IMAGE_GAP_MS),
         ),
-        coverStore,
-        SystemClock::elapsedRealtime,
     )
+
+    /** Album covers from Apple's catalogue (v1.15 — M40): its searches 3.5 s apart, its images 1 s apart. */
+    private val covers = CoverFetcher(apple, coverStore, SystemClock::elapsedRealtime)
 
     private val worker = ArtworkWorker(
         store = dao,
@@ -321,13 +326,15 @@ class ArtworkRepository(
      * into the piece's row (its notes, their source and their status kept, so a Wikipedia credit stays; a new `fetchedAt`,
      * so every screen and the web panel read it afresh), the old file gone when it had another name, and [record] (the
      * lookup's row, `cover:<id>`, v1.15 — M40) written with it. [unlessCovered] (a lookup): nothing is kept when the piece
-     * has a cover of its own by now. True when kept; null when [unlessCovered] found one; false when it could not be kept.
+     * has a cover of its own by now, or its cover was chosen by hand ([ArtworkPolicy.chosenByHand], v1.18 — M48: taken
+     * away in the panel). True when kept; null when [unlessCovered] found one; false when it could not be kept.
      */
     private suspend fun keepCover(pieceId: Long, image: ByteArray, record: ArtworkEntity?, unlessCovered: Boolean = false): Boolean? = readOr(false) {
         writing.withLock {
             val key = ArtworkEntity.forPiece(pieceId)
             val row = dao.get(key)
-            if (unlessCovered && row?.imagePath != null) return@withLock null
+            // v1.18 — M48: nor when the person took the cover away in the panel while this lookup was under way.
+            if (unlessCovered && (row?.imagePath != null || ArtworkPolicy.chosenByHand(dao.get(ArtworkEntity.forCover(pieceId))))) return@withLock null
             val path = withContext(io) {
                 try {
                     files.write(key, image)
@@ -453,4 +460,84 @@ class ArtworkRepository(
         if (!coversWanted()) return@readOr 0
         worker.requestAll(library.coverRetries().map { ArtKey.Cover(it.id, it.title, it.composerShort, it.genre == Genres.CLASSICAL) }, force = true)
     }
+
+    // ---- The cover picker (v1.18 — M48) ---------------------------------------------------------------------
+
+    /** What the web panel's cover picker keeps here: whether a piece was made here, a cover chosen, a cover taken away. */
+    private val pickedCovers = object : PickedCovers {
+        override suspend fun madeHere(pieceId: Long): Boolean? = readOr<Boolean?>(null) {
+            library.piece(pieceId)?.let { it.genre != Genres.CLASSICAL && it.genre != Genres.MODERN }
+        }
+
+        override suspend fun keepChosen(pieceId: Long, image: ByteArray, sourceUrl: String?, sourceTitle: String): Boolean {
+            if (!withContext(io) { BitmapCache.isImage(image) }) return false
+            val since = System.currentTimeMillis()
+            val record = ArtworkEntity(
+                ArtworkEntity.forCover(pieceId), description = ArtworkEntity.CHOSEN_IN_PANEL, sourceUrl = sourceUrl, sourceTitle = sourceTitle,
+                fetchedAt = 0, status = ArtworkStatus.OK,
+            )
+            return (keepCover(pieceId, image, record) == true).also { if (it) shown(pieceId, since) }
+        }
+
+        override suspend fun takeAway(pieceId: Long): Boolean {
+            val since = System.currentTimeMillis()
+            return dropCover(pieceId).also { if (it) shown(pieceId, since) }
+        }
+    }
+
+    /**
+     * Returns once the rows every screen and the panel's reads share hold piece [pieceId]'s cover lookup as written at
+     * [since] or later (Room tells the flow a moment after the write), [SHOWN_MS] at most: the panel's 204 means the
+     * piece's next read already has its new art.
+     */
+    private suspend fun shown(pieceId: Long, since: Long) {
+        val key = ArtworkEntity.forCover(pieceId)
+        withTimeoutOrNull(SHOWN_MS) { rows.filterNotNull().first { (it[key]?.fetchedAt ?: Long.MIN_VALUE) >= since } }
+    }
+
+    /**
+     * The web panel's cover picker (v1.18 — M48, [CoverPicker]): its searches through [apple], in the lookup's turn and
+     * pacing; its pictures and the cover chosen straight from Apple's image hosts through the same client and its checks
+     * (four at a time, outside the lookup's image pacing); Apple's hour-long stop shared with the lookup.
+     */
+    val coverPicker: CoverPicker = CoverPicker(
+        api = object : AppleCatalogApi {
+            override suspend fun search(term: String, limit: Int) = apple.search(term, limit)
+
+            override suspend fun download(url: String, maxBytes: Int) = catalog.download(url, maxBytes)
+        },
+        store = pickedCovers,
+        now = SystemClock::elapsedRealtime,
+        blockedFor = covers::blockedFor,
+        stop = covers::stop,
+    )
+
+    /**
+     * Piece [pieceId]'s own cover goes (v1.18 — M48: the panel's "Remove this piece's cover"), in one step under the write
+     * lock: its row's picture cleared (the row gone when it held the cover alone; notes and their credit stay), its lookup
+     * recorded as not found and chosen in the panel ([ArtworkEntity.CHOSEN_IN_PANEL]), so the composer's portrait or the
+     * roll card shows and no lookup brings a cover back ([ArtworkPolicy.recordOf]), and its file deleted. False when it
+     * could not be written.
+     */
+    private suspend fun dropCover(pieceId: Long): Boolean = readOr(false) {
+        writing.withLock {
+            val key = ArtworkEntity.forPiece(pieceId)
+            val row = dao.get(key)
+            when {
+                row == null -> Unit
+                ArtworkPolicy.notesOf(row) == null -> dao.delete(key)   // the row held the cover alone
+                else -> dao.upsert(row.copy(imagePath = null))
+            }
+            val lookup = ArtworkEntity(
+                ArtworkEntity.forCover(pieceId), description = ArtworkEntity.CHOSEN_IN_PANEL, fetchedAt = System.currentTimeMillis(),
+                status = ArtworkStatus.NOT_FOUND,
+            )
+            dao.upsert(lookup)
+            row?.imagePath?.let { path -> withContext(io) { files.delete(path) } }
+        }
+        true
+    }
 }
+
+/** How long the cover picker's choice or removal waits for the shared rows to show it (v1.18 — M48). */
+private const val SHOWN_MS = 2_000L

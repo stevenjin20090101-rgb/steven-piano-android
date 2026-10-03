@@ -216,6 +216,18 @@ interface WebBackend {
      * player, with what the connected piano says of them (its Full power, its repeat period).
      */
     suspend fun settings(): WebSettings
+
+    /**
+     * The cover picker (v1.18 — M48, `data.art.CoverPicker`): Apple's catalogue searched by hand for [text] (as typed;
+     * the picker trims it and holds it to 2–80 characters), one search in 4 s whichever panel asks.
+     */
+    suspend fun coverSearch(text: String): dev.stevenjin.stevenpiano.data.art.CoverSearch
+
+    /** Piece [pieceId]'s cover becomes result [index] of search [searchId], chosen by hand. */
+    suspend fun coverChoose(pieceId: Long, searchId: String, index: Int): dev.stevenjin.stevenpiano.data.art.CoverChange
+
+    /** Piece [pieceId]'s own cover goes, and no lookup brings one back. */
+    suspend fun coverRemove(pieceId: Long): dev.stevenjin.stevenpiano.data.art.CoverChange
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
