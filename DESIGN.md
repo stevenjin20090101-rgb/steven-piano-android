@@ -1719,6 +1719,7 @@ is release 1.7.1.
 ## Art and notes
 
 On the chosen canvas (true black, or the app's own ink or paper), and nothing else on it:
+*(v1.15 — M41 retires "nothing else on it" and "never a faded backdrop": the album's colours now drift behind Art and notes.)*
 
 - **The art**, large and sharp, never a faded backdrop: the composer's portrait, else the piece's roll
   card, mounted as every art surface is (the elevated surface inside a hairline, the card corners); in
@@ -1762,6 +1763,7 @@ fades with the screen and takes part in its shift. The tabs keep their one-line 
 Every resting screen, whatever it shows, steps 4 dp round a small square once a minute, never
 animated, as only kiosk mode's rest did before; the byline, the art, the words and the dot step
 together.
+*(v1.15 — M41: the screen is no longer still; behind Art and notes the album's colours drift while a piece plays, without the step, and hold still while it comes or goes.)*
 
 ## Motion
 
@@ -2697,3 +2699,40 @@ Fable, built by Opus in one lean run. It reverses v1.10.1's "no album covers" (D
   by hand, or drawn, is never replaced by a lookup.
 - **The credit.** About: "Album covers from Apple's iTunes Search API." The piece sheet, under the notes' credit: "Cover:
   album · artist", linking to the track on Apple Music, or "Cover chosen on this tablet".
+
+# v1.15 — M41: the album-colour backdrop
+
+Steven chose (2026-10-02, after a mock) Apple Music's Now Playing backdrop: the playing piece's art colours drifting
+behind the player, full strength and moving while a piece plays, with a switch to turn the colour off and on. Designed
+by Fable, built by Opus in one lean run. It overrides v1.7.1's "nothing else on the canvas", "never a faded backdrop"
+and "never animated" for Art and notes, retired in place above.
+
+- **The look.** Four soft discs of the art's colours, each fading from its colour to nothing over a radius of 60 % of
+  the pane's shorter side, drifting on slow paths (a turn in 20, 22.5, 24 and 26 s, each its own), centred in the lower
+  three quarters. No blur: the gradient is the soft shape. The colours are the art's own (the piece's cover, else its
+  composer's portrait): four hues kept apart, their saturation lifted a third; the lightness is the appearance's (45 %
+  on paper, 32 % on ink), so the words read whatever the art. Grey art gives none: an engraving, a black-and-white
+  photograph, a roll card, a monogram. Most composer portraits are grey, so the backdrop shows mostly for pieces with a
+  colour cover.
+- **Where.** Behind **Now playing** (the phone's, and the tablet's Now playing tab), under its header and the tab bar
+  too; behind the **tablet's now-playing panel**; and on the **resting screen** behind Art and notes (Paper roll keeps
+  its own faded portrait). The **web panel**'s Now playing has it as well, from a sample of the art it shows.
+- **The veil and the words.** A veil of the surface over the discs: 55 % on paper, 62 % on ink; on the resting
+  screen's black, black at 35 % over the words' side alone, so the art's surroundings keep the full colours. Over the
+  backdrop every word is in the **primary colour**, the eyebrows, the times and "Sent to piano" included: through the
+  veil only the primary keeps 4.5:1 over every hue (worst 5.7:1 on paper, 8.6:1 on ink, 5.1:1 on black). The score and
+  the roll keep their opaque cards, and the art its frame; the colours show around them, under the title, the gaps,
+  the transport and the tempo row.
+- **Motion.** It moves only while a piece **plays**, the screen is in sight and the app not resting beneath the resting
+  screen; still when paused and under reduced motion. A new piece's colours cross-fade (480 ms; 1,200 ms at rest, the
+  resting screen's own pace; a cut under reduced motion). On the resting screen it holds still while the screen fades,
+  and it takes no burn-in step (soft shapes have no edge); the words and the art keep theirs. Nothing loops by itself but
+  the aura and, while a piece plays, the backdrop.
+- **When it is gone.** High contrast text or reduced transparency, Artwork in black and white, or the switch off: no
+  backdrop at all, and every screen looks as before.
+- **The bars.** No blur on every frame: over the moving colours the header and the tab bar are the surface at the bar's
+  72 % fill, so the colours show through faintly, and the header's words take the content colour. A short screen
+  scrolled beneath its header still blurs, as before.
+- **The switch.** Piano › Display › **Album colours behind the player** (on), after Artwork in black and white: "The
+  album's colours drift behind the player while playing". The same switch is **Album colours** at the foot of Now
+  playing's View menu, one tap from the player. Search finds it by backdrop, colours, album and Apple Music.

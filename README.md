@@ -90,6 +90,14 @@ on the tablet*). Made by Steven Jin. Version 1.14.
   notes, or the **score**, with tempo, scrubbing, previous and next. Over the
   paper roll the scrubber and the transport float on glass above the notes just
   played, never over the tracker bar or the keys.
+- **Album colours** (1.15): behind Now playing, the tablet's now-playing panel,
+  the resting screen and the web panel's Now playing, the playing piece's art
+  colours drift slowly as soft shapes, as Apple Music does, while it plays (still
+  when paused or with animations off), under a veil that keeps every word
+  readable. Grey art (most composers' portraits) gives none, so it shows mostly
+  for pieces with a colour cover. **Piano › Display › Album colours behind the
+  player** or **Album colours** in Now playing's View menu turns it off; it is
+  never shown in black and white or with *High contrast text*.
 - **A pause before each piece**: two seconds of silence before every piece starts
   (**Piano › Playback › Pause before each piece**: off, or half seconds up to
   5 s). Meanwhile the play button already reads pause, the time stays at 0:00,
@@ -107,7 +115,8 @@ on the tablet*). Made by Steven Jin. Version 1.14.
   composer's), the art beside the words when the screen is wider than tall and
   above them when it is taller; the live dot at the foot and the byline, "Player
   piano" over "Made by Steven Jin", at the top right; on true black (or on the
-  app's own ink or paper: **Background**). **What it shows › Paper roll**
+  app's own ink or paper: **Background**), the album's colours drifting behind
+  while the piece plays (1.15). **What it shows › Paper roll**
   keeps the earlier display instead: the portrait faint behind the title and the
   paper roll over its keyboard. A new piece cross-fades in. No controls: any
   touch, or Back, fades it away and brings the app back as it was, and does
@@ -249,8 +258,9 @@ on the tablet*). Made by Steven Jin. Version 1.14.
   **Schedule**: timed play, see *Schedules*), **SHARING** (**Web panel**: the
   panel, its PIN, *Also on Wi-Fi* and the panel over the internet; **Guests**: the
   guests' switches and the poster) and **THIS TABLET** (**Display**: appearance,
-  artwork in black and white and the **resting screen**: after a minute, its
-  background and what it shows; **Kiosk**; **Updates**: checking by itself, *Check
+  artwork in black and white, album colours behind the player and the **resting
+  screen**: after a minute, its background and what it shows; **Kiosk**;
+  **Updates**: checking by itself, *Check
   for app updates* and a release on offer; **Library and artwork**: fetching
   artwork, for every composer too, and Steven's library; **Help and about**: Share
   diagnostics and the credits). Each row says in a few words what its page holds

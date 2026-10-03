@@ -7560,3 +7560,61 @@ bump, no signing.
   and a two-letter country; nothing about the person.
 - **Tests**: `CoverMatchTest` (6), `AppleCatalogTest` (4); `DiagnosticsExporterTest`'s line count 48 → 49. 1,582 → 1,592
   unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.
+
+# v1.15 — M41: the album-colour backdrop
+
+Fable's design (DESIGN.md › v1.15 — M41), Opus coding, one lean run on `main`: no emulator, two new test classes, no
+version bump, no signing.
+
+- **The palette** (`data/art/ArtPalette.kt`, pure): `artPalette(pixels, width, height): ArtPalette?`, `data class
+  ArtPalette(hues, saturations)`, exactly four. A 4-bit RGB histogram (4,096 bins, each read as its pixels' average);
+  pixels under alpha 128 or with HSL lightness outside 0.08–0.92 skipped; score = count × (0.3 + saturation), ties by
+  bin; greedy picks at least 25° apart in hue or 0.25 in saturation; saturation × 1.35, at most 1; fewer than four
+  padded by the first hue + 30°, − 30°, + 60°; null when the best bin's chroma is under 0.12. `ArtPaletteRules` holds
+  the numbers. `ArtworkRepository.palette(row)` reads the `ArtSize.Row` (128 px) decode's pixels on
+  `Dispatchers.Default` and keeps the result in a 32-entry `LruCache` by `imagePath@fetchedAt` (a grey picture's none
+  too; a picture that can't be read is not kept); `cachedPalette(row)` for the first frame.
+  `ui/components/ArtPaletteState.kt` `rememberArtPalette(pieceId, composerKey)`: the piece's own row with a picture,
+  else the composer's (the order `PieceArt` draws), through `produceState` keyed by the row's path and version, so a
+  new piece keeps the last colours until its own are read.
+- **The values** (`ui/theme/Backdrop.kt`, the one place): `Backdrop.PaperLightness` 0.45, `InkLightness` 0.32,
+  `PaperVeil` 0.55, `InkVeil` 0.62, `BlackWordsVeil` 0.35, `Radius` 0.6, `PeriodsMs` 20,000 / 22,500 / 24,000 / 26,000,
+  `veil(dark)`; `discColour(hue, saturation, dark)`; `hsl()` moved here from `StudioCover` (which imports it, still
+  `StrictMath`). The contrast proof needed no veil raised.
+- **The node** (`ui/components/ArtBackdrop.kt`): `ArtBackdrop(palette, playing, modifier, veil, resting, fadeMs,
+  veilArea)`, a `Spacer` with `clipToBounds()` (its own layer) and one `drawWithCache`: four radial-gradient brushes
+  about the origin (colour → nothing in five stops), built once per size and palette; per frame `translate(x, y) {
+  drawCircle(brush) }` for each disc on an ellipse about its place (x 0.30/0.70/0.45/0.60 of the width ± 0.25, y
+  0.50/0.58/0.66/0.62 of the height ± 0.22), then `drawRect(surface.copy(alpha = veil))`, or over `veilArea` alone
+  with 48 dp gradient feathers at its inner edges. The loop is `Aura.kt`'s shape: a `LaunchedEffect` of
+  `withFrameNanos` advancing four `mutableFloatStateOf` phases read only in the draw phase, while something is drawn,
+  `playing`, not reduced motion, lifecycle ≥ RESUMED and, unless `resting`, `LocalIdleState.current?.idle != true`. A
+  new palette cross-fades (`BackdropFade`: the old at 1 − p, the new at p) over `Motion.timed(480)`, or 1,200 ms
+  (`RestingMotion.PIECE_MS`) on the resting screen; a cut under reduced motion.
+- **The gates** (`rememberBackdrop(pieceId, composerKey, on)`): `albumBackdrop`, not `LocalArtworkMonochrome`, neither
+  `increasedContrast` nor `reducedTransparency` (`rememberGlassAccessibility()`), and a palette; non-null is the
+  screens' `backdropShown`. `OnBackdrop(shown)` provides `LocalTertiary` and `LocalSecondaryText` as `onSurface` over it
+  (one composition either way); `ConnectionLine`, `TabletSoundNote`, `StudioReviewBanner` and the resting screen's
+  description read `secondaryText()` so they follow.
+- **Where**: `NowPlayingScreen` (a `Box` in `GlassHeaderPane`'s content: the backdrop `matchParentSize()`, then the
+  `BoxWithConstraints`), `NowPlayingPanel` (the same round its column), `DisplayScreen` (first in the canvas under Art
+  and notes, `playing && resting`; on black `BlackWordsVeil` over `WordsPlace.side`, the words' column reported by
+  `onGloballyPositioned` against the canvas's `onPlaced` coordinates: from the column to the edge beside the art, from
+  its top down under it). `PieceView` keeps its frame clock.
+- **The bars**: `GlassSurface`/`rememberGlassLook` `translucent` paints `surface.copy(alpha = fill.alpha)` in the
+  non-blurring glass branch (the solid fallback stays opaque); `GlassHeaderPane(translucent)` passes it to `HeaderBar`
+  (its text in the content colour) and keys the header slot on it; `BottomBar` passes it on Now playing.
+- **The switch**: `Settings.albumBackdrop` (key `albumBackdrop`, true), `setAlbumBackdrop`, `PianoViewModel`,
+  `PageRows.ALBUM_BACKDROP` (`display.backdrop`), `SettingNotes.ALBUM_BACKDROP`, `DisplayPage`, the View menu's
+  `MenuSwitch("Album colours")`, diagnostics after `standbyShows`, the web state's `albumBackdrop`.
+- **The web panel**: `index.html` `#now-backdrop` (four `div.bd` and `div.bd-veil`, first in `.now-main`); `app.js`
+  `backdropFrom(box)` and `artPalette(img)` (the same rule over a 32 × 32 canvas sample), `--bd1..--bd4` through
+  `style.setProperty`, `.has-backdrop` and `.playing` classes, `body.no-backdrop`; `style.css` `--bd-l` and `--bd-veil`
+  per appearance, `bd-sway` (`translate`) and `bd-rise` (`transform`) keyframes, paused unless playing, `animation:
+  none` under reduced motion, hidden under `body.mono`, `body.no-backdrop`, reduced transparency and more contrast.
+- **Greps**: `Color(0x` outside `ui/theme`: none. `BlurEffect`: still the aura's glow alone; `Modifier.blur`: none.
+  `dev.chrisbanes`: `Glass.kt` alone.
+- **Tests**: `ArtPaletteTest` (5: two colours, grey art, spacing, the boost's clamp, determinism),
+  `BackdropContrastTest` (3: every hue 0–359 at saturation 1 through each veil ≥ 4.5:1, worst 5.7 paper, 8.6 ink, 5.1
+  on black; the values), the setting's round trip; `DiagnosticsExporterTest` 49 → 50 lines, `WebApiTest`'s key set.
+  1,592 → 1,601 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.
