@@ -82,9 +82,10 @@ on the tablet*). Made by Steven Jin. Version 1.14.
   the order back. The lock screen and the system media controls show the queue
   and both modes.
 - **Artwork and notes**: composers' portraits and two-sentence blurbs, and each
-  piece's notes (tap the title on Now playing), from Wikipedia: the app talks to
-  `en.wikipedia.org` and `upload.wikimedia.org` and nothing else (see below).
-  Pieces without a portrait get a card drawn from their own first seconds.
+  piece's notes (tap the title on Now playing), from Wikipedia (`en.wikipedia.org`,
+  `upload.wikimedia.org`); each piece's album cover from Apple's catalogue
+  (`itunes.apple.com`, `*.mzstatic.com`), or one you choose (see below). Pieces
+  without a cover or a portrait get a card drawn from their own first seconds.
 - **Now playing**: the pianola paper roll (the default), Synthesia-style falling
   notes, or the **score**, with tempo, scrubbing, previous and next. Over the
   paper roll the scrubber and the transport float on glass above the notes just
@@ -332,10 +333,10 @@ Sheeran, Hans Zimmer…) are looked up by their name, then as "*name* (band)",
 "(singer)", "(musician)" and "(composer)": only a page about a band or a performer
 is taken, so a namesake's photograph never appears. A joint name ("Lady Gaga &
 Bradley Cooper") whose own page finds nothing is looked up by its first name; five
-lookups an artist at most. No album covers (they are not free): an artist without a
-free photograph, or a company, keeps the roll cards below. For all this the app talks
-to **two hosts and no others**: `en.wikipedia.org` (page summaries and search) and
-`upload.wikimedia.org` (the portraits); a redirect anywhere else is refused.
+lookups an artist at most. An artist without a free photograph, or a company, keeps the
+roll cards below. For all this the app talks to **two hosts**: `en.wikipedia.org` (page
+summaries and search) and `upload.wikimedia.org` (the portraits), and, for album covers,
+Apple's two (below); a redirect anywhere else is refused.
 (The only other network use is the app's own updates and the piano's firmware
 releases, below, Studio's models when you download them, *Studio*, and Steven's library, *Steven's library*.) What it sends is a page title or a search made from the library's own
 composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),
@@ -352,6 +353,21 @@ location, nothing about what you play.
   shows a mosaic of their pieces' first seconds drawn as a paper roll, and a piece its
   own; a piece whose file can't be drawn shows its title's first letter.
 - **Piano › Display › Artwork in black and white** shows the portraits in black and white.
+
+**Album covers** (1.15): each Classical and Modern piece is looked up once in Apple's
+catalogue (the iTunes Search API, `itunes.apple.com`, its images on `*.mzstatic.com`) by
+its title and its artist, and a cover is kept only when both clearly match (every word of
+the artist in the result's artist, or, for a composer, in its album or track; the title
+equal, one inside the other, or 70 % of its longer words), else the portrait or the roll
+card stays. What goes to Apple is the title, the artist's name and the device's two-letter
+country; nothing about you. Searches go 3.5 s apart and images 1 s apart, after the
+composers (Modern first, newest first; the piece playing first of all); Apple saying "too
+many" stops them for an hour. The cover is the piece's own everywhere (rows, the sheet, Now
+playing, the resting screen, playlists, the web panel), credited on the sheet ("Cover: album
+· artist", linking to Apple Music) and in About. **Piano › Library and artwork › Album
+covers** (on; off with *Fetch artwork automatically*) stops the lookups, and covers found
+stay. A piece's menu › **Change cover** picks a photo instead (the kiosk PIN first): no
+lookup replaces it, nor a cover Studio or a recording drew.
 
 ## Updates
 
@@ -1437,7 +1453,9 @@ The full audit, every finding and what was done about it, is in
 
 - **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
   `upload.wikimedia.org`, carrying page titles and searches made from the library's
-  own names, and, for updates of the app and of the piano's firmware and for Studio's
+  own names; with *Album covers* on, to `itunes.apple.com` (a search: a piece's title and
+  artist, and the device's two-letter country) and Apple's image hosts `*.mzstatic.com`;
+  and, for updates of the app and of the piano's firmware and for Studio's
   models, the piano sound and Steven's library (only when you download one), to `raw.githubusercontent.com` (the four
   lists: the app's `latest.json`, the firmware's, `models.json` and `library.json`), `github.com` (the
   release downloads of this repository, its releases `models` and `library` among them, and of the

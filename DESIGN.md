@@ -2675,3 +2675,25 @@ Modern. Designed by Fable (apple-design lenses; the plan's decisions by multiple
   search box ("Search pieces") shows when there are more than 20 pieces and filters the rows already on the phone; a
   list shows 200 rows, then **Show more**. Request, the five-minute rule and approval are unchanged. The Modern list
   is worked out when the library changes, without pictures, and kept: anyone with the QR code can ask for it.
+
+# v1.15 — M40: album covers
+
+Steven chose (2026-10-02, multiple choice) real album covers for the pieces, and a cover chosen by hand. Designed by
+Fable, built by Opus in one lean run. It reverses v1.10.1's "no album covers" (D5) on purpose, with a credit and a switch.
+
+- **The source.** Apple's iTunes Search API, one search a piece, no key: every Classical and Modern piece, never one made
+  here (Studio's and the recordings' keep their drawn covers). Searches 3.5 s apart, images 1 s apart; Apple's 403 or 429
+  stops the lookups for an hour.
+- **The match.** The first result with artwork whose artist and track clearly fit: every word of the artist (an artist's
+  whole name, a composer's surname, which the album or the track may name instead), and the title's core (folded, without
+  trailing brackets or a " - …" tail) equal to the track's, one holding the other, or 70 % of its longer words in it.
+  Otherwise the composer's portrait or the roll card stays, as before.
+- **Where it shows.** The cover is the piece's own: its row (every row now shows the piece's own art), the piece sheet,
+  Now playing, the mini player, the resting screen, playlist tiles and composer mosaics, and the web panel.
+- **The switch.** Piano › Library and artwork › **Album covers** (on), under Fetch artwork automatically and off with it:
+  "Looks each piece up by its title and artist in Apple's catalogue. Composers' portraits and notes still come from
+  Wikipedia." Off, nothing is looked up; covers already found stay.
+- **By hand.** A piece's menu, after Move to …: **Change cover** (the photo picker, the kiosk PIN first). A cover chosen
+  by hand, or drawn, is never replaced by a lookup.
+- **The credit.** About: "Album covers from Apple's iTunes Search API." The piece sheet, under the notes' credit: "Cover:
+  album · artist", linking to the track on Apple Music, or "Cover chosen on this tablet".

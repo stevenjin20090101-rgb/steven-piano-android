@@ -29,7 +29,9 @@ Folder: `Player Piano/android/` (its own git repo; never pushed without Steven's
   `rememberLauncherForActivityResult`. Network (from v1.2, M11): exactly two hosts,
   `en.wikipedia.org` and `upload.wikimedia.org`, for composers' portraits and notes; what is
   sent is page titles and search terms made from the library's own names, nothing about the
-  person (see `v1.2 — M11 › Network policy`). From v1.4, for the app's own updates only,
+  person (see `v1.2 — M11 › Network policy`). From v1.15 (M40), with Album covers on,
+  `itunes.apple.com` and Apple's image hosts `*.mzstatic.com` for pieces' album covers (see
+  `v1.15 — M40`). From v1.4, for the app's own updates only,
   `raw.githubusercontent.com`, `github.com` (this repository's release downloads) and GitHub's
   download hosts `objects.githubusercontent.com` and `release-assets.githubusercontent.com`;
   nothing is sent but the request itself (see `v1.4 › Network policy`).
@@ -7514,3 +7516,47 @@ Run 2, on `main` beside run 3's worktree: `ui/**`, `settings/Settings.kt` and on
   without `genre`, a channel with and without); `FakeWebBackend` follows the interface (its pieces Classical, its
   Modern list from its Modern pieces). 1,577 → 1,580 unit tests (12 skipped), none failing. `lintDebug`: 0 errors,
   the same 30 warnings, none in `web/` or `assets/web/`.
+
+# v1.15 — M40: album covers
+
+Fable's design (DESIGN.md › v1.15 — M40), Opus coding, one lean run on `main`: no emulator, two new tests, no version
+bump, no signing.
+
+- **The API** (`net/AppleCatalog.kt`): `AppleCatalogApi { search(term, limit): List<CatalogTrack>; download(url,
+  maxBytes): ByteArray? }`; `AppleCatalog` over `HttpFetch` as `WikipediaClient` is (the app has no OkHttp): exactly
+  `https://itunes.apple.com/search?term=<URLEncoder, spaces "+">&media=music&entity=song&limit=10&country=<the device's
+  two letters, else US>`; 404/410 → none; 403/429 → `AppleBusyException`; other non-2xx → `IOException`; JSON capped at
+  256 KB (`AppleJson`, `org.json`), images at 6 MB. `CatalogTrack(trackName, artistName, collectionName, artworkUrl100,
+  trackViewUrl, kind)`; `coverUrl` is `AppleUrls.cover`: HTTPS on a host ending `.mzstatic.com` (user info, backslash,
+  other ports and lookalikes refused), the last segment's `100x100bb` → `600x600bb`. `AppleUrls.pageLink` keeps
+  `trackViewUrl` only as HTTPS on `music.apple.com` or `itunes.apple.com`, checked again when opened (`CoverLink`).
+- **The match** (`data/art/CoverMatch.kt`, pure): `core`, `words` (runs of letters and digits), `term`, `pick`,
+  `trackFits`; "contains" at word boundaries; the 70 % counts title words of 3 or more characters found as substrings of
+  the track's core. No artist, a name that is no person's (`ArtworkFetcher.pageName`) or an empty core: no request.
+- **The keys**: `ArtKey.Cover(id, title, artist = composerShort, classical)` → `cover:<id>` (`ArtworkEntity.forCover`):
+  the lookup's status, `fetchedAt` and credit (`sourceUrl` = `trackViewUrl`, `sourceTitle` = "album · artist", or
+  `ArtworkEntity.CHOSEN_HERE`). The picture is the `piece:<id>` row's `imagePath`, merged in by
+  `ArtworkRepository.keepCover` under the write lock (the notes, their Wikipedia source and their status kept);
+  `setPieceCover` (Studio, recordings) and `setPieceCoverFromUri` ("Change cover", `PhotoImport`) use it too.
+  `ArtworkPolicy.notesOf`: a piece row found with no text and no source holds only a cover, and its notes stay due (the
+  worker through `recordOf`, `PieceNotesChoice.of`, `StandbyText.asksForOwnNotes`). The worker's writes merge (keep
+  `imagePath`; never overwrite a row found while its fetch was under way) under the repository's lock; `forget` drops
+  `cover:<id>` with its piece.
+- **The pacer**: `PacedAppleCatalog`, `RequestPacer`s of its own, searches 3,500 ms and images 1,000 ms apart.
+  `CoverFetcher`: `Skipped` while covers are off or the piece has a picture; `CoverStore.keep` gives `Saved`, or
+  `Skipped` when a cover came meanwhile, or NOT_FOUND when the bytes are no image. A 403 or 429 records FAILED and blocks
+  an hour (`Fetched.Busy`): the worker drops the background covers only (Wikimedia's long wait now drops only Wikipedia's
+  keys); `due()` counts no covers meanwhile. Wikipedia's background keys are queued ahead of covers.
+- **Queueing**: `requestDue(force)` (was `requestComposers`): the composers, then, with `fetchArtworkAutomatically &&
+  albumCovers`, `PieceDao.coverCandidates()` (genre 1 or 2, no picture on `piece:<id>`, no `cover:<id>` row or a FAILED
+  one; Modern first, newest first), never forced. `due()` (was `composersDue`) counts them. `requestCover(id)` (first in
+  line) from `DisplayScreen.PieceAtRest`, `NowPlayingScreen` and `NowPlayingPanel`.
+- **The switch and the screens**: `Settings.albumCovers` (key `albumCovers`, true; diagnostics after
+  `fetchArtworkAutomatically`); `PageRows.ALBUM_COVERS` on Library and artwork (enabled with automatic fetching, checked
+  only with both); `ArtworkCopy.ALBUM_COVERS`, `APPLE_CREDIT`, `COVER_CHOSEN`, `cover()`; `AboutRow`; the sheet's
+  `CoverCredit`. `PieceRow` uses `PieceArt` for every piece; `PieceActions.changeCover` behind `gate.run`.
+- **The hosts**: `en.wikipedia.org` and `upload.wikimedia.org`, and with Album covers on `itunes.apple.com` and
+  `*.mzstatic.com` (the updates' GitHub hosts unchanged). What goes to Apple: a piece's title core and its artist's name,
+  and a two-letter country; nothing about the person.
+- **Tests**: `CoverMatchTest` (6), `AppleCatalogTest` (4); `DiagnosticsExporterTest`'s line count 48 → 49. 1,582 → 1,592
+  unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.

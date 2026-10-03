@@ -2008,3 +2008,25 @@ relay is unchanged. Where each is held, and the test that holds it:
 - A signed-in browser can still keep the layout thread busy for six layouts every half minute, each up to 8 s.
 - The notes answer for a 200,000-note file is about 2.2 MB per revision, sent raw over the relay.
 - Not run through the real relay or on the school tablet yet.
+
+## 1.15 — album covers (pre-audit notes, M40)
+
+- **New hosts.** With Album covers on (and Fetch artwork automatically), the app reaches `itunes.apple.com` (the iTunes
+  Search API) and Apple's image hosts, the names under `mzstatic.com`. `AppleUrls.allowed` refuses anything else on every
+  hop: HTTPS only, port 443, no user info, no backslash, and a lookalike (`is1-ssl.mzstatic.com.evil.example`,
+  `evilmzstatic.com`) fails; redirects are followed by hand through the same check (`HttpFetch`). Wikipedia's allow-list
+  is unchanged.
+- **What is sent.** A search: a piece's title (folded, without trailing brackets or a dash's tail) and its artist's name as
+  the library shows it, URL-encoded, and a two-letter country from the device's locale (else US); the app's User-Agent.
+  No identifier, nothing about the person or what they play.
+- **What comes back.** The JSON is capped at 256 KB before `org.json` reads it (an unreadable or too deep body is a failed
+  lookup); an image at 6 MB, kept only when Android reads it as an image (`BitmapCache.isImage`), stored as the other art
+  is (`files/art/`, a sanitised name). The artwork URL is rebuilt over HTTPS on its own host, without query or fragment.
+- **The link.** `trackViewUrl` is kept only as an HTTPS page on `music.apple.com` or `itunes.apple.com` with no port or
+  user info (`AppleUrls.pageLink`), checked again when the sheet opens it as a browsable VIEW; otherwise the credit is
+  plain text.
+- **Pacing and refusal.** Searches 3.5 s apart, images 1 s apart, one request at a time with the rest of the artwork; a
+  403 or 429 records that piece as failed (retried a day later) and stops every lookup for an hour. Nothing runs offline
+  or with either switch off.
+- **By hand.** Change cover uses the photo picker (no storage permission), copies and re-encodes the photo at once
+  (`PhotoImport`, a JPEG at most 1024 px), behind the kiosk PIN; no lookup ever replaces it.
