@@ -66,3 +66,16 @@ val Tabular = TextStyle(fontFeatureSettings = "tnum")
 // The eyebrow a third larger, beside displayLarge in display mode on wide screens: 16 sp, its
 // line height and tracking in proportion (+1.4 sp at 12 sp is +1.87 sp at 16).
 val EyebrowLarge = PianoTypography.labelSmall.copy(fontSize = 16.sp, lineHeight = 21.sp, letterSpacing = 1.87.sp)
+
+// Now playing over the cover (DESIGN.md › v1.18 — M49): the title beside or under the large cover, bold and tight;
+// the score's strip's smaller one; and the composer under either, semibold, sentence case, at a size that reads as
+// large text over the backdrop's lighter top.
+val NowPlayingTitle = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight.Bold,
+    fontSize = 40.sp, lineHeight = 44.sp, letterSpacing = (-1).sp,
+)
+val NowPlayingStripTitle = NowPlayingTitle.copy(fontSize = 30.sp, lineHeight = 34.sp, letterSpacing = (-0.6).sp)
+val NowPlayingComposer = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight.SemiBold,
+    fontSize = 19.sp, lineHeight = 25.sp, letterSpacing = 0.sp,
+)

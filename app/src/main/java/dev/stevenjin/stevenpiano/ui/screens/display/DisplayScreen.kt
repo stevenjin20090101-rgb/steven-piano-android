@@ -42,19 +42,14 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -90,10 +85,10 @@ import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.components.ArtBackdrop
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.Immersive
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
-import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
 import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.QrTile
 import dev.stevenjin.stevenpiano.ui.components.rememberArtworkRow
@@ -131,7 +126,8 @@ private val MARGIN_TOP_AND_FOOT = 16.dp
  * [ArtAndNotes]): the piece's art large and sharp (the composer's portrait, else the piece's roll
  * card; black and white when the person chose that), its title, the composer (and the channel) as
  * an eyebrow, and a few lines about it ([StandbyText]); a new piece cross-fades in; behind them, with
- * Album colours on, the art's colours drift while the piece plays ([ArtBackdrop], v1.15 — M41). **Paper roll**
+ * Album colours on, the cover itself edge to edge, blurred, turning while the piece plays and a little darker than on
+ * Now playing so a still screen stays gentle ([ArtBackdrop], v1.18 — M49), the words on it light ([Immersive]). **Paper roll**
  * ([PaperRoll], v1.5's): the portrait faint behind the title and the roll over its keyboard. On
  * both, the byline at the top right ([RestingByline]) and the live dot at the foot on the left; no
  * controls. The whole screen steps a few dp once a minute ([rememberDrift]), so hours of the same
@@ -175,13 +171,11 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
         onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
     }
     val black = settings.standbyCanvas == StandbyCanvas.BLACK
-    val words = remember { WordsPlace() }
     DisplayTheme(black = black, darkTheme = dark) {
         Box(
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
-                .onPlaced { words.canvas = it }
                 .then(if (resting) Modifier.leaveOnTouch(piece?.title, onLeave) else Modifier),
         ) {
             val drift = rememberDrift()
@@ -189,50 +183,25 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
             if (piece != null && settings.standbyShows == StandbyShows.PAPER_ROLL) {
                 PaperRoll(piece, state, connected, playing, channel, insets, drift)
             } else {
-                // The album's colours behind the art and the words (v1.15 — M41), still while the screen fades away and
-                // without the burn-in step (soft shapes have no edge); on black, veiled behind the words alone.
+                // The cover behind the art and the words, edge to edge (v1.18 — M49), deeper than on Now playing, still
+                // while the screen fades away and without the burn-in step (a blurred picture has no edge). Album colours
+                // off: the canvas as Standby canvas says.
                 val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
                 ArtBackdrop(
                     backdrop,
                     playing = playing && resting,
                     modifier = Modifier.matchParentSize(),
-                    veil = if (black) Backdrop.BlackWordsVeil else Backdrop.veil(dark),
                     resting = true,
                     fadeMs = RestingMotion.PIECE_MS,
-                    veilArea = if (black) words.side else null,
+                    deeper = Backdrop.RestingDeeper,
                 )
-                OnBackdrop(backdrop != null) {
-                    ArtAndNotes(piece, connected, playing, channel, insets, drift, words)
+                Immersive(backdrop != null) {
+                    ArtAndNotes(piece, connected, playing, channel, insets, drift)
                 }
             }
         }
     }
 }
-
-/**
- * Where the words stand on the canvas (v1.15 — M41): on the black canvas the backdrop's veil covers their side alone,
- * from their column to the screen's edge (beside the art), or from their top down (under it). Placed as they are laid
- * out, the burn-in step and all.
- */
-private class WordsPlace {
-    var canvas: LayoutCoordinates? = null
-    val side = mutableStateOf(Rect.Zero)
-
-    fun report(words: LayoutCoordinates) {
-        val canvas = canvas?.takeIf { it.isAttached && words.isAttached } ?: return
-        val box = canvas.localBoundingBoxOf(words)
-        val width = canvas.size.width.toFloat()
-        val height = canvas.size.height.toFloat()
-        side.value = when {
-            box.center.x > width * BESIDE_SHARE -> Rect(box.left, 0f, width, height)          // beside the art, after it
-            box.center.x < width * (1f - BESIDE_SHARE) -> Rect(0f, 0f, box.right, height)   // beside it, right to left
-            else -> Rect(0f, box.top, width, height)                                        // under it
-        }
-    }
-}
-
-/** Words whose middle stands past this share of the width stand beside the art. */
-private const val BESIDE_SHARE = 0.55f
 
 /**
  * While resting: any touch leaves, and nothing beneath sees it (the whole gesture is consumed);
@@ -296,7 +265,7 @@ private class Held<T>(var value: T)
  * kiosk mode with nothing loaded, the request page's code there instead, or nothing.
  */
 @Composable
-private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean, channel: String?, insets: PaddingValues, drift: State<IntOffset>, words: WordsPlace) {
+private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean, channel: String?, insets: PaddingValues, drift: State<IntOffset>) {
     val reduced = rememberReducedMotion()
     val twoPane = LocalAppFrame.current.twoPane
     // The byline's two lines and a gap, kept clear above the piece and, so it stands in the middle, below it.
@@ -322,7 +291,7 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
             ) { shown ->
                 BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val room = DpSize(maxWidth, maxHeight)
-                    if (shown != null) PieceAtRest(shown, channel, twoPane, window, room, words) else RequestAtRest(twoPane)
+                    if (shown != null) PieceAtRest(shown, channel, twoPane, window, room) else RequestAtRest(twoPane)
                 }
             }
             RestingByline(Modifier.align(Alignment.TopEnd))
@@ -356,7 +325,7 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
  * M40) is asked for first in line, when Album covers is on and it has none.
  */
 @Composable
-private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, window: DpSize, room: DpSize, place: WordsPlace) {
+private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, window: DpSize, room: DpSize) {
     val graph = LocalContext.current.graph
     val settings by graph.settings.collectAsStateWithLifecycle()
     val fetchAutomatically = settings.fetchArtworkAutomatically
@@ -380,7 +349,7 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
         Row(verticalAlignment = Alignment.CenterVertically) {
             PieceArt(piece.pieceId, piece.composerKey, ArtSize.Full, Modifier.size(art), title = piece.title)
             Spacer(Modifier.width(RestingLayout.sideGap(art)))
-            Column(Modifier.width(words).onGloballyPositioned(place::report)) {
+            Column(Modifier.width(words)) {
                 Words(piece.title, eyebrow, notes, twoPane, TextAlign.Start)
             }
         }
@@ -391,8 +360,7 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
             Column(
                 Modifier
                     .width(words)
-                    .weight(1f, fill = false)
-                    .onGloballyPositioned(place::report),
+                    .weight(1f, fill = false),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Words(piece.title, eyebrow, notes, twoPane, TextAlign.Center)
@@ -430,7 +398,7 @@ private fun ColumnScope.Words(title: String, eyebrow: String, notes: StandbyText
                 .padding(top = if (wide) 16.dp else 12.dp)
                 .weight(1f, fill = false),
             style = MaterialTheme.typography.bodyLarge,
-            color = secondaryText(),   // the primary colour over the album-colour backdrop (v1.15 — M41)
+            color = secondaryText(),   // the light words over the cover's backdrop (v1.18 — M49)
             maxLines = StandbyText.maxLines(wide),
             overflow = TextOverflow.Ellipsis,
             textAlign = align,

@@ -177,7 +177,9 @@ mini player above it on phones; see that section.)*
 ### Now playing — the signature screen
 - Title in Display, composer line in Eyebrow beneath it. *(v1.16 — M43: the small art beside the
   title, 72 dp (56 dp on phones), opens the piece sheet as the title does; the title keeps two lines,
-  three on a phone under 360 dp.)*
+  three on a phone under 360 dp.)* *(v1.18 — M49 retires the small art: the cover is large, 400 dp
+  beside the roll, 84 dp in the score's strip, as wide as a phone; the title 40 sp bold, the composer
+  19 sp under it. See v1.18 — M49.)*
 - **Note canvas**: fills the middle. Background is `surfaceElevated`. 84 lanes for
   C1–B7 (the piano's real range), black-key lanes narrower and slightly darker.
   Upcoming notes are drawn in `contentSecondary`; the moment a note crosses the line it
@@ -2716,7 +2718,8 @@ and "never animated" for Art and notes, retired in place above.
   composer's portrait): four hues kept apart, their saturation lifted a third; the lightness is the appearance's (45 %
   on paper, 32 % on ink), so the words read whatever the art. Grey art gives none: an engraving, a black-and-white
   photograph, a roll card, a monogram. Most composer portraits are grey, so the backdrop shows mostly for pieces with a
-  colour cover.
+  colour cover. *(Retired by v1.18 — M49: no discs, no picked hues, no lightness of the appearance's; the backdrop is
+  the cover itself, blurred, and grey art gives one too.)*
 - **Where.** Behind **Now playing** (the phone's, and the tablet's Now playing tab), under its header and the tab bar
   too; behind the **tablet's now-playing panel**; and on the **resting screen** behind Art and notes (Paper roll keeps
   its own faded portrait). The **web panel**'s Now playing has it as well, from a sample of the art it shows.
@@ -2725,7 +2728,9 @@ and "never animated" for Art and notes, retired in place above.
   backdrop every word is in the **primary colour**, the eyebrows, the times and "Sent to piano" included: through the
   veil only the primary keeps 4.5:1 over every hue (worst 5.7:1 on paper, 8.6:1 on ink, 5.1:1 on black). The score and
   the roll keep their opaque cards, and the art its frame; the colours show around them, under the title, the gaps,
-  the transport and the tempo row.
+  the transport and the tempo row. *(Retired by v1.18 — M49: no veil of the surface and no black words' veil; black
+  over the picture as deep as its brightest part needs, the words the ink scheme's primary in both appearances, the
+  roll without its card.)*
 - **Motion.** It moves only while a piece **plays**, the screen is in sight and the app not resting beneath the resting
   screen; still when paused and under reduced motion. A new piece's colours cross-fade (480 ms; 1,200 ms at rest, the
   resting screen's own pace; a cut under reduced motion). On the resting screen it holds still while the screen fades,
@@ -2735,7 +2740,8 @@ and "never animated" for Art and notes, retired in place above.
   backdrop at all, and every screen looks as before.
 - **The bars.** No blur on every frame: over the moving colours the header and the tab bar are the surface at the bar's
   72 % fill, so the colours show through faintly, and the header's words take the content colour. A short screen
-  scrolled beneath its header still blurs, as before.
+  scrolled beneath its header still blurs, as before. *(Retired by v1.18 — M49: the bars over the backdrop are black at
+  26 % with a light edge, and nothing scrolls beneath the header there.)*
 - **The switch.** Piano › Display › **Album colours behind the player** (on), after Artwork in black and white: "The
   album's colours drift behind the player while playing". The same switch is **Album colours** at the foot of Now
   playing's View menu, one tap from the player. Search finds it by backdrop, colours, album and Apple Music.
@@ -2806,3 +2812,49 @@ aside, and, when nothing fits, taking the album the artist names ("Stay" by "Int
 the work ("Skyrim Theme" by Jeremy Soule) finds four of the other eleven and four of five classical misses on the demo
 tablet, and changes no cover found today except for an earlier result. A lookup that found nothing before this version
 is tried once more.
+
+# v1.18 — M49: Now playing over the cover
+
+Steven asked (2026-10-03) for the colours behind the player to be "more punchy … like Apple Music, perfectly matched to
+the album art", and for the art to take most of the screen. Designed by Fable and shown to him as mocks, built by Opus
+in one lean run. It retires in place v1.15 — M41's discs, lightness, veils and bars, and v1.16 — M43's small art.
+
+- **The picture.** The art the piece shows (its own cover, else its composer's portrait; a roll card or a monogram
+  gives none), its row-size decode cropped square and brought to 48 × 48, blurred (three passes of a box blur of radius
+  3) and its saturation raised 1.6 ×, made once a picture, off the main thread, and kept with its dimming. Grey art
+  gives a grey backdrop.
+- **The dimming.** Black over the picture so the light words keep 4.5:1 over its brightest part: of its sixteen
+  12 × 12 blocks, the brightest's relative luminance L gives `dim = max(0.18, 1 − (0.14 / L)^(1 / 2.2))` (a white
+  cover 0.59, a pure yellow 0.58, a red, a grey or a dark one 0.18). It runs from `dim − 0.06` at the top to
+  `dim + 0.10` at the foot.
+- **The drawing.** The picture three times, edge to edge behind the whole screen, under the header and the rail or the
+  tab bar: 1.05 × the screen's diagonal, turning once in 60 s; 1.5 ×, at 60 %, once in 84 s the other way, set off
+  (12 %, −6 %); 0.7 ×, at 38 %, towards the top right, once in 48 s. They turn only while a piece plays, the screen is
+  in sight and motion is not reduced. A new piece's picture cross-fades over the old one, whole (480 ms; 1,200 ms at
+  rest; a cut under reduced motion). No blur effect: the picture is soft already.
+- **Immersive.** While the backdrop shows, in both appearances, every word and glyph on it is the ink scheme's primary
+  (nothing secondary or tertiary); the play circle is filled in it with its glyph in the ink surface. The header, the
+  rail or the tab bar while Now playing is the route, and the foot's capsules are black at 26 % with a light edge and
+  no blur of their own; nothing scrolls beneath the header there. The roll has no card: its notes light (the right
+  hand's 92 %, the left hand's 50 %, filled; with Hand colours, the ink scheme's hand colours), a sounding note and key
+  the sounding yellow, one light line where the notes land, no lanes; the keyboard keeps its keys, white light and black
+  dark. The score keeps its opaque sheet in the app's own appearance, as do every menu, popover, sheet and dialog. The
+  live dot carries a 1.5 dp light ring, so the red reads on a red cover.
+- **The layouts** (wide frames as before). *The notes without the score*: a column at the left, the cover up to 400 dp
+  (24 dp corners, a deep soft shadow; smaller where the height is short, the words then as narrow as it), the title
+  (40 sp bold, two lines), the composer (19 sp), the scrubber and the transport; the roll fills the rest at the right,
+  its keyboard at its foot. *The score with the notes*, or alone: a strip at the top (the cover at 84 dp, the title at
+  30 sp, the composer; the transport at its end, no scrubber: a bar of the score seeks) over the score's sheet and the
+  roll with the divider as before. *Art only* (new, the View menu's fourth Show choice): the cover as large as fits,
+  at most 56 % of the height and 520 dp, centred, the words and the controls beneath it. *Phones*, and screens too
+  short for these: one scroll, the cover as wide as the screen less its margins (at most 360 dp), the words, the
+  scrubber and the transport, then the views. The foot's row (Tempo, the tablet's speaker, "Sent to piano") is three
+  glass capsules. The title and the cover open the piece sheet. Without a backdrop the same layouts on the plain
+  surface, the roll on its card.
+- **The now-playing panel** beside the Library keeps its layout, with the same backdrop within its pane and the
+  immersive colours; there its controls stand under the strip, not on glass over its history.
+- **The resting screen.** Art and notes shows the same backdrop edge to edge, its black 0.10 deeper so a still screen
+  stays gentle, the words light; the black canvas's words veil is gone. Album colours off: the canvas as Standby canvas
+  says. Paper roll is unchanged.
+- **When it is gone.** Album colours off, Artwork in black and white, high contrast text or reduced transparency, or no
+  picture: no backdrop, and every screen as v1.17 had it but for the layouts.

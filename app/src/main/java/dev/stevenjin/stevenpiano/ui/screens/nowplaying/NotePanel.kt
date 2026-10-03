@@ -32,10 +32,12 @@ import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.components.AppAppearance
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
+import dev.stevenjin.stevenpiano.ui.components.LocalImmersive
 import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.TRACKER_FROM_BOTTOM
@@ -65,6 +67,28 @@ internal fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Un
 }
 
 /**
+ * The score's card, an opaque sheet in the app's own appearance wherever it stands, over the cover's backdrop too
+ * ([AppAppearance], v1.18 — M49).
+ */
+@Composable
+internal fun ScoreSheet(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    AppAppearance { Panel(modifier, content) }
+}
+
+/**
+ * The roll's card: [Panel], except over the cover's backdrop ([LocalImmersive], v1.18 — M49), where the roll has no
+ * card and its notes stand on the backdrop. The same composition either way.
+ */
+@Composable
+internal fun RollPanel(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val card = !LocalImmersive.current
+    Column(
+        if (card) modifier.clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant) else modifier,
+        content = content,
+    )
+}
+
+/**
  * A roll's card with the transport floating on glass over its history (DESIGN.md › v1.5 — M16):
  * the card ([panel]: the canvas, the hairline, the keyboard strip) is the glass's source, and the
  * glass is its sibling, laid across the card's width with its bottom on the strip's top edge
@@ -83,7 +107,7 @@ internal fun GlassTransportPanel(
 ) {
     val source = rememberHazeState()
     Box(modifier) {
-        Panel(Modifier.matchParentSize().hazeSource(source), panel)
+        RollPanel(Modifier.matchParentSize().hazeSource(source), panel)
         CompositionLocalProvider(LocalHazeState provides source) {
             GlassSurface(
                 Modifier
@@ -128,7 +152,8 @@ internal val PANEL_GAP = 8.dp
  * The scrubber over the transport, as Now playing and the now-playing panel show them, on glass or
  * solid: through [playback] (which keeps the playback service running), Shuffle and Repeat on the
  * player. [onSeek] is the scrubber's seek; [onMoved] follows anything else that moves a paused
- * piece (Previous), so the picture catches up.
+ * piece (Previous), so the picture catches up. Without [scrubber] the transport alone (the score's
+ * strip, v1.18 — M49); [inset] is the scrubber's room at its sides.
  */
 @Composable
 internal fun ColumnScope.TransportControls(
@@ -140,14 +165,18 @@ internal fun ColumnScope.TransportControls(
     playback: PlaybackStarter,
     onSeek: (Long) -> Unit,
     onMoved: () -> Unit,
+    scrubber: Boolean = true,
+    inset: Dp = 16.dp,
 ) {
-    Scrubber(
-        piece.durationMicros,
-        frame,
-        roll,
-        onSeek = onSeek,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
+    if (scrubber) {
+        Scrubber(
+            piece.durationMicros,
+            frame,
+            roll,
+            onSeek = onSeek,
+            modifier = Modifier.padding(horizontal = inset, vertical = 4.dp),
+        )
+    }
     TransportBar(
         playing = state.status == PlaybackStatus.Playing,
         hasNext = state.queue.hasNext,

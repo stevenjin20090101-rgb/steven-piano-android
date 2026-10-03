@@ -91,6 +91,8 @@ import dev.stevenjin.stevenpiano.ui.components.GlassEdge
 import dev.stevenjin.stevenpiano.ui.components.GlassHidden
 import dev.stevenjin.stevenpiano.ui.components.GlassShown
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
+import dev.stevenjin.stevenpiano.ui.components.Immersive
+import dev.stevenjin.stevenpiano.ui.components.LocalImmersive
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.HazeState
 import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
@@ -118,6 +120,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import dev.stevenjin.stevenpiano.ui.theme.Backdrop
 import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
@@ -222,7 +225,7 @@ fun PianoNavHost(
                 .watchTouches(onTouch),
         ) {
             RailFrame(
-                rail = if (frame.rail) ({ TabRail(current, select) }) else null,
+                rail = if (frame.rail) ({ TabRail(current, select, settings.albumBackdrop) }) else null,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background),
@@ -389,8 +392,8 @@ private enum class FrameSlot { Rail, Content }
  * player whenever a piece is loaded or loading (not on Now playing itself, which is the full
  * player), a hairline between them, or while a piece loads the moving hairline. The mini player
  * grows in from the bar and gives way into it over 200 ms (a cut when motion is reduced); the
- * floating padding follows it. Over Now playing's album colours (v1.15 — M41) it is the surface at
- * the bar's fill, so they show through it without a blur on every frame.
+ * floating padding follows it. Over Now playing's cover (v1.18 — M49) it is black glass with light words
+ * ([Immersive]), so the backdrop shows through it without a blur on every frame.
  */
 @Composable
 private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: PlaybackStarter, albumBackdrop: Boolean, onOpenNowPlaying: () -> Unit) {
@@ -402,19 +405,21 @@ private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: Playb
     val lists = current == Route.Library || current == Route.Piano
     val playing = state.piece?.takeIf { current == Route.NowPlaying }
     val backdrop = rememberBackdrop(playing?.pieceId, playing?.composerKey, albumBackdrop) != null
-    GlassSurface(Modifier.fillMaxWidth(), blur = lists, band = if (lists) GlassShown else GlassHidden, translucent = backdrop) {
-        Column {
-            AnimatedVisibility(
-                visible = !frame.twoPane && state.miniPlayerShown && current != Route.NowPlaying,
-                enter = if (reduced) EnterTransition.None else MiniPlayerMotion.enter,
-                exit = if (reduced) ExitTransition.None else MiniPlayerMotion.exit,
-            ) {
-                Column {
-                    MiniPlayer(state, onOpen = onOpenNowPlaying, onPlayPause = playback::togglePlayPause, onNext = playback::next)
-                    if (state.loading) ProgressHairline(null) else HairlineDivider()
+    Immersive(backdrop) {
+        GlassSurface(Modifier.fillMaxWidth(), blur = lists, band = if (lists) GlassShown else GlassHidden) {
+            Column {
+                AnimatedVisibility(
+                    visible = !frame.twoPane && state.miniPlayerShown && current != Route.NowPlaying,
+                    enter = if (reduced) EnterTransition.None else MiniPlayerMotion.enter,
+                    exit = if (reduced) ExitTransition.None else MiniPlayerMotion.exit,
+                ) {
+                    Column {
+                        MiniPlayer(state, onOpen = onOpenNowPlaying, onPlayPause = playback::togglePlayPause, onNext = playback::next)
+                        if (state.loading) ProgressHairline(null) else HairlineDivider()
+                    }
                 }
+                TabBar(current, onSelect)
             }
-            TabBar(current, onSelect)
         }
     }
 }
@@ -437,7 +442,7 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
     val colors = NavigationBarItemDefaults.colors(
         selectedIconColor = tones.selected,
         selectedTextColor = tones.selected,
-        indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+        indicatorColor = tones.pill,
         unselectedIconColor = tones.unselectedIcon,
         unselectedTextColor = tones.unselectedText,
     )
@@ -465,17 +470,21 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
  * Medium and expanded widths: the same five glyphs and labels in a rail on the left, labels
  * always shown, on glass whose end edge (a hairline and the specular line) sets it off from the
  * content beside it. Every screen keeps clear of the rail, so it has the glass's look without
- * blurring (see [GlassSurface]). Labels scale up to 1.5x.
+ * blurring (see [GlassSurface]). Labels scale up to 1.5x. While Now playing shows the cover's backdrop (v1.18 — M49,
+ * [albumBackdrop]) it reaches under the rail, and the rail is black glass with light words ([Immersive]).
  */
 @Composable
-private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
+private fun TabRail(current: Route, onSelect: (Route) -> Unit, albumBackdrop: Boolean) {
+    val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
+    val playing = state.piece?.takeIf { current == Route.NowPlaying }
+    val backdrop = rememberBackdrop(playing?.pieceId, playing?.composerKey, albumBackdrop) != null
     // Every screen keeps clear of the rail (the floating padding's start), so nothing passes beneath it.
-    GlassSurface(Modifier.fillMaxHeight(), edge = GlassEdge.End, blur = false) {
+    Immersive(backdrop) { GlassSurface(Modifier.fillMaxHeight(), edge = GlassEdge.End, blur = false) {
         val tones = tabTones()
         val colors = NavigationRailItemDefaults.colors(
             selectedIconColor = tones.selected,
             selectedTextColor = tones.selected,
-            indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+            indicatorColor = tones.pill,
             unselectedIconColor = tones.unselectedIcon,
             unselectedTextColor = tones.unselectedText,
         )
@@ -497,22 +506,24 @@ private fun TabRail(current: Route, onSelect: (Route) -> Unit) {
                 }
             }
         }
-    }
+    } }
 }
 
-/** The bar's and the rail's colours: the chosen tab in the content colour on its pill, the others secondary. */
-private class TabTones(val selected: Color, val unselectedIcon: Color, val unselectedText: Color)
+/** The bar's and the rail's colours: the chosen tab in the content colour on its [pill], the others secondary. */
+private class TabTones(val selected: Color, val unselectedIcon: Color, val unselectedText: Color, val pill: Color)
 
 /**
  * On glass the labels are all the content colour (text on glass is primary: GlassTokensTest), and
  * the chosen tab is told by its pill and its brighter glyph; on the solid surface, today's
- * secondary labels.
+ * secondary labels. Over the cover's backdrop (v1.18 — M49) every glyph and label is the light words, and the pill is
+ * the light words at 18 % ([Backdrop.Pill]).
  */
 @Composable
 private fun tabTones(): TabTones {
     val primary = MaterialTheme.colorScheme.onSurface
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    return TabTones(primary, secondary, if (LocalOnGlass.current) primary else secondary)
+    val pill = if (LocalImmersive.current) Backdrop.Pill else MaterialTheme.colorScheme.surfaceVariant
+    return TabTones(primary, secondary, if (LocalOnGlass.current) primary else secondary, pill)
 }
 
 /**

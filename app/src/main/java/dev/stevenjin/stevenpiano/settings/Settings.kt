@@ -130,6 +130,8 @@ data class PianoSettings(
      */
     val notesSplitStacked: Float? = null,
     val notesSplitSide: Float? = null,
+    /** Now playing's Art only on wide frames (v1.18 — M49): neither the score nor the notes, the cover and its controls alone. */
+    val notesArtOnly: Boolean = false,
     /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
     val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
     /** The transport's Shuffle, remembered across launches. */
@@ -167,7 +169,8 @@ data class PianoSettings(
     val standbyShows: StandbyShows = StandbyShows.ART_AND_NOTES,
     /**
      * The playing piece's art colours drifting behind the player (v1.15 — M41: Now playing, the now-playing panel, the
-     * resting screen's art and notes, the web panel's Now playing): Piano › Display, and Now playing's View menu.
+     * resting screen's art and notes, the web panel's Now playing): Piano › Display, and Now playing's View menu. Since
+     * v1.18 — M49 the tablet's backdrop is the cover itself, blurred and slowly turning.
      */
     val albumBackdrop: Boolean = true,
     /** The web panel is on (Piano › Web panel); it can be only once a PIN is set. */
@@ -298,9 +301,13 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
                 if (it[NOTES_SPLIT_SIDE] == null) it[NOTES_SPLIT_SIDE] = seed
             }
             it.remove(WIDE_LAYOUT)
+            it.remove(NOTES_ART_ONLY)   // a split chosen shows the views again (v1.18 — M49)
             it[if (stacked) NOTES_SPLIT_STACKED else NOTES_SPLIT_SIDE] = share.coerceIn(0f, 1f)
         }
     }
+
+    /** Now playing's Art only (v1.18 — M49): the cover alone on wide frames; choosing a split ([setNotesSplit]) ends it. */
+    suspend fun setNotesArtOnly(on: Boolean) = edit { it[NOTES_ART_ONLY] = on }
 
     suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
 
@@ -539,6 +546,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             restrikeMs = PlaybackLimits.restrikeMs(this[RESTRIKE_MS] ?: defaults.restrikeMs),
             notesSplitStacked = this[NOTES_SPLIT_STACKED].asShare() ?: legacySplit(),
             notesSplitSide = this[NOTES_SPLIT_SIDE].asShare() ?: legacySplit(),
+            notesArtOnly = this[NOTES_ART_ONLY] ?: defaults.notesArtOnly,
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
             shuffle = this[SHUFFLE] ?: defaults.shuffle,
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
@@ -601,6 +609,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
         val NOTES_SPLIT_STACKED = floatPreferencesKey("notesSplitStacked")
         val NOTES_SPLIT_SIDE = floatPreferencesKey("notesSplitSide")
+        val NOTES_ART_ONLY = booleanPreferencesKey("notesArtOnly")
 
         /** A stored split as read: held to 0-1; not a number reads as the default. */
         fun Float?.asShare(): Float? = this?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)

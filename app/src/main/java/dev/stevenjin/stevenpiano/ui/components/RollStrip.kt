@@ -34,7 +34,8 @@ val RollStripHeight: Dp = RollStripCanvasHeight + Hairline + KeyboardStripHeight
  * [ROLL_STRIP_DP_PER_SECOND] over its keyboard strip, lane for key; no hands, fingering or chord
  * names (a glance, not a study; the Now playing tab has them). The roll takes the height [modifier]
  * gives beyond [RollStripCanvasHeight]; like Now playing's, it is content: it moves under reduced
- * motion too.
+ * motion too. Over the cover's backdrop ([LocalImmersive], v1.18 — M49) the roll's light line is where its notes land,
+ * and no hairline stands between it and the keys.
  */
 @Composable
 fun RollStrip(
@@ -56,7 +57,7 @@ fun RollStrip(
                 .fillMaxWidth(),
             dpPerSecond = ROLL_STRIP_DP_PER_SECOND,
         )
-        HairlineDivider()
+        if (!LocalImmersive.current) HairlineDivider()
         KeyboardStrip(frameNanos, activeLow, activeHigh)
     }
 }
