@@ -53,7 +53,7 @@ fun ConnectionLine(
         Text(
             if (connected) sent else notConnected,
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = secondaryText(),   // the primary colour over the album-colour backdrop (v1.15 — M41)
         )
     }
 }

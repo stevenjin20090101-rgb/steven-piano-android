@@ -14,6 +14,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
+import android.util.LruCache
 import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.db.ArtworkDao
@@ -80,6 +81,9 @@ class ArtworkRepository(
 
     /** Each composer's mosaic pieces, forgotten whenever the library's pieces change. */
     private val mosaics = ConcurrentHashMap<String, List<Long>>()
+
+    /** The backdrop's colours already read (v1.15 — M41), by picture ([paletteKey]); a grey picture's is known to be none. */
+    private val palettes = LruCache<String, KnownPalette>(PALETTES)
 
     /** What album covers need of this repository (v1.15 — M40): the settings, the piece's row, and keeping a found cover. */
     private val coverStore = object : CoverStore {
@@ -212,6 +216,37 @@ class ArtworkRepository(
         val path = artwork.imagePath ?: return null
         return bitmaps.peek(files.file(path), size, artwork.fetchedAt)
     }
+
+    /**
+     * The album-colour backdrop's colours of [artwork]'s picture (v1.15 — M41): [artPalette] over its row-size decode
+     * (128 px), read off the main thread once a picture and kept by its path and version (a replaced picture is read
+     * again); null when it has none, when it is grey, or when it can't be read (asked again next time).
+     */
+    suspend fun palette(artwork: ArtworkEntity): ArtPalette? {
+        val key = paletteKey(artwork) ?: return null
+        palettes.get(key)?.let { return it.palette }
+        val bitmap = bitmap(artwork, ArtSize.Row) ?: return null
+        val read = withContext(Dispatchers.Default) {
+            try {
+                val pixels = IntArray(bitmap.width * bitmap.height)
+                bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                KnownPalette(artPalette(pixels, bitmap.width, bitmap.height))
+            } catch (e: RuntimeException) {   // a picture that can't be read (recycled, not in memory): no backdrop
+                null
+            }
+        } ?: return null
+        palettes.put(key, read)
+        return read.palette
+    }
+
+    /** [palette], only if it was read already: the first frame has its colours. Cheap: safe on the main thread. */
+    fun cachedPalette(artwork: ArtworkEntity): ArtPalette? = paletteKey(artwork)?.let { palettes.get(it)?.palette }
+
+    /** A picture's path and version (`imagePath@fetchedAt`, as [BitmapCache] keys its decodes); null when there is none. */
+    private fun paletteKey(artwork: ArtworkEntity): String? = artwork.imagePath?.let { "$it@${artwork.fetchedAt}" }
+
+    /** A picture's palette as read: none for grey art. */
+    private class KnownPalette(val palette: ArtPalette?)
 
     /**
      * The photo at [uri] (from the photo picker, whose grant does not last) becomes the playlist's
@@ -393,6 +428,7 @@ class ArtworkRepository(
         const val TAG = "Artwork"
         const val STOP_TIMEOUT_MS = 5_000L
         const val MOSAIC_PIECES = 4
+        const val PALETTES = 32
         const val ROLL_CARD_DIR = "rollcards"
         val PIECE_PREFIX = ArtworkEntity.forPiece(0).removeSuffix("0")
         val COMPOSER_PREFIX = ArtworkEntity.forComposer("")

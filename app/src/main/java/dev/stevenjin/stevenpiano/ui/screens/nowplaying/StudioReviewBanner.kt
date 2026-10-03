@@ -26,6 +26,7 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
+import dev.stevenjin.stevenpiano.ui.components.secondaryText
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import kotlinx.coroutines.launch
 
@@ -49,7 +50,7 @@ fun StudioReviewBanner(modifier: Modifier = Modifier) {
     val gate = rememberKioskGate()
     val sheet by remember(pieceId) { graph.artwork.artwork(ArtworkEntity.forPiece(pieceId)) }.collectAsStateWithLifecycle(null)
     OutlinedBanner(StudioCopy.REVIEW_TITLE, modifier) {
-        Text(StudioCopy.reviewLine(sheet?.description), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(StudioCopy.reviewLine(sheet?.description), style = MaterialTheme.typography.bodyLarge, color = secondaryText())
         FlowRow {
             // A recording made here waits for someone with the PIN in kiosk mode, Keep as Discard (v1.11 — M29).
             val keep = { graph.appScope.launch { review.keep(pieceId) }; Unit }

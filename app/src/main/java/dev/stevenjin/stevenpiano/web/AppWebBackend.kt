@@ -201,6 +201,7 @@ class AppWebBackend(
             web = addresses(),
             guests = guests(),
             monochrome = settings.artworkMonochrome,
+            albumBackdrop = settings.albumBackdrop,
             schedule = WebScheduleState(graph.schedules.nextNow()?.line, graph.schedules.revision),
             studio = studio(),
             instruments = WebInstruments.of(

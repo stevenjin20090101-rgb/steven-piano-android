@@ -165,6 +165,10 @@ val GlassHidden: () -> Float = { 0f }
  * surface, as where nothing passes beneath), at once; when it turns false the blur comes back under a
  * veil of the surface that fades away over 120 ms (a cut when motion is reduced).
  *
+ * [translucent] (v1.15 — M41: the bars over the album-colour backdrop): where it draws the glass's look without
+ * blurring, the surface at [fill]'s opacity instead of opaque, so what moves beneath shows through without a blur
+ * redrawn on every frame. The solid fallback stays opaque.
+ *
  * Cost: the blur is worked out only inside the surface's own bounds, drawn clipped to its shape,
  * and from a copy of that content at a third of its resolution ([HazeInputScale.Auto]), a ninth of
  * the pixels, which a 24 dp blur hides; a header, as wide as its pane, and the sheets, menus and
@@ -189,9 +193,10 @@ fun GlassSurface(
     outline: Color = LocalHairline.current,
     edgeAlpha: () -> Float = GlassShown,
     band: () -> Float = GlassHidden,
+    translucent: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val look = rememberGlassLook(shape, source, edge, fill, blur, solid, outline, edgeAlpha, band, paused)
+    val look = rememberGlassLook(shape, source, edge, fill, blur, solid, outline, edgeAlpha, band, paused, translucent)
     Box(modifier.then(look.modifier)) {
         GlassText(look.glass, fill) { content() }
     }
@@ -217,6 +222,7 @@ internal fun rememberGlassLook(
     edgeAlpha: () -> Float,
     band: () -> Float,
     paused: Boolean = false,
+    translucent: Boolean = false,
 ): GlassLook {
     val surface = MaterialTheme.colorScheme.surface
     val specular = LocalGlassEdge.current
@@ -261,7 +267,7 @@ internal fun rememberGlassLook(
                     }
                     .glassBand(edge, surface, band)
                     .glassVeil(surface) { veil.value }
-                glass -> Modifier.background(surface)
+                glass -> Modifier.background(if (translucent) surface.copy(alpha = fill.alpha) else surface)
                 else -> Modifier.background(solid)
             },
         )

@@ -190,7 +190,8 @@ class WebApiTest {
         assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "schedule", "studio", "display"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display"), json.keys().asSequence().toSet())
+        assertTrue("Album colours behind the player, on until turned off (v1.15 — M41)", json.getBoolean("albumBackdrop"))
         // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
         assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
         assertTrue(json.getJSONObject("web").isNull("cloud"))

@@ -84,6 +84,7 @@ object PageRows {
     const val RESTING_SECTION = "Resting screen"
     val APPEARANCE = AppRow("display.appearance", "Appearance", SettingsPage.Display, APPEARANCE_SECTION, listOf("dark mode", "light mode", "theme", "night"))
     val MONOCHROME = AppRow("display.mono", "Artwork in black and white", SettingsPage.Display, APPEARANCE_SECTION, listOf("monochrome", "greyscale", "grayscale", "colour", "color"))
+    val ALBUM_BACKDROP = AppRow("display.backdrop", "Album colours behind the player", SettingsPage.Display, APPEARANCE_SECTION, listOf("backdrop", "colours", "album", "Apple Music"))
     val RESTING = AppRow("display.resting", "Resting screen after a minute", SettingsPage.Display, RESTING_SECTION, listOf("display mode", "standby", "screensaver", "idle"))
     val RESTING_BACKGROUND = AppRow("display.canvas", "Background", SettingsPage.Display, RESTING_SECTION, listOf("canvas", "black", "standby canvas"))
     val RESTING_SHOWS = AppRow("display.shows", "What it shows", SettingsPage.Display, RESTING_SECTION, listOf("paper roll", "art and notes", "standby shows"))
@@ -117,7 +118,7 @@ object PageRows {
         ADD_SCHEDULE, EXACT_ALARMS,
         WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
-        APPEARANCE, MONOCHROME, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,
+        APPEARANCE, MONOCHROME, ALBUM_BACKDROP, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,
         KIOSK_MODE, KIOSK_UNLOCK, KIOSK_PIN,
         CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES,
         FETCH_AUTOMATICALLY, ALBUM_COVERS, FETCH_EVERY_COMPOSER, STEVENS_LIBRARY,

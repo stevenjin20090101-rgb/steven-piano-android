@@ -153,6 +153,11 @@ data class PianoSettings(
     val standbyCanvas: StandbyCanvas = StandbyCanvas.BLACK,
     /** What the resting screen shows: the art and notes, or the paper roll (Piano › Display › RESTING SCREEN). */
     val standbyShows: StandbyShows = StandbyShows.ART_AND_NOTES,
+    /**
+     * The playing piece's art colours drifting behind the player (v1.15 — M41: Now playing, the now-playing panel, the
+     * resting screen's art and notes, the web panel's Now playing): Piano › Display, and Now playing's View menu.
+     */
+    val albumBackdrop: Boolean = true,
     /** The web panel is on (Piano › Web panel); it can be only once a PIN is set. */
     val webEnabled: Boolean = false,
     /** Guests may ask for pieces from the request page (Guests can request). */
@@ -302,6 +307,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setStandbyCanvas(canvas: StandbyCanvas) = edit { it[STANDBY_CANVAS] = canvas.name }
 
     suspend fun setStandbyShows(shows: StandbyShows) = edit { it[STANDBY_SHOWS] = shows.name }
+
+    suspend fun setAlbumBackdrop(on: Boolean) = edit { it[ALBUM_BACKDROP] = on }
 
     suspend fun setWebEnabled(on: Boolean) = edit { it[WEB_ENABLED] = on }
 
@@ -508,6 +515,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             appearance = Appearance.entries.firstOrNull { it.name == this[APPEARANCE] } ?: defaults.appearance,
             standbyCanvas = StandbyCanvas.entries.firstOrNull { it.name == this[STANDBY_CANVAS] } ?: defaults.standbyCanvas,
             standbyShows = StandbyShows.entries.firstOrNull { it.name == this[STANDBY_SHOWS] } ?: defaults.standbyShows,
+            albumBackdrop = this[ALBUM_BACKDROP] ?: defaults.albumBackdrop,
             webEnabled = this[WEB_ENABLED] ?: defaults.webEnabled,
             webGuests = this[WEB_GUESTS] ?: defaults.webGuests,
             webApproveFirst = this[WEB_APPROVE_FIRST] ?: defaults.webApproveFirst,
@@ -575,6 +583,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val APPEARANCE = stringPreferencesKey("appearance")
         val STANDBY_CANVAS = stringPreferencesKey("standbyCanvas")
         val STANDBY_SHOWS = stringPreferencesKey("standbyShows")
+        val ALBUM_BACKDROP = booleanPreferencesKey("albumBackdrop")
         val WEB_ENABLED = booleanPreferencesKey("webEnabled")
         val WEB_GUESTS = booleanPreferencesKey("webGuests")
         val WEB_APPROVE_FIRST = booleanPreferencesKey("webApproveFirst")

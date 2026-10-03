@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.studio.compose.Composition
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
+import dev.stevenjin.stevenpiano.ui.theme.hsl
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -155,26 +156,6 @@ class CoverSpec private constructor(
 
         private val MAJOR = doubleArrayOf(6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
         private val MINOR = doubleArrayOf(6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
-
-        /** HSL to an opaque ARGB colour (hue in degrees). */
-        fun hsl(hue: Double, saturation: Double, lightness: Double): Int {
-            val l = lightness.coerceIn(0.0, 1.0)
-            val s = saturation.coerceIn(0.0, 1.0)
-            val c = (1 - StrictMath.abs(2 * l - 1)) * s
-            val h = ((hue % 360.0) + 360.0) % 360.0 / 60.0
-            val x = c * (1 - StrictMath.abs(h % 2 - 1))
-            val (r, g, b) = when {
-                h < 1 -> Triple(c, x, 0.0)
-                h < 2 -> Triple(x, c, 0.0)
-                h < 3 -> Triple(0.0, c, x)
-                h < 4 -> Triple(0.0, x, c)
-                h < 5 -> Triple(x, 0.0, c)
-                else -> Triple(c, 0.0, x)
-            }
-            val m = l - c / 2
-            fun channel(v: Double) = ((v + m) * 255 + 0.5).toInt().coerceIn(0, 255)
-            return (0xFF shl 24) or (channel(r) shl 16) or (channel(g) shl 8) or channel(b)
-        }
     }
 }
 

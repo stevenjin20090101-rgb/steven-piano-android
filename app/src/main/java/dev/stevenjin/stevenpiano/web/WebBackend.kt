@@ -437,7 +437,8 @@ data class CatalogueList(val key: String, val name: String, val pieces: List<Web
 
 /**
  * Everything `/api/state` carries but the requests waiting. [monochrome]: Artwork in black and
- * white is on, so the panel draws portraits without colour, as the app does. [schedule]: the next
+ * white is on, so the panel draws portraits without colour, as the app does. [albumBackdrop]: Album
+ * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [schedule]: the next
  * start's line for Now playing with nothing loaded, and a revision that changes whenever the
  * schedules do, so an open Schedule page reads them again.
  */
@@ -450,6 +451,7 @@ data class WebState(
     val web: WebAddresses = WebAddresses(null, null),
     val guests: GuestSettings = GuestSettings(open = false, approveFirst = true),
     val monochrome: Boolean = false,
+    val albumBackdrop: Boolean = true,
     val schedule: WebScheduleState = WebScheduleState(),
     val studio: WebStudio = WebStudio(),
     /** What plays and what is played from (v1.11 — M29), read-only. */

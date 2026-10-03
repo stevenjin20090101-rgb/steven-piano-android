@@ -432,6 +432,7 @@ object WebApi {
                     .put("cloud", s.web.cloud ?: JSONObject.NULL),
             )
             .put("monochrome", s.monochrome)
+            .put("albumBackdrop", s.albumBackdrop)
             .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))
             .put("display", display(s.display))

@@ -77,6 +77,7 @@ import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
+import dev.stevenjin.stevenpiano.ui.components.ArtBackdrop
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
@@ -88,6 +89,7 @@ import dev.stevenjin.stevenpiano.ui.components.KeyHands
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
+import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
@@ -97,6 +99,7 @@ import dev.stevenjin.stevenpiano.ui.components.SplitAxis
 import dev.stevenjin.stevenpiano.ui.components.SplitPane
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
 import dev.stevenjin.stevenpiano.ui.components.TransportBar
+import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
 import dev.stevenjin.stevenpiano.ui.components.scrollEdges
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
@@ -130,7 +133,9 @@ private val SHORT_SCORE = 200.dp
  * with transparency reduced) they stand below the views on the screen, as before.
  * The screen stops above the tab bar ([dev.stevenjin.stevenpiano.ui.LocalFloatingPadding]), and
  * below its header, a glass navigation bar ([GlassHeaderPane], DESIGN.md › v1.9) that only a short
- * screen's scrolling column passes beneath.
+ * screen's scrolling column passes beneath. Behind it all, under the header and the tab bar too, the
+ * playing piece's art colours drift ([ArtBackdrop], v1.15 — M41), and the words over them take the
+ * primary colour ([OnBackdrop]); the cards keep their opaque surface.
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
@@ -150,11 +155,14 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val outer = LocalFloatingPadding.current
     val statusBar = outer.calculateTopPadding()
     val column = rememberScrollState()
+    // The album's colours behind the player (v1.15 — M41): the header, and the tab bar, let them show through.
+    val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
     // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it.
     // The whole pane keeps clear of the rail, its header too.
     GlassHeaderPane(
         scroll = column,
         modifier = Modifier.padding(outer.sides()),
+        translucent = backdrop != null,
         header = {
             ScreenHeader("Now playing") {
                 if (piece != null) {
@@ -166,25 +174,31 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     ) {
         val floating = LocalFloatingPadding.current
         val top = floating.calculateTopPadding()
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .padding(bottom = floating.calculateBottomPadding()),
-        ) {
-            // Too short for the note views to share the height (landscape, a small phone at a large
-            // font): the screen scrolls and the views keep fixed heights instead of collapsing.
-            val available = maxHeight - statusBar
-            val short = piece != null && available < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
-            // The divider (and a hidden pane's grabber at its edge) only where both views would fit unscrolled (v1.12 — M31a).
-            val divided = !short && when (plan.axis) {
-                SplitAxis.Stacked -> available >= SHORT_BELOW_STACKED
-                SplitAxis.SideBySide -> true
-                null -> false
-            }
-            Column(if (short) Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column) else Modifier.fillMaxSize().padding(top = top)) {
-                if (short) Spacer(Modifier.height(top))
-                val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
-                NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, divided) { about = it }
+        // The backdrop is the scrolling column's sibling: it never scrolls, and it reaches under the header and the tab bar.
+        Box(Modifier.fillMaxSize()) {
+            ArtBackdrop(backdrop, state.status == PlaybackStatus.Playing, Modifier.matchParentSize())
+            OnBackdrop(backdrop != null) {
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(bottom = floating.calculateBottomPadding()),
+                ) {
+                    // Too short for the note views to share the height (landscape, a small phone at a large
+                    // font): the screen scrolls and the views keep fixed heights instead of collapsing.
+                    val available = maxHeight - statusBar
+                    val short = piece != null && available < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
+                    // The divider (and a hidden pane's grabber at its edge) only where both views would fit unscrolled (v1.12 — M31a).
+                    val divided = !short && when (plan.axis) {
+                        SplitAxis.Stacked -> available >= SHORT_BELOW_STACKED
+                        SplitAxis.SideBySide -> true
+                        null -> false
+                    }
+                    Column(if (short) Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column) else Modifier.fillMaxSize().padding(top = top)) {
+                        if (short) Spacer(Modifier.height(top))
+                        val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
+                        NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, divided) { about = it }
+                    }
+                }
             }
         }
     }

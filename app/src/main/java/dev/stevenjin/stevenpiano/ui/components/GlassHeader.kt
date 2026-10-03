@@ -58,11 +58,16 @@ import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
  * Now playing), and the header never blurs. The content is the header's own source ([hazeSource]),
  * recorded apart from the other pane's, so a roll playing beside a list never makes the list's header
  * blur again; and with nothing scrolled beneath it the header does not blur at all.
+ *
+ * [translucent] (v1.15 — M41): the album-colour backdrop moves beneath (Now playing, the now-playing panel). Where the
+ * header does not blur it is the surface at the bar's fill, so the colours show through without a blur on every frame,
+ * and its text takes the content colour, as on glass.
  */
 @Composable
 fun GlassHeaderPane(
     scroll: ScrollableState?,
     modifier: Modifier = Modifier,
+    translucent: Boolean = false,
     header: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -79,7 +84,7 @@ fun GlassHeaderPane(
     val direction = LocalLayoutDirection.current
     SubcomposeLayout(modifier) { constraints ->
         val top = floating.calculateTopPadding()
-        val bar = subcompose(PaneSlot.Header, slots.header(listOf(top, header, scroll)) { { HeaderBar(source, scroll != null, scrolled, presence, top, header) } })
+        val bar = subcompose(PaneSlot.Header, slots.header(listOf(top, header, scroll, translucent)) { { HeaderBar(source, scroll != null, scrolled, presence, top, translucent, header) } })
             .map { it.measure(constraints.copy(minHeight = 0)) }
         val height = (bar.maxOfOrNull { it.height } ?: 0).toDp()
         val below = floating.withTop(height, direction)
@@ -139,7 +144,8 @@ private fun PaneBody(source: HazeState, sourced: Boolean, padding: PaddingValues
 
 /**
  * The header's glass: blurring only while content is scrolled beneath ([scrolled]); its edge, its
- * band and its text's colours following [presence] (0 at rest, 1 with content beneath).
+ * band and its text's colours following [presence] (0 at rest, 1 with content beneath). [translucent]:
+ * the backdrop's colours beneath, its text in the content colour whatever the presence.
  */
 @Composable
 private fun HeaderBar(
@@ -148,6 +154,7 @@ private fun HeaderBar(
     scrolled: State<Boolean>,
     presence: State<Float>,
     top: Dp,
+    translucent: Boolean,
     header: @Composable () -> Unit,
 ) {
     // Today's greys, read outside the glass (which would give them way at once).
@@ -163,9 +170,11 @@ private fun HeaderBar(
         blur = scrolls && scrolled.value,
         edgeAlpha = edge,
         band = edge,
+        translucent = translucent,
     ) {
-        // At rest, today's greys; with content beneath, the content colour (the bar's rule), fading between.
-        val shown = if (glass) presence.value else 0f
+        // At rest, today's greys; with content beneath, the content colour (the bar's rule), fading between; over the
+        // backdrop, the content colour throughout (the greys fall under 4.5:1 there).
+        val shown = if (!glass) 0f else if (translucent) 1f else presence.value
         CompositionLocalProvider(
             LocalTertiary provides lerp(tertiary, ink, shown),
             LocalSecondaryText provides lerp(secondary, ink, shown),

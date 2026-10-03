@@ -82,7 +82,8 @@ internal const val HAND_COLOURS_NOTE = "Colours the two hands in the notes and o
  * stands at the glyph's end, so on the tablet it never crosses the panes' divider. On wide frames SHOW
  * (Score and notes · Notes only · Score only: the split's shares without dragging), then NOTES (the roll's
  * style: Paper roll · Falling notes, and Score on a phone), then Fingering, Chord names and Hand colours
- * (with its note). Free in kiosk, as the divider is. The settings are written as they are chosen.
+ * (with its note), and Album colours (v1.15 — M41: the backdrop, as Piano › Display has it). Free in kiosk, as the
+ * divider is. The settings are written as they are chosen.
  */
 @Composable
 fun ViewMenu(settings: PianoSettings, plan: NotesPlan, frame: AppFrame) {
@@ -131,6 +132,7 @@ fun ViewMenu(settings: PianoSettings, plan: NotesPlan, frame: AppFrame) {
                 MenuSwitch("Fingering", settings.fingering) { on -> write { setFingering(on) } }
                 MenuSwitch("Chord names", settings.chordNames) { on -> write { setChordNames(on) } }
                 MenuSwitch("Hand colours", settings.handColours, note = HAND_COLOURS_NOTE) { on -> write { setHandColours(on) } }
+                MenuSwitch("Album colours", settings.albumBackdrop) { on -> write { setAlbumBackdrop(on) } }   // v1.15 — M41
             }
         }
     }

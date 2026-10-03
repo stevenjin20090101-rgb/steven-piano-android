@@ -161,7 +161,7 @@ fun TabletSoundNote(state: TabletSoundState, onDownload: () -> Unit, onCancel: (
                 line,
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondaryText(),   // the primary colour over the album-colour backdrop (v1.15 — M41)
             )
             if (progress != null) {
                 ActionButton("Cancel", onClick = onCancel, description = "Cancel the piano sound's download")

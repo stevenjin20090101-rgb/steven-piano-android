@@ -61,6 +61,7 @@ import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.components.ArtBackdrop
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.easedIn
@@ -68,12 +69,14 @@ import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
 import dev.stevenjin.stevenpiano.ui.components.Hairline
+import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.RollStrip
 import dev.stevenjin.stevenpiano.ui.components.RollStripHeight
 import dev.stevenjin.stevenpiano.ui.components.glassAvailable
+import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
 import dev.stevenjin.stevenpiano.ui.components.screenHeaderHeight
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
@@ -109,7 +112,8 @@ private val StripPlan = NotesPlan(NotesLayout.ROLL, NoteDisplay.PAPER_ROLL)
  * [onOpenPiano]). With nothing loaded: "Choose a piece from the library." Its NOW PLAYING row is the
  * pane's glass header ([GlassHeaderPane], DESIGN.md › v1.9), as tall as the list's beside it.
  * It reuses Now playing's clock ([RollClock], [rememberFrameNanos]) and plays through [playback].
- * Its sheets' state lives where the panel is composed, apart from Now playing's.
+ * Its sheets' state lives where the panel is composed, apart from Now playing's. Behind it, under its header too, the
+ * playing piece's art colours drift ([ArtBackdrop], v1.15 — M41), its words in the primary colour over them.
  */
 @Composable
 fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier: Modifier = Modifier) {
@@ -122,6 +126,9 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     val piece = state.piece
     LaunchedEffect(piece?.pieceId) { piece?.let { graph.artwork.requestCover(it.pieceId) } }   // its album cover first (v1.15 — M40)
+    // The album's colours behind the panel (v1.15 — M41); its header lets them show through.
+    val settings by graph.settings.collectAsStateWithLifecycle()
+    val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
     // The NOW PLAYING row is the pane's glass header (DESIGN.md › v1.9), level with the list's beside it.
     val header: @Composable () -> Unit = {
         Row(
@@ -136,31 +143,35 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
         }
     }
     // Nothing scrolls beneath it: the panel's own column starts below it (and scrolls inside itself when short).
-    GlassHeaderPane(scroll = null, modifier = modifier, header = header) { Column(Modifier.fillMaxSize().padding(top = LocalFloatingPadding.current.calculateTopPadding())) {
-        if (state.loading) ProgressHairline(null)
-        state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
-        StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        if (piece != null) {
-            PanelPiece(piece, state, player, playback, link is LinkState.Connected, onOpenPiano, onAbout = { about = piece.pieceId })
-        } else if (!state.loading) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.6.2 — M19).
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
-                    Text(
-                        "Choose a piece from the library.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
+    // The backdrop is the column's sibling, under the header too.
+    GlassHeaderPane(scroll = null, modifier = modifier, translucent = backdrop != null, header = header) { Box(Modifier.fillMaxSize()) {
+        ArtBackdrop(backdrop, state.status == PlaybackStatus.Playing, Modifier.matchParentSize())
+        OnBackdrop(backdrop != null) { Column(Modifier.fillMaxSize().padding(top = LocalFloatingPadding.current.calculateTopPadding())) {
+            if (state.loading) ProgressHairline(null)
+            state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+            StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            if (piece != null) {
+                PanelPiece(piece, state, player, playback, link is LinkState.Connected, onOpenPiano, onAbout = { about = piece.pieceId })
+            } else if (!state.loading) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.6.2 — M19).
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
+                        Text(
+                            "Choose a piece from the library.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
-        }
+        } }
     } }
     if (upNext) UpNextSheet { upNext = false }
     about?.let { PieceDetailSheet(it) { about = null } }

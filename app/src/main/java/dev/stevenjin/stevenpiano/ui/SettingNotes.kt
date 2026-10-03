@@ -84,6 +84,7 @@ object SettingNotes {
 
     // ---- THIS TABLET -------------------------------------------------------------------------------
 
+    const val ALBUM_BACKDROP = "The album's colours drift behind the player while playing"
     const val RESTING_BACKGROUND = "Black, or the app's own paper or ink"
     const val RESTING_SHOWS = "The piece's art and notes, or the paper roll"
     const val CHECK_AUTOMATICALLY = "Looks for a newer version by itself"
@@ -93,7 +94,7 @@ object SettingNotes {
     /** Every note above, for the rules' test. */
     val all: List<String> = piano.values + listOf(
         TEST_LED, READ_STATUS, SAVE_TO_PIANO, ALL_KEYS_OFF, AUTO_CONNECT, DEFAULT_TEMPO, VELOCITY, FOLD, SKIP_DRUMS,
-        WEB_PANEL, GUESTS_CAN_REQUEST, APPROVE_FIRST, RELAY_ADDRESS, RESTING_BACKGROUND, RESTING_SHOWS,
+        WEB_PANEL, GUESTS_CAN_REQUEST, APPROVE_FIRST, RELAY_ADDRESS, ALBUM_BACKDROP, RESTING_BACKGROUND, RESTING_SHOWS,
         CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES, FETCH_EVERY_COMPOSER,
     )
 }

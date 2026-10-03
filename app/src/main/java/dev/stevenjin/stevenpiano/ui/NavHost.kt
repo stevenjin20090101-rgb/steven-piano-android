@@ -102,6 +102,7 @@ import dev.stevenjin.stevenpiano.ui.components.MiniPlayer
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
 import dev.stevenjin.stevenpiano.ui.components.miniPlayerShown
+import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.display.DisplayScreen
 import dev.stevenjin.stevenpiano.ui.screens.display.RestingMotion
@@ -231,7 +232,7 @@ fun PianoNavHost(
                     // Every inset reaches the padding below; the content itself keeps only the top one.
                     // A phone on its side may have its navigation buttons or its camera cutout at either end.
                     contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
-                    bottomBar = { if (!frame.rail) BottomBar(current, select, playback, onOpenNowPlaying = { open(Route.NowPlaying) }) },
+                    bottomBar = { if (!frame.rail) BottomBar(current, select, playback, settings.albumBackdrop, onOpenNowPlaying = { open(Route.NowPlaying) }) },
                 ) { padding ->
                     val direction = LocalLayoutDirection.current
                     val top = padding.calculateTopPadding()
@@ -388,17 +389,20 @@ private enum class FrameSlot { Rail, Content }
  * player whenever a piece is loaded or loading (not on Now playing itself, which is the full
  * player), a hairline between them, or while a piece loads the moving hairline. The mini player
  * grows in from the bar and gives way into it over 200 ms (a cut when motion is reduced); the
- * floating padding follows it.
+ * floating padding follows it. Over Now playing's album colours (v1.15 — M41) it is the surface at
+ * the bar's fill, so they show through it without a blur on every frame.
  */
 @Composable
-private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: PlaybackStarter, onOpenNowPlaying: () -> Unit) {
+private fun BottomBar(current: Route, onSelect: (Route) -> Unit, playback: PlaybackStarter, albumBackdrop: Boolean, onOpenNowPlaying: () -> Unit) {
     val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
     val frame = LocalAppFrame.current
     val reduced = rememberReducedMotion()
     // Lists pass beneath the bar (the Library, the Piano tab), and the frost thickens along its top edge
     // where they do (the scroll-edge effect); Now playing and Keys stop above it.
     val lists = current == Route.Library || current == Route.Piano
-    GlassSurface(Modifier.fillMaxWidth(), blur = lists, band = if (lists) GlassShown else GlassHidden) {
+    val playing = state.piece?.takeIf { current == Route.NowPlaying }
+    val backdrop = rememberBackdrop(playing?.pieceId, playing?.composerKey, albumBackdrop) != null
+    GlassSurface(Modifier.fillMaxWidth(), blur = lists, band = if (lists) GlassShown else GlassHidden, translucent = backdrop) {
         Column {
             AnimatedVisibility(
                 visible = !frame.twoPane && state.miniPlayerShown && current != Route.NowPlaying,

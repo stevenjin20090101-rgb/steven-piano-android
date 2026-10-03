@@ -193,6 +193,7 @@ object DiagnosticsText {
         line("displayModeAfterMinute", s.displayModeAfterMinute)
         line("standbyCanvas", s.standbyCanvas)
         line("standbyShows", s.standbyShows)
+        line("albumBackdrop", s.albumBackdrop)
         line("webEnabled", s.webEnabled)
         line("webGuests", s.webGuests)
         line("webApproveFirst", s.webApproveFirst)

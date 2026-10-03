@@ -29,10 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
 // Motion budget (DESIGN.md › Motion, › v1.14 — motion). Purposeful, brief, cancellable. Nothing loops by itself
-// but the aura; status that lasts (the live dot's breath, a search's sweep, an indeterminate hairline) moves only
-// while it lasts. Every transition takes one of the durations below, the longest 480 ms; it enters decelerating
-// and leaves accelerating; and it goes through the helper at the end ([Motion.timed], [Motion.sprung],
-// [Motion.enter], [Motion.exit], [Motion.change]), which makes it a cut when motion is reduced.
+// but the aura and, while a piece plays, the album-colour backdrop (v1.15 — M41); status that lasts (the live dot's
+// breath, a search's sweep, an indeterminate hairline) moves only while it lasts. Every transition takes one of the
+// durations below, the longest 480 ms; it enters decelerating and leaves accelerating; and it goes through the helper
+// at the end ([Motion.timed], [Motion.sprung], [Motion.enter], [Motion.exit], [Motion.change]), which makes it a cut
+// when motion is reduced.
 object Motion {
     /** Quick: something leaving, a digit rolling, a pressed glass settling; the note brightening at the tracker bar. */
     const val QuickMs = 120

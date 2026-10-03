@@ -291,6 +291,8 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     fun setStandbyShows(shows: StandbyShows) = edit { setStandbyShows(shows) }
 
+    fun setAlbumBackdrop(on: Boolean) = edit { setAlbumBackdrop(on) }
+
     fun setWebEnabled(on: Boolean) = graph.setWebEnabled(on)
 
     fun setWebGuests(on: Boolean) = edit { setWebGuests(on) }

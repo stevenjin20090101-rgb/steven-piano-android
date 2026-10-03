@@ -28,7 +28,8 @@ private const val RESTING_NOTE = "The piece's art and title fill the screen for 
 
 /**
  * Display (THIS TABLET since v1.13 — M31b): how the app looks on this tablet. APPEARANCE (Follow system,
- * Light, Dark: the app's whole look, at once; Artwork in black and white) · RESTING SCREEN ("Display mode"
+ * Light, Dark: the app's whole look, at once; Artwork in black and white; Album colours behind the player, v1.15 —
+ * M41, also in Now playing's View menu) · RESTING SCREEN ("Display mode"
  * and STANDBY until v1.13: the resting screen after a minute without a touch, its background: black, or
  * the app's own, and what it shows: the art and notes, or the paper roll). The note views and their
  * options live in Now playing's View menu (M31a); fetching artwork is under Library and artwork. The hub's
@@ -42,6 +43,9 @@ fun DisplayPage(settings: PianoSettings, vm: PianoViewModel) {
     }
     Anchored(PageRows.MONOCHROME.anchor) {
         SwitchRow(PageRows.MONOCHROME.label, settings.artworkMonochrome, vm::setArtworkMonochrome)
+    }
+    Anchored(PageRows.ALBUM_BACKDROP.anchor) {
+        SwitchRow(PageRows.ALBUM_BACKDROP.label, settings.albumBackdrop, vm::setAlbumBackdrop, note = SettingNotes.ALBUM_BACKDROP)
     }
     SectionEyebrow(PageRows.RESTING_SECTION)
     Anchored(PageRows.RESTING.anchor) {

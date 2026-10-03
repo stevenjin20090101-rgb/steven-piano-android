@@ -295,6 +295,16 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `the album's colours behind the player start on, and turned off are remembered (v1_15 M41)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "backdrop.preferences_pb") }
+        assertEquals(true, SettingsRepository(store).settings.first().albumBackdrop)
+        SettingsRepository(store).setAlbumBackdrop(false)
+        assertEquals("read back by a new repository", PianoSettings(albumBackdrop = false), SettingsRepository(store).settings.first())
+        scope.cancel()
+    }
+
+    @Test
     fun `the web panel starts off with guests closed and approval first, and every switch is remembered`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "web.preferences_pb") }
