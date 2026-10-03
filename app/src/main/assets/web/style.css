@@ -16,8 +16,7 @@
    Liquid Glass (DESIGN.md › v1.9) as the app has it: the functional layer (the rail, the tab strip and bar, capsules,
    menus, popovers, the toast, the PIN gate's card, the sheets) is the surface over a 24 px blur of what lies beneath,
    at 72 % for bars and 86 % for sheets, menus and dialogs, with a hairline and a faint specular line; content is never
-   glass. Over the cover (Now playing's backdrop) the panel is immersive: glass is a black tint at 26 % over a 30 px
-   blur with a light edge, and the words are the ink's primary colour in both appearances. */
+   glass. Behind Now playing the album's colours (v1.15 — M41) fill the window under a veil of the page. */
 
 :root {
   /* Light: the paper roll */
@@ -65,6 +64,9 @@
   /* The segmented control's thumb (v1.14 — M37): lighter than its track in both appearances, the paper's elevated
      surface here, the content colour at 18 % on the camera body. */
   --thumb: var(--paper-elevated);
+  /* Now playing's album colours (v1.15 — M41, ui/theme/Backdrop.kt): the discs' lightness and the veil over them. */
+  --bd-l: 45%;
+  --bd-veil: 55%;
   color-scheme: light;
 
   /* The glass (ui/theme/Glass.kt's GlassTokens): the fills, the blur, the scroll-edge band and the
@@ -77,24 +79,6 @@
   --paper-specular: hsl(0 0% 100% / 0.70);
   --ink-specular: hsl(0 0% 100% / 0.10);
   --specular: var(--paper-specular);
-
-  /* Over the cover (v1.18 — M47): the glass's black tint and blur, its light edge and line; the words' second and third
-     tones (the ink's light at 78 % and 60 %, for text on glass and for large text). */
-  --immersive-glass: hsl(0 0% 0% / 0.26);
-  --immersive-blur: 30px;
-  --immersive-edge: hsl(0 0% 100% / 0.14);
-  --immersive-specular: hsl(0 0% 100% / 0.12);
-  --immersive-secondary: hsl(0 0% 95% / 0.78);
-  --immersive-tertiary: hsl(0 0% 95% / 0.6);
-
-  /* The appearance's own, kept for what stays itself over the cover: the score's sheet. */
-  --sheet-surface: var(--surface);
-  --sheet-elevated: var(--elevated);
-  --sheet-hairline: var(--hairline);
-  --sheet-disabled: var(--disabled);
-  --sheet-primary: var(--primary);
-  --sheet-secondary: var(--secondary);
-  --sheet-tertiary: var(--tertiary);
 
   --row: 56px;
   --inset: 20px;
@@ -119,6 +103,8 @@
     --hand-left: var(--ink-hand-left);
     --hand-right: var(--ink-hand-right);
     --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
+    --bd-l: 32%;
+    --bd-veil: 62%;
     color-scheme: dark;
   }
 }
@@ -138,6 +124,8 @@
   --hand-left: var(--ink-hand-left);
   --hand-right: var(--ink-hand-right);
   --thumb: color-mix(in srgb, var(--ink-primary) 18%, var(--ink-surface));
+  --bd-l: 32%;
+  --bd-veil: 62%;
   color-scheme: dark;
 }
 
@@ -1115,15 +1103,16 @@ button, input, select { font: inherit; color: inherit; }
   position: relative;
   min-width: 0;
   display: grid;
-  /* min(54vh, 560px), and on a window shorter than about 850 px no more than leaves the words and controls (392 px) in
-     sight, never under 240 px; never wider than the column. */
-  grid-template-columns: min(max(240px, min(54vh, 100vh - 392px)), 560px, 100%);
+  /* min(54vh, 560px); the cover gives way first so that the page's head, the words, the controls and the instrument's
+     lines stay in sight (444 px: a title on two lines, or the capsules on two rows), never under 240 px; never wider
+     than the column. */
+  grid-template-columns: min(max(240px, min(54vh, 100vh - 444px)), 560px, 100%);
   justify-content: center;
   align-content: center;
   padding: 0 12px 8px;
 }
 
-.now-hero { display: grid; min-width: 0; }
+.now-hero { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 
 .now-art {
   width: 100%;
@@ -1183,7 +1172,8 @@ button, input, select { font: inherit; color: inherit; }
 
 .transport { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
 
-.transport .icon-button { width: 52px; height: 52px; }
+/* The icon buttons give way (to 40 px) on the narrowest block; the play circle never does. */
+.transport .icon-button { flex: 0 1 52px; min-width: 40px; width: 52px; height: 52px; }
 
 .transport .icon-button .glyph { width: 28px; height: 28px; }
 
@@ -1250,7 +1240,11 @@ button, input, select { font: inherit; color: inherit; }
 /* Notes and Score: the strip over the views. */
 .now.views-on .now-main { grid-template-columns: minmax(0, 1fr); justify-content: stretch; align-content: start; row-gap: 16px; padding: 0 0 4px; }
 
-.now.views-on .now-hero { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 22px; padding: 0 8px; }
+/* The words take all the room between the cover and the transport, which is compact here; where they would have less
+   than 280 px the transport moves to its own line at the right. */
+.now.views-on .now-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+
+.now.views-on .now-words { flex: 1 1 280px; }
 
 .now.views-on .now-art { width: 132px; border-radius: 16px; box-shadow: 0 24px 50px -24px hsl(0 0% 0% / 0.7), 0 4px 12px hsl(0 0% 0% / 0.3); }
 
@@ -1262,11 +1256,15 @@ button, input, select { font: inherit; color: inherit; }
 
 .now.views-on .scrubber { margin-top: 12px; }
 
-.now.views-on .transport { margin-top: 0; gap: 8px; }
+.now.views-on .transport { flex: none; margin: 0 0 0 auto; gap: 4px; }
 
-.now.views-on .play-circle { width: 64px; height: 64px; }
+.now.views-on .transport .icon-button { flex: 0 1 44px; width: 44px; height: 44px; }
 
-.now.views-on .play-circle .glyph { width: 30px; height: 30px; }
+.now.views-on .transport .icon-button .glyph { width: 24px; height: 24px; }
+
+.now.views-on .play-circle { width: 60px; height: 60px; }
+
+.now.views-on .play-circle .glyph { width: 28px; height: 28px; }
 
 .now.views-on .quick { margin-top: 0; }
 
@@ -1278,7 +1276,7 @@ button, input, select { font: inherit; color: inherit; }
 @media (min-width: 900px) {
   /* The page's foot is the mock's 26 px here (its 40 less 26 by the negative margin), so the whole fits 100vh. */
   .now { display: grid; grid-template-rows: auto 1fr; min-height: calc(100vh - 28px); margin-bottom: -26px; }
-  .now.views-on .now-main { grid-template-rows: auto minmax(340px, 1fr); }
+  .now.views-on .now-main { grid-template-rows: auto minmax(320px, 1fr); }
   .now.views-on .views { display: flex; flex-direction: column; min-height: 0; }
   /* Size containment: the canvases' own pixel sizes never feed back into the row they fill. */
   .now.views-on .views-panes { flex: 1 1 auto; height: auto; min-height: 0; contain: size; }
@@ -1289,6 +1287,8 @@ button, input, select { font: inherit; color: inherit; }
 
 @media (min-width: 1100px) {
   .now-body { grid-template-columns: minmax(0, 1fr) 380px; }
+  /* Beside Up next the strip's title keeps to one line, an ellipsis where it must. */
+  .now.views-on .now-title { display: block; white-space: nowrap; text-overflow: ellipsis; }
   .now-side {
     display: block;
     align-self: start;
@@ -1310,139 +1310,69 @@ button, input, select { font: inherit; color: inherit; }
 
 /* Below 900 px the strip folds: the cover and the words, the transport under them. */
 @media (max-width: 899px) {
-  .now.views-on .now-hero { grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; padding: 0; }
+  .now.views-on .now-hero { gap: 12px 16px; }
+  .now.views-on .now-words { flex-basis: 180px; }
   .now.views-on .now-art { width: 72px; border-radius: 12px; }
   .now.views-on .now-title { font-size: 24px; line-height: 28px; letter-spacing: -0.4px; }
   .now.views-on .now-by { font-size: 15px; line-height: 20px; }
-  .now.views-on .transport { grid-column: 1 / -1; justify-content: space-between; }
+  .now.views-on .transport { flex: 1 1 100%; margin-left: 0; justify-content: space-between; }
 }
 
-/* ---- Now playing over the cover (v1.18 — M47) -----------------------------------------------------------
-   The backdrop: the cover three times, each a 240 px copy blurred 12 px and saturated 1.75 that its transform scales to
-   cover the window (--bd-scale: the window's diagonal over the copy's clear 192 px, set by app.js), so the blurred
-   texture stays small and the compositor does the enlarging. The first at 1.05 × turns in 60 s; the second, half again
-   as large at 60 %, in 84 s the other way, set off by (12 %, −6 %) of the window; the third, smaller at 38 %, in 48 s off
-   centre toward the top right. Transform-only keyframes, running only while a piece plays (.playing), none under reduced
-   motion. Over them a black dimming, from dim − 0.06 at the top to dim + 0.10 at the foot, where dim (set by app.js
-   from the cover's brightest 4 × 4 block of a 16 × 16 reading) keeps the light words at 4.5:1. */
+/* ---- Now playing's album colours (v1.15 — M41; v1.18 — M47: the whole window) ------------------------------------
+   The playing piece's art colours behind the panel while Now playing shows, as the tablet's Now playing has them: four
+   soft discs, each a radial gradient from its colour to nothing (no blur), 60 % of the window's shorter side in radius,
+   drifting on a transform-only path (each its own pace) while a piece plays and still otherwise, under a veil of the
+   surface (55 % on paper, 62 % on the camera body) so the words, in the primary colour over it, keep 4.5:1 over any hue.
+   Since v1.18 — M47 the layer is fixed to the window, behind the rail, the page and Up next (the mock's places for the
+   discs). The colours are the art's (--bd1 … --bd4: hue and saturation, set by app.js from a 32 × 32 sample of the loaded
+   picture); the lightness is the appearance's. None in black and white, with Album colours off on the tablet, with
+   reduced transparency or more contrast; still with reduced motion. */
 
-.backdrop {
-  --bd-scale: 8;
-  --dim: 0.45;
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
-  background: var(--ink-surface);
-}
+.backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 
-.backdrop i {
+.bd {
+  --bd: 0 0%;
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 240px;
-  height: 240px;
-  margin: -120px 0 0 -120px;
-  background: center / cover no-repeat var(--art, none);
-  filter: blur(12px) saturate(1.75);
-  will-change: transform;
-  animation: 60s linear infinite paused;
+  width: 120vmin;
+  height: 120vmin;
+  margin: -60vmin 0 0 -60vmin;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, hsl(var(--bd) var(--bd-l)), hsl(var(--bd) var(--bd-l) / 0.82) 30%,
+    hsl(var(--bd) var(--bd-l) / 0.42) 60%, hsl(var(--bd) var(--bd-l) / 0.12) 85%, hsl(var(--bd) var(--bd-l) / 0));
+  animation: bd-sway 10s ease-in-out infinite alternate, bd-rise 7s ease-in-out infinite alternate;
+  animation-play-state: paused;
 }
 
-.backdrop i:nth-child(1) { scale: calc(var(--bd-scale) * 1.05); rotate: 8deg; animation-name: bd-turn-a; }
+.bd1 { --bd: var(--bd1); left: 22%; top: 34%; animation-duration: 10s, 7s; }
+.bd2 { --bd: var(--bd2); left: 74%; top: 64%; animation-duration: 11.25s, 7.9s; animation-direction: alternate-reverse, alternate; }
+.bd3 { --bd: var(--bd3); left: 48%; top: 88%; animation-duration: 12s, 8.4s; animation-direction: alternate, alternate-reverse; }
+.bd4 { --bd: var(--bd4); left: 92%; top: 8%; animation-duration: 13s, 9.1s; animation-direction: alternate-reverse; }
 
-.backdrop i:nth-child(2) { scale: calc(var(--bd-scale) * 1.575); rotate: 150deg; translate: 12vw -6vh; opacity: 0.6; animation-name: bd-turn-b; animation-duration: 84s; }
+.bd-veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--surface) var(--bd-veil), transparent); }
 
-.backdrop i:nth-child(3) { scale: calc(var(--bd-scale) * 0.735); rotate: -30deg; translate: 22vw -20vh; opacity: 0.38; animation-name: bd-turn-c; animation-duration: 48s; }
+.backdrop.playing .bd { animation-play-state: running; }
 
-.backdrop::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, hsl(0 0% 0% / calc(var(--dim) - 0.06)), hsl(0 0% 0% / calc(var(--dim) + 0.1)));
-}
+@keyframes bd-sway { from { translate: -25% 0; } to { translate: 25% 0; } }
 
-.backdrop.playing i { animation-play-state: running; }
-
-@keyframes bd-turn-a { from { rotate: 8deg; } to { rotate: 368deg; } }
-
-@keyframes bd-turn-b { from { rotate: 150deg; } to { rotate: -210deg; } }
-
-@keyframes bd-turn-c { from { rotate: -30deg; } to { rotate: 330deg; } }
-
-/* Immersive (while the backdrop shows): the words are the ink's primary colour in both appearances, nothing secondary or
-   tertiary stands on the backdrop below 18 px, glass is the black tint over its blur with a light edge, and the live dot
-   carries a light ring so red reads on a red cover. */
-.panel.immersive {
-  --surface: var(--ink-surface);
-  --elevated: var(--ink-elevated);
-  --hairline: var(--immersive-edge);
-  --disabled: var(--ink-disabled);
-  --primary: var(--ink-primary);
-  --secondary: var(--immersive-secondary);
-  --tertiary: var(--immersive-tertiary);
-  --specular: var(--immersive-specular);
-  color-scheme: dark;
-}
-
-.panel.immersive .glass {
-  background: var(--immersive-glass);
-  -webkit-backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
-  backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
-  border-color: var(--immersive-edge);
-  box-shadow: inset 0 1px 0 var(--immersive-specular);
-}
-
-.panel.immersive .dot.live { box-shadow: 0 0 0 1.5px hsl(0 0% 100% / 0.9); }
-
-.panel.immersive .connection, .panel.immersive .now-main .eyebrow, .panel.immersive .now-lines .meta, .panel.immersive .views-note { color: var(--primary); }
-
-.panel.immersive .now-art::after { display: none; }
-
-.panel.immersive .segmented button[aria-pressed="true"] {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--ink-primary) 94%, transparent);
-  color: var(--ink-surface);
-  font-weight: 600;
-}
-
-/* The roll has no card over the cover (views.js draws it for it); the score keeps its opaque sheet in its own colours. */
-.panel.immersive .pane-roll { background: transparent; border-radius: 0; }
-
-.panel.immersive .strip-canvas { height: 64px; border-top: 0; }
-
-.panel.immersive .pane-score {
-  --surface: var(--sheet-surface);
-  --elevated: var(--sheet-elevated);
-  --hairline: var(--sheet-hairline);
-  --disabled: var(--sheet-disabled);
-  --primary: var(--sheet-primary);
-  --secondary: var(--sheet-secondary);
-  --tertiary: var(--sheet-tertiary);
-  background: var(--sheet-elevated);
-  color: var(--primary);
-  box-shadow: 0 30px 70px -30px hsl(0 0% 0% / 0.7);
-}
-
-/* Below 900 px the strip over the cover is the same glass. */
-@media (max-width: 899px) {
-  .panel.immersive .sections {
-    background-color: var(--immersive-glass);
-    -webkit-backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
-    backdrop-filter: blur(var(--immersive-blur)) saturate(1.4);
-    border-bottom-color: var(--immersive-edge);
-    box-shadow: inset 0 -1px 0 var(--immersive-specular);
-  }
-  .panel.immersive.scrolled .sections { background-image: none; }
-  .panel.immersive .sections::after { display: none; }
-}
-
-@media (max-width: 599px) {
-  .panel.immersive .sections { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
-}
+@keyframes bd-rise { from { transform: translateY(-18%); } to { transform: translateY(18%); } }
 
 body.mono .backdrop, body.no-backdrop .backdrop { display: none; }
+
+/* Over the colours, nothing secondary or tertiary stands on them: the primary colour alone keeps 4.5:1 through the veil.
+   The words, the times, the transport and the instrument's lines stand on them; below 900 px the strip's words too, and
+   on a phone the name and the connection line. The glass (the rail, the capsules, Up next, the bar) and the views' cards
+   keep their own greys. */
+body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport, .now-lines, .views-note) {
+  --secondary: var(--primary);
+  --tertiary: var(--primary);
+}
+
+@media (max-width: 899px) {
+  body:not(.mono):not(.no-backdrop) .panel.has-backdrop .sections {
+    --secondary: var(--primary);
+    --tertiary: var(--primary);
+  }
+}
 
 /* ---- Now playing's views (v1.13 — M32) ------------------------------------------------------------
    The score and the moving notes, as the tablet's Now playing shows them: content, never glass; each view a card on the
@@ -1899,7 +1829,7 @@ body.mono .backdrop, body.no-backdrop .backdrop { display: none; }
 /* Reduced motion: the bands come and go as a cut; nothing turns, breathes or sweeps; every change is a cut. */
 @media (prefers-reduced-motion: reduce) {
   .sections::after { transition: none; }
-  .backdrop i, .dot.live.breathing { animation: none; }
+  .bd, .dot.live.breathing { animation: none; }
   .progress.waiting > span { animation: none; left: 0; }
   *, *::before, *::after { transition: none !important; }
 }

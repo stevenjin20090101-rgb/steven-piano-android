@@ -522,6 +522,7 @@
     if (section === 'queue') renderQueue($('queue-full'));
     renderQueue($('now-side'), true);
     renderRequestsCount();
+    if (section === 'library' && !library.loaded && !library.asking && performance.now() - library.failedAt >= LIBRARY_RETRY_MS) libraryLoad();
     if (section === 'channels' && (!before || channelOf(before) !== channelOf(state))) channelsLoad();
     if (section === 'requests' && (!before || before.requests.pending !== state.requests.pending)) requestsLoad();
     if (section === 'requests') renderGuestSwitches();
@@ -839,8 +840,8 @@
   // ---- Now playing --------------------------------------------------------------------------------
   //
   // v1.18 — M47: the art view (the cover large, the title, the composer, the scrubber, the transport, a row of glass
-  // capsules) or, with Notes or Score, the strip over the views; Up next beside it from 1100 px; the cover's own
-  // colours behind the whole panel while it shows (the backdrop, below).
+  // capsules) or, with Notes or Score, the strip over the views; Up next beside it from 1100 px; the album's colours
+  // behind the whole window while it shows (v1.15's backdrop, below).
 
   let seeking = false;
   let shownProblem = null;
@@ -849,7 +850,8 @@
     const player = state.player;
     const piece = player.piece;
     const playing = player.status === 'playing';
-    // Asked for at once, ahead of the rest, at the full size; its picture is the backdrop (the same picture: left as it is).
+    // Asked for at once, ahead of the rest, at the full size; its picture gives the backdrop its colours (the same
+    // picture: left as it is).
     art($('now-art'), piece, 'full', { priority: true, onPicture: backdropFrom });
     $('now-art').hidden = !piece;
     $('section-now').classList.toggle('unloaded', !piece && !player.loading);
@@ -903,124 +905,122 @@
     $('keyboard-line').hidden = !keyboardLine;
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
-    updateImmersive();
+    updateBackdrop();
     tick();
   }
 
-  // ---- Now playing over the cover (v1.18 — M47) ------------------------------------------------------------
-  //
-  // The backdrop is the cover itself: three small copies (240 px, blurred 12 px, saturated 1.75) that their transform
-  // scales up to cover the window, each turning at its own pace while a piece plays, under a black dimming that keeps
-  // the light words at 4.5:1 over the cover's brightest part. While it shows, the panel is immersive (style.css). None
-  // for a roll card or a monogram, with Album colours off, in black and white, with reduced transparency or more
-  // contrast; only while Now playing shows.
+  // ---- Now playing's album colours (v1.15 — M41; v1.18 — M47: the whole window) --------------------------------
+
+  /** The colours of the picture Now playing shows ([hue, saturation] × 4), or null: grey art, a roll card, a monogram. */
+  let backdropPalette = null;
 
   /**
-   * Of each copy's 240 px (style.css: its transform does the enlarging, so the blurred texture stays small), the clear
-   * middle inside the blur's soft edge: what must cover the window's diagonal at every turn.
-   */
-  const BACKDROP_CLEAR = 192;
-  const BACKDROP_MIN_DIM = 0.18;
-  /** The luminance light words may stand on at 4.5:1, and sRGB's exponent the black's alpha works through. */
-  const BACKDROP_WORDS_L = 0.14;
-  const BACKDROP_GAMMA = 2.2;
-  const plainQuery = window.matchMedia('(prefers-reduced-transparency: reduce), (prefers-contrast: more)');
-
-  /** The address of the cover Now playing shows (its picture, not a roll card or a monogram), or null. */
-  let backdropAddress = null;
-  let immersive = false;
-
-  /**
-   * Now playing's picture, as the art loader hands it over once it is in ([img]: a cover or a portrait), or null for a
-   * roll card, a monogram or a failure; the last picture stays meanwhile. Its address (the same, so from the cache) and
-   * its dimming go in through the CSSOM.
+   * The art's colours behind Now playing, as the tablet has them: read from the picture Now playing's box shows, which
+   * the art loader hands over once it is in ([img]: a cover or a portrait), the last colours kept meanwhile, and none
+   * ([img] null) for a roll card, a monogram or a failure. They go in as --bd1 … --bd4 on the backdrop (hue and
+   * saturation; the stylesheet gives the lightness and the veil of the page's appearance).
    */
   function backdropFrom(img) {
+    const backdrop = $('now-backdrop');
+    const show = (palette) => {
+      if (palette) palette.forEach(([hue, saturation], i) => backdrop.style.setProperty(`--bd${i + 1}`, `${hue.toFixed(1)} ${(saturation * 100).toFixed(1)}%`));
+      backdropPalette = palette;
+      updateBackdrop();
+    };
     if (!img) {
-      backdropAddress = null;
-      updateImmersive();
+      show(null);
       return;
     }
     const read = () => {
-      if (!img.isConnected) return;
-      const address = img.currentSrc || img.src;
-      const backdrop = $('now-backdrop');
-      backdrop.style.setProperty('--art', `url("${address.replace(/["\\\n]/g, encodeURIComponent)}")`);
-      backdrop.style.setProperty('--dim', dimFor(img).toFixed(3));
-      backdropAddress = address;
-      updateImmersive();
+      if (img.isConnected) show(artPalette(img));
     };
     if (img.complete && img.naturalWidth > 0) read();
     else {
       img.addEventListener('load', read, { once: true });
-      img.addEventListener('error', () => backdropFrom(null), { once: true });
+      img.addEventListener('error', () => show(null), { once: true });
     }
   }
 
   /**
-   * The black a picture needs under light words: the loaded cover read on a 16 × 16 canvas, the brightest of its sixteen
-   * 4 × 4 block means (relative luminance L), dim = max(0.18, 1 − (0.14 / L)^(1 / 2.2)). The picture comes from this
-   * page's own address, so the canvas may read it; one it can't read gives the middle of the range.
+   * The colours behind the whole window while Now playing shows a piece whose art has them, drifting while it plays;
+   * .has-backdrop puts the words standing on them in the primary colour. The stylesheet takes them away in black and
+   * white, with Album colours off, with reduced transparency or more contrast.
    */
-  function dimFor(img) {
-    const canvas = h('canvas', { width: 16, height: 16 });
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return 0.45;
-    let data;
-    try {
-      context.imageSmoothingQuality = 'high';
-      context.drawImage(img, 0, 0, 16, 16);
-      data = context.getImageData(0, 0, 16, 16).data;
-    } catch (e) {
-      return 0.45;
-    }
-    const linear = (v) => {
-      const c = v / 255;
-      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    };
-    let brightest = 0;
-    for (let by = 0; by < 16; by += 4) {
-      for (let bx = 0; bx < 16; bx += 4) {
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        for (let y = by; y < by + 4; y++) {
-          for (let x = bx; x < bx + 4; x++) {
-            const i = (y * 16 + x) * 4;
-            r += data[i];
-            g += data[i + 1];
-            b += data[i + 2];
-          }
-        }
-        brightest = Math.max(brightest, 0.2126 * linear(r / 16) + 0.7152 * linear(g / 16) + 0.0722 * linear(b / 16));
-      }
-    }
-    if (brightest <= 0) return BACKDROP_MIN_DIM;
-    return Math.max(BACKDROP_MIN_DIM, 1 - (BACKDROP_WORDS_L / brightest) ** (1 / BACKDROP_GAMMA));
-  }
-
-  /** The backdrop and the immersive panel, as the section, the picture, the tablet's switches and the browser allow. */
-  function updateImmersive() {
-    const on = section === 'now' && !!state && !!state.player.piece && !!backdropAddress
-      && !state.monochrome && state.albumBackdrop !== false && !plainQuery.matches;
+  function updateBackdrop() {
+    const on = section === 'now' && !!state && !!state.player.piece && !!backdropPalette;
     const backdrop = $('now-backdrop');
     backdrop.hidden = !on;
     backdrop.classList.toggle('playing', on && state.player.status === 'playing');
-    $('panel').classList.toggle('immersive', on);
-    if (on !== immersive) {
-      immersive = on;
-      if (views) views.immersive(on);
+    $('panel').classList.toggle('has-backdrop', on);
+  }
+
+  /**
+   * The backdrop's four colours of a loaded picture, [hue, saturation] each, or null for grey art: the tablet's rule
+   * (data/art/ArtPalette.kt) over a 32 × 32 sample. A 4-bit histogram, near-black and near-white skipped (lightness
+   * outside 0.08–0.92); each bin scored by its count × (0.3 + its saturation); the best kept, each 25° from the others
+   * in hue or 0.25 in saturation, four at most; saturation × 1.35, at most 1; fewer than four padded from the first
+   * hue ± 30°, then + 60°; none when the best bin's chroma is under 0.12. The picture comes from this page's own
+   * address, so the canvas may read it; one it can't read gives none.
+   */
+  function artPalette(img) {
+    const size = 32;
+    const canvas = h('canvas', { width: size, height: size });
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    let data;
+    try {
+      context.drawImage(img, 0, 0, size, size);
+      data = context.getImageData(0, 0, size, size).data;
+    } catch (e) {
+      return null;
     }
+    const counts = new Uint32Array(4096);
+    const sums = new Float64Array(4096 * 3);
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 510;
+      if (lightness < 0.08 || lightness > 0.92) continue;
+      const bin = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      counts[bin] += 1;
+      sums[bin * 3] += r;
+      sums[bin * 3 + 1] += g;
+      sums[bin * 3 + 2] += b;
+    }
+    const bins = [];
+    for (let bin = 0; bin < 4096; bin++) {
+      const n = counts[bin];
+      if (!n) continue;
+      const r = sums[bin * 3] / n / 255;
+      const g = sums[bin * 3 + 1] / n / 255;
+      const b = sums[bin * 3 + 2] / n / 255;
+      const hi = Math.max(r, g, b);
+      const lo = Math.min(r, g, b);
+      const chroma = hi - lo;
+      const saturation = chroma === 0 ? 0 : Math.min(1, chroma / (1 - Math.abs(hi + lo - 1)));
+      let hue = 0;
+      if (chroma > 0) hue = hi === r ? 60 * ((g - b) / chroma) : hi === g ? 60 * ((b - r) / chroma + 2) : 60 * ((r - g) / chroma + 4);
+      bins.push({ bin, chroma, hue: ((hue % 360) + 360) % 360, saturation, score: n * (0.3 + saturation) });
+    }
+    bins.sort((a, b) => b.score - a.score || a.bin - b.bin);
+    if (bins.length === 0 || bins[0].chroma < 0.12) return null;
+    const apart = (a, b) => {
+      const d = Math.abs(a.hue - b.hue) % 360;
+      return Math.min(d, 360 - d) >= 25 || Math.abs(a.saturation - b.saturation) >= 0.25;
+    };
+    const picks = [];
+    for (const bin of bins) {
+      if (picks.length === 4) break;
+      if (picks.every((p) => apart(p, bin))) picks.push(bin);
+    }
+    const colours = picks.map((p) => [p.hue, Math.min(1, p.saturation * 1.35)]);
+    for (const turn of [30, -30, 60]) {
+      if (colours.length < 4) colours.push([(((colours[0][0] + turn) % 360) + 360) % 360, colours[0][1]]);
+    }
+    return colours;
   }
-
-  /** The copies' scale: the window's diagonal over their clear middle, through the CSSOM. */
-  function backdropScale() {
-    $('now-backdrop').style.setProperty('--bd-scale', (Math.hypot(window.innerWidth, window.innerHeight) / BACKDROP_CLEAR).toFixed(3));
-  }
-
-  backdropScale();
-  window.addEventListener('resize', debounce(backdropScale, 100));
-  plainQuery.addEventListener('change', updateImmersive);
 
   /**
    * What plays and what is played from (v1.11 — M29), in two read-only lines: "Instrument: Steven Piano" and
@@ -1139,7 +1139,7 @@
     viewsLoading = true;
     import('./views.js').then((module) => {
       views = module.mountViews($('now-views'), viewsApi, {
-        h, glyph, chip, failed, viewButton: $('now-view'), view: () => nowView, immersive: () => immersive,
+        h, glyph, chip, failed, viewButton: $('now-view'), view: () => nowView,
       });
       views.show(section === 'now');
       views.state(state);
@@ -1414,8 +1414,44 @@
     return window.matchMedia('(min-width: 900px)').matches ? 'covers' : 'list';
   }
 
-  const library = { category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, loaded: false, genre: storedGenre(), shows: storedLibraryView(), emptyText: '' };
+  const library = {
+    category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, genre: storedGenre(), shows: storedLibraryView(), emptyText: '',
+    loaded: false,      // the list asked for last is drawn
+    asking: false,      // a list or a group is on its way
+    failedAt: -Infinity,
+  };
   const PAGE = 50;
+
+  // Every list the Library asks for takes a ticket (v1.18 — M47): its answer is drawn whenever it arrives, unless a newer
+  // list was asked for meanwhile, whatever the section or the state. A list that could not be read (refused through the
+  // relay, the piano offline, the session ended) leaves the Library to ask again when it next shows, or with a state
+  // message while it shows, at most every 5 s: never tools over an empty page that waits for a tap.
+  const LIBRARY_RETRY_MS = 5000;
+  let libraryAsked = 0;
+
+  /**
+   * Asks the tablet with [load] and draws its answer with [draw]. [list]: the Library's own list (a category's first
+   * page, a search, the playlists, the composers), which, unread, is asked for again; a page more, a playlist or a
+   * composer opened that can't be read leaves what shows as it is.
+   */
+  async function libraryAsk(load, draw, list) {
+    const ticket = ++libraryAsked;
+    library.asking = true;
+    try {
+      const answer = await load();
+      if (ticket !== libraryAsked) return;   // a newer list was asked for: its answer is the one drawn
+      draw(answer);
+      library.loaded = true;
+    } catch (e) {
+      if (ticket === libraryAsked && list) {
+        library.loaded = false;
+        library.failedAt = performance.now();
+      }
+      failed(e);
+    } finally {
+      if (ticket === libraryAsked) library.asking = false;
+    }
+  }
 
   /** Under Modern the Library says artist where it says composer (v1.14 — M37). */
   const artists = () => library.genre === 'modern';
@@ -1486,9 +1522,9 @@
 
   $('lib-more').querySelector('button').addEventListener('click', () => libraryPage(library.offset));
 
-  async function libraryLoad(force) {
-    if (library.loaded && !force) return;
-    library.loaded = true;
+  /** The list the switches and the search say: asked for when forced, else unless drawn or on its way. */
+  function libraryLoad(force) {
+    if (!force && (library.loaded || library.asking)) return undefined;
     renderGenre();
     renderChips();
     $('lib-crumb').hidden = true;
@@ -1498,20 +1534,17 @@
     return libraryPage(0);
   }
 
-  async function libraryPage(offset) {
+  function libraryPage(offset) {
     const params = new URLSearchParams({ category: library.query ? 'all' : library.category, offset: String(offset), limit: String(PAGE) });
     if (library.query) params.set('q', library.query);
     if (library.genre !== 'all') params.set('genre', library.genre);
-    try {
-      const page = await get(ROOT + `/api/library?${params}`);
+    return libraryAsk(() => get(ROOT + `/api/library?${params}`), (page) => {
       library.pieces = offset === 0 ? page.pieces : library.pieces.concat(page.pieces);
       library.total = page.total;
       library.offset = offset + page.pieces.length;
       renderPieces(library.pieces, library.query ? 'Nothing matches that search.' : 'No pieces here yet.');
       $('lib-more').hidden = library.offset >= library.total;
-    } catch (e) {
-      failed(e);
-    }
+    }, offset === 0);
   }
 
   /** A list of pieces (a category's, a playlist's, a composer's, a search's): a grid of covers, or the rows. */
@@ -1605,9 +1638,8 @@
     if (event.key === 'Escape') closeMenu();
   });
 
-  async function playlistsLoad() {
-    try {
-      const { playlists } = await get(scoped(ROOT + '/api/playlists'));
+  function playlistsLoad() {
+    return libraryAsk(() => get(scoped(ROOT + '/api/playlists')), ({ playlists }) => {
       $('lib-more').hidden = true;
       artForgetIn($('lib-rows'));
       rowsOnly();
@@ -1623,24 +1655,18 @@
       }));
       $('lib-empty').hidden = playlists.length > 0;
       $('lib-empty').textContent = 'No playlists yet.';
-    } catch (e) {
-      failed(e);
-    }
+    }, true);
   }
 
-  async function openPlaylist(list) {
-    try {
-      const detail = await get(ROOT + `/api/playlists/${list.id}`);
+  function openPlaylist(list) {
+    return libraryAsk(() => get(ROOT + `/api/playlists/${list.id}`), (detail) => {
       showGroup(detail.playlist.name, [detail.playlist.builtIn ? 'Built in' : null, plural(detail.pieces.length, 'piece', 'pieces')].filter(Boolean).join(' · '), detail.pieces,
         (shuffle) => post(ROOT + '/api/play-all', { playlistId: list.id, shuffle }));
-    } catch (e) {
-      failed(e);
-    }
+    }, false);
   }
 
-  async function composersLoad() {
-    try {
-      const { composers } = await get(scoped(ROOT + '/api/composers'));
+  function composersLoad() {
+    return libraryAsk(() => get(scoped(ROOT + '/api/composers')), ({ composers }) => {
       $('lib-more').hidden = true;
       artForgetIn($('lib-rows'));
       rowsOnly();
@@ -1656,20 +1682,15 @@
       }));
       $('lib-empty').hidden = composers.length > 0;
       $('lib-empty').textContent = artists() ? 'No artists yet.' : 'No composers yet.';
-    } catch (e) {
-      failed(e);
-    }
+    }, true);
   }
 
-  async function openComposer(composer) {
-    try {
-      const detail = await get(scoped(ROOT + `/api/composers/${encodeURIComponent(composer.key)}`));
+  function openComposer(composer) {
+    return libraryAsk(() => get(scoped(ROOT + `/api/composers/${encodeURIComponent(composer.key)}`)), (detail) => {
       const ids = detail.pieces.map((p) => p.id);
       showGroup(detail.composer.name || unknownName(), plural(detail.pieces.length, 'piece', 'pieces'), detail.pieces,
         (shuffle) => post(ROOT + '/api/play-all', { ids, shuffle }));
-    } catch (e) {
-      failed(e);
-    }
+    }, false);
   }
 
   /** A playlist or a composer opened: back, its name, Play and Shuffle, then its pieces. */

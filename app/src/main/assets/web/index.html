@@ -94,9 +94,15 @@
 </main>
 
 <div id="panel" class="panel" hidden>
-  <!-- Now playing over the cover (v1.18 — M47): the cover three times, blurred and turning, under the dimming its
-       brightest part needs. Behind the whole panel while Now playing shows a piece with a picture. -->
-  <div class="backdrop" id="now-backdrop" aria-hidden="true" hidden><i></i><i></i><i></i></div>
+  <!-- The album's colours (v1.15 — M41): four soft discs, drifting while a piece plays, under a veil of the page. Since
+       v1.18 — M47 they fill the window behind the panel, the rail and Up next while Now playing shows. -->
+  <div class="backdrop" id="now-backdrop" aria-hidden="true" hidden>
+    <div class="bd bd1"></div>
+    <div class="bd bd2"></div>
+    <div class="bd bd3"></div>
+    <div class="bd bd4"></div>
+    <div class="bd-veil"></div>
+  </div>
 
   <!-- The rail (from 900 px a glass card, its groups under engraved headings), the tab strip below it; on phones the
        name and the connection line over the page, the sections in the bar at the foot. -->

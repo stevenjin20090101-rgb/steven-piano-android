@@ -8058,17 +8058,15 @@ v1.15 — M41's rules stand again; only the tablet's Compose code and `data/art/
 
 # v1.18 — M47: the panel's new look
 
-Fable's design (DESIGN.md › v1.18 — M47, the mocks `panel.css`/`panel.html` and `now2.html`), Opus coding, one lean run
-in a worktree: no emulator, no version bump, no signing. Settings and System (M47b) are written apart, as modules.
+Fable's design (DESIGN.md › v1.18 — M47, the mocks `panel.css`/`panel.html` and `now2.html`), Opus coding, two lean runs
+in a worktree (the second after Steven's choice of the effect before and the integrator's look at the real panel): no
+emulator, no version bump, no signing. Settings and System (M47b) are written apart, as modules.
 
 ## Tokens (`ui/theme/Color.kt`, `style.css`)
 - `AttentionInk` #E6A23C and `AttentionPaper` #9A5B00; `--ink-attention`/`--paper-attention`, `--attention` in each
   appearance block (`WebAssetsTest`'s parity list). Every other palette token, the glass's (72 %, 86 %, 24 px), the
   scroll-edge bands and the specular lines as before; `--radius-card` 18 px, `--radius-control` 10 px, `--inset` 20 px.
-- Immersive: `--immersive-glass` hsl(0 0% 0% / 0.26), `--immersive-blur` 30 px, `--immersive-edge` and the specular
-  line hsl(0 0% 100% / 0.14 and 0.12), `--immersive-secondary`/`-tertiary` the ink's light at 78 % and 60 %. `--sheet-*`
-  hold the appearance's own surface and text colours (declared on :root, so they keep the root's values inside
-  `.immersive`) for the score's sheet.
+- `--bd-l`/`--bd-veil` as v1.15 had them: 45 % / 55 % on paper, 32 % / 62 % on ink (the two dark blocks).
 - Dark by default: `<html lang="en" data-theme="dark">`, `<meta name="color-scheme" content="dark light">`;
   `appearance()` gives `dark` with nothing stored, `light` or `system` when chosen (`system` removes the attribute).
   The guests' page and the poster keep theirs; `.guest-page` restores 1.17's insets, corners, field, buttons, genre
@@ -8100,11 +8098,19 @@ in a worktree: no emulator, no version bump, no signing. Settings and System (M4
   `.now-lines`, and the volumes' `.popover.glass` (positioned through the CSSOM over the capsule, closed by the capsule,
   Escape, a tap outside, a scroll or a section change). `#section-now.views-on` (the switch on Notes or Score) gives the
   strip; `.unloaded` (no piece, none loading) the centred line.
-- Art: `.now-main` is one column `min(max(240px, min(54vh, 100vh − 392px)), 560px, 100%)`, centred both ways. From
-  900 px `.now` is a grid `auto 1fr` of `min-height: calc(100vh − 28px)` with a −26 px bottom margin (the page's foot
-  is 14 px there), the views' row `minmax(340px, 1fr)` and `.views-panes` under `contain: size` (the canvases' pixel
-  sizes never feed back into the row). From 1100 px `.now-body` is `1fr 380px`: `.now-side.glass`, at most
+- Art: `.now-main` is one column `min(max(240px, min(54vh, 100vh − 444px)), 560px, 100%)`, centred both ways: 444 px
+  is the page's padding and head (90) with the words, the controls and the instrument's lines under the cover, a title
+  on two lines or the capsules on two rows (at 1440 × 900 the cover is 456 px, the lines end at 852). `.now-hero` is
+  one `minmax(0, 1fr)` column; the transport's icon buttons are `flex: 0 1 52px` down to 40 px, the play circle fixed.
+  From 900 px `.now` is a grid `auto 1fr` of `min-height: calc(100vh − 28px)` with a −26 px bottom margin (the page's
+  foot is 14 px there), the views' row `minmax(320px, 1fr)` and `.views-panes` under `contain: size` (the canvases'
+  pixel sizes never feed back into the row). From 1100 px `.now-body` is `1fr 380px`: `.now-side.glass`, at most
   `calc(100vh − 90px)`, scrolling inside.
+- The strip (`.now.views-on`): `.now-hero` a wrapping flex row (gap 12 px × 20 px): the 132 px cover, `.now-words`
+  `flex: 1 1 280px`, `.transport` `flex: none` with 44 px buttons, a 60 px play circle and 4 px gaps (252 px), pushed
+  right; where the words would have less than 280 px it wraps to its own line. From 1100 px the title is one line,
+  `white-space: nowrap; text-overflow: ellipsis`. At 1440 × 900 the words get 332 px (the scrubber 232 px, was about
+  160) and the views 566 px between the strip and the capsules; at 1280 × 720 the transport wraps and the words get 444.
 - `art(#now-art, piece, 'full', {priority, onPicture: backdropFrom})`. `nowView` (`steven-piano-now-view`) drives the
   switch at every width; `views.js` loads when it is not Art.
 - Up next rows: the cover, the title (two lines) with Requested, the composer, `.time` at the right, `.row-tools` (up,
@@ -8112,31 +8118,27 @@ in a worktree: no emulator, no version bump, no signing. Settings and System (M4
   (width 0 otherwise, so the keyboard still reaches them); elsewhere the time moves into the meta line (`.meta-time`).
   The playing row: `.current`, `.bars` (three still bars).
 
-## The backdrop (`index.html` `#now-backdrop`, `style.css` › Now playing over the cover, `app.js`)
-- `.backdrop` is `position: fixed; inset: 0; z-index: -1` inside `.panel` (`isolation: isolate`), the ink surface
-  under three `<i>`: 240 px squares, `background: center / cover var(--art)`, `filter: blur(12px) saturate(1.75)`,
-  `will-change: transform`, individual transform properties: `scale: calc(var(--bd-scale) × 1.05 | 1.575 | 0.735)`,
-  `translate` 0 · (12vw, −6vh) · (22vw, −20vh), opacity 1 · 0.6 · 0.38, keyframes on `rotate` alone (8°→368° in 60 s,
-  150°→−210° in 84 s, −30°→330° in 48 s), `animation-play-state` running only with `.playing`; `animation: none` under
-  reduced motion. `--bd-scale` = the window's diagonal / 192 (the copy's clear middle inside the blur's edge), set on
-  resize. `::after`: `linear-gradient(to bottom, hsl(0 0% 0% / calc(var(--dim) − 0.06)), … calc(var(--dim) + 0.1))`.
-- `backdropFrom(img)`: `--art: url("<img.currentSrc>")` (the loader's full-size address, so from the cache) and
-  `--dim` = `dimFor(img)`: the image drawn on a 16 × 16 canvas (`imageSmoothingQuality` high), each 4 × 4 block's mean
-  sRGB → linear → L = 0.2126 R + 0.7152 G + 0.0722 B, the largest L, `max(0.18, 1 − (0.14 / L)^(1/2.2))` (0.18 for
-  L ≤ 0; 0.45 if the canvas can't read). Null (a roll card, a monogram, a failure): no backdrop.
-- `updateImmersive()` (each state, each section change, the media query's change): on when the section is `now`, a
-  piece plays with a picture, `monochrome` is false, `albumBackdrop` is not false and
-  `(prefers-reduced-transparency: reduce), (prefers-contrast: more)` doesn't match. It shows the backdrop, sets
-  `.playing`, puts `.immersive` on `.panel` (style.css overrides `--surface`, `--elevated`, `--hairline`, `--primary`,
-  `--secondary`, `--tertiary`, `--specular`, the glass, the live dot's ring, the pressed segment) and tells the views.
-- `views.js`: `host.view()` replaces `phoneView()`; `panes.dataset.mode` is `notes`, `score` (below 900 px) or `split`
-  (Score from 900 px), the divider only in `split`; `immersive(on)` rebuilds the look: no lanes, notes filled
-  (`fade(light, 0.92 → 1)`, the left hand `0.5 → 0.7`; Hand colours: the ink's ramps), numerals in the ink surface,
-  chord names on a 42 % shade, the line at the tracker or the strip's edge at 75 %, the strip `keysOverCover` (white
-  keys the ink's light with 1 px gaps and 3 px feet, black keys the ink surface, sounding ones `--ink-sounding` or the
-  hand's mix). `roll.js` adds `fade`, `cssAlpha` and the constants; `rgb()` also reads `rgb(r g b)` (the hand ramps'
-  mixed end colour fell back to grey before). `.immersive .pane-roll` has no card, the strip 64 px; `.immersive
-  .pane-score` keeps `--sheet-*`.
+## The colours behind Now playing (`index.html` `#now-backdrop`, `style.css` › Now playing's album colours, `app.js`)
+- v1.15 — M41's backdrop as `main` had it before M47 (Steven's choice on 2026-10-03, after the blurred cover was tried
+  in the first run): `#now-backdrop` holds `.bd1` … `.bd4` and `.bd-veil`; each disc 120vmin round,
+  `radial-gradient(closest-side, hsl(var(--bd) var(--bd-l)) …)` to nothing, `bd-sway`/`bd-rise` at its own pace
+  (10/7 s, 11.25/7.9 s, 12/8.4 s, 13/9.1 s), `animation-play-state` running only with `.playing`; `.bd-veil` the
+  surface at `--bd-veil`. New: `.backdrop` is `position: fixed; inset: 0; z-index: -1`, the first child of `.panel`
+  (`isolation: isolate`), so it fills the window behind the rail, the page and Up next; the discs sit at the mock's
+  places (22 %/34 %, 74 %/64 %, 48 %/88 %, 92 %/8 %). `body.mono`, `body.no-backdrop`, reduced transparency and more
+  contrast hide it; reduced motion stills it.
+- `backdropFrom(img)` (Now playing's `onPicture`) and `artPalette(img)` are v1.15's, unchanged (`artPalette` the same
+  bytes); the palette goes in as `--bd1` … `--bd4` and `updateBackdrop()` (each state, through `renderNow()`, so each
+  section change too) shows it while the section is `now`, a piece is loaded and its art has colours, sets `.playing`
+  while it plays and `.has-backdrop` on `.panel`.
+- The words on it (`body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport, .now-lines,
+  .views-note)`, and below 900 px `.sections`) take `--secondary` and `--tertiary` from `--primary`, v1.15's rule. The
+  glass is the standard glass (`--glass-bar`, `--glass-sheet`, `--glass-blur`): the rail card, Up next, the capsules,
+  the phone's bar; the roll and the score are on their cards (`.pane`'s elevated surface).
+- `views.js` keeps `host.view()` (Art · Notes · Score at every width) and `panes.dataset.mode` (`notes`, `score` below
+  900 px, `split` for Score from 900 px, the divider only in `split`); the roll and the score look as on `main` before
+  M47. `roll.js` is `main`'s but for `rgb()`, which also reads `rgb(r g b)` (the hand ramps' mixed end colour fell back
+  to grey before).
 
 ## The Library (`index.html`, `app.js` › Library, `style.css` › Library)
 - `.lib-tools`: `#lib-genre`, `label.field.search-field` (the `g-search` glyph, `#lib-search`), `#lib-view` (Covers ·
@@ -8144,6 +8146,13 @@ in a worktree: no emulator, no version bump, no signing. Settings and System (M4
 - `renderPieces` sets `#lib-rows` to `cover-grid` or `rows card`; `pieceTile`: `li.cover-tile` > `button.tile-play`
   (`span.art` at `tile`, the title, the composer; a click plays the list) and `button.icon-button.tile-more.glass`
   (the menu), shown on hover or focus, always under `(pointer: coarse)`. Playlists and composers call `rowsOnly()`.
+- Every list goes through `libraryAsk(load, draw, list)`: a ticket each (`libraryAsked`); the answer is drawn whenever
+  it arrives unless a newer ask has taken a ticket since (a page more, a playlist or a composer opened included), and
+  then `library.loaded` holds. Before, `libraryLoad()` set `loaded` ahead of the answer, so a first list refused (429 or
+  503 busy through the relay, offline, the gate) left the tools over an empty page until a chip or the search was
+  touched. Now a list (`list`: the first page, a search, the playlists, the composers) that can't be read clears
+  `loaded` and notes `failedAt`; `show('library')` asks again, and so does each state while the Library shows, at most
+  every `LIBRARY_RETRY_MS` (5 s). A page more, a playlist or a composer that fails leaves what shows.
 
 ## The seam with M47b (`app.js` › The Settings and System pages' modules)
 - `index.html` links `system.css` after `style.css` (an empty file here, its banner only; `WebAssets.PANEL` serves it);
@@ -8169,4 +8178,6 @@ in a worktree: no emulator, no version bump, no signing. Settings and System (M4
 `WebAssetsTest`: the attention pair in the parity list; Settings and System among the section names; a new test (dark
 by default, `system.css` linked after `style.css` and served, the seam's ids, the two modules imported by `app.js` and
 never by the page, the frozen host, the guests' page keeping its own appearance). `WebServerTest`: `size=full` answered.
-1,631 → 1,632 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings, none in this run's files.
+1,631 → 1,632 unit tests (12 skipped), none failing, after the second run too (run with `--rerun`: the web files are not
+the test task's inputs, so a change to them alone comes back from the build cache untested). `lintDebug`: 0 errors, the
+same 30 warnings, none in this run's files.
