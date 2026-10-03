@@ -66,6 +66,8 @@ class ArtworkRepository(
     catalog: AppleCatalogApi,
     /** Whether album covers may be looked up: Fetch artwork automatically and Album covers both on. */
     private val coversWanted: suspend () -> Boolean,
+    /** When the wider album-cover match began (v1.17 — M45), 0 unset: a cover's lookup that found nothing before it is due once more. */
+    private val coverRuleSince: suspend () -> Long,
     private val network: NetworkMonitor,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -122,6 +124,7 @@ class ArtworkRepository(
         clock = System::currentTimeMillis,
         log = { Log.i(TAG, it) },
         writing = writing,
+        coverRuleSince = coverRuleSince,
     )
 
     /** The background run's progress: the Library's hairline row and the fetch notification. */
@@ -167,22 +170,27 @@ class ArtworkRepository(
     /**
      * Every composer in the library that is due (all but the found ones when [force]), then, with album covers on, every
      * piece's cover that is due (v1.15 — M40: a piece without a cover of its own and not made here, Modern first, newest
-     * first; a lookup that found nothing is never forced again). Returns how many were queued; 0 when the library can't be read.
+     * first; a lookup that found nothing is never forced again, though one from before the wider match is asked once more,
+     * v1.17 — M45). Returns how many were queued; 0 when the library can't be read.
      */
     suspend fun requestDue(force: Boolean): Int = readOr(0) {
         val composers = worker.requestAll(composerKeys(), force)
-        composers + if (coversWanted()) worker.requestAll(coverKeys(), force = false) else 0
+        composers + if (coversWanted()) worker.requestAll(coverKeys(coverRuleSince()), force = false) else 0
     }
 
     /**
      * Whether any composer, or (album covers on, v1.15 — M40) any piece's cover, has never been looked up, or failed a day
-     * ago or more: worth a fetch when the app opens. Covers are not, while Apple's lookups wait out a 403 or 429.
+     * ago or more, or (a cover) found nothing before the wider match (v1.17 — M45): worth a fetch when the app opens.
+     * Covers are not, while Apple's lookups wait out a 403 or 429.
      */
     suspend fun due(): Boolean = readOr(false) {
         val now = System.currentTimeMillis()
         composerKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) } ||
-            (covers.blockedFor() == null && coversWanted() && coverKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) })
+            (covers.blockedFor() == null && coversWanted() && coversDue(now, coverRuleSince()))
     }
+
+    private suspend fun coversDue(now: Long, since: Long): Boolean =
+        coverKeys(since).any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false, coverRuleSince = since) }
 
     /**
      * Piece [pieceId]'s album cover, first in line (v1.15 — M40: the piece playing, from the resting screen and Now
@@ -421,8 +429,8 @@ class ArtworkRepository(
         library.composers().first().map { ArtKey.Composer(it.composerKey, it.name) }
 
     /** The pieces whose album cover may be looked up (v1.15 — M40), as keys, in [LibraryRepository.coverCandidates]' order. */
-    private suspend fun coverKeys(): List<ArtKey.Cover> =
-        library.coverCandidates().map { ArtKey.Cover(it.id, it.title, it.composerShort, it.genre == Genres.CLASSICAL) }
+    private suspend fun coverKeys(since: Long): List<ArtKey.Cover> =
+        library.coverCandidates(since).map { ArtKey.Cover(it.id, it.title, it.composerShort, it.genre == Genres.CLASSICAL) }
 
     private companion object {
         const val TAG = "Artwork"

@@ -84,4 +84,56 @@ class CoverMatchTest {
         assertSame(queen, CoverMatch.pick("Bohemian Rhapsody (Piano Version)", "Queen", classical = false, listOf(queen)))
         assertNull("no title left, nothing to match", CoverMatch.pick("(Untitled)", "Queen", classical = false, listOf(queen)))
     }
+
+    // ---- A little wider (v1.17 — M45): 25 results, and the rules below, measured on Steven's songs ----------------
+
+    @Test
+    fun `two cores equal without their spaces fit, four characters or more`() {
+        assertEquals(25, CoverFetcher.RESULTS)
+        assertTrue("S.T.A.Y. is Stay", CoverMatch.trackFits(CoverMatch.core("Stay"), CoverMatch.core("S.T.A.Y.")))
+        assertFalse("three are too few", CoverMatch.trackFits(CoverMatch.core("ABC"), CoverMatch.core("A.B.C.")))
+    }
+
+    @Test
+    fun `a composer's movement words do not count towards the 70 %`() {
+        val title = "Pathétique Sonata, 1st movement"
+        val barenboim = song(
+            "Piano Sonata No. 8 in C Minor, Op. 13 \"Pathétique\": I. Grave - Allegro di molto e con brio",
+            "Daniel Barenboim",
+            "Beethoven: Piano Sonatas Nos. 8, 14 & 23",
+        )
+        assertSame(barenboim, CoverMatch.pick(title, "Beethoven", classical = true, listOf(barenboim)))
+        assertTrue(CoverMatch.trackFits(CoverMatch.core(title), CoverMatch.core(barenboim.trackName), classical = true))
+        assertFalse("a song's every word counts: two of four", CoverMatch.trackFits(CoverMatch.core(title), CoverMatch.core(barenboim.trackName)))
+    }
+
+    @Test
+    fun `when nothing fits, an album the artist names is taken, its track fitting`() {
+        val zimmer = song("S.T.A.Y.", "Hans Zimmer", "Interstellar (Original Motion Picture Soundtrack) [Expanded Edition]")
+        val covers = song("Stay", "Piano Dreamers", "Interstellar Piano Covers")
+        assertSame(zimmer, CoverMatch.pick("Stay", "Interstellar", classical = false, listOf(covers, zimmer)))
+        assertNull("its track must fit", CoverMatch.pick("Cornfield Chase", "Interstellar", classical = false, listOf(zimmer)))
+    }
+
+    @Test
+    fun `then any track by the artist on the work's album, which holds every distinctive word of the title`() {
+        val dragonborn = song("Dragonborn", "Jeremy Soule", "The Elder Scrolls V: Skyrim (Original Game Soundtrack)")
+        val piano = song("Skyrim Theme", "Piano Covers Club", "Video Game Piano")
+        assertSame(dragonborn, CoverMatch.pick("Skyrim Theme", "Jeremy Soule", classical = false, listOf(piano, dragonborn)))
+        assertNull(
+            "a title of plain words names no work",
+            CoverMatch.pick("Main Theme", "Jeremy Soule", classical = false, listOf(song("Dragonborn", "Jeremy Soule", "Main Theme and Other Songs"))),
+        )
+        assertNull("another artist's album", CoverMatch.pick("Skyrim Theme", "Jeremy Soule", classical = false, listOf(dragonborn.copy(artistName = "Lindsey Stirling"))))
+    }
+
+    @Test
+    fun `a name only in a feat credit, or a tribute album, is refused`() {
+        val featured = song("S.T.A.Y.", "DJ Example", "Space Hits (feat. Interstellar)")
+        assertNull("a feat. album", CoverMatch.pick("Stay", "Interstellar", classical = false, listOf(featured)))
+        val credited = song("Dragonborn", "Malukah (feat. Jeremy Soule)", "The Elder Scrolls V: Skyrim Covers")
+        assertNull("a feat. artist", CoverMatch.pick("Skyrim Theme", "Jeremy Soule", classical = false, listOf(credited)))
+        val tribute = song("Boulevard of Broken Dreams", "Vitamin String Quartet", "Vitamin String Quartet Performs Green Day's American Idiot")
+        assertNull(CoverMatch.pick("Boulevard of Broken Dreams", "Green Day", classical = false, listOf(tribute)))
+    }
 }

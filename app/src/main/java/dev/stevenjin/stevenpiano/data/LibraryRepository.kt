@@ -107,8 +107,11 @@ class LibraryRepository(
     /** The recordings without a cover of their own (made before 1.14), newest first: the start's drawing (v1.14 — M37). */
     suspend fun recordingsWithoutCover(): List<Long> = pieces.withoutCover(ComposerNames.RECORDED_LIVE_KEY)
 
-    /** The pieces whose album cover may be looked up, Modern first, newest first (v1.15 — M40; [PieceDao.coverCandidates]). */
-    suspend fun coverCandidates(): List<CoverCandidate> = pieces.coverCandidates()
+    /**
+     * The pieces whose album cover may be looked up, Modern first, newest first (v1.15 — M40; [PieceDao.coverCandidates]),
+     * those whose lookup found nothing before [since] among them (v1.17 — M45: the wider match's one more try; 0: none).
+     */
+    suspend fun coverCandidates(since: Long): List<CoverCandidate> = pieces.coverCandidates(since)
 
     /**
      * Every playlist by name, with its size and total length; under a genre's [scope], those that show under it

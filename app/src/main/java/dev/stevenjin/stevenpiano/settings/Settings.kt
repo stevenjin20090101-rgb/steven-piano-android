@@ -503,6 +503,18 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun markCrashNoticeSeen(reportAt: Long) = edit { if ((it[CRASH_NOTICE_SEEN_AT] ?: 0L) < reportAt) it[CRASH_NOTICE_SEEN_AT] = reportAt }
 
+    /**
+     * When the wider album-cover match began (v1.17 — M45), epoch ms: [now] the first time it is asked, then kept. A
+     * cover's lookup that found nothing before it is due once more (`ArtworkPolicy.shouldFetch`). Housekeeping, not a
+     * preference; 0 (nothing asked again) when the settings can't be read or written.
+     */
+    suspend fun coverRuleSince(now: Long): Long = try {
+        current()[COVER_RULE_SINCE]?.takeIf { it > 0 }
+            ?: store.edit { if ((it[COVER_RULE_SINCE] ?: 0L) <= 0L) it[COVER_RULE_SINCE] = now }[COVER_RULE_SINCE] ?: now
+    } catch (e: IOException) {
+        0L
+    }
+
     private suspend fun edit(change: (MutablePreferences) -> Unit) {
         store.edit(change)
     }
@@ -633,6 +645,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val TEXT_REPAIR_DONE = booleanPreferencesKey("libraryTextRepairDone")
         val UPLOAD_REPAIR_DONE = booleanPreferencesKey("libraryUploadRepairDone")
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
+        val COVER_RULE_SINCE = longPreferencesKey("coverRuleSince")
         val TABLET_SOUND = stringPreferencesKey("tabletSound")
         val TABLET_VOLUME = intPreferencesKey("tabletVolume")
         val CLOUD_ENABLED = booleanPreferencesKey("cloudEnabled")

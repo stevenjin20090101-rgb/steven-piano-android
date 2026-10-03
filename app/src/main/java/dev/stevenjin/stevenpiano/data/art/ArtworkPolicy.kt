@@ -15,15 +15,19 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 /**
  * When to ask Wikipedia, or Apple's catalogue for a cover (again). Found artwork is kept for good. A failure is retried
  * a day later, or at once when the person asks for every composer ([force]). Something looked for and not there is
- * asked again only when forced. Nothing recorded yet: always.
+ * asked again only when forced, or, for an album cover looked up before [coverRuleSince] (v1.17 — M45: when the wider
+ * match began, 0 unset), once more. Nothing recorded yet: always.
  */
 object ArtworkPolicy {
     const val RETRY_FAILED_AFTER_MS = 24 * 60 * 60 * 1000L
 
-    fun shouldFetch(existing: ArtworkEntity?, now: Long, force: Boolean): Boolean = when (existing?.status) {
+    /** A cover lookup's key, `cover:<id>`, without its id. */
+    private val COVER_PREFIX = ArtworkEntity.forCover(0).removeSuffix("0")
+
+    fun shouldFetch(existing: ArtworkEntity?, now: Long, force: Boolean, coverRuleSince: Long = 0): Boolean = when (existing?.status) {
         null -> true
         ArtworkStatus.OK -> false
-        ArtworkStatus.NOT_FOUND -> force
+        ArtworkStatus.NOT_FOUND -> force || (existing.fetchedAt < coverRuleSince && existing.key.startsWith(COVER_PREFIX))
         // A clock set back must not hold a failure for a year.
         ArtworkStatus.FAILED -> force || now - existing.fetchedAt >= RETRY_FAILED_AFTER_MS || now < existing.fetchedAt
     }

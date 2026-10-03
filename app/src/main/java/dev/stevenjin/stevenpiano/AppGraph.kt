@@ -259,6 +259,7 @@ class AppGraph(private val app: Application) {
         ArtworkRepository(
             app, database.artwork(), library, ArtFiles(app.filesDir), WikipediaClient(), AppleCatalog(),
             coversWanted = { settingsRepository.settings.first().let { it.fetchArtworkAutomatically && it.albumCovers } },
+            coverRuleSince = { settingsRepository.coverRuleSince(System.currentTimeMillis()) },
             network = network,
             scope = appScope,
         )

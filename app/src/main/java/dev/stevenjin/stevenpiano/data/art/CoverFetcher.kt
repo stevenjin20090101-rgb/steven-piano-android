@@ -41,7 +41,8 @@ interface CoverStore {
 /**
  * Album covers from Apple's iTunes Search API (v1.15 — M40), through [api] (searches 3.5 s apart, images 1 s apart:
  * [PacedAppleCatalog]). A piece is searched for as "<title core> <artist>" ([CoverMatch.term]); [CoverMatch.pick] takes
- * the first result whose artist and track clearly fit, and its artwork at 600 px becomes the piece's own cover, with the
+ * the first result whose artist and track clearly fit (else, v1.17 — M45, an album the artist names, or the work's own
+ * album by the artist), and its artwork at 600 px becomes the piece's own cover, with the
  * album's credit on the lookup's row ([CoverStore.keep]). Nothing is looked up while covers are off, for a piece with a
  * cover of its own, nor for one without an artist or with a name that is no person's ("Traditional", "Made in Studio":
  * [ArtworkFetcher.pageName]). Apple answering 403 or 429 is recorded as a failure (retried a day later, [ArtworkPolicy])
@@ -79,8 +80,8 @@ class CoverFetcher(private val api: AppleCatalogApi, private val store: CoverSto
     }
 
     companion object {
-        /** Results asked for each search. */
-        const val RESULTS = 10
+        /** Results asked for each search (v1.17 — M45: 25, was 10; well within the 256 KB the JSON may be). */
+        const val RESULTS = 25
 
         /** Apple answers about 20 searches a minute: one every 3.5 s. */
         const val SEARCH_GAP_MS = 3_500L

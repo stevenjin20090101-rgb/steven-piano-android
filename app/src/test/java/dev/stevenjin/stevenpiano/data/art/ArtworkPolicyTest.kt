@@ -51,4 +51,15 @@ class ArtworkPolicyTest {
     fun `a clock set back does not hold a failure`() {
         assertTrue(shouldFetch(row(ArtworkStatus.FAILED), t0 - 60_000, force = false))
     }
+
+    @Test
+    fun `an album cover not found before the wider match is asked once more (v1_17 M45)`() {
+        val since = t0 + 60_000
+        fun cover(status: ArtworkStatus, at: Long) = ArtworkEntity("cover:7", fetchedAt = at, status = status)
+        assertTrue("not found under the old rule", shouldFetch(cover(ArtworkStatus.NOT_FOUND, t0), since + 1, force = false, coverRuleSince = since))
+        assertFalse("not found under the new one", shouldFetch(cover(ArtworkStatus.NOT_FOUND, since), since + 1, force = false, coverRuleSince = since))
+        assertFalse("unset: nothing", shouldFetch(cover(ArtworkStatus.NOT_FOUND, t0), since + 1, force = false, coverRuleSince = 0))
+        assertFalse("a composer's lookup is no cover's", shouldFetch(row(ArtworkStatus.NOT_FOUND), since + 1, force = false, coverRuleSince = since))
+        assertFalse("a cover found stays", shouldFetch(cover(ArtworkStatus.OK, t0), since + 1, force = false, coverRuleSince = since))
+    }
 }

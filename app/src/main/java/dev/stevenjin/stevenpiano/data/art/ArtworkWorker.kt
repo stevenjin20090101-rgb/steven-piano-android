@@ -103,6 +103,8 @@ class ArtworkWorker(
     private val log: (String) -> Unit,
     private val pause: suspend (Long) -> Unit = { delay(it) },
     private val writing: Mutex = Mutex(),
+    /** When the wider album-cover match began (v1.17 — M45; 0 unset): a cover's lookup that found nothing before it is due once more. */
+    private val coverRuleSince: suspend () -> Long = { 0L },
 ) {
     private class Task(val key: ArtKey, var force: Boolean, val background: Boolean)
 
@@ -135,11 +137,12 @@ class ArtworkWorker(
      */
     suspend fun requestAll(keys: List<ArtKey>, force: Boolean): Int = withContext(confined) {
         val now = clock()
+        val since = coverRuleSince()
         var count = 0
         for (key in keys) {
             val other = key is ArtKey.Composer && ComposerNames.canonical(key.composerKey) == null
             if (other && !force && othersThisRun >= MAX_OTHER_COMPOSERS) continue
-            if (!ArtworkPolicy.shouldFetch(ArtworkPolicy.recordOf(key, store.get(key.storageKey)), now, force)) continue
+            if (!ArtworkPolicy.shouldFetch(ArtworkPolicy.recordOf(key, store.get(key.storageKey)), now, force, since)) continue
             if (other && !force) othersThisRun++
             enqueue(key, priority = false, force = force)
             count++
@@ -217,7 +220,7 @@ class ArtworkWorker(
 
     private suspend fun process(task: Task) {
         val key = task.key.storageKey
-        if (!ArtworkPolicy.shouldFetch(ArtworkPolicy.recordOf(task.key, store.get(key)), clock(), task.force)) return
+        if (!ArtworkPolicy.shouldFetch(ArtworkPolicy.recordOf(task.key, store.get(key)), clock(), task.force, coverRuleSince())) return
         if (!online()) {
             log("Offline: $key skipped, nothing recorded")
             return
