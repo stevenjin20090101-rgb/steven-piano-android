@@ -11,6 +11,9 @@ package dev.stevenjin.stevenpiano.web
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.stevenjin.stevenpiano.ui.PlaybackCopy
+import dev.stevenjin.stevenpiano.ui.SettingNotes
+import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.theme.CarbonPrimary
 import dev.stevenjin.stevenpiano.ui.theme.CarbonSecondary
 import dev.stevenjin.stevenpiano.ui.theme.CarbonTertiary
@@ -245,5 +248,42 @@ class WebAssetsTest {
         }
         assertFalse("Live is never offered to the panel", text("app.js").contains("liveToPiano") || text("app.js").contains("/api/live"))
         assertTrue(text("poster.html").contains("data-theme=\"light\""))
+    }
+
+    @Test
+    fun `the Settings and System modules are on the list, ask only through the host from its ROOT, and say what the tablet says (v1_18 M47b)`() {
+        for (name in listOf("settings.js", "system.js")) {
+            assertTrue("$name is on the panel's list", WebAssets.PANEL["/$name"] == WebAssets.Asset(name, WebAssets.JS))
+            val js = text(name)
+            assertTrue("$name is the module the frame creates", js.contains("export function create(host, body, tools)"))
+            for (banned in listOf("fetch(", "WebSocket(", "XMLHttpRequest", "setAttribute('style'", "cssText")) assertFalse("$name holds $banned", js.contains(banned))
+            val paths = Regex("['`\"]/api/").findAll(js).map { it.range.first }.toList()
+            assertTrue("$name asks the tablet", paths.isNotEmpty())
+            for (at in paths) assertEquals("$name: every /api/ path starts from host.ROOT (at $at)", "host.ROOT + ", js.substring(maxOf(0, at - 12), at))
+        }
+        assertTrue("the rail's foot", text("system.js").contains("export function vitals(host, node)"))
+        assertTrue(WebAssets.PANEL["/system.css"] == WebAssets.Asset("system.css", WebAssets.CSS))
+        // Tokens only: no pure black or white, red the live dot's alone (style.css), the arc's ease cut under reduced motion.
+        val css = text("system.css").replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "").replace("white-space", "")
+        for (forbidden in listOf("#000", "#fff", "#FFF", "white", "black", "rgb(0", "rgb(255", "var(--live)", "!important")) {
+            assertFalse("system.css names $forbidden", css.contains(forbidden))
+        }
+        assertTrue(css.contains("transition: stroke-dasharray 480ms") && css.contains("@media (prefers-reduced-motion: reduce) {\n  .system-page .dial .fill { transition: none; }"))
+        // The Playback page in the tablet's own words: its rows' names, their notes, the line under Velocity.
+        val settings = text("settings.js")
+        val rows = listOf(
+            PageRows.DEFAULT_TEMPO, PageRows.TRANSPOSE, PageRows.VELOCITY, PageRows.DYNAMIC_RANGE, PageRows.QUIETEST_NOTE, PageRows.EXPRESSION,
+            PageRows.RESTRIKE, PageRows.PAUSE, PageRows.FOLD, PageRows.SKIP_DRUMS, PageRows.ALBUM_BACKDROP,
+        )
+        for (row in rows) assertTrue(row.label, settings.contains("'${row.label}'"))
+        for (copy in listOf(
+            SettingNotes.DEFAULT_TEMPO, SettingNotes.VELOCITY, SettingNotes.DYNAMIC_RANGE, SettingNotes.QUIETEST_NOTE, SettingNotes.EXPRESSION,
+            SettingNotes.RESTRIKE, SettingNotes.FOLD, SettingNotes.SKIP_DRUMS, SettingNotes.ALBUM_BACKDROP, PlaybackCopy.FULL_POWER_ON, PlaybackCopy.FULL_POWER_OFF,
+        )) {
+            assertTrue(copy, settings.contains(copy))
+        }
+        assertTrue("a MIDI piano hides the piano's pages", settings.contains("belong to Steven Piano and are hidden while"))
+        // What newer piano firmware will fill in (firmware/docs/BLE_DIAG.md) is said, never left blank.
+        assertTrue(text("system.js").contains("'Needs newer firmware'"))
     }
 }
