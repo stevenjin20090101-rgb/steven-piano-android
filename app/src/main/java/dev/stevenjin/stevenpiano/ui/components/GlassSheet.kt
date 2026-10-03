@@ -57,7 +57,7 @@ fun GlassSheet(
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(),
     content: @Composable ColumnScope.() -> Unit,
-) = AppAppearance {   // opened from over the cover's backdrop, still in the app's appearance (v1.18 — M49)
+) {
     val shape = BottomSheetDefaults.ExpandedShape
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,

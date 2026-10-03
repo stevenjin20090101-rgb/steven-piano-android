@@ -169,8 +169,7 @@ data class PianoSettings(
     val standbyShows: StandbyShows = StandbyShows.ART_AND_NOTES,
     /**
      * The playing piece's art colours drifting behind the player (v1.15 — M41: Now playing, the now-playing panel, the
-     * resting screen's art and notes, the web panel's Now playing): Piano › Display, and Now playing's View menu. Since
-     * v1.18 — M49 the tablet's backdrop is the cover itself, blurred and slowly turning.
+     * resting screen's art and notes, the web panel's Now playing): Piano › Display, and Now playing's View menu.
      */
     val albumBackdrop: Boolean = true,
     /** The web panel is on (Piano › Web panel); it can be only once a PIN is set. */

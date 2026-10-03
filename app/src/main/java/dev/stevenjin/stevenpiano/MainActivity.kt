@@ -48,7 +48,6 @@ import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.ui.AppFrame
 import dev.stevenjin.stevenpiano.ui.PianoNavHost
 import dev.stevenjin.stevenpiano.ui.Route
-import dev.stevenjin.stevenpiano.ui.components.ImmersiveBars
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.library.ShareSheet
@@ -97,9 +96,7 @@ class MainActivity : ComponentActivity() {
             // Light, dark, or as the system says (Piano › Display › Appearance); nothing is drawn until it is known.
             val appearance by graph.appearance.collectAsStateWithLifecycle()
             val dark = appearance?.dark(isSystemInDarkTheme()) ?: return@setContent
-            // Over the cover's backdrop the bars' icons are light in both appearances (v1.18 — M49).
-            val bars = dark || ImmersiveBars.on
-            LaunchedEffect(bars) { systemBarsFor(bars) }
+            LaunchedEffect(dark) { systemBarsFor(dark) }
             PianoTheme(darkTheme = dark) {
                 // The navigation content, the glass's source: the share sheet over it blurs it too (DESIGN.md › v1.9).
                 val content = rememberHazeState()

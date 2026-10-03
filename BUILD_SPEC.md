@@ -7925,7 +7925,8 @@ panel for "diagnostics from the piano, the tablet and the ESP: temps, memory, wh
 # v1.18 — M49: Now playing over the cover
 
 Fable's design (DESIGN.md › v1.18 — M49), Opus coding, one lean run in a worktree (`m49-immersive`): no emulator, no
-version bump, no signing.
+version bump, no signing. *(The picture, the values, the node and Immersive below were taken back by v1.18 — M51; the
+layouts stay.)*
 
 ## The picture (`data/art/`)
 - `BackdropRules.kt` (pure, new): `SIDE` 48, `BLUR_RADIUS` 3, `BLUR_PASSES` 3, `SATURATION` 1.6, `BLOCK` 12,
@@ -8023,6 +8024,37 @@ ink's primary over the dimmed brightest block ≥ 4.5:1 and deeper at the foot; 
 deterministic, the edge softened, a pure red kept). `ArtPaletteTest` and `BackdropContrastTest` removed;
 `AdaptiveFrameTest` takes Art only. 1,622 → 1,617 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the
 same 30 warnings.
+
+# v1.18 — M51: the effect before
+
+Fable's design (DESIGN.md › v1.18 — M49, its first three lines), Opus coding, one lean run in a worktree
+(`m51-effect-before`): no emulator, no version bump, no signing. M49's backdrop made of the cover was tried; Steven saw
+it on the tablet-size emulator (2026-10-03) and chose the effect before, keeping the big cover and the layouts.
+v1.15 — M41's rules stand again; only the tablet's Compose code and `data/art/` changed.
+
+- **Put back, as at `fc61332`**: `data/art/ArtPalette.kt` and `ArtPaletteTest`; `ArtworkRepository.palette()`,
+  `cachedPalette()` and their cache (the file is `0b38748`'s, M46's `coversBlockedForMs` and `lookAgainForCovers` kept);
+  `ArtBackdrop.kt` (`rememberBackdrop`, `OnBackdrop`, `backdropDark`, the discs, the veil, `veilArea`) and
+  `ArtPaletteState.kt`; `ui/theme/Backdrop.kt` and `BackdropContrastTest`; `GlassSurface` and `GlassHeaderPane`
+  `translucent`; `KeyboardStrip`, `NoteCanvas`, `RollStrip`, `LiveDot`, `ConnectionLine`, `TabletSoundControls`,
+  `GlassMenu` and `GlassSheet` as 1.17; `MainActivity`'s bar icons as the appearance has them; `NowPlayingPanel` and
+  `DisplayScreen` whole.
+- **Removed**: `BackdropRules.kt` and `BackdropRulesTest`, `BackdropPicture`, `backdrop()` and its cache,
+  `ArtBackdropState.kt`, `Immersive.kt` (`LocalImmersive`, `ImmersiveBars`, `AppAppearance`), `ImmersiveScheme`,
+  `ScoreSheet`, `RollPanel`, `TabTones.pill` and every immersive branch.
+- **Kept from M49**: `NowPlayingScreen`'s layouts and sizes (`BesideTheRoll`, `UnderTheStrip`, `ArtOnly`, `InTheScroll`,
+  `CoverStack`, `Cover`), `Type.kt`'s three styles, `TransportControls(scrubber, inset)`, Art only (`ViewShow.ART`,
+  `notesArtOnly`, `NotesPlan.artOnly`), and the backdrop at the screen's root, edge to edge. On M41's look now: the
+  pane's body in `OnBackdrop`, the header `translucent`, the roll and the score on `Panel`, the foot's
+  `Capsule(translucent)` (`PieceLayout.colours`), and `TabRail` (given `albumBackdrop` and reading the player's piece,
+  as M49 had it) `translucent` while Now playing shows the colours.
+- **Simplified, and why**: a screen that scrolls (phones, short screens) passes beneath the header again, which blurs it
+  as M41's did; the backdrop lies outside the pane now (so it reaches under the rail), so that blur holds the content,
+  not the colours' faint tint. The tablet's wide layouts scroll only where the screen is short (a large font).
+- **Greps**: `Immersive|BackdropRules|BackdropPicture` in the Kotlin: none (the web panel's own `updateImmersive` is
+  M47's, not this run's). `Color(0x` outside `ui/theme`: none. `BlurEffect`: the aura's alone.
+- **Tests**: `ArtPaletteTest` (5) and `BackdropContrastTest` (3) back, `BackdropRulesTest` (4) gone. 1,628 → 1,632 unit
+  tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30 warnings.
 
 # v1.18 — M47: the panel's new look
 
