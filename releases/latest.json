@@ -1,9 +1,9 @@
 {
-  "versionCode": 27,
-  "versionName": "1.17",
-  "notes": "The web panel shows its pictures over the internet link. Covers and portraits now load only for the rows in sight, a few at a time, wait and try again when the link is busy, and are kept by the browser for good, so Now playing and Up next show their art instead of empty tiles. Rows get a small picture instead of the large one, about a tenth of the data. Album covers also match a little wider: a film or game theme takes its soundtrack's cover, classical movements match by the work, and pieces that found nothing before are looked up once more.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.17/steven-piano-1.17.apk",
-  "sha256": "29853fd98ec9b057763c2263fee6e4d36cd1471c31e8ee57e8c59df15e49b291",
-  "sizeBytes": 14027086,
+  "versionCode": 28,
+  "versionName": "1.18",
+  "notes": "The web panel has a new look: dark by default, a glass side rail, a big cover on Now playing with the album's colours as soft glows across the page, and Library as a grid of covers. Settings now holds the app's Playback settings beside the piano's pages. A new System page shows the tablet's battery, temperature, memory, storage and Wi-Fi, the piano's controller and power boards, what the app is running, a chart of the day, and tools: read status, find missing covers, reconnect the piano, all keys off, download diagnostics. The same System page is in the tablet app, first under This tablet on the Piano tab. On the tablet, Now playing has a big cover and a new Art only view beside the score and the notes. Find a cover, in a piece's menu on the panel, searches Apple's catalogue so you can choose a cover by hand or remove a wrong one. Phones get a bar at the foot with a More sheet. Covers load faster over the internet link.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.18/steven-piano-1.18.apk",
+  "sha256": "28883e3f8e06aa057a5217508291b6679fab868d4d603c1d5cea11a4d7e5ffe1",
+  "sizeBytes": 14153121,
   "minSdk": 26
 }
