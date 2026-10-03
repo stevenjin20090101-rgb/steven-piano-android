@@ -17,8 +17,10 @@ import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.settings.InstrumentChoice
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.update.UpdateState
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -37,7 +39,10 @@ import java.util.zip.ZipOutputStream
  * - the crash reports kept ([crashes]), each cut at [MAX_REPORT_CHARS].
  *
  * Nothing from the library (no titles, playlists or files), no photos, no Wikipedia text: the
- * exporter is given none of them. Each export replaces the one before.
+ * exporter is given none of them. Each export replaces the one before. No PIN or its hash, no
+ * session's digest, no relay secret or enrolment code either (v1.18 — M46: the web panel's System
+ * page offers the same zip, [exportBytes], so it may cross the internet): [DiagnosticsText.settings]
+ * names whether each is set, never the thing.
  */
 class DiagnosticsExporter(
     private val outDir: File,
@@ -54,7 +59,19 @@ class DiagnosticsExporter(
         outDir.listFiles()?.forEach { it.delete() }
         val at = clock()
         val zip = File(outDir, "steven-piano-diagnostics-${FILE_STAMP.format(Instant.ofEpochMilli(at).atZone(zone))}.zip")
-        ZipOutputStream(FileOutputStream(zip)).use { out ->
+        FileOutputStream(zip).use { write(it, at) }
+        return zip
+    }
+
+    /**
+     * The same zip as bytes, written nowhere (v1.18 — M46: the web panel's System page downloads it), so a download never
+     * takes the file the share sheet is sending. Throws IOException when a crash report can't be read.
+     */
+    fun exportBytes(): ByteArray = ByteArrayOutputStream().also { write(it, clock()) }.toByteArray()
+
+    /** The zip's entries, stamped [at], into [stream]. */
+    private fun write(stream: OutputStream, at: Long) {
+        ZipOutputStream(stream).use { out ->
             fun entry(name: String, text: String) {
                 out.putNextEntry(ZipEntry(name).apply { time = at })
                 out.write(text.toByteArray(Charsets.UTF_8))
@@ -68,7 +85,6 @@ class DiagnosticsExporter(
                 entry(report.name, if (text.length <= MAX_REPORT_CHARS) text else text.substring(0, MAX_REPORT_CHARS))
             }
         }
-        return zip
     }
 
     companion object {

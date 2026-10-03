@@ -834,6 +834,10 @@ new PIN or turning the web panel off signs every browser out: do that if a phone
 had the panel is lost. Five wrong PINs close the gate for 30 seconds, then longer each
 time, up to ten minutes.
 
+From 1.18 the tablet also answers the panel's System routes (behind the PIN like the rest): its battery, temperature,
+memory and network, what the app is doing, the piano's own facts and Share diagnostics' zip, for the System page a
+later version shows.
+
 While the web panel is on, a quiet notification reads "Web panel on" with the address.
 The panel runs as a foreground service, as playback does: set the app's battery use to
 *Unrestricted* (see *Keep playing with the screen off*) so Android leaves it running

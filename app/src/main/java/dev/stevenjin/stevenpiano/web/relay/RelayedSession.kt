@@ -127,8 +127,10 @@ class RelayedResponse(val status: Int, val headers: Map<String, String>, val bod
 
         /**
          * Every header the server sets (WebServer's security headers, `Cache-Control`, `Set-Cookie`,
-         * `Retry-After`, `Allow`), in the order sent; `Content-Type` and `Content-Length` come from the
-         * answer itself.
+         * `Retry-After`, `Allow`, and since v1.18 (M46) the diagnostics zip's `Content-Disposition`), in the
+         * order sent; `Content-Type` and `Content-Length` come from the answer itself. The relay passes on
+         * only its own allow-list (`cloud/src/relay/room.ts`, `RESPONSE_HEADERS`), which leaves
+         * `Content-Disposition` out: through it the page names the file itself.
          */
         val HEADERS: List<String> = listOf(
             "X-Content-Type-Options",
@@ -140,6 +142,7 @@ class RelayedResponse(val status: Int, val headers: Map<String, String>, val bod
             "Set-Cookie",
             "Retry-After",
             "Allow",
+            "Content-Disposition",
         )
 
         /** [response] read whole (and closed): its status, its known headers, its body. IOException past [MAX_BODY]. */

@@ -14,6 +14,7 @@ import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInStore
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.CoverCandidate
+import dev.stevenjin.stevenpiano.data.db.CoverCount
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PieceHead
@@ -436,4 +437,10 @@ class LibraryRepository(
         const val RECORDINGS_KEY = "recordings"
         const val RECORDINGS_NAME = "Recordings"
     }
+
+    /** The pieces that may have an album cover, counted by their lookup's status (v1.18 — M46; [PieceDao.coverCounts]). */
+    suspend fun coverCounts(): List<CoverCount> = pieces.coverCounts()
+
+    /** What Look again for covers asks for (v1.18 — M46; [PieceDao.coverRetries]). */
+    suspend fun coverRetries(): List<CoverCandidate> = pieces.coverRetries()
 }

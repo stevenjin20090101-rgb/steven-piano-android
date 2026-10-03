@@ -7836,3 +7836,88 @@ integrator measured the page through a stand-in for the relay's limits over HTTP
 1.16: 2,800 picture requests in 8 s, 39 answered, the page's own files refused. This build: 19 requests, all answered,
 none refused, 35 requests in all, every row in sight showing its cover. A row's cover is 3,977 bytes where it was
 45,580. Not seen on the school tablet's own link yet: that is Steven's.
+
+# v1.18 — M46: the system routes
+
+Fable's design, Opus coding, one lean run in a worktree (`m46-system`) beside the art work on `main`: the data and the
+routes only (the System page that shows them is a later run); no emulator, no version bump, no signing. Steven asked the
+panel for "diagnostics from the piano, the tablet and the ESP: temps, memory, what process is running and battery".
+
+- **The readers** (`diag/SystemProbe.kt`): `SystemProbe.read(): SystemReading`, every field nullable; `AndroidSystemProbe`
+  (thread-safe) guards each read (the API level, `SecurityException`, anything else: null, never a throw). Battery from
+  the sticky `ACTION_BATTERY_CHANGED` (no receiver): percent (level/scale), charging (charging or full), plug `ac` `usb`
+  `wireless` `dock` `none`, `tempC` (tenths → one decimal), `voltageMv`, health `good` `overheat` `cold` `dead`
+  `overVoltage` `unknown`; `firmware/Battery.kt`'s `batteryState()` now calls it (one reader; full on the charger counts
+  as charging). Thermal: `currentThermalStatus` (API 29+) as `none light moderate severe critical emergency shutdown`,
+  `getThermalHeadroom(10)` (API 30+, NaN → null), CPU and skin °C, the hottest finite sensor of
+  `HardwarePropertiesManager` (a device owner's reading: asked only when the app is one, else null). Memory
+  (`ActivityManager.MemoryInfo`), storage (`StatFs` of `filesDir`: total, usable). CPU: cores; the tablet's load from
+  `getCpuUsages()` between two reads (device owner); the app's `Process.getElapsedCpuTime()` over the wall time between two
+  reads, a share of one core (`app.cpuPct`); the first read gives null for both. Network: the default network's
+  INTERNET capability, its transport (`wifi`, `ethernet`, `cellular` before `vpn`, else `other`), `signalStrength` (API
+  29+), `linkDownstreamBandwidthKbps`. Tablet: "Manufacturer Model", Android's release, `elapsedRealtime`,
+  `isInteractive`. App: version and build, pid, `Threads:` of `/proc/self/status`, uptime since
+  `getStartElapsedRealtime`, heap used and max, native heap, device owner, kiosk (`lockTaskModeState`: locked now).
+- **The day** (`diag/SystemHistory.kt`, pure): a ring of 1,440 `SystemSample(at, batteryPct, batteryTenthsC,
+  memAvailPct, thermal, pianoTenthsC)`, `snapshot()` oldest first. `AppGraph.startSystemSamples()` adds one at start and
+  every 60 s on `Dispatchers.Default` in the app's scope for the life of the process; nothing on disk. The piano's
+  `!temp` goes in only when its facts came in within two minutes (`PIANO_FRESH_MS`): they are read only while the page
+  is open (`firmware/docs/BLE_DIAG.md`), so a stale value is never charted as now.
+- **What is running** (`diag/RunningNow.kt`, pure): `RunningNow.of(Inputs)` gives twelve `Activity(key, title, state,
+  detail, progress)`, always in this order: `player` (Playing, Paused or Stopped · title · composer · "Calm channel";
+  position/duration), `link` (Connected to <name> · MTU n, Connecting…, Not connected; a MIDI piano's name; the keyboard
+  and its state; Live; Recording), `web` (devices signed in, panels open, guests), `relay` (connected to the host with
+  its answered and refused, reconnecting with the wait, off; revoked, removed or key gone as a problem), `covers` (the
+  worker's "Fetching artwork 12 of 61 · <label>", else waiting "Apple asked to wait · covers again at 14:32" while its
+  hour-long stop is on, else idle), `import`, `studio` (the running job's line and progress, else the queue), `pack`,
+  `update`, `firmware` (Sending · 38% · …, bytes of total), `schedule` (the next start's line), `sound` (active, silent,
+  off). States `running` `waiting` `idle` `off` `problem`; details in the app's own words (its copy objects), a
+  sentence's full stop dropped; progress 0–1, three decimals.
+- **The piano** (`piano/`): `PianoSettings.diagFacts`, BLE_DIAG.md's twenty names in the `diag` order.
+  `PianoSettingsRepository.refreshFacts()` (beside `readStatus`) sends `get !<name>` for `liveFacts` and `diagFacts`, only
+  names among the facts the piano gave (its dump's: 2.0.0 is never asked a fact it lacks), nothing before Ready nor while
+  `updating()` (`AppGraph`: the firmware updater `busy`); true when it asked. `factsAt`: when a fact last came in on this
+  connection (epoch ms), null once the link drops. New constructor parameters `updating` and `clock`, with defaults.
+- **Covers** (`data/`, accessors only; no art logic changed): `PieceDao.coverCounts()`, the pieces that may have a cover
+  (genre 1 or 2) grouped by their `cover:<id>` row's status (OK, NOT_FOUND, FAILED, none = never looked up; a piece with a
+  cover of its own and no lookup is not counted); `PieceDao.coverRetries()`, `coverCandidates` plus NOT_FOUND;
+  `ArtworkRepository.coversBlockedForMs()` (`CoverFetcher.blockedFor`) and `lookAgainForCovers()`
+  (`ArtworkWorker.requestAll(…, force = true)` over the retries, album covers on).
+- **Counts**: `RelayClient.answered` / `refused` since each connection's hello (an answer from the panel, any status / a
+  refusal at the client: busy past the requests in flight, or the server failing); `WebPanel.hub` and `relay`, as the web
+  service holds them (`reportHub`, `reportRelay`).
+- **Routes** (each with its `sample`; READ needs the session, WRITE the session and `X-Steven-Piano: 1`, as every route):
+  - `GET /api/system`: `{at, app{version, build, pid, threads, uptimeMs, heapUsed, heapMax, nativeHeap, cpuPct,
+    deviceOwner, kiosk}, tablet{model, android, uptimeMs, screenOn, battery{percent, charging, plug, tempC, voltageMv,
+    health}, thermal{status, headroom, cpuC, skinC}, memory{total, available, low}, storage{total, free}, cpu{cores,
+    loadPct}, network{online, transport, signalDbm, downKbps}}, piano{link{state, name, mtu}, state, facts{…}, factsAt,
+    diag{temp, heap, heapmin, heapblock, tasks, stack, looprate, loopms, rssi, active, trips, crashes, i2cfails, uptime,
+    repeatms, reset, ota, fw, boards, pedalboard}}, running[{key, title, state, detail, progress}], web{sessions, sockets,
+    guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting, blockedUntil}}`. Every key always
+    there, null when unknown. `facts`: every fact as it stands (null before the piano answered); `diag`: `temp` and
+    `loopms` decimals, the rest numbers whole, `reset` `ota` `fw` `pedalboard` words, `boards` a list of `ok` / `missing`,
+    each null when absent or unreadable. `relay.state`: `connected`, `reconnecting`, `off`, or `stopped` (revoked,
+    removed, key gone). `sockets` counts the listeners' sockets and the relay's bridged browsers.
+  - `GET /api/system/history`: `{everyMs: 60000, samples: [[at, batteryPct, batteryTempC, memAvailPct, thermal,
+    pianoTempC], …]}`, oldest first, the temperatures in °C (one decimal).
+  - `GET /api/system/diagnostics`: Share diagnostics' zip, built in memory (`DiagnosticsExporter.exportBytes()`, the same
+    entries; the shared file is never touched), `application/zip`, `Content-Disposition: attachment;
+    filename="steven-piano-diagnostics.zip"`, `no-store`; 503 when it can't be made. It holds about.txt, settings.txt,
+    link.log and the crash reports; of the secrets settings.txt names only `webPinSet` and `kioskPinSet` (and the cloud's
+    on, host, enrolled): no PIN, PIN hash, session digest, relay secret, piano id or enrolment code, so no line was taken
+    out (`DiagnosticsExporterTest` pins it). `RelayedResponse.HEADERS` gains `Content-Disposition`; the relay's own
+    allow-list (`cloud/src/relay/room.ts`, audit delta 3) still drops it, so through the cloud the page names the file
+    itself (`<a download>`); the type passes as it is.
+  - `POST /api/system/refresh` (the body is not read): `{refreshed: true|false}`; the piano's facts at most once in 10 s
+    whichever listener or the relay asks (`RefreshFloor` in `AppWebBackend`, `elapsedRealtime`).
+  - `POST /api/system/tool` `{name}`: `covers` (204; queued in the app's scope) or `reconnect` (204;
+    `AppGraph.reconnectPiano()`: the player paused and flushed, the link dropped, connected again as `chooseInstrument`
+    connects; 409 `busy` while the player is locked or the firmware updater busy); any other name 400 `field`.
+- **Tests**: `SystemHistoryTest` (2: fills, wraps, oldest first; a sample's figures and the piano's temperature only when
+  fresh), `RunningNowTest` (4: all idle in order; a channel playing; Apple's stop as waiting; a firmware update's
+  progress), `WebApiTest` (the system object's keys, nulls, `diag` from facts and null without them),
+  `WebServerTest` (each route refused without a session, the two actions without the header; the floor; the tools, a bad
+  name 400, busy 409; the zip's type, disposition and `no-store`), `DiagnosticsExporterTest` (no secret in the zip);
+  `WebServerTest`'s write count 25 → 27; `FakeWebBackend`'s floor moves its clock 10 s a look unless a test sets it, so
+  `WebServerRelayTest`'s every-route check sees the same answer twice. 1,615 → 1,624 unit tests (12 skipped), none
+  failing. `lintDebug`: 0 errors, the same 30 warnings, none in the new code.

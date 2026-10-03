@@ -441,4 +441,16 @@ class ArtworkRepository(
         val PIECE_PREFIX = ArtworkEntity.forPiece(0).removeSuffix("0")
         val COMPOSER_PREFIX = ArtworkEntity.forComposer("")
     }
+
+    /** How much longer Apple's lookups wait after its 403 or 429, in ms; null when they may go (v1.18 — M46: the System page reads it). */
+    fun coversBlockedForMs(): Long? = covers.blockedFor()
+
+    /**
+     * The System page's Look again for covers (v1.18 — M46): with album covers on, every piece's cover never looked up,
+     * not found or failed is queued for the worker, forced ([ArtworkWorker.requestAll]). Returns how many were queued.
+     */
+    suspend fun lookAgainForCovers(): Int = readOr(0) {
+        if (!coversWanted()) return@readOr 0
+        worker.requestAll(library.coverRetries().map { ArtKey.Cover(it.id, it.title, it.composerShort, it.genre == Genres.CLASSICAL) }, force = true)
+    }
 }

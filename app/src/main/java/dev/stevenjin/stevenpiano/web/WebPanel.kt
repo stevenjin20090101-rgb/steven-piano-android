@@ -18,6 +18,7 @@ import dev.stevenjin.stevenpiano.web.relay.CloudAddress
 import dev.stevenjin.stevenpiano.web.relay.CloudSecrets
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
 import dev.stevenjin.stevenpiano.web.relay.KeystoreSealer
+import dev.stevenjin.stevenpiano.web.relay.RelayClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -164,5 +165,29 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
         change.webGuests?.let { settings.setWebGuests(it) }
         change.webApproveFirst?.let { settings.setWebApproveFirst(it) }
         change.webHostName?.let { settings.setWebHostName(it.ifEmpty { null }) }
+    }
+
+    // ---- The System page's counts (v1.18 — M46) ----------------------------------------------
+
+    @Volatile
+    private var heldHub: WebSocketHub? = null
+
+    @Volatile
+    private var heldRelay: RelayClient? = null
+
+    /** The socket hub the web service holds now (its sockets open), or null while it holds none. */
+    val hub: WebSocketHub? get() = heldHub
+
+    /** The relay client the web service holds now (its requests answered and refused), or null while remote access is off. */
+    val relay: RelayClient? get() = heldRelay
+
+    /** The web service made its hub ([hub]), or let it go (null). */
+    fun reportHub(hub: WebSocketHub?) {
+        heldHub = hub
+    }
+
+    /** The web service made a relay client ([relay]), or stopped it (null). */
+    fun reportRelay(client: RelayClient?) {
+        heldRelay = client
     }
 }

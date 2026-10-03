@@ -54,11 +54,14 @@ import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.data.imports.Importer
+import dev.stevenjin.stevenpiano.diag.AndroidSystemProbe
 import dev.stevenjin.stevenpiano.diag.CrashReports
 import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.diag.DiagnosticsExporter
 import dev.stevenjin.stevenpiano.diag.DiagnosticsText
 import dev.stevenjin.stevenpiano.diag.LinkLog
+import dev.stevenjin.stevenpiano.diag.SystemHistory
+import dev.stevenjin.stevenpiano.diag.SystemProbe
 import dev.stevenjin.stevenpiano.firmware.FakeFirmwareServer
 import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
@@ -156,6 +159,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -462,8 +466,10 @@ class AppGraph(private val app: Application) {
         return result
     }
 
-    /** The piano's own settings over its console, read on every connection. */
-    val pianoSettings: PianoSettingsRepository by lazy { PianoSettingsRepository(stevenLink, appScope) }
+    /** The piano's own settings over its console, read on every connection; nothing asked of it while its firmware updates (v1.18 — M46). */
+    val pianoSettings: PianoSettingsRepository by lazy {
+        PianoSettingsRepository(stevenLink, appScope, updating = { firmwareUpdater.state.value.busy })
+    }
 
     /** The channels, in their order on screen (Calm, Epic, Baroque…), read from the app's assets the first time, off the main thread. */
     val channels: List<Channel> by lazy { Channels.load(app, builtIns.lists) }
@@ -768,6 +774,12 @@ class AppGraph(private val app: Application) {
         )
     }
 
+    /** The tablet's and the app's readings for the web panel's System page (v1.18 — M46). */
+    val systemProbe: SystemProbe by lazy { AndroidSystemProbe(app) }
+
+    /** The System page's day: a sample a minute while the process lives ([startSystemSamples]), in memory only. */
+    val systemHistory = SystemHistory()
+
     /** When the newest crash report was written, read once at start (null: none). */
     private val latestCrash = MutableStateFlow<Long?>(null)
 
@@ -866,6 +878,7 @@ class AppGraph(private val app: Application) {
         appScope.launch { player.state.map { it.status == PlaybackStatus.Playing }.distinctUntilChanged().collect(tabletSound::playing) }
         channelPools.summaries   // the channels' pools are worked out from the start, for the Library's first look
         channelPlayer.start()
+        startSystemSamples()
         web.start()
         firmwareUpdater.start()
         schedules.start()
@@ -1097,6 +1110,47 @@ class AppGraph(private val app: Application) {
         }
     }
 
+    /**
+     * The web panel's System page's Reconnect (v1.18 — M46): as [disconnectPiano] (the player paused and the piano
+     * silenced first), then the instrument connects again as [chooseInstrument] connects it. Nothing while the player is
+     * locked for a firmware update; false then.
+     */
+    fun reconnectPiano(): Boolean {
+        if (player.locked || firmwareUpdater.state.value.busy) return false
+        appScope.launch {
+            player.pauseAndFlush(DISCONNECT_FLUSH_MS)
+            pianoLink.disconnect()
+            LinkLog.warn("Reconnecting, asked from the web panel")
+            if (pianoLink.kind.value == InstrumentKind.StevenPiano) {
+                if (BlePermissions.missing(app).isEmpty()) pianoLink.connect(settings.value.lastDeviceAddress)
+            } else {
+                pianoLink.connect(null)
+            }
+        }
+        return true
+    }
+
+    /**
+     * The System page's day (v1.18 — M46): a sample now and every minute after, for as long as the process lives, off
+     * the main thread; the piano's temperature only when its facts were read in the last two minutes ([SystemHistory]).
+     */
+    private fun startSystemSamples() {
+        appScope.launch(Dispatchers.Default) {
+            while (true) {
+                try {
+                    val piano = pianoSettings.state.value as? PianoState.Ready
+                    val at = System.currentTimeMillis()
+                    systemHistory.add(SystemHistory.sampleOf(at, systemProbe.read(), piano?.facts?.get(TEMP_FACT), pianoSettings.factsAt.value))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "A system sample couldn't be taken")
+                }
+                delay(SystemHistory.EVERY_MS)
+            }
+        }
+    }
+
     private companion object {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"
@@ -1120,6 +1174,9 @@ class AppGraph(private val app: Application) {
 
         /** The piano's steady repeat period, a fact of its `dump` (v1.16 — M44). */
         const val REPEAT_FACT = "repeatms"
+
+        /** The piano's controller temperature, °C, a fact of later firmware's `dump` (v1.18 — M46; BLE_DIAG.md). */
+        const val TEMP_FACT = "temp"
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L

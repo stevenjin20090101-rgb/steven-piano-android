@@ -17,6 +17,10 @@ import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
+import dev.stevenjin.stevenpiano.diag.BatteryReading
+import dev.stevenjin.stevenpiano.diag.RunningNow
+import dev.stevenjin.stevenpiano.diag.SystemReading
+import dev.stevenjin.stevenpiano.diag.ThermalReading
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
@@ -335,5 +339,92 @@ class WebApiTest {
                 .map(WebInstruments::keyboardState),
         )
         assertEquals("in the state beside the link", "midi", WebApi.state(WebState(instruments = state), 0).getJSONObject("instruments").getJSONObject("instrument").getString("kind"))
+    }
+
+    private fun keys(json: JSONObject): Set<String> = json.keys().asSequence().toSet()
+
+    @Test
+    fun `the System page's object has every key, null where nothing is known, and the piano's diag only from its facts (v1_18 M46)`() {
+        val bare = WebApi.system(WebSystem(at = 5))
+        assertEquals(setOf("at", "app", "tablet", "piano", "running", "web", "covers"), keys(bare))
+        val app = bare.getJSONObject("app")
+        assertEquals(setOf("version", "build", "pid", "threads", "uptimeMs", "heapUsed", "heapMax", "nativeHeap", "cpuPct", "deviceOwner", "kiosk"), keys(app))
+        val tablet = bare.getJSONObject("tablet")
+        assertEquals(setOf("model", "android", "uptimeMs", "screenOn", "battery", "thermal", "memory", "storage", "cpu", "network"), keys(tablet))
+        val parts = mapOf(
+            "battery" to setOf("percent", "charging", "plug", "tempC", "voltageMv", "health"),
+            "thermal" to setOf("status", "headroom", "cpuC", "skinC"),
+            "memory" to setOf("total", "available", "low"),
+            "storage" to setOf("total", "free"),
+            "cpu" to setOf("cores", "loadPct"),
+            "network" to setOf("online", "transport", "signalDbm", "downKbps"),
+        )
+        val unknowns = mutableListOf(app)
+        for ((name, expected) in parts) unknowns += tablet.getJSONObject(name).also { assertEquals(name, expected, keys(it)) }
+        val piano = bare.getJSONObject("piano")
+        assertEquals(setOf("link", "state", "facts", "factsAt", "diag"), keys(piano))
+        assertEquals(setOf("state", "name", "mtu"), keys(piano.getJSONObject("link")))
+        val web = bare.getJSONObject("web")
+        assertEquals(setOf("sessions", "sockets", "guests", "relay"), keys(web))
+        assertEquals(setOf("state", "answered", "refused"), keys(web.getJSONObject("relay")))
+        val covers = bare.getJSONObject("covers")
+        assertEquals(setOf("found", "missing", "failed", "waiting", "blockedUntil"), keys(covers))
+        unknowns += listOf(covers, piano.getJSONObject("diag"))
+        for (part in unknowns) for (key in keys(part)) assertTrue("$key: unknown is null, never absent", part.isNull(key))
+        for (key in listOf("model", "android", "uptimeMs", "screenOn")) assertTrue(tablet.isNull(key))
+        assertTrue(piano.isNull("facts") && piano.isNull("factsAt") && piano.getJSONObject("link").isNull("mtu"))
+        assertEquals("no facts: every diag name there, each null", PianoSettings.diagFacts.toSet(), keys(piano.getJSONObject("diag")))
+        assertEquals("off", web.getJSONObject("relay").getString("state"))
+
+        // What a 2.0.0 piano lists, a fact from later firmware, one that doesn't read, and one the app doesn't know.
+        val facts = mapOf(
+            "proto" to "1", "fw" to "2.0.0+a1b2c3d", "ota" to "confirmed", "boards" to "OK,OK,MISSING,OK,OK,OK,OK", "i2cfails" to "3",
+            "pedalboard" to "online", "uptime" to "7322", "repeatms" to "70", "temp" to "41.5", "heap" to "182344", "heapmin" to "lots",
+            "loopms" to "1.25", "rssi" to "-61", "reset" to "brownout", "mystery" to "42",
+        )
+        val full = WebApi.system(
+            WebSystem(
+                at = 7,
+                reading = SystemReading(
+                    model = "Google Pixel Tablet",
+                    battery = BatteryReading(percent = 81, charging = true, plug = "usb", tempC = 31.2, voltageMv = 4_210, health = "good"),
+                    thermal = ThermalReading(status = 2, headroom = 0.45),
+                ),
+                piano = WebSystemPiano(WebLink("connected", "Steven Piano"), mtu = 247, state = "ready", facts = facts, factsAt = 1_790_000_000_000L),
+                running = RunningNow.of(RunningNow.Inputs()),
+                web = WebSystemWeb(sessions = 2, sockets = 1, guests = true, relay = WebRelay("connected", 12, 0)),
+                covers = WebCovers(found = 10, missing = 3, failed = 1, waiting = 40),
+            ),
+        )
+        val shown = full.getJSONObject("tablet")
+        assertEquals(31.2, shown.getJSONObject("battery").getDouble("tempC"), 1e-9)
+        assertEquals("usb", shown.getJSONObject("battery").getString("plug"))
+        assertEquals("the thermal status by name", "moderate", shown.getJSONObject("thermal").getString("status"))
+        assertTrue(shown.getJSONObject("thermal").isNull("cpuC"))
+        val fullPiano = full.getJSONObject("piano")
+        assertEquals(247, fullPiano.getJSONObject("link").getInt("mtu"))
+        assertEquals("every fact as it stands, known or not", "42", fullPiano.getJSONObject("facts").getString("mystery"))
+        val diag = fullPiano.getJSONObject("diag")
+        assertEquals(PianoSettings.diagFacts.toSet(), keys(diag))
+        assertEquals(41.5, diag.getDouble("temp"), 1e-9)
+        assertEquals(1.25, diag.getDouble("loopms"), 1e-9)
+        assertEquals(182_344L, diag.getLong("heap"))
+        assertEquals(-61, diag.getInt("rssi"))
+        assertEquals(7_322L, diag.getLong("uptime"))
+        assertEquals("brownout", diag.getString("reset"))
+        assertEquals("2.0.0+a1b2c3d", diag.getString("fw"))
+        assertEquals("online", diag.getString("pedalboard"))
+        val boards = diag.getJSONArray("boards")
+        assertEquals(listOf("ok", "ok", "missing", "ok", "ok", "ok", "ok"), (0 until boards.length()).map { boards.getString(it) })
+        assertTrue("a count that isn't one reads as none", diag.isNull("heapmin"))
+        assertTrue("2.0.0 has none of these", listOf("heapblock", "tasks", "stack", "looprate", "active", "trips", "crashes").all { diag.isNull(it) })
+        assertFalse("a fact outside the list stays in facts only", diag.has("mystery") || diag.has("proto"))
+        val running = full.getJSONArray("running")
+        assertEquals(RunningNow.KEYS, (0 until running.length()).map { running.getJSONObject(it).getString("key") })
+        assertEquals(setOf("key", "title", "state", "detail", "progress"), keys(running.getJSONObject(0)))
+        assertTrue("nothing playing: no progress", running.getJSONObject(0).isNull("progress"))
+        assertEquals(12, full.getJSONObject("web").getJSONObject("relay").getInt("answered"))
+        assertEquals(40, full.getJSONObject("covers").getInt("waiting"))
+        assertTrue(full.getJSONObject("covers").isNull("blockedUntil"))
     }
 }

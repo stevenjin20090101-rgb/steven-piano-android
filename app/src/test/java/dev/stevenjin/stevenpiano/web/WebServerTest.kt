@@ -103,7 +103,7 @@ class WebServerTest {
         val token = login(http)
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
-        assertEquals("the table's twenty-five routes that change something (the schedules' three from 1.6.2, Studio's three from 1.7)", 25, writes.size)
+        assertEquals("the table's twenty-seven routes that change something (the schedules' three from 1.6.2, Studio's three from 1.7, the System page's two from 1.18)", 27, writes.size)
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
@@ -1030,6 +1030,70 @@ class WebServerTest {
         val told = http.get("/api/schedules", auth).json()
         assertFalse(told.getBoolean("exactAlarms"))
         assertEquals("Missed: Wednesday 12:30 (piano not connected)", told.getString("last"))
+    }
+
+    @Test
+    fun `the System page's routes need a session to read and the header too to act, with the refresh's floor, the tools and the zip (v1_18 M46)`() {
+        val (_, http) = start()
+        val reads = listOf("/api/system", "/api/system/history", "/api/system/diagnostics")
+        for (path in reads) assertEquals("$path without a session", 401, http.get(path).status)
+        for (path in listOf("/api/system/refresh", "/api/system/tool")) assertEquals("$path without a session", 401, http.api("POST", path, """{"name":"covers"}""").status)
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        backend.calls.clear()
+        for (path in listOf("/api/system/refresh", "/api/system/tool")) {
+            assertEquals("$path without the header", 403, http.api("POST", path, """{"name":"covers"}""", session = token, panel = false).status)
+        }
+        assertEquals("nothing refused reached the app", emptyList<String>(), backend.calls.toList())
+
+        val system = http.get("/api/system", cookie)
+        assertEquals(200, system.status)
+        assertEquals("no-store", system.header("cache-control"))
+        assertEquals(setOf("at", "app", "tablet", "piano", "running", "web", "covers"), system.json().keys().asSequence().toSet())
+        val history = http.get("/api/system/history", cookie).json()
+        assertEquals(60_000L, history.getLong("everyMs"))
+        assertEquals("tenths of a degree as °C", 31.2, history.getJSONArray("samples").getJSONArray(0).getDouble(2), 1e-9)
+
+        // The zip: its type, a name to save it as, never stored; 503 when it couldn't be made.
+        val zip = http.get("/api/system/diagnostics", cookie)
+        assertEquals(200, zip.status)
+        assertEquals("application/zip", zip.header("content-type"))
+        assertEquals("attachment; filename=\"steven-piano-diagnostics.zip\"", zip.header("content-disposition"))
+        assertEquals("no-store", zip.header("cache-control"))
+        assertEquals("nosniff", zip.header("x-content-type-options"))
+        assertTrue(zip.body.contentEquals(backend.zip))
+        backend.zip = null
+        assertEquals(503, http.get("/api/system/diagnostics", cookie).status)
+
+        // The refresh, with an empty body: at most once in 10 s.
+        backend.clock = { now }
+        fun refreshed(): Boolean = http.api("POST", "/api/system/refresh", null, session = token).let {
+            assertEquals(it.toString(), 200, it.status)
+            it.json().getBoolean("refreshed")
+        }
+        assertTrue("the first", refreshed())
+        now += 9_999
+        assertFalse("again within 10 s", refreshed())
+        now += 1
+        assertTrue("10 s on", refreshed())
+        assertEquals(listOf("system refresh", "system refresh"), backend.calls.toList())
+
+        // The tools: covers and reconnect; reconnect refused while a firmware update runs; any other name 400.
+        backend.calls.clear()
+        fun tool(body: String) = http.api("POST", "/api/system/tool", body, session = token)
+        assertEquals(204, tool("""{"name":"covers"}""").status)
+        assertEquals(204, tool("""{"name":"reconnect"}""").status)
+        backend.firmwareUpdating = true
+        val busy = tool("""{"name":"reconnect"}""")
+        assertEquals(409, busy.status)
+        assertEquals("busy", busy.json().getString("error"))
+        for (bad in listOf("""{"name":"reboot"}""", """{"name":"COVERS"}""", """{"name":1}""", "{}", """{"name":"covers","all":true}""")) {
+            assertEquals(bad, 400, tool(bad).status)
+        }
+        assertEquals("field", tool("""{"name":"reboot"}""").json().getString("error"))
+        assertEquals(listOf("system tool covers", "system tool reconnect"), backend.calls.toList())
+        assertEquals("the reads are GET only", 405, http.api("POST", "/api/system", "{}", session = token).status)
+        assertEquals("the actions are POST only", 405, http.get("/api/system/refresh", cookie).status)
     }
 
     @Test

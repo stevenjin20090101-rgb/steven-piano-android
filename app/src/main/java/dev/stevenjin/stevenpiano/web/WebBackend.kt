@@ -192,6 +192,24 @@ interface WebBackend {
 
     /** Page [page] of the score's layout [layoutId], once laid out; never starts a layout. */
     suspend fun nowScorePage(layoutId: Int, page: Int): NowAnswer
+
+    /**
+     * The System page (v1.18 — M46): the tablet and the app now, the piano's facts, what the app is doing, the panel's and
+     * the relay's counts, the album covers' counts.
+     */
+    suspend fun system(): WebSystem
+
+    /** The System page's day: a sample a minute, oldest first ([dev.stevenjin.stevenpiano.diag.SystemHistory]). */
+    suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample>
+
+    /** Asks the piano for its live facts now, at most once in 10 s whichever panel asks ([RefreshFloor]); true when it asked. */
+    suspend fun refreshPiano(): Boolean
+
+    /** One of the System page's tools: look again for covers, or drop the piano's link and connect again (busy during a firmware update). */
+    suspend fun systemTool(tool: SystemTool): SystemToolResult
+
+    /** Share diagnostics' zip, as bytes; null when it couldn't be made. */
+    suspend fun diagnostics(): ByteArray?
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
@@ -582,4 +600,81 @@ object WebLimits {
 
     /** A views panel's width or height as a request may give it, in CSS px (v1.13 — M32; [NowViews] then holds it to its own bounds). */
     val VIEW_SIZE = 1..8_192
+}
+
+/**
+ * `GET /api/system` (v1.18 — M46): [at] (epoch ms), the tablet's and the app's [reading], the [piano], what is [running]
+ * ([dev.stevenjin.stevenpiano.diag.RunningNow]), the panel's [web] counts and the album [covers]' counts. Every unknown is null on the wire.
+ */
+data class WebSystem(
+    val at: Long,
+    val reading: dev.stevenjin.stevenpiano.diag.SystemReading = dev.stevenjin.stevenpiano.diag.SystemReading(),
+    val piano: WebSystemPiano = WebSystemPiano(),
+    val running: List<dev.stevenjin.stevenpiano.diag.RunningNow.Activity> = emptyList(),
+    val web: WebSystemWeb = WebSystemWeb(),
+    val covers: WebCovers = WebCovers(),
+)
+
+/**
+ * The piano's side: its [link] ([WebLink]'s state and name) and the link's [mtu], what the app knows of its settings
+ * ([state], [WebPianoState.state]'s word), its [facts] as they stand (every one, known to the app or not; null until it
+ * has answered) and when one last came in ([factsAt], epoch ms).
+ */
+data class WebSystemPiano(
+    val link: WebLink = WebLink("disconnected"),
+    val mtu: Int? = null,
+    val state: String = "unknown",
+    val facts: Map<String, String>? = null,
+    val factsAt: Long? = null,
+)
+
+/** The web panel: the devices signed in ([sessions]), the panels open ([sockets]: the listeners' and the relay's), guests on, the relay. */
+data class WebSystemWeb(val sessions: Int? = null, val sockets: Int? = null, val guests: Boolean = false, val relay: WebRelay = WebRelay())
+
+/** The internet link: [state] (`connected`, `reconnecting`, `off`, `stopped`: [dev.stevenjin.stevenpiano.diag.RunningNow.relayWord]) and its requests [answered] and [refused] since it connected. */
+data class WebRelay(val state: String = "off", val answered: Int? = null, val refused: Int? = null)
+
+/**
+ * The album covers: the pieces that may have one [found], [missing] (looked up, not there), [failed] (retried a day later),
+ * [waiting] (never looked up), and when Apple's hour-long stop ends ([blockedUntil], epoch ms; null when none is on).
+ */
+data class WebCovers(val found: Int? = null, val missing: Int? = null, val failed: Int? = null, val waiting: Int? = null, val blockedUntil: Long? = null)
+
+/** The System page's tools (`POST /api/system/tool`, `{name}`). */
+enum class SystemTool(val key: String) {
+    /** Look again for every cover never looked up, not found or failed (the worker's forced lookup). */
+    COVERS("covers"),
+
+    /** Drop the piano's link and connect again (never while a firmware update runs). */
+    RECONNECT("reconnect"),
+    ;
+
+    companion object {
+        fun of(key: String?): SystemTool? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/** How a tool went: done, or refused while a firmware update runs. */
+enum class SystemToolResult { DONE, BUSY }
+
+/**
+ * At most one go every [gapMs] on [clock] (v1.18 — M46: the piano's live facts, once in 10 s whichever panel asks;
+ * firmware/docs/BLE_DIAG.md). Thread-safe.
+ */
+class RefreshFloor(private val gapMs: Long = REFRESH_FLOOR_MS, private val clock: () -> Long) {
+    private var last: Long? = null
+
+    /** True, and counted, when the last go was [gapMs] or more ago (or there was none); false otherwise. */
+    @Synchronized
+    fun take(): Boolean {
+        val now = clock()
+        val before = last
+        if (before != null && now - before in 0 until gapMs) return false
+        last = now
+        return true
+    }
+
+    companion object {
+        const val REFRESH_FLOOR_MS = 10_000L
+    }
 }

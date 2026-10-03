@@ -61,6 +61,10 @@ class PianoSettingsRepository(
     private val link: PianoLink,
     private val scope: CoroutineScope,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
+    /** Whether a firmware update runs now (v1.18 — M46): [refreshFacts] asks the piano nothing meanwhile. */
+    private val updating: () -> Boolean = { false },
+    /** The wall clock, for [factsAt]. */
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val _state = MutableStateFlow<PianoState>(PianoState.Unknown)
     val state: StateFlow<PianoState> = _state.asStateFlow()
@@ -72,6 +76,11 @@ class PianoSettingsRepository(
 
     private val _statusReading = MutableStateFlow(false)
     val statusReading: StateFlow<Boolean> = _statusReading.asStateFlow()
+
+    private val _factsAt = MutableStateFlow<Long?>(null)
+
+    /** When a fact last came in on this connection (epoch ms; v1.18 — M46, the System page's `factsAt`); null before one. */
+    val factsAt: StateFlow<Long?> = _factsAt.asStateFlow()
 
     private var session: Session? = null
     private var started = false
@@ -87,6 +96,7 @@ class PianoSettingsRepository(
                 _state.value = PianoState.Unknown
                 _statusText.value = null
                 _statusReading.value = false
+                _factsAt.value = null
                 if (connected) {
                     val console = link.console
                     if (console == null) {
@@ -146,6 +156,17 @@ class PianoSettingsRepository(
      */
     fun readFact(name: String) {
         session?.readFact(name)
+    }
+
+    /**
+     * Asks the piano for its live facts again (v1.18 — M46, the web panel's System page; `firmware/docs/BLE_DIAG.md`):
+     * `get !<name>` for [PianoSettings.liveFacts] and [PianoSettings.diagFacts], each only when the piano listed it in its
+     * dump (2.0.0 answers a name it lacks "unknown setting", which would read as a refusal). Nothing before the piano has
+     * answered its dump, nor while a firmware update runs. True when it asked. The caller keeps it to once in 10 s.
+     */
+    fun refreshFacts(): Boolean {
+        if (updating()) return false
+        return session?.refreshFacts() ?: false
     }
 
     /** The screen has shown the last error; it goes until the next one. */
@@ -354,6 +375,17 @@ class PianoSettingsRepository(
             }
         }
 
+        /** [readStatus]'s facts again, and the System page's, without the status report: only names the dump listed. */
+        fun refreshFacts(): Boolean {
+            if (!ready) return false
+            val names = (PianoSettings.liveFacts + PianoSettings.diagFacts).distinct().filter { it in facts }
+            for (fact in names) {
+                awaiting += Awaited("!$fact", null)
+                send("get !$fact")
+            }
+            return names.isNotEmpty()
+        }
+
         private fun send(line: String) {
             if (!line.startsWith("get ") && line != "dump") lastCommand = line.substringBefore(' ')
             console.sendLine(line)
@@ -382,6 +414,7 @@ class PianoSettingsRepository(
             val answered = if (i >= 0) awaiting.removeAt(i) else null
             if (wireName.startsWith("!")) {
                 facts[wireName.removePrefix("!")] = text
+                _factsAt.value = clock()
             } else {
                 // A newer value the person is still choosing, or already sent, keeps showing until its own answer.
                 val newer = wireName in debounce || awaiting.any { it.name == wireName }

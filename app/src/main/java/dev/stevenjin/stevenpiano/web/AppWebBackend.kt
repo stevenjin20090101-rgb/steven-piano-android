@@ -796,4 +796,127 @@ class AppWebBackend(
         }
 
     }
+
+    // ---- The System page (v1.18 — M46) -------------------------------------------------------
+
+    /** The piano's live facts at most once in 10 s, whichever panel or listener asks (firmware/docs/BLE_DIAG.md). */
+    private val refreshFloor = RefreshFloor(clock = android.os.SystemClock::elapsedRealtime)
+
+    override suspend fun system(): WebSystem {
+        val reading = withContext(Dispatchers.IO) { graph.systemProbe.read() }
+        val settings = graph.settings.value
+        val panel = graph.web
+        val link = graph.pianoLink.state.value
+        val piano = graph.pianoSettings.state.value
+        val cloud = panel.cloud.value
+        val relay = panel.relay
+        val hub = panel.hub
+        val sessions = panel.sessions.count()
+        val sockets = hub?.let { it.count + it.memberCount } ?: 0
+        val guests = guests().open
+        val now = System.currentTimeMillis()
+        val blockedUntil = graph.artwork.coversBlockedForMs()?.let { now + it }
+        val counts = library { graph.library.coverCounts() }
+        val web = dev.stevenjin.stevenpiano.diag.RunningNow.Web(
+            on = panel.status.value.running || cloud != dev.stevenjin.stevenpiano.web.relay.CloudStatus.Off,
+            sessions = sessions,
+            sockets = sockets,
+            guests = guests,
+        )
+        val internet = dev.stevenjin.stevenpiano.diag.RunningNow.Relay(cloud, relay?.answered, relay?.refused)
+        return WebSystem(
+            at = now,
+            reading = reading,
+            piano = WebSystemPiano(
+                link = linkOf(link),
+                mtu = (link as? LinkState.Connected)?.mtu?.takeIf { it > 0 },
+                state = pianoOf(piano).state,
+                facts = (piano as? PianoState.Ready)?.facts,
+                factsAt = graph.pianoSettings.factsAt.value,
+            ),
+            running = dev.stevenjin.stevenpiano.diag.RunningNow.of(runningInputs(settings, link, web, internet, blockedUntil, now)),
+            web = WebSystemWeb(sessions, sockets, guests, WebRelay(dev.stevenjin.stevenpiano.diag.RunningNow.relayWord(cloud), internet.answered, internet.refused)),
+            covers = coversOf(counts, blockedUntil),
+        )
+    }
+
+    /** The covers' counts by their lookup's status (all null when the library couldn't be read), and Apple's stop. */
+    private fun coversOf(counts: List<dev.stevenjin.stevenpiano.data.db.CoverCount>?, blockedUntil: Long?): WebCovers {
+        fun count(status: String?): Int? = counts?.filter { it.status == status }?.sumOf { it.count }
+        return WebCovers(
+            found = count(dev.stevenjin.stevenpiano.data.db.ArtworkStatus.OK.name),
+            missing = count(dev.stevenjin.stevenpiano.data.db.ArtworkStatus.NOT_FOUND.name),
+            failed = count(dev.stevenjin.stevenpiano.data.db.ArtworkStatus.FAILED.name),
+            waiting = count(null),
+            blockedUntil = blockedUntil,
+        )
+    }
+
+    /** What [system]'s running rows are built from: the app's own state, read where each part keeps it. */
+    private suspend fun runningInputs(
+        settings: dev.stevenjin.stevenpiano.settings.PianoSettings,
+        link: LinkState,
+        web: dev.stevenjin.stevenpiano.diag.RunningNow.Web,
+        internet: dev.stevenjin.stevenpiano.diag.RunningNow.Relay,
+        blockedUntil: Long?,
+        now: Long,
+    ): dev.stevenjin.stevenpiano.diag.RunningNow.Inputs {
+        val player = graph.player.state.value
+        val piece = player.piece
+        val kind = graph.pianoLink.kind.value
+        return dev.stevenjin.stevenpiano.diag.RunningNow.Inputs(
+            player = dev.stevenjin.stevenpiano.diag.RunningNow.Player(
+                status = player.status,
+                loading = player.loading,
+                title = piece?.title,
+                composer = piece?.composer,
+                channel = player.channel?.let { channelName(it) ?: it },
+                positionMs = if (piece == null) 0 else graph.player.positionMicrosAt(System.nanoTime()) / MICROS_PER_MS,
+                durationMs = (piece?.durationMicros ?: 0) / MICROS_PER_MS,
+                problem = player.problem,
+            ),
+            link = dev.stevenjin.stevenpiano.diag.RunningNow.Link(
+                kind = kind,
+                state = link,
+                instrument = dev.stevenjin.stevenpiano.ui.InstrumentCopy.instrumentValue(kind, settings.midiOutName),
+                keyboard = graph.keyboard.state.value,
+                live = graph.liveThru.state.value.open,
+                recording = graph.recording.state.value is RecordingState.Recording,
+            ),
+            web = web,
+            relay = internet,
+            covers = dev.stevenjin.stevenpiano.diag.RunningNow.Covers(graph.artwork.progress.value, blockedUntil),
+            import = graph.importProgress.value,
+            studio = dev.stevenjin.stevenpiano.diag.RunningNow.Studio(graph.studio.jobs.jobs.value, StudioCopy.unsupported(graph.studio.availability.support.value)),
+            pack = graph.libraryPack.state.value,
+            update = graph.updater.state.value,
+            firmware = graph.firmwareUpdater.state.value,
+            schedule = library { graph.schedules.nextNow()?.line },
+            sound = graph.tabletSound.state.value,
+            now = now,
+        )
+    }
+
+    override suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample> = graph.systemHistory.snapshot()
+
+    /** At most once in 10 s ([refreshFloor]), on the main thread where the piano's settings live; nothing during a firmware update. */
+    override suspend fun refreshPiano(): Boolean = refreshFloor.take() && onMain { graph.pianoSettings.refreshFacts() }
+
+    override suspend fun systemTool(tool: SystemTool): SystemToolResult = when (tool) {
+        SystemTool.COVERS -> {
+            // Queued in the app's scope: finding what to look again for reads every cover's row, which may take a moment.
+            graph.appScope.launch { graph.artwork.lookAgainForCovers() }
+            SystemToolResult.DONE
+        }
+        SystemTool.RECONNECT -> if (onMain { graph.reconnectPiano() }) SystemToolResult.DONE else SystemToolResult.BUSY
+    }
+
+    override suspend fun diagnostics(): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            graph.diagnostics.exportBytes()
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "The diagnostics couldn't be gathered for the web panel")
+            null
+        }
+    }
 }

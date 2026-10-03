@@ -113,7 +113,8 @@ interface StatusSource {
  * 300 s, ±20 %), the count starting again at each hello; [nudge] (a network came back) tries at once;
  * 4401 and 4403 (or the relay refusing the secret) stop it, 4409 (another tablet took over) waits a
  * minute. [config] is read before every try (a rotated secret takes effect at the next one); null:
- * not enrolled. Nothing here logs a secret, a cookie or a request's content.
+ * not enrolled. Nothing here logs a secret, a cookie or a request's content. Since v1.18 (M46) it
+ * counts the requests [answered] and [refused] since its connection's hello, for the System page.
  */
 class RelayClient(
     private val config: suspend () -> RelayConfig?,
@@ -364,6 +365,10 @@ class RelayClient(
             }
             val first = hello == null
             hello = message
+            if (first) {
+                answeredCount.set(0)
+                refusedCount.set(0)
+            }
             _state.value = CloudStatus.Connected(message.host, message.pianoId, clock())
             if (!first) return
             log("Cloud: connected to ${message.host}")
@@ -395,6 +400,7 @@ class RelayClient(
         private fun onReq(req: RelayMessage.Req) {
             val hello = hello ?: return
             if (requests.size >= MAX_IN_FLIGHT) {
+                refusedCount.incrementAndGet()
                 answer(req.id, RelayedResponse.refusal(503, "busy", "The piano is busy. Try again.", hello.host, cfg.scheme), Pending(null), hello, wait = false)
                 return
             }
@@ -405,6 +411,7 @@ class RelayClient(
             } catch (e: RejectedExecutionException) {
                 requests.remove(req.id, pending)
                 pending.abort()
+                refusedCount.incrementAndGet()
                 answer(req.id, RelayedResponse.refusal(503, "busy", "The piano is busy. Try again.", hello.host, cfg.scheme), Pending(null), hello, wait = false)
             }
         }
@@ -415,8 +422,9 @@ class RelayClient(
                 val body = pending.pipe ?: ByteArrayInputStream(ByteArray(0))
                 val session = RelayedSession(req.method, req.path, req.query, req.headers, req.address, body)
                 val answer = try {
-                    RelayedResponse.write(server.serveRelayed(session, hello.host, hello.prefix, cfg.scheme))
+                    RelayedResponse.write(server.serveRelayed(session, hello.host, hello.prefix, cfg.scheme)).also { answeredCount.incrementAndGet() }
                 } catch (e: Exception) {
+                    refusedCount.incrementAndGet()
                     RelayedResponse.refusal(500, "server", "Something went wrong.", hello.host, cfg.scheme)
                 }
                 if (!pending.aborted) answer(req.id, answer, pending, hello)
@@ -593,4 +601,15 @@ class RelayClient(
             }.apply { allowCoreThreadTimeOut(true) }
         }
     }
+
+    // ---- The System page's counts (v1.18 — M46) ----------------------------------------------
+
+    private val answeredCount = AtomicInteger()
+    private val refusedCount = AtomicInteger()
+
+    /** Requests the web panel answered through the relay since this connection's hello (any status). */
+    val answered: Int get() = answeredCount.get()
+
+    /** Requests turned away since the hello without the panel's answer: busy past the requests in flight, or the server failing. */
+    val refused: Int get() = refusedCount.get()
 }

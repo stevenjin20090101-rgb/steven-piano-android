@@ -194,4 +194,33 @@ interface PieceDao {
 
     @Query("DELETE FROM pieces WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /**
+     * The pieces that may have an album cover (Classical or Modern: none made here), counted by their `cover:<id>`
+     * lookup's status (v1.18 — M46, the web panel's System page): `OK` found, `NOT_FOUND`, `FAILED`, and null for those
+     * never looked up yet (a piece with a cover of its own and no lookup is not counted).
+     */
+    @Query(
+        "SELECT c.status AS status, COUNT(*) AS count FROM pieces p " +
+            "LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
+            "LEFT JOIN artwork c ON c.`key` = 'cover:' || p.id " +
+            "WHERE p.genre IN (1, 2) AND (c.status IS NOT NULL OR a.imagePath IS NULL) GROUP BY c.status",
+    )
+    suspend fun coverCounts(): List<CoverCount>
+
+    /**
+     * [coverCandidates] and the lookups that found nothing (v1.18 — M46): what the System page's Look again for covers
+     * asks for again, forced. Modern first, then Classical, newest first.
+     */
+    @Query(
+        "SELECT p.id, p.title, p.composerShort, p.genre FROM pieces p " +
+            "LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
+            "LEFT JOIN artwork c ON c.`key` = 'cover:' || p.id " +
+            "WHERE p.genre IN (1, 2) AND a.imagePath IS NULL AND (c.status IS NULL OR c.status IN ('NOT_FOUND', 'FAILED')) " +
+            "ORDER BY p.genre DESC, p.addedAt DESC, p.id DESC",
+    )
+    suspend fun coverRetries(): List<CoverCandidate>
 }
+
+/** How many pieces' album-cover lookups ended as [status] (an `ArtworkStatus` name; null: never looked up). [PieceDao.coverCounts]. */
+data class CoverCount(val status: String?, val count: Int)
