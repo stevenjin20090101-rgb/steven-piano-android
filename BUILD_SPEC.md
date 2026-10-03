@@ -7664,6 +7664,16 @@ panel's address is the one on the guests' poster).
   strings gain `Max-Age`. 1,592 → 1,596 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the same 30
   warnings, none in `web/`.
 
+## The release: 1.16 (versionCode 26)
+
+Cut from `main` after M44 (`c50aa52`, `6478957`, `6171537`) and the merge of `m43-now-playing-art` (`6114a95`): 1,615
+unit tests green, lint 0 errors. The integrator's smoke pass on the tablet-size emulator, upgraded in place from 1.15:
+Now playing with the small art beside "Appassionata, 3rd movement" and the backdrop behind it, the piece (fast
+repeated chords) playing without a crash; Piano › Playback with Velocity's Full power line, Dynamic range, Quietest
+note, Expression and Re-strike time. The shaping itself is unit-tested and was checked by the coder over the 3,454
+files of the `midi` folder at fourteen settings (order, length, pedals, onsets within 25 ms, repeat spacing and the
+release gap all held). Not heard on the real piano yet: that is Steven's.
+
 # v1.16 — M44: how a piece is played
 
 Fable's design (DESIGN.md › v1.16 — M44), Opus coding, one lean run on `main`: no emulator, three new test classes,
