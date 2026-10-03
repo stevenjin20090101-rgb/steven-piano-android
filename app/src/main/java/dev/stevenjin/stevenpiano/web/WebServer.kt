@@ -1243,6 +1243,9 @@ object WebCookies {
     const val SESSION = "sp_session"
     const val GUEST = "sp_guest"
 
+    /** How long a browser keeps the session cookie, in seconds: [Sessions.IDLE_MS], a year. */
+    const val SESSION_MAX_AGE_S = Sessions.IDLE_MS / 1_000
+
     /** 16 random bytes, URL-safe base64 without padding. */
     val GUEST_ID = Regex("[A-Za-z0-9_-]{22}")
 
@@ -1262,11 +1265,12 @@ object WebCookies {
 
     /**
      * The session cookie: never readable by scripts, never sent with another site's request, for the
-     * whole panel at [path] (`/` on a listener, `/p/<id>/` through the relay), and only over HTTPS when
-     * [secure] (the relay).
+     * whole panel at [path] (`/` on a listener, `/p/<id>/` through the relay), only over HTTPS when
+     * [secure] (the relay), and kept a year ([SESSION_MAX_AGE_S], v1.15 — M42) rather than until the
+     * browser closes, as long as the tablet keeps a session unused.
      */
     fun session(token: String, path: String = "/", secure: Boolean = false): String =
-        "$SESSION=$token; HttpOnly; SameSite=Strict; Path=$path" + secureFlag(secure)
+        "$SESSION=$token; HttpOnly; SameSite=Strict; Path=$path; Max-Age=$SESSION_MAX_AGE_S" + secureFlag(secure)
 
     fun endSession(path: String = "/", secure: Boolean = false): String =
         "$SESSION=; HttpOnly; SameSite=Strict; Path=$path; Max-Age=0" + secureFlag(secure)

@@ -60,7 +60,7 @@ data class WebStatus(
  * link ([cloudLink]); the relay's requests are weighed by [relayGuard] (audit delta 3).
  */
 class WebPanel(private val app: Context, private val graph: AppGraph) {
-    val sessions = Sessions()
+    val sessions = Sessions(FileSessionStore.under(app.filesDir))   // v1.15 — M42: remembered across restarts, `files/web/sessions.json`
     val guard = LoginGuard()
 
     /** The PIN tries that come through the relay, from the internet: a gate of their own, far stricter (audit delta 3). */
