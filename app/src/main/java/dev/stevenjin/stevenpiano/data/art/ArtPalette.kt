@@ -26,8 +26,10 @@ data class ArtPalette(val hues: List<Float>, val saturations: List<Float>)
  * near-white skipped (HSL lightness outside 0.08–0.92, and anything mostly transparent); each bin scored by its count ×
  * (0.3 + its saturation); the best bins taken greedily, each at least 25° from every one taken in hue or 0.25 in
  * saturation, four at most; every saturation × 1.35, at most 1; fewer than four padded by the first hue turned 30° each
- * way (then 60°). Null when the best bin's chroma is under 0.12: grey art (an engraving, a black-and-white photograph)
- * gives no backdrop. Pure and deterministic: the pixels' order does not matter.
+ * way (then 60°). Only colourful bins count (chroma 0.12 or more): null when there is none, or when together they hold
+ * under 5 % of the pixels read, so grey art (an engraving, a black-and-white photograph, a grey page with a speck of
+ * colour) gives no backdrop, while a painting over a pale ground gives its paint. Pure and deterministic: the pixels'
+ * order does not matter.
  */
 fun artPalette(pixels: IntArray, width: Int, height: Int): ArtPalette? {
     val total = min(pixels.size.toLong(), width.toLong().coerceAtLeast(0) * height.toLong().coerceAtLeast(0)).toInt()
@@ -35,6 +37,7 @@ fun artPalette(pixels: IntArray, width: Int, height: Int): ArtPalette? {
     val red = LongArray(ArtPaletteRules.BINS)
     val green = LongArray(ArtPaletteRules.BINS)
     val blue = LongArray(ArtPaletteRules.BINS)
+    var read = 0
     for (i in 0 until total) {
         val argb = pixels[i]
         if ((argb ushr 24) < ArtPaletteRules.OPAQUE) continue
@@ -44,6 +47,7 @@ fun artPalette(pixels: IntArray, width: Int, height: Int): ArtPalette? {
         val lightness = (max(r, max(g, b)) + min(r, min(g, b))) / 510f
         if (lightness < ArtPaletteRules.DARKEST || lightness > ArtPaletteRules.LIGHTEST) continue
         val bin = ((r shr 4) shl 8) or ((g shr 4) shl 4) or (b shr 4)
+        read++
         counts[bin]++
         red[bin] += r.toLong()
         green[bin] += g.toLong()
@@ -52,9 +56,8 @@ fun artPalette(pixels: IntArray, width: Int, height: Int): ArtPalette? {
     val bins = (0 until ArtPaletteRules.BINS).filter { counts[it] > 0 }.map { bin ->
         val n = counts[bin]
         Bin(bin, n, red[bin].toFloat() / n / 255f, green[bin].toFloat() / n / 255f, blue[bin].toFloat() / n / 255f)
-    }.sortedWith(compareByDescending<Bin> { it.score }.thenBy { it.index })
-    val best = bins.firstOrNull() ?: return null
-    if (best.chroma < ArtPaletteRules.MIN_CHROMA) return null
+    }.filter { it.chroma >= ArtPaletteRules.MIN_CHROMA }.sortedWith(compareByDescending<Bin> { it.score }.thenBy { it.index })
+    if (bins.isEmpty() || bins.sumOf { it.count } < read * ArtPaletteRules.MIN_COLOUR_SHARE) return null
     val picks = ArrayList<Bin>(ArtPaletteRules.COLOURS)
     for (bin in bins) {
         if (picks.size == ArtPaletteRules.COLOURS) break
@@ -95,15 +98,18 @@ object ArtPaletteRules {
     /** Every saturation lifted by this, never past 1. */
     const val BOOST = 1.35f
 
-    /** Under this chroma (max − min of its channels, 0 to 1) the best bin is grey, and there is no backdrop. */
+    /** Under this chroma (max − min of its channels, 0 to 1) a bin is grey and does not count. */
     const val MIN_CHROMA = 0.12f
+
+    /** Colourful bins holding under this share of the pixels read: grey art with a speck of colour, no backdrop. */
+    const val MIN_COLOUR_SHARE = 0.05f
 
     /** Fewer than four colours: the first's hue turned by these, in turn. */
     val PAD_TURNS = floatArrayOf(30f, -30f, 60f)
 }
 
 /** A histogram bin: its [index], how many pixels fell in it, and their average colour (0 to 1 a channel). */
-private class Bin(val index: Int, count: Int, r: Float, g: Float, b: Float) {
+private class Bin(val index: Int, val count: Int, r: Float, g: Float, b: Float) {
     val chroma: Float
     val hue: Float
     val saturation: Float

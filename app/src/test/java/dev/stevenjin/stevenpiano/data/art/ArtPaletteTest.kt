@@ -45,8 +45,10 @@ class ArtPaletteTest {
         val greys = IntArray(128 * 128) { i -> (i % 200 + 20).let { rgb(it, it, it) } }
         assertNull(artPalette(greys, 128, 128))
         val sepia = IntArray(1_000) { rgb(140, 130, 120) }
-        assertNull("its best bin's chroma is under 0.12", palette(sepia))
-        assertNull("the best bin decides", palette(picture(rgb(128, 128, 128) to 9_000, rgb(220, 30, 30) to 1_000)))
+        assertNull("every bin's chroma is under 0.12", palette(sepia))
+        assertNull("a speck of colour on grey is grey art", palette(picture(rgb(128, 128, 128) to 9_700, rgb(220, 30, 30) to 300)))
+        val splashes = palette(picture(rgb(217, 217, 218) to 9_000, rgb(220, 30, 30) to 700, rgb(56, 134, 170) to 300))
+        assertEquals("paint over a pale ground gives the paint, not the ground", 0f, splashes!!.hues[0], 2f)
         assertNull("only black and white: nothing to read", palette(picture(rgb(0, 0, 0) to 500, rgb(255, 255, 255) to 500)))
         assertNull(artPalette(IntArray(0), 0, 0))
     }
