@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.art.ArtSize
-import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
@@ -52,10 +51,10 @@ import dev.stevenjin.stevenpiano.ui.components.PlaylistCover
 import dev.stevenjin.stevenpiano.ui.components.pressScale
 
 /**
- * A piece: its composer's 40 dp portrait (else the mosaic of their roll cards, else a monogram),
- * then the title over "Surname · m:ss". Tap plays; long-press opens its menu ([PieceMenu] with
- * [actions]; [place] offers Move up and Move down inside a reorderable playlist). [trailing] is
- * the drag handle inside a playlist.
+ * A piece: its 40 dp art ([PieceArt], v1.15 — M40: its own cover, an album cover or one drawn or chosen,
+ * else its composer's portrait, else its own roll card), then the title over "Surname · m:ss". Tap
+ * plays; long-press opens its menu ([PieceMenu] with [actions]; [place] offers Move up and Move down
+ * inside a reorderable playlist). [trailing] is the drag handle inside a playlist.
  */
 @Composable
 fun PieceRow(
@@ -74,14 +73,8 @@ fun PieceRow(
             onClickLabel = "Play",
             onClick = onPlay,
             onLongClick = { menu = true },
-            leading = {
-                // A piece Studio made (v1.12 — M30) or a recording (v1.14 — M37) shows its own cover, not the mosaic every one shared.
-                if (piece.composerKey == ComposerNames.STUDIO_KEY || piece.composerKey == ComposerNames.RECORDED_LIVE_KEY) {
-                    PieceArt(piece.id, piece.composerKey, ArtSize.Row, Modifier.size(PORTRAIT), title = piece.title)
-                } else {
-                    ComposerArt(piece.composerKey, piece.composerShort.ifBlank { piece.title }, ArtSize.Row, Modifier.size(PORTRAIT))
-                }
-            },
+            // Every piece its own art (v1.15 — M40), as Studio's pieces (v1.12 — M30) and the recordings (v1.14 — M37) had.
+            leading = { PieceArt(piece.id, piece.composerKey, ArtSize.Row, Modifier.size(PORTRAIT), title = piece.title) },
             trailing = trailing,
         )
         PieceMenu(piece, actions, place, expanded = menu) { menu = false }
@@ -283,7 +276,7 @@ private fun TextRow(
     }
 }
 
-/** The composer portrait beside a piece row. */
+/** The art beside a piece row. */
 private val PORTRAIT: Dp = 40.dp
 private val LEADING_GAP: Dp = 16.dp
 private val TEXT_INSET_WITH_ART: Dp = 16.dp + PORTRAIT + LEADING_GAP

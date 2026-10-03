@@ -299,7 +299,8 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
  * secondary ink, six lines at most on wide frames and four on phones, with "From Wikipedia · CC BY-SA
  * 4.0" one line under it when the text is Wikipedia's. A piece whose own notes were never looked up
  * has them asked for once, at low priority, while artwork is fetched by itself ([StandbyText.asksForOwnNotes]):
- * the composer's show meanwhile, and the piece's take their place when they come.
+ * the composer's show meanwhile, and the piece's take their place when they come. Its album cover (v1.15 —
+ * M40) is asked for first in line, when Album covers is on and it has none.
  */
 @Composable
 private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, window: DpSize, room: DpSize) {
@@ -308,6 +309,7 @@ private fun PieceAtRest(piece: NowPlaying, channel: String?, twoPane: Boolean, w
     val fetchAutomatically = settings.fetchArtworkAutomatically
     LaunchedEffect(piece.pieceId, fetchAutomatically) {
         if (!fetchAutomatically) return@LaunchedEffect
+        graph.artwork.requestCover(piece.pieceId)   // the playing piece's cover first (v1.15 — M40)
         // The table as it is read (not the first frame's empty guess), so a piece already looked up is never asked for.
         val row = graph.artwork.artwork(ArtworkEntity.forPiece(piece.pieceId)).first()
         if (StandbyText.asksForOwnNotes(row, fetchAutomatically)) {

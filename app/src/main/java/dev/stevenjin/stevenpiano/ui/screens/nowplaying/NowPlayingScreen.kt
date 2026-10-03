@@ -141,6 +141,8 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val settings by graph.settings.collectAsStateWithLifecycle()
     val link by graph.pianoLink.state.collectAsStateWithLifecycle()
     val piece = state.piece
+    // The playing piece's album cover first in line (v1.15 — M40), for the mini player and every screen that shows it.
+    LaunchedEffect(piece?.pieceId) { piece?.let { graph.artwork.requestCover(it.pieceId) } }
     val plan = frame.notesPlan(settings.noteDisplay, settings.notesSplitStacked, settings.notesSplitSide)
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }

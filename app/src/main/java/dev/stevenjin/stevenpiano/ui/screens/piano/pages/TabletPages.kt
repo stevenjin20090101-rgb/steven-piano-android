@@ -78,9 +78,10 @@ fun UpdatesPage(settings: PianoSettings, vm: PianoViewModel) {
 }
 
 /**
- * Library and artwork: Fetch artwork automatically (from Display, with what it sends), Fetch artwork for
- * every composer and Steven's library (Load, or Update while a newer pack is on offer, the licence sheet
- * before the first load). Both actions stay in the Library's + sheet too.
+ * Library and artwork: Fetch artwork automatically (from Display, with what it sends), Album covers (v1.15 —
+ * M40: Apple's catalogue; off, and not to be turned on, while artwork is not fetched automatically), Fetch
+ * artwork for every composer and Steven's library (Load, or Update while a newer pack is on offer, the licence
+ * sheet before the first load). Both actions stay in the Library's + sheet too.
  */
 @Composable
 fun ArtworkPage(settings: PianoSettings, vm: PianoViewModel) {
@@ -96,6 +97,15 @@ fun ArtworkPage(settings: PianoSettings, vm: PianoViewModel) {
     SectionRule()
     Anchored(PageRows.FETCH_AUTOMATICALLY.anchor) {
         SwitchRow(PageRows.FETCH_AUTOMATICALLY.label, settings.fetchArtworkAutomatically, vm::setFetchArtworkAutomatically, note = ArtworkCopy.TRANSPARENCY)
+    }
+    Anchored(PageRows.ALBUM_COVERS.anchor) {
+        SwitchRow(
+            PageRows.ALBUM_COVERS.label,
+            settings.fetchArtworkAutomatically && settings.albumCovers,
+            vm::setAlbumCovers,
+            enabled = settings.fetchArtworkAutomatically,
+            note = ArtworkCopy.ALBUM_COVERS,
+        )
     }
     Anchored(PageRows.FETCH_EVERY_COMPOSER.anchor) {
         ActionRow(note = SettingNotes.FETCH_EVERY_COMPOSER) {

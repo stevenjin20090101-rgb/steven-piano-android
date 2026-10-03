@@ -31,7 +31,7 @@ private const val LIBRARY_SOURCES =
  * Help and about's lines (THIS TABLET, v1.13 — M31b; the very bottom of the hub until then): who made the app, the sources' credit, Studio's models and their
  * licences (v1.7 — M23), the tablet's piano sound (v1.8 — M25), what the app sends to the internet (nothing about the person), what
  * the relay sees when remote access over the internet is on (v1.10, audit delta 3) and the credit
- * for Wikipedia's text and Wikimedia Commons' portraits, in the eyebrow style. The provenance line
+ * for Wikipedia's text and Wikimedia Commons' portraits, and for Apple's album covers (v1.15 — M40), in the eyebrow style. The provenance line
  * keeps its own case so the fingerprint reads exactly as it is published.
  */
 @Composable
@@ -47,6 +47,7 @@ fun AboutRow(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(8.dp))
         Eyebrow(ArtworkCopy.TRANSPARENCY, uppercase = false)
         Eyebrow(ArtworkCopy.ATTRIBUTION, uppercase = false)
+        Eyebrow(ArtworkCopy.APPLE_CREDIT, uppercase = false)   // v1.15 — M40
         Spacer(Modifier.height(8.dp))
         Eyebrow(CloudCopy.ABOUT, uppercase = false)   // v1.10, audit delta 3
     }

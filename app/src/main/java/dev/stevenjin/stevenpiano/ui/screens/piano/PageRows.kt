@@ -99,6 +99,7 @@ object PageRows {
 
     // ---- THIS TABLET › Library and artwork ----------------------------------------------------------
     val FETCH_AUTOMATICALLY = AppRow("artwork.auto", "Fetch artwork automatically", SettingsPage.Artwork, null, listOf("Wikipedia", "portraits", "pictures", "covers"))
+    val ALBUM_COVERS = AppRow("artwork.covers", "Album covers", SettingsPage.Artwork, null, listOf("album", "covers", "Apple"))
     val FETCH_EVERY_COMPOSER = AppRow("artwork.every", "Fetch artwork for every composer", SettingsPage.Artwork, null, listOf("Wikipedia", "portraits", "composers"))
     val STEVENS_LIBRARY = AppRow("artwork.library", "Steven's library", SettingsPage.Artwork, null, listOf("load", "update the library", "MAESTRO", "pieces"))
 
@@ -119,7 +120,7 @@ object PageRows {
         APPEARANCE, MONOCHROME, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,
         KIOSK_MODE, KIOSK_UNLOCK, KIOSK_PIN,
         CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES,
-        FETCH_AUTOMATICALLY, FETCH_EVERY_COMPOSER, STEVENS_LIBRARY,
+        FETCH_AUTOMATICALLY, ALBUM_COVERS, FETCH_EVERY_COMPOSER, STEVENS_LIBRARY,
         DIAGNOSTICS, ABOUT,
     )
 }

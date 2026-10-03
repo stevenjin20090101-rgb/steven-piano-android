@@ -260,9 +260,10 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
 
 /**
  * A piece's art where it stands for the piece itself (the mini player, the now-playing panel,
- * display mode's backdrop, the piece sheet, a Studio piece's row): its own cover first (v1.12 — M30: a piece
- * Studio made has one, drawn from its music, cropped about its centre), then its composer's portrait, else its
- * own roll card, which is never mistaken for another piece's, else ([title] given) its title's monogram.
+ * display mode's backdrop, the piece sheet, every piece's row since v1.15 — M40): its own cover first (cropped
+ * about its centre: v1.12 — M30, a Studio piece's, drawn from its music; v1.15 — M40, an album cover from Apple's
+ * catalogue or one chosen by hand), then its composer's portrait, else its own roll card, which is never mistaken
+ * for another piece's, else ([title] given) its title's monogram.
  * [composerKey] is the library's ("" when the composer is unknown). Unframed ([framed] false) it fills
  * [modifier]'s box, cropped.
  */

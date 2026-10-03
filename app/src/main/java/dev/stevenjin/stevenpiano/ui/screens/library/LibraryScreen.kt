@@ -173,8 +173,9 @@ import java.time.LocalTime
  * panel ([NowPlayingPanel]) beside it; playing a piece then stays on the Library, and the Now
  * playing tab remains for the full score. In kiosk mode the library's changes are locked (DESIGN.md
  * › v1.6.1 — M20): adding music (the + and its sheet), deleting, renaming, adding to and taking out of
- * playlists, reordering them, a playlist's photo, a channel's volume and scheduling a channel wait for
- * the kiosk PIN ([KioskGate]); playing, queueing, favourites and browsing never do. A channel's
+ * playlists, reordering them, a playlist's photo, a piece's cover (Change cover, v1.15 — M40), a channel's
+ * volume and scheduling a channel wait for the kiosk PIN ([KioskGate]); playing, queueing, favourites and
+ * browsing never do. A channel's
  * Schedule opens the schedule editor with the channel chosen (DESIGN.md › v1.6.2 — M19). In the
  * header, once there are pieces, the genre switch All · Classical · Modern (DESIGN.md › v1.14 — M37):
  * everything listed follows it, it is remembered, and it is free in kiosk mode; a piece's or a
@@ -215,6 +216,7 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
     var dialog by remember { mutableStateOf<LibraryDialog?>(null) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     var photoFor by rememberSaveable { mutableStateOf<Long?>(null) }
+    var coverFor by rememberSaveable { mutableStateOf<Long?>(null) }
     var volumeFor by rememberSaveable { mutableStateOf<String?>(null) }
     val gate = rememberKioskGate()
     var scheduling by rememberSaveable(stateSaver = ScheduleDraftSaver) { mutableStateOf<ScheduleDraft?>(null) }
@@ -230,6 +232,12 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             photoFor = playlistId
             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
+    }
+    // A piece's cover chosen by hand (v1.15 — M40), copied the same way; no album cover lookup ever replaces it.
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val pieceId = coverFor
+        coverFor = null
+        if (uri != null && pieceId != null) graph.appScope.launch { graph.artwork.setPieceCoverFromUri(pieceId, uri) }
     }
     // Every dialog changes the library (add to a playlist, rename, delete): in kiosk mode each waits for the PIN.
     val openDialog: (LibraryDialog) -> Unit = { next -> gate.run { dialog = next } }
@@ -255,6 +263,13 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                 gate.run {
                     vm.setGenre(piece, genre)
                     view.announceMoved(genre)
+                }
+            },
+            // The cover is the library's too: in kiosk mode it waits for the PIN, as a playlist's photo does.
+            changeCover = { piece ->
+                gate.run {
+                    coverFor = piece.id
+                    coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }
             },
         )

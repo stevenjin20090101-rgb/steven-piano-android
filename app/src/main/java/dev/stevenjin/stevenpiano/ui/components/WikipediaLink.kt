@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import dev.stevenjin.stevenpiano.net.AppleUrls
 import dev.stevenjin.stevenpiano.net.WikipediaUrls
 
 /**
@@ -37,11 +38,32 @@ import dev.stevenjin.stevenpiano.net.WikipediaUrls
 @Composable
 fun WikipediaLink(url: String?, modifier: Modifier = Modifier) {
     val link = remember(url) { WikipediaUrls.pageLink(url) } ?: return
+    BrowserLink("From Wikipedia", link, modifier)
+}
+
+/**
+ * An album cover's credit (v1.15 — M40), [label] ("Cover: album · artist") in [WikipediaLink]'s style, opening the track
+ * on Apple Music at [url]. The address is checked again ([AppleUrls.pageLink]); when it does not pass, the credit stands
+ * as plain text, in the eyebrow style and sentence case, as Wikipedia's attribution line does.
+ */
+@Composable
+fun CoverLink(label: String, url: String?, modifier: Modifier = Modifier) {
+    val link = remember(url) { AppleUrls.pageLink(url) }
+    if (link == null) {
+        Eyebrow(label, Modifier.padding(top = 8.dp), uppercase = false)
+    } else {
+        BrowserLink(label, link, modifier)
+    }
+}
+
+/** A text button that sends [link] (already checked) to a browser; a tablet with none says so instead. */
+@Composable
+private fun BrowserLink(label: String, link: String, modifier: Modifier) {
     val context = LocalContext.current
     var failed by remember(link) { mutableStateOf(false) }
     Column {
         TextButton(onClick = { failed = !openInBrowser(context, link) }, modifier = modifier) {
-            Text("From Wikipedia")
+            Text(label)
         }
         if (failed) OutlinedBanner(NO_BROWSER, Modifier.padding(vertical = 8.dp))
     }

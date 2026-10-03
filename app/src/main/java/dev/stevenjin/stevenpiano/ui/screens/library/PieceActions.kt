@@ -34,6 +34,8 @@ class PieceActions(
     val delete: (PieceEntity) -> Unit,
     /** Move to Classical or Modern ([Genres.CLASSICAL], [Genres.MODERN]; v1.14 — M37). */
     val setGenre: (PieceEntity, Int) -> Unit,
+    /** Change cover (v1.15 — M40): a photo chosen in the photo picker becomes the piece's own cover. */
+    val changeCover: (PieceEntity) -> Unit,
     /** Inside a playlist: take the piece out of it (the piece stays in the library). */
     val removeFromPlaylist: ((PieceEntity) -> Unit)? = null,
     /** Inside a playlist: Move up (-1) or Move down (+1). */
@@ -41,7 +43,7 @@ class PieceActions(
 ) {
     /** These actions, with the two a playlist adds. */
     fun forPlaylist(remove: (PieceEntity) -> Unit, move: (PieceEntity, Int) -> Unit): PieceActions =
-        PieceActions(playNext, addToQueue, about, addToPlaylist, setFavorite, rename, delete, setGenre, removeFromPlaylist = remove, move = move)
+        PieceActions(playNext, addToQueue, about, addToPlaylist, setFavorite, rename, delete, setGenre, changeCover, removeFromPlaylist = remove, move = move)
 }
 
 /** A row's place in a reorderable playlist: which of Move up and Move down it can offer. */
@@ -53,9 +55,10 @@ data class RowPlace(val index: Int, val count: Int) {
 /**
  * A piece's menu, in three groups set apart by hairlines, destructive items last: Play next · Add
  * to queue · About this piece | Add to playlist · Favorite · Rename · Move to Modern or Move to
- * Classical (v1.14 — M37; the other genre's) (· Move up · Move down, inside a playlist that can be
- * reordered) | Remove from playlist (inside a playlist) · Delete. A move the row cannot make is left
- * out rather than shown disabled: no Move to a genre for a piece made here, which has none.
+ * Classical (v1.14 — M37; the other genre's) · Change cover (v1.15 — M40) (· Move up · Move down,
+ * inside a playlist that can be reordered) | Remove from playlist (inside a playlist) · Delete. A
+ * move the row cannot make is left out rather than shown disabled: no Move to a genre for a piece
+ * made here, which has none.
  */
 @Composable
 fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expanded: Boolean, onDismiss: () -> Unit) {
@@ -68,6 +71,7 @@ fun PieceMenu(piece: PieceEntity, actions: PieceActions, place: RowPlace?, expan
         MenuItem(if (piece.favorite) "Unfavorite" else "Favorite", onDismiss) { actions.setFavorite(piece, !piece.favorite) }
         MenuItem("Rename", onDismiss) { actions.rename(piece) }
         moveTarget(piece.genre)?.let { target -> MenuItem(moveLabel(target), onDismiss) { actions.setGenre(piece, target) } }
+        MenuItem(CHANGE_COVER, onDismiss) { actions.changeCover(piece) }
         val move = actions.move
         if (move != null && place != null) {
             if (place.canMoveUp) MenuItem("Move up", onDismiss) { move(piece, -1) }
@@ -93,6 +97,9 @@ fun moveLabel(target: Int): String = "Move to ${genreWord(target)}"
 fun movedLine(target: Int): String = "Moved to ${genreWord(target)}."
 
 private fun genreWord(genre: Int): String = if (genre == Genres.MODERN) "Modern" else "Classical"
+
+/** The piece menu's item that opens the photo picker for its cover (v1.15 — M40). */
+const val CHANGE_COVER = "Change cover"
 
 /** A menu item that closes the menu, then acts. */
 @Composable

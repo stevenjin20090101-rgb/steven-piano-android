@@ -49,6 +49,7 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
+import dev.stevenjin.stevenpiano.ui.components.CoverLink
 import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassSheet
@@ -61,9 +62,11 @@ import kotlinx.coroutines.flow.first
 
 /**
  * The piece sheet ("About this piece", or a tap on the title on Now playing): a bottom sheet with
- * its drag handle; the art (the composer's portrait, else the piece's own roll card), the title,
- * the composer as an eyebrow, then the piece's Wikipedia extract when it has a page, otherwise the
- * composer's, a "From Wikipedia" link to where the text came from and the attribution line.
+ * its drag handle; the art ([PieceArt]: its own cover, else the composer's portrait, else its roll
+ * card), the title, the composer as an eyebrow, then the piece's Wikipedia extract when it has a
+ * page, otherwise the composer's, a "From Wikipedia" link to where the text came from and the
+ * attribution line; under them, where the cover came from (v1.15 — M40: "Cover: album · artist",
+ * linking to Apple Music, or "Cover chosen on this tablet").
  * Opening it asks for the piece's notes (and the composer's, if never looked up) ahead of any
  * background fetch, when artwork may arrive by itself (the Piano tab's "Fetch artwork
  * automatically"); with that off, nothing is asked until the person taps "Fetch notes". Nothing
@@ -108,6 +111,7 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState, fetching: Boo
     val online by LocalContext.current.graph.artwork.online.collectAsStateWithLifecycle()
     val own = rememberArtworkRow(ArtworkEntity.forPiece(piece.id))
     val composer = rememberArtworkRow(ArtworkEntity.forComposer(piece.composerKey))
+    val cover = rememberArtworkRow(ArtworkEntity.forCover(piece.id))
     // A fetch that never records anything (Wikimedia asked to wait) must not leave the sheet waiting.
     var patient by remember(piece.id) { mutableStateOf(true) }
     LaunchedEffect(piece.id, fetching) {
@@ -155,6 +159,7 @@ private fun PieceNotes(piece: PieceEntity, sheetState: SheetState, fetching: Boo
             PieceNotesChoice.None -> Message("No notes found for this piece.")
             PieceNotesChoice.Offline -> Message("Notes need an internet connection.")
         }
+        CoverCredit(cover, own?.imagePath != null)
         Spacer(Modifier.height(32.dp))
     }
 }
@@ -167,6 +172,22 @@ private fun NotesText(notes: PieceNotesChoice.Text) {
     // Shifted by the button's own padding so its label lines up with the text.
     WikipediaLink(notes.sourceUrl, Modifier.padding(top = 4.dp).offset(x = (-12).dp))
     Eyebrow(ArtworkCopy.ATTRIBUTION, Modifier.padding(top = 4.dp), uppercase = false)
+}
+
+/**
+ * Where the piece's cover came from (v1.15 — M40), from its lookup's row ([ArtworkEntity.forCover]) while the piece has a
+ * cover ([covered]): chosen by hand, or an album's from Apple's catalogue, linking to the track on Apple Music.
+ */
+@Composable
+private fun CoverCredit(row: ArtworkEntity?, covered: Boolean) {
+    val found = row?.takeIf { covered && it.status == ArtworkStatus.OK } ?: return
+    val source = found.sourceTitle ?: return
+    if (source == ArtworkEntity.CHOSEN_HERE && found.sourceUrl == null) {
+        Eyebrow(ArtworkCopy.COVER_CHOSEN, Modifier.padding(top = 8.dp), uppercase = false)
+    } else {
+        // Shifted by the button's own padding so its label lines up with the text, as "From Wikipedia" is.
+        CoverLink(ArtworkCopy.cover(source), found.sourceUrl, Modifier.padding(top = 4.dp).offset(x = (-12).dp))
+    }
 }
 
 @Composable

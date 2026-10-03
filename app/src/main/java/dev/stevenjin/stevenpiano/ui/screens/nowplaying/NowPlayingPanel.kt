@@ -121,6 +121,7 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     val piece = state.piece
+    LaunchedEffect(piece?.pieceId) { piece?.let { graph.artwork.requestCover(it.pieceId) } }   // its album cover first (v1.15 — M40)
     // The NOW PLAYING row is the pane's glass header (DESIGN.md › v1.9), level with the list's beside it.
     val header: @Composable () -> Unit = {
         Row(
