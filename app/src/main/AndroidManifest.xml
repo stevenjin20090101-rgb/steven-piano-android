@@ -29,7 +29,8 @@
 
     <!-- Artwork and notes from Wikipedia: two hosts only (en.wikipedia.org, upload.wikimedia.org),
          asked for page titles and searches made from the library's own names; nothing about the
-         person is sent. Updates (v1.4): the release manifest from raw.githubusercontent.com and the
+         person is sent. Album covers (v1.15, with Album covers on): itunes.apple.com, searched for a
+         piece's title and artist and the device's country, and Apple's image hosts (*.mzstatic.com). Updates (v1.4): the release manifest from raw.githubusercontent.com and the
          file from github.com's release downloads (objects / release-assets.githubusercontent.com).
          Offline, nothing is fetched. -->
     <uses-permission android:name="android.permission.INTERNET" />

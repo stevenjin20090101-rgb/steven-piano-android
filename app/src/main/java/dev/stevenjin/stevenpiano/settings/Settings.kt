@@ -128,6 +128,11 @@ data class PianoSettings(
     val artworkMonochrome: Boolean = false,
     /** Composers' portraits and notes fetched from Wikipedia after an import, and when the app opens. */
     val fetchArtworkAutomatically: Boolean = true,
+    /**
+     * Pieces' album covers looked up in Apple's catalogue (v1.15 — M40), with [fetchArtworkAutomatically] and never
+     * without it; off, nothing is looked up and the covers already found stay.
+     */
+    val albumCovers: Boolean = true,
     /** Suggested fingering: numerals on the score's heads and in the waterfall's bars. */
     val fingering: Boolean = true,
     /** Chord names above the score and at the waterfall's left edge. */
@@ -277,6 +282,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setArtworkMonochrome(on: Boolean) = edit { it[ARTWORK_MONOCHROME] = on }
 
     suspend fun setFetchArtworkAutomatically(on: Boolean) = edit { it[FETCH_ARTWORK_AUTOMATICALLY] = on }
+
+    suspend fun setAlbumCovers(on: Boolean) = edit { it[ALBUM_COVERS] = on }
 
     suspend fun setFingering(on: Boolean) = edit { it[FINGERING] = on }
 
@@ -490,6 +497,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
             artworkMonochrome = this[ARTWORK_MONOCHROME] ?: defaults.artworkMonochrome,
             fetchArtworkAutomatically = this[FETCH_ARTWORK_AUTOMATICALLY] ?: defaults.fetchArtworkAutomatically,
+            albumCovers = this[ALBUM_COVERS] ?: defaults.albumCovers,
             fingering = this[FINGERING] ?: defaults.fingering,
             chordNames = this[CHORD_NAMES] ?: defaults.chordNames,
             handColours = this[HAND_COLOURS] ?: defaults.handColours,
@@ -556,6 +564,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val REPEAT = stringPreferencesKey("repeat")
         val ARTWORK_MONOCHROME = booleanPreferencesKey("artworkMonochrome")
         val FETCH_ARTWORK_AUTOMATICALLY = booleanPreferencesKey("fetchArtworkAutomatically")
+        val ALBUM_COVERS = booleanPreferencesKey("albumCovers")
         val FINGERING = booleanPreferencesKey("fingering")
         val CHORD_NAMES = booleanPreferencesKey("chordNames")
         val HAND_COLOURS = booleanPreferencesKey("handColours")

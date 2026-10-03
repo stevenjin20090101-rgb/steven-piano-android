@@ -38,13 +38,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Composers' portraits and notes, fetched in the background: a dataSync foreground service with
- * the notification "Fetching artwork and notes" and its progress (channel "artwork"). Started
- * after an import that brought pieces in (from the import service, while it is still in the
- * foreground, since Android 12 refuses most starts from the background), when the app opens with
- * composers due, and by the `+` sheet's "Fetch artwork and notes for every composer" ([start]
- * with force). It queues the composers that are due, follows the one artwork worker, and stops
- * once the worker is idle. When Android's time limit for data sync runs out ([onTimeout]) it
+ * Composers' portraits and notes, and pieces' album covers (v1.15 — M40), fetched in the background:
+ * a dataSync foreground service with the notification "Fetching artwork and notes" and its progress
+ * (channel "artwork"). Started after an import that brought pieces in (from the import service, while
+ * it is still in the foreground, since Android 12 refuses most starts from the background), when the
+ * app opens with composers or covers due, and by the `+` sheet's "Fetch artwork and notes for every
+ * composer" ([start] with force). It queues the composers that are due, then (Album covers on) the
+ * covers, follows the one artwork worker, and stops once the worker is idle. When Android's time limit for data sync runs out ([onTimeout]) it
  * stops cleanly; whatever was left is fetched on the next start.
  */
 class ArtworkService : Service() {
@@ -64,14 +64,14 @@ class ArtworkService : Service() {
             ServiceCompat.startForeground(this, ID, notificationFor(artwork.progress.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } catch (e: RuntimeException) {   // refused (the app went to the background meanwhile): fetch without the notification
             Log.w(TAG, "Fetching artwork without the foreground service: ${e.message}")
-            graph.appScope.launch { artwork.requestComposers(force) }
+            graph.appScope.launch { artwork.requestDue(force) }
             stopSelf(startId)
             return START_NOT_STICKY
         }
         pending++
         scope.launch {
             try {
-                artwork.requestComposers(force)
+                artwork.requestDue(force)
             } finally {
                 pending--
             }
@@ -152,7 +152,7 @@ class ArtworkService : Service() {
         fun createChannel(context: Context) {
             val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
                 .setName("Artwork")
-                .setDescription("Progress while composers' portraits and notes come from Wikipedia.")
+                .setDescription("Progress while composers' portraits and notes come from Wikipedia, and album covers from Apple.")
                 .setShowBadge(false)
                 .build()
             NotificationManagerCompat.from(context).createNotificationChannel(channel)
@@ -170,7 +170,7 @@ class ArtworkService : Service() {
             } catch (e: IllegalStateException) {   // ForegroundServiceStartNotAllowedException on Android 12+
                 Log.w(TAG, "Fetching artwork without the foreground service: ${e.message}")
                 val graph = context.graph
-                graph.appScope.launch { graph.artwork.requestComposers(force) }
+                graph.appScope.launch { graph.artwork.requestDue(force) }
             }
         }
     }

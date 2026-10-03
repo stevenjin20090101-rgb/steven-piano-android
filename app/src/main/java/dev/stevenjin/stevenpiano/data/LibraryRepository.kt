@@ -13,6 +13,7 @@ import androidx.room.withTransaction
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInStore
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
+import dev.stevenjin.stevenpiano.data.db.CoverCandidate
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PieceHead
@@ -105,6 +106,9 @@ class LibraryRepository(
 
     /** The recordings without a cover of their own (made before 1.14), newest first: the start's drawing (v1.14 — M37). */
     suspend fun recordingsWithoutCover(): List<Long> = pieces.withoutCover(ComposerNames.RECORDED_LIVE_KEY)
+
+    /** The pieces whose album cover may be looked up, Modern first, newest first (v1.15 — M40; [PieceDao.coverCandidates]). */
+    suspend fun coverCandidates(): List<CoverCandidate> = pieces.coverCandidates()
 
     /**
      * Every playlist by name, with its size and total length; under a genre's [scope], those that show under it

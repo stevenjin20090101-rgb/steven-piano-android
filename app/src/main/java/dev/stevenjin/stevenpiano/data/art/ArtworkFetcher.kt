@@ -30,8 +30,17 @@ sealed interface Fetched {
     /** A request failed; retried after a day. */
     data class Failed(val reason: String?) : Fetched
 
-    /** Wikimedia asked to slow down twice running: nothing is recorded, and the worker waits [retryAfterMs]. */
+    /**
+     * Wikimedia asked to slow down twice running, or Apple's lookups wait out a 403 or 429 (v1.15 — M40): nothing is
+     * recorded, and the worker waits [retryAfterMs] (or, longer than a minute, ends the run of that source's keys).
+     */
     data class Busy(val retryAfterMs: Long) : Fetched
+
+    /** An album cover was kept, with its record, by the fetcher itself (v1.15 — M40): nothing more to record. */
+    data object Saved : Fetched
+
+    /** Nothing to do (v1.15 — M40): covers are off, or the piece has a cover of its own. Nothing is recorded. */
+    data object Skipped : Fetched
 }
 
 /**
@@ -49,16 +58,21 @@ sealed interface Fetched {
  *   page finds nothing is looked up as A, the same way. At most [MAX_LOOKUPS] pages an artist; a
  *   company or anything else not about music ("Nintendo") is not found, and keeps its roll cards.
  * - A piece is searched for as "title composer"; the first hit that is not the composer's own
- *   page and whose extract names the composer's surname is its page. Text only: no piece images
- *   (album covers are not free).
+ *   page and whose extract names the composer's surname is its page. Text only: a piece's picture
+ *   is its album cover, from Apple's catalogue ([covers], v1.15 — M40), never Wikipedia's.
  * - A failed request is a failure. Asked to wait (HTTP 429/503), the fetch waits as asked, once
  *   (up to [MAX_WAIT_MS]), then leaves the key for later ([Fetched.Busy]).
  */
-class ArtworkFetcher(private val api: WikiApi, private val wait: suspend (Long) -> Unit = { delay(it) }) {
+class ArtworkFetcher(
+    private val api: WikiApi,
+    private val covers: CoverFetcher? = null,
+    private val wait: suspend (Long) -> Unit = { delay(it) },
+) {
     suspend fun fetch(key: ArtKey): Fetched = try {
         when (key) {
             is ArtKey.Composer -> composer(key)
             is ArtKey.Piece -> piece(key)
+            is ArtKey.Cover -> covers?.fetch(key) ?: Fetched.Skipped
         }
     } catch (e: CancellationException) {
         throw e

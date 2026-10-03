@@ -183,6 +183,7 @@ object DiagnosticsText {
         line("repeat", s.repeat)
         line("artworkMonochrome", s.artworkMonochrome)
         line("fetchArtworkAutomatically", s.fetchArtworkAutomatically)
+        line("albumCovers", s.albumCovers)
         line("fingering", s.fingering)
         line("chordNames", s.chordNames)
         line("handColours", s.handColours)

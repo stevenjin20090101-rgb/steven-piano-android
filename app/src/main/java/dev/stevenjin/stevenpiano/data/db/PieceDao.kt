@@ -117,6 +117,20 @@ interface PieceDao {
     )
     suspend fun withoutCover(composerKey: String): List<Long>
 
+    /**
+     * The pieces whose album cover may be looked up (v1.15 — M40): Classical (1) or Modern (2), so none made here; no
+     * picture in their `piece:<id>` row; their `cover:<id>` lookup never made or failed (a failure waits its day in the
+     * worker). Modern first, then Classical, newest first.
+     */
+    @Query(
+        "SELECT p.id, p.title, p.composerShort, p.genre FROM pieces p " +
+            "LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
+            "LEFT JOIN artwork c ON c.`key` = 'cover:' || p.id " +
+            "WHERE p.genre IN (1, 2) AND a.imagePath IS NULL AND (c.status IS NULL OR c.status = 'FAILED') " +
+            "ORDER BY p.genre DESC, p.addedAt DESC, p.id DESC",
+    )
+    suspend fun coverCandidates(): List<CoverCandidate>
+
     @Query("SELECT COUNT(*) FROM pieces")
     fun count(): Flow<Int>
 

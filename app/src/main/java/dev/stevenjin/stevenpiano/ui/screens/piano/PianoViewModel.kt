@@ -279,6 +279,8 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     fun setFetchArtworkAutomatically(on: Boolean) = edit { setFetchArtworkAutomatically(on) }
 
+    fun setAlbumCovers(on: Boolean) = edit { setAlbumCovers(on) }
+
     fun setCheckForUpdates(on: Boolean) = edit { setCheckForUpdates(on) }
 
     fun setAppearance(appearance: Appearance) = edit { setAppearance(appearance) }

@@ -14,10 +14,12 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.db.ArtworkDao
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
+import dev.stevenjin.stevenpiano.net.AppleCatalogApi
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikiApi
 import kotlinx.coroutines.CancellationException
@@ -47,11 +49,12 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Artwork for the whole app, one per process in `AppGraph`: composers' portraits and blurbs and
  * pieces' notes from Wikipedia (fetched by one [ArtworkWorker], strictly one request at a time and
- * at most four a second, nothing at all while offline), the person's own playlist photos, and the
- * roll cards drawn from a piece's own notes when there is no portrait. Screens read rows with
- * [artwork] and pictures with [bitmap] and [rollCard]; everything that can fail fails quietly,
- * and the fallback art shows. Roll cards are drawn one at a time (each parses a whole file) and
- * kept on disk ([RollCardFiles]), so scrolling a grid never parses many files at once.
+ * at most four a second, nothing at all while offline), pieces' album covers from Apple's catalogue
+ * through the same worker while [coversWanted] (v1.15 — M40: searches 3.5 s apart), the person's own
+ * playlist photos and piece covers, and the roll cards drawn from a piece's own notes when there is
+ * no portrait. Screens read rows with [artwork] and pictures with [bitmap] and [rollCard]; everything
+ * that can fail fails quietly, and the fallback art shows. Roll cards are drawn one at a time (each
+ * parses a whole file) and kept on disk ([RollCardFiles]), so scrolling a grid never parses many files at once.
  */
 class ArtworkRepository(
     private val context: Context,
@@ -59,6 +62,9 @@ class ArtworkRepository(
     private val library: LibraryRepository,
     private val files: ArtFiles,
     api: WikiApi,
+    catalog: AppleCatalogApi,
+    /** Whether album covers may be looked up: Fetch artwork automatically and Album covers both on. */
+    private val coversWanted: suspend () -> Boolean,
     private val network: NetworkMonitor,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -75,14 +81,43 @@ class ArtworkRepository(
     /** Each composer's mosaic pieces, forgotten whenever the library's pieces change. */
     private val mosaics = ConcurrentHashMap<String, List<Long>>()
 
+    /** What album covers need of this repository (v1.15 — M40): the settings, the piece's row, and keeping a found cover. */
+    private val coverStore = object : CoverStore {
+        override suspend fun wanted(): Boolean = coversWanted()
+
+        override suspend fun hasCover(pieceId: Long): Boolean = dao.get(ArtworkEntity.forPiece(pieceId))?.imagePath != null
+
+        override suspend fun keep(pieceId: Long, image: ByteArray, sourceUrl: String?, sourceTitle: String): Fetched {
+            if (!withContext(io) { BitmapCache.isImage(image) }) return Fetched.NotFound
+            val record = ArtworkEntity(ArtworkEntity.forCover(pieceId), sourceUrl = sourceUrl, sourceTitle = sourceTitle, fetchedAt = 0, status = ArtworkStatus.OK)
+            return when (keepCover(pieceId, image, record, unlessCovered = true)) {
+                true -> Fetched.Saved
+                null -> Fetched.Skipped
+                false -> Fetched.Failed("The cover couldn't be kept")
+            }
+        }
+    }
+
+    /** Album covers from Apple's catalogue (v1.15 — M40): its searches 3.5 s apart, its images 1 s apart. */
+    private val covers = CoverFetcher(
+        PacedAppleCatalog(
+            catalog,
+            searches = RequestPacer(SystemClock::elapsedRealtime, CoverFetcher.SEARCH_GAP_MS),
+            images = RequestPacer(SystemClock::elapsedRealtime, CoverFetcher.IMAGE_GAP_MS),
+        ),
+        coverStore,
+        SystemClock::elapsedRealtime,
+    )
+
     private val worker = ArtworkWorker(
         store = dao,
-        fetcher = ArtworkFetcher(PacedWikiApi(api, RequestPacer(SystemClock::elapsedRealtime))),
+        fetcher = ArtworkFetcher(PacedWikiApi(api, RequestPacer(SystemClock::elapsedRealtime)), covers = covers),
         images = ImageStore { key, bytes -> withContext(io) { if (BitmapCache.isImage(bytes)) files.write(key, bytes) else null } },
         online = network::isOnline,
         scope = scope,
         clock = System::currentTimeMillis,
         log = { Log.i(TAG, it) },
+        writing = writing,
     )
 
     /** The background run's progress: the Library's hairline row and the fetch notification. */
@@ -125,13 +160,40 @@ class ArtworkRepository(
     /** Fetches [key] when it is due: first in line when [priority] (a sheet just opened), otherwise last. */
     fun request(key: ArtKey, priority: Boolean = false, force: Boolean = false) = worker.request(key, priority, force)
 
-    /** Every composer in the library that is due (all but the found ones when [force]). Returns how many were queued; 0 when the library can't be read. */
-    suspend fun requestComposers(force: Boolean): Int = readOr(0) { worker.requestAll(composerKeys(), force) }
+    /**
+     * Every composer in the library that is due (all but the found ones when [force]), then, with album covers on, every
+     * piece's cover that is due (v1.15 — M40: a piece without a cover of its own and not made here, Modern first, newest
+     * first; a lookup that found nothing is never forced again). Returns how many were queued; 0 when the library can't be read.
+     */
+    suspend fun requestDue(force: Boolean): Int = readOr(0) {
+        val composers = worker.requestAll(composerKeys(), force)
+        composers + if (coversWanted()) worker.requestAll(coverKeys(), force = false) else 0
+    }
 
-    /** Whether any composer has never been looked up, or failed a day ago or more: worth a fetch when the app opens. */
-    suspend fun composersDue(): Boolean = readOr(false) {
+    /**
+     * Whether any composer, or (album covers on, v1.15 — M40) any piece's cover, has never been looked up, or failed a day
+     * ago or more: worth a fetch when the app opens. Covers are not, while Apple's lookups wait out a 403 or 429.
+     */
+    suspend fun due(): Boolean = readOr(false) {
         val now = System.currentTimeMillis()
-        composerKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) }
+        composerKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) } ||
+            (covers.blockedFor() == null && coversWanted() && coverKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) })
+    }
+
+    /**
+     * Piece [pieceId]'s album cover, first in line (v1.15 — M40: the piece playing, from the resting screen and Now
+     * playing): only with album covers on, and for a piece of Classical or Modern without a cover of its own.
+     */
+    fun requestCover(pieceId: Long) {
+        scope.launch {
+            readOr(Unit) {
+                if (!coversWanted()) return@readOr
+                val piece = library.piece(pieceId) ?: return@readOr
+                if (piece.genre != Genres.CLASSICAL && piece.genre != Genres.MODERN) return@readOr   // made here: never looked up
+                if (dao.get(ArtworkEntity.forPiece(pieceId))?.imagePath != null) return@readOr
+                worker.request(ArtKey.Cover(piece.id, piece.title, piece.composerShort, piece.genre == Genres.CLASSICAL), priority = true, force = false)
+            }
+        }
     }
 
     /** Stops the background run after the fetch under way (the fetch service ran out of time); nothing is recorded for the rest. */
@@ -194,32 +256,55 @@ class ArtworkRepository(
     }
 
     /**
-     * [image] becomes piece [pieceId]'s own cover (v1.12 — M30: a Studio piece's, drawn from its music): kept under
-     * `files/art/`, its row keeping the piece's line and naming no source (so no Wikipedia credit), the old file gone
-     * when it had another name. A new `fetchedAt` makes every screen and the web panel read it afresh. False when it
-     * could not be kept.
+     * [image] becomes piece [pieceId]'s own cover (v1.12 — M30: a Studio piece's, drawn from its music; v1.14 — M37: a
+     * recording's): [keepCover], with no lookup recorded. False when it could not be kept.
      */
-    suspend fun setPieceCover(pieceId: Long, image: ByteArray): Boolean {
-        val key = ArtworkEntity.forPiece(pieceId)
-        val path = withContext(io) {
-            try {
-                files.write(key, image)
-            } catch (e: IOException) {
-                null
-            }
-        } ?: return false
-        return readOr(false) {
-            writing.withLock {
-                val row = dao.get(key)
-                val old = row?.imagePath
-                if (old != null && old != path) withContext(io) { files.delete(old) }
-                dao.upsert(ArtworkEntity(key, imagePath = path, description = row?.description, fetchedAt = System.currentTimeMillis(), status = ArtworkStatus.OK))
-            }
+    suspend fun setPieceCover(pieceId: Long, image: ByteArray): Boolean = keepCover(pieceId, image, record = null) == true
+
+    /**
+     * The photo at [uri] (the photo picker's, whose grant does not last) becomes piece [pieceId]'s own cover ("Change
+     * cover", v1.15 — M40): copied now, turned upright and re-encoded as a JPEG at most 1024 px on its longer side, as a
+     * playlist's photo is; its lookup recorded as found and chosen here ([ArtworkEntity.CHOSEN_HERE]), so no lookup ever
+     * replaces it. False when it could not be read or kept.
+     */
+    suspend fun setPieceCoverFromUri(pieceId: Long, uri: Uri): Boolean {
+        val jpeg = withContext(io) { PhotoImport.jpeg(context.contentResolver, uri, PhotoImport.MAX_PX) } ?: return false
+        val record = ArtworkEntity(ArtworkEntity.forCover(pieceId), sourceTitle = ArtworkEntity.CHOSEN_HERE, fetchedAt = 0, status = ArtworkStatus.OK)
+        return keepCover(pieceId, jpeg, record) == true
+    }
+
+    /**
+     * [image] becomes piece [pieceId]'s own cover, in one step under the write lock: kept under `files/art/` and merged
+     * into the piece's row (its notes, their source and their status kept, so a Wikipedia credit stays; a new `fetchedAt`,
+     * so every screen and the web panel read it afresh), the old file gone when it had another name, and [record] (the
+     * lookup's row, `cover:<id>`, v1.15 — M40) written with it. [unlessCovered] (a lookup): nothing is kept when the piece
+     * has a cover of its own by now. True when kept; null when [unlessCovered] found one; false when it could not be kept.
+     */
+    private suspend fun keepCover(pieceId: Long, image: ByteArray, record: ArtworkEntity?, unlessCovered: Boolean = false): Boolean? = readOr(false) {
+        writing.withLock {
+            val key = ArtworkEntity.forPiece(pieceId)
+            val row = dao.get(key)
+            if (unlessCovered && row?.imagePath != null) return@withLock null
+            val path = withContext(io) {
+                try {
+                    files.write(key, image)
+                } catch (e: IOException) {   // a full disk: the cover stays as it was
+                    null
+                }
+            } ?: return@withLock false
+            val old = row?.imagePath
+            if (old != null && old != path) withContext(io) { files.delete(old) }
+            val now = System.currentTimeMillis()
+            dao.upsert((row ?: ArtworkEntity(key, fetchedAt = now, status = ArtworkStatus.OK)).copy(imagePath = path, fetchedAt = now))
+            record?.let { dao.upsert(it.copy(fetchedAt = now)) }
             true
         }
     }
 
-    /** The pieces with a cover of their own (Studio's and the recordings'), by id, with when it was drawn: the web panel's art kind and version. */
+    /**
+     * The pieces with a cover of their own (Studio's, the recordings', album covers and covers chosen by hand), by id, with
+     * when it was kept: the web panel's art kind and version.
+     */
     suspend fun pieceCovers(): Map<Long, Long> = readOr(emptyMap()) {
         rows.filterNotNull().first().values.asSequence()
             .filter { it.imagePath != null && it.key.startsWith(PIECE_PREFIX) }
@@ -268,11 +353,14 @@ class ArtworkRepository(
     /** [mosaicPieces], only if already known. */
     fun peekMosaic(composerKey: String): List<Long>? = mosaics[composerKey]
 
-    /** A playlist or a piece is gone: its artwork row goes, and its file with it (and a piece's roll card). */
+    /** A playlist or a piece is gone: its artwork row goes, and its file with it (and a piece's roll card and its cover's lookup). */
     fun forget(key: String) {
         scope.launch {
             readOr(Unit) {
-                pieceIdOf(key)?.let { id -> withContext(io) { rollCardFiles.delete(id) } }
+                pieceIdOf(key)?.let { id ->
+                    withContext(io) { rollCardFiles.delete(id) }
+                    dao.delete(ArtworkEntity.forCover(id))   // v1.15 — M40
+                }
                 val row = dao.get(key) ?: return@readOr
                 row.imagePath?.let { path -> withContext(io) { files.delete(path) } }
                 dao.delete(key)
@@ -296,6 +384,10 @@ class ArtworkRepository(
 
     private suspend fun composerKeys(): List<ArtKey.Composer> =
         library.composers().first().map { ArtKey.Composer(it.composerKey, it.name) }
+
+    /** The pieces whose album cover may be looked up (v1.15 — M40), as keys, in [LibraryRepository.coverCandidates]' order. */
+    private suspend fun coverKeys(): List<ArtKey.Cover> =
+        library.coverCandidates().map { ArtKey.Cover(it.id, it.title, it.composerShort, it.genre == Genres.CLASSICAL) }
 
     private companion object {
         const val TAG = "Artwork"

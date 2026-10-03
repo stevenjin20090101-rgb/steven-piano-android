@@ -652,7 +652,7 @@ class AppWebBackend(
             }
             if (result != null && result.piecesChanged) {
                 graph.refreshBuiltIns()
-                if (graph.settingsRepository.settings.first().fetchArtworkAutomatically) graph.artwork.requestComposers(force = false)
+                if (graph.settingsRepository.settings.first().fetchArtworkAutomatically) graph.artwork.requestDue(force = false)
             }
         }
     }

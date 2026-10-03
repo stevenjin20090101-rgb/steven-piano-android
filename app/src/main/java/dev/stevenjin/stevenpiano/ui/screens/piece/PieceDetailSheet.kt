@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.data.art.ArtKey
 import dev.stevenjin.stevenpiano.data.art.ArtSize
+import dev.stevenjin.stevenpiano.data.art.ArtworkPolicy
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
@@ -200,7 +201,8 @@ sealed interface PieceNotesChoice {
          * [waiting]: the sheet still expects the piece's own fetch to finish. [fetching]: a fetch was
          * asked for, by the setting or by the person; without it nothing goes out until they ask.
          */
-        fun of(piece: ArtworkEntity?, composer: ArtworkEntity?, online: Boolean, waiting: Boolean, fetching: Boolean = true): PieceNotesChoice {
+        fun of(row: ArtworkEntity?, composer: ArtworkEntity?, online: Boolean, waiting: Boolean, fetching: Boolean = true): PieceNotesChoice {
+            val piece = ArtworkPolicy.notesOf(row)   // a row holding only a cover is no lookup of the notes (v1.15 — M40)
             piece.textOrNull()?.let { return it }
             if (piece == null && !fetching && online) return Ask(composer.textOrNull())
             if (piece == null && online && waiting) return Waiting

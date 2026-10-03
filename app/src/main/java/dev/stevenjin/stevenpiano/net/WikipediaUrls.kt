@@ -15,10 +15,11 @@ import java.net.URLEncoder
 import java.util.Locale
 
 /**
- * Where the app's requests go, built without Android so it is unit-tested. The app talks to two
- * hosts and no others: [API_HOST] for page summaries and search, [IMAGE_HOST] for portraits.
- * What goes out is only ever a page title or a search made from the library's own composer names
- * and piece titles; nothing about the person is in any URL.
+ * Where Wikipedia's requests go, built without Android so it is unit-tested. The Wikipedia client
+ * talks to two hosts and no others: [API_HOST] for page summaries and search, [IMAGE_HOST] for
+ * portraits (album covers come from Apple's catalogue, [AppleUrls], v1.15 — M40). What goes out is
+ * only ever a page title or a search made from the library's own composer names and piece titles;
+ * nothing about the person is in any URL.
  */
 object WikipediaUrls {
     const val API_HOST = "en.wikipedia.org"

@@ -26,8 +26,8 @@ enum class ArtworkStatus {
 
 /**
  * Artwork and notes fetched for a composer, a piece or a playlist, one row per [key]
- * ([forComposer], [forPiece], [forPlaylist]). [imagePath] is relative to the app's files
- * directory; [description] is the short text shown with it; [sourceUrl] and [sourceTitle] name
+ * ([forComposer], [forPiece], [forPlaylist]; a piece's album cover lookup, [forCover]). [imagePath] is relative to
+ * the app's files directory; [description] is the short text shown with it; [sourceUrl] and [sourceTitle] name
  * where it came from. Created in schema v2 so v1.2 has one migration; the UI starts reading it
  * in v1.2's artwork run.
  */
@@ -50,5 +50,15 @@ data class ArtworkEntity(
 
         /** A playlist's cover photo, by playlist id. */
         fun forPlaylist(playlistId: Long): String = "playlist:$playlistId"
+
+        /**
+         * A piece's album cover lookup (v1.15 — M40), by piece id: its status and when, and where the cover came from
+         * ([sourceUrl] the track on Apple Music, [sourceTitle] "album · artist", or [CHOSEN_HERE]). The picture itself is
+         * the piece's own cover, on its [forPiece] row, whose source fields stay the notes' Wikipedia credit.
+         */
+        fun forCover(pieceId: Long): String = "cover:$pieceId"
+
+        /** A cover row's [sourceTitle] when the person chose the cover ("Change cover"): no lookup ever replaces it. */
+        const val CHOSEN_HERE = "Chosen on this tablet"
     }
 }

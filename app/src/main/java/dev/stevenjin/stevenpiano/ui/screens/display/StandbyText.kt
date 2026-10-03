@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.display
 
+import dev.stevenjin.stevenpiano.data.art.ArtworkPolicy
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 
@@ -47,11 +48,13 @@ object StandbyText {
 
     /**
      * Whether the resting screen asks for the piece's own notes (v1.8): never looked up ([pieceRow]
-     * null: no `piece:<id>` row at all, so not a piece made in Studio, which has its line) and the
-     * person lets artwork be fetched by itself ([fetchAutomatically]). Asked once, at low priority;
-     * the composer's notes show meanwhile, and the piece's replace them when they come.
+     * null, or a row that holds only a cover, [ArtworkPolicy.notesOf], v1.15 — M40; so not a piece
+     * made in Studio, which has its line) and the person lets artwork be fetched by itself
+     * ([fetchAutomatically]). Asked once, at low priority; the composer's notes show meanwhile, and
+     * the piece's replace them when they come.
      */
-    fun asksForOwnNotes(pieceRow: ArtworkEntity?, fetchAutomatically: Boolean): Boolean = fetchAutomatically && pieceRow == null
+    fun asksForOwnNotes(pieceRow: ArtworkEntity?, fetchAutomatically: Boolean): Boolean =
+        fetchAutomatically && ArtworkPolicy.notesOf(pieceRow) == null
 
     /** The description alone ([notes]'s text). */
     fun description(piece: ArtworkEntity?, composer: ArtworkEntity?): String? = notes(piece, composer)?.text

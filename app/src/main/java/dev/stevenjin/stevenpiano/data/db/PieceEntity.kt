@@ -58,6 +58,9 @@ data class PieceSummary(val id: Long, val title: String, val composerShort: Stri
 /** One of a playlist's first pieces: what its cover is made of (v1.14 — M37). */
 data class PieceHead(val id: Long, val composerKey: String)
 
+/** A piece whose album cover may be looked up (v1.15 — M40): what the lookup needs of it. */
+data class CoverCandidate(val id: Long, val title: String, val composerShort: String, val genre: Int)
+
 /** How many of an artist's pieces are Classical and how many Modern (v1.14 — M37): the import's rule 2. */
 data class ArtistGenres(val composerKey: String, val classical: Int, val modern: Int)
 

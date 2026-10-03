@@ -86,6 +86,7 @@ import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
+import dev.stevenjin.stevenpiano.net.AppleCatalog
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
@@ -249,9 +250,17 @@ class AppGraph(private val app: Application) {
     /** Whether the device is online; artwork is only ever fetched when it is. */
     val network: NetworkMonitor by lazy { NetworkMonitor(app) }
 
-    /** Portraits, notes, playlist photos and roll cards (the only network use: two Wikimedia hosts). */
+    /**
+     * Portraits, notes, album covers, playlist photos and roll cards (their network use: Wikipedia's two hosts, and with
+     * Album covers on Apple's catalogue, `itunes.apple.com` and `*.mzstatic.com`; v1.15 — M40).
+     */
     val artwork: ArtworkRepository by lazy {
-        ArtworkRepository(app, database.artwork(), library, ArtFiles(app.filesDir), WikipediaClient(), network, appScope)
+        ArtworkRepository(
+            app, database.artwork(), library, ArtFiles(app.filesDir), WikipediaClient(), AppleCatalog(),
+            coversWanted = { settingsRepository.settings.first().let { it.fetchArtworkAutomatically && it.albumCovers } },
+            network = network,
+            scope = appScope,
+        )
     }
 
     /**
@@ -807,7 +816,7 @@ class AppGraph(private val app: Application) {
         appScope.launch {
             val named = repairUploadsOnce()
             refreshBuiltIns()
-            if (named && settingsRepository.settings.first().fetchArtworkAutomatically) artwork.requestComposers(force = false)
+            if (named && settingsRepository.settings.first().fetchArtworkAutomatically) artwork.requestDue(force = false)
         }
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         pianoSettings.start()
@@ -976,13 +985,14 @@ class AppGraph(private val app: Application) {
 
     /**
      * The app came to the foreground, where a foreground service may start: if the person lets
-     * artwork arrive by itself, the device is online, and some composer was never looked up (a
-     * library from 1.1, an import made offline) or failed a day ago or more, the fetch starts.
+     * artwork arrive by itself, the device is online, and some composer (or, with Album covers on,
+     * some piece's cover; v1.15 — M40) was never looked up (a library from 1.1, an import made
+     * offline) or failed a day ago or more, the fetch starts.
      */
     fun fetchArtworkIfDue() {
         appScope.launch {
             if (!settingsRepository.settings.first().fetchArtworkAutomatically || !network.isOnline()) return@launch
-            if (artwork.composersDue()) ArtworkService.start(app, force = false)
+            if (artwork.due()) ArtworkService.start(app, force = false)
         }
     }
 

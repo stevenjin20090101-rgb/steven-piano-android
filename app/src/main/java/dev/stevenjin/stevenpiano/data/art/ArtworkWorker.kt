@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.CoroutineContext
@@ -73,14 +75,20 @@ fun interface ImageStore {
 /**
  * The one artwork worker: a queue of keys fetched strictly one after another by [fetcher] (whose
  * requests are paced), recorded in [store] with images in [images]. [request] puts a key last,
- * or first when the person is waiting on it (a sheet just opened). Before each fetch
- * [ArtworkPolicy] decides whether it is due; offline ([online] false) a key is skipped and
+ * or first when the person is waiting on it (a sheet just opened); in the background Wikipedia's
+ * keys go ahead of the album covers queued (v1.15 — M40), so an import's composers never wait
+ * out a library's covers. Before each fetch [ArtworkPolicy] decides whether it is due (a piece's
+ * notes as [ArtworkPolicy.recordOf] reads its row); offline ([online] false) a key is skipped and
  * nothing is recorded, and a failure seen while offline is not recorded either. Wikimedia asking
- * to slow down records nothing: the worker pauses as asked, or, asked for more than a minute,
- * leaves the rest of the background run for the next start.
+ * to slow down, or Apple's lookups waiting out a 403 or 429, records nothing: the worker pauses as
+ * asked, or, asked for more than a minute, leaves the rest of that source's background run for the
+ * next start. Rows are written under [writing] (the repository's lock) and merged: a piece's cover
+ * stays when its notes arrive, and a row found while its fetch was under way (a cover chosen by
+ * hand) is never overwritten.
  *
  * Confined to [scope]'s thread (the app's main thread; a test's scheduler): the queue is only
- * touched there, and finding a queued key is a hash lookup, not a scan. Fetching suspends; it
+ * touched there, and finding a queued key is a hash lookup, not a scan (only a Wikipedia key
+ * queued in the background scans, for the first cover to stand before). Fetching suspends; it
  * never blocks that thread. An automatic run asks about at most [MAX_OTHER_COMPOSERS] composers
  * outside the library's list of well-known ones ([ComposerNames.canonical]); the rest are left
  * due for the next run, so a 10,000-file import does not queue hours of lookups.
@@ -94,6 +102,7 @@ class ArtworkWorker(
     private val clock: () -> Long,
     private val log: (String) -> Unit,
     private val pause: suspend (Long) -> Unit = { delay(it) },
+    private val writing: Mutex = Mutex(),
 ) {
     private class Task(val key: ArtKey, var force: Boolean, val background: Boolean)
 
@@ -130,7 +139,7 @@ class ArtworkWorker(
         for (key in keys) {
             val other = key is ArtKey.Composer && ComposerNames.canonical(key.composerKey) == null
             if (other && !force && othersThisRun >= MAX_OTHER_COMPOSERS) continue
-            if (!ArtworkPolicy.shouldFetch(store.get(key.storageKey), now, force)) continue
+            if (!ArtworkPolicy.shouldFetch(ArtworkPolicy.recordOf(key, store.get(key.storageKey)), now, force)) continue
             if (other && !force) othersThisRun++
             enqueue(key, priority = false, force = force)
             count++
@@ -146,11 +155,15 @@ class ArtworkWorker(
         }
     }
 
-    /** Takes the background tasks out of the queue, and out of the run's count. Returns how many. */
-    private fun dropBackground(): Int {
-        val dropped = queue.count { it.background }
-        queue.removeAll { it.background }
-        queued.values.removeAll { it.background }
+    /**
+     * Takes the background tasks out of the queue, and out of the run's count: all of them, or only those from [like]'s
+     * source (Apple's covers, or Wikipedia's keys; v1.15 — M40). Returns how many.
+     */
+    private fun dropBackground(like: ArtKey? = null): Int {
+        val drop = { task: Task -> task.background && (like == null || (task.key is ArtKey.Cover) == (like is ArtKey.Cover)) }
+        val dropped = queue.count(drop)
+        queue.removeAll(drop)
+        queued.values.removeAll(drop)
         total -= dropped
         return dropped
     }
@@ -167,7 +180,14 @@ class ArtworkWorker(
             }
         } else {
             val task = Task(key, force, background = !priority)
-            if (priority) queue.addFirst(task) else queue.addLast(task)
+            when {
+                priority -> queue.addFirst(task)
+                key is ArtKey.Cover -> queue.addLast(task)
+                else -> {   // ahead of the covers queued in the background (v1.15 — M40): rare, and at most a few hundred a run
+                    val covers = queue.indexOfFirst { it.background && it.key is ArtKey.Cover }
+                    if (covers < 0) queue.addLast(task) else queue.add(covers, task)
+                }
+            }
             queued[storageKey] = task
             if (task.background) total++
         }
@@ -197,7 +217,7 @@ class ArtworkWorker(
 
     private suspend fun process(task: Task) {
         val key = task.key.storageKey
-        if (!ArtworkPolicy.shouldFetch(store.get(key), clock(), task.force)) return
+        if (!ArtworkPolicy.shouldFetch(ArtworkPolicy.recordOf(task.key, store.get(key)), clock(), task.force)) return
         if (!online()) {
             log("Offline: $key skipped, nothing recorded")
             return
@@ -205,27 +225,43 @@ class ArtworkWorker(
         when (val outcome = fetcher.fetch(task.key)) {
             is Fetched.Found -> {
                 val path = outcome.image?.let { images.save(key, it) }
-                store.upsert(ArtworkEntity(key, path, outcome.description, outcome.sourceUrl, outcome.sourceTitle, clock(), ArtworkStatus.OK))
+                record(task.key) { kept -> ArtworkEntity(key, path ?: kept?.imagePath, outcome.description, outcome.sourceUrl, outcome.sourceTitle, clock(), ArtworkStatus.OK) }
                 log("$key: found${if (path != null) " with a picture" else ""}")
             }
             Fetched.NotFound -> {
-                store.upsert(ArtworkEntity(key, fetchedAt = clock(), status = ArtworkStatus.NOT_FOUND))
+                record(task.key) { kept -> ArtworkEntity(key, kept?.imagePath, fetchedAt = clock(), status = ArtworkStatus.NOT_FOUND) }
                 log("$key: not found")
             }
             is Fetched.Failed -> if (online()) {
-                store.upsert(ArtworkEntity(key, fetchedAt = clock(), status = ArtworkStatus.FAILED))
+                record(task.key) { kept -> ArtworkEntity(key, kept?.imagePath, fetchedAt = clock(), status = ArtworkStatus.FAILED) }
                 log("$key: failed (${outcome.reason}); retried after a day")
             } else {
                 log("$key: offline mid-fetch, nothing recorded")
             }
-            is Fetched.Busy -> if (outcome.retryAfterMs > ArtworkFetcher.MAX_WAIT_MS) {
-                val dropped = dropBackground()
-                log("$key: Wikimedia asked to wait ${outcome.retryAfterMs} ms; this run stops, $dropped more left for the next")
-            } else {
-                log("$key: Wikimedia asked to wait ${outcome.retryAfterMs} ms; left for later")
-                pause(outcome.retryAfterMs.coerceAtLeast(MIN_BUSY_PAUSE_MS))
+            Fetched.Saved -> log("$key: found with a picture")
+            Fetched.Skipped -> log("$key: nothing to look up")
+            is Fetched.Busy -> {
+                val source = if (task.key is ArtKey.Cover) "Apple" else "Wikimedia"
+                if (outcome.retryAfterMs > ArtworkFetcher.MAX_WAIT_MS) {
+                    val dropped = dropBackground(like = task.key)
+                    log("$key: $source asked to wait ${outcome.retryAfterMs} ms; this run stops, $dropped more left for the next")
+                } else {
+                    log("$key: $source asked to wait ${outcome.retryAfterMs} ms; left for later")
+                    pause(outcome.retryAfterMs.coerceAtLeast(MIN_BUSY_PAUSE_MS))
+                }
             }
         }
+    }
+
+    /**
+     * Writes [key]'s row as [row] makes it from the row there now (whose picture it keeps: a piece's cover stays when its
+     * notes arrive), under the repository's lock. A row its lookup reads as found was written while the fetch was under
+     * way (a cover chosen by hand, a Studio piece's line): it stays, and nothing is written.
+     */
+    private suspend fun record(key: ArtKey, row: (kept: ArtworkEntity?) -> ArtworkEntity) = writing.withLock {
+        val now = store.get(key.storageKey)
+        if (ArtworkPolicy.recordOf(key, now)?.status == ArtworkStatus.OK) return@withLock
+        store.upsert(row(now))
     }
 
     private fun publish(current: String? = state.value.current) {
