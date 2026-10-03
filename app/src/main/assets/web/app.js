@@ -483,94 +483,291 @@
   const channelOf = (s) => (s && s.player.channel ? s.player.channel.key : null);
 
   // ---- Art ----------------------------------------------------------------------------------------
+  //
+  // One loader for every picture (DESIGN.md › v1.17 — M45). A box shows its title's monogram at once and its picture
+  // over it once loaded, one request each, to a versioned address the browser keeps for good. Only the boxes in sight
+  // ask (Now playing's at once, ahead of the rest), a few at a time and, through the relay, within a budget that leaves
+  // the page's own requests room in its 120 a minute. A failed address waits before it is asked again.
 
-  /** Art is fetched only once its row is in sight: a roll card costs the tablet a parse of the piece. */
-  const lazyArt = 'IntersectionObserver' in window
+  /** Loads at once: 4 through the relay, 6 on the tablet's own address. */
+  const ART_PARALLEL = ROOT !== '' ? 4 : 6;
+  /** Through the relay, a budget: 40 pictures at once, one more each second. */
+  const ART_BUDGET = 40;
+  const ART_REFILL_MS = 1000;
+  /** A failed address is asked again after 4 s, then 20 s, then 60 s, then no more. */
+  const ART_RETRY_MS = [4000, 20000, 60000];
+  /** Three failures in a row pause every load for 20 s: the relay's refusal lasts up to a minute. */
+  const ART_PAUSE_AFTER = 3;
+  const ART_PAUSE_MS = 20000;
+
+  /** Each box's picture: its key and address, and where its load stands. */
+  const artBoxes = new WeakMap();
+  /** The addresses that failed: how often, and when they may be asked again. */
+  const artFailures = new Map();
+  /** The loads under way, by address, with the boxes waiting on each. */
+  const artLoads = new Map();
+  const artQueue = [];
+  let artTokens = ART_BUDGET;
+  let artTokensAt = performance.now();
+  let artFailedInRow = 0;
+  let artPausedUntil = 0;
+  let artTimer = 0;
+  let artTimerAt = 0;
+
+  /** Every box but Now playing's asks once it comes within 200 px of the window; a box not displayed never does. */
+  const artSight = 'IntersectionObserver' in window
     ? new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        lazyArt.unobserve(entry.target);
-        loadArt(entry.target);
+        const s = artBoxes.get(entry.target);
+        if (!s) continue;
+        s.inSight = entry.isIntersecting;
+        if (s.inSight) artWant(entry.target, s);
       }
     }, { rootMargin: '200px' })
     : null;
 
+  /** What a box shows, `kind:id-or-composerKey:version:size`: the same key, the same picture. */
+  function artKey(piece, size) {
+    return `${piece.art}:${piece.art === 'portrait' ? piece.composerKey : piece.id}:${piece.artVersion || 0}:${size}`;
+  }
+
+  /** The picture's address, with its version (so it is kept for good); null when the monogram is all there is. */
+  function artAddress(piece, size) {
+    const id = encodeURIComponent(String(piece.id));
+    const v = encodeURIComponent(String(piece.artVersion || 0));
+    if (piece.art === 'cover' && Number(piece.id)) return ROOT + `/api/art/piece/${id}?kind=cover&size=${size}&v=${v}`;
+    if (piece.art === 'portrait' && piece.composerKey) return ROOT + `/api/art/composer/${encodeURIComponent(piece.composerKey)}?size=${size}&v=${v}`;
+    if (piece.art === 'roll' && Number(piece.id)) return ROOT + `/api/art/piece/${id}?kind=roll&v=1`;
+    return null;
+  }
+
+  /** A composer (the composers list, a channel's mosaic) as [art] takes them: their portrait, else their name's monogram. */
+  function portraitOf(composer) {
+    return { art: composer.portrait ? 'portrait' : 'roll', composerKey: composer.key, id: 0, title: composer.name, artVersion: composer.artVersion };
+  }
+
   /**
-   * Fills an .art box for [piece]: the composer's portrait, else the piece's own roll card tinted as
-   * the app tints it, else (no card to be had) the monogram of its title, so no frame stands empty
-   * (v1.10.1). [lazy]: only once the box is in sight (the library's long lists).
+   * Fills an .art box for [piece] at [size] ('row' for the 40 px boxes, 'tile' for Now playing's and the larger ones):
+   * its title's monogram at once, then over it its cover, its composer's portrait, or its own roll card tinted as the
+   * app tints it. A box already showing that picture is left as it is. [options.priority]: asked for at once, ahead of
+   * the rest (Now playing's); [options.onPicture]: given the <img> once it shows, or null for a roll card, a monogram or
+   * a failure.
    */
-  function art(box, piece, size, lazy) {
-    box.replaceChildren();
-    box.dataset.kind = '';
-    if (!piece) return box;
-    box.dataset.kind = piece.art;
-    box.dataset.key = piece.composerKey;
-    box.dataset.id = String(piece.id);
-    box.dataset.size = size;
-    box.dataset.title = piece.title || '';
-    box.dataset.version = String(piece.artVersion || 0);
-    if (lazy && lazyArt) lazyArt.observe(box);
-    else loadArt(box);
+  function art(box, piece, size, options) {
+    const key = piece ? artKey(piece, size) : null;
+    const known = artBoxes.get(box);
+    if (known && known.key === key) {
+      if (piece) setMonogram(box, piece.title);   // renamed: the picture stays
+      return box;
+    }
+    if (artSight) artSight.unobserve(box);
+    const onPicture = (options && options.onPicture) || null;
+    const s = {
+      key,
+      address: piece ? artAddress(piece, size) : null,
+      roll: !!piece && piece.art === 'roll',
+      onPicture,
+      priority: !!(options && options.priority),
+      inSight: !artSight,
+      queued: false,
+      loading: false,
+      done: false,
+      timer: 0,
+    };
+    artBoxes.set(box, s);
+    box.classList.remove('pictured');
+    box.dataset.kind = piece ? piece.art : '';
+    box.replaceChildren(...(piece ? [monogram(piece.title)] : []));
+    if (onPicture && (!s.address || s.roll)) onPicture(null);   // a monogram and a roll card have no colours
+    if (!s.address) s.done = true;
+    else if (s.priority || !artSight) artWant(box, s);
+    else artSight.observe(box);
     return box;
   }
 
-  function loadArt(box) {
-    if (box.dataset.kind === 'cover') {
-      // A Studio piece's own cover (v1.12): drawn from its music; its version keeps the hour-long cache honest.
-      const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/piece/${encodeURIComponent(box.dataset.id)}?v=${encodeURIComponent(box.dataset.version || '0')}` });
-      img.addEventListener('error', () => {
-        box.dataset.kind = 'roll';
-        loadArt(box);
-      });
-      box.replaceChildren(img);
-    } else if (box.dataset.kind === 'portrait') {
-      const img = h('img', { alt: '', decoding: 'async', src: ROOT + `/api/art/composer/${encodeURIComponent(box.dataset.key)}?size=${box.dataset.size}` });
-      img.addEventListener('error', () => {
-        box.dataset.kind = 'roll';
-        loadArt(box);
-      });
-      box.replaceChildren(img);
-    } else if (box.dataset.kind === 'roll') {
-      if (!Number(box.dataset.id)) {
-        box.replaceChildren(monogram(box.dataset.title));
+  /** [box] in sight (or Now playing's) asks for its picture: queued, unless its address failed and waits, or gave up. */
+  function artWant(box, s) {
+    if (artBoxes.get(box) !== s || s.done || s.queued || s.loading) return;
+    const failure = artFailures.get(s.address);
+    if (failure) {
+      if (failure.count > ART_RETRY_MS.length) {
+        artDone(box, s);   // three tries more failed too: the monogram stays
         return;
       }
-      const src = ROOT + `/api/art/piece/${encodeURIComponent(box.dataset.id)}`;
-      const roll = h('span', { class: 'roll' });
-      roll.style.webkitMaskImage = `url("${src}")`;
-      roll.style.maskImage = `url("${src}")`;
-      box.replaceChildren(roll);
-      // A mask that fails to load draws nothing: the same address (from the cache) says whether the card came.
-      const probe = new Image();
-      probe.addEventListener('error', () => {
-        if (roll.parentNode === box) box.replaceChildren(monogram(box.dataset.title));
-      });
-      probe.src = src;
+      const wait = failure.retryAt - performance.now();
+      if (wait > 0) {
+        // Asked again at its time, only if its box is still in sight then (else when it comes back into sight).
+        if (!s.timer) {
+          s.timer = setTimeout(() => {
+            s.timer = 0;
+            if (box.isConnected && (s.inSight || s.priority)) artWant(box, s);
+          }, wait);
+        }
+        return;
+      }
+    }
+    s.queued = true;
+    if (s.priority) artQueue.unshift({ box, s });
+    else artQueue.push({ box, s });
+    artPump();
+  }
+
+  /** Starts what the limits allow, Now playing's first; a box gone from the page or out of sight by now is skipped. */
+  function artPump() {
+    const now = performance.now();
+    if (now < artPausedUntil) {
+      artWake(artPausedUntil - now);
+      return;
+    }
+    artTokens = Math.min(ART_BUDGET, artTokens + (now - artTokensAt) / ART_REFILL_MS);
+    artTokensAt = now;
+    while (artQueue.length > 0) {
+      const { box, s } = artQueue[0];
+      if (artBoxes.get(box) !== s || s.done || s.loading || !box.isConnected || !(s.inSight || s.priority)) {
+        artQueue.shift();
+        s.queued = false;
+        continue;
+      }
+      const under = artLoads.get(s.address);
+      if (under) {   // the same picture is on its way: this box shows it too
+        artQueue.shift();
+        s.queued = false;
+        s.loading = true;
+        under.add(box);
+        continue;
+      }
+      if (artLoads.size >= ART_PARALLEL) return;   // the next starts when one ends
+      if (ROOT !== '' && !s.priority && artTokens < 1) {
+        artWake((1 - artTokens) * ART_REFILL_MS);
+        return;
+      }
+      artQueue.shift();
+      s.queued = false;
+      if (ROOT !== '') artTokens -= 1;   // Now playing's takes one too, but never waits for it
+      artLoad(box, s);
     }
   }
 
-  function monogram(name) {
+  /** Runs [artPump] again in [ms]: a pause's end, or the budget's next picture. */
+  function artWake(ms) {
+    const at = performance.now() + Math.max(16, ms);
+    if (artTimer && artTimerAt <= at) return;
+    clearTimeout(artTimer);
+    artTimerAt = at;
+    artTimer = setTimeout(() => {
+      artTimer = 0;
+      artPump();
+    }, at - performance.now());
+  }
+
+  /** One request for [s.address]: every box waiting on it shows the picture, or keeps its monogram and waits to ask again. */
+  function artLoad(box, s) {
+    const address = s.address;
+    const waiting = new Set([box]);
+    artLoads.set(address, waiting);
+    s.loading = true;
+    const img = new Image();
+    img.decoding = 'async';
+    img.alt = '';
+    const settle = (ok) => {
+      artLoads.delete(address);
+      if (ok) {
+        artFailures.delete(address);
+        artFailedInRow = 0;
+      } else {
+        const failure = artFailures.get(address) || { count: 0, retryAt: 0 };
+        failure.count += 1;
+        failure.retryAt = performance.now() + (ART_RETRY_MS[failure.count - 1] || 0);
+        artFailures.set(address, failure);
+        artFailedInRow += 1;
+        if (artFailedInRow >= ART_PAUSE_AFTER) {
+          artFailedInRow = 0;
+          artPausedUntil = performance.now() + ART_PAUSE_MS;
+        }
+      }
+      let picture = img;
+      for (const each of waiting) {
+        const t = artBoxes.get(each);
+        if (!t || t.address !== address) continue;   // it shows something else by now
+        t.loading = false;
+        if (ok) {
+          artShow(each, t, picture);
+          picture = null;   // a second box with the same picture takes its own <img>, from the cache
+        } else {
+          if (t.onPicture && !t.roll) t.onPicture(null);
+          artWant(each, t);   // waits for its retry, or gives up
+        }
+      }
+      artPump();
+    };
+    img.addEventListener('load', () => settle(true), { once: true });
+    img.addEventListener('error', () => settle(false), { once: true });
+    img.src = address;
+  }
+
+  /** Lays the picture over the monogram and fades it in: a cover or a portrait as the <img>, a roll card as the .roll span's mask. */
+  function artShow(box, s, img) {
+    let picture;
+    if (s.roll) {
+      // The same address, in the cache by now; the mask goes through the CSSOM.
+      picture = h('span', { class: 'roll picture' });
+      picture.style.webkitMaskImage = `url("${s.address}")`;
+      picture.style.maskImage = `url("${s.address}")`;
+    } else {
+      picture = img || h('img', { alt: '', decoding: 'async', src: s.address });
+      picture.className = 'picture';
+    }
+    box.append(picture);
+    void getComputedStyle(picture).opacity;   // where the fade starts (160 ms; none under reduced motion)
+    picture.classList.add('shown');
+    box.classList.add('pictured');
+    artDone(box, s);
+    if (s.onPicture && !s.roll) s.onPicture(picture);
+  }
+
+  /** Nothing more to load for [box]: shown, or given up. */
+  function artDone(box, s) {
+    s.done = true;
+    if (artSight) artSight.unobserve(box);
+  }
+
+  /** A box whose row is gone: nothing more is loaded for it. */
+  function artForget(box) {
+    if (artSight) artSight.unobserve(box);
+    artBoxes.delete(box);
+  }
+
+  /** Lets go of every box in [container], whose rows are about to be replaced (the observer itself stays). */
+  function artForgetIn(container) {
+    for (const box of container.querySelectorAll('.art')) artForget(box);
+  }
+
+  /** The first letter or digit of [name], in capitals; a dash when it has none. */
+  function initial(name) {
     const letter = (name || '').match(/[\p{L}\p{N}]/u);
-    return h('span', { class: 'monogram', text: letter ? letter[0].toUpperCase() : '–' });
+    return letter ? letter[0].toUpperCase() : '–';
+  }
+
+  function monogram(name) {
+    return h('span', { class: 'monogram', text: initial(name) });
+  }
+
+  function setMonogram(box, name) {
+    const mono = box.querySelector('.monogram');
+    if (mono && mono.textContent !== initial(name)) mono.textContent = initial(name);
   }
 
   // ---- Now playing --------------------------------------------------------------------------------
 
   let seeking = false;
-  let shownArt = null;
   let shownProblem = null;
 
   function renderNow() {
     const player = state.player;
     const piece = player.piece;
     const playing = player.status === 'playing';
-    const artKey = piece ? `${piece.id}:${piece.art}:${piece.artVersion || 0}` : null;
-    if (artKey !== shownArt) {
-      shownArt = artKey;
-      art($('now-art'), piece, 'tile');
-      backdropFrom($('now-art'));
-    }
+    // Asked for at once, ahead of the rest; its picture gives the backdrop its colours (the same picture: left as it is).
+    art($('now-art'), piece, 'tile', { priority: true, onPicture: backdropFrom });
     $('now-art').hidden = !piece;
     $('now-backdrop').classList.toggle('playing', playing);
     $('now-title').textContent = piece ? piece.title : 'Choose a piece from the library.';
@@ -626,25 +823,25 @@
   // ---- Now playing's album colours (v1.15 — M41) ----------------------------------------------------
 
   /**
-   * The art's colours behind Now playing, as the tablet has them: read from the picture [box] shows (a cover or a
-   * portrait; a roll card or a monogram has none) once it has loaded, the last colours kept meanwhile, and none when it
-   * fails. They go in as --bd1 … --bd4 on the backdrop (hue and saturation; the stylesheet gives the lightness and the
-   * veil of the page's appearance), and .has-backdrop puts the words over them in the primary colour.
+   * The art's colours behind Now playing, as the tablet has them: read from the picture Now playing's box shows, which
+   * the art loader hands over once it is in ([img]: a cover or a portrait), the last colours kept meanwhile, and none
+   * ([img] null) for a roll card, a monogram or a failure. They go in as --bd1 … --bd4 on the backdrop (hue and
+   * saturation; the stylesheet gives the lightness and the veil of the page's appearance), and .has-backdrop puts the
+   * words over them in the primary colour.
    */
-  function backdropFrom(box) {
+  function backdropFrom(img) {
     const backdrop = $('now-backdrop');
     const show = (palette) => {
       if (palette) palette.forEach(([hue, saturation], i) => backdrop.style.setProperty(`--bd${i + 1}`, `${hue.toFixed(1)} ${(saturation * 100).toFixed(1)}%`));
       backdrop.hidden = !palette;
       backdrop.parentElement.classList.toggle('has-backdrop', !!palette);
     };
-    const img = box.querySelector('img');
     if (!img) {
       show(null);
       return;
     }
     const read = () => {
-      if (box.contains(img)) show(artPalette(img));
+      if (img.isConnected) show(artPalette(img));
     };
     if (img.complete && img.naturalWidth > 0) read();
     else {
@@ -950,6 +1147,9 @@
     }
   }
 
+  /** What each Up next list shows: a state message that changes none of it leaves the rows, and their pictures, as they are. */
+  const queueShown = new WeakMap();
+
   /** Up next: the piece playing, then what follows, each row with up, down and remove, and drag where the browser has it. */
   function renderQueue(container, compact) {
     if (!container) return;
@@ -959,13 +1159,36 @@
     const current = hasCurrent ? items[0] : null;
     const upcoming = hasCurrent ? items.slice(1) : items;
     const total = Math.max(0, player.queue.ids.length - (player.queue.index + 1));
+    const shows = JSON.stringify([
+      !!compact,
+      current && [current.uid, current.id, current.title, current.composer, current.composerShort, current.art, current.artVersion],
+      upcoming.map((item) => [item.uid, item.id, item.title, item.composerShort, item.durationMs, !!item.requested, item.art, item.artVersion]),
+      total,
+    ]);
+    if (queueShown.get(container) === shows) return;
+    queueShown.set(container, shows);
+    // The boxes already here move into the new rows where they show the same picture; the rest are let go.
+    const boxes = new Map();
+    for (const box of container.querySelectorAll('.art')) {
+      const known = artBoxes.get(box);
+      if (!known || !known.key) {
+        artForget(box);
+        continue;
+      }
+      if (!boxes.has(known.key)) boxes.set(known.key, []);
+      boxes.get(known.key).push(box);
+    }
+    const artFor = (piece) => {
+      const same = boxes.get(artKey(piece, 'row'));
+      return art((same && same.shift()) || h('div', { class: 'art' }), piece, 'row');
+    };
     const head = h('div', { class: 'queue-head' },
       h('p', { class: 'eyebrow', text: total > 0 ? `Up next · ${plural(total, 'piece', 'pieces')}` : 'Up next' }),
       upcoming.length > 0 ? h('button', { class: 'text-button', type: 'button', onclick: () => queueCommand({ action: 'clear' }), text: 'Clear' }) : null);
     const list = h('ul', { class: 'rows' });
     if (current) {
       list.append(h('li', { class: 'row queue-row current' },
-        art(h('div', { class: 'art' }), current, 'row'),
+        artFor(current),
         h('div', { class: 'text' },
           h('p', { class: 'title', text: current.title }),
           h('p', { class: 'meta', text: `Playing · ${current.composerShort || current.composer || 'Unknown composer'}` }))));
@@ -973,7 +1196,7 @@
     upcoming.forEach((item, index) => {
       const row = h('li', { class: 'row queue-row clickable', draggable: 'true', 'data-uid': item.uid },
         compact ? null : h('span', { class: 'handle', 'aria-hidden': 'true' }, glyph('i-handle')),
-        art(h('div', { class: 'art' }), item, 'row'),
+        artFor(item),
         h('div', { class: 'text' },
           h('p', { class: 'title' }, item.title, item.requested ? h('span', { class: 'tag', text: 'Requested' }) : null),
           h('p', { class: 'meta', text: [item.composerShort || 'Unknown composer', clock(item.durationMs)].join(' · ') })),
@@ -1007,6 +1230,7 @@
       list,
       upcoming.length === 0 ? h('p', { class: 'empty', text: 'Nothing up next.' }) : null,
       compact ? dropZone() : null);
+    for (const left of boxes.values()) left.forEach(artForget);
   }
 
   // ---- Library -------------------------------------------------------------------------------------
@@ -1113,7 +1337,7 @@
   }
 
   function renderPieces(pieces, emptyText) {
-    if (lazyArt) lazyArt.disconnect();   // the rows go: nothing keeps watching them
+    artForgetIn($('lib-rows'));   // the rows go: nothing keeps watching them
     const ids = pieces.map((p) => p.id);
     $('lib-rows').replaceChildren(...pieces.map((piece) => pieceRow(piece, ids)));
     $('lib-empty').hidden = pieces.length > 0;
@@ -1123,7 +1347,7 @@
   /** A piece's row: its art, title and composer with its length; a tap plays it (and the list after it); its menu plays it next or adds it. */
   function pieceRow(piece, queue) {
     const row = h('li', { class: 'row clickable' },
-      art(h('div', { class: 'art' }), piece, 'row', true),
+      art(h('div', { class: 'art' }), piece, 'row'),
       h('div', { class: 'text' },
         h('p', { class: 'title', text: piece.title }),
         h('p', { class: 'meta', text: [piece.composerShort || unknownName(), clock(piece.durationMs)].join(' · ') })),
@@ -1181,6 +1405,7 @@
     try {
       const { playlists } = await get(scoped(ROOT + '/api/playlists'));
       $('lib-more').hidden = true;
+      artForgetIn($('lib-rows'));
       $('lib-rows').replaceChildren(...playlists.map((list) => {
         const row = h('li', { class: 'row clickable' },
           h('div', { class: 'art' }, monogram(list.name)),
@@ -1212,12 +1437,10 @@
     try {
       const { composers } = await get(scoped(ROOT + '/api/composers'));
       $('lib-more').hidden = true;
+      artForgetIn($('lib-rows'));
       $('lib-rows').replaceChildren(...composers.map((composer) => {
-        const box = h('div', { class: 'art' });
-        if (composer.portrait) art(box, { art: 'portrait', composerKey: composer.key, id: 0, title: composer.name }, 'row');
-        else box.append(monogram(composer.name));
         const row = h('li', { class: 'row clickable' },
-          box,
+          art(h('div', { class: 'art' }), portraitOf(composer), 'row'),
           h('div', { class: 'text' },
             h('p', { class: 'title', text: composer.name || unknownName() }),
             h('p', { class: 'meta', text: plural(composer.pieceCount, 'piece', 'pieces') })),
@@ -1271,6 +1494,7 @@
       const { channels, playing } = await get(ROOT + '/api/channels');
       $('channel-stop').hidden = !playing;
       $('channels-empty').hidden = channels.length > 0;
+      artForgetIn($('channel-tiles'));
       $('channel-tiles').replaceChildren(...channels.map(channelTile));
     } catch (e) {
       failed(e);
@@ -1282,15 +1506,7 @@
     const cells = channel.composers.slice(0, 4);
     const mosaic = h('div', { class: cells.length > 1 ? 'mosaic' : 'mosaic one' });
     if (cells.length === 0) mosaic.append(monogram(channel.name));
-    for (const composer of cells.length === 3 ? cells.concat(cells[0]) : cells) {
-      if (!composer.portrait) {
-        mosaic.append(monogram(composer.name));
-        continue;
-      }
-      const img = h('img', { alt: '', loading: 'lazy', src: ROOT + `/api/art/composer/${encodeURIComponent(composer.key)}?size=tile` });
-      img.addEventListener('error', () => img.replaceWith(monogram(composer.name)));
-      mosaic.append(img);
-    }
+    for (const composer of cells.length === 3 ? cells.concat(cells[0]) : cells) mosaic.append(art(h('div', { class: 'art' }), portraitOf(composer), 'tile'));
     const meta = channel.playing
       ? h('p', { class: 'eyebrow' }, h('span', { class: 'dot live' }), 'Playing')
       : h('p', { class: 'eyebrow', text: channel.playable ? plural(channel.size, 'piece', 'pieces') : 'Add more pieces' });

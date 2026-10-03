@@ -561,7 +561,7 @@ button, input, select { font: inherit; color: inherit; }
   pointer-events: none;
 }
 
-.art img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.art img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
 
 .mono .art img { filter: grayscale(1); }
 .art[data-kind="cover"] img { object-position: 50% 50%; }
@@ -586,6 +586,16 @@ button, input, select { font: inherit; color: inherit; }
   color: var(--secondary);
   font-size: 28px;
   font-weight: 500;
+}
+
+/* The art loader (v1.17 — M45): the monogram shows at once and the picture is laid over it once loaded, fading in over
+   160 ms; then the monogram goes, so a roll card's gaps and a portrait's clear edges show the frame as before. */
+.art .picture { opacity: 0; transition: opacity 160ms ease-out; }
+.art .picture.shown { opacity: 1; }
+.art.pictured .monogram { visibility: hidden; transition: visibility 0s linear 160ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .art .picture, .art.pictured .monogram { transition: none; }
 }
 
 /* ---- The PIN gate -------------------------------------------------------------------------- */
@@ -1173,6 +1183,11 @@ body:not(.mono):not(.no-backdrop) .now-main.has-backdrop > :is(.views-bar, .now-
 .mosaic.one { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 
 .mosaic img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+
+/* A cell is an .art box (v1.17 — M45) filling its quarter, with no frame of its own: the tile has one. */
+.mosaic .art { width: auto; height: auto; border-radius: 0; }
+
+.mosaic .art::after { display: none; }
 
 .mono .mosaic img { filter: grayscale(1); }
 
