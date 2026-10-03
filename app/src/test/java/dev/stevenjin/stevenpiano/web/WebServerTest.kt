@@ -875,6 +875,7 @@ class WebServerTest {
         assertEquals("no cover of its own: none, never its roll card in an <img>", 404, http.get("/api/art/piece/1?kind=cover&size=row&v=7", auth).status)
         backend.pieces[1] = backend.pieces[1].copy(cover = true, artVersion = 7)
         assertEquals("image/jpeg", http.get("/api/art/piece/2?kind=cover&size=row&v=7", auth).header("content-type"))
+        assertEquals("Now playing's cover at its full size (v1.18 — M47)", 200, http.get("/api/art/piece/2?kind=cover&size=full&v=7", auth).status)
         val roll = http.get("/api/art/piece/1?kind=roll&v=1", auth)
         assertEquals("the roll card, even beside a portrait", "image/png", roll.header("content-type"))
         assertEquals("private, max-age=31536000, immutable", roll.header("cache-control"))

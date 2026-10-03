@@ -308,10 +308,11 @@ data class WebComposerDetail(val composer: WebComposer, val pieces: List<WebPiec
 /** An image and its type, as the art routes send it. */
 class WebImage(val bytes: ByteArray, val contentType: String)
 
-/** A picture for a 40 px row (at most 128 px) or a tile (at most 512 px). */
+/** A picture for a 40 px row (at most 128 px), a tile (at most 512 px), or Now playing's cover (v1.18 — M47, at most 1024 px). */
 enum class WebArtSize(val key: String) {
     ROW("row"),
     TILE("tile"),
+    FULL("full"),
     ;
 
     companion object {
