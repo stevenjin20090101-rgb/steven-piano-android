@@ -308,4 +308,26 @@ class WebAssetsTest {
         // What newer piano firmware will fill in (firmware/docs/BLE_DIAG.md) is said, never left blank.
         assertTrue(text("system.js").contains("'Needs newer firmware'"))
     }
+
+    @Test
+    fun `the cover picker is a module on the list, asks only through the host from its ROOT, and shows only the tablet's data pictures (v1_18 M48)`() {
+        assertTrue("covers.js is on the panel's list", WebAssets.PANEL["/covers.js"] == WebAssets.Asset("covers.js", WebAssets.JS))
+        val js = text("covers.js")
+        assertTrue("the module the piece menu opens", js.contains("export function open(host, piece)"))
+        for (banned in listOf("fetch(", "WebSocket(", "XMLHttpRequest", "setAttribute('style'", "cssText")) assertFalse("covers.js holds $banned", js.contains(banned))
+        val paths = Regex("['`\"]/api/").findAll(js).map { it.range.first }.toList()
+        assertEquals("its three routes", 3, paths.size)
+        for (at in paths) assertEquals("covers.js: every /api/ path starts from host.ROOT (at $at)", "host.ROOT + ", js.substring(maxOf(0, at - 12), at))
+        for (copy in listOf(
+            "'Find a cover'", "'Searching…'", "\"Nothing found. Try the album's name or the artist's.\"", "'Apple asked to slow down. Try again in a minute.'",
+            "\"Remove this piece's cover\"", "'Cover changed.'",
+        )) {
+            assertTrue(copy, js.contains(copy))
+        }
+        assertTrue("a picture only as a data: JPEG or PNG", js.contains("/^data:image\\/(?:jpeg|png);base64,"))
+        val app = text("app.js")
+        assertTrue("loaded the first time a piece's menu asks for it", app.contains("import('./covers.js').then((m) => m.open(host, piece))"))
+        assertFalse("never at the page's start", text("index.html").contains("covers.js"))
+        assertTrue("offered for the library's pieces only", app.contains("piece.genre === 'classical' || piece.genre === 'modern' ? [['Find a cover…'"))
+    }
 }

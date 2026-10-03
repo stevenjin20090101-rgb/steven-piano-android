@@ -1614,7 +1614,47 @@
       ['Play', () => play(piece.id, queue)],
       ['Play next', () => queueCommand({ action: 'playNext', ids: [piece.id] }).then(() => toast('It plays next.'))],
       ['Add to queue', () => queueCommand({ action: 'add', ids: [piece.id] }).then(() => toast('Added to Up next.'))],
+      // The cover picker (v1.18 — M48), for a piece from the library: one made here (Studio's, a recording) has no genre.
+      ...(piece.genre === 'classical' || piece.genre === 'modern' ? [['Find a cover…', () => findCover(piece, anchor)]] : []),
     ]);
+  }
+
+  /**
+   * The cover picker (v1.18 — M48, covers.js), loaded the first time it is asked for. When its sheet closes the focus goes
+   * back to the piece's More ([anchor]), and a cover chosen or taken away shows at once.
+   */
+  function findCover(piece, anchor) {
+    import('./covers.js').then((m) => m.open(host, piece)).then((changed) => {
+      if (anchor && anchor.isConnected) anchor.focus();
+      if (changed) coverChanged(piece);
+    }, () => toast("The cover picker couldn't be loaded."));
+  }
+
+  /**
+   * A piece's cover chosen or taken away (v1.18 — M48): the state is read again now, so Now playing and Up next take the
+   * new artVersion without waiting for its next message, and the piece is read again (a search for its title holds it),
+   * so its rows and tiles in the Library's list show the new art without a reload; the rest keep their pictures.
+   */
+  async function coverChanged(piece) {
+    get(ROOT + '/api/state').then(onState).catch(() => {});
+    if ($('lib-view').hidden || !library.pieces.some((p) => p.id === piece.id)) return;
+    let fresh = null;
+    try {
+      const page = await get(ROOT + `/api/library?${new URLSearchParams({ q: piece.title, limit: '200' })}`);
+      fresh = page.pieces.find((p) => p.id === piece.id) || null;
+    } catch (e) {
+      return;   // the list shows what it showed; it is read afresh when it is next asked for
+    }
+    if (!fresh || $('lib-view').hidden) return;
+    const size = library.shows === 'covers' ? 'tile' : 'row';
+    const items = $('lib-rows').children;
+    library.pieces.forEach((p, i) => {
+      if (p.id !== piece.id) return;
+      p.art = fresh.art;
+      p.artVersion = fresh.artVersion;
+      const box = items[i] && items[i].querySelector('.art');
+      if (box) art(box, p, size);
+    });
   }
 
   /** A small menu under [anchor] (above it near the window's foot): [items] are [label, action] pairs. */

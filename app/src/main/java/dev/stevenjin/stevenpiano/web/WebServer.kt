@@ -13,6 +13,9 @@ import android.annotation.SuppressLint
 import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.TextLimits
+import dev.stevenjin.stevenpiano.data.art.CoverChange
+import dev.stevenjin.stevenpiano.data.art.CoverPicker
+import dev.stevenjin.stevenpiano.data.art.CoverSearch
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettings
@@ -513,6 +516,10 @@ class WebServer(
         // The System page's two (v1.18 — M46): the piano's live facts now (the body is not read), and a tool by name.
         Route(Method.POST, Regex("/api/system/refresh"), Access.WRITE, "/api/system/refresh") { json(JSONObject().put("refreshed", backend.refreshPiano())) },
         Route(Method.POST, Regex("/api/system/tool"), Access.WRITE, "/api/system/tool") { call -> systemTool(call) },
+        // The cover picker (v1.18 — M48): Apple's catalogue searched by hand, and a piece's cover chosen from it or taken away.
+        Route(Method.POST, Regex("/api/covers/search"), Access.WRITE, "/api/covers/search") { call -> coverSearch(call) },
+        Route(Method.POST, Regex("/api/covers/choose"), Access.WRITE, "/api/covers/choose") { call -> coverChoose(call) },
+        Route(Method.POST, Regex("/api/covers/remove"), Access.WRITE, "/api/covers/remove") { call -> coverRemove(call) },
 
         // Logging in.
         Route(Method.POST, Regex("/api/login"), Access.LOGIN, "/api/login") { call -> login(call) },
@@ -1077,6 +1084,72 @@ class WebServer(
             it.addHeader("Content-Disposition", "attachment; filename=\"$DIAGNOSTICS_FILE\"")
         }
     }
+
+    // ---- The cover picker (v1.18 — M48) ---------------------------------------------------------
+
+    /**
+     * `POST /api/covers/search` `{text}`: the text trimmed, 2 to 80 characters with no control character (400 `field`
+     * otherwise, before anything is asked); 200 with the covers found ([WebApi.coverResults]); 429 `wait` within the
+     * picker's 4 s, with `retryAfterMs`; 503 `busy` while Apple's hour-long stop is on, with when it lifts; 503
+     * `unreachable` when Apple couldn't be reached.
+     */
+    private suspend fun coverSearch(call: Call): Response {
+        val body = call.body()
+        WebApi.onlyKeys(body, setOf("text"))
+        val term = CoverPicker.term(WebApi.string(body, "text", TextLimits.TITLE))
+            ?: throw ApiError(400, "field", "A search is ${CoverPicker.MIN_TEXT} to ${CoverPicker.MAX_TEXT} characters.")
+        return when (val answer = backend.coverSearch(term)) {
+            is CoverSearch.Found -> json(WebApi.coverResults(answer))
+            is CoverSearch.Wait -> {
+                val secs = seconds(answer.retryAfterMs)
+                coverAnswer(429, WebApi.error("wait", "Try again in $secs s.").put("retryAfter", secs).put("retryAfterMs", answer.retryAfterMs))
+                    .also { it.addHeader("Retry-After", secs.toString()) }
+            }
+            is CoverSearch.Busy -> appleBusy(answer.retryAfterMs)
+            CoverSearch.Unreachable -> refuse(503, "unreachable", "Apple's catalogue can't be reached. Try again.")
+            CoverSearch.BadText -> refuse(400, "field", "A search is ${CoverPicker.MIN_TEXT} to ${CoverPicker.MAX_TEXT} characters.")
+        }
+    }
+
+    /**
+     * `POST /api/covers/choose` `{pieceId, searchId, index}`: 204 once the cover is the piece's own; 404 `not-found` for a
+     * piece, a search or an index that is not there; 409 `made-here`; 503 `busy` or `unreachable` when it can't come down.
+     */
+    private suspend fun coverChoose(call: Call): Response {
+        val body = call.body()
+        WebApi.onlyKeys(body, setOf("pieceId", "searchId", "index"))
+        val pieceId = WebApi.id(body, "pieceId")
+        val searchId = WebApi.string(body, "searchId", SEARCH_ID_MAX)
+        val index = WebApi.whole(body, "index")
+        if (index !in 0 until CoverPicker.MAX_PICKS) return notFound()
+        return coverChanged(backend.coverChoose(pieceId, searchId, index.toInt()))
+    }
+
+    /** `POST /api/covers/remove` `{pieceId}`: 204 once the piece's own cover is gone; 404 `not-found`; 409 `made-here`. */
+    private suspend fun coverRemove(call: Call): Response {
+        val body = call.body()
+        WebApi.onlyKeys(body, setOf("pieceId"))
+        return coverChanged(backend.coverRemove(WebApi.id(body, "pieceId")))
+    }
+
+    private fun coverChanged(change: CoverChange): Response = when (change) {
+        CoverChange.Done -> noContent()
+        CoverChange.NotFound -> notFound()
+        CoverChange.MadeHere -> refuse(409, "made-here", "Studio's pieces and the recordings keep the cover drawn from their music.")
+        is CoverChange.Busy -> appleBusy(change.retryAfterMs)
+        CoverChange.Unreachable -> refuse(503, "unreachable", "The cover couldn't be downloaded. Try again.")
+        CoverChange.Failed -> refuse(500, "cover", "The tablet couldn't keep that cover.")
+    }
+
+    /** 503 `busy`: Apple's hour-long stop, lifting in `retryAfterMs` (and `Retry-After`), at `blockedUntil` (epoch ms, the tablet's clock). */
+    private fun appleBusy(ms: Long): Response {
+        val body = WebApi.error("busy", "Apple asked to slow down. Try again later.").put("retryAfterMs", ms).put("blockedUntil", System.currentTimeMillis() + ms)
+        return coverAnswer(503, body).also { it.addHeader("Retry-After", seconds(ms).toString()) }
+    }
+
+    /** A JSON answer with any [status], never stored, as [refuse]'s are. */
+    private fun coverAnswer(status: Int, body: JSONObject): Response =
+        bytesResponse(statusOf(status), JSON, body.toString().toByteArray(Charsets.UTF_8)).also { it.addHeader("Cache-Control", "no-store") }
 }
 
 /**
@@ -1430,3 +1503,6 @@ private fun closeQuietly(closeable: java.io.Closeable?) {
 /** The diagnostics zip's type and the name a browser saves it as (v1.18 — M46). */
 private const val ZIP = "application/zip"
 private const val DIAGNOSTICS_FILE = "steven-piano-diagnostics.zip"
+
+/** A cover search's id as a body may give it, at most (v1.18 — M48: the picker's are 16 characters). */
+private const val SEARCH_ID_MAX = 64

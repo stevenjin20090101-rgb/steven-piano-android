@@ -2960,3 +2960,12 @@ attention; search finds it by diagnostics, battery, temperature, memory, running
   (`diag/Attention.kt`, its thresholds and words) says so, always beside the words; red stays the live dot's.
 - **Read only while seen**: the tablet every 5 s and the piano's facts every 15 s (one round in 10 s at most, with the
   panel's) while the page is on screen and no resting screen covers it; the hub's line as it shows, then once a minute.
+
+# v1.18 — M48: the cover picker
+
+Steven asked (2026-10-03) to choose covers from the panel "for the few songs Apple cannot match by itself": 7 of his 266
+uploads find nothing, and a match can be the wrong album. A piece's menu, for a piece not made here, gains **Find a
+cover…**: a sheet in the editors' glass with the piece's title and composer, a search of Apple's catalogue filled with
+"title composer", and the covers found as tiles (the picture at 96 px, the album, the artist). A tap makes one the piece's
+own ("Cover changed."), credited on the piece sheet as a found cover is; **Remove this piece's cover** (after a word) brings
+the portrait or the roll card back. Neither is ever undone by a lookup. The tablet asks Apple: one search in 4 s.

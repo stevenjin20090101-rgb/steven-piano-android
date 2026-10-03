@@ -845,4 +845,23 @@ object WebApi {
     private const val VELOCITY_STEP = 5
     private const val FLOOR_STEP = 5
     private const val PRE_ROLL_STEP_MS = 500
+
+    // ---- The cover picker (v1.18 — M48) --------------------------------------------------------
+
+    /**
+     * `POST /api/covers/search`'s answer: `{searchId, results: [{index, album, artist, picture}]}`, in Apple's order, each
+     * picture its 100 px bytes as a `data:` address (`data:image/jpeg;base64,…`), which the panel's policy lets an `<img>`
+     * show and which needs no further request.
+     */
+    fun coverResults(found: dev.stevenjin.stevenpiano.data.art.CoverSearch.Found): JSONObject = JSONObject()
+        .put("searchId", found.searchId)
+        .put(
+            "results",
+            JSONArray().apply {
+                for (pick in found.picks) {
+                    val picture = "data:${pick.type};base64," + java.util.Base64.getEncoder().encodeToString(pick.picture)
+                    put(JSONObject().put("index", pick.index).put("album", pick.album).put("artist", pick.artist).put("picture", picture))
+                }
+            },
+        )
 }

@@ -74,9 +74,14 @@ class CoverFetcher(private val api: AppleCatalogApi, private val store: CoverSto
             val image = api.download(url, WikipediaClient.IMAGE_CAP) ?: return Fetched.NotFound
             store.keep(key.id, image, AppleUrls.pageLink(track.trackViewUrl), credit(track))
         } catch (e: AppleBusyException) {
-            blockedUntil = now() + BLOCK_MS
+            stop()
             Fetched.Failed("Apple asked to stop (HTTP ${e.code})")
         }
+    }
+
+    /** Starts the hour-long stop now: Apple's 403 or 429 to a lookup, or (v1.18 — M48) to the cover picker's search. */
+    fun stop() {
+        blockedUntil = now() + BLOCK_MS
     }
 
     companion object {

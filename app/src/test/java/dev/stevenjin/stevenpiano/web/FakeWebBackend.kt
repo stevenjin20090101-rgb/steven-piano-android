@@ -330,4 +330,18 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     var settingsHeld = WebSettings(fullPower = true, repeatMs = 110)
 
     override suspend fun settings(): WebSettings = settingsHeld
+
+    /** The cover picker (v1.18 — M48): what a search answers (one JPEG cover by default), and what a choice or a removal does. */
+    var coverSearchAnswer: dev.stevenjin.stevenpiano.data.art.CoverSearch = dev.stevenjin.stevenpiano.data.art.CoverSearch.Found(
+        "s1",
+        listOf(dev.stevenjin.stevenpiano.data.art.CoverPick(0, "Interstellar", "Hans Zimmer", byteArrayOf(-1, -40, -1, -32), "image/jpeg")),
+    )
+    var coverChangeAnswer: dev.stevenjin.stevenpiano.data.art.CoverChange = dev.stevenjin.stevenpiano.data.art.CoverChange.Done
+
+    override suspend fun coverSearch(text: String): dev.stevenjin.stevenpiano.data.art.CoverSearch = coverSearchAnswer.also { record("cover search $text") }
+
+    override suspend fun coverChoose(pieceId: Long, searchId: String, index: Int): dev.stevenjin.stevenpiano.data.art.CoverChange =
+        coverChangeAnswer.also { record("cover choose $pieceId $searchId $index") }
+
+    override suspend fun coverRemove(pieceId: Long): dev.stevenjin.stevenpiano.data.art.CoverChange = coverChangeAnswer.also { record("cover remove $pieceId") }
 }
