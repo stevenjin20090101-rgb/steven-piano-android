@@ -124,6 +124,30 @@ class DiagnosticsExporterTest {
     }
 
     @Test
+    fun `no PIN, digest, relay token or enrolment secret is in the zip the web panel offers too (v1_18 M46)`() {
+        // Every secret the tablet keeps is set: both PINs, the cloud's enrolment; the link log has the cloud's own lines.
+        linkLog.add("Cloud: enrolled with relay.example.dev")
+        linkLog.add("Cloud: connected to relay.example.dev")
+        val bytes = exporter().exportBytes()
+        val entries = java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            generateSequence { zip.nextEntry }.associate { it.name to zip.readBytes().toString(Charsets.UTF_8) }
+        }
+        assertEquals("the same entries as the shared file", listOf("about.txt", "settings.txt", "link.log"), entries.keys.toList())
+        val prefs = entries.getValue("settings.txt")
+        val names = prefs.lines().filter { it.isNotEmpty() }.map { it.substringBefore(" = ") }
+        val secretLike = Regex("(?i)pin|salt|hash|digest|session|token|secret|bearer|pianoid|code")
+        assertEquals(
+            "of the secrets, settings.txt says only whether each is set",
+            listOf("webPinSet", "kioskPinSet"),
+            names.filter { secretLike.containsMatchIn(it) },
+        )
+        val everything = entries.values.joinToString("\n")
+        assertFalse("the cloud's piano id (half its bearer token)", "abcdefgh2345" in everything)
+        assertFalse("no SHA-256 digest: a PIN's hash or a session's", Regex("[0-9a-fA-F]{64}").containsMatchIn(everything))
+        assertFalse(Regex("(?i)bearer|secret").containsMatchIn(everything))
+    }
+
+    @Test
     fun `each export replaces the one before, and an empty link log says so`() {
         val first = exporter().export()
         now += 60_000

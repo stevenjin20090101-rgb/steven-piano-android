@@ -10,11 +10,13 @@
 package dev.stevenjin.stevenpiano.firmware
 
 import android.content.Context
-import android.os.BatteryManager
+import dev.stevenjin.stevenpiano.diag.AndroidSystemProbe
 
-/** The tablet's battery now, as the firmware updater weighs it: its charge and whether it is charging. */
+/**
+ * The tablet's battery now, as the firmware updater weighs it: its charge and whether it is charging (or full, on the
+ * charger). One reader since v1.18 (M46): the System page's ([AndroidSystemProbe.battery]).
+ */
 fun batteryState(context: Context): PowerState {
-    val battery = context.getSystemService(BatteryManager::class.java) ?: return PowerState(null, charging = false)
-    val percent = battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).takeIf { it in 0..100 }
-    return PowerState(percent, charging = battery.isCharging)
+    val battery = AndroidSystemProbe.battery(context) ?: return PowerState(null, charging = false)
+    return PowerState(battery.percent, charging = battery.charging == true)
 }

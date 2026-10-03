@@ -336,6 +336,17 @@ object PianoSettings {
     val liveFacts: List<String> = listOf("boards", "i2cfails", "pedalboard", "uptime")
 
     /**
+     * The facts the web panel's System page reads (v1.18 — M46; `firmware/docs/BLE_DIAG.md`), in the order its `diag`
+     * lists them: read again with [liveFacts] when it asks ([PianoSettingsRepository.refreshFacts]), each only when the
+     * piano listed it in its dump. 2.0.0 lists seven (`i2cfails`, `uptime`, `repeatms`, `ota`, `fw`, `boards`,
+     * `pedalboard`); the rest are asked of later firmware.
+     */
+    val diagFacts: List<String> = listOf(
+        "temp", "heap", "heapmin", "heapblock", "tasks", "stack", "looprate", "loopms", "rssi", "active", "trips", "crashes",
+        "i2cfails", "uptime", "repeatms", "reset", "ota", "fw", "boards", "pedalboard",
+    )
+
+    /**
      * Writing one of these changes others on the piano, so those are read back too: volume below 100 turns full power
      * off; the shortest strike and the repeat gap make the repeat period (`!repeatms`, read back when the piano reports it).
      */
