@@ -14,6 +14,8 @@ import { constantTimeEqual, sha256Hex } from '../shared/hash';
 import { PIANO_ID, PENDING_LIFE_MS, newSecret, randomU32 } from '../shared/ids';
 import { API_CSP, error, withSecurity } from '../shared/http';
 import {
+  ART_LIMIT_HEADER,
+  ART_LIMIT_PER_MINUTE,
   CHUNK,
   CLOSE_POLICY,
   Close,
@@ -683,6 +685,8 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     }
     const headers = responseHeaders(msg.headers, attachment.pianoId);
     withSecurity(headers, headers.get('content-type')?.includes('json') ? API_CSP : PAGE_CSP);
+    // The relay's own word, never the tablet's (RESPONSE_HEADERS doesn't take it): the pictures' limit, for the page.
+    headers.set(ART_LIMIT_HEADER, String(ART_LIMIT_PER_MINUTE));
     const noBody = p.method === 'HEAD' || status === 204 || status === 205 || status === 304;
     // The tablet has decided: the rest of a body not yet sent is not wanted.
     this.stopBody(p);

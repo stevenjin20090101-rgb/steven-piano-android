@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import consoleConfig from '../wrangler.console.jsonc?raw';
 import relayConfig from '../wrangler.relay.jsonc?raw';
 import packageJson from '../package.json?raw';
+import { ART_LIMIT_PER_MINUTE } from '../src/shared/protocol';
 import { FakeBrowser, FakeTablet, RELAY, answerJson, newAddress, panel, pianoRow, seedPiano, status } from './helpers';
 
 /** A JSONC file's JSON: its comments taken out (none of the configs has "//" or "/*" inside a string but URLs, kept). */
@@ -82,6 +83,13 @@ describe("the cloud's hygiene", () => {
       if (script.includes('wrangler deploy')) expect(script, name).not.toContain('--var');
     }
     expect(jsonc(consoleConfig).assets.run_worker_first).toBe(true);
+  });
+
+  it("limits a panel's pictures as the header tells the page (v1.18 — M47b)", () => {
+    const limits = jsonc(relayConfig).ratelimits as Array<{ name: string; namespace_id: string; simple: { limit: number; period: number } }>;
+    const art = limits.find((l) => l.name === 'ART_LIMIT');
+    expect(art?.simple).toEqual({ limit: ART_LIMIT_PER_MINUTE, period: 60 });
+    expect(new Set(limits.map((l) => l.namespace_id)).size, 'each limit its own namespace').toBe(limits.length);
   });
 
   it('answers a request from anywhere but localhost 401 even with DEV_BYPASS set', async () => {

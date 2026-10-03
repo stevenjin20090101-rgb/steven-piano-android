@@ -15,6 +15,8 @@ export interface RelayEnv {
   DB: D1Database;
   ENROL_LIMIT: RateLimit;
   PANEL_LIMIT: RateLimit;
+  /** A panel's pictures (v1.18 — M47b): GETs under /api/art/, 600 a minute per address, apart from PANEL_LIMIT. */
+  ART_LIMIT: RateLimit;
   LOGIN_LIMIT: RateLimit;
   MAX_BODY_BYTES: number | string;
   /** The host browsers use, when it isn't the one the tablet connected to (local development). */
