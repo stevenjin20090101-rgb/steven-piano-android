@@ -7827,3 +7827,105 @@ tribute album refused); `ArtworkPolicyTest` (1: `coverRuleSince`). The loader wa
 the relay's limits (an 86-piece queue, a state message every 0.6 s): 8 picture requests on opening Now playing, none more
 over the state messages, a rebuilt Up next keeping its pictures. 1,615 → 1,622 unit tests (12 skipped), none failing.
 `lintDebug`: 0 errors, the same 30 warnings.
+
+# v1.18 — M49: Now playing over the cover
+
+Fable's design (DESIGN.md › v1.18 — M49), Opus coding, one lean run in a worktree (`m49-immersive`): no emulator, no
+version bump, no signing.
+
+## The picture (`data/art/`)
+- `BackdropRules.kt` (pure, new): `SIDE` 48, `BLUR_RADIUS` 3, `BLUR_PASSES` 3, `SATURATION` 1.6, `BLOCK` 12,
+  `TARGET_LUMINANCE` 0.14, `MIN_DIM` 0.18. `prepare(pixels, w, h)` in place: opaque (laid over black by alpha), three
+  separable box-blur passes (running sums, edges clamped, rounded), then the saturation matrix Android's
+  `ColorMatrix.setSaturation` builds (weights 0.213 / 0.715 / 0.072), clamped. `dimFor(pixels, w, h)`: the brightest of
+  the 12 × 12 block means by WCAG relative luminance L (`brightestBlock`, `luminance`, `StrictMath`), then
+  `max(0.18, 1 − (0.14 / L)^(1 / 2.2))`, 0.18 at L ≤ 0.14.
+- `ArtworkRepository.backdrop(row): BackdropPicture?`: the `ArtSize.Row` decode's centre square drawn filtered into a
+  48 × 48 ARGB bitmap (`createBitmap`, `Canvas.drawBitmap`), its pixels prepared and set back, with `dimFor`; made on
+  `Dispatchers.Default`, kept in a 32-entry `LruCache` by `imagePath@fetchedAt` (`pictureKey`); a picture that can't be
+  read is not kept. `cachedBackdrop(row)` for the first frame. `class BackdropPicture(bitmap, dim)`. `ArtPalette.kt`,
+  `palette()`, `cachedPalette()` and `KnownPalette` are gone.
+- `ui/components/ArtBackdropState.kt` (was `ArtPaletteState.kt`): `rememberBackdropPicture(pieceId, composerKey)`, the
+  piece's own row with a picture, else the composer's, through `produceState` keyed by path and version.
+
+## The values (`ui/theme/Backdrop.kt`, the one place)
+`Backdrop.Scales` 1.05 / 1.5 / 0.7 of the node's diagonal, `Alphas` 1 / 0.6 / 0.38, `PeriodsMs` 60,000 / 84,000 /
+48,000, `Directions` 1 / −1 / 1, `StartDegrees` 8 / 150 / −30, `OffsetsX` 0 / 0.12 / 0.27 and `OffsetsY` 0 / −0.06 /
+−0.24 of the node, `TopLighter` 0.06, `FootDeeper` 0.10, `RestingDeeper` 0.10, `Shade` (black), `Words`
+(`SilverPrimary`), `Glass` (black at `GlassAlpha` 0.26), `GlassEdge` (words at 0.14), `Pill` (0.18), `Hairline` (0.22),
+`RightHandAlpha` 0.92, `LeftHandAlpha` 0.5, `Landing` (0.75), `KeyWhite` `SilverPrimary`, `KeyBlack` `CarbonPrimary`,
+`KeyLine` `SilverTertiary`, `KeySounding` `NoteSoundingDark`, `KeyHands` (the paper's), `LiveRing` 1.5 dp at 0.9.
+`ImmersiveScheme` = `DarkScheme` with `onSurfaceVariant`, `secondary` and `tertiary` the words. `discColour`, the
+lightness and veil constants and `BlackWordsVeil` are gone; `hsl()` stays for Studio's covers. `ui/theme/Type.kt`:
+`NowPlayingTitle` (40 sp bold, 44, −1), `NowPlayingStripTitle` (30 sp, 34, −0.6), `NowPlayingComposer` (19 sp semibold).
+
+## The node (`ui/components/ArtBackdrop.kt`)
+`ArtBackdrop(picture, playing, modifier, resting, fadeMs, deeper)`: a `Spacer` with `clipToBounds()` and one
+`drawWithCache`. Per size and picture, `BackdropLayers`: the `ImageBitmap`, each layer's integer square and centre,
+the black `Brush.verticalGradient` from `dim + deeper − 0.06` to `dim + deeper + 0.10`. Per frame: for each layer
+`rotate(degrees, centre) { drawImage(…, alpha, filterQuality = FilterQuality.High) }`, then `drawRect(shade)`; no
+allocation. The fade (`BackdropFade`, as M41's): the new picture whole over the old at p through one `saveLayer` with a
+cached `Paint` (only while it fades), or alone at p / 1 − p; `Motion.timed(480)` or `RestingMotion.PIECE_MS`, a cut
+under reduced motion. The loop (`BackdropMotion`, three `mutableFloatStateOf` turns read only in the draw phase) runs
+as M41's did. `rememberBackdrop` keeps M41's gates and returns the picture; `OnBackdrop` and `backdropDark` are gone.
+
+## Immersive (`ui/components/Immersive.kt`, new)
+- `LocalImmersive`; `Immersive(shown)` provides, one composition either way, `ImmersiveScheme` through `MaterialTheme`,
+  `LocalContentColor`, `LocalTertiary` and `LocalSecondaryText` as the words, `LocalHairline` `Backdrop.Hairline`, the
+  ink's live red, sounding yellow, specular edge, disabled glyph, hand tones and aura, and remembers the appearance it
+  replaced (`AppAppearanceTokens`, a data class). `AppAppearance` puts that appearance back (a no-op outside): the
+  score's sheet (`ScoreSheet`), `GlassSheet`, `GlassDropdownMenu`, `GlassAlertDialog` and `GlassPopover`'s content.
+- `GlassSurface(immersive = LocalImmersive.current)` replaces `translucent`: `background(Backdrop.Glass)`, the edge in
+  `Backdrop.GlassEdge`, never blurring, on any API. `GlassHeaderPane(immersive)`: its edge always shown, its text the
+  content colour. `NavHost`: `BottomBar` and `TabRail` (now given `albumBackdrop`, reading the player's piece) wrap their
+  glass in `Immersive(Now playing && rememberBackdrop(…) != null)`; `TabTones.pill` is `Backdrop.Pill` there.
+- `NoteCanvas` (immersive): no black-key lanes, ramps from the words at 0.92 / 0.5 (`leftRamp` filled, `Roll.outlineLeft`
+  false) to the sounding yellow, or the hand tones as before; one 2 dp `Landing` line at the tracker bar or the foot.
+  `KeyboardStrip`: the `Key*` colours, every sounding key filled yellow without Hand colours. `RollStrip` and Now
+  playing's roll drop the hairline before the keys. `LiveDot`: its canvas 2 × 1.5 dp larger, the ring under the dot.
+  `RollPanel`: the card's clip and fill only when not immersive.
+
+## The screens
+- `NowPlayingScreen`: a `Box` with `ArtBackdrop(matchParentSize)` under `Immersive { GlassHeaderPane(padding(sides)) }`.
+  `scrolls` = a piece and (short as before, or a compact frame); over the backdrop the scroll is padded below the header
+  and clipped. `PieceView` picks `InTheScroll` (cover ≤ 360 dp and 0.8 of the viewport, `NowPlayingStripTitle`, then
+  the views at `scrollHeight`: the viewport less 64 dp, or the fixed heights stacked), `ArtOnly` (≤ 520 dp and 0.56 of
+  the height, centred), `BesideTheRoll` (`COLUMN` 400 dp, or half the width less 28 dp, then the views) or
+  `UnderTheStrip` (cover 84 dp with 14 dp corners, `ArtSize.Tile`; the transport 400 dp at the end from 720 dp wide,
+  else under the words; no scrubber). `CoverStack` lays the cover, the words and the controls one width: `coverSide`
+  takes the height less 22 + 4 + 2 + 14 dp, the composer's, STARTING's and the title's lines and `TransportHeight`,
+  two title lines unless `rememberTextMeasurer` finds one fits. `Cover`: `PieceArt` in a `MaterialTheme` whose
+  `shapes.medium` is the cover's (24 dp), `shadow(24 dp)`, the tap as M43's. `FootRow`: `FlowRow` of `Capsule`s
+  (`GlassSurface(CircleShape, Outline, blur = false)`): Tempo's eyebrow and stepper with the speaker, and
+  `ConnectionLine`. `NoteViews` lost its floating controls (`GlassTransportPanel` is the panel's alone);
+  `TransportControls(scrubber, inset)`.
+- `NowPlayingPanel`: `Box(modifier) { ArtBackdrop; Immersive { GlassHeaderPane } }`; the strip's controls float only
+  when not immersive.
+- `DisplayScreen`: Art and notes over `ArtBackdrop(deeper = Backdrop.RestingDeeper)` in `Immersive`; `WordsPlace`,
+  `veilArea` and the black words veil are gone.
+- The View menu: `ViewShow.ART` ("Art only"), `ViewShow.of(plan)`; Score and notes from Art only keeps a split already
+  between. `PianoSettings.notesArtOnly` (key `notesArtOnly`, false), `setNotesArtOnly`; `setNotesSplit` clears it.
+  `NotesPlan.artOnly`, `AppFrame.notesPlan(…, artOnly)` (wide frames only).
+
+## Greps
+`Color(0x` outside `ui/theme`: none. `BlurEffect`: still the aura's glow alone (`Aura.kt`); `Modifier.blur`: none.
+`dev.chrisbanes`: `Glass.kt` alone.
+
+## Simplified, and why
+- The covering size is the node's diagonal (the square that covers it at any turn); the mock's was 1.5 × its longer side.
+- The cover is as large as the height leaves it beside the roll and under Art only, and the words as wide as it, so the
+  column stays one width on a tablet whose bars leave about 600 dp.
+- Phones and short screens share one scroll layout; Art only is offered on wide frames, as Show is.
+- The panel's controls stand under its strip over the backdrop: black glass without a blur would show the notes
+  passing under the glyphs.
+- With Hand colours on, a sounding note and key keep the hands' colours; without them every sounding key fills yellow
+  (a yellow outline would not read on a light key).
+- The speaker's popover keeps its ends aligned, as `GlassPopoverTest` pins.
+- `notesArtOnly` is not among the diagnostics' lines (`diag/` belongs to another run).
+
+## Tests
+`BackdropRulesTest` (3: white, pure yellow, mid grey, saturated red, dark and half white, half black, prepared: the
+ink's primary over the dimmed brightest block ≥ 4.5:1 and deeper at the foot; the dimming ≥ 0.18, 0.591 for white;
+deterministic, the edge softened, a pure red kept). `ArtPaletteTest` and `BackdropContrastTest` removed;
+`AdaptiveFrameTest` takes Art only. 1,622 → 1,617 unit tests (12 skipped), none failing. `lintDebug`: 0 errors, the
+same 30 warnings.
