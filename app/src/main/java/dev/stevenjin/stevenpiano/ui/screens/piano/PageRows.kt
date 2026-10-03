@@ -83,6 +83,11 @@ object PageRows {
     val APPROVE_FIRST = AppRow("guests.approve", "Approve requests first", SettingsPage.Guests, null, listOf("approval", "moderate"))
     val POSTER = AppRow("guests.poster", "Print the request poster", SettingsPage.Guests, null, listOf("QR code", "print", "sign"))
 
+    // ---- THIS TABLET › System (v1.18 — M50: drawn by the page, on its Tools card) ---------------------
+    const val TOOLS = "Tools"
+    val FIND_COVERS = AppRow("system.covers", "Find missing covers", SettingsPage.System, TOOLS, listOf("album covers", "artwork", "look again"))
+    val RECONNECT = AppRow("system.reconnect", "Reconnect the piano", SettingsPage.System, TOOLS, listOf("bluetooth", "link", "connect again"))
+
     // ---- THIS TABLET › Display ----------------------------------------------------------------------
     const val APPEARANCE_SECTION = "Appearance"
     const val RESTING_SECTION = "Resting screen"
@@ -122,6 +127,7 @@ object PageRows {
         ADD_SCHEDULE, EXACT_ALARMS,
         WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
+        FIND_COVERS, RECONNECT,
         APPEARANCE, MONOCHROME, ALBUM_BACKDROP, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,
         KIOSK_MODE, KIOSK_UNLOCK, KIOSK_PIN,
         CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES,

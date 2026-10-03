@@ -44,7 +44,7 @@ class RoutesTest {
         assertEquals(
             listOf(
                 "instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "tablet-sound", "schedule", "remote", "guests",
-                "display", "kiosk", "updates", "artwork", "help",
+                "system", "display", "kiosk", "updates", "artwork", "help",
             ),
             SettingsPage.entries.map { it.key },
         )
@@ -93,15 +93,15 @@ class RoutesTest {
     }
 
     @Test
-    fun `four pages are the piano's, twelve are the app's, each with the one name the person reads (v1_13 M31b)`() {
+    fun `four pages are the piano's, thirteen are the app's, each with the one name the person reads (v1_13 M31b, System v1_18 M50)`() {
         assertEquals(
-            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware) + List(10) { null },
+            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware) + List(11) { null },
             SettingsPage.entries.map { it.piano },
         )
         assertEquals(
             listOf(
                 "Instrument", "Keyboard", "Sound and touch", "Lights and screen", "Pedal", "Firmware and status", "Playback", "Tablet sound",
-                "Schedule", "Web panel", "Guests", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about",
+                "Schedule", "Web panel", "Guests", "System", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about",
             ),
             SettingsPage.entries.map { it.title },
         )

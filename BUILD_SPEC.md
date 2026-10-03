@@ -8289,3 +8289,33 @@ the frame's host and the tablet's answers (made by `WebApi`): every page, the na
 firmware 2.0.0, a missing board and the other attention states, not connected, another MIDI piano. 1,631 → 1,634 unit
 tests (12 skipped), none failing; `lintDebug` 0 errors, the same 30 warnings, none in the new code. The relay: 82 → 85
 tests, the type check clean.
+
+# v1.18 — M50: System on the tablet
+
+Fable's design (DESIGN.md › v1.18 — M50), Opus coding, one lean run in a worktree (`m50-tablet-system`): no emulator, no
+version bump, no signing.
+
+- **Lifted, not copied**: `AppGraph.runningInputs(now)` is `/api/system`'s gathering for `RunningNow`, now the one both
+  pages call (`AppWebBackend.system()` reads the panel's figures from its `web`, `relay`, `covers`; its private copy is
+  gone). `AppGraph.factsFloor` (`RefreshFloor`, 10 s) is the one floor for the piano's live facts, the panel's and the tablet's.
+- **Attention** (`diag/Attention.kt`, pure): `Attention.of(Inputs(reading, running, piano, cloudOn, cloud))` → `Item(part,
+  text, key)` in the panel's order and words, `heatWord`; `PianoDiag(facts)` reads the facts as `WebApi.pianoDiag` does,
+  `PianoDiag.of(kind, link, piano)` only for Steven Piano connected and ready.
+- **Theme**: `LocalAttention` (`AttentionInk` / `AttentionPaper`, provided by `PianoTheme`); `DialFigure` in `Type.kt`.
+- **UI**: `ui/components/Dial.kt` (`Dial(label, DialValue, low, high)`, the panel's geometry in a 132-unit square sized in
+  sp, an `Animatable` from 0 through `Motion.timed(SlowMs)`); `ui/SystemCopy.kt` (`system.js`'s words, pure);
+  `pages/SystemPage.kt` (`SystemNow`, `SystemDay`, `ReadWhileShown`: `repeatOnLifecycle(RESUMED)` unless the resting
+  screen is over the app; the cards, the octaves and the day on Canvas). `SettingsPage.System` ("system") first in THIS
+  TABLET, `GroupSummaries.system`, `PageRows.FIND_COVERS` / `RECONNECT`, the page's synonyms; `SettingsPageView` sets
+  System's column and header at `systemPageWidth()` (1,120 dp at most) and gives pages `onOpenPage` (beside the hub
+  `vm.pick`, on phones a push from `NavHost`). View model: `system`, `systemDay`, `readSystem()` (IO, one at a time),
+  `readSystemDay()`, `refreshPianoFacts()`, `findMissingCovers()`, `reconnectPiano()`.
+- **Simplified, and why**: two columns follow the window's Expanded class (the app's "840 dp and up", `AppFrame`, so a
+  phone on its side stays one column) with room for two 360 dp cards (760 dp), not the page's own width: beside the hub
+  on the 1,280 dp tablet the page is 839 dp. The hub's row reads the tablet as it shows and then once a minute (the 5 s
+  reads are the page's alone); with something needing attention the row is that sentence alone. Album covers waiting
+  stays the last item of attention, as the panel's rule has it. The page opens behind the kiosk PIN like every page;
+  Reconnect and All keys off go through the gate as well.
+- **Tests**: `AttentionTest` (8: each rule on and off, the order); `RoutesTest`, `PianoPagesTest`, `GroupSummariesTest`
+  updated. 1,635 → 1,643 unit tests (12 skipped), none failing; `lintDebug` 0 errors, the same 30 warnings, none in the
+  new code.

@@ -10,6 +10,9 @@
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
+import dev.stevenjin.stevenpiano.diag.Attention
+import dev.stevenjin.stevenpiano.diag.BatteryReading
+import dev.stevenjin.stevenpiano.diag.SystemReading
 import dev.stevenjin.stevenpiano.firmware.FirmwareFailures
 import dev.stevenjin.stevenpiano.firmware.FirmwareManifest
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
@@ -116,7 +119,7 @@ class GroupSummariesTest {
         assertEquals(
             listOf(
                 "Steven Piano · Connected", "None", "Piano volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Always · 70%", "None",
-                "On · 100.101.2.3", "Off", "Follow system", "Off", "Automatic", "Automatic", "Version 1.13",
+                "On · 100.101.2.3", "Off", "—", "Follow system", "Off", "Automatic", "Automatic", "Version 1.13",
             ),
             SettingsPage.entries.map { rows.of(it) },
         )
@@ -139,6 +142,12 @@ class GroupSummariesTest {
         assertEquals("Off", GroupSummaries.artwork(PianoSettings(fetchArtworkAutomatically = false)))
         assertEquals("Version 1.13", GroupSummaries.help("1.13"))
         assertEquals("", GroupSummaries.help(""))
+        // System (v1.18 — M50): the battery and the temperature, or what needs attention first; a dash before a reading.
+        val reading = SystemReading(battery = BatteryReading(percent = 82, charging = true, tempC = 31.2))
+        assertEquals("Battery 82% · 31 °C · everything running", GroupSummaries.system(reading, emptyList()))
+        assertEquals("Everything running", GroupSummaries.system(SystemReading(), emptyList()))
+        assertEquals("The tablet is hot", GroupSummaries.system(reading, listOf(Attention.Item(Attention.Part.Heat, "The tablet is hot"))))
+        assertEquals(unknown, GroupSummaries.system(null, emptyList()))
     }
 
     @Test

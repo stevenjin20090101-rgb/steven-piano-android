@@ -89,9 +89,14 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LockedFirmwareUpdate
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.ReadWhileShown
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SYSTEM_ROW_MS
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SchedulePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SystemPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.TabletSoundPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.UpdatesPage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.rememberAttention
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.systemPageWidth
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
@@ -173,7 +178,7 @@ fun PianoScreen(tab: NavBackStackEntry, onOpenPage: (SettingsPage) -> Unit, onRe
                 },
                 label = "piano page",
             ) { page ->
-                SettingsPageView(page, vm, onBack = null, Modifier.fillMaxSize(), gate)
+                SettingsPageView(page, vm, onBack = null, Modifier.fillMaxSize(), gate, onOpenPage = { other -> gate.openPage(vm, other) { vm.pick(other) } })
             }
         }
     } else {
@@ -231,7 +236,7 @@ private fun floatingSides(): PaddingValues {
  * scrolled where it was ([onBack] takes this one off).
  */
 @Composable
-fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Unit) {
+fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Unit, onOpenPage: (SettingsPage) -> Unit = {}) {
     val vm = pianoViewModel(tab)
     val frame = LocalAppFrame.current
     val gate = rememberKioskGate()
@@ -250,6 +255,12 @@ fun PianoPageScreen(tab: NavBackStackEntry, page: SettingsPage, onBack: () -> Un
             .background(MaterialTheme.colorScheme.background)
             .padding(floatingSides()),
         gate,
+        onOpenPage = { other ->
+            gate.openPage(vm, other) {
+                vm.open(other)
+                onOpenPage(other)
+            }
+        },
     )
     KioskGateSheet(gate)
 }
@@ -288,7 +299,11 @@ private fun PianoHub(
     val midi = kind == InstrumentKind.MidiPiano
     val instrument = InstrumentCopy.instrumentValue(kind, settings.midiOutName)
     val linkWords = InstrumentCopy.linkWords(kind, link)
-    val summaries = remember(piano, settings, web, firmware, firmwarePiano, nextSchedule, keyboard, instrument, linkWords, update) {
+    // The System row's line (v1.18 — M50): the tablet read as the hub shows, then once a minute while it does.
+    ReadWhileShown(SYSTEM_ROW_MS, vm::readSystem)
+    val system by vm.system.collectAsStateWithLifecycle()
+    val attention = rememberAttention(vm, system)
+    val summaries = remember(piano, settings, web, firmware, firmwarePiano, nextSchedule, keyboard, instrument, linkWords, update, system, attention) {
         GroupSummaries.from(
             piano,
             settings,
@@ -300,6 +315,8 @@ private fun PianoHub(
             GroupSummaries.instrumentLine(instrument, linkWords),
             update,
             BuildConfig.VERSION_NAME,
+            system?.reading,
+            attention,
         )
     }
     val query = vm.query
@@ -388,12 +405,21 @@ private fun HubRowView(
  * ([LocalAnchorHost]), so a search result lands on its row ([JumpEffect]).
  */
 @Composable
-private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (() -> Unit)?, modifier: Modifier, gate: KioskGate) {
+private fun SettingsPageView(
+    page: SettingsPage,
+    vm: PianoViewModel,
+    onBack: (() -> Unit)?,
+    modifier: Modifier,
+    gate: KioskGate,
+    onOpenPage: (SettingsPage) -> Unit,
+) {
     val scroll = vm.scrollOf(page)
     val anchors = remember(page) { AnchorHost() }
     val jump by vm.jump.collectAsStateWithLifecycle()
     JumpEffect(jump, page, anchors, scroll, vm::jumpDone)
-    GlassHeaderPane(scroll = scroll, modifier = modifier, header = { PageHeader(page.title, onBack, Modifier.readingWidth()) }) {
+    // System's cards sit two to a row on a wide pane (v1.18 — M50): its column, and its header with it, run wider.
+    val width = if (page == SettingsPage.System) Modifier.systemPageWidth() else Modifier.readingWidth()
+    GlassHeaderPane(scroll = scroll, modifier = modifier, header = { PageHeader(page.title, onBack, width) }) {
         val floating = LocalFloatingPadding.current
         Column(
             Modifier
@@ -403,11 +429,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
         ) {
             Spacer(Modifier.height(floating.calculateTopPadding()))
             CompositionLocalProvider(LocalAnchorHost provides anchors) {
-                Column(
-                    Modifier
-                        .readingWidth()
-                        .anchorColumn(anchors),
-                ) {
+                Column(width.anchorColumn(anchors)) {
                     // Settings locked in kiosk: the page's controls wait behind the PIN (the page beside the hub,
                     // or one left open when the five minutes ran out or the tablet rested). Firmware and status
                     // keeps a firmware update in view, its Cancel behind the PIN (LockedFirmware).
@@ -428,6 +450,7 @@ private fun SettingsPageView(page: SettingsPage, vm: PianoViewModel, onBack: (()
                         SettingsPage.Schedule -> SchedulePage()
                         SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
                         SettingsPage.Guests -> GuestsPage(appSettings(vm), webStatus(vm), vm)
+                        SettingsPage.System -> SystemPage(vm, gate, onOpenPage)
                         SettingsPage.Display -> DisplayPage(appSettings(vm), vm)
                         SettingsPage.Kiosk -> KioskPage(appSettings(vm))
                         SettingsPage.Updates -> UpdatesPage(appSettings(vm), vm)

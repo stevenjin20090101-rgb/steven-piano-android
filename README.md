@@ -269,7 +269,9 @@ on the tablet*). Made by Steven Jin. Version 1.17.
   channel; **Tablet sound**: the tablet's own piano sound and *Tablet volume*;
   **Schedule**: timed play, see *Schedules*), **SHARING** (**Web panel**: the
   panel, its PIN, *Also on Wi-Fi* and the panel over the internet; **Guests**: the
-  guests' switches and the poster) and **THIS TABLET** (**Display**: appearance,
+  guests' switches and the poster) and **THIS TABLET** (**System**: the tablet's battery,
+  temperature, memory and storage, the piano's controller and power boards, what the app is
+  running, the day's chart and a few tools, read live while it is open; **Display**: appearance,
   artwork in black and white, album colours behind the player and the **resting
   screen**: after a minute, its background and what it shows; **Kiosk**;
   **Updates**: checking by itself, *Check
