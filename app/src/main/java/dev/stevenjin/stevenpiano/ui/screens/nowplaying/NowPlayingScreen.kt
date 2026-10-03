@@ -20,14 +20,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,32 +36,40 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.LongState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.min
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
@@ -83,31 +91,35 @@ import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.components.ArtBackdrop
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.GlassEdge
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
+import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
-import dev.stevenjin.stevenpiano.ui.components.glassAvailable
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.Hairline
+import dev.stevenjin.stevenpiano.ui.components.Immersive
 import dev.stevenjin.stevenpiano.ui.components.KeyHands
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
+import dev.stevenjin.stevenpiano.ui.components.LocalImmersive
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
-import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PieceArt
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ScreenHeader
 import dev.stevenjin.stevenpiano.ui.components.ScorePages
-import dev.stevenjin.stevenpiano.ui.components.Scrubber
 import dev.stevenjin.stevenpiano.ui.components.SplitAxis
 import dev.stevenjin.stevenpiano.ui.components.SplitPane
 import dev.stevenjin.stevenpiano.ui.components.StepperControl
-import dev.stevenjin.stevenpiano.ui.components.TransportBar
 import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
 import dev.stevenjin.stevenpiano.ui.components.scrollEdges
+import dev.stevenjin.stevenpiano.ui.components.secondaryText
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
 import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
 import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.NowPlayingComposer
+import dev.stevenjin.stevenpiano.ui.theme.NowPlayingStripTitle
+import dev.stevenjin.stevenpiano.ui.theme.NowPlayingTitle
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.launch
 
@@ -121,33 +133,51 @@ private val SHORT_ROLL = 240.dp
 private val SHORT_SCORE = 200.dp
 
 /**
- * The small art beside the title (v1.16 — M43): its side on wide frames and on phones, and the room before the
- * words. A screen narrower than [NARROW_BELOW] (a small phone upright) keeps the title's third line.
+ * The cover (v1.18 — M49): beside the roll, a column this wide (the cover its width, less where the screen is short or
+ * narrow) this far from the roll; in the score's strip, this side; alone (Art only), at most this and this share of
+ * the height; in the scroll (phones, short screens), at most this, and this share of the screen's height.
  */
-private val ART_WIDE = 72.dp
-private val ART_COMPACT = 56.dp
-private val ART_GAP = 12.dp
-private val NARROW_BELOW = 360.dp
+private val COLUMN = 400.dp
+private val COLUMN_GAP = 28.dp
+private val STRIP_COVER = 84.dp
+private val ART_ONLY_MAX = 520.dp
+private const val ART_ONLY_SHARE = 0.56f
+private val SCROLL_COVER_MAX = 360.dp
+private const val SCROLL_COVER_SHARE = 0.8f
+
+/** The cover's corners (the strip's smaller) and the deep soft shadow it stands on. */
+private val COVER_CORNERS = 24.dp
+private val STRIP_CORNERS = 14.dp
+private val COVER_SHADOW = 24.dp
+
+/** The score's strip: the transport at its end this wide, or under the words where the strip is narrower than [STRIP_BESIDE]. */
+private val STRIP_TRANSPORT = 400.dp
+private val STRIP_BESIDE = 720.dp
+
+/** In the scroll the views take the screen's height less the foot's row, never less than their fixed heights. */
+private val FOOT_ROOM = 64.dp
 
 /**
- * The signature screen: the title beside its art, the composer, the note views, the scrubber, the transport,
- * tempo and the connection line. The note views follow the window's width class: on a phone one
- * canvas (paper roll, falling notes or the score, as Note display says); on wider screens the
- * score and the notes together (stacked on medium widths, side by side on expanded ones), sharing
- * the room as the divider between them says, or either alone (DESIGN.md › v1.12: [SplitPane]; the
- * View menu in the header, [ViewMenu], sets the same shares and the notes' style and marks). The roll
- * always keeps its keyboard strip beneath it, lane for key. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through [playback], which keeps the playback service running, with
- * Shuffle and Repeat at its two ends; the queue glyph in the header opens the Up next sheet, and
- * the title and its art open the piece sheet. [onOpenPiano] shows the Piano tab. The scrubber and the
- * transport float on glass over the paper roll's history, the third below the tracker bar, above
- * the keyboard strip (DESIGN.md › v1.5 — M16), whenever that third can hold them; otherwise (falling
- * notes, the score alone, a phone on its side, and wherever glass is unavailable: below API 31 or
- * with transparency reduced) they stand below the views on the screen, as before.
- * The screen stops above the tab bar ([dev.stevenjin.stevenpiano.ui.LocalFloatingPadding]), and
- * below its header, a glass navigation bar ([GlassHeaderPane], DESIGN.md › v1.9) that only a short
- * screen's scrolling column passes beneath. Behind it all, under the header and the tab bar too, the
- * playing piece's art colours drift ([ArtBackdrop], v1.15 — M41), and the words over them take the
- * primary colour ([OnBackdrop]); the cards keep their opaque surface.
+ * The signature screen, over the cover (DESIGN.md › v1.18 — M49): the piece's art large, its title and composer, the
+ * scrubber and the transport, the note views as the View menu says ([ViewMenu]: the score, the notes, both, or neither),
+ * and at its foot the tempo, the tablet's speaker and the connection line in glass capsules. Behind it all, edge to
+ * edge, under the header and the rail or the tab bar too, the cover itself blurred and slowly turning ([ArtBackdrop]);
+ * while it shows the screen is immersive ([Immersive]): light words, black glass, the roll without its card over the
+ * backdrop, the score on its opaque sheet. Without it (Album colours off, a roll card for art, high contrast) the same
+ * layouts on the plain surface.
+ *
+ * On wide frames, the notes without the score: a column 400 dp wide (the cover at its width, smaller where the height
+ * is short), the title (40 sp, two lines), the composer, the scrubber and the transport, and the roll filling the rest
+ * at the right over its keyboard strip. The score with the notes (or alone): a strip at the top (the cover at 84 dp,
+ * the title, the composer, the transport at its end) over the score's sheet and the roll, sharing the room as the
+ * divider says (DESIGN.md › v1.12: [SplitPane]). Art only: the cover as large as fits (at most 56 % of the height and
+ * 520 dp), centred, the words and the controls beneath it. On phones, and wherever the screen is too short for those,
+ * one scroll: the cover as wide as the screen less its margins (at most 360 dp), the words, the scrubber and the
+ * transport, then the views. Tapping a bar of the score seeks there, as the scrubber does. The transport goes through
+ * [playback], which keeps the playback service running; the queue glyph in the header opens the Up next sheet, and the
+ * title and the cover open the piece sheet. [onOpenPiano] shows the Piano tab. The screen stops above the tab bar
+ * ([LocalFloatingPadding]) and below its header, a glass navigation bar ([GlassHeaderPane], DESIGN.md › v1.9) that only
+ * a short screen's scroll passes beneath, and never over the backdrop.
  */
 @Composable
 fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
@@ -160,57 +190,62 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     val piece = state.piece
     // The playing piece's album cover first in line (v1.15 — M40), for the mini player and every screen that shows it.
     LaunchedEffect(piece?.pieceId) { piece?.let { graph.artwork.requestCover(it.pieceId) } }
-    val plan = frame.notesPlan(settings.noteDisplay, settings.notesSplitStacked, settings.notesSplitSide)
+    val plan = frame.notesPlan(settings.noteDisplay, settings.notesSplitStacked, settings.notesSplitSide, settings.notesArtOnly)
     var upNext by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf<Long?>(null) }
     // The status bar, before the header's glass takes the top: the short rule measures what is below it, as before.
     val outer = LocalFloatingPadding.current
     val statusBar = outer.calculateTopPadding()
     val column = rememberScrollState()
-    // The album's colours behind the player (v1.15 — M41): the header, and the tab bar, let them show through.
+    // The cover behind everything, edge to edge (v1.18 — M49); while it shows, what stands on it is immersive.
     val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
-    // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it.
-    // The whole pane keeps clear of the rail, its header too.
-    GlassHeaderPane(
-        scroll = column,
-        modifier = Modifier.padding(outer.sides()),
-        translucent = backdrop != null,
-        header = {
-            ScreenHeader("Now playing") {
-                if (piece != null) {
-                    ViewMenu(settings, plan, frame)   // v1.12 — M31a
-                    GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
-                }
-            }
-        },
-    ) {
-        val floating = LocalFloatingPadding.current
-        val top = floating.calculateTopPadding()
-        // The backdrop is the scrolling column's sibling: it never scrolls, and it reaches under the header and the tab bar.
-        Box(Modifier.fillMaxSize()) {
-            ArtBackdrop(backdrop, state.status == PlaybackStatus.Playing, Modifier.matchParentSize())
-            OnBackdrop(backdrop != null) {
+    val immersive = backdrop != null
+    Box(Modifier.fillMaxSize()) {
+        ArtBackdrop(backdrop, state.status == PlaybackStatus.Playing, Modifier.matchParentSize())
+        Immersive(immersive) {
+            // The header is a glass navigation bar (DESIGN.md › v1.9); only a short screen's column scrolls beneath it,
+            // and over the backdrop not even that. The whole pane keeps clear of the rail, its header too.
+            GlassHeaderPane(
+                scroll = column,
+                modifier = Modifier.padding(outer.sides()),
+                header = {
+                    ScreenHeader("Now playing") {
+                        if (piece != null) {
+                            ViewMenu(settings, plan, frame)   // v1.12 — M31a
+                            GlyphButton(R.drawable.ic_queue, "Up next", onClick = { upNext = true })
+                        }
+                    }
+                },
+            ) {
+                val floating = LocalFloatingPadding.current
+                val top = floating.calculateTopPadding()
                 BoxWithConstraints(
                     Modifier
                         .fillMaxSize()
                         .padding(bottom = floating.calculateBottomPadding()),
                 ) {
-                    // Too short for the note views to share the height (landscape, a small phone at a large
-                    // font): the screen scrolls and the views keep fixed heights instead of collapsing.
+                    // Too short for the wide layouts (landscape, a small tablet at a large font), and on every phone: one
+                    // scroll, the cover first, the views below it at fixed heights.
                     val available = maxHeight - statusBar
-                    val short = piece != null && available < if (plan.layout == NotesLayout.STACKED) SHORT_BELOW_STACKED else SHORT_BELOW
+                    val short = piece != null && available < if (plan.layout == NotesLayout.STACKED && !plan.artOnly) SHORT_BELOW_STACKED else SHORT_BELOW
+                    val scrolls = piece != null && (short || !frame.wide)
                     // The divider (and a hidden pane's grabber at its edge) only where both views would fit unscrolled (v1.12 — M31a).
-                    val divided = !short && when (plan.axis) {
+                    val divided = !scrolls && when (plan.axis) {
                         SplitAxis.Stacked -> available >= SHORT_BELOW_STACKED
                         SplitAxis.SideBySide -> true
                         null -> false
                     }
-                    // A small phone upright keeps the title's third line beside its art (v1.16 — M43).
-                    val titleLines = if (maxWidth < NARROW_BELOW) 3 else 2
-                    Column(if (short) Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column) else Modifier.fillMaxSize().padding(top = top)) {
-                        if (short) Spacer(Modifier.height(top))
+                    // Over the backdrop the scroll starts below the header and never passes beneath it.
+                    val body = when {
+                        !scrolls -> Modifier.fillMaxSize().padding(top = top)
+                        immersive -> Modifier.fillMaxSize().padding(top = top).clipToBounds().verticalScroll(column)
+                        else -> Modifier.fillMaxSize().scrollEdges(column).verticalScroll(column)
+                    }
+                    val view = PieceLayout(plan, scrolls, divided, viewport = maxHeight - top)
+                    Column(body) {
+                        if (scrolls && !immersive) Spacer(Modifier.height(top))
                         val marks = Marks(fingering = settings.fingering, chordNames = settings.chordNames)
-                        NowPlayingContent(state, piece, plan, marks, link is LinkState.Connected, player, playback, onOpenPiano, short, divided, titleLines) { about = it }
+                        NowPlayingContent(state, piece, view, marks, link is LinkState.Connected, player, playback, onOpenPiano) { about = it }
                     }
                 }
             }
@@ -220,26 +255,27 @@ fun NowPlayingScreen(playback: PlaybackStarter, onOpenPiano: () -> Unit) {
     about?.let { PieceDetailSheet(it) { about = null } }
 }
 
+/** How the piece is laid out: its [plan], whether the screen [scrolls], whether the views share a [divided] room, and the scroll's visible height. */
+@Immutable
+private class PieceLayout(val plan: NotesPlan, val scrolls: Boolean, val divided: Boolean, val viewport: Dp)
+
 @Composable
 private fun ColumnScope.NowPlayingContent(
     state: PlayerState,
     piece: NowPlaying?,
-    plan: NotesPlan,
+    view: PieceLayout,
     marks: Marks,
     connected: Boolean,
     player: Player,
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
-    short: Boolean,
-    divided: Boolean,
-    titleLines: Int,
     onAbout: (Long) -> Unit,
 ) {
     if (state.loading) ProgressHairline(null)
     state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
     StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
     if (piece != null) {
-        PieceView(piece, state, plan, marks, connected, player, playback, onOpenPiano, short, divided, titleLines) { onAbout(piece.pieceId) }
+        PieceView(piece, state, view, marks, connected, player, playback, onOpenPiano) { onAbout(piece.pieceId) }
     } else if (!state.loading) {
         Box(
             Modifier
@@ -261,20 +297,17 @@ private fun ColumnScope.NowPlayingContent(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** The piece in the layout [view] says (v1.18 — M49), then the foot's capsules and the tablet sound's download line. */
 @Composable
 private fun ColumnScope.PieceView(
     piece: NowPlaying,
     state: PlayerState,
-    plan: NotesPlan,
+    view: PieceLayout,
     marks: Marks,
     connected: Boolean,
     player: Player,
     playback: PlaybackStarter,
     onOpenPiano: () -> Unit,
-    short: Boolean,
-    divided: Boolean,
-    titleLines: Int,
     onAbout: () -> Unit,
 ) {
     val playing = state.status == PlaybackStatus.Playing
@@ -283,102 +316,311 @@ private fun ColumnScope.PieceView(
     val frame = rememberFrameNanos(playing, piece.pieceId, settle, roll)
     // The pause before the piece: playing, and the music not reached yet.
     val starting by remember(roll, frame, playing) { derivedStateOf { playing && roll.positionAt(frame.longValue) < 0L } }
-
-    Column(Modifier.padding(horizontal = 16.dp)) {
-        // The small art beside the title (v1.16 — M43), as on the tablet's panel, centred on the title and the
-        // composer. Both open the piece sheet: its art and notes.
-        val art = if (LocalAppFrame.current.wide) ART_WIDE else ART_COMPACT
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            PieceArt(
-                piece.pieceId,
-                piece.composerKey,
-                ArtSize.Tile,
-                // A tap alone: screen readers skip the picture and reach the sheet through the title beside it.
-                Modifier
-                    .size(art)
-                    .clip(MaterialTheme.shapes.medium)
-                    .clearAndSetSemantics { }
-                    .clickable(onClick = onAbout),
-                title = piece.title,
-            )
-            Spacer(Modifier.width(ART_GAP))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    piece.title,
-                    modifier = Modifier.clickable(onClickLabel = "About this piece", onClick = onAbout),
-                    style = MaterialTheme.typography.displayMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = titleLines,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                // The composer, and while a channel plays its name: "CLAUDE DEBUSSY · CALM · CHANNEL".
-                val eyebrow = ChannelCopy.eyebrow(piece.composer, rememberChannelName(state.channel))
-                if (eyebrow.isNotEmpty()) Eyebrow(eyebrow, Modifier.padding(top = 4.dp), maxLines = 1)
-            }
-        }
-        // Under the composer, in line with the words.
-        StartingLine(starting, Modifier.padding(start = art + ART_GAP, top = 2.dp))
-    }
-    Spacer(Modifier.height(8.dp))
+    val channel = rememberChannelName(state.channel)
+    val plan = view.plan
     // Every seek (the scrubber, a bar of the score) silences the piano first; paused, the picture catches up.
     val seek: (Long) -> Unit = {
         player.seek(it)
         if (!playing) settle++
     }
-    val controls: @Composable ColumnScope.() -> Unit = {
-        TransportControls(piece, state, frame, roll, player, playback, onSeek = seek, onMoved = { if (!playing) settle++ })
+    val cover: @Composable (Modifier) -> Unit = { modifier -> Cover(piece, onAbout, modifier) }
+    val words: @Composable (TextStyle) -> Unit = { title -> PieceWords(piece, channel, starting, title, onAbout) }
+    val controls: @Composable ColumnScope.(Boolean) -> Unit = { scrubber ->
+        TransportControls(piece, state, frame, roll, player, playback, onSeek = seek, onMoved = { if (!playing) settle++ }, scrubber = scrubber, inset = 0.dp)
     }
-    if (short) {
-        NoteViews(plan, piece, state, marks, frame, roll, player, short, false, seek, null, Modifier.height(shortHeight(plan.layout)).fillMaxWidth().padding(horizontal = 16.dp))
-        Column(content = controls)
-    } else {
-        // The controls float on glass over the roll's history when it can hold them; otherwise they stand below.
-        // Both read the committed split, so the transport stays put while a finger drags the divider.
-        // One call site either way, so the split and the score keep their state when the transport moves.
-        BoxWithConstraints(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        ) {
-            val floats = glassAvailable() && transportFloats(plan, maxHeight, maxWidth - 32.dp)
-            Column(Modifier.fillMaxSize()) {
-                NoteViews(plan, piece, state, marks, frame, roll, player, short, divided, seek, if (floats) controls else null, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp))
-                if (!floats) controls()
-            }
-        }
+    val views: @Composable (Modifier) -> Unit = { modifier ->
+        NoteViews(plan, piece, state, marks, frame, roll, player, view.scrolls, view.divided, seek, modifier)
     }
-    FlowRow(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        itemVerticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow("Tempo")
-            Spacer(Modifier.width(4.dp))
-            StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo, rolling = true)
-            TabletSoundSpeaker()   // v1.8 — M25: the tablet's piano sound and its volume
-        }
-        ConnectionLine(connected, playing, onOpenPiano)
+    when {
+        view.scrolls -> InTheScroll(piece, plan, view.viewport, cover, words, controls, views)
+        plan.artOnly -> ArtOnly(piece, cover, words, controls)
+        plan.layout == NotesLayout.ROLL -> BesideTheRoll(piece, cover, words, controls, views)
+        else -> UnderTheStrip(piece, onAbout, words, controls, views)
     }
+    FootRow(state, connected, playing, player, onOpenPiano)
     TabletSoundDownloadNote(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
 }
 
-/** The fixed height the note views take when the screen scrolls: one system of the score. */
-private fun shortHeight(layout: NotesLayout): Dp = when (layout) {
-    NotesLayout.STACKED -> SHORT_SCORE + PANEL_GAP + SHORT_ROLL
-    NotesLayout.SCORE -> SHORT_SCORE + Hairline + KeyboardStripHeight
-    else -> SHORT_ROLL
+/**
+ * The notes without the score (wide frames): a column at the start, [COLUMN] wide at most ([CoverStack]: the cover, as
+ * large as the height leaves it, over the title, the composer, the scrubber and the transport, all as wide as the
+ * cover), and the roll filling the rest at the end, the hidden score's grabber at its edge.
+ */
+@Composable
+private fun ColumnScope.BesideTheRoll(
+    piece: NowPlaying,
+    cover: @Composable (Modifier) -> Unit,
+    words: @Composable (TextStyle) -> Unit,
+    controls: @Composable ColumnScope.(Boolean) -> Unit,
+    views: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(
+        Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        val most = min(COLUMN, (maxWidth - COLUMN_GAP) / 2)
+        val height = maxHeight
+        Row(Modifier.fillMaxSize()) {
+            CoverStack(piece, most, height, NowPlayingTitle, cover, words, controls)
+            Spacer(Modifier.width(COLUMN_GAP))
+            views(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            )
+        }
+    }
 }
 
 /**
- * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip, the score,
- * or both, each on the elevated surface with the card corners. [onSeek] is a tap on a bar. With
- * [controls] the roll's card carries them on glass over its history ([GlassTransportPanel]).
- * [divided] (wide frames with room, v1.12 — M31a): the two share a [SplitPane] whose divider the
- * person drags, a hidden pane's grabber waiting at its edge; the share it settles on is remembered
- * for the arrangement. Otherwise (a short screen that scrolls) they keep fixed heights.
+ * The score with the notes, or alone (wide frames): a strip at the top (the cover at [STRIP_COVER], the title, the
+ * composer; the transport at its end, or under them where the strip is narrow) over the views, sharing the room.
+ */
+@Composable
+private fun ColumnScope.UnderTheStrip(
+    piece: NowPlaying,
+    onAbout: () -> Unit,
+    words: @Composable (TextStyle) -> Unit,
+    controls: @Composable ColumnScope.(Boolean) -> Unit,
+    views: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        val beside = maxWidth >= STRIP_BESIDE
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Cover(piece, onAbout, Modifier.size(STRIP_COVER), corners = STRIP_CORNERS, art = ArtSize.Tile)
+                Spacer(Modifier.width(18.dp))
+                Box(Modifier.weight(1f)) { words(NowPlayingStripTitle) }
+                if (beside) {
+                    Spacer(Modifier.width(18.dp))
+                    Column(Modifier.width(STRIP_TRANSPORT)) { controls(false) }
+                }
+            }
+            if (!beside) controls(false)
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    views(
+        Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    )
+}
+
+/**
+ * Neither view (Art only, wide frames): the cover as large as fits, at most [ART_ONLY_MAX] and [ART_ONLY_SHARE] of the
+ * height (and what the words and the controls beneath it leave), centred, the words and the controls as wide as it.
+ */
+@Composable
+private fun ColumnScope.ArtOnly(
+    piece: NowPlaying,
+    cover: @Composable (Modifier) -> Unit,
+    words: @Composable (TextStyle) -> Unit,
+    controls: @Composable ColumnScope.(Boolean) -> Unit,
+) {
+    BoxWithConstraints(
+        Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CoverStack(piece, min(min(ART_ONLY_MAX, maxHeight * ART_ONLY_SHARE), maxWidth), maxHeight, NowPlayingTitle, cover, words, controls)
+    }
+}
+
+/**
+ * Phones, and screens too short for the wide layouts: one scroll, the cover as wide as the screen less its margins (at
+ * most [SCROLL_COVER_MAX], and [SCROLL_COVER_SHARE] of the screen's height), the words, the scrubber and the transport,
+ * then the views below it (none under Art only).
+ */
+@Composable
+private fun ColumnScope.InTheScroll(
+    piece: NowPlaying,
+    plan: NotesPlan,
+    viewport: Dp,
+    cover: @Composable (Modifier) -> Unit,
+    words: @Composable (TextStyle) -> Unit,
+    controls: @Composable ColumnScope.(Boolean) -> Unit,
+    views: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        CoverStack(piece, min(min(SCROLL_COVER_MAX, maxWidth), viewport * SCROLL_COVER_SHARE), Dp.Infinity, NowPlayingStripTitle, cover, words, controls)
+    }
+    if (!plan.artOnly) {
+        Spacer(Modifier.height(16.dp))
+        views(
+            Modifier
+                .height(scrollHeight(plan.layout, viewport))
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        )
+    }
+}
+
+/**
+ * The cover over its words and controls, all one width: the cover's side, at most [most] and what [height] leaves above
+ * the words in [title]'s style and the controls ([coverSide]), then the title, the composer, the scrubber and the
+ * transport. Top-aligned: what the height leaves over is below it.
+ */
+@Composable
+private fun CoverStack(
+    piece: NowPlaying,
+    most: Dp,
+    height: Dp,
+    title: TextStyle,
+    cover: @Composable (Modifier) -> Unit,
+    words: @Composable (TextStyle) -> Unit,
+    controls: @Composable ColumnScope.(Boolean) -> Unit,
+) {
+    val side = coverSide(piece.title, title, most, height)
+    Column(Modifier.width(side)) {
+        cover(Modifier.size(side))
+        Spacer(Modifier.height(WORDS_GAP))
+        words(title)
+        Spacer(Modifier.height(CONTROLS_GAP))
+        controls(true)
+    }
+}
+
+/**
+ * The cover's side over the words and the controls in [height]: at most [most], and what the height leaves above them
+ * (the gaps, the title's lines in [style], the composer's, STARTING's and [TransportHeight]); the title is given two
+ * lines unless it fits in one at that side, measured.
+ */
+@Composable
+private fun coverSide(title: String, style: TextStyle, most: Dp, height: Dp): Dp {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val eyebrow = MaterialTheme.typography.labelSmall
+    val line = with(density) { style.lineHeight.toDp() }
+    val rest = with(density) { WORDS_GAP + 4.dp + NowPlayingComposer.lineHeight.toDp() + 2.dp + eyebrow.lineHeight.toDp() + CONTROLS_GAP + TransportHeight }
+    val oneLine = min(most, height - rest - line).coerceAtLeast(0.dp)
+    val fits = remember(title, style, oneLine, density, measurer) {
+        val width = with(density) { oneLine.roundToPx() }
+        width > 0 && measurer.measure(title, style, constraints = Constraints(maxWidth = width), density = density).lineCount <= 1
+    }
+    return if (fits) oneLine else min(most, height - rest - line * 2).coerceAtLeast(0.dp)
+}
+
+/** Between the cover and the title, and between the words and the scrubber. */
+private val WORDS_GAP = 22.dp
+private val CONTROLS_GAP = 14.dp
+
+/**
+ * The piece's art (its own cover, else its composer's portrait, else its roll card) in [modifier]'s square, with
+ * [corners] and a deep soft shadow; a tap opens the piece sheet. Screen readers skip it and reach the sheet through the title.
+ */
+@Composable
+private fun Cover(piece: NowPlaying, onAbout: () -> Unit, modifier: Modifier, corners: Dp = COVER_CORNERS, art: ArtSize = ArtSize.Full) {
+    val shape = RoundedCornerShape(corners)
+    // The art's frame draws in the theme's card shape: these corners for it.
+    MaterialTheme(colorScheme = MaterialTheme.colorScheme, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes.copy(medium = shape)) {
+        PieceArt(
+            piece.pieceId,
+            piece.composerKey,
+            art,
+            modifier
+                .shadow(COVER_SHADOW, shape)
+                .clearAndSetSemantics { }
+                .clickable(onClick = onAbout),
+            title = piece.title,
+        )
+    }
+}
+
+/**
+ * The title in [title]'s style, two lines at most (it opens the piece sheet), the composer under it (and while a
+ * channel plays its name: "Claude Debussy · Calm · Channel"), and STARTING during the pause before the piece.
+ */
+@Composable
+private fun PieceWords(piece: NowPlaying, channel: String?, starting: Boolean, title: TextStyle, onAbout: () -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            piece.title,
+            modifier = Modifier.clickable(onClickLabel = "About this piece", onClick = onAbout),
+            style = title,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val line = ChannelCopy.eyebrow(piece.composer, channel)
+        if (line.isNotEmpty()) {
+            Text(
+                line,
+                modifier = Modifier.padding(top = 4.dp),
+                style = NowPlayingComposer,
+                color = secondaryText(),   // the light words over the backdrop
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        StartingLine(starting, Modifier.padding(top = 2.dp))
+    }
+}
+
+/**
+ * The foot's row in glass capsules (v1.18 — M49): Tempo with its stepper and the tablet's speaker (v1.8 — M25) at the
+ * start, "Sent to piano" at the end; over the backdrop black glass, otherwise the bars' glass without a blur.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FootRow(state: PlayerState, connected: Boolean, playing: Boolean, player: Player, onOpenPiano: () -> Unit) {
+    FlowRow(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(CAPSULE_GAP), verticalAlignment = Alignment.CenterVertically) {
+            Capsule {
+                Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Eyebrow("Tempo")
+                    Spacer(Modifier.width(4.dp))
+                    StepperControl(state.tempoPct, PlaybackLimits.TempoPct, TEMPO_STEP, Format::percent, "Slower", "Faster", player::setTempo, rolling = true)
+                }
+            }
+            Capsule { TabletSoundSpeaker() }
+        }
+        Capsule { ConnectionLine(connected, playing, onOpenPiano, Modifier.padding(horizontal = 8.dp)) }
+    }
+}
+
+/** A capsule of glass round [content], which sets its height (48 dp targets). */
+@Composable
+private fun Capsule(content: @Composable () -> Unit) {
+    GlassSurface(shape = CircleShape, edge = GlassEdge.Outline, blur = false) { content() }
+}
+
+private val CAPSULE_GAP = 12.dp
+
+/** The height the views take in the scroll: a stacked pair their fixed heights; one view the screen's height less the foot's row. */
+private fun scrollHeight(layout: NotesLayout, viewport: Dp): Dp = when (layout) {
+    NotesLayout.STACKED -> SHORT_SCORE + PANEL_GAP + SHORT_ROLL
+    NotesLayout.SCORE -> max(SHORT_SCORE + Hairline + KeyboardStripHeight, viewport - FOOT_ROOM)
+    else -> max(SHORT_ROLL, viewport - FOOT_ROOM)
+}
+
+/**
+ * The note views of [plan] in [modifier]'s room: the roll over its keyboard strip on its card ([RollPanel]: none over
+ * the backdrop), the score on its sheet ([ScoreSheet], always opaque), or both. [onSeek] is a tap on a bar. [divided]
+ * (wide frames with room, v1.12 — M31a): the two share a [SplitPane] whose divider the person drags, a hidden pane's
+ * grabber waiting at its edge; the share it settles on is remembered for the arrangement. Otherwise (in the scroll)
+ * they keep fixed heights.
  */
 @Composable
 private fun NoteViews(
@@ -389,10 +631,9 @@ private fun NoteViews(
     frame: LongState,
     roll: RollClock,
     player: Player,
-    short: Boolean,
+    scrolls: Boolean,
     divided: Boolean,
     onSeek: (Long) -> Unit,
-    controls: (@Composable ColumnScope.() -> Unit)?,
     modifier: Modifier,
 ) {
     val graph = LocalContext.current.graph
@@ -408,18 +649,13 @@ private fun NoteViews(
             piece.notes, state.transpose, state.fold, plan.rollStyle, frame, roll, Modifier.weight(1f).fillMaxWidth(),
             hands = hands, fingers = fingers, chords = chords,
         )
-        HairlineDivider()
+        // Over the backdrop the roll's own light line is where its notes land: no hairline before the keys.
+        if (!LocalImmersive.current) HairlineDivider()
         KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, hands = keyHands, clock = roll)
     }
-    val notes: @Composable (Modifier) -> Unit = { panel ->
-        if (controls != null) {
-            GlassTransportPanel(panel, stripHeight = KeyboardStripHeight + Hairline, panel = rollCard, controls = controls)
-        } else {
-            Panel(panel, rollCard)
-        }
-    }
+    val notes: @Composable (Modifier) -> Unit = { panel -> RollPanel(panel, rollCard) }
     val score: @Composable (Modifier, Boolean) -> Unit = { panel, strip ->
-        Panel(panel) {
+        ScoreSheet(panel) {
             ScorePages(
                 notes = piece.notes,
                 tempo = piece.tempoMap,
@@ -460,9 +696,9 @@ private fun NoteViews(
         NotesLayout.ROLL -> notes(modifier)
         NotesLayout.SCORE -> score(modifier, true)
         NotesLayout.STACKED -> Column(modifier) {
-            score(if (short) Modifier.height(SHORT_SCORE).fillMaxWidth() else Modifier.weight(plan.split).fillMaxWidth(), false)
+            score(if (scrolls) Modifier.height(SHORT_SCORE).fillMaxWidth() else Modifier.weight(plan.split).fillMaxWidth(), false)
             Spacer(Modifier.height(PANEL_GAP))
-            notes(if (short) Modifier.height(SHORT_ROLL).fillMaxWidth() else Modifier.weight(1f - plan.split).fillMaxWidth())
+            notes(if (scrolls) Modifier.height(SHORT_ROLL).fillMaxWidth() else Modifier.weight(1f - plan.split).fillMaxWidth())
         }
         NotesLayout.SIDE_BY_SIDE -> Row(modifier) {
             score(Modifier.weight(plan.split).fillMaxHeight(), false)

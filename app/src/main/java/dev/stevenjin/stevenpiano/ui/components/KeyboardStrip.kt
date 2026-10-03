@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.score.Hands
+import dev.stevenjin.stevenpiano.ui.theme.Backdrop
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandTones
@@ -42,7 +43,10 @@ private val KeyOutline = 1.5.dp
  * colour; with [hands], a key only the left hand is playing is outlined in it instead, as the
  * waterfall outlines the left hand's bars (DESIGN.md › v1.3), and with Hand colours on the right
  * hand's keys fill with its blue and the left hand's outline in its green, as sounding bars show them
- * (`LocalHandColours`, `LocalHandTones`). It redraws each frame [frameNanos]
+ * (`LocalHandColours`, `LocalHandTones`). Over the cover's backdrop ([LocalImmersive], v1.18 — M49) it keeps its keys,
+ * as a piano's: white keys light, black keys dark ([Backdrop.KeyWhite], [Backdrop.KeyBlack]), and a sounding key the
+ * sounding yellow, either hand's; with Hand colours on, the paper's hand colours on the light keys.
+ * It redraws each frame [frameNanos]
  * changes, reading the player's key bitsets ([activeLow]: bit `key - 24`, keys 24-87; [activeHigh]:
  * bit `key - 88`) and, with [hands], which hand the notes sounding at [clock]'s position belong to,
  * without allocating.
@@ -56,13 +60,17 @@ fun KeyboardStrip(
     hands: KeyHands? = null,
     clock: SongClock? = null,
 ) {
-    val body = MaterialTheme.colorScheme.surfaceVariant
-    val content = MaterialTheme.colorScheme.onSurface
-    val tones = if (LocalHandColours.current && hands != null) LocalHandTones.current else null
-    val pressed = tones?.let { lerp(it.right, content, HAND_SOUNDING_MIX) } ?: content
-    val pressedLeft = tones?.let { lerp(it.left, content, HAND_SOUNDING_MIX) } ?: content
-    val blackKey = LocalTertiary.current
-    val line = LocalHairline.current
+    val immersive = LocalImmersive.current
+    val body = if (immersive) Backdrop.KeyWhite else MaterialTheme.colorScheme.surfaceVariant
+    val content = if (immersive) Backdrop.KeyBlack else MaterialTheme.colorScheme.onSurface
+    val tones = if (LocalHandColours.current && hands != null) (if (immersive) Backdrop.KeyHands else LocalHandTones.current) else null
+    val lit = if (immersive) Backdrop.KeySounding else content
+    val pressed = tones?.let { lerp(it.right, content, HAND_SOUNDING_MIX) } ?: lit
+    val pressedLeft = tones?.let { lerp(it.left, content, HAND_SOUNDING_MIX) } ?: lit
+    val blackKey = if (immersive) Backdrop.KeyBlack else LocalTertiary.current
+    val line = if (immersive) Backdrop.KeyLine else LocalHairline.current
+    // Over the backdrop, without Hand colours, every sounding key fills yellow (an outline of it would not read on a light key).
+    val sides = if (immersive && tones == null) null else hands
     Spacer(
         modifier
             .fillMaxWidth()
@@ -77,10 +85,10 @@ fun KeyboardStrip(
                     val frame = frameNanos.longValue   // a new frame: the keys may have changed
                     val low = activeLow()
                     val high = activeHigh()
-                    if (hands != null && clock != null) hands.update(clock.positionAt(frame))
+                    if (sides != null && clock != null) sides.update(clock.positionAt(frame))
                     drawRect(body)
                     for (i in 0 until KeyMap.KEY_COUNT) {
-                        if (!keys.isBlack(i) && isActive(i, low, high) && hands?.leftOnly(i) != true) {
+                        if (!keys.isBlack(i) && isActive(i, low, high) && sides?.leftOnly(i) != true) {
                             drawRect(pressed, Offset(keys.left(i), 0f), Size(keys.width(i), size.height))
                         }
                     }
@@ -88,14 +96,14 @@ fun KeyboardStrip(
                         drawRect(line, Offset(w * keys.whiteWidth - sep / 2, 0f), Size(sep, size.height))
                     }
                     for (i in 0 until KeyMap.KEY_COUNT) {
-                        if (keys.isBlack(i) || !isActive(i, low, high) || hands?.leftOnly(i) != true) continue
+                        if (keys.isBlack(i) || !isActive(i, low, high) || sides?.leftOnly(i) != true) continue
                         drawRect(pressedLeft, Offset(keys.left(i) + half, half), Size(keys.width(i) - outline.width, size.height - outline.width), style = outline)
                     }
                     for (i in 0 until KeyMap.KEY_COUNT) {
                         if (!keys.isBlack(i)) continue
                         drawRect(body, Offset(keys.left(i) - sep, 0f), Size(keys.width(i) + 2 * sep, blackHeight + sep))
                         val active = isActive(i, low, high)
-                        val left = active && hands?.leftOnly(i) == true
+                        val left = active && sides?.leftOnly(i) == true
                         drawRect(if (active && !left) pressed else blackKey, Offset(keys.left(i), 0f), Size(keys.width(i), blackHeight))
                         if (left) {
                             drawRect(pressedLeft, Offset(keys.left(i) + half, half), Size(keys.width(i) - outline.width, blackHeight - outline.width), style = outline)

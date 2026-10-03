@@ -11,10 +11,14 @@ package dev.stevenjin.stevenpiano.data.art
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import android.util.LruCache
+import androidx.core.graphics.createBitmap
 import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.db.ArtworkDao
@@ -84,8 +88,8 @@ class ArtworkRepository(
     /** Each composer's mosaic pieces, forgotten whenever the library's pieces change. */
     private val mosaics = ConcurrentHashMap<String, List<Long>>()
 
-    /** The backdrop's colours already read (v1.15 — M41), by picture ([paletteKey]); a grey picture's is known to be none. */
-    private val palettes = LruCache<String, KnownPalette>(PALETTES)
+    /** The backdrop's pictures already made (v1.18 — M49), with their dimming, by picture ([pictureKey]). */
+    private val backdrops = LruCache<String, BackdropPicture>(BACKDROPS)
 
     /** What album covers need of this repository (v1.15 — M40): the settings, the piece's row, and keeping a found cover. */
     private val coverStore = object : CoverStore {
@@ -226,35 +230,48 @@ class ArtworkRepository(
     }
 
     /**
-     * The album-colour backdrop's colours of [artwork]'s picture (v1.15 — M41): [artPalette] over its row-size decode
-     * (128 px), read off the main thread once a picture and kept by its path and version (a replaced picture is read
-     * again); null when it has none, when it is grey, or when it can't be read (asked again next time).
+     * The backdrop's picture of [artwork]'s picture (v1.18 — M49): its row-size decode (128 px) cropped to the centre
+     * square and scaled to 48 × 48, then blurred and lifted ([BackdropRules.prepare]) with the black it needs under light
+     * words ([BackdropRules.dimFor]), made off the main thread once a picture and kept by its path and version (a
+     * replaced picture is made again); null when it has none or it can't be read (asked again next time).
      */
-    suspend fun palette(artwork: ArtworkEntity): ArtPalette? {
-        val key = paletteKey(artwork) ?: return null
-        palettes.get(key)?.let { return it.palette }
+    suspend fun backdrop(artwork: ArtworkEntity): BackdropPicture? {
+        val key = pictureKey(artwork) ?: return null
+        backdrops.get(key)?.let { return it }
         val bitmap = bitmap(artwork, ArtSize.Row) ?: return null
-        val read = withContext(Dispatchers.Default) {
+        val made = withContext(Dispatchers.Default) {
             try {
-                val pixels = IntArray(bitmap.width * bitmap.height)
-                bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                KnownPalette(artPalette(pixels, bitmap.width, bitmap.height))
+                backdropOf(bitmap)
             } catch (e: RuntimeException) {   // a picture that can't be read (recycled, not in memory): no backdrop
+                null
+            } catch (e: OutOfMemoryError) {
                 null
             }
         } ?: return null
-        palettes.put(key, read)
-        return read.palette
+        backdrops.put(key, made)
+        return made
     }
 
-    /** [palette], only if it was read already: the first frame has its colours. Cheap: safe on the main thread. */
-    fun cachedPalette(artwork: ArtworkEntity): ArtPalette? = paletteKey(artwork)?.let { palettes.get(it)?.palette }
+    /** [backdrop], only if it was made already: the first frame has it. Cheap: safe on the main thread. */
+    fun cachedBackdrop(artwork: ArtworkEntity): BackdropPicture? = pictureKey(artwork)?.let { backdrops.get(it) }
 
     /** A picture's path and version (`imagePath@fetchedAt`, as [BitmapCache] keys its decodes); null when there is none. */
-    private fun paletteKey(artwork: ArtworkEntity): String? = artwork.imagePath?.let { "$it@${artwork.fetchedAt}" }
+    private fun pictureKey(artwork: ArtworkEntity): String? = artwork.imagePath?.let { "$it@${artwork.fetchedAt}" }
 
-    /** A picture's palette as read: none for grey art. */
-    private class KnownPalette(val palette: ArtPalette?)
+    /** [bitmap]'s centre square at [BackdropRules.SIDE] (filtered), its pixels prepared, with their dimming. */
+    private fun backdropOf(bitmap: Bitmap): BackdropPicture {
+        val side = BackdropRules.SIDE
+        val small = createBitmap(side, side)
+        val shorter = minOf(bitmap.width, bitmap.height)
+        val left = (bitmap.width - shorter) / 2
+        val top = (bitmap.height - shorter) / 2
+        Canvas(small).drawBitmap(bitmap, Rect(left, top, left + shorter, top + shorter), Rect(0, 0, side, side), Paint(Paint.FILTER_BITMAP_FLAG))
+        val pixels = IntArray(side * side)
+        small.getPixels(pixels, 0, side, 0, 0, side, side)
+        BackdropRules.prepare(pixels, side, side)
+        small.setPixels(pixels, 0, side, 0, 0, side, side)
+        return BackdropPicture(small, BackdropRules.dimFor(pixels, side, side))
+    }
 
     /**
      * The photo at [uri] (from the photo picker, whose grant does not last) becomes the playlist's
@@ -436,9 +453,15 @@ class ArtworkRepository(
         const val TAG = "Artwork"
         const val STOP_TIMEOUT_MS = 5_000L
         const val MOSAIC_PIECES = 4
-        const val PALETTES = 32
+        const val BACKDROPS = 32
         const val ROLL_CARD_DIR = "rollcards"
         val PIECE_PREFIX = ArtworkEntity.forPiece(0).removeSuffix("0")
         val COMPOSER_PREFIX = ArtworkEntity.forComposer("")
     }
 }
+
+/**
+ * The backdrop's picture (v1.18 — M49): the art, [BackdropRules.SIDE] square, soft and lifted ([bitmap], opaque), and
+ * the black laid over it so light words read ([dim], 0.18 or more). One per picture, shared: never recycled.
+ */
+class BackdropPicture(val bitmap: Bitmap, val dim: Float)

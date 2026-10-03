@@ -13,25 +13,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
-import dev.stevenjin.stevenpiano.data.art.ArtPalette
+import dev.stevenjin.stevenpiano.data.art.BackdropPicture
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.graph
 
 /**
- * The album-colour backdrop's palette for piece [pieceId] (v1.15 — M41): the colours of the art [PieceArt] shows first,
- * its own cover, else its composer's portrait ([composerKey]); a roll card or a monogram has none. Read from the
- * picture's row-size decode off the main thread, once a picture ([dev.stevenjin.stevenpiano.data.art.ArtworkRepository.palette]),
- * so a piece played again has its colours at once. Null while it is read, for grey art and for no art; a new piece's
- * art keeps the last colours until its own are read, so the backdrop cross-fades from one to the other.
+ * The backdrop's picture for piece [pieceId] (v1.18 — M49): made of the art [PieceArt] shows first, its own cover,
+ * else its composer's portrait ([composerKey]); a roll card or a monogram gives none. Made from the picture's row-size
+ * decode off the main thread, once a picture ([dev.stevenjin.stevenpiano.data.art.ArtworkRepository.backdrop]), so a
+ * piece played again has it at once. Null while it is made and for no art; a new piece's art keeps the last picture
+ * until its own is made, so the backdrop cross-fades from one to the other.
  */
 @Composable
-fun rememberArtPalette(pieceId: Long, composerKey: String): ArtPalette? {
+fun rememberBackdropPicture(pieceId: Long, composerKey: String): BackdropPicture? {
     val artwork = LocalContext.current.graph.artwork
     val own = rememberArtworkRow(ArtworkEntity.forPiece(pieceId))
     val portrait = rememberArtworkRow(ArtworkEntity.forComposer(composerKey))
     val row = own?.takeIf { it.imagePath != null } ?: portrait?.takeIf { it.imagePath != null }
-    val palette by produceState(row?.let(artwork::cachedPalette), row?.imagePath, row?.fetchedAt) {
-        value = row?.let { artwork.palette(it) }
+    val picture by produceState(row?.let(artwork::cachedBackdrop), row?.imagePath, row?.fetchedAt) {
+        value = row?.let { artwork.backdrop(it) }
     }
-    return palette
+    return picture
 }
