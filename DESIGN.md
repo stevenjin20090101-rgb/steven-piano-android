@@ -2944,3 +2944,12 @@ run beside the panel's new look (M47): two pages of their own, `settings.js` and
   then they fill in by themselves, and any fact the page doesn't know yet is shown as a plain row under its own name.
 - **Pictures through the relay** get an allowance of their own: 600 a minute from one address, apart from the panel's
   120, which the relay tells the page on every answer.
+
+# v1.18 — M48: the cover picker
+
+Steven asked (2026-10-03) to choose covers from the panel "for the few songs Apple cannot match by itself": 7 of his 266
+uploads find nothing, and a match can be the wrong album. A piece's menu, for a piece not made here, gains **Find a
+cover…**: a sheet in the editors' glass with the piece's title and composer, a search of Apple's catalogue filled with
+"title composer", and the covers found as tiles (the picture at 96 px, the album, the artist). A tap makes one the piece's
+own ("Cover changed."), credited on the piece sheet as a found cover is; **Remove this piece's cover** (after a word) brings
+the portrait or the roll card back. Neither is ever undone by a lookup. The tablet asks Apple: one search in 4 s.

@@ -389,7 +389,10 @@ playing, the resting screen, playlists, the web panel), credited on the sheet ("
 · artist", linking to Apple Music) and in About. **Piano › Library and artwork › Album
 covers** (on; off with *Fetch artwork automatically*) stops the lookups, and covers found
 stay. A piece's menu › **Change cover** picks a photo instead (the kiosk PIN first): no
-lookup replaces it, nor a cover Studio or a recording drew.
+lookup replaces it, nor a cover Studio or a recording drew. On the web panel (1.18), a piece's
+menu › **Find a cover…** searches Apple's catalogue by hand for the words you type (whatever the
+switches, one search in 4 s) and makes the cover you pick the piece's own, or takes a wrong one
+away; no lookup changes either.
 
 ## Updates
 
@@ -1482,8 +1485,9 @@ The full audit, every finding and what was done about it, is in
 
 - **What leaves the device:** only HTTPS requests to `en.wikipedia.org` and
   `upload.wikimedia.org`, carrying page titles and searches made from the library's
-  own names; with *Album covers* on, to `itunes.apple.com` (a search: a piece's title and
-  artist, and the device's two-letter country) and Apple's image hosts `*.mzstatic.com`;
+  own names; with *Album covers* on, or from a signed-in panel's *Find a cover…*, to
+  `itunes.apple.com` (a search: a piece's title and artist, or the words typed there, and the
+  device's two-letter country) and Apple's image hosts `*.mzstatic.com`;
   and, for updates of the app and of the piano's firmware and for Studio's
   models, the piano sound and Steven's library (only when you download one), to `raw.githubusercontent.com` (the four
   lists: the app's `latest.json`, the firmware's, `models.json` and `library.json`), `github.com` (the

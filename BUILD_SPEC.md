@@ -8289,3 +8289,87 @@ the frame's host and the tablet's answers (made by `WebApi`): every page, the na
 firmware 2.0.0, a missing board and the other attention states, not connected, another MIDI piano. 1,631 → 1,634 unit
 tests (12 skipped), none failing; `lintDebug` 0 errors, the same 30 warnings, none in the new code. The relay: 82 → 85
 tests, the type check clean.
+
+# v1.18 — M48: the cover picker
+
+Fable's design (DESIGN.md › v1.18 — M48), Opus coding, one lean run in a worktree (`m48-cover-picker`) beside the
+tablet's Compose work: no emulator, no version bump, no signing.
+
+## The tablet (`data/art/`, `web/`)
+- **Search** (`CoverPicker.search`, `data/art/CoverPicker.kt`; `ArtworkRepository.coverPicker`): `term` (trimmed, 2–80
+  characters, no control character; else `BadText`); while Apple's hour-long stop stands (`CoverFetcher.blockedFor`),
+  `Busy(ms)` and nothing asked; one search in `FLOOR_MS` (4,000 on `elapsedRealtime`) whichever panel or the relay asks,
+  else `Wait(ms)`. Then one `AppleCatalogApi.search(term, 25)` through the lookup's own pacer: `ArtworkRepository.apple`
+  is `OneSearchAtATime(PacedAppleCatalog(…))`, a mutex round the 3.5 s pacer, so the lookup's searches and the picker's
+  take turns. Apple's 403 or 429 starts the stop for both (`CoverFetcher.stop()`, which the lookup now uses too).
+- **The results** (`CoverPicker.albums`): those with `coverUrl` (`AppleUrls.cover`'s rule: HTTPS, `*.mzstatic.com`), the
+  first of each `collectionName` + `artistName` (case aside), at most 12; each `artworkUrl100` downloaded through the same
+  client (`AppleUrls.allowed` on every hop) but not the lookup's 1 s image pacer, four at a time, 64 KB each; one that
+  fails, or whose first bytes are no JPEG's or PNG's, is left out and the rest indexed from 0. Remembered under a fresh
+  id (12 random bytes, URL-safe base64) for 10 minutes, the last four searches, in memory only.
+- **Choose** (`CoverPicker.choose`): the piece (`PickedCovers.madeHere`: genre 1 or 2, else `MadeHere`; none, `NotFound`),
+  the search and the index (`NotFound`), then the result's 600 px `coverUrl` at `WikipediaClient.IMAGE_CAP` (403/429: the
+  stop and `Busy`; else `Unreachable`), kept through `keepCover` as "Change cover" keeps one, its lookup row `cover:<id>`
+  OK with `sourceTitle` "album · artist" (`CoverFetcher.credit`), `sourceUrl` `AppleUrls.pageLink(trackViewUrl)` and
+  `description` `ArtworkEntity.CHOSEN_IN_PANEL` ("Chosen in the web panel"): the piece sheet's "Cover: …" line and link
+  read as a found cover's. **Remove** (`dropCover`, under the write lock): the piece row's picture cleared (the row
+  deleted when it held the cover alone), `cover:<id>` NOT_FOUND with `CHOSEN_IN_PANEL`, the file deleted. Both answer once
+  the shared rows show the change (`ArtworkRepository.shown`, 2 s at most), so the panel's next read has the new
+  `artVersion`.
+- **Chosen by hand** (`ArtworkPolicy.chosenByHand`: `sourceTitle` CHOSEN_HERE or `description` CHOSEN_IN_PANEL):
+  `recordOf` reads such a cover row as found, so the worker never queues, fetches (forced too: Look again for covers) or
+  writes over it, and `keepCover(unlessCovered)` keeps nothing for it from a lookup already under way.
+- **Routes** (WRITE: the session, `X-Steven-Piano: 1`, the panel's origin; bodies through `WebApi`, `onlyKeys`):
+  `POST /api/covers/search {text}` → 200 `{searchId, results: [{index, album, artist, picture}]}`, `picture` a
+  `data:image/jpeg;base64,…` (or png) address (`WebApi.coverResults`); 400 `field` for a text not 2–80 characters
+  trimmed, before anything is asked; 429 `wait` `{retryAfter, retryAfterMs}` with `Retry-After`; 503 `busy`
+  `{retryAfterMs, blockedUntil}` (epoch ms) with `Retry-After`; 503 `unreachable`. `POST /api/covers/choose {pieceId,
+  searchId, index}` → 204; 404 `not-found` (an index outside 0–11 is not looked for); 409 `made-here`; 503 `busy` or
+  `unreachable`; 500 `cover`. `POST /api/covers/remove {pieceId}` → 204, 404, 409. `WebBackend.coverSearch`,
+  `coverChoose`, `coverRemove` (`AppWebBackend`: `graph.artwork.coverPicker`).
+
+## The panel (`covers.js`, `app.js`)
+- `covers.js` (on `WebAssets.PANEL`), `open(host, piece)` → a promise, when the sheet closes, of whether the cover
+  changed: a `dialog.sheet.confirm` (the editors' glass, 400 px, 22 px corners) with "Find a cover", the title and the
+  composer; a `.field` holding the text field (filled "title composerShort", 80 characters, Enter searches) and Search
+  (off under 2 characters and while a request runs); the covers as a `.cover-grid` of the Library's `.cover-tile` and
+  `.tile-play` at 96 px (fixed columns through the CSSOM), each picture an `<img>` of a `data:` JPEG or PNG address (any
+  other is left out); Remove this piece's cover for a piece whose art is `cover`, after `host.confirm`; Cancel, Escape
+  and the scrim close it. Words: "Searching…", "Fetching the cover…", "Nothing found. Try the album's name or the
+  artist's.", "Apple asked to slow down. Try again in a minute." (429), "Apple asked to slow down. Try again after
+  15:30." (503 `busy`, its `blockedUntil`), "Those results have expired. Search again." (404); toasts "Cover changed.",
+  "Cover removed.".
+- `app.js`: `openMenu` gains "Find a cover…" for a piece whose `genre` is classical or modern, `import('./covers.js')
+  .then((m) => m.open(host, piece))`; when the sheet closes the focus goes back to the piece's More, and after a change
+  `coverChanged` reads `/api/state` (Now playing and Up next take the new `artVersion` now) and the piece again
+  (`/api/library?q=<title>&limit=200`), giving each of its rows or tiles in the list drawn its `art` and `artVersion`
+  (`art()` loads the new address; the rest keep their pictures).
+
+## Simplified, and why
+- Beyond the files named: `ArtworkRepository` (the shared catalogue, the store, `shown`, the guard in `keepCover`),
+  `CoverFetcher.stop`, `ArtworkPolicy`, `ArtworkEntity.CHOSEN_IN_PANEL` and `FakeWebBackend`: the picker keeps covers as
+  "Change cover" does and shares the lookup's pacing and stop, which live there. No change to `AppGraph`: the picker is
+  the repository's, beside its worker.
+- Chosen by hand is a mark in the cover row's `description`, so `sourceTitle` keeps the album's credit for the sheet;
+  `CHOSEN_HERE` is read as chosen by hand too.
+- A removal recorded as not found would have been looked for again by M46's Look again for covers (forced): the hand's
+  mark now settles a cover row for every lookup.
+- The 503 `busy` line names the time the stop lifts rather than "in a minute"; the 4 s floor's 429 keeps the sentence.
+- Remove shows only for a piece with a cover of its own; the field is plain text (a search field's first Escape clears
+  the words filled in instead of closing the sheet); Search keeps its width at a phone's.
+- A choice downloads its cover even while the stop stands (one picture from the image hosts, asked for by a person); a
+  403 or 429 there starts the stop. The picker works whatever the Album covers switch says: it asks only when a person
+  does.
+
+## Tests
+`CoverPickerTest` (5, a stand-in catalogue: one result an album with artwork, twelve at most, a picture that fails or is
+no picture left out and the index of what is shown; a lookalike, a bare and a plain-HTTP picture host never asked for;
+the 4 s floor, the text's limits, Apple's 429 starting the shared stop and nothing asked while it stands; ten minutes
+and the last four; made here refused, and a cover taken away never looked for again, forced or not), `WebServerTest`
+(1: the three routes refused without a session, the header or the origin, POST only, bad bodies 400, an index past
+eleven 404, the search's JSON and `data:` picture, 429 and 503 with their times, 404 and 409; the write routes 27 → 30),
+`WebAssetsTest` (1: `covers.js` on the list, asking only through `host.ROOT`, its words, the `data:` rule, the menu's
+item for the library's pieces). The panel was run in a browser against the real server and files over a stand-in
+backend: a search, a choice and a removal from a tile and a row (the new art showing in place), nothing found, the floor,
+Apple's stop, unreachable, expired results, Escape, the scrim, a phone's width. 1,635 → 1,642 unit tests (12 skipped),
+none failing, the web tests again with `--rerun`. `lintDebug`: 0 errors, the same 30 warnings, none in this run's code.

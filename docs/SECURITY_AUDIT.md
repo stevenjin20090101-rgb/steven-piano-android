@@ -2112,3 +2112,37 @@ is reached, the relay is unchanged. Where each part is held, and the test that h
   Share diagnostics already gave to whoever it was shared with, now to every session.
 - **The deployed relay drops `Content-Disposition`** (its allow-list, unchanged); the zip still arrives as
   `application/zip` and the page names the file itself.
+
+## 1.18 — the cover picker (pre-audit notes, M48)
+
+2026-10-03, notes written with M48 for the next audit, not an audit (BUILD_SPEC.md › v1.18 — M48). The panel can now make
+the tablet ask Apple's catalogue for words a person types, and choose or remove a piece's cover. Nothing new listens, no
+new host is reached, the relay is unchanged. Where each part is held, and the test that holds it:
+
+- **Signed-in panels only.** `POST /api/covers/search`, `/api/covers/choose` and `/api/covers/remove` are `Access.WRITE`
+  (the session, `X-Steven-Piano: 1`, the panel's own origin; 401 or 403 otherwise, before the body is read), no route on
+  the guests' Wi-Fi listener, and behind the relay's gate as every route is (`WebServerTest`: the write loop, now 30
+  routes, and the picker's test; `WebServerRelayTest`).
+- **What goes to Apple.** The text typed, trimmed, 2 to 80 characters with no control character (400 otherwise, nothing
+  asked), URL-encoded into the lookup's own search with the device's two-letter country; whatever the Album covers switch
+  says, since a person asks. Nothing else about the person.
+- **How often.** One search in 4 s across every panel and the relay (429 `wait`), taking turns with the lookup's searches
+  3.5 s apart; nothing while Apple's hour-long stop stands (503 `busy`, with when it lifts), and Apple's 403 or 429 to a
+  picker's search starts that stop for the lookup too (`CoverPickerTest`).
+- **The same hosts, capped.** The search's JSON as before (256 KB). Pictures only from results whose artwork passes
+  `AppleUrls.cover`'s rule (HTTPS on `*.mzstatic.com`, no port, user info or backslash: a lookalike is never asked for,
+  `CoverPickerTest`), through the same client and its check on every hop, 64 KB each, four at a time, twelve at most, kept
+  only when their first bytes are a JPEG's or a PNG's. The cover chosen comes at 600 px within the lookup's 6 MB cap and
+  is kept only when Android reads it as an image. The panel shows a picture only as a `data:` JPEG or PNG address (the
+  policy already allows `img-src data:`); names go in as text.
+- **What is stored.** Nothing new but covers: one chosen is kept as the lookup keeps one (`files/art/`, the `cover:<id>`
+  row with the album's credit and the hand's mark); a removal clears the picture and marks the row, and no lookup undoes
+  either. The searches live in memory, the last four for ten minutes, under random ids.
+
+### Residuals (stated honestly)
+
+- **A signed-in browser can make the tablet send words to Apple**: any text of up to 80 characters, at most 15 searches
+  a minute, with the tablet's address. A choice has no floor of its own: a panel could have the tablet fetch the same
+  600 px cover again and again from Apple's image hosts, each within the 6 MB cap.
+- **Apple's stop can follow a panel's searches**: the 4 s floor keeps them under Apple's own rate, but should Apple answer
+  429 anyway, every lookup waits an hour.
