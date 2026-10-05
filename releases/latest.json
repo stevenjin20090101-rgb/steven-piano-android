@@ -1,9 +1,9 @@
 {
-  "versionCode": 28,
-  "versionName": "1.18",
-  "notes": "The web panel has a new look: dark by default, a glass side rail, a big cover on Now playing with the album's colours as soft glows across the page, and Library as a grid of covers. Settings now holds the app's Playback settings beside the piano's pages. A new System page shows the tablet's battery, temperature, memory, storage and Wi-Fi, the piano's controller and power boards, what the app is running, a chart of the day, and tools: read status, find missing covers, reconnect the piano, all keys off, download diagnostics. The same System page is in the tablet app, first under This tablet on the Piano tab. On the tablet, Now playing has a big cover and a new Art only view beside the score and the notes. Find a cover, in a piece's menu on the panel, searches Apple's catalogue so you can choose a cover by hand or remove a wrong one. Phones get a bar at the foot with a More sheet. Covers load faster over the internet link.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.18/steven-piano-1.18.apk",
-  "sha256": "28883e3f8e06aa057a5217508291b6679fab868d4d603c1d5cea11a4d7e5ffe1",
-  "sizeBytes": 14153121,
+  "versionCode": 29,
+  "versionName": "1.19",
+  "notes": "At most four pieces now play in a row: after the fourth, the next piece waits at its start until someone presses Play or a schedule starts. The resting screen is plain again, black by default, without the album's colours; Now playing keeps them.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.19/steven-piano-1.19.apk",
+  "sha256": "d58a0fd0a6e66fa33c110dea442dfb6257dd14ac7c47f92c171650de0dacf36d",
+  "sizeBytes": 14152577,
   "minSdk": 26
 }
