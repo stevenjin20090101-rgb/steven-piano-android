@@ -8422,3 +8422,11 @@ twelve albums with their pictures, a choice changed the piece's cover and its `a
 portrait back. The relay was deployed (`ART_LIMIT`, `X-Relay-Art-Limit: 600`) and the school tablet answered through it.
 Not checked: the resting screen by eye (its code is 1.17's again), the piano's own cards with a piano attached (the
 emulator has none), the controller's temperature, memory and tasks (they wait for firmware, `firmware/docs/BLE_DIAG.md`).
+
+## The release: 1.19 (versionCode 29)
+
+Steven's two asks of 2026-10-05, made without the usual look on the emulator, at his request: **at most four pieces
+in a row** (`Player.MAX_IN_A_ROW`; `inARow` counts pieces started one after another, a person's or a schedule's start
+resets it to one, auto-advance and Repeat one add one; past four, auto-advance loads the next piece without playing it,
+or seeks Repeat one's piece to its start, and the next Play starts a new run), and **no album colours on the resting
+screen** (`DisplayScreen` asks `rememberBackdrop` with `on = false`; Now playing keeps them). 1,650 unit tests green.

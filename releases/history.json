@@ -229,5 +229,14 @@
     "minSdk": 26,
     "tag": "v1.18",
     "publishedAt": "2026-10-03"
+  },
+  {
+    "versionCode": 29,
+    "versionName": "1.19",
+    "notes": "At most four pieces now play in a row: after the fourth, the next piece waits at its start until someone presses Play or a schedule starts. The resting screen is plain again, black by default, without the album's colours; Now playing keeps them.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.19/steven-piano-1.19.apk",
+    "minSdk": 26,
+    "tag": "v1.19",
+    "draft": true
   }
 ]

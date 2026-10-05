@@ -189,9 +189,9 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
             if (piece != null && settings.standbyShows == StandbyShows.PAPER_ROLL) {
                 PaperRoll(piece, state, connected, playing, channel, insets, drift)
             } else {
-                // The album's colours behind the art and the words (v1.15 — M41), still while the screen fades away and
-                // without the burn-in step (soft shapes have no edge); on black, veiled behind the words alone.
-                val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, settings.albumBackdrop)
+                // No album colours at rest (v1.19, Steven's choice): the canvas stays plain, black by default. Now playing
+                // keeps them (Album colours on Piano › Display).
+                val backdrop = rememberBackdrop(piece?.pieceId, piece?.composerKey, on = false)
                 ArtBackdrop(
                     backdrop,
                     playing = playing && resting,

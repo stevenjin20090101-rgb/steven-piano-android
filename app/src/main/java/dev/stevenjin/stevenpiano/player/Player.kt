@@ -143,6 +143,13 @@ class Player(
     /** The queue entries the playing channel dealt (its first pieces and its top-ups); empty without a channel. */
     private var channelUids: Set<Long> = emptySet()
 
+    /**
+     * Pieces played one after another since a person or a schedule last started playback, the current one included
+     * (v1.19): auto-advance stops after [MAX_IN_A_ROW]; the next piece then waits, loaded, for Play.
+     */
+    @Volatile
+    private var inARow = 0
+
     /** Why nothing may play now ([lock]), or null. */
     @Volatile
     private var lockedFor: String? = null
@@ -259,6 +266,7 @@ class Player(
 
     fun resume() {
         if (locked) return
+        if (inARow == 0) inARow = 1   // after the stop at MAX_IN_A_ROW, a person's Play starts a new run
         command { engine.play(it) }
     }
 
@@ -505,12 +513,17 @@ class Player(
         _state.update { if (it.queue == snapshot && it.channel == channel) it else it.copy(queue = snapshot, channel = channel) }
     }
 
-    private fun startCurrent() {
+    private fun startCurrent(auto: Boolean = false, start: Boolean = true) {
         if (locked) return
         advanceJob?.cancel()
         val superseding = loadJob?.isActive == true
         loadJob?.cancel()
         val id = queue.current?.pieceId ?: return
+        inARow = when {
+            !start -> 0
+            auto -> inARow + 1
+            else -> 1
+        }
         _state.update { it.copy(loading = true, problem = null, queue = queue.snapshot()) }
         loadJob = scope.launch {
             if (superseding) delay(SETTLE_MS)   // the taps keep coming: read and work out only the last
@@ -573,9 +586,9 @@ class Player(
             scheduler.submit { now ->
                 engine.load(played, now)
                 engine.setTempo(tempo, now)
-                engine.play(now, preRoll)
+                if (start) engine.play(now, preRoll)
             }
-            withContext(io) { source.markPlayed(id) }
+            if (start) withContext(io) { source.markPlayed(id) }
         }
     }
 
@@ -656,14 +669,27 @@ class Player(
             delay((AUTO_ADVANCE_DELAY_MS - preRollMs).coerceAtLeast(0L))
             val ended = queue.current ?: return@launch
             val after = queue.afterEnd() ?: return@launch
+            val again = after.current?.uid == ended.uid
+            if (inARow >= MAX_IN_A_ROW) {
+                // Enough in a row (v1.19): the next piece waits, ready at its start, until a person or a schedule plays.
+                inARow = 0
+                if (again) {
+                    scheduler.submit { now -> engine.seek(0L, now) }
+                } else {
+                    setQueue(after)
+                    startCurrent(auto = true, start = false)
+                }
+                return@launch
+            }
             setQueue(after)
-            if (after.current?.uid == ended.uid) restartCurrent(ended.pieceId) else startCurrent()
+            if (again) restartCurrent(ended.pieceId) else startCurrent(auto = true)
         }
     }
 
     /** The piece that just ended plays again from its start, after the pause before each piece: the engine still has it. */
     private fun restartCurrent(pieceId: Long) {
         if (locked) return
+        inARow += 1
         val preRoll = preRollMs * NANOS_PER_MS
         scheduler.submit { now ->
             engine.seek(0L, now)
@@ -771,6 +797,9 @@ class Player(
                 ", ${run.medianMs} ms median and ${run.worstMs} ms at most from the keyboard to the piano's queue"
 
         private const val AUTO_ADVANCE_DELAY_MS = 1_500L
+
+        /** At most this many pieces play one after another before the player waits for a person or a schedule (v1.19). */
+        const val MAX_IN_A_ROW = 4
         private const val NANOS_PER_MS = 1_000_000L
         private const val MICROS_PER_MS = 1_000L
         private const val CANT_PLAY = "This piece can't be played."
