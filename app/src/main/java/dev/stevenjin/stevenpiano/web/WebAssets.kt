@@ -57,9 +57,14 @@ object WebAssets {
     const val JS = "text/javascript; charset=utf-8"
     const val CSS = "text/css; charset=utf-8"
 
+    /** The mark's type (v1.20 — M53): a picture, with no script and nothing from elsewhere (WebAssetsTest). */
+    const val SVG = "image/svg+xml"
+
     val PANEL: Map<String, Asset> = mapOf(
         "/" to Asset("index.html", HTML),
         "/app.js" to Asset("app.js", JS),
+        // The mark (v1.20 — M53): the app's icon in the browser's tab and beside the rail's name; the guests' list has it too.
+        "/favicon.svg" to Asset("favicon.svg", SVG),
         // The Settings and System pages (v1.18 — M47b): modules the page imports the first time each shows.
         "/settings.js" to Asset("settings.js", JS),
         "/system.js" to Asset("system.js", JS),
@@ -77,6 +82,8 @@ object WebAssets {
 
     val PUBLIC: Map<String, Asset> = mapOf(
         "/style.css" to Asset("style.css", CSS),
+        // The mark (v1.20 — M53), for the guests' page and the poster.
+        "/favicon.svg" to Asset("favicon.svg", SVG),
         "/request" to Asset("request.html", HTML),
         "/request.js" to Asset("request.js", JS),
     )

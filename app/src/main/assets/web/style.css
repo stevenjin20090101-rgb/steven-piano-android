@@ -16,7 +16,10 @@
    Liquid Glass (DESIGN.md › v1.9) as the app has it: the functional layer (the rail, the tab strip and bar, capsules,
    menus, popovers, the toast, the PIN gate's card, the sheets) is the surface over a 24 px blur of what lies beneath,
    at 72 % for bars and 86 % for sheets, menus and dialogs, with a hairline and a faint specular line; content is never
-   glass. Behind Now playing the album's colours (v1.15 — M41) fill the window under a veil of the page. */
+   glass. Behind Now playing the album's colours (v1.15 — M41) fill the window under a veil of the page.
+   Motion (v1.20 — M53, › Motion at the foot): transforms and opacity only, on the app's curves; nothing loops but the
+   album's colours while a piece plays (and status while it lasts: the live dot's breath, a job's sweep); every change
+   is a cut under reduced motion. */
 
 :root {
   /* Light: the paper roll */
@@ -79,6 +82,10 @@
   --paper-specular: hsl(0 0% 100% / 0.70);
   --ink-specular: hsl(0 0% 100% / 0.10);
   --specular: var(--paper-specular);
+
+  /* Motion's curves (ui/theme/Motion.kt): entering decelerates, leaving accelerates. */
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-leave: cubic-bezier(0.4, 0, 1, 1);
 
   --row: 56px;
   --inset: 20px;
@@ -213,7 +220,7 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 160ms;
+  transition: background-color 160ms, transform 100ms var(--ease-enter);
 }
 
 .outlined:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
@@ -238,6 +245,7 @@ button, input, select { font: inherit; color: inherit; }
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+  transition: background-color 160ms, transform 100ms var(--ease-enter);
 }
 
 .text-button:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
@@ -255,6 +263,7 @@ button, input, select { font: inherit; color: inherit; }
   color: var(--primary);
   cursor: pointer;
   flex: none;
+  transition: background-color 160ms, transform 100ms var(--ease-enter);
 }
 
 .icon-button .glyph { width: 24px; height: 24px; }
@@ -301,6 +310,7 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 160ms, color 160ms, transform 100ms var(--ease-enter);
 }
 
 .chip[aria-pressed="true"], .chip[aria-checked="true"] {
@@ -338,8 +348,13 @@ button, input, select { font: inherit; color: inherit; }
   letter-spacing: 0.1px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 160ms, border-color 160ms, color 160ms;
+  transition: background-color 160ms, border-color 160ms, color 160ms, transform 100ms var(--ease-enter);
 }
+
+/* A segment with a glyph (v1.20 — M53: the Library's four lists): the glyph beside its name. */
+.segmented button:has(> .glyph) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+.segmented button .glyph { width: 18px; height: 18px; }
 
 .segmented button[aria-pressed="true"] {
   border-color: var(--hairline);
@@ -480,6 +495,7 @@ button, input, select { font: inherit; color: inherit; }
   background: transparent;
   color: inherit;
   cursor: pointer;
+  transition: transform 100ms var(--ease-enter);
 }
 
 .stepper button .glyph, .stepper .icon-button .glyph { width: 20px; height: 20px; }
@@ -505,7 +521,10 @@ button, input, select { font: inherit; color: inherit; }
 
 .capsule b { font-weight: 600; }
 
-.capsule.button { cursor: pointer; font-family: inherit; }
+.capsule.button { cursor: pointer; font-family: inherit; transition: transform 100ms var(--ease-enter); }
+
+/* The number a capsule or a place carries (the guests' requests waiting). */
+.capsule .count { margin-left: 0; }
 
 /* Glass: the surface at the bar's fill over the blur, a light edge, the specular line. */
 .glass {
@@ -641,6 +660,9 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 .empty { padding: 48px var(--inset); color: var(--secondary); text-align: center; }
+
+/* An empty state's glyph (v1.20 — M53): 32 px over its line. */
+.empty > .glyph { display: block; width: 32px; height: 32px; margin: 0 auto 12px; color: var(--tertiary); }
 
 /* A line of the page at the rows' inset. */
 .inset { padding: 8px var(--inset); }
@@ -780,7 +802,7 @@ button, input, select { font: inherit; color: inherit; }
 .pin-field:focus { border-color: var(--primary); }
 
 /* On a sheet's glass the tertiary grey gives way to the secondary, which reads 4.5:1 there, as the app's. */
-.gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow, .sheet .eyebrow { color: var(--secondary); }
+.gate-card .eyebrow, .compose-editor .eyebrow, .sheet .eyebrow { color: var(--secondary); }
 
 /* ---- Menus, popovers, the sheets and the dialog ---------------------------------------------- */
 
@@ -832,7 +854,8 @@ button, input, select { font: inherit; color: inherit; }
 
 .popover-title { font-size: 13px; line-height: 18px; font-weight: 600; }
 
-/* The sheets (the editors' glass): the phone's More sheet, and the dialog the modules ask for (host.confirm). */
+/* The sheets (the editors' glass): Up next below 1100 px and Add music (v1.20 — M53), the cover picker, and the dialog
+   the modules ask for (host.confirm). */
 .sheet, .confirm {
   padding: 0;
   border: 1px solid var(--hairline);
@@ -854,19 +877,65 @@ button, input, select { font: inherit; color: inherit; }
 
 .confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 
-/* ---- The frame (v1.18 — M47) ------------------------------------------------------------------------
-   From 900 px a glass rail at the left (236 px, 22 px corners, 12 px from the window's edges): the piano's name and the
-   connection line, the sections in four groups under engraved headings, each a glyph and a label, the selected one on
-   the content colour at 12 %, and at its foot the System module's vitals. Below 900 px today's sticky glass strip of
-   tabs, 44 px tall; below 600 px the name over the page and the sections in a glass bar at the foot. */
+/* The panel's own sheets: a head (the name, Close) over a body that scrolls; a card in the window's middle, and on a
+   phone a sheet at its foot. */
+.panel-sheet { width: min(520px, calc(100vw - 32px)); max-width: none; max-height: min(84vh, 760px); border-radius: 24px; overflow: hidden; }
+
+.panel-sheet[open] { display: flex; flex-direction: column; }
+
+.sheet-head { display: flex; flex: none; align-items: center; gap: 8px; padding: 12px 10px 4px 22px; }
+
+.sheet-head h2 { flex: 1; min-width: 0; font-size: 19px; line-height: 24px; font-weight: 600; }
+
+.sheet-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 12px; }
+
+.add-body { padding: 8px 16px 16px; }
+
+.add-body .uploads:empty, .add-body .note:empty { display: none; }
+
+@media (max-width: 599px) {
+  .panel-sheet {
+    position: fixed;
+    inset: auto 8px calc(8px + env(safe-area-inset-bottom)) 8px;
+    width: auto;
+    margin: 0;
+    max-height: calc(100vh - 48px);
+  }
+}
+
+/* ---- The frame (v1.18 — M47; v1.20 — M53: five places) ---------------------------------------------------------
+   From 900 px a glass rail at the left (236 px, 22 px corners, 12 px from the window's edges): the mark, the piano's
+   name and a status dot (a short pill under them only while something is wrong), the five places, each a glyph and a
+   label, the selected one on the content colour at 12 %, and at its foot the System module's vitals. Below 900 px the
+   sticky glass strip of tabs, 44 px tall; below 600 px the mark and the name over the page and the five in a glass bar
+   at the foot. */
 
 .panel { position: relative; isolation: isolate; min-height: 100vh; color: var(--primary); font: 400 15px/22px var(--sans); }
 
 .sections { z-index: 3; }
 
-.identity { padding: 12px var(--inset) 4px; }
+.identity { display: grid; grid-template-columns: auto minmax(0, auto) auto 1fr; align-items: center; gap: 4px 10px; padding: 12px var(--inset) 4px; }
 
-.piano-name { font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -0.2px; }
+/* The mark: the app's icon, 24 px with 6 px corners. */
+.mark { display: block; flex: none; width: 24px; height: 24px; border-radius: 6px; }
+
+.piano-name { min-width: 0; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -0.2px; }
+
+/* What is wrong, under the name: a quiet capsule of words; nothing while all is well. */
+.status-pill {
+  grid-column: 1 / -1;
+  justify-self: start;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 1px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.status-pill:not([hidden]) { display: block; animation: rise-in 200ms var(--ease-enter); }
 
 .connection { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 13px; line-height: 18px; }
 
@@ -886,7 +955,7 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background-color 160ms, color 160ms;
+  transition: background-color 160ms, color 160ms, transform 100ms var(--ease-enter);
 }
 
 .nav-item:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); color: var(--primary); }
@@ -908,15 +977,16 @@ button, input, select { font: inherit; color: inherit; }
 
 .rail-foot { display: none; }
 
-.vital { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 18px; color: var(--secondary); }
+/* The rail's foot (v1.20 — M53): the battery and the temperature as a glyph and a figure, side by side. */
+.vital { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; line-height: 18px; color: var(--secondary); }
 
-.vital b { color: var(--primary); font-weight: 600; margin-left: auto; }
+.vital b { color: var(--primary); font-weight: 600; }
 
 .vital .glyph { width: 18px; height: 18px; }
 
 .tab-bar { display: none; }
 
-.page { min-width: 0; padding: 8px 16px 40px; }
+.page { position: relative; min-width: 0; padding: 8px 16px 40px; }
 
 .page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 56px; margin-bottom: 6px; }
 
@@ -963,7 +1033,7 @@ button, input, select { font: inherit; color: inherit; }
     background-image: linear-gradient(to bottom, transparent calc(100% - var(--glass-band)), color-mix(in srgb, var(--surface) 50%, transparent));
   }
   /* Text on a bar's glass with content beneath it is the content colour, as the app's. */
-  .panel.scrolled .sections .nav-item, .panel.scrolled .connection { color: var(--primary); }
+  .panel.scrolled .sections .nav-item, .panel.scrolled .status-pill { color: var(--primary); }
   /* The rail's card is the strip itself here. */
   .panel .sections .rail-card.glass {
     border: 0;
@@ -983,10 +1053,9 @@ button, input, select { font: inherit; color: inherit; }
     scrollbar-width: none;
   }
   .section-list::-webkit-scrollbar { display: none; }
-  .nav-group { display: flex; flex: none; gap: 4px; }
-  .nav-group > .eyebrow { display: none; }
-  .sections .nav-item { width: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; white-space: nowrap; }
+  .sections .nav-item { flex: none; width: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; white-space: nowrap; }
   .sections .nav-item .glyph { display: none; }
+  .sections .nav-item .count { margin-left: 8px; }
 }
 
 /* From 900 px: the rail. */
@@ -1003,15 +1072,14 @@ button, input, select { font: inherit; color: inherit; }
     overflow-y: auto;
     scrollbar-width: thin;
   }
-  .identity { padding: 2px 10px 16px; }
+  .identity { padding: 2px 10px 18px; }
   .piano-name { font-size: 18px; }
-  .connection { margin-top: 4px; }
-  .nav-group { margin-top: 14px; }
-  .nav-group:first-child { margin-top: 0; }
-  .nav-group > .eyebrow { padding: 0 10px 6px; }
+  .section-list { display: grid; gap: 2px; }
   .rail-foot {
-    display: grid;
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
     margin-top: auto;
     padding: 12px 10px 0;
     border-top: 1px solid color-mix(in srgb, var(--primary) 9%, transparent);
@@ -1020,13 +1088,13 @@ button, input, select { font: inherit; color: inherit; }
   .page { padding: 14px 28px 40px 16px; }
 }
 
-/* Up next is a section of its own only below 1100 px: from there it stands beside Now playing. */
+/* Up next stands beside Now playing from 1100 px: its capsule, which opens it as a sheet below that, goes. */
 @media (min-width: 1100px) {
-  .nav-item.up-next-item { display: none; }
+  .up-next-button { display: none; }
 }
 
-/* Phones: the name over the page, the sections in a glass bar at the foot (each a glyph over a label, 56 px tall), the
-   others in the More sheet; the page keeps the bar's height free at its foot. */
+/* Phones: the mark and the name over the page, the five in a glass bar at the foot (each a glyph over its label, 56 px
+   tall); the page keeps the bar's height free at its foot. */
 @media (max-width: 599px) {
   .sections {
     position: static;
@@ -1040,7 +1108,8 @@ button, input, select { font: inherit; color: inherit; }
   .section-list { display: none; }
   .identity { padding: 14px 16px 0; }
   .page { padding-bottom: calc(56px + 32px + env(safe-area-inset-bottom)); }
-  .page-head h1 { font-size: 24px; line-height: 30px; }
+  /* The page's name keeps its line; its capsules go under it where they don't fit beside it. */
+  .page-head h1 { min-width: max-content; font-size: 24px; line-height: 30px; }
   .toast { bottom: calc(56px + 12px + env(safe-area-inset-bottom)); }
   .tab-bar {
     position: fixed;
@@ -1049,7 +1118,7 @@ button, input, select { font: inherit; color: inherit; }
     bottom: 0;
     z-index: 6;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     height: calc(56px + env(safe-area-inset-bottom));
     padding: 0 4px env(safe-area-inset-bottom);
     border-width: 1px 0 0;
@@ -1069,33 +1138,25 @@ button, input, select { font: inherit; color: inherit; }
     font-size: 11px;
     line-height: 14px;
     font-weight: 500;
+    white-space: nowrap;
     cursor: pointer;
+    transition: color 160ms, transform 100ms var(--ease-enter);
   }
-  .tab-pill { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 28px; border-radius: 14px; transition: background-color 160ms; }
+  .tab-pill { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 28px; border-radius: 14px; transition: background-color 160ms; }
   .tab-item .glyph { width: 22px; height: 22px; }
   .tab-item[aria-current="page"] { color: var(--primary); }
   .tab-item[aria-current="page"] .tab-pill { background: color-mix(in srgb, var(--primary) 12%, transparent); }
-  .more-sheet {
-    position: fixed;
-    inset: auto 8px calc(56px + 8px + env(safe-area-inset-bottom)) 8px;
-    width: auto;
-    max-width: none;
-    max-height: calc(100vh - 56px - 32px);
-    margin: 0;
-    overflow: auto;
-    border-radius: 24px;
-  }
-  .sheet-body { display: grid; gap: 2px; padding: 14px 8px 8px; }
-  .sheet-body > .eyebrow { padding: 0 12px 6px; }
-  .more-sheet .nav-item { min-height: 48px; padding: 0 12px; }
+  /* The requests waiting, at the pill's top right. */
+  .tab-pill .count { position: absolute; top: -4px; left: 34px; min-width: 18px; padding: 0 5px; font-size: 11px; line-height: 16px; }
 }
 
-/* ---- Now playing (v1.18 — M47) ------------------------------------------------------------------------
+/* ---- Now playing (v1.18 — M47; v1.20 — M53) -----------------------------------------------------------------
    Art: a centred block as wide as the cover (min(54vh, 560px)): the cover (22 px corners, a deep soft shadow), the title
    (34/40, 700, two lines at most), the composer (19 px, 600) and the channel after it, the scrubber (a 6 px track), the
    transport (a 76 px play circle in the content colour), one row of glass capsules (Tempo, the volumes, the views'
-   switch), the instrument's lines beneath, small. Notes and Score: the strip at the top (the cover at 132 px, the title
-   38 px, the transport at the right), then the views. From 1100 px Up next beside it, a glass card. */
+   switch), and nothing under them. Notes and Score: the strip at the top (the cover at 132 px, the title 38 px, the
+   transport at the right), then the views. From 1100 px Up next beside it, a glass card; below, its capsule in the head
+   beside Quiet until and Play anyway (while quiet) and the Piano capsule. */
 
 .now-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
 
@@ -1103,9 +1164,8 @@ button, input, select { font: inherit; color: inherit; }
   position: relative;
   min-width: 0;
   display: grid;
-  /* min(54vh, 560px); the cover gives way first so that the page's head, the words, the controls and the instrument's
-     lines stay in sight (444 px: a title on two lines, or the capsules on two rows), never under 240 px; never wider
-     than the column. */
+  /* min(54vh, 560px); the cover gives way first so that the page's head, the words and the controls stay in sight
+     (444 px: a title on two lines, or the capsules on two rows), never under 240 px; never wider than the column. */
   grid-template-columns: min(max(240px, min(54vh, 100vh - 444px)), 560px, 100%);
   justify-content: center;
   align-content: center;
@@ -1123,6 +1183,14 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 .now-art .monogram { font-size: 96px; font-weight: 600; }
+
+/* A new piece's cover cross-fades (v1.20 — M53): the picture there was fades out over the new one, whose own fade is
+   300 ms here, while the cover settles from 0.96. */
+.now-art .picture { transition-duration: 300ms; }
+
+.now-art .ghost { animation: fade-out 300ms var(--ease-leave) forwards; }
+
+.now-art.settle { animation: settle-in 300ms var(--ease-enter); }
 
 .now-words { min-width: 0; }
 
@@ -1180,6 +1248,7 @@ button, input, select { font: inherit; color: inherit; }
 /* The play control, the primary action: a circle filled in the content colour, the glyph in the surface colour, as the
    app's (DESIGN.md › v1.9: never glass). */
 .play-circle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1192,9 +1261,22 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--primary);
   color: var(--surface);
   cursor: pointer;
+  transition: transform 100ms var(--ease-enter);
 }
 
-.play-circle .glyph { width: 34px; height: 34px; }
+/* Play and Pause both there, one over the other: the one not meant fades and shrinks a little (200 ms). */
+.play-circle .glyph {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 34px;
+  height: 34px;
+  transition: opacity 200ms var(--ease-enter), transform 200ms var(--ease-enter);
+}
+
+.play-circle .pause-glyph, .play-circle.playing .play-glyph { opacity: 0; transform: scale(0.8); }
+
+.play-circle.playing .pause-glyph { opacity: 1; transform: none; }
 
 .play-circle:disabled { background: var(--disabled); cursor: default; }
 
@@ -1223,12 +1305,7 @@ button, input, select { font: inherit; color: inherit; }
 
 .quick .segmented button { min-height: 34px; padding: 0 16px; }
 
-/* The instrument's two lines, side by side where they fit. */
-.now-lines { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 14px; margin-top: 8px; text-align: center; }
-
-.now-lines:not(:has(> :not([hidden]))) { display: none; }
-
-/* Nothing loaded: today's line, centred, and the next schedule under it. */
+/* Nothing loaded: today's line, centred. */
 .now.unloaded .now-art, .now.unloaded .scrubber, .now.unloaded .transport, .now.unloaded .quick { display: none; }
 
 .now.unloaded .now-main { text-align: center; }
@@ -1269,8 +1346,6 @@ button, input, select { font: inherit; color: inherit; }
 .now.views-on .quick { margin-top: 0; }
 
 .now.views-on .quick > * { flex: none; }
-
-.now.views-on .now-lines { justify-content: flex-start; margin-top: 0; text-align: left; }
 
 /* From 900 px Now playing fills the window: the views take what the strip and the capsules leave (360 px at least). */
 @media (min-width: 900px) {
@@ -1359,10 +1434,9 @@ button, input, select { font: inherit; color: inherit; }
 body.mono .backdrop, body.no-backdrop .backdrop { display: none; }
 
 /* Over the colours, nothing secondary or tertiary stands on them: the primary colour alone keeps 4.5:1 through the veil.
-   The words, the times, the transport and the instrument's lines stand on them; below 900 px the strip's words too, and
-   on a phone the name and the connection line. The glass (the rail, the capsules, Up next, the bar) and the views' cards
-   keep their own greys. */
-body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport, .now-lines, .views-note) {
+   The words, the times and the transport stand on them; below 900 px the strip's words too, and on a phone the name
+   and its pill. The glass (the rail, the capsules, Up next, the bar) and the views' cards keep their own greys. */
+body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport, .views-note) {
   --secondary: var(--primary);
   --tertiary: var(--primary);
 }
@@ -1502,6 +1576,14 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 /* ---- Up next ------------------------------------------------------------------------------- */
 
+/* The guests' requests waiting (v1.20 — M53), at the top of Up next: a group of its own over a hairline, each row with
+   approve and decline, always shown. */
+.requests-group { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--primary) 9%, transparent); }
+
+.request-row { min-height: 56px; }
+
+.request-row .row-tools { gap: 2px; }
+
 .queue-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 10px 18px 6px; }
 
 .queue-head .eyebrow { color: var(--secondary); }
@@ -1557,6 +1639,8 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 @media (hover: none), (pointer: coarse) {
   .queue-row .time { display: none; }
+  /* No dragging under a finger: up and down move a row. */
+  .queue-row .handle { display: none; }
 }
 
 /* ---- The drop zone ---------------------------------------------------------------------------- */
@@ -1585,7 +1669,7 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 .progress { height: 2px; margin-top: 6px; background: var(--hairline); }
 
-.progress > span { display: block; height: 100%; width: var(--fill, 0%); background: var(--primary); }
+.progress > span { display: block; height: 100%; width: var(--fill, 0%); background: var(--primary); transition: width 200ms var(--ease-enter); }
 
 /* Studio (v1.7 — M23): a job under way before its first measure sweeps a short segment, as the app's hairline does. */
 .progress.waiting { position: relative; overflow: hidden; }
@@ -1595,7 +1679,9 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 /* ---- Library ----------------------------------------------------------------------------------- */
 
-/* The tools as one row (v1.18 — M47): the genre switch, the search field with its glyph, Covers · List; then the chips. */
+/* The tools as one row, wrapping as it must (v1.18 — M47; v1.20 — M53): the four lists (Pieces · Playlists · Composers
+   · Channels, each with its glyph), the genre switch (not for the channels, every genre's), the search field with its
+   glyph, Covers · List for pieces; then, under Pieces, All · Favorites · Recent. */
 .lib-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
 
 .lib-tools .segmented { flex: none; }
@@ -1603,6 +1689,17 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 .search-field { flex: 1 1 260px; max-width: 580px; }
 
 .lib-chips { margin-bottom: 16px; }
+
+/* On a phone the four lists share the page's width, by their names alone. */
+@media (max-width: 599px) {
+  .lib-tools .lib-kind { display: flex; flex: 1 1 100%; min-width: 0; }
+  .lib-kind button { flex: 1 1 auto; min-width: 0; padding: 0 8px; }
+  .lib-kind button .glyph { display: none; }
+  .lib-kind button span { overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* The channels' cards in the Library's body, Stop the channel over them while one plays. */
+.channel-bar { display: flex; justify-content: flex-end; margin: -4px 0 12px; }
 
 .crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 
@@ -1618,9 +1715,14 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 .cover-tile { position: relative; min-width: 0; }
 
-.tile-play { display: block; width: 100%; padding: 0; border: 0; border-radius: 14px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tile-play { display: block; width: 100%; padding: 0; border: 0; border-radius: 14px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: transform 100ms var(--ease-enter); }
 
-.tile-play .art { width: 100%; height: auto; aspect-ratio: 1; border-radius: 14px; box-shadow: 0 14px 30px -16px hsl(0 0% 0% / 0.6); }
+.tile-play .art { width: 100%; height: auto; aspect-ratio: 1; border-radius: 14px; box-shadow: 0 14px 30px -16px hsl(0 0% 0% / 0.6); transition: transform 160ms var(--ease-enter); }
+
+/* A cover lifts 2 px under a fine pointer (v1.20 — M53). */
+@media (hover: hover) and (pointer: fine) {
+  .tile-play:hover .art { transform: translateY(-2px); }
+}
 
 .tile-play .art .monogram { font-size: 56px; }
 
@@ -1628,7 +1730,7 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 .tile-play .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.tile-more { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; opacity: 0; transition: opacity 120ms; }
+.tile-more { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; opacity: 0; transition: opacity 120ms, transform 100ms var(--ease-enter); }
 
 .tile-more .glyph { width: 20px; height: 20px; }
 
@@ -1651,6 +1753,7 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
   color: var(--primary);
   text-align: left;
   cursor: pointer;
+  transition: transform 100ms var(--ease-enter);
 }
 
 .tile::after { content: ""; position: absolute; inset: 0; border: 1px solid var(--hairline); border-radius: inherit; pointer-events: none; }
@@ -1688,17 +1791,11 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 .band .eyebrow { display: flex; align-items: center; gap: 6px; color: var(--primary); }
 
-/* ---- Schedule (v1.6.2) -------------------------------------------------------------------------- */
+/* ---- Studio's editor (v1.7 — M24) ------------------------------------------------------------------------- */
 
-.schedule-next { padding: 4px 4px 8px; }
-
-.schedule-row .switch { margin-left: 4px; }
-
-.row .title.off { color: var(--secondary); }
-
-/* The editors are the tablet's sheets laid flat (the schedule's; composing's, v1.7 — M24): a sheet's glass (nothing
-   passes beneath them in the page, so the surface), its hairline round it and the specular line along its top. */
-.schedule-editor, .compose-editor {
+/* Composing's editor is the tablet's sheet laid flat: a sheet's glass (nothing passes beneath it in the page, so the
+   surface), its hairline round it and the specular line along its top. */
+.compose-editor {
   margin: 8px 0 16px;
   border: 1px solid var(--hairline);
   border-radius: 24px;
@@ -1709,31 +1806,20 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
   overflow: hidden;
 }
 
-.schedule-editor > .eyebrow:first-child, .compose-editor > .eyebrow:first-child { padding-top: 18px; padding-bottom: 0; }
+.compose-editor > .eyebrow:first-child { padding-top: 18px; padding-bottom: 0; }
 
-.schedule-editor .section-head, .compose-editor .section-head { padding: 18px var(--inset) 6px; }
+.compose-editor .section-head { padding: 18px var(--inset) 6px; }
 
 .editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 600; }
 
-.schedule-editor .actions, .compose-editor .actions { flex-direction: column; padding-top: 8px; }
+.compose-editor .actions { flex-direction: column; padding-top: 8px; }
 
-.schedule-editor .editor-actions, .compose-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-top: 1px solid var(--hairline); }
+.compose-editor .editor-actions { flex-direction: row; justify-content: flex-end; border-top: 1px solid var(--hairline); }
 
 /* Studio's COMPOSE, closed: the button, its note under it, as the tablet's action row. */
 .actions.compose-start { flex-direction: column; align-items: flex-start; gap: 4px; padding-left: 4px; padding-right: 4px; }
 
-/* A time as two selects, hour and minutes, on the 24-hour clock whatever the browser's own. */
-.time-field { display: inline-flex; align-items: center; gap: 4px; flex: none; }
-
-.time-part { width: auto; min-width: 64px; min-height: 40px; padding: 0 12px; font-variant-numeric: tabular-nums; }
-
-.time-colon { font-weight: 500; }
-
-.schedule-list { margin-top: 8px; }
-
 .choice .glyph { color: var(--primary); }
-
-.choice.off { color: var(--secondary); cursor: default; }
 
 /* ---- Settings, built in (while settings.js is not there) --------------------------------------------- */
 
@@ -1799,7 +1885,7 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 
 /* Reduce transparency, or more contrast: solid surfaces and their hairlines, no scroll-edge bands, no backdrop. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .sections, .glass, .menu, .view-menu, .toast, .gate-card, .schedule-editor, .compose-editor, .sheet, .confirm, .popover {
+  .sections, .glass, .menu, .view-menu, .toast, .gate-card, .compose-editor, .sheet, .confirm, .popover {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     box-shadow: none;
@@ -1809,11 +1895,11 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
   .panel.scrolled .sections { background-image: none; }
   .sections::after { display: none; }
   .menu, .view-menu, .toast, .popover { background: var(--elevated); }
-  .gate-card, .schedule-editor, .compose-editor, .sheet, .confirm { background: var(--surface); }
+  .gate-card, .compose-editor, .sheet, .confirm { background: var(--surface); }
   .panel.scrolled .sections .nav-item { color: var(--secondary); }
   .panel.scrolled .sections .nav-item[aria-current="page"] { color: var(--primary); }
-  .panel.scrolled .connection { color: var(--secondary); }
-  .gate-card .eyebrow, .schedule-editor .eyebrow, .compose-editor .eyebrow, .sheet .eyebrow { color: var(--tertiary); }
+  .panel.scrolled .status-pill { color: var(--secondary); }
+  .gate-card .eyebrow, .compose-editor .eyebrow, .sheet .eyebrow { color: var(--tertiary); }
   .backdrop { display: none; }
 }
 
@@ -1826,12 +1912,58 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
   :root:not([data-theme="light"]) { --hairline: color-mix(in srgb, var(--primary) 40%, var(--surface)); }
 }
 
+/* ---- Motion (v1.20 — M53) ----------------------------------------------------------------------------------------
+   Smooth and responsive, transforms and opacity only, on the app's curves (--ease-enter, --ease-leave). A section
+   change cross-fades with a 6 px rise (200 ms; app.js lays the section going out over the page as .leaving); a list or
+   a cover grid comes in once a visit, each item 30 ms after the one before, 300 ms at most in all (.enter, --i from
+   app.js); Now playing's cover cross-fades and settles from 0.96 (300 ms, › Now playing); a press scales to 0.97
+   (100 ms); play and pause cross-fade (200 ms); a cover lifts 2 px under a fine pointer; a sheet rises 12 px and fades
+   (220 ms); a toast slides up; the bars ease (200 ms). Nothing here loops. */
+
+.page > .entering { animation: rise-in 200ms var(--ease-enter); }
+
+.page > .leaving { position: absolute; z-index: 1; margin: 0; pointer-events: none; animation: fade-out 200ms var(--ease-leave) forwards; }
+
+.enter { animation: rise-in 200ms var(--ease-enter) backwards; animation-delay: calc(var(--i, 0) * 30ms); }
+
+:is(.panel, dialog) :is(.outlined, .text-button, .icon-button, .chip, .segmented button, .capsule.button, .nav-item, .tab-item, .play-circle, .stepper button, .tile-play, .tile, .tile-more):active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+dialog.sheet[open], dialog.confirm[open] { animation: sheet-in 220ms var(--ease-enter); }
+
+dialog.sheet[open]::backdrop, dialog.confirm[open]::backdrop { animation: fade-in 220ms var(--ease-enter); }
+
+body > .toast:not([hidden]) { animation: toast-in 200ms var(--ease-enter); }
+
+body > .toast.offline:not([hidden]) { animation-name: toast-down; }
+
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px); } }
+
+@keyframes fade-in { from { opacity: 0; } }
+
+@keyframes fade-out { to { opacity: 0; } }
+
+@keyframes settle-in { from { transform: scale(0.96); } }
+
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
+
+@keyframes toast-down { from { opacity: 0; transform: translateY(-12px); } }
+
 /* Reduced motion: the bands come and go as a cut; nothing turns, breathes or sweeps; every change is a cut. */
 @media (prefers-reduced-motion: reduce) {
   .sections::after { transition: none; }
   .bd, .dot.live.breathing { animation: none; }
   .progress.waiting > span { animation: none; left: 0; }
   *, *::before, *::after { transition: none !important; }
+  /* v1.20 — M53: no section fades, no list comes in, no cover settles, no press, no lift, no sheet or toast moves. */
+  .page > .entering, .page > .leaving, .enter, .now-art.settle, .now-art .ghost, .status-pill:not([hidden]),
+  dialog.sheet[open], dialog.confirm[open], dialog.sheet[open]::backdrop, dialog.confirm[open]::backdrop, body > .toast:not([hidden]) { animation: none; }
+  .now-art .ghost { display: none; }
+  :is(.panel, dialog) :is(.outlined, .text-button, .icon-button, .chip, .segmented button, .capsule.button, .nav-item, .tab-item, .play-circle, .stepper button, .tile-play, .tile, .tile-more):active:not(:disabled),
+  .tile-play:hover .art { transform: none; }
 }
 
 /* ---- The request page -------------------------------------------------------------------------- */

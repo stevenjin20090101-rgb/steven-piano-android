@@ -59,6 +59,16 @@
     return svg;
   }
 
+  /** An empty state (v1.20 — M53): a 32 px glyph over its line. */
+  function emptyLine(id, text) {
+    return h('p', { class: 'empty' }, glyph(id), h('span', { text }));
+  }
+
+  /** [node], an empty state of the page's own, says [text] under the glyph [id]. */
+  function setEmpty(node, id, text) {
+    fill(node, glyph(id), h('span', { text }));
+  }
+
   /** "0:00", "4:31", "1:02:03", as the app's clock. */
   function clock(ms) {
     const s = Math.max(0, Math.floor(ms / 1000));
@@ -166,7 +176,8 @@
   /**
    * The relay's answer while the piano's tablet isn't connected (v1.10 — M26, `{"error":"offline"}`,
    * 503): before the panel has its state, the offline card in place of the PIN gate (start() looks
-   * again every few seconds); after, a line at the head of the window until the tablet answers again.
+   * again every few seconds); after, a line at the head of the window until the tablet answers again,
+   * and the rail's pill.
    */
   function offline(on) {
     if (state === null) {
@@ -176,6 +187,10 @@
         $('panel').hidden = true;
       }
       return;
+    }
+    if (connection.offline !== on) {
+      connection.offline = on;
+      renderStatus();
     }
     let node = $('offline-note');
     if (!on) {
@@ -188,8 +203,6 @@
     }
     node.textContent = 'The piano is offline. The panel comes back when its tablet does.';
     node.hidden = false;
-    $('conn-dot').classList.remove('live');
-    $('conn-text').textContent = 'Offline';
   }
 
   const get = (path) => call('GET', path);
@@ -426,86 +439,184 @@
   }
 
   function setConnected(on) {
-    $('conn-dot').classList.toggle('live', on);
-    $('conn-text').textContent = on ? `Connected · ${location.host}` : 'Reconnecting…';
+    connection.socket = on;
+    renderStatus();
+  }
+
+  // ---- The rail's head (v1.20 — M53): the mark, the name and a status dot; a pill only while something is wrong -----
+
+  /** The socket: null until it first opens (nothing to say yet), then whether it is open; the relay's offline answer. */
+  const connection = { socket: null, offline: false };
+
+  /**
+   * The dot is live while the socket is open. The pill under the name says what is wrong, and only then: the socket
+   * dropped or the piano offline ("Reconnecting…"), else the piano's link down ("Piano not connected"); all well, nothing.
+   */
+  function renderStatus() {
+    const up = connection.socket === true && !connection.offline;
+    const dot = $('conn-dot');
+    dot.classList.toggle('live', up);
+    dot.setAttribute('aria-label', up ? 'Connected to the tablet' : connection.socket === null ? 'Connecting' : 'Reconnecting');
+    let text = '';
+    if (connection.socket === false || connection.offline) text = 'Reconnecting…';
+    else if (up && state && state.link && state.link.state !== 'connected') text = 'Piano not connected';
+    const pill = $('conn-pill');
+    if (pill.textContent !== text) pill.textContent = text;
+    pill.hidden = !text;
   }
 
   // ---- Sections ---------------------------------------------------------------------------------
 
-  // The frame (v1.18 — M47): the rail's groups (Play, Plan, Make, Piano), the tab strip below 900 px, the bar and the
-  // More sheet below 600 px; every item names its section in data-section, the one shown carries aria-current. Up next
-  // is a section of its own only below 1100 px: from there it stands beside Now playing.
-  const SECTIONS = ['now', 'queue', 'library', 'channels', 'schedule', 'requests', 'add', 'studio', 'piano', 'system'];
-  /** The sections the phone's More sheet holds (the bar has Now playing, Up next and Library). */
-  const MORE = ['channels', 'schedule', 'requests', 'add', 'studio', 'piano', 'system'];
+  // The frame (v1.18 — M47; v1.20 — M53): five places, the same in the rail (from 900 px), the tab strip below it and
+  // the phones' bar below 600 px: Now playing, Library, Quiet times, Studio, Settings. Every item names its section in
+  // data-section; the one shown carries aria-current. The other places of 1.19 live inside these now (route()): Up next
+  // beside Now playing from 1100 px and in a sheet below it, the guests' requests at its top; the channels a segment of
+  // the Library and Add music its sheet; System the first page of Settings, Guests a page there. Timed plays are gone.
+  const SECTIONS = ['now', 'library', 'quiet', 'studio', 'settings'];
   const besideQuery = window.matchMedia('(min-width: 1100px)');
+  const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  /** Reduced motion: every change is a cut (style.css cuts the rest). */
+  const reduced = () => reducedQuery.matches;
   let section = 'now';
 
+  /** An address of 1.19 (a bookmark, a link) opens its new home; [hash] without its '#'. */
+  function route(hash) {
+    switch (hash) {
+      case 'queue':
+        show('now');
+        if (!besideQuery.matches) openSheet('queue');
+        return;
+      case 'requests':
+        show('now');
+        return;
+      case 'channels':
+        chooseKind('channels');
+        show('library');
+        return;
+      case 'add':
+        show('library');
+        openSheet('add');
+        return;
+      case 'system':
+        modules.settings.opening = 'system';
+        show('settings');
+        return;
+      case 'piano':
+        show('settings');
+        return;
+      case 'schedule':
+        show('quiet');
+        return;
+      default:
+        show(hash);
+    }
+  }
+
   function show(name) {
-    let next = SECTIONS.includes(name) ? name : 'now';
-    if (next === 'queue' && besideQuery.matches) next = 'now';
-    if (next === 'system' && modules.system.failed) next = 'now';   // no System page without its module
+    const next = SECTIONS.includes(name) ? name : 'now';
     const before = section;
     section = next;
-    closeMore();
+    const changed = before !== next;
     closePopover();
+    if (changed) {
+      closeSheets();
+      staggered = new Set();   // a new visit: its lists come in again
+    }
     for (const item of document.querySelectorAll('[data-section]')) {
       if (item.dataset.section === section) item.setAttribute('aria-current', 'page');
       else item.removeAttribute('aria-current');
     }
-    if (MORE.includes(section)) $('tab-more').setAttribute('aria-current', 'page');
-    else $('tab-more').removeAttribute('aria-current');
+    // Where the section going out stands, before the page changes under it.
+    const from = changed ? $(`section-${before}`) : null;
+    const box = from && !from.hidden && !reduced() ? { top: from.offsetTop - window.scrollY, left: from.offsetLeft, width: from.offsetWidth } : null;
     for (const page of document.querySelectorAll('[data-page]')) page.hidden = page.dataset.page !== section;
     if (location.hash !== '#' + section) history.replaceState(null, '', '#' + section);
     for (const key of Object.keys(modules)) if (key !== section) moduleHide(modules[key]);
     if (section === 'library') libraryLoad();
-    if (section === 'channels') channelsLoad();
-    if (section === 'schedule') scheduleLoad();
-    if (section === 'requests') requestsLoad();
-    if (section === 'piano') openSettings();
-    if (section === 'system') openSystem();
-    if (section === 'add') renderAdd();
+    if (section === 'settings') openSettings();
+    if (section === 'quiet') openQuiet();
     if (section === 'studio') renderStudio();
     render(state);
     if (views) views.show(section === 'now');
-    if (before !== section) window.scrollTo(0, 0);
+    if (changed) {
+      window.scrollTo(0, 0);
+      crossFade(from, $(`section-${section}`), box);
+    }
+    staggerPresent();
   }
 
   for (const item of document.querySelectorAll('[data-section]')) {
     item.addEventListener('click', () => show(item.dataset.section));
   }
 
-  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  window.addEventListener('hashchange', () => route(location.hash.slice(1)));
 
-  // From 1100 px Up next is beside Now playing: its own section gives way to it.
-  besideQuery.addEventListener('change', () => {
-    if (besideQuery.matches && section === 'queue') show('now');
-  });
+  // ---- Motion (v1.20 — M53): smooth and responsive, transforms and opacity only, none under reduced motion ---------
 
-  // ---- The More sheet (phones) ---------------------------------------------------------------------
+  /**
+   * A section change cross-fades: the new section fades in rising 6 px while the one going out fades where it stood,
+   * laid over the page (200 ms, ease-out; style.css › Motion). Under reduced motion a cut.
+   */
+  let leaving = null;
+  let leavingTimer = 0;
+  const SECTION_MS = 200;
 
-  /** The sections the bar has no room for, in the editors' sheet over it; a choice, Escape or a tap outside closes it. */
-  function openMore() {
-    const sheet = $('more-sheet');
-    if (sheet.open) return;
-    sheet.showModal();
-    $('tab-more').setAttribute('aria-expanded', 'true');
+  function finishLeaving() {
+    clearTimeout(leavingTimer);
+    if (!leaving) return;
+    const node = leaving;
+    leaving = null;
+    node.classList.remove('leaving');
+    node.inert = false;
+    node.removeAttribute('aria-hidden');
+    for (const property of ['top', 'left', 'width']) node.style.removeProperty(property);
+    node.hidden = node.dataset.page !== section;
   }
 
-  function closeMore() {
-    const sheet = $('more-sheet');
-    if (sheet.open) sheet.close();
+  function crossFade(from, to, box) {
+    finishLeaving();
+    // Nothing showed before (the panel opening on an address) or motion is reduced: a cut.
+    if (!to || !from || !box || from === to || reduced()) return;
+    to.classList.remove('entering');
+    void to.offsetWidth;   // the animation starts again for a section shown again at once
+    to.classList.add('entering');
+    setTimeout(() => to.classList.remove('entering'), SECTION_MS + 40);
+    leaving = from;
+    from.hidden = false;
+    from.inert = true;
+    from.setAttribute('aria-hidden', 'true');
+    from.style.setProperty('top', `${box.top}px`);
+    from.style.setProperty('left', `${box.left}px`);
+    from.style.setProperty('width', `${box.width}px`);
+    from.classList.add('leaving');
+    leavingTimer = setTimeout(finishLeaving, SECTION_MS + 20);
   }
 
-  $('tab-more').addEventListener('click', openMore);
-  // Past 600 px the bar gives way to the strip, and the sheet goes with it.
-  window.matchMedia('(max-width: 599px)').addEventListener('change', closeMore);
-  // Closing gives the focus back to More (the dialog's own rule).
-  $('more-sheet').addEventListener('close', () => $('tab-more').setAttribute('aria-expanded', 'false'));
-  // A tap on the scrim (the dialog itself, outside its body) closes it.
-  $('more-sheet').addEventListener('click', (event) => {
-    if (event.target === $('more-sheet')) closeMore();
-  });
+  /**
+   * Lists and cover grids come in on their first show of a visit: each item fades in rising, 30 ms after the one
+   * before, the eleventh and on with the tenth (300 ms at most in all). [key] names the list; [items] are its nodes.
+   */
+  let staggered = new Set();
+  const STAGGER_STEP_MS = 30;
+  const STAGGER_LAST = 10;
+
+  function staggerIn(key, items) {
+    if (reduced() || staggered.has(key)) return;
+    const nodes = Array.from(items || []).filter((node) => node.nodeType === Node.ELEMENT_NODE);
+    if (nodes.length === 0) return;
+    staggered.add(key);
+    nodes.forEach((node, i) => {
+      node.style.setProperty('--i', String(Math.min(i, STAGGER_LAST)));
+      node.classList.add('enter');
+    });
+    setTimeout(() => nodes.forEach((node) => node.classList.remove('enter')), STAGGER_LAST * STAGGER_STEP_MS + 240);
+  }
+
+  /** The lists already drawn in the section just shown: they come in as a new list does. */
+  function staggerPresent() {
+    if (section === 'now') staggerUpNext($('now-side'), 'queue');
+    if (section === 'library' && library.loaded && !library.asking) staggerLibrary();
+  }
 
   // The scroll-edge effect (DESIGN.md › v1.9): once the page is scrolled, the content fades into the
   // tab strip's glass (style.css, .scrolled). At the top of the page there is no band.
@@ -518,23 +629,79 @@
 
   function render(before) {
     if (!state) return;
+    renderStatus();
     renderNow();
-    if (section === 'queue') renderQueue($('queue-full'));
-    renderQueue($('now-side'), true);
+    renderUpNext($('now-side'), true);
+    if ($('queue-sheet').open) renderUpNext($('queue-full'), false);
     renderRequestsCount();
+    if (!before || before.requests.pending !== state.requests.pending) requestsLoad();
     if (section === 'library' && !library.loaded && !library.asking && performance.now() - library.failedAt >= LIBRARY_RETRY_MS) libraryLoad();
-    if (section === 'channels' && (!before || channelOf(before) !== channelOf(state))) channelsLoad();
-    if (section === 'requests' && (!before || before.requests.pending !== state.requests.pending)) requestsLoad();
-    if (section === 'requests') renderGuestSwitches();
-    if (section === 'schedule' && before && before.schedule.revision !== state.schedule.revision && !scheduling.editing) scheduleLoad();
-    if (section === 'add') renderTally();
+    if (section === 'library' && before && library.category === 'channels' && !library.query && channelOf(before) !== channelOf(state)) channelsLoad();
+    renderTally();
     if (section === 'studio') renderStudioState();
-    if (section === 'piano') {
-      if (modules.piano.page) moduleRender(modules.piano);
-      else if (modules.piano.failed) renderPiano();   // the built-in page, while settings.js is not there
+    if (section === 'settings') {
+      if (modules.settings.page) moduleRender(modules.settings);
+      else if (modules.settings.failed) renderPiano();   // the built-in page, while settings.js is not there
     }
-    if (section === 'system') moduleRender(modules.system);
+    if (section === 'quiet') moduleRender(modules.quiet);
   }
+
+  // ---- The sheets (v1.20 — M53): Up next below 1100 px, Add music; the editors' glass, rising as they open --------
+
+  const SHEETS = { queue: { dialog: 'queue-sheet', opener: 'queue-open', close: 'queue-close' }, add: { dialog: 'add-sheet', opener: 'add-open', close: 'add-close' } };
+
+  /** Opens the sheet [name] over the page (one at a time); Escape, its close button or a tap on the scrim closes it. */
+  function openSheet(name) {
+    const sheet = SHEETS[name];
+    if (!sheet || $('panel').hidden) return;
+    for (const other of Object.keys(SHEETS)) if (other !== name) closeSheet(other);
+    const dialog = $(sheet.dialog);
+    if (name === 'queue') {
+      requestsLoad();
+      renderUpNext($('queue-full'), false);
+    }
+    if (name === 'add') {
+      if (!$('add-body').firstChild) renderAdd();
+      renderUploads();
+      renderTally();
+    }
+    if (!dialog.open) dialog.showModal();
+    $(sheet.opener).setAttribute('aria-expanded', 'true');
+    if (name === 'queue') staggerUpNext($('queue-full'), 'sheet');
+  }
+
+  function closeSheet(name) {
+    const dialog = $(SHEETS[name].dialog);
+    if (dialog.open) dialog.close();
+  }
+
+  function closeSheets() {
+    for (const name of Object.keys(SHEETS)) closeSheet(name);
+  }
+
+  for (const [name, sheet] of Object.entries(SHEETS)) {
+    const dialog = $(sheet.dialog);
+    $(sheet.opener).addEventListener('click', () => openSheet(name));
+    $(sheet.close).addEventListener('click', () => closeSheet(name));
+    // Closing gives the focus back to what opened it (the dialog's own rule).
+    dialog.addEventListener('close', () => {
+      $(sheet.opener).setAttribute('aria-expanded', 'false');
+      if (name === 'queue') staggered.delete('sheet');
+    });
+    // A tap on the scrim (the dialog itself, outside its body) closes it; one that began inside does not.
+    let fromScrim = false;
+    dialog.addEventListener('pointerdown', (event) => {
+      fromScrim = event.target === dialog;
+    });
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog && fromScrim) closeSheet(name);
+    });
+  }
+
+  // From 1100 px Up next stands beside Now playing: its sheet gives way to it.
+  besideQuery.addEventListener('change', () => {
+    if (besideQuery.matches) closeSheet('queue');
+  });
 
   const channelOf = (s) => (s && s.player.channel ? s.player.channel.key : null);
 
@@ -841,7 +1008,9 @@
   //
   // v1.18 — M47: the art view (the cover large, the title, the composer, the scrubber, the transport, a row of glass
   // capsules) or, with Notes or Score, the strip over the views; Up next beside it from 1100 px; the album's colours
-  // behind the whole window while it shows (v1.15's backdrop, below).
+  // behind the whole window while it shows (v1.15's backdrop, below). v1.20 — M53: nothing but the piece's words under
+  // the cover (the instrument's lines are on Settings › System); the head's capsules say when the piano is quiet, open
+  // Up next below 1100 px, and show the piano's link as a dot.
 
   let seeking = false;
   let shownProblem = null;
@@ -852,17 +1021,15 @@
     const playing = player.status === 'playing';
     // Asked for at once, ahead of the rest, at the full size; its picture gives the backdrop its colours (the same
     // picture: left as it is).
-    art($('now-art'), piece, 'full', { priority: true, onPicture: backdropFrom });
+    nowArt(piece);
     $('now-art').hidden = !piece;
     $('section-now').classList.toggle('unloaded', !piece && !player.loading);
     $('now-title').textContent = piece ? piece.title : 'Choose a piece from the library.';
-    $('now-eyebrow').textContent = piece
-      ? [piece.composer, player.channel && `${player.channel.name} channel`].filter(Boolean).join(' · ')
-      : state.schedule.next || '';   // with nothing loaded, the next schedule (DESIGN.md › v1.6.2 — M19)
+    $('now-eyebrow').textContent = piece ? [piece.composer, player.channel && `${player.channel.name} channel`].filter(Boolean).join(' · ') : '';
     const play = $('now-play');
     play.disabled = !piece && !player.loading;
     play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    $('now-play-glyph').setAttribute('href', playing ? '#i-pause' : '#i-play');
+    play.classList.toggle('playing', playing);   // the two glyphs cross-fade (style.css)
     const queue = player.queue;
     $('now-previous').disabled = !piece;
     $('now-next').disabled = !piece || (queue.index + 1 >= queue.ids.length && queue.repeat !== 'all');
@@ -891,23 +1058,83 @@
       setRange($('tablet-volume-range'), tablet.volume, 100);
       $('tablet-volume-value').textContent = `${tablet.volume}%`;
     }
-    if (tablet) $('tablet-volume-note').textContent = tabletLine(tablet);
     if (popoverOpen && popoverOpen.button.hidden) closePopover();
-    // "Sent to piano", a capsule in the page's head: the dot live while connected, breathing while it plays.
+    // "Piano", a capsule in the page's head: the dot live while the piano is connected, breathing while it plays.
     const connected = state.link.state === 'connected';
     $('link-dot').classList.toggle('live', connected);
     $('link-dot').classList.toggle('breathing', connected && playing);
-    $('link-text').textContent = connected ? 'Sent to piano' : 'Not connected';
-    const [instrumentLine, keyboardLine] = instrumentLines(state.instruments);
-    $('instrument-line').textContent = instrumentLine || '';
-    $('instrument-line').hidden = !instrumentLine;
-    $('keyboard-line').textContent = keyboardLine || '';
-    $('keyboard-line').hidden = !keyboardLine;
+    $('link-state').textContent = connected ? ', connected' : ', not connected';
+    renderQuiet();
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
     updateBackdrop();
     tick();
   }
+
+  /**
+   * Now playing's cover. A new piece (or a new cover) cross-fades: the picture there was fades out over the new one
+   * (300 ms) while the cover settles from 0.96 (style.css › Motion); the same picture is left as it is. A cut under
+   * reduced motion, and none the first time the page draws.
+   */
+  let nowArtKey;
+
+  function nowArt(piece) {
+    const box = $('now-art');
+    const key = piece ? artKey(piece, 'full') : null;
+    const changed = nowArtKey !== undefined && key !== nowArtKey && !!piece && !reduced();
+    // Only a cover or a portrait (an <img>) is laid over as it fades; a roll card's mask is the CSSOM's, not copied.
+    const old = changed ? box.querySelector('img.picture.shown:not(.ghost)') : null;
+    nowArtKey = key;
+    art(box, piece, 'full', { priority: true, onPicture: backdropFrom });
+    if (!changed) return;
+    if (old) {
+      // The same <img>, already decoded, laid back over the new monogram (or picture) while it fades out.
+      old.classList.add('ghost');
+      box.append(old);
+      setTimeout(() => old.remove(), 340);
+    }
+    box.classList.remove('settle');
+    void box.offsetWidth;
+    box.classList.add('settle');
+    setTimeout(() => box.classList.remove('settle'), 340);
+  }
+
+  // ---- Quiet now (v1.20 — M54's quiet times) -----------------------------------------------------------------------
+  //
+  // The state's `quiet` ({now, until, overridden, next}; absent on older tablets: not quiet). While a quiet time holds
+  // and nobody has lifted it, Now playing's head says "Quiet until 9:30" and offers Play anyway, which lifts it until
+  // the block ends. A Play the tablet refuses meanwhile (409 quiet) says so in its own words, as every refusal does.
+
+  /** A moment as this browser's clock says it: "9:30", "21:00". */
+  function timeOfDay(epochMs) {
+    const d = new Date(epochMs);
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function quietNow() {
+    const quiet = state && state.quiet;
+    return !!(quiet && quiet.now && !quiet.overridden);
+  }
+
+  function renderQuiet() {
+    const on = quietNow();
+    $('quiet-capsule').hidden = !on;
+    $('quiet-override').hidden = !on;
+    if (!on) return;
+    const until = Number(state.quiet.until);
+    const text = until > 0 ? `Quiet until ${timeOfDay(until)}` : 'Quiet now';
+    if ($('quiet-text').textContent !== text) $('quiet-text').textContent = text;
+  }
+
+  $('quiet-override').addEventListener('click', async () => {
+    const until = state && state.quiet ? Number(state.quiet.until) : 0;
+    try {
+      await post(ROOT + '/api/quiet/override');
+      toast(until > 0 ? `Quiet lifted until ${timeOfDay(until)}.` : 'Quiet lifted.');
+    } catch (e) {
+      failed(e);
+    }
+  });
 
   // ---- Now playing's album colours (v1.15 — M41; v1.18 — M47: the whole window) --------------------------------
 
@@ -1204,13 +1431,6 @@
     volumeDragging = false;
   }, 150);
 
-  /** What the tablet's piano sound is doing, as the tablet's popover says it. */
-  function tabletLine(tablet) {
-    if (!tablet.installed) return "The piano sound isn't on the tablet yet: download it there, in Piano › Tablet sound.";
-    if (!tablet.active) return 'Silent while the piano is connected.';
-    return tablet.mode === 'always' ? 'Playing on the tablet with the piano.' : "Playing on the tablet while the piano isn't connected.";
-  }
-
   let tabletDragging = false;
   const sendTabletVolume = debounce(async (pct) => {
     try {
@@ -1283,6 +1503,9 @@
   window.addEventListener('scroll', () => closePopover(), { passive: true });
 
   // ---- Up next --------------------------------------------------------------------------------------
+  //
+  // Beside Now playing from 1100 px (a glass card) and below that in a sheet its capsule opens (v1.20 — M53). At its
+  // top the guests' requests waiting, each with approve and decline; then the piece playing and what follows.
 
   async function queueCommand(body) {
     try {
@@ -1290,6 +1513,33 @@
     } catch (e) {
       failed(e);
     }
+  }
+
+  /** Each Up next's two parts, made once: the requests group, then the queue. */
+  const upNextParts = new WeakMap();
+
+  function upNextOf(container) {
+    let parts = upNextParts.get(container);
+    if (!parts) {
+      parts = { requests: h('div', { class: 'requests-group', hidden: true }), queue: h('div', { class: 'queue-group' }) };
+      container.replaceChildren(parts.requests, parts.queue);
+      upNextParts.set(container, parts);
+    }
+    return parts;
+  }
+
+  /** The card beside Now playing ([compact]: no handles, the drop zone at its foot) or the sheet's list. */
+  function renderUpNext(container, compact) {
+    if (!container || !state) return;
+    const parts = upNextOf(container);
+    renderRequests(parts.requests);
+    renderQueue(parts.queue, compact);
+  }
+
+  /** Up next's rows come in as a list does, once a visit (the sheet: once each time it opens). */
+  function staggerUpNext(container, key) {
+    const parts = upNextParts.get(container);
+    if (parts) staggerIn(key, [...parts.requests.querySelectorAll('.row'), ...parts.queue.querySelectorAll('.row')]);
   }
 
   /** What each Up next list shows: a state message that changes none of it leaves the rows, and their pictures, as they are. */
@@ -1327,9 +1577,12 @@
       const same = boxes.get(artKey(piece, 'row'));
       return art((same && same.shift()) || h('div', { class: 'art' }), piece, 'row');
     };
-    const head = h('div', { class: 'queue-head' },
-      h('p', { class: 'eyebrow', text: total > 0 ? `Up next · ${plural(total, 'piece', 'pieces')}` : 'Up next' }),
-      upcoming.length > 0 ? h('button', { class: 'text-button', type: 'button', onclick: () => queueCommand({ action: 'clear' }), text: 'Clear' }) : null);
+    // The card names itself; the sheet's own head says Up next, so its line is the count alone.
+    const count = total > 0 ? plural(total, 'piece', 'pieces') : '';
+    const words = compact ? (count ? `Up next · ${count}` : 'Up next') : count;
+    const head = words || upcoming.length > 0 ? h('div', { class: 'queue-head' },
+      h('p', { class: 'eyebrow', text: words }),
+      upcoming.length > 0 ? h('button', { class: 'text-button', type: 'button', onclick: () => queueCommand({ action: 'clear' }), text: 'Clear' }) : null) : null;
     const list = h('ul', { class: 'rows' });
     if (current) {
       // The playing row, tinted, with a small three-bar mark (still: nothing loops but the backdrop).
@@ -1350,9 +1603,9 @@
           h('p', { class: 'meta' }, item.composerShort || 'Unknown composer', h('span', { class: 'meta-time', text: ` · ${clock(item.durationMs)}` }))),
         h('span', { class: 'time', text: clock(item.durationMs) }),
         h('span', { class: 'row-tools' },
-          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} up`, disabled: index === 0, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index - 1 }); } }, glyph('i-up')),
-          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} down`, disabled: index === upcoming.length - 1, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index + 1 }); } }, glyph('i-down')),
-          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Remove ${item.title} from the queue`, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'remove', uid: item.uid }); } }, glyph('i-close'))));
+          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} up`, disabled: index === 0, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index - 1 }); } }, glyph('g-up')),
+          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Move ${item.title} down`, disabled: index === upcoming.length - 1, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'move', uid: item.uid, toIndex: index + 1 }); } }, glyph('g-down')),
+          h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Remove ${item.title} from the queue`, onclick: (e) => { e.stopPropagation(); queueCommand({ action: 'remove', uid: item.uid }); } }, glyph('g-x'))));
       row.addEventListener('click', () => queueCommand({ action: 'skip', uid: item.uid }));
       row.addEventListener('dragstart', (event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -1360,12 +1613,15 @@
         row.classList.add('dragging');
       });
       row.addEventListener('dragend', () => row.classList.remove('dragging'));
+      // A row moved onto another; files dragged over the rows go on to the page's own drop (Add music).
       row.addEventListener('dragover', (event) => {
+        if (draggingFiles(event)) return;
         event.preventDefault();
         row.classList.add('drop-before');
       });
       row.addEventListener('dragleave', () => row.classList.remove('drop-before'));
       row.addEventListener('drop', (event) => {
+        if (draggingFiles(event)) return;
         event.preventDefault();
         row.classList.remove('drop-before');
         const uid = Number(event.dataTransfer.getData('text/plain'));
@@ -1378,9 +1634,87 @@
     fill(container,
       head,
       list,
-      upcoming.length === 0 ? h('p', { class: 'empty', text: 'Nothing up next.' }) : null,
+      upcoming.length === 0 ? emptyLine('g-queue', 'Nothing up next.') : null,
       compact ? dropZone() : null);
     for (const left of boxes.values()) left.forEach(artForget);
+  }
+
+  // ---- The guests' requests (v1.20 — M53: at the top of Up next) ---------------------------------------------------
+
+  /** The requests waiting (/api/requests), read again whenever the state's number of them changes or the sheet opens. */
+  const requests = { list: [], ticket: 0 };
+  const requestsShown = new WeakMap();
+
+  /** The number waiting, on Now playing's rail item and bar item and on Up next's capsule. */
+  function renderRequestsCount() {
+    const count = state.requests.pending;
+    for (const badge of document.querySelectorAll('[data-count="requests"]')) {
+      badge.hidden = count === 0;
+      badge.textContent = String(count);
+    }
+  }
+
+  async function requestsLoad() {
+    if (!state) return;
+    const ticket = ++requests.ticket;
+    if (!state.requests.pending) {
+      setRequests([]);
+      return;
+    }
+    try {
+      const data = await get(ROOT + '/api/requests');
+      if (ticket === requests.ticket) setRequests(Array.isArray(data.pending) ? data.pending : []);
+    } catch (e) {
+      // Quiet: the rows stay as they were and are read again with the next change (a refused approve says why).
+    }
+  }
+
+  function setRequests(list) {
+    requests.list = list;
+    for (const container of [$('now-side'), $('queue-full')]) {
+      const parts = upNextParts.get(container);
+      if (parts) renderRequests(parts.requests);
+    }
+  }
+
+  /** The requests group: its eyebrow with the number, a row each with approve and decline. Hidden with none. */
+  function renderRequests(holder) {
+    const list = requests.list;
+    const shows = JSON.stringify(list.map((r) => [r.id, r.title, r.composer, r.at]));
+    if (requestsShown.get(holder) === shows) return;
+    requestsShown.set(holder, shows);
+    holder.hidden = list.length === 0;
+    fill(holder, list.length === 0 ? null : [
+      h('div', { class: 'queue-head' }, h('p', { class: 'eyebrow', text: `Requests · ${list.length}` })),
+      h('ul', { class: 'rows' }, list.map(requestRow)),
+    ]);
+  }
+
+  function requestRow(request) {
+    const asked = Number(request.at) > 0 ? new Date(request.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+    const approve = h('button', { class: 'icon-button small approve', type: 'button', 'aria-label': `Approve ${request.title}` }, glyph('g-check'));
+    const decline = h('button', { class: 'icon-button small', type: 'button', 'aria-label': `Decline ${request.title}` }, glyph('g-x'));
+    approve.addEventListener('click', () => answer(request, 'approve', [approve, decline]));
+    decline.addEventListener('click', () => answer(request, 'dismiss', [approve, decline]));
+    return h('li', { class: 'row request-row' },
+      h('div', { class: 'text' },
+        h('p', { class: 'title', text: request.title }),
+        h('p', { class: 'meta', text: [request.composer || 'Unknown composer', asked].filter(Boolean).join(' · ') })),
+      h('span', { class: 'row-tools' }, approve, decline));
+  }
+
+  /** Approve (it joins Up next) or decline a request; its row goes at once, the state's next message says the rest. */
+  async function answer(request, action, buttons) {
+    for (const button of buttons) button.disabled = true;
+    try {
+      await post(ROOT + `/api/requests/${request.id}/${action}`);
+      setRequests(requests.list.filter((r) => r.id !== request.id));
+      if (action === 'approve') toast('Added to Up next.');
+    } catch (e) {
+      failed(e);
+      for (const button of buttons) button.disabled = false;
+      requestsLoad();
+    }
   }
 
   // ---- Library -------------------------------------------------------------------------------------
@@ -1416,6 +1750,8 @@
 
   const library = {
     category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, genre: storedGenre(), shows: storedLibraryView(), emptyText: '',
+    emptyGlyph: 'g-note',
+    listKey: '',        // the list drawn last, as its stagger names it (v1.20 — M53)
     loaded: false,      // the list asked for last is drawn
     asking: false,      // a list or a group is on its way
     failedAt: -Infinity,
@@ -1461,19 +1797,51 @@
   const scoped = (path) => (library.genre === 'all' ? path : `${path}?genre=${library.genre}`);
 
   /**
-   * A segmented control (v1.14 — M37, the tablet's): [options] as [key, label] pairs in [holder]'s capsule, the one
-   * [current] names pressed; a press calls [onChoose] with its key. Built once, then marked in place, so the thumb fades.
+   * A segmented control (v1.14 — M37, the tablet's): [options] as [key, label] pairs (or [key, label, glyph], v1.20 —
+   * M53) in [holder]'s capsule, the one [current] names pressed; a press calls [onChoose] with its key. Built once (again
+   * when its words change), then marked in place, so the thumb fades.
    */
+  const segmentedShown = new WeakMap();
+
   function segmented(holder, options, current, onChoose) {
-    if (holder.childElementCount !== options.length) {
-      holder.replaceChildren(...options.map(([key, label]) => h('button', { type: 'button', 'data-key': key, onclick: () => onChoose(key) }, label)));
+    const words = options.map(([key, label, icon]) => `${key}:${label}:${icon || ''}`).join('|');
+    if (segmentedShown.get(holder) !== words || holder.childElementCount !== options.length) {
+      segmentedShown.set(holder, words);
+      holder.replaceChildren(...options.map(([key, label, icon]) => h('button', { type: 'button', 'data-key': key, onclick: () => onChoose(key) },
+        icon ? [glyph(icon), h('span', { text: label })] : label)));
     }
     for (const button of holder.children) button.setAttribute('aria-pressed', button.dataset.key === current ? 'true' : 'false');
   }
 
+  // The Library's four lists (v1.20 — M53): Pieces (All · Favorites · Recent under it) · Playlists · Composers (Artists
+  // under Modern) · Channels, each with its glyph; a search shows pieces, whichever is chosen.
+  const PIECE_CATEGORIES = ['all', 'favorites', 'recent'];
+  const PIECE_CHIPS = [['all', 'All'], ['favorites', 'Favorites'], ['recent', 'Recent']];
+  const libraryKinds = () => [['pieces', 'Pieces', 'g-note'], ['playlists', 'Playlists', 'g-playlist'], ['composers', artists() ? 'Artists' : 'Composers', 'g-person'], ['channels', 'Channels', 'g-channels']];
+  const kindOf = () => (library.query || PIECE_CATEGORIES.includes(library.category) ? 'pieces' : library.category);
+
+  /**
+   * One of the four, chosen: the search clears and a playlist or composer open closes; Pieces keeps its chip. Whatever
+   * list was on its way is for the one before; the new one is asked for when the Library shows (or at once, by its press).
+   */
+  function chooseKind(kind) {
+    library.category = kind !== 'pieces' ? kind : PIECE_CATEGORIES.includes(library.category) ? library.category : 'all';
+    library.query = '';
+    library.view = null;
+    library.loaded = false;
+    library.asking = false;
+    libraryAsked += 1;
+    $('lib-search').value = '';
+  }
+
   function renderGenre() {
+    segmented($('lib-kind'), libraryKinds(), kindOf(), (kind) => {
+      chooseKind(kind);
+      libraryLoad(true);
+    });
     segmented($('lib-genre'), GENRES, library.genre, chooseGenre);
     segmented($('lib-view'), LIBRARY_VIEWS, library.shows, chooseLibraryView);
+    $('lib-genre').hidden = kindOf() === 'channels';   // the channels are every genre's
     $('lib-search').placeholder = SEARCH_WORDS[library.genre];
   }
 
@@ -1487,7 +1855,7 @@
     }
     library.shows = value;
     segmented($('lib-view'), LIBRARY_VIEWS, library.shows, chooseLibraryView);
-    if (!$('lib-view').hidden) renderPieces(library.pieces, library.emptyText);
+    if (!$('lib-view').hidden) renderPieces(library.pieces, library.emptyText, library.emptyGlyph);
   }
 
   /** Another genre: remembered in this browser; a playlist or composer open closes, the chip and the search stay. */
@@ -1503,13 +1871,14 @@
     libraryLoad(true);
   }
 
+  /** Under Pieces, with no search: All · Favorites · Recent. */
   function renderChips() {
-    const chips = [['all', 'Pieces'], ['playlists', 'Playlists'], ['composers', artists() ? 'Artists' : 'Composers'], ['favorites', 'Favorites'], ['recent', 'Recent']];
-    $('lib-chips').replaceChildren(...chips.map(([key, label]) => chip(label, library.category === key && !library.query, () => {
+    const holder = $('lib-chips');
+    holder.hidden = kindOf() !== 'pieces' || !!library.query;
+    if (holder.hidden) return;
+    holder.replaceChildren(...PIECE_CHIPS.map(([key, label]) => chip(label, library.category === key, () => {
       library.category = key;
-      library.query = '';
       library.view = null;
-      $('lib-search').value = '';
       libraryLoad(true);
     })));
   }
@@ -1531,6 +1900,7 @@
     if (library.query) return libraryPage(0);
     if (library.category === 'playlists') return playlistsLoad();
     if (library.category === 'composers') return composersLoad();
+    if (library.category === 'channels') return channelsLoad();
     return libraryPage(0);
   }
 
@@ -1542,28 +1912,57 @@
       library.pieces = offset === 0 ? page.pieces : library.pieces.concat(page.pieces);
       library.total = page.total;
       library.offset = offset + page.pieces.length;
-      renderPieces(library.pieces, library.query ? 'Nothing matches that search.' : 'No pieces here yet.');
+      library.listKey = library.query ? 'search' : library.category;
+      renderPieces(library.pieces, library.query ? 'Nothing matches that search.' : 'No pieces here yet.', library.query ? 'g-search' : 'g-note');
       $('lib-more').hidden = library.offset >= library.total;
     }, offset === 0);
   }
 
+  /**
+   * The Library's body: the rows (or covers) of a list, or the channels' cards. The one going away lets go of its
+   * pictures.
+   */
+  function showListBody(channels) {
+    $('lib-channels').hidden = !channels;
+    $('lib-rows').hidden = channels;
+    if (channels) {
+      artForgetIn($('lib-rows'));
+      $('lib-rows').replaceChildren();
+      $('lib-more').hidden = true;
+      $('lib-view').hidden = true;
+    } else {
+      artForgetIn($('channel-tiles'));
+      $('channel-tiles').replaceChildren();
+    }
+  }
+
+  /** A list's items come in once a visit (v1.20 — M53): each list by its own name. */
+  function staggerLibrary() {
+    const items = $('lib-channels').hidden ? $('lib-rows').children : $('channel-tiles').children;
+    staggerIn(`library:${library.listKey}`, items);
+  }
+
   /** A list of pieces (a category's, a playlist's, a composer's, a search's): a grid of covers, or the rows. */
-  function renderPieces(pieces, emptyText) {
+  function renderPieces(pieces, emptyText, emptyGlyph) {
+    showListBody(false);
     const list = $('lib-rows');
     artForgetIn(list);   // the rows go: nothing keeps watching them
     library.pieces = pieces;
     library.emptyText = emptyText;
+    library.emptyGlyph = emptyGlyph || 'g-note';
     const covers = library.shows === 'covers';
     list.className = covers ? 'cover-grid' : 'rows card';
     $('lib-view').hidden = false;
     const ids = pieces.map((p) => p.id);
     list.replaceChildren(...pieces.map((piece) => (covers ? pieceTile(piece, ids) : pieceRow(piece, ids))));
     $('lib-empty').hidden = pieces.length > 0;
-    $('lib-empty').textContent = emptyText;
+    setEmpty($('lib-empty'), library.emptyGlyph, emptyText);
+    staggerLibrary();
   }
 
   /** The playlists' and the composers' lists stay rows; Covers · List is for pieces. */
   function rowsOnly() {
+    showListBody(false);
     $('lib-rows').className = 'rows card';
     $('lib-view').hidden = true;
   }
@@ -1694,7 +2093,9 @@
         return row;
       }));
       $('lib-empty').hidden = playlists.length > 0;
-      $('lib-empty').textContent = 'No playlists yet.';
+      setEmpty($('lib-empty'), 'g-playlist', 'No playlists yet.');
+      library.listKey = 'playlists';
+      staggerLibrary();
     }, true);
   }
 
@@ -1721,7 +2122,9 @@
         return row;
       }));
       $('lib-empty').hidden = composers.length > 0;
-      $('lib-empty').textContent = artists() ? 'No artists yet.' : 'No composers yet.';
+      setEmpty($('lib-empty'), 'g-person', artists() ? 'No artists yet.' : 'No composers yet.');
+      library.listKey = 'composers';
+      staggerLibrary();
     }, true);
   }
 
@@ -1751,21 +2154,24 @@
       h('button', { class: 'outlined', type: 'button', onclick: run(true), disabled: pieces.length === 0 }, 'Shuffle'));
     crumb.hidden = false;
     $('lib-more').hidden = true;
-    renderPieces(pieces, 'Nothing in here yet.');
+    library.listKey = 'group';
+    renderPieces(pieces, 'Nothing in here yet.', 'g-playlist');
   }
 
-  // ---- Channels --------------------------------------------------------------------------------------
+  // ---- Channels (v1.20 — M53: the Library's fourth list) --------------------------------------------------------
 
-  async function channelsLoad() {
-    try {
-      const { channels, playing } = await get(ROOT + '/api/channels');
-      $('channel-stop').hidden = !playing;
-      $('channels-empty').hidden = channels.length > 0;
+  /** The channels' cards in the Library's body, and Stop the channel over them while one plays. */
+  function channelsLoad() {
+    return libraryAsk(() => get(ROOT + '/api/channels'), ({ channels, playing }) => {
+      showListBody(true);
+      $('channel-bar').hidden = !playing;
+      $('lib-empty').hidden = channels.length > 0;
+      setEmpty($('lib-empty'), 'g-channels', 'The channels are being worked out from the library.');
       artForgetIn($('channel-tiles'));
       $('channel-tiles').replaceChildren(...channels.map(channelTile));
-    } catch (e) {
-      failed(e);
-    }
+      library.listKey = 'channels';
+      staggerLibrary();
+    }, true);
   }
 
   /** A channel's card: a mosaic of the composers it holds most, its name on the band, and how many pieces, or Playing with the dot. */
@@ -1804,352 +2210,7 @@
     }
   });
 
-  // ---- Schedule ------------------------------------------------------------------------------------
-
-  // The tablet's Piano › Schedule (DESIGN.md › v1.6.2 — M19): the next start and what the last one did,
-  // a row a schedule with its switch, and an editor with the tablet's fields. The tablet checks every
-  // save again (the same rules) and keeps the one alarm; its words come back when it refuses one.
-
-  const DAYS = [['Mon', 'Monday'], ['Tue', 'Tuesday'], ['Wed', 'Wednesday'], ['Thu', 'Thursday'], ['Fri', 'Friday'], ['Sat', 'Saturday'], ['Sun', 'Sunday']];
-  const WEEKDAYS = 31;
-  const EVERY_DAY = 127;
-  const scheduling = { data: null, editing: null, tab: 'channel', query: '', deleting: null, error: null, channels: null, playlists: null, pieces: null };
-
-  async function scheduleLoad() {
-    try {
-      scheduling.data = await get(ROOT + '/api/schedules');
-      renderSchedule();
-    } catch (e) {
-      failed(e);
-    }
-  }
-
-  /** Why the schedule being edited can't be saved, as the tablet says it; null when it can. */
-  function scheduleProblem(d) {
-    if (!d.days) return 'Choose at least one day.';
-    if (d.endMinute !== null && d.endMinute === d.startMinute) return 'The end must differ from the start.';
-    if (!d.kind || !d.target) return 'Choose what to play.';
-    return null;
-  }
-
-  function renderSchedule() {
-    const data = scheduling.data;
-    const body = $('schedule-body');
-    if (!data || !body) return;
-    $('schedule-add').hidden = !!scheduling.editing;
-    fill(body,
-      data.next ? h('p', { class: 'eyebrow inset schedule-next', text: data.next }) : null,
-      data.last && data.schedules.length ? h('p', { class: 'note inset', text: data.last }) : null,
-      data.exactAlarms ? null : h('div', { class: 'banner', role: 'status', text: 'Exact alarms are off on the tablet, so no schedule will start. Allow them there: Piano › Schedule › Allow exact alarms.' }),
-      scheduling.editing ? scheduleEditor() : null,
-      h('ul', { class: 'rows card schedule-list' }, data.schedules.map(scheduleRow)),
-      data.schedules.length === 0 && !scheduling.editing ? h('p', { class: 'empty', text: 'No schedules yet. The piano can play by itself at set times: a channel, a playlist or a piece.' }) : null,
-      h('p', { class: 'note inset', text: 'The tablet starts them: keep it on, charged and near the piano.' }));
-  }
-
-  /** What a schedule's fields are, as the tablet takes them. */
-  const fields = (s) => ({ days: s.days, startMinute: s.startMinute, kind: s.kind, target: s.target, endMinute: s.endMinute, volumePct: s.volumePct, enabled: s.enabled });
-
-  function scheduleRow(s) {
-    if (scheduling.deleting === s.id) {
-      return h('li', { class: 'row' },
-        h('div', { class: 'text' }, h('p', { class: 'title', text: 'Delete this schedule?' }), h('p', { class: 'meta', text: `${s.when} · ${s.what}. It won't play again.` })),
-        h('button', { class: 'text-button', type: 'button', onclick: () => { scheduling.deleting = null; renderSchedule(); } }, 'Cancel'),
-        h('button', { class: 'outlined', type: 'button', onclick: () => deleteSchedule(s) }, 'Delete schedule'));
-    }
-    const toggle = h('button', { class: 'switch', role: 'switch', type: 'button', 'aria-checked': s.enabled ? 'true' : 'false', 'aria-label': `${s.when}, ${s.what}` });
-    toggle.addEventListener('click', (event) => {
-      event.stopPropagation();
-      toggle.setAttribute('aria-checked', s.enabled ? 'false' : 'true');
-      sendSchedule({ ...fields(s), enabled: !s.enabled }, s.id);
-    });
-    const row = h('li', { class: 'row clickable schedule-row' },
-      h('div', { class: 'text' },
-        h('p', { class: s.enabled ? 'title' : 'title off', text: s.when }),
-        h('p', { class: 'meta', text: s.what })),
-      toggle,
-      h('button', { class: 'icon-button', type: 'button', 'aria-label': `More for ${s.when}`, 'aria-haspopup': 'menu', onclick: (event) => {
-        event.stopPropagation();
-        showMenu(event.currentTarget, s.when, [
-          ['Edit', () => editSchedule(s)],
-          ['Delete', () => { scheduling.deleting = s.id; renderSchedule(); }],
-        ]);
-      } }, glyph('i-more')));
-    row.addEventListener('click', () => editSchedule(s));
-    return row;
-  }
-
-  function editSchedule(s) {
-    scheduling.editing = { id: s.id, ...fields(s), name: s.name };
-    scheduling.tab = s.kind;
-    scheduling.error = null;
-    renderSchedule();
-    $('schedule-body').scrollIntoView({ block: 'start' });
-  }
-
-  $('schedule-add').addEventListener('click', () => {
-    const now = new Date();
-    const start = ((now.getHours() + 1) % 24) * 60;
-    scheduling.editing = { id: null, days: WEEKDAYS, startMinute: start, kind: null, target: null, endMinute: (start + 60) % 1440, volumePct: 70, enabled: true, name: null };
-    scheduling.tab = 'channel';
-    scheduling.error = null;
-    renderSchedule();
-  });
-
-  /** The editor: DAYS, TIME, PLAYS and VOLUME as on the tablet, then what keeps it from saving, Cancel and Save. */
-  function scheduleEditor() {
-    const d = scheduling.editing;
-    const again = () => {
-      scheduling.error = null;
-      renderSchedule();
-    };
-    const dayChips = DAYS.map(([short, full], i) => {
-      const bit = 1 << i;
-      const node = chip(short, (d.days & bit) !== 0, () => {
-        d.days ^= bit;
-        again();
-      });
-      node.setAttribute('aria-label', full);
-      return node;
-    });
-    const problem = scheduling.error || scheduleProblem(d);
-    return h('div', { class: 'schedule-editor' },
-      h('p', { class: 'eyebrow inset', text: 'Schedule' }),
-      h('h2', { class: 'editor-title', text: d.id ? 'Edit schedule' : 'Add schedule' }),
-      h('h3', { class: 'section-head eyebrow', text: 'Days' }),
-      h('div', { class: 'actions' },
-        h('div', { class: 'chips', role: 'group', 'aria-label': 'Days' }, dayChips),
-        h('div', { class: 'chips' },
-          chip('Weekdays', d.days === WEEKDAYS, () => { d.days = WEEKDAYS; again(); }),
-          chip('Every day', d.days === EVERY_DAY, () => { d.days = EVERY_DAY; again(); }))),
-      h('h3', { class: 'section-head eyebrow', text: 'Time' }),
-      timeSetting('Starts', d.startMinute, null, (m) => { d.startMinute = m; again(); }),
-      switchSetting('Until the end', d.endMinute === null, 'A playlist or a piece plays to its end; a channel plays until someone stops it', (on) => {
-        d.endMinute = on ? null : (d.startMinute + 60) % 1440;
-        again();
-      }),
-      d.endMinute === null ? null : timeSetting('Ends', d.endMinute, d.endMinute < d.startMinute ? 'The next day' : null, (m) => { d.endMinute = m; again(); }),
-      h('h3', { class: 'section-head eyebrow', text: 'Plays' }),
-      h('div', { class: 'actions' }, h('div', { class: 'chips', role: 'group', 'aria-label': 'Plays' },
-        [['channel', 'Channels'], ['playlist', 'Playlists'], ['piece', 'Pieces']].map(([kind, label]) => chip(label, scheduling.tab === kind, () => {
-          scheduling.tab = kind;
-          renderSchedule();
-        })))),
-      scheduleChoices(d),
-      h('h3', { class: 'section-head eyebrow', text: 'Volume' }),
-      switchSetting('Set the volume', d.volumePct !== null, 'Off: the piano plays as it is set, and a channel at its own volume', (on) => {
-        d.volumePct = on ? 70 : null;
-        again();
-      }),
-      d.volumePct === null ? null : volumeSetting(d),
-      problem ? h('p', { class: 'note inset', role: 'status', text: problem }) : null,
-      h('div', { class: 'actions editor-actions' },
-        h('button', { class: 'text-button', type: 'button', onclick: () => { scheduling.editing = null; renderSchedule(); } }, 'Cancel'),
-        h('button', { class: 'outlined', type: 'button', disabled: !!scheduleProblem(d), onclick: () => sendSchedule(fields(d), d.id, true) }, 'Save')));
-  }
-
-  /** A time of day on the 24-hour clock, as the tablet shows it whatever the browser's own clock: the hour and the minutes. */
-  function timeSetting(label, minute, note, onChange) {
-    const select = (count, value, name) => {
-      const node = h('select', { class: 'field time-part', 'aria-label': `${label}, ${name}` },
-        Array.from({ length: count }, (_, i) => h('option', { value: String(i), text: String(i).padStart(2, '0') })));
-      node.value = String(value);
-      return node;
-    };
-    const hour = select(24, Math.floor(minute / 60), 'hour');
-    const minutes = select(60, minute % 60, 'minutes');
-    const changed = () => onChange(Number(hour.value) * 60 + Number(minutes.value));
-    hour.addEventListener('change', changed);
-    minutes.addEventListener('change', changed);
-    return h('div', { class: 'setting' },
-      h('div', { class: 'label' }, label, note ? h('span', { class: 'meta', text: note }) : null),
-      h('div', { class: 'time-field' }, hour, h('span', { class: 'time-colon', text: ':' }), minutes));
-  }
-
-  function switchSetting(label, on, note, onChange) {
-    const button = h('button', { class: 'switch', role: 'switch', type: 'button', 'aria-checked': on ? 'true' : 'false', 'aria-label': label });
-    button.addEventListener('click', () => onChange(!on));
-    return h('div', { class: 'setting' }, h('div', { class: 'label' }, label, h('span', { class: 'meta', text: note })), button);
-  }
-
-  function volumeSetting(d) {
-    const range = h('input', { class: 'range', type: 'range', min: '0', max: '100', step: '1', 'aria-label': 'Schedule volume' });
-    const value = h('span', { class: 'value', text: `${d.volumePct}%` });
-    setRange(range, d.volumePct, 100);
-    range.addEventListener('input', () => {
-      d.volumePct = Number(range.value);
-      setRange(range, d.volumePct, 100);
-      value.textContent = `${d.volumePct}%`;
-    });
-    return h('div', { class: 'setting stacked' },
-      h('div', { class: 'label' }, 'Schedule volume', h('span', { class: 'eyebrow', text: '%' })),
-      h('div', { class: 'with-value' }, range, value),
-      h('p', { class: 'meta', text: "The piano's own volume while it plays, or how hard its keys are struck where the piano has none. What was there comes back when it ends." }));
-  }
-
-  /** The choices for what to play, as rows with a check on the chosen one: the channels, the playlists, or pieces searched. */
-  function scheduleChoices(d) {
-    const list = h('ul', { class: 'rows', role: 'radiogroup', 'aria-label': 'What to play' });
-    const choose = (kind, target, name) => {
-      d.kind = kind;
-      d.target = String(target);
-      d.name = name;
-      scheduling.error = null;
-      renderSchedule();
-    };
-    const row = (kind, target, title, meta, enabled) => {
-      const chosen = d.kind === kind && d.target === String(target);
-      const node = h('li', { class: enabled ? 'row clickable choice' : 'row choice off', role: 'radio', tabindex: enabled ? '0' : '-1', 'aria-checked': chosen ? 'true' : 'false', 'aria-disabled': enabled ? null : 'true' },
-        h('div', { class: 'text' }, h('p', { class: 'title', text: title }), meta ? h('p', { class: 'meta', text: meta }) : null),
-        chosen ? glyph('i-check') : null);
-      if (enabled) {
-        node.addEventListener('click', () => choose(kind, target, title));
-        node.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            choose(kind, target, title);
-          }
-        });
-      }
-      return node;
-    };
-    const fillRows = (rows, empty) => fill(list, rows.length ? rows : h('li', { class: 'row' }, h('p', { class: 'meta', text: empty })));
-    const wrap = h('div', { class: 'choices' });
-    if (scheduling.tab === 'channel') {
-      const show = () => fillRows(scheduling.channels.map((c) => row('channel', c.key, c.name, c.playable ? plural(c.size, 'piece', 'pieces') : 'Add more pieces', c.playable)), 'The channels are being worked out from the library.');
-      if (scheduling.channels) show();
-      else get(ROOT + '/api/channels').then((r) => { scheduling.channels = r.channels; show(); }).catch(failed);
-      wrap.append(list);
-    } else if (scheduling.tab === 'playlist') {
-      const show = () => fillRows(scheduling.playlists
-        .slice().sort((a, b) => Number(b.builtIn) - Number(a.builtIn))
-        .map((p) => row('playlist', p.id, p.name, [p.builtIn ? 'Built in' : null, plural(p.pieceCount, 'piece', 'pieces')].filter(Boolean).join(' · '), true)), 'No playlists yet.');
-      if (scheduling.playlists) show();
-      else get(ROOT + '/api/playlists').then((r) => { scheduling.playlists = r.playlists; show(); }).catch(failed);
-      wrap.append(list);
-    } else {
-      const search = h('input', { class: 'field', type: 'search', placeholder: 'Search titles and composers', 'aria-label': 'Search pieces', autocomplete: 'off', maxlength: '200' });
-      search.value = scheduling.query;
-      const show = (pieces) => {
-        const rows = pieces.map((p) => row('piece', p.id, p.title, [p.composerShort || 'Unknown composer', clock(p.durationMs)].join(' · '), true));
-        const chosenShown = pieces.some((p) => d.kind === 'piece' && String(p.id) === d.target);
-        if (d.kind === 'piece' && d.target && !chosenShown) rows.unshift(row('piece', d.target, d.name || 'The piece chosen', null, true));
-        fillRows(rows, scheduling.query ? 'Nothing matches that search.' : 'No pieces yet.');
-      };
-      const load = () => {
-        const params = new URLSearchParams({ limit: '30' });
-        if (scheduling.query) params.set('q', scheduling.query);
-        else params.set('category', 'recent');
-        get(ROOT + `/api/library?${params}`).then((page) => show(page.pieces)).catch(failed);
-      };
-      search.addEventListener('input', debounce(() => {
-        scheduling.query = search.value.trim();
-        load();
-      }, 250));
-      load();
-      wrap.append(h('div', { class: 'inset' }, search), list);
-    }
-    return wrap;
-  }
-
-  /** Saves a schedule: a new one (POST) or [id]'s (PUT); the tablet's refusal comes back in its own words. */
-  async function sendSchedule(body, id, fromEditor) {
-    try {
-      if (id) await put(ROOT + `/api/schedules/${id}`, body);
-      else await post(ROOT + '/api/schedules', body);
-      if (fromEditor) {
-        scheduling.editing = null;
-        toast('Saved. The tablet starts it on time.');
-      }
-      await scheduleLoad();
-    } catch (e) {
-      if (fromEditor && e.status && e.status !== 401) {
-        scheduling.error = e.message;
-        renderSchedule();
-      } else {
-        failed(e);
-        scheduleLoad();
-      }
-    }
-  }
-
-  async function deleteSchedule(s) {
-    scheduling.deleting = null;
-    try {
-      await del(ROOT + `/api/schedules/${s.id}`);
-      toast('Schedule deleted.');
-    } catch (e) {
-      failed(e);
-    }
-    scheduleLoad();
-  }
-
-  // ---- Requests ------------------------------------------------------------------------------------
-
-  /** The number waiting, on the rail's Requests and the More sheet's. */
-  function renderRequestsCount() {
-    const count = state.requests.pending;
-    for (const badge of document.querySelectorAll('[data-count="requests"]')) {
-      badge.hidden = count === 0;
-      badge.textContent = String(count);
-    }
-  }
-
-  async function requestsLoad() {
-    try {
-      const data = await get(ROOT + '/api/requests');
-      $('requests-empty').hidden = data.pending.length > 0;
-      $('requests-rows').replaceChildren(...data.pending.map((request) => h('li', { class: 'row' },
-        h('div', { class: 'text' },
-          h('p', { class: 'title', text: request.title }),
-          h('p', { class: 'meta', text: [request.composer || 'Unknown composer', new Date(request.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })].join(' · ') })),
-        h('button', { class: 'outlined', type: 'button', onclick: () => answer(request.id, 'approve') }, 'Approve'),
-        h('button', { class: 'text-button', type: 'button', onclick: () => answer(request.id, 'dismiss') }, 'Dismiss'))));
-      renderGuestSwitches();
-    } catch (e) {
-      failed(e);
-    }
-  }
-
-  async function answer(id, action) {
-    try {
-      await post(ROOT + `/api/requests/${id}/${action}`);
-      requestsLoad();
-    } catch (e) {
-      failed(e);
-    }
-  }
-
-  function renderGuestSwitches() {
-    if (!state) return;
-    setSwitch($('guests-open'), state.requests.guests);
-    setSwitch($('guests-approve'), state.requests.approveFirst, !state.requests.guests);
-    const guest = state.web.guestAddress;
-    $('guests-address').textContent = guest ? `Guests ask at ${guest}, or with the poster's code.` : '';
-  }
-
-  function setSwitch(button, on, disabled) {
-    button.setAttribute('aria-checked', on ? 'true' : 'false');
-    button.disabled = !!disabled;
-  }
-
-  $('guests-open').addEventListener('click', async () => {
-    try {
-      await put(ROOT + '/api/settings', { webGuests: !state.requests.guests });
-    } catch (e) {
-      failed(e);
-    }
-  });
-
-  $('guests-approve').addEventListener('click', async () => {
-    try {
-      await put(ROOT + '/api/settings', { webApproveFirst: !state.requests.approveFirst });
-    } catch (e) {
-      failed(e);
-    }
-  });
-
-  // ---- Add ---------------------------------------------------------------------------------------------
+  // ---- Add music (v1.20 — M53: a sheet the Library's head opens) ------------------------------------------------
 
   const MIDI_BYTES = 8 * 1024 * 1024;
   const ZIP_BYTES = 64 * 1024 * 1024;
@@ -2178,7 +2239,7 @@
     const zone = h('div', { class: 'drop' },
       h('p', { text: options.title }),
       h('p', { class: 'meta', text: options.meta }),
-      h('button', { class: 'outlined', type: 'button', onclick: () => input.click() }, glyph('i-add'), options.button),
+      h('button', { class: 'outlined', type: 'button', onclick: () => input.click() }, glyph('g-plus'), options.button),
       input);
     zone.addEventListener('dragover', (event) => {
       if (!event.dataTransfer || !Array.from(event.dataTransfer.types).includes('Files')) return;
@@ -2194,6 +2255,28 @@
     });
     return zone;
   }
+
+  // Files dropped anywhere on the page (v1.20 — M53, the Add page's being a sheet now): MIDI files and zips on Now
+  // playing or the Library go to the tablet as the sheet's zone sends them, the sheet opening on their progress, and
+  // recordings on Studio as its zone does. A drop a zone took is its own; elsewhere a drop is let go, never opened by
+  // the browser in the panel's place.
+  const draggingFiles = (event) => !!event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files');
+  const dropsHere = () => section === 'now' || section === 'library' || section === 'studio';
+
+  document.addEventListener('dragover', (event) => {
+    if (!draggingFiles(event) || $('panel').hidden) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = dropsHere() ? 'copy' : 'none';
+  });
+
+  document.addEventListener('drop', (event) => {
+    if (!draggingFiles(event) || $('panel').hidden || event.defaultPrevented) return;   // a zone took it
+    event.preventDefault();
+    const files = event.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    if (section === 'studio') addRecordings(files);
+    else if (section === 'now' || section === 'library') addFiles(files);
+  });
 
   function renderAdd() {
     $('add-body').replaceChildren(
@@ -2219,27 +2302,34 @@
       else upload.pending = true;
       uploads.unshift(upload);
     }
-    if (section !== 'add') show('add');
+    openSheet('add');   // where they show going
     renderUploads();
     sendNext();
   }
 
+  /** The uploads' lists (the Add sheet's, Studio's): the rows there stay as they are, so their bars ease; new ones come in at the top. */
   function renderUploads() {
     for (const id of ['upload-rows', 'studio-upload-rows']) {
       const list = $(id);
-      if (list) list.replaceChildren(...uploads.filter((upload) => upload.list === id).slice(0, 50).map(uploadRow));
+      if (!list) continue;
+      const rows = uploads.filter((upload) => upload.list === id).slice(0, 50).map(uploadRow);
+      if (rows.length !== list.children.length || rows.some((row, i) => list.children[i] !== row)) list.replaceChildren(...rows);
     }
   }
 
-  /** One file sent, or waiting: its name, its size and how it went, and its bar while it goes. */
+  /** One file sent, or waiting: its name, its size and how it went, and its bar while it goes; made once, then kept up to date. */
   function uploadRow(upload) {
-    const bar = h('div', { class: 'progress' }, h('span'));
-    bar.firstChild.style.setProperty('--fill', `${Math.round(upload.progress * 100)}%`);
-    return h('li', { class: 'row' },
-      h('div', { class: 'text' },
-        h('p', { class: 'title', text: upload.name }),
-        h('p', { class: 'meta', text: `${size(upload.size)} · ${upload.status}` }),
-        upload.pending || upload.sending ? bar : null));
+    if (!upload.row) {
+      upload.meta = h('p', { class: 'meta' });
+      upload.fill = h('span');
+      upload.bar = h('div', { class: 'progress' }, upload.fill);
+      upload.row = h('li', { class: 'row' }, h('div', { class: 'text' }, h('p', { class: 'title', text: upload.name }), upload.meta, upload.bar));
+    }
+    const line = `${size(upload.size)} · ${upload.status}`;
+    if (upload.meta.textContent !== line) upload.meta.textContent = line;
+    upload.fill.style.setProperty('--fill', `${Math.round(upload.progress * 100)}%`);
+    upload.bar.hidden = !(upload.pending || upload.sending);
+    return upload.row;
   }
 
   /** "1.7 KB", "2.4 MB": decimal units to one place, as the app writes sizes (UpdateCopy). */
@@ -2342,11 +2432,12 @@
 
   /** The Library section with the imported playlist open, as if chosen from its Playlists. */
   function openImported(playlist) {
-    library.category = 'playlists';
-    library.query = '';
-    library.view = null;
+    closeSheet('add');
+    chooseKind('playlists');
     library.loaded = true;   // the playlist itself shows, not the list beneath it first
-    $('lib-search').value = '';
+    rowsOnly();
+    artForgetIn($('lib-rows'));
+    $('lib-rows').replaceChildren();
     show('library');
     renderGenre();
     renderChips();
@@ -2401,37 +2492,69 @@
     sendNext();
   }
 
-  /** The models and the jobs, as the tablet reports them in its state. */
+  /** The models and the jobs, as the tablet reports them in its state; their rows kept in place, so a bar eases. */
   function renderStudioState() {
     const body = $('studio-parts');
     if (!body || !state || !state.studio) return;
     const studio = state.studio;
     const unavailable = $('studio-unavailable');
     unavailable.hidden = studio.available;
-    unavailable.textContent = studio.reason || '';
+    if (!studio.available) setEmpty(unavailable, 'g-studio', studio.reason || '');
     body.hidden = !studio.available;
-    $('studio-models').replaceChildren(...studio.models.map((model) => h('li', { class: 'row' },
-      h('div', { class: 'text' },
-        h('p', { class: 'title', text: model.title }),
-        h('p', { class: 'meta', text: model.line }),
-        model.progress === null ? null : progressBar(model.progress)))));
+    keyedRows($('studio-models'), studio.models, (model) => model.name, studioRow, (row, model) => {
+      setStudioRow(row, model.title, model.line, model.progress === null || model.progress === undefined ? undefined : model.progress);
+    });
     if (!composing) renderCompose();   // the note follows the model; an open form is left as it is
     $('studio-jobs-head').hidden = studio.jobs.length === 0;
-    $('studio-jobs').replaceChildren(...studio.jobs.map((job) => h('li', { class: 'row' },
-      h('div', { class: 'text' },
-        h('p', { class: 'title', text: job.state === 'done' && job.title ? job.title : job.name }),
-        h('p', { class: 'meta', text: job.line }),
-        job.state === 'running' ? progressBar(job.progress) : null),
-      job.state === 'queued' || job.state === 'running'
-        ? h('button', { class: 'outlined', type: 'button', 'aria-label': `Cancel ${job.name}`, onclick: () => cancelJob(job.id) }, 'Cancel')
-        : null)));
+    keyedRows($('studio-jobs'), studio.jobs, (job) => job.id, studioRow, (row, job) => {
+      setStudioRow(row, job.state === 'done' && job.title ? job.title : job.name, job.line, job.state === 'running' ? job.progress : undefined);
+      const cancellable = job.state === 'queued' || job.state === 'running';
+      if (cancellable && !row.cancel) {
+        row.cancel = h('button', { class: 'outlined', type: 'button', 'aria-label': `Cancel ${job.name}`, onclick: () => cancelJob(job.id) }, 'Cancel');
+        row.node.append(row.cancel);
+      } else if (!cancellable && row.cancel) {
+        row.cancel.remove();
+        row.cancel = null;
+      }
+    });
   }
 
-  /** A 2 px bar; [fraction] null: under way, no measure yet. */
-  function progressBar(fraction) {
-    const bar = h('div', { class: fraction === null ? 'progress waiting' : 'progress' }, h('span'));
-    bar.firstChild.style.setProperty('--fill', `${Math.round((fraction === null ? 0 : fraction) * 100)}%`);
-    return bar;
+  /**
+   * [list]'s rows for [items], one per [keyOf], each made once by [make] (→ {node, …}) and brought up to date by
+   * [update]: a row that stays keeps its place in the page, so its bar eases to each new value (v1.20 — M53).
+   */
+  const keyedShown = new WeakMap();
+
+  function keyedRows(list, items, keyOf, make, update) {
+    const known = keyedShown.get(list) || new Map();
+    const next = new Map();
+    const nodes = items.map((item) => {
+      const key = keyOf(item);
+      const row = known.get(key) || make(item);
+      update(row, item);
+      next.set(key, row);
+      return row.node;
+    });
+    keyedShown.set(list, next);
+    if (nodes.length !== list.children.length || nodes.some((node, i) => list.children[i] !== node)) list.replaceChildren(...nodes);
+  }
+
+  /** A Studio row: its title, its line, and a 2 px bar under them. */
+  function studioRow() {
+    const title = h('p', { class: 'title' });
+    const line = h('p', { class: 'meta' });
+    const fill = h('span');
+    const bar = h('div', { class: 'progress' }, fill);
+    return { node: h('li', { class: 'row' }, h('div', { class: 'text' }, title, line, bar)), title, line, bar, fill, cancel: null };
+  }
+
+  /** [progress]: undefined, no bar; null, under way with no measure yet (the sweep); else 0–1. */
+  function setStudioRow(row, title, line, progress) {
+    if (row.title.textContent !== title) row.title.textContent = title;
+    if (row.line.textContent !== (line || '')) row.line.textContent = line || '';
+    row.bar.hidden = progress === undefined;
+    row.bar.classList.toggle('waiting', progress === null);
+    row.fill.style.setProperty('--fill', `${Math.round((Number(progress) || 0) * 100)}%`);
   }
 
   async function cancelJob(id) {
@@ -2781,7 +2904,7 @@
   }
 
   function renderPiano() {
-    const body = $('piano-body');
+    const body = $('settings-body');
     if (!pianoTable || !state || !body || pianoDragging) return;   // a slider being dragged keeps its place
     const piano = state.piano;
     const connected = state.link.state === 'connected';
@@ -2864,13 +2987,15 @@
         h('div', { class: 'segmented', id: 'appearance-switch', role: 'group', 'aria-label': 'Appearance' })));
   }
 
-  // ---- The Settings and System pages' modules (v1.18 — M47) ----------------------------------------------
+  // ---- The pages' modules: Settings (v1.18 — M47b; System and Guests among its pages, v1.20 — M53) and Quiet times ----
   //
-  // settings.js (the section piano) and system.js (the section system) are ES modules written apart from this file.
-  // Each loads the first time its section shows (system.js also after the first state, for the rail's foot), and each
-  // exports create(host, body, tools) → { show(), hide(), render(state) }; system.js also vitals(host, node). While
-  // settings.js is not there the built-in page shows; while system.js is not there the System item stays hidden and
-  // the rail's foot empty. Nothing a module does can stop the panel: every call into one is caught.
+  // settings.js (the section settings) and quiet.js (the section quiet, v1.20 — M54's) are ES modules written apart from
+  // this file. Each loads the first time its section shows and exports create(host, body, tools) → { show(), hide(),
+  // render(state) }; settings.js may also have open(page), for an address that names one of its pages (#system).
+  // system.js loads after the first state, for the rail's foot (vitals(host, node)), and Settings makes its System page
+  // with system.js's create(), through host.system(). While settings.js is not there the built-in page shows; while
+  // quiet.js is not there Quiet times shows its head alone; while system.js is not there the rail's foot is empty and
+  // Settings has no System page. Nothing a module does can stop the panel: every call into one is caught.
 
   /** What a module may use: the panel's helpers, its calls (every address from ROOT), the art loader, the sections. */
   const host = Object.freeze({
@@ -2891,21 +3016,23 @@
     signed,
     debounce,
     art,
-    show: (name) => show(name),
+    show: (name) => route(name),
     appearance: Object.freeze({ get: appearance, set: setAppearance }),
     confirm,
+    /** system.js (v1.20 — M53: Settings' System page): a promise of the module, or of null while it is not there. */
+    system: () => loadSystem(),
   });
 
   const modules = {
-    piano: { body: 'piano-body', tools: 'piano-tools', loading: null, module: null, page: null, showing: false, failed: false },
-    system: { body: 'system-body', tools: 'system-tools', loading: null, module: null, page: null, showing: false, failed: false },
+    settings: { body: 'settings-body', tools: 'settings-tools', load: () => import('./settings.js'), loading: null, module: null, page: null, showing: false, failed: false, opening: null },
+    quiet: { body: 'quiet-body', tools: 'quiet-tools', load: () => import('./quiet.js'), loading: null, module: null, page: null, showing: false, failed: false },
   };
 
   /** [key]'s module, imported once: it, or null (and failed) while it is not there or not one. */
   function loadModule(key) {
     const m = modules[key];
     if (!m.loading) {
-      m.loading = (key === 'piano' ? import('./settings.js') : import('./system.js')).then((module) => {
+      m.loading = m.load().then((module) => {
         if (!module || typeof module.create !== 'function') throw new Error(`${key}: no create()`);
         m.module = module;
         return module;
@@ -2915,6 +3042,13 @@
       });
     }
     return m.loading;
+  }
+
+  /** system.js, imported once for the rail's foot and Settings' System page: it, or null while it is not there. */
+  let systemLoading = null;
+  function loadSystem() {
+    if (!systemLoading) systemLoading = import('./system.js').then((module) => module || null, () => null);
+    return systemLoading;
   }
 
   /** Runs [fn] for a module; what it throws is kept from the panel. */
@@ -2953,39 +3087,42 @@
     if (m.page && m.showing && state) guarded(() => m.page.render(state));
   }
 
-  /** Settings: settings.js's page once it is in; the built-in page (today's) when it is not there. */
+  /** Settings: settings.js's page once it is in (on the page an address named, #system); the built-in page without it. */
   function openSettings() {
-    const m = modules.piano;
+    const m = modules.settings;
     if (m.failed) {
       pianoLoad();
       return;
     }
-    loadModule('piano').then(() => {
-      if (section !== 'piano') return;
-      if (modulePage(m)) moduleShow(m);
-      else pianoLoad();
+    loadModule('settings').then(() => {
+      if (section !== 'settings') return;
+      if (!modulePage(m)) {
+        pianoLoad();
+        return;
+      }
+      moduleShow(m);
+      const page = m.opening;
+      m.opening = null;
+      if (page && typeof m.page.open === 'function') guarded(() => m.page.open(page));
     });
   }
 
-  /** System: system.js's page; without it, Now playing. */
-  function openSystem() {
-    const m = modules.system;
-    loadModule('system').then(() => {
-      if (section !== 'system') return;
-      if (modulePage(m)) moduleShow(m);
-      else show('now');
+  /** Quiet times: quiet.js's page once it is in; while it is not there, the section's head alone. */
+  function openQuiet() {
+    const m = modules.quiet;
+    if (m.failed) return;
+    loadModule('quiet').then(() => {
+      if (section === 'quiet' && modulePage(m)) moduleShow(m);
     });
   }
 
-  /** After the first state: system.js, if it is there, shows its item and keeps the rail's foot. */
+  /** After the first state: system.js, if it is there, keeps the rail's foot. */
   let systemStarted = false;
   function startSystem() {
     if (systemStarted) return;
     systemStarted = true;
-    loadModule('system').then((module) => {
-      if (!module) return;
-      for (const item of document.querySelectorAll('[data-section="system"]')) item.hidden = false;
-      if (typeof module.vitals === 'function') guarded(() => module.vitals(host, $('rail-vitals')));
+    loadSystem().then((module) => {
+      if (module && typeof module.vitals === 'function') guarded(() => module.vitals(host, $('rail-vitals')));
     });
   }
 
@@ -3036,7 +3173,7 @@
     $('gate').hidden = true;
     $('panel').hidden = false;
     startSystem();
-    show(location.hash.slice(1) || 'now');
+    route(location.hash.slice(1) || 'now');
     openSocket();
   }
 

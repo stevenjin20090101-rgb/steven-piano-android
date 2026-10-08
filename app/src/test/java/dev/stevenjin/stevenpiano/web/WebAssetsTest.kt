@@ -232,7 +232,9 @@ class WebAssetsTest {
         }
         assertTrue(text("request.js").contains("'Request'") || text("request.js").contains("text: 'Request'"))
         val index = text("index.html")
-        for (section in listOf("Now playing", "Up next", "Library", "Channels", "Schedule", "Requests", "Add", "Studio", "Piano", "Settings", "System")) assertTrue(section, index.contains(">$section"))
+        // v1.20 — M53: five places; Up next, Add music and the Piano capsule in the pages' heads; the rest built by the script.
+        for (words in listOf("Now playing", "Library", "Quiet times", "Studio", "Settings", "Up next", "Add music", "Piano", "Play anyway")) assertTrue(words, index.contains(">$words"))
+        for (copy in listOf("'Channels'", "`Requests · ", "`Approve \${", "`Decline \${", "'Added to Up next.'")) assertTrue(copy, text("app.js").contains(copy))
         for (copy in listOf(
             "Drop a piano recording here", "About a minute per three minutes of audio.", "/api/studio/audio", "/api/studio/jobs/",
             "Compose a piece…", "Runs on this tablet. About a minute for a two-minute piece.", "/api/studio/compose", "/api/studio/seed",
@@ -240,14 +242,13 @@ class WebAssetsTest {
         )) {
             assertTrue("Studio (1.7): $copy", text("app.js").contains(copy))
         }
-        assertTrue("the Schedule page is real (1.6.2)", index.contains(">Add schedule<") && !text("app.js").contains("Coming in the next update."))
-        for (copy in listOf("No schedules yet.", "Choose at least one day.", "Choose what to play.", "The tablet starts them: keep it on, charged and near the piano.")) {
-            assertTrue(copy, text("app.js").contains(copy))
-        }
+        // Timed plays are gone (v1.20): no schedule page, editor or route on the panel.
+        assertFalse("no Schedule page", index.contains("Add schedule") || text("app.js").contains("/api/schedules") || text("app.js").contains("scheduleLoad"))
         assertTrue("the tablet's piano sound (1.8), its volume by its one name (1.13)", index.contains("Tablet volume") && text("app.js").contains("tabletVolume"))
-        assertTrue("places named as the tablet names them (1.13)", index.contains("Piano › Web panel") && text("app.js").contains("Piano › Tablet sound") && !text("app.js").contains("Remote control"))
-        // What plays and what is played from (1.11 — M29): two read-only lines, the piano's pages hidden under a MIDI piano.
-        assertTrue(index.contains("id=\"instrument-line\"") && index.contains("id=\"keyboard-line\""))
+        assertTrue("places named as the tablet names them (1.13)", index.contains("Piano › Web panel") && !text("app.js").contains("Remote control"))
+        // What plays and what is played from (1.11 — M29): no longer under Now playing (v1.20 — M53: Settings › System
+        // says it); the built-in Settings page keeps its two lines, and the piano's pages hide under a MIDI piano.
+        assertFalse(index.contains("id=\"instrument-line\"") || index.contains("id=\"keyboard-line\""))
         for (copy in listOf("Instrument: ", "Keyboard: ", "'Live'", "'Recording'", "belong to Steven Piano and are hidden while")) {
             assertTrue("Instruments (1.11): $copy", text("app.js").contains(copy))
         }
@@ -261,8 +262,9 @@ class WebAssetsTest {
         assertTrue("dark by default", index.contains("<html lang=\"en\" data-theme=\"dark\">") && index.contains("<meta name=\"color-scheme\" content=\"dark light\">"))
         assertTrue("the modules' styles after the frame's", index.indexOf("href=\"system.css\"") > index.indexOf("href=\"style.css\""))
         assertTrue(WebAssets.PANEL["/system.css"] == WebAssets.Asset("system.css", WebAssets.CSS))
-        for (id in listOf("piano-tools", "piano-body", "system-tools", "system-body", "rail-vitals")) assertTrue(id, index.contains("id=\"$id\""))
-        assertTrue(index.contains("<section id=\"section-system\" data-page=\"system\" hidden>"))
+        for (id in listOf("settings-tools", "settings-body", "quiet-tools", "quiet-body", "rail-vitals")) assertTrue(id, index.contains("id=\"$id\""))
+        assertTrue(index.contains("<section id=\"section-settings\" data-page=\"settings\" hidden>"))
+        assertFalse("System is a page of Settings now (v1.20 — M53)", index.contains("section-system"))
         val app = text("app.js")
         assertTrue("each module loaded the first time it is needed", app.contains("import('./settings.js')") && app.contains("import('./system.js')"))
         assertFalse("never at the page's start", Regex("src=\"(settings|system)\\.js\"").containsMatchIn(index))
@@ -270,6 +272,70 @@ class WebAssetsTest {
         assertTrue("nothing stored: dark", app.contains("return value === 'light' || value === 'system' ? value : 'dark';"))
         // The guests' page and the poster keep their own appearance.
         assertTrue(text("request.html").contains("<html lang=\"en\">") && text("request.html").contains("content=\"light dark\""))
+    }
+
+    @Test
+    fun `the panel has five places and no stray text, the mark in the tab and the rail, and Quiet times through the seam (v1_20 M53)`() {
+        val index = text("index.html")
+        val app = text("app.js")
+        // The five places, and no others, in the rail and in the phones' bar, in this order; no More sheet.
+        val five = listOf("now" to "Now playing", "library" to "Library", "quiet" to "Quiet times", "studio" to "Studio", "settings" to "Settings")
+        fun places(from: String, to: String): List<Pair<String, String>> {
+            val part = index.substring(index.indexOf(from), index.indexOf(to, index.indexOf(from)))
+            return Regex("data-section=\"([a-z]+)\".*?<span>([^<]+)</span>").findAll(part).map { it.groupValues[1] to it.groupValues[2] }.toList()
+        }
+        assertEquals("the rail", five, places("<div class=\"section-list\">", "<div class=\"rail-foot\""))
+        assertEquals("the phones' bar", five, places("<nav class=\"tab-bar glass\"", "</nav>"))
+        assertEquals("nothing else names a section", 10, Regex("data-section=\"").findAll(index).count())
+        assertFalse("no More sheet", index.contains("more-sheet") || app.contains("tab-more"))
+        assertTrue("the script's places are the five", app.contains("const SECTIONS = ['now', 'library', 'quiet', 'studio', 'settings'];"))
+        // The addresses of 1.19 open their new homes.
+        for (old in listOf("queue", "requests", "channels", "add", "system", "piano", "schedule")) assertTrue("#$old", app.contains("case '$old':"))
+        // No stray text: the rail's head is the mark, the name and a dot, with a pill only while something is wrong.
+        for (name in listOf("index.html", "app.js", "settings.js", "system.js")) assertFalse("$name: no \"Connected ·\"", text(name).contains("Connected ·"))
+        assertTrue(app.contains("'Reconnecting…'") && app.contains("'Piano not connected'"))
+        assertEquals("the tablet's address only in the socket's, never on the page", 1, Regex("location\\.host").findAll(app).count())
+        // The mark: the app's icon as the tab's icon on the three pages and beside the rail's name, a picture and nothing more.
+        val svg = WebAssets.Asset("favicon.svg", WebAssets.SVG)
+        assertEquals("image/svg+xml", WebAssets.SVG)
+        assertEquals(svg, WebAssets.PANEL["/favicon.svg"])
+        assertEquals(svg, WebAssets.PUBLIC["/favicon.svg"])
+        for (page in listOf("index.html", "request.html", "poster.html")) {
+            assertTrue("$page links the mark, relatively", text(page).contains("<link rel=\"icon\" href=\"favicon.svg\" type=\"image/svg+xml\">"))
+        }
+        assertTrue("the mark beside the name", index.contains("<img class=\"mark\" src=\"favicon.svg\" alt=\"\""))
+        val mark = text("favicon.svg")
+        assertTrue("a viewBox", Regex("<svg [^>]*viewBox=\"[0-9 .]+\"").containsMatchIn(mark))
+        assertTrue("its own background", mark.contains("<rect ") && mark.contains("fill=\"#0E0E0E\""))
+        assertTrue("the launcher's glyph", mark.contains(File("src/main/res/drawable/ic_launcher_foreground.xml").readText().substringAfter("android:pathData=\"").substringBefore("\"")))
+        assertFalse("no script", mark.contains("<script", ignoreCase = true) || Regex("\\son[a-z]+=", RegexOption.IGNORE_CASE).containsMatchIn(mark))
+        assertFalse("nothing from elsewhere", Regex("(?:href|src)=").containsMatchIn(mark) || mark.replace("http://www.w3.org/2000/svg", "").contains("http"))
+        // Quiet times: quiet.js through the modules' seam, loaded the first time its section shows, never at the start.
+        assertTrue(app.contains("import('./quiet.js')") && app.contains("quiet: { body: 'quiet-body', tools: 'quiet-tools'"))
+        assertFalse("never at the page's start", Regex("(?:src|href)=\"quiet\\.js\"").containsMatchIn(index))
+        assertTrue(index.contains("<section id=\"section-quiet\" data-page=\"quiet\" hidden>"))
+        // Quiet now (M54's state field, absent on older tablets) and Play anyway.
+        assertTrue(app.contains("return !!(quiet && quiet.now && !quiet.overridden);") && app.contains("await post(ROOT + '/api/quiet/override');"))
+        // Settings: System its first page (system.js's create through host.system()), Guests with the two switches.
+        val settings = text("settings.js")
+        assertTrue(app.contains("system: () => loadSystem(),") && settings.contains("module.create(host, system.holder, system.tools)"))
+        assertTrue(settings.indexOf("key: 'system'") in 0 until settings.indexOf("key: 'playback'"))
+        for (copy in listOf("'Guests can request'", "'Approve requests first'", "webGuests", "webApproveFirst")) assertTrue(copy, settings.contains(copy))
+        assertFalse("the guests' switches left the frame", index.contains("guests-open") || app.contains("webGuests"))
+        // Motion: every animation the frame adds has a cut under reduced motion; nothing new loops.
+        val css = text("style.css")
+        val reduced = css.substring(css.lastIndexOf("@media (prefers-reduced-motion: reduce) {"))
+        for (cut in listOf(".page > .entering", ".enter", ".now-art.settle", "dialog.sheet[open]", ".toast:not([hidden])", ".tile-play:hover .art { transform: none; }")) {
+            assertTrue("reduced motion cuts $cut", reduced.contains(cut))
+        }
+        val motion = css.substring(css.indexOf("/* ---- Motion (v1.20 — M53)"), css.lastIndexOf("@media (prefers-reduced-motion: reduce) {"))
+        assertFalse("nothing new loops", motion.contains("infinite"))
+        assertTrue(app.contains("const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');"))
+        // No pure black or white anywhere in the pages' own files (the mark's colours are the icon's own, near-black and near-white).
+        for (name in WebAssets.NAMES - WebAssets.FONT.name) {
+            val body = File(folder, name).readText()
+            assertFalse("$name names pure black or white", Regex("#(?:000|fff)(?:000|fff)?\\b", RegexOption.IGNORE_CASE).containsMatchIn(body))
+        }
     }
 
     @Test

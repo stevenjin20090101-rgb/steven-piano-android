@@ -8,7 +8,8 @@
    ============================================================================ */
 
 // The panel's System page (DESIGN.md › v1.18 — M47b): an ES module the frame (app.js) imports after the first state,
-// create(host, body, tools) → { show(), hide(), render(state) }, and vitals(host, node), the rail's foot. Three cards
+// create(host, body, tools) → { show(), hide(), render(state) }, which Settings calls for its first page (v1.20 — M53,
+// through host.system()), and vitals(host, node), the rail's foot. Three cards
 // (the tablet, the controller, the piano), then Running now beside Today and Tools, from /api/system (every 5 s while
 // the page shows, 10 s through the relay), /api/system/refresh (every 15 s while the piano is ready) and
 // /api/system/history (on opening, then every minute); nothing while the page is closed or the window hidden. Built
@@ -165,9 +166,10 @@ function loadSystem() {
 // ---- The rail's foot ----------------------------------------------------------------------------------------------
 
 /**
- * Three small lines in the rail's foot (Tablet 82%, Temperature 31 °C, Piano Connected), amber where attention() says
- * so, with its word. Read once a minute, or from the page's own reads while it is open; the piano's line follows the
- * state between them.
+ * The rail's foot (v1.20 — M53: no words while all is well): the tablet's battery and its temperature as a glyph and a
+ * figure (82%, 31 °C), their names for screen readers alone, and the piano's line only while it needs attention. Amber
+ * where attention() says so, with its word ("15% low", "Hot", "Board missing"). Read once a minute, or from the page's
+ * own reads while it is open; the piano's line follows the state between them.
  */
 export function vitals(host, node) {
   bind(host);
@@ -175,11 +177,12 @@ export function vitals(host, node) {
   const { h } = host;
   const line = (glyphId, label) => {
     const value = h('b', { text: '—' });
-    return { value, node: h('p', { class: 'vital' }, host.glyph(glyphId), h('span', { text: label }), value) };
+    return { value, node: h('p', { class: 'vital' }, host.glyph(glyphId), h('span', { class: 'visually-hidden', text: label }), value) };
   };
-  const tablet = line('g-battery', 'Tablet');
-  const heat = line('g-temp', 'Temperature');
-  const piano = line('g-keys', 'Piano');
+  const tablet = line('g-battery', "The tablet's battery");
+  const heat = line('g-temp', "The tablet's temperature");
+  const piano = line('g-keys', 'The piano');
+  piano.node.hidden = true;
   host.fill(node, tablet.node, heat.node, piano.node);
 
   const set = (part, text, flagged) => {
@@ -200,11 +203,10 @@ export function vitals(host, node) {
     set(heat, celsius === null ? '—' : hot ? capital(hot.short) : `${Math.round(celsius)} °C`, !!hot);
     const instrument = state && state.instruments && state.instruments.instrument;
     const linkState = (state && state.link && state.link.state) || (sys && sys.piano && sys.piano.link && sys.piano.link.state) || null;
-    const trouble = first(['boards', 'chip', 'heap']);
-    let word = linkState ? LINK_WORDS[linkState] || 'Not connected' : '—';
-    if (instrument && instrument.kind === 'midi') word = instrument.name || word;
-    else if (trouble && linkState === 'connected') word = capital(trouble.short);
-    set(piano, word, !!trouble && linkState === 'connected');
+    const trouble = instrument && instrument.kind === 'midi' ? null : first(['boards', 'chip', 'heap']);
+    const flagged = !!trouble && linkState === 'connected';
+    set(piano, flagged ? capital(trouble.short) : '—', flagged);
+    piano.node.hidden = !flagged;
   };
   shared.listeners.add(paint);
   paint();

@@ -10,7 +10,8 @@
 /* The Settings and System pages' own styles (DESIGN.md › v1.18 — M47b: settings.js and system.js). Everything here
    sits under the pages' roots (.settings-page, .system-page) or the rail's vitals; the shared classes (.card,
    .setting, .stepper, .segmented, .dot, .tag…) are style.css's and are not redefined. Tokens only: amber,
-   var(--attention), means "needs attention" and nothing else, and red stays the live dot's (.dot.live). */
+   var(--attention), means "needs attention" and nothing else, and red stays the live dot's (.dot.live). Since v1.20 —
+   M53 the System page is the first page of Settings, in its pane: its columns follow the pane's width, not the window's. */
 
 /* ---- Settings: a list of pages and the chosen page beside it from 900 px; below, the list, then a page over it --- */
 
@@ -110,8 +111,10 @@
   color: var(--primary);
   text-align: left;
   cursor: pointer;
-  transition: background-color 160ms, border-color 160ms;
+  transition: background-color 160ms, border-color 160ms, transform 100ms var(--ease-enter);
 }
+
+.settings-page .preset:active:not(:disabled) { transform: scale(0.97); }
 
 .settings-page .preset:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--primary) 40%, transparent);
@@ -154,7 +157,14 @@
   user-select: none;
 }
 
-/* ---- System: three cards, then Running now beside Today and Tools; one column below 1180 px --------------------- */
+/* ---- System: three cards, then Running now beside Today and Tools, as the pane has room ----------------------------
+   In Settings' pane (v1.20 — M53), measured as a container: three cards from 960 px of it, two below, one below 600 px;
+   Running now beside Today and Tools from 760 px, under them below. */
+
+/* System's capsules in the Settings head, beside its others, while its page shows. */
+.system-tools { display: contents; }
+
+.system-holder { container: system / inline-size; }
 
 .system-page .sys-grid {
   display: grid;
@@ -171,9 +181,16 @@
   align-items: start;
 }
 
-@media (max-width: 1179px) {
-  .system-page .sys-grid,
+@container system (max-width: 959px) {
+  .system-page .sys-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container system (max-width: 759px) {
   .system-page .sys-lower { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container system (max-width: 599px) {
+  .system-page .sys-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .system-page .card-head > .glyph { align-self: center; }
@@ -269,7 +286,7 @@
   overflow: hidden;
 }
 
-.system-page .meter i { display: block; width: var(--fill, 0%); height: 100%; border-radius: 3px; background: var(--primary); }
+.system-page .meter i { display: block; width: var(--fill, 0%); height: 100%; border-radius: 3px; background: var(--primary); transition: width 200ms var(--ease-enter); }
 
 .system-page .level.attention .meter i { background: var(--attention); }
 
@@ -369,7 +386,7 @@
   overflow: hidden;
 }
 
-.system-page .bar i { display: block; width: var(--fill, 0%); height: 100%; border-radius: 2px; background: var(--primary); }
+.system-page .bar i { display: block; width: var(--fill, 0%); height: 100%; border-radius: 2px; background: var(--primary); transition: width 200ms var(--ease-enter); }
 
 /* Today: battery a line over a soft area, the tablet's temperature dashed, the piano's dotted. */
 .system-page .legend {
@@ -432,13 +449,13 @@
 /* The head's first capsule: what needs attention first, and how many more. */
 .capsule .more { color: var(--secondary); }
 
-/* The rail's foot: a line in amber, its word saying why; the names never break. */
-.vital > span { white-space: nowrap; }
+/* The rail's foot: a figure in amber, its word saying why (v1.20 — M53: their names are for screen readers alone). */
+.vital > b { white-space: nowrap; }
 
 .vital.attention b,
 .vital.attention .glyph { color: var(--attention); }
 
-@media (max-width: 760px) {
+@container system (max-width: 559px) {
   .system-page .task { grid-template-columns: 10px minmax(0, 1fr) auto; row-gap: 2px; }
 
   .system-page .task .dot { grid-row: 1; grid-column: 1; }
@@ -454,4 +471,6 @@
   .system-page .dial .fill { transition: none; }
 
   .settings-page .preset { transition: none; }
+
+  .settings-page .preset:active:not(:disabled) { transform: none; }
 }
