@@ -428,7 +428,9 @@ class WebAssetsTest {
         for (forbidden in listOf("#000", "#fff", "#FFF", "white", "black", "rgb(0", "rgb(255", "var(--live)", "!important", "url(")) {
             assertFalse("quiet.css names $forbidden", css.contains(forbidden))
         }
-        assertTrue("the blocks hatched with tokens", css.contains("repeating-linear-gradient(135deg, color-mix(in srgb, var(--primary)"))
+        // The calendar (v1.21): each block a card of the content colour's tokens, with its section's name and times.
+        assertTrue("the blocks drawn with tokens", css.contains("background: color-mix(in srgb, var(--primary) 14%, transparent)"))
+        assertTrue("today and the time now marked", css.contains(".quiet-col.today") && css.contains(".quiet-now"))
         // The guests' page: the resting line from the catalogue's quiet, its words the design's.
         val request = text("request.js")
         assertTrue(request.contains("resting(data.quiet);"))

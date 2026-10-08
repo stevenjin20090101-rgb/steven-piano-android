@@ -31,21 +31,27 @@
 
 .quiet-page .quiet-grid {
   display: grid;
-  grid-template-columns: 44px repeat(7, minmax(0, 1fr));
-  grid-template-rows: 22px 200px;
+  grid-template-columns: 48px repeat(7, minmax(0, 1fr));
+  grid-template-rows: 28px 480px;
+}
+
+@media (max-width: 599px) {
+  .quiet-page .quiet-grid { grid-template-columns: 40px repeat(7, minmax(0, 1fr)); grid-template-rows: 28px 400px; }
 }
 
 .quiet-page .quiet-day {
   overflow: hidden;
   text-align: center;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 18px;
   font-weight: 500;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
+  letter-spacing: 0.4px;
   white-space: nowrap;
-  color: var(--tertiary);
+  color: var(--secondary);
 }
+
+/* Today: its name in the content colour on a soft pill, its column a faint wash. */
+.quiet-page .quiet-day.today { justify-self: center; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
 
 .quiet-page .quiet-hours { position: relative; }
 
@@ -63,19 +69,50 @@
 
 .quiet-page .quiet-col:last-child { border-right: 1px solid var(--hairline); }
 
+.quiet-page .quiet-col.today { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+
 .quiet-page .quiet-rule { position: absolute; left: 0; right: 0; height: 1px; background: var(--hairline); }
 
-/* A block: hatched in the content colour over a faint wash of it, inside a tertiary edge. */
+.quiet-page .quiet-rule.minor { background: color-mix(in srgb, var(--hairline) 45%, transparent); }
+
+/* A block: a card of the content colour at 14 % with a 3 px edge of it, its section's name and times inside. */
 .quiet-page .quiet-block {
   position: absolute;
   left: 3px;
   right: 3px;
-  min-height: 2px;
-  border: 1px solid var(--tertiary);
-  border-radius: 4px;
-  background:
-    repeating-linear-gradient(135deg, color-mix(in srgb, var(--primary) 34%, transparent) 0 1px, transparent 1px 6px),
-    color-mix(in srgb, var(--primary) 6%, transparent);
+  min-height: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 1px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 0;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 160ms;
+}
+
+.quiet-page .quiet-block:hover { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+
+.quiet-page .quiet-block:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+.quiet-page .quiet-block-name { overflow: hidden; font-size: 12px; line-height: 15px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+
+.quiet-page .quiet-block-time { overflow: hidden; font-size: 11px; line-height: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--secondary); }
+
+/* Now: a line across today's column, a dot at its start. */
+.quiet-page .quiet-now { position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; background: var(--primary); pointer-events: none; z-index: 1; }
+
+.quiet-page .quiet-now::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .quiet-page .quiet-block { transition: none; }
 }
 
 /* ---- The sections ------------------------------------------------------------------------------------------- */

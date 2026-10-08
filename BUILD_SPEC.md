@@ -8659,3 +8659,12 @@ upgraded in place: through the panel's routes, three sections saved (`PUT /api/q
 made Play answer 409 "Quiet until 14:20. Use Play anyway."; in headless Chrome the five-item rail with the mark, Now
 playing's "Quiet until" and Play anyway, the Quiet times page with its week strip and sections; on the tablet, Piano ›
 Quiet times with the same sections. Not checked: the school tablet itself, which still ran 1.17 that morning.
+
+## The release: 1.21 (versionCode 31)
+
+Two asks of Steven's on 2026-10-08, made directly: the panel's Quiet times week becomes a calendar (`quiet.js`
+`renderWeek`, `quiet.css`: 480 px for 6:00–22:00, every hour ruled and every other labelled, each block a card of the
+content colour at 14 % with a 3 px edge, its times from 30 minutes and its section's name from 70, today's column washed
+with a line at the time now, a block opens its section's editor), and the rail's status line says "Connected" in words
+when all is well (`app.js` `renderStatus`, `.status-pill.ok`). `WebAssetsTest`'s quiet assertion follows the cards.
+1,649 tests green; seen once in headless Chrome against the demo emulator.

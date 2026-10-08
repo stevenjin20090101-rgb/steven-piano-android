@@ -251,5 +251,14 @@
     "minSdk": 26,
     "tag": "v1.20",
     "publishedAt": "2026-10-08"
+  },
+  {
+    "versionCode": 31,
+    "versionName": "1.21",
+    "notes": "Quiet times on the web panel now show as a week calendar: days across, hours down, each block with its times (and its section's name when it is long enough), today marked with a line at the time now; tap a block to edit its section. The menu's head just says Connected when all is well.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.21/steven-piano-1.21.apk",
+    "minSdk": 26,
+    "tag": "v1.21",
+    "draft": true
   }
 ]

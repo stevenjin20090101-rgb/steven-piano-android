@@ -937,6 +937,9 @@ button, input, select { font: inherit; color: inherit; }
 
 .status-pill:not([hidden]) { display: block; animation: rise-in 200ms var(--ease-enter); }
 
+/* All well: the plain word, no outline (v1.21). */
+.status-pill.ok { padding-left: 0; border-color: transparent; }
+
 .connection { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 13px; line-height: 18px; }
 
 .nav-item {

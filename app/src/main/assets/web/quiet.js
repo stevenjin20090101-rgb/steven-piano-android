@@ -39,10 +39,15 @@ const GAP_MINUTES = 10;
 const DEFAULT_LENGTH = 50;
 const DAY_MINUTES = 1440;
 
-/** The week strip's window, 6:00 to 22:00, and the hours ruled across it. */
+/** The calendar's window, 6:00 to 22:00, the hours labelled (every two) and ruled (every one) (v1.21). */
 const WEEK_FROM = 6 * 60;
 const WEEK_TO = 22 * 60;
-const RULED = [6, 12, 18, 22];
+const LABELLED = [6, 8, 10, 12, 14, 16, 18, 20, 22];
+const RULED = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+
+/** A block this many minutes long shows its section's name and its times; this long, its times alone. */
+const NAMED_MINUTES = 70;
+const TIMED_MINUTES = 30;
 
 /** What quiet times do, under the sections (QuietCopy.NOTE). */
 const NOTE = 'During a quiet time the piano stays silent: anything playing stops as a block begins, and nothing starts until it ends. Play anyway lifts it until the block ends.';
@@ -83,7 +88,7 @@ export function create(host, body, tools) {
   anyway.addEventListener('click', playAnyway);
   const status = h('div', { class: 'card quiet-status', role: 'status', 'aria-live': 'polite' }, host.glyph('g-moon'), statusLine, anyway);
   const grid = h('div', { class: 'quiet-grid' });
-  const week = h('div', { class: 'card quiet-week', role: 'img', 'aria-label': "The week's quiet times, Monday to Sunday, 6:00 to 22:00" }, grid);
+  const week = h('div', { class: 'card quiet-week', role: 'group', 'aria-label': "The week's quiet times, Monday to Sunday, 6:00 to 22:00" }, grid);
   const sectionsNode = h('div', { class: 'stack quiet-sections' });
   const root = h('div', { class: 'quiet-page stack' }, status, week, sectionsNode, h('p', { class: 'note inset', text: NOTE }));
   fill(body, root);
@@ -127,20 +132,36 @@ export function create(host, body, tools) {
     anyway.hidden = !holds;
   }
 
-  /** Monday to Sunday across, 6:00 to 22:00 down: the hours ruled, every block hatched (quiet.css), placed through the CSSOM. */
+  /**
+   * The week as a calendar (v1.21): Monday to Sunday across, 6:00 to 22:00 down, every hour ruled and every other one
+   * labelled; today's column marked, with a line at the time now; each block a card with its section's name and its
+   * times when it is long enough, which opens its section's editor.
+   */
   function renderWeek() {
     const sections = data ? data.sections.map(inMinutes) : [];
-    const columns = DAYS.map(() => h('div', { class: 'quiet-col' }));
+    const now = new Date();
+    const today = (now.getDay() + 6) % 7;
+    const minuteNow = now.getHours() * 60 + now.getMinutes();
+    const columns = DAYS.map((_, i) => h('div', { class: i === today ? 'quiet-col today' : 'quiet-col' }));
     for (const column of columns) {
-      for (const hour of RULED) column.append(placed(h('span', { class: 'quiet-rule' }), hour * 60));
+      for (const hour of RULED) column.append(placed(h('span', { class: hour % 2 ? 'quiet-rule minor' : 'quiet-rule' }), hour * 60));
     }
     for (const piece of weekPieces(sections)) {
-      const node = placed(h('span', { class: 'quiet-block' }), piece.from);
+      const times = `${clock(piece.start)}–${clock(piece.end)}`;
+      const words = [];
+      if (piece.to - piece.from >= NAMED_MINUTES) words.push(h('span', { class: 'quiet-block-name', text: piece.name }));
+      if (piece.to - piece.from >= TIMED_MINUTES) words.push(h('span', { class: 'quiet-block-time', text: times }));
+      const node = placed(h('button', {
+        class: 'quiet-block', type: 'button', title: `${piece.name} · ${times}`,
+        'aria-label': `${piece.name}, ${DAYS[piece.day][2]}, ${times}. Edit`,
+      }, words), piece.from);
       node.style.height = `${((piece.to - piece.from) / (WEEK_TO - WEEK_FROM)) * 100}%`;
+      node.addEventListener('click', () => openEditor(piece.section));
       columns[piece.day].append(node);
     }
-    const hours = h('div', { class: 'quiet-hours' }, RULED.map((hour) => placed(h('span', { text: clock(hour * 60) }), hour * 60)));
-    fill(grid, h('span', { class: 'quiet-corner' }), DAYS.map(([, short]) => h('span', { class: 'quiet-day', text: short })), hours, columns);
+    if (minuteNow > WEEK_FROM && minuteNow < WEEK_TO) columns[today].append(placed(h('span', { class: 'quiet-now', 'aria-hidden': 'true' }), minuteNow));
+    const hours = h('div', { class: 'quiet-hours' }, LABELLED.map((hour) => placed(h('span', { text: clock(hour * 60) }), hour * 60)));
+    fill(grid, h('span', { class: 'quiet-corner' }), DAYS.map(([, short], i) => h('span', { class: i === today ? 'quiet-day today' : 'quiet-day', text: short })), hours, columns);
   }
 
   function renderSections() {
@@ -422,25 +443,26 @@ function placed(node, minute) {
 /** Every block as the strip draws it: a piece each day it runs, one crossing midnight on the next day too, cut to 6:00–22:00. */
 function weekPieces(sections) {
   const pieces = [];
-  const add = (day, from, to) => {
+  const add = (day, from, to, about) => {
     const a = Math.max(from, WEEK_FROM);
     const b = Math.min(to, WEEK_TO);
-    if (b > a) pieces.push({ day, from: a, to: b });
+    if (b > a) pieces.push({ day, from: a, to: b, ...about });
   };
-  for (const section of sections) {
+  sections.forEach((section, index) => {
     for (const block of section.blocks) {
       if (!Number.isFinite(block.start) || !Number.isFinite(block.end) || block.start === block.end) continue;
+      const about = { section: index, name: section.name, start: block.start, end: block.end };
       for (const day of section.days) {
         const at = day - 1;
         if (block.end > block.start) {
-          add(at, block.start, block.end);
+          add(at, block.start, block.end, about);
         } else {
-          add(at, block.start, DAY_MINUTES);
-          add((at + 1) % 7, 0, block.end);
+          add(at, block.start, DAY_MINUTES, about);
+          add((at + 1) % 7, 0, block.end, about);
         }
       }
     }
-  }
+  });
   return pieces;
 }
 

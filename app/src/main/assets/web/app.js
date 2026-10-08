@@ -460,8 +460,10 @@
     let text = '';
     if (connection.socket === false || connection.offline) text = 'Reconnecting…';
     else if (up && state && state.link && state.link.state !== 'connected') text = 'Piano not connected';
+    else if (up) text = 'Connected';   // in words, nothing else (v1.21, Steven): no address
     const pill = $('conn-pill');
     if (pill.textContent !== text) pill.textContent = text;
+    pill.classList.toggle('ok', text === 'Connected');
     pill.hidden = !text;
   }
 
