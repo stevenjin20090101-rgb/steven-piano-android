@@ -22,8 +22,8 @@ firmware's (see *Updating the piano's firmware*) and for Studio's models and the
 piano sound when you download them (see *Studio*, *Piano sound on the tablet*). With
 **Web panel** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
-page to guests on the tablet's Wi-Fi (see *Web panel*). It can play by itself at set
-times (see *Schedules*), on the school tablet it can be locked to the app as a kiosk
+page to guests on the tablet's Wi-Fi (see *Web panel*). It never starts a piece by itself, and
+keeps silent at the hours you set (see *Quiet times*), on the school tablet it can be locked to the app as a kiosk
 (see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
 piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
@@ -71,8 +71,7 @@ on the tablet*). Made by Steven Jin. Version 1.19.
   "CLAUDE DEBUSSY · CALM · CHANNEL", and the card "● PLAYING". A long press sets
   the channel's **volume** (70 % at first): the piano's own volume while the
   channel plays, when its firmware offers it (else the app's velocity), put back
-  as it was when the channel ends; **Schedule** plays it at set times (see
-  *Schedules*). Playing
+  as it was when the channel ends. Playing
   anything else, or Stop, ends the channel. A channel of fewer than three pieces
   reads "Add more pieces" and does not play.
 - **Up next, shuffle and repeat**: the queue glyph on Now playing opens *Up
@@ -267,7 +266,7 @@ on the tablet*). Made by Steven Jin. Version 1.19.
   pause before each piece, default tempo, transpose, velocity, dynamic range, the
   quietest note, expression, the re-strike time, folding, drum
   channel; **Tablet sound**: the tablet's own piano sound and *Tablet volume*;
-  **Schedule**: timed play, see *Schedules*), **SHARING** (**Web panel**: the
+  **Quiet times**: the hours the piano stays silent, see *Quiet times*), **SHARING** (**Web panel**: the
   panel, its PIN, *Also on Wi-Fi* and the panel over the internet; **Guests**: the
   guests' switches and the poster) and **THIS TABLET** (**System**: the tablet's battery,
   temperature, memory and storage, the piano's controller and power boards, what the app is
@@ -287,14 +286,15 @@ on the tablet*). Made by Steven Jin. Version 1.19.
 - **Guests' requests**: a printed poster's QR code opens a request page on the
   tablet's Wi-Fi, where anyone can ask the piano for a piece from Popular,
   Recognisable or Epic on piano, or (from 1.14) the Modern list, one every five
-  minutes; it joins Up next, or waits for your Approve.
+  minutes; it joins Up next, or waits for your Approve, and never starts the piano by
+  itself: it waits in Up next for someone's Play.
 - **Updates**: the app looks for a newer release when it opens and once a day,
   and the Piano tab offers it under **UPDATE**: one tap downloads it, checks it
   and hands it to Android's installer. On the school tablet it installs without
   a tap (see *Updates* and *School tablet*).
-- **Schedules**: the piano plays a channel, a playlist or a piece by itself on
-  chosen days at a set time, until an end time or its end, at its own volume; the
-  tablet wakes for it with its screen off (see *Schedules*).
+- **Quiet times**: sections of days with blocks of time ("School days, Mon to Fri: 8:40–9:30,
+  9:40–10:30 …") when the piano stays silent; staff can **Play anyway** (see *Quiet times*).
+  Nothing starts a piece by itself: timed plays were removed in 1.20.
 - **Studio** (its own tab since 1.12): type an idea ("calm and slow", "a bright waltz,
   2 minutes", "stormy, in D minor", a composer or a piece's name) and the tablet composes a
   piece in that manner from the library, showing what it understood, its progress and the
@@ -810,8 +810,8 @@ internet or any server of ours.
 **The panel** has what the app has: Now playing (the time running, the transport,
 tempo, a channel's volume), Up next (reorder, remove, clear), the Library (the
 **All · Classical · Modern** switch, which the browser remembers; search, playlists,
-composers, or artists under Modern; Play, Play next, Add to queue), Channels, Schedule (see
-*Schedules*), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
+composers, or artists under Modern; Play, Play next, Add to queue), Channels, Quiet times (see
+*Quiet times*), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
 to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
 tally; a zip becomes a playlist and loose files go into **Uploads**, and under the
 tally "In the playlist MIDI" with **Open the playlist**) and **Piano** (the piano's
@@ -1042,11 +1042,11 @@ to use kiosk mode again. A factory reset also ends everything.
 (**Live** and **Record** included: a recording then waits, at most 30, for someone with the
 PIN to keep or discard it), but anything that changes the piano or the library asks for the
 kiosk PIN first: every page of the Piano tab (Instrument, Keyboard, Sound and touch, Lights and screen, Pedal,
-Firmware and status, Playback, Tablet sound, Schedule, Web panel, Guests, Display, Kiosk, Updates,
+Firmware and status, Playback, Tablet sound, Quiet times, Web panel, Guests, Display, Kiosk, Updates,
 Library and artwork, Help and about; so choosing or forgetting an instrument or a keyboard), keeping or
 discarding a recording, Disconnect; searching the settings stays free, and in the Library the
-**+** (adding music), deleting, renaming, playlists' edits, Change photo, and a channel's volume
-and Schedule. A
+**+** (adding music), deleting, renaming, playlists' edits, Change photo, and a channel's volume;
+and **Play anyway** during a quiet time. A
 small padlock marks them. The right PIN opens them for five minutes, or until the tablet
 rests in display mode, whichever comes first; while unlocked for now they are open too.
 
@@ -1056,43 +1056,34 @@ firmware carries on if the tablet rests meanwhile, and Firmware and status keeps
 while the settings are locked: how far it has got, and how it ended; only its Cancel asks for
 the PIN (and while it runs, its row opens without it).
 
-## Schedules
+## Quiet times
 
-The piano can play by itself at set times, as a Disklavier's timer does: a channel, a playlist
-or a piece, on chosen days, at a start time, until an end time or its end, at a volume.
-**Piano › Schedule** (the hub's row reads when the next one starts, "Next Wed 12:30"):
+Since 1.20 the piano never starts a piece by itself: someone presses Play, on the tablet or the web panel, and then Up
+next follows on, four pieces in a row at most. A guest's request joins Up next and waits for someone's Play. The timed
+plays of earlier versions (Schedules) were removed; any you saved stay on the tablet, unshown, and never run.
 
-1. **Add schedule**: choose the days (Weekdays and Every day are one tap), the start time, and
-   an end time or **Until the end** (a playlist or a piece plays out; a channel plays until
-   someone stops it). An end before the start is past midnight: "The next day".
-2. Under PLAYS, choose a channel, a playlist or a piece (search by title or composer).
-3. **Set the volume** (70% at first): the piano's own volume while it plays, or how hard its
-   keys are struck where the piano has none; what was there comes back when it ends, and the
-   piano never saves it. Off, the piano plays as it is set, and a channel at its own volume.
-4. **Save.** The row reads "Weekdays 12:30 · Calm channel · until 13:15 · 70%"; its switch
-   turns it off and on; a tap edits it; a long press offers Edit and Delete.
+**Quiet times** keep the piano silent at set hours, for lessons or the night. **Piano › Quiet times** (the hub's row
+reads "Quiet until 9:30" or "Next Mon 8:40"):
 
-A channel's card has **Schedule** in its long-press menu too, with that channel chosen. With
-nothing loaded, Now playing (and the tablet's panel) shows the next one: "Next: Wednesday 12:30,
-Calm". The web panel's **Schedule** page lists, adds, edits and deletes them the same way.
+1. **Add section**: a name ("School days"), its days (Weekdays and Every day are one tap), and its blocks, each from a
+   time to a time ("8:40–9:30"). **Add block** proposes the next one ten minutes after the last, as long as it. A block
+   that ends before it starts runs past midnight ("The next day"): 21:00–7:00 keeps the night quiet.
+2. **Save.** The page shows the week at a glance (Monday to Sunday, 6:00 to 22:00, the blocks hatched) and a card for
+   each section; **Edit** changes one, **Delete section** removes it. Up to 12 sections of 16 blocks; the blocks of one
+   section may not overlap (two sections may).
 
-**The tablet must be on**, charged and near the piano, with Bluetooth on: it is the tablet
-that starts each schedule, at the minute, with its screen off and asleep (an exact alarm wakes
-it). If the piano isn't connected, the tablet reaches for it and waits 20 seconds; if the piano
-doesn't come (switched off, out of range, another device holding it), nothing plays and the
-page says so: "Missed: Wednesday 12:30 (piano not connected)", also in Share diagnostics'
-connection log. While the piano's firmware is being updated nothing plays, and a start that
-falls then is missed the same way: "Missed: Wednesday 12:30 (the piano was updating)". In
-kiosk mode the Schedule page and a channel's Schedule ask for the kiosk PIN. A schedule
-replaces whatever was playing; at its end time the tablet stops what
-the schedule started, but never something someone chose meanwhile. A tablet switched off misses
-what falls while it is off; after it restarts, the next schedule is set again by itself (the app
-need not be opened). Set the app's battery use to *Unrestricted* (see *Keep playing with the
-screen off*).
+During a block the piano is silent: whatever plays stops as the block begins, and nothing starts until it ends; nothing
+resumes by itself afterwards. Now playing and the resting screen say **Quiet until 9:30** with **Play anyway**, which
+lifts the quiet until that block ends (the next block is quiet again); pressing Play asks the same. In kiosk mode Play
+anyway asks for the kiosk PIN. The Keys tab and a MIDI keyboard still play: someone is at the piano. The web panel's
+**Quiet times** page shows and edits the same sections and has Play anyway; its Play, while quiet, answers "Quiet until
+9:30. Use Play anyway." The guests' page says "The piano is resting until 9:30. Your request will wait until then.", and
+requests still go in.
 
-Android 13 and newer let the app start at an exact time by itself. On Android 12 the person may
-take that away (Settings › Apps › Special app access › Alarms & reminders): the page then shows
-**Allow exact alarms**, which opens that setting, and no schedule starts until it is allowed.
+**The tablet keeps the times**: leave it on, with the app's battery use *Unrestricted* (see *Keep playing with the screen
+off*). An exact alarm wakes it as each block begins. Android 13 and newer allow that by themselves; on Android 12 the
+person may take it away (Settings › Apps › Special app access › Alarms & reminders): the page then shows **Allow exact
+alarms**, which opens that setting, and until then the app stops the piano only while it is awake.
 
 **On the piano:**
 

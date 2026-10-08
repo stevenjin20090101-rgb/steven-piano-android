@@ -1355,6 +1355,12 @@ the kiosk PIN first.
 
 # v1.6.2 — M19: schedules
 
+> **Retired in 1.20 (M54).** Nothing plays by itself any more: the timed plays below are gone, and this section is
+> kept as their record. The Schedule page became **Quiet times** (see "v1.20 — M54: quiet times"); the editor, a
+> channel's **Schedule**, the "NEXT: …" line on Now playing, the last line, the runner and the panel's Schedule page
+> went with them. Rows saved before 1.20 stay in the table, unshown and never run. The one exact alarm, its
+> receiver and Allow exact alarms stay, for quiet times.
+
 Steven asked for timed play, Disklavier's Timer Play in the app's language: a playlist, a channel
 or a piece on chosen days at a start time, until an end time or its end, at a volume. The tablet
 plays them itself, from one exact alarm, with its screen off and dozing; the web panel lists and
@@ -1452,6 +1458,8 @@ no schedule is ahead. It moves on as the minutes pass.
   (its hold ceiling, its silence on a dropped link) apply as to any playing.
 
 ## The web panel's Schedule page
+
+(Retired in 1.20: `GET /api/schedules` answers an empty list for older pages, its writes 410.)
 
 - The page's head: **Schedule**, and **Add schedule** (outlined) at its end. Then NEXT: …, the
   last line in the notes' size, a banner while exact alarms are off on the tablet ("Exact alarms
@@ -2969,3 +2977,77 @@ cover…**: a sheet in the editors' glass with the piece's title and composer, a
 "title composer", and the covers found as tiles (the picture at 96 px, the album, the artist). A tap makes one the piece's
 own ("Cover changed."), credited on the piece sheet as a found cover is; **Remove this piece's cover** (after a word) brings
 the portrait or the roll card back. Neither is ever undone by a lookup. The tablet asks Apple: one search in 4 s.
+
+# v1.20 — M54: quiet times
+
+Steven asked (2026-10-08) for "down time with a schedule so the piano will not be played", then to "remove automatic
+play altogether … remove automatically starting to play a song", and for quiet time "sectioned … multiple times a day in
+blocks". His choices: quiet time is **silent, staff can override**, and it is set up **on the panel and on the tablet**.
+Designed from an inline mock; approved the same day.
+
+## Nothing starts a song by itself
+
+- **Timed plays go** (v1.6.2 — M19, retired in place): nothing starts a channel, a playlist or a piece at a time. Rows
+  saved before stay in the table, unshown and never run (nothing deleted). The alarm wakes the tablet for quiet times
+  alone.
+- **A guest's request never starts playback.** Approved, or let in without approval, it joins Up next; with nothing
+  playing it waits there, its piece loaded at its start, for someone to press Play.
+- **Nothing resumes** by itself when a quiet time ends.
+- **Kept**: once a person presses Play, Up next follows on, four pieces in a row at most (v1.19).
+
+## Sections and blocks
+
+- A **section** is a name ("School days", 1 to 40 characters), its days, and its **blocks**, each from a time to a time
+  ("8:40–9:30"). A block whose end comes before its start runs past midnight into the next morning ("Night, every day:
+  21:00–7:00"). At most 12 sections and 16 blocks each; two blocks of one section may not meet on any of its days (one
+  ending as the next starts meets nothing); sections may overlap each other, and the quiet is then their union.
+- **The quiet now**: a block is on. It lasts until the quiet ends, carried on through any block, of any section, that
+  starts before that end or at it. "Next quiet time" is the next block's start.
+- **The words**: "Quiet now · until 9:30", "Lifted until 9:30" (after Play anyway), "Next quiet time 9:40" (with its short
+  weekday when it isn't today: "Next quiet time Mon 8:40"), "No quiet times set"; the capsule "Quiet until 9:30"; the hub's
+  "Quiet until 9:30", "Next Mon 8:40" or "None". Times are the tablet's, the 24-hour clock with no leading zero (a day or
+  more away, the weekday first: "Quiet until Tue 7:00").
+
+## While quiet
+
+- **At a block's start** whatever plays stops, with the piano's stop sequence: from the one exact alarm as the block
+  begins, from the app's own clock while it is awake, and at once when the app starts inside a block.
+- **Until it ends** nothing starts: Play, a list's Play or Shuffle, a channel, Next, Previous, a piece from Up next, and
+  the end of a piece (the next one waits, loaded). What is added to Up next waits there, loaded, for Play. The Keys tab
+  and a MIDI keyboard still sound: a person is at the piano.
+- **Play anyway** lifts the quiet until the block ends; a block that begins after it is quiet again. It is kept in
+  memory only. On the tablet it asks for the kiosk PIN while the kiosk keeps the settings locked; on the panel any
+  signed-in device may use it.
+
+## On the tablet
+
+- **Piano › Quiet times**, where Schedule was in PLAYING (search finds it by quiet, downtime, silent, class and schedule),
+  behind the kiosk PIN like every page: at its top the moon and the quiet now, with **Play anyway** while one holds; the
+  week at a glance (Monday to Sunday across, 6:00 to 22:00 down, the hours 6, 12, 18 and 22 ruled in hairlines, every
+  block hatched in the content colour inside a tertiary edge); Allow exact alarms while Android refuses them; SECTIONS, a
+  card a section (its name, its days, its blocks as chips, **Edit**); **Add section**, with what a quiet time does under it.
+- **The editor**, a sheet: QUIET TIMES over **Add section** or **Edit section**; the name; DAYS, a chip a day and Weekdays,
+  Every day; BLOCKS, each **From** and **to** on the app's outlined buttons, which open the time picker (the schedule
+  editor's, in the ink), "The next day" under one that crosses midnight, and its remove glyph; **Add block**, proposing a
+  block ten minutes after the last one's end, as long as it (a new section's first: the next whole hour, for 50 minutes);
+  what keeps it from saving, in the rules' words; **Delete section** (after a word), **Cancel**, **Save**.
+- **Now playing** (and the now-playing panel beside the Library): while a quiet time holds, a glass capsule, the moon,
+  "Quiet until 9:30" and **Play anyway**, at the foot among the capsules, or over "Choose a piece from the library." The
+  transport's Play, a row's play, a channel's card and a tap in Up next ask first: "Quiet until 9:30", "The piano is resting for a quiet
+  time. Play anyway lifts it until 9:30.", **Cancel** and **Play anyway**, which plays what was asked.
+- **The resting screen**, at the foot opposite the live dot: the moon, "Quiet until 9:30" and **Play anyway** as an outlined
+  pill. A touch leaves the resting screen as any touch does; on the pill it then plays anyway (TalkBack offers it as an
+  action).
+- The channels' long press keeps Set volume alone.
+
+## On the web panel
+
+- **Quiet times** (the frame's section, M53, loads `quiet.js`): the page as the tablet's, in the panel's classes: the
+  quiet now with Play anyway, the week strip (its blocks hatched with a CSS pattern of the tokens), a card a section, **Add
+  section** in the head; the editor in the editors' sheet with the browser's time fields, the same rules and words, and
+  the tablet's own words when it refuses a save; Delete asks through the frame's dialog.
+- **Now playing's capsule** (the frame's, M53) reads the state's `quiet`; a play while quiet is answered "Quiet until
+  9:30. Use Play anyway."
+- **The guests' page**: while a quiet time holds the piano, under its head, "The piano is resting until 9:30. Your request
+  will wait until then." A request still goes in.
+
