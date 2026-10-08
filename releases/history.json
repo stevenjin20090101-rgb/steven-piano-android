@@ -246,8 +246,10 @@
     "versionName": "1.20",
     "notes": "The web panel is calmer: five menu items with icons (Now playing, Library, Quiet times, Studio, Settings), the app's icon in the browser tab and beside the name, no connection text unless something is wrong, and smooth motion. Channels and Add music are in Library, guests' requests at the top of Up next, System and Guests in Settings. New: Quiet times, set on the panel or on the tablet in sections of blocks, such as each class period. During a block anything playing stops and nothing starts until it ends; Play anyway lifts it until the block ends. Nothing starts a song by itself any more: timed plays are gone, and approved guests' requests wait for someone to press Play.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.20/steven-piano-1.20.apk",
+    "sha256": "fdfdc2e465c0f1e5b35676566c0346bcf91a254928dcc77d8856240fe33203a6",
+    "sizeBytes": 14170284,
     "minSdk": 26,
     "tag": "v1.20",
-    "draft": true
+    "publishedAt": "2026-10-08"
   }
 ]
