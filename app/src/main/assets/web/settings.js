@@ -8,10 +8,11 @@
    ============================================================================ */
 
 // The panel's Settings page (DESIGN.md › v1.18 — M47b): an ES module the frame (app.js) imports the first time the
-// section `piano` shows, create(host, body, tools) → { show(), hide(), render(state) }. A list of pages (Playback, the
-// piano's three, Panel) with the chosen page's cards beside it from 900 px; below that the list, and a page over it
-// with a back row (system.css › Settings). Every element is built with DOM calls, what the tablet says goes in as
-// text, sizes go through the CSSOM, and every request is built from host.ROOT.
+// section `settings` shows, create(host, body, tools) → { show(), hide(), render(state), open(page) }. A list of pages
+// (System, Playback, the piano's three, Guests, Panel; v1.20 — M53 added System, system.js's page made here through
+// host.system(), and Guests, the guests' two switches and their address) with the chosen page's cards beside it from
+// 900 px; below that the list, and a page over it with a back row (system.css › Settings). Every element is built with
+// DOM calls, what the tablet says goes in as text, sizes go through the CSSOM, and every request is built from host.ROOT.
 
 /** The app's own words (ui/SettingNotes.kt, ui/PlaybackCopy.kt), so the panel says what the tablet says. */
 const NOTES = {
@@ -24,6 +25,9 @@ const NOTES = {
   foldOutOfRange: 'Moves notes the piano lacks into its range',
   skipDrumChannel: 'Skips the drum part of a file',
   albumBackdrop: "The album's colours drift behind the player while playing",
+  // The tablet's Guests page (ui/SettingNotes.kt).
+  webGuests: "Anyone with the poster's code can ask for a piece",
+  webApproveFirst: 'A request waits for you before it plays',
 };
 const FULL_POWER_ON =
   'Full power is on: every note strikes at full strength. Turn it off on Sound and touch to hear dynamics and expression.';
@@ -80,8 +84,8 @@ export function create(host, body, tools) {
   let prefsFailed = false;
   let showing = false;
 
-  /** The page chosen, and (below 900 px) whether it is open over the list. */
-  let chosen = stored() || 'feel';
+  /** The page chosen (System, the first, unless this browser chose another), and (below 900 px) whether it is open over the list. */
+  let chosen = stored() || 'system';
   let opened = false;
 
   /** A piano setting being changed: its value until the piano's own comes back, or [SETTLE_MS] after it was sent. */
@@ -119,6 +123,8 @@ export function create(host, body, tools) {
   const linkName = h('span');
   const linkCapsule = h('span', { class: 'capsule glass wide', hidden: true }, h('span', { class: 'dot live' }), linkName);
   const save = h('button', { class: 'outlined filled', type: 'button', hidden: true }, glyph('g-save'), h('span', { text: 'Save to the piano' }));
+  /** System's page (v1.20 — M53): its head's capsules in [system.tools], its cards in [system.holder], made once. */
+  const system = { state: 'idle', page: null, showing: false, holder: h('div', { class: 'system-holder' }), tools: h('span', { class: 'system-tools', hidden: true }) };
   save.addEventListener('click', async () => {
     try {
       await host.post(host.ROOT + '/api/piano/action', { name: 'save' });
@@ -127,7 +133,7 @@ export function create(host, body, tools) {
       host.failed(e);
     }
   });
-  if (tools) fill(tools, linkCapsule, save);
+  if (tools) fill(tools, system.tools, linkCapsule, save);
 
   // ---- What the state says ------------------------------------------------------------------------------------------
 
@@ -688,6 +694,80 @@ export function create(host, body, tools) {
     return nodes;
   }
 
+  // ---- System (v1.20 — M53: system.js's page, the first of Settings) -----------------------------------------------------
+
+  /** system.js through the frame, once: its page is made in [system.holder] the first time System shows. */
+  function loadSystemPage() {
+    if (system.state !== 'idle') return;
+    if (typeof host.system !== 'function') {
+      system.state = 'failed';
+      return;
+    }
+    system.state = 'loading';
+    Promise.resolve(host.system()).then((module) => {
+      const page = module && typeof module.create === 'function' ? guarded(() => module.create(host, system.holder, system.tools)) : null;
+      system.page = page && typeof page.show === 'function' ? page : null;
+      system.state = system.page ? 'ready' : 'failed';
+      update();
+    }, () => {
+      system.state = 'failed';
+      update();
+    });
+  }
+
+  /** System's page runs (its reads, every 5 s) only while it shows: chosen, beside the list or open over it, and Settings showing. */
+  function systemShows(page) {
+    const on = showing && page.key === 'system' && (opened || window.matchMedia(WIDE).matches) && !!system.page;
+    if (on && !system.showing) {
+      system.showing = true;
+      guarded(() => system.page.show());
+    } else if (!on && system.showing) {
+      system.showing = false;
+      guarded(() => system.page.hide());
+    }
+    if (system.showing && st) guarded(() => system.page.render(st));
+  }
+
+  function buildSystem() {
+    if (system.state === 'failed') return [h('p', { class: 'note', text: "The System page couldn't be loaded. Reload the page to try once more." })];
+    return [system.holder];
+  }
+
+  // ---- Guests (v1.20 — M53: the guests' switches and their address, from the Requests page of 1.19) -------------------
+
+  /** One of the guests' two settings: a change just made here, else the state's (it lives there, live). */
+  function guestSetting(name, field) {
+    const change = pending.get(name);
+    if (change) return change.value;
+    const requests = st && st.requests;
+    return requests && typeof requests[field] === 'boolean' ? requests[field] : null;
+  }
+
+  const guestsOpen = () => guestSetting('webGuests', 'guests');
+  const approveFirst = () => guestSetting('webApproveFirst', 'approveFirst');
+
+  function buildGuests() {
+    const openEnabled = () => guestsOpen() !== null;
+    const approveEnabled = () => guestsOpen() === true && approveFirst() !== null;
+    const address = h('p', { class: 'note pane-line' });
+    controls.push({
+      update() {
+        const guest = st && st.web && st.web.guestAddress;
+        const text = guest ? `Guests ask at ${guest}, or with the poster's code.` : '';
+        if (address.textContent !== text) address.textContent = text;
+        address.hidden = !text;
+      },
+    });
+    return [
+      h('section', { class: 'card', 'aria-label': 'Guests' },
+        row('Guests can request', [h('span', { class: 'meta', text: NOTES.webGuests })],
+          switchControl('Guests can request', guestsOpen, (on) => sendPref('webGuests', on), openEnabled), openEnabled),
+        row('Approve requests first', [h('span', { class: 'meta', text: NOTES.webApproveFirst })],
+          switchControl('Approve requests first', approveFirst, (on) => sendPref('webApproveFirst', on), approveEnabled), approveEnabled)),
+      address,
+    ];
+  }
+
   // ---- Panel (this browser's appearance, and Album colours behind the player) -----------------------------------------
 
   const appearanceNow = () => {
@@ -729,14 +809,22 @@ export function create(host, body, tools) {
       ? table.pages.filter((p) => p && typeof p.key === 'string').map((p) => ({ key: p.key, title: p.title || p.key }))
       : PIANO_PAGES;
     return [
+      ...(system.state === 'failed' ? [] : [{ key: 'system', title: 'System', glyph: 'g-system' }]),
       { key: 'playback', title: 'Playback', glyph: 'g-now' },
       ...piano.map((p) => ({ key: p.key, title: p.title, glyph: PIANO_GLYPHS[p.key] || 'g-piano', piano: true })),
+      { key: 'guests', title: 'Guests', glyph: 'g-guests' },
       { key: 'panel', title: 'Panel', glyph: 'g-grid' },
     ];
   }
 
   /** The line under a page's name: what is set there now. */
   function summary(page) {
+    if (page.key === 'system') return 'The tablet, the controller, the piano';
+    if (page.key === 'guests') {
+      // As the tablet's hub says it: Off, On, On · approve first.
+      if (guestsOpen() === null) return '';
+      return guestsOpen() ? (approveFirst() ? 'On · approve first' : 'On') : 'Off';
+    }
     if (page.key === 'playback') {
       if (!prefs) return 'Tempo, velocity, expression';
       const expression = EXPRESSIONS.find(([wire]) => wire === prefValue('expression'));
@@ -835,21 +923,25 @@ export function create(host, body, tools) {
     const midi = page.piano && otherInstrument() !== null;
     const shape = page.key === 'playback' ? (prefs ? 'prefs' : prefsFailed ? 'failed' : 'loading')
       : page.piano ? `${midi ? 'midi' : piano().state === 'unsupported' ? 'unsupported' : 'cards'}:${table ? 'table' : tableFailed ? 'failed' : 'none'}:${listKey}`
-        : 'panel';
+        : page.key === 'system' ? system.state
+          : page.key;
     const key = `${page.key}|${shape}`;
     if (key !== paneKey) {
       paneKey = key;
       controls = [];
       paneTitle.textContent = page.title;
-      const nodes = page.key === 'playback' ? buildPlayback() : page.key === 'panel' ? buildPanel() : buildPiano(page.key);
-      fill(paneBody, nodes);
+      const build = { playback: buildPlayback, panel: buildPanel, guests: buildGuests, system: buildSystem }[page.key];
+      fill(paneBody, build ? build() : buildPiano(page.key));
     }
     for (const control of controls) control.update();
     return page;
   }
 
   function renderTools(page) {
-    const showLink = connected();
+    // System's own capsules (what needs attention, how old the figures are) while its page shows; the piano's link else.
+    const onSystem = page.key === 'system' && system.showing;
+    system.tools.hidden = !onSystem;
+    const showLink = connected() && !onSystem;
     linkCapsule.hidden = !showLink;
     if (showLink) {
       const name = link().name || otherInstrument() || 'the piano';
@@ -864,11 +956,16 @@ export function create(host, body, tools) {
   }
 
   function update() {
-    if (!showing) return;
+    if (!showing) {
+      if (system.showing) systemShows({ key: '' });
+      return;
+    }
     settle();
     split.classList.toggle('opened', opened);
+    loadSystemPage();   // once: without system.js, Settings has no System page
     renderList();
     const page = renderPane();
+    systemShows(page);
     renderTools(page);
   }
 
@@ -889,9 +986,18 @@ export function create(host, body, tools) {
     hide() {
       showing = false;
       dragging = null;
+      update();   // System's page stops its reads
     },
     render(state) {
       if (state) st = state;
+      update();
+    },
+    /** [key]'s page, chosen and open (an address that names it: #system). */
+    open(key) {
+      if (typeof key !== 'string' || !key) return;
+      chosen = key;
+      opened = true;
+      remember(key);
       update();
     },
   };
@@ -939,6 +1045,16 @@ function stored() {
     return localStorage.getItem(STORED_PAGE);
   } catch (e) {
     return null;
+  }
+}
+
+/** Runs [fn] for System's page; what it throws is kept from Settings. */
+function guarded(fn) {
+  try {
+    return fn();
+  } catch (e) {
+    if (window.console) console.error(e);
+    return undefined;
   }
 }
 

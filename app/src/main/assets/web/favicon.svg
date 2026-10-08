@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="72" height="72">
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<!-- The mark (v1.20 — M53): the app's launcher icon (res/drawable/ic_launcher_foreground.xml on the background it names,
+     res/values/colors.xml › ic_launcher_background), its 72-unit safe area, with corners of a quarter of its side. A
+     picture: its two colours are the icon's own, the camera body's surface and primary. -->
+<rect x="18" y="18" width="72" height="72" rx="18" fill="#0E0E0E"/>
+<path fill="#F2F2F2" d="M37,42 A4,4 0 0 1 41,38 A4,4 0 0 1 45,42 L45,66 A4,4 0 0 1 41,70 A4,4 0 0 1 37,66 Z M50,34 A4,4 0 0 1 54,30 A4,4 0 0 1 58,34 L58,54 A4,4 0 0 1 54,58 A4,4 0 0 1 50,54 Z M63,50 A4,4 0 0 1 67,46 A4,4 0 0 1 71,50 L71,74 A4,4 0 0 1 67,78 A4,4 0 0 1 63,74 Z"/>
+</svg>

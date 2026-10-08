@@ -14,13 +14,14 @@
 <meta name="color-scheme" content="dark light">
 <meta name="referrer" content="no-referrer">
 <title>Steven Piano</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="system.css">
 <script src="app.js" defer></script>
 </head>
 <body>
-<!-- The app's own glyphs (res/drawable), drawn in the content colour; then the panel's stroke glyphs (v1.18 — M47),
-     the sections' and the pages' own, for app.js and the modules (host.glyph('g-…')). -->
+<!-- The app's own glyphs (res/drawable), drawn in the content colour; then the panel's stroke glyphs (v1.18 — M47; more
+     in v1.20 — M53), the sections' and the pages' own, for app.js and the modules (host.glyph('g-…')). -->
 <svg class="sprite" aria-hidden="true" focusable="false">
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M8,5L19,12L8,19Z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7,5h3.5v14H7z M13.5,5H17v14h-3.5z"/></symbol>
@@ -69,6 +70,17 @@
   <symbol id="g-minus" viewBox="0 0 24 24"><path class="glyph-stroke" d="M6 12h12"/></symbol>
   <symbol id="g-plus" viewBox="0 0 24 24"><path class="glyph-stroke" d="M12 6v12M6 12h12"/></symbol>
   <symbol id="g-grid" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z"/></symbol>
+  <symbol id="g-moon" viewBox="0 0 24 24"><path class="glyph-stroke" d="M19.5 12.66A7.5 7.5 0 1 1 11.34 4.5 5.83 5.83 0 0 0 19.5 12.66z"/></symbol>
+  <symbol id="g-gear" viewBox="0 0 24 24"><path class="glyph-stroke" d="M10.65 6.15L10.89 4.08L13.11 4.08L13.35 6.15A6 6 0 0 1 15.18 6.91L16.81 5.61L18.39 7.19L17.09 8.82A6 6 0 0 1 17.85 10.65L19.92 10.89L19.92 13.11L17.85 13.35A6 6 0 0 1 17.09 15.18L18.39 16.81L16.81 18.39L15.18 17.09A6 6 0 0 1 13.35 17.85L13.11 19.92L10.89 19.92L10.65 17.85A6 6 0 0 1 8.82 17.09L7.19 18.39L5.61 16.81L6.91 15.18A6 6 0 0 1 6.15 13.35L4.08 13.11L4.08 10.89L6.15 10.65A6 6 0 0 1 6.91 8.82L5.61 7.19L7.19 5.61L8.82 6.91A6 6 0 0 1 10.65 6.15Z"/><circle class="glyph-stroke" cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="g-note" viewBox="0 0 24 24"><path class="glyph-stroke" d="M9.5 17V7l9-2.2v10"/><circle class="glyph-stroke" cx="7.3" cy="17" r="2.2"/><circle class="glyph-stroke" cx="16.3" cy="14.8" r="2.2"/></symbol>
+  <symbol id="g-playlist" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4.5 7h10M4.5 11.5h10M4.5 16h5.5M17.5 17.5V9.2l2.6.9"/><circle class="glyph-stroke" cx="15.7" cy="17.5" r="1.8"/></symbol>
+  <symbol id="g-person" viewBox="0 0 24 24"><circle class="glyph-stroke" cx="12" cy="8.6" r="3.4"/><path class="glyph-stroke" d="M5.5 19.5a6.5 6.5 0 0 1 13 0"/></symbol>
+  <symbol id="g-guests" viewBox="0 0 24 24"><circle class="glyph-stroke" cx="9.5" cy="9" r="3"/><path class="glyph-stroke" d="M3.8 19.2a5.7 5.7 0 0 1 11.4 0M15.6 6.4a2.6 2.6 0 0 1 0 5.2M17.2 14.2a5 5 0 0 1 3.2 4.6"/></symbol>
+  <symbol id="g-play" viewBox="0 0 24 24"><path class="glyph-stroke" d="M8.5 6.3v11.4l9-5.7z"/></symbol>
+  <symbol id="g-up" viewBox="0 0 24 24"><path class="glyph-stroke" d="M7 14.5l5-5 5 5"/></symbol>
+  <symbol id="g-down" viewBox="0 0 24 24"><path class="glyph-stroke" d="M7 9.5l5 5 5-5"/></symbol>
+  <symbol id="g-x" viewBox="0 0 24 24"><path class="glyph-stroke" d="M7 7l10 10M17 7L7 17"/></symbol>
+  <symbol id="g-check" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5.5 12.5l4.2 4.2 8.8-9.2"/></symbol>
 </svg>
 
 <main id="gate" class="gate" hidden>
@@ -104,37 +116,23 @@
     <div class="bd-veil"></div>
   </div>
 
-  <!-- The rail (from 900 px a glass card, its groups under engraved headings), the tab strip below it; on phones the
-       name and the connection line over the page, the sections in the bar at the foot. -->
+  <!-- The rail (from 900 px a glass card), the tab strip below it; on phones the mark and the name over the page, the
+       sections in the bar at the foot. Five places (v1.20 — M53), each a stroke glyph and its name; the head is the mark,
+       the name and a status dot, with a short pill under them only while something is wrong. -->
   <nav class="sections" aria-label="Sections">
     <div class="rail-card glass">
       <div class="identity">
+        <img class="mark" src="favicon.svg" alt="" width="24" height="24">
         <p class="piano-name">Steven Piano</p>
-        <p class="connection"><span class="dot" id="conn-dot"></span><span id="conn-text">Connecting…</span></p>
+        <span class="dot" id="conn-dot" role="img" aria-label="Connecting"></span>
+        <p class="status-pill" id="conn-pill" role="status" aria-live="polite" hidden></p>
       </div>
       <div class="section-list">
-        <div class="nav-group" role="group" aria-labelledby="rail-play">
-          <p class="eyebrow" id="rail-play">Play</p>
-          <button class="nav-item" type="button" data-section="now"><svg class="glyph" aria-hidden="true"><use href="#g-now"/></svg><span>Now playing</span></button>
-          <button class="nav-item up-next-item" type="button" data-section="queue"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg><span>Up next</span></button>
-          <button class="nav-item" type="button" data-section="library"><svg class="glyph" aria-hidden="true"><use href="#g-library"/></svg><span>Library</span></button>
-          <button class="nav-item" type="button" data-section="channels"><svg class="glyph" aria-hidden="true"><use href="#g-channels"/></svg><span>Channels</span></button>
-        </div>
-        <div class="nav-group" role="group" aria-labelledby="rail-plan">
-          <p class="eyebrow" id="rail-plan">Plan</p>
-          <button class="nav-item" type="button" data-section="schedule"><svg class="glyph" aria-hidden="true"><use href="#g-schedule"/></svg><span>Schedule</span></button>
-          <button class="nav-item" type="button" data-section="requests"><svg class="glyph" aria-hidden="true"><use href="#g-requests"/></svg><span>Requests</span><span class="count" id="requests-count" data-count="requests" hidden>0</span></button>
-        </div>
-        <div class="nav-group" role="group" aria-labelledby="rail-make">
-          <p class="eyebrow" id="rail-make">Make</p>
-          <button class="nav-item" type="button" data-section="add"><svg class="glyph" aria-hidden="true"><use href="#g-add"/></svg><span>Add</span></button>
-          <button class="nav-item" type="button" data-section="studio"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span></button>
-        </div>
-        <div class="nav-group" role="group" aria-labelledby="rail-piano">
-          <p class="eyebrow" id="rail-piano">Piano</p>
-          <button class="nav-item" type="button" data-section="piano"><svg class="glyph" aria-hidden="true"><use href="#g-piano"/></svg><span>Settings</span></button>
-          <button class="nav-item" type="button" data-section="system" hidden><svg class="glyph" aria-hidden="true"><use href="#g-system"/></svg><span>System</span></button>
-        </div>
+        <button class="nav-item" type="button" data-section="now"><svg class="glyph" aria-hidden="true"><use href="#g-now"/></svg><span>Now playing</span><span class="count" data-count="requests" hidden>0</span></button>
+        <button class="nav-item" type="button" data-section="library"><svg class="glyph" aria-hidden="true"><use href="#g-library"/></svg><span>Library</span></button>
+        <button class="nav-item" type="button" data-section="quiet"><svg class="glyph" aria-hidden="true"><use href="#g-moon"/></svg><span>Quiet times</span></button>
+        <button class="nav-item" type="button" data-section="studio"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span></button>
+        <button class="nav-item" type="button" data-section="settings"><svg class="glyph" aria-hidden="true"><use href="#g-gear"/></svg><span>Settings</span></button>
       </div>
       <div class="rail-foot" id="rail-vitals"></div>
     </div>
@@ -142,12 +140,16 @@
 
   <main class="page" id="page">
     <!-- Now playing: the art view (the cover large, the words, the transport, the capsules) or, with Notes or Score,
-         the strip over the views; Up next beside it from 1100 px. -->
+         the strip over the views; Up next beside it from 1100 px, below that a sheet its capsule opens. The head says
+         when the piano is quiet (v1.20 — M54's quiet times), with Play anyway. -->
     <section id="section-now" data-page="now" class="now" hidden>
       <div class="page-head">
         <h1>Now playing</h1>
         <div class="head-tools">
-          <p class="capsule glass link-capsule"><span class="dot" id="link-dot"></span><span id="link-text">Not connected</span></p>
+          <p class="capsule glass quiet-capsule" id="quiet-capsule" hidden><svg class="glyph" aria-hidden="true"><use href="#g-moon"/></svg><span id="quiet-text">Quiet now</span></p>
+          <button class="capsule glass button" id="quiet-override" type="button" hidden><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg><span>Play anyway</span></button>
+          <button class="capsule glass button up-next-button" id="queue-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="queue-sheet"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg><span>Up next</span><span class="count" data-count="requests" hidden>0</span></button>
+          <p class="capsule glass link-capsule"><span class="dot" id="link-dot"></span><span>Piano</span><span class="visually-hidden" id="link-state">, not connected</span></p>
         </div>
       </div>
       <div class="now-body">
@@ -167,7 +169,7 @@
             <div class="transport">
               <button class="icon-button mode" id="now-shuffle" type="button" aria-pressed="false" aria-label="Shuffle"><svg class="glyph"><use href="#i-shuffle"/></svg></button>
               <button class="icon-button" id="now-previous" type="button" aria-label="Previous"><svg class="glyph"><use href="#i-previous"/></svg></button>
-              <button class="play-circle" id="now-play" type="button" aria-label="Play"><svg class="glyph"><use href="#i-play" id="now-play-glyph"/></svg></button>
+              <button class="play-circle" id="now-play" type="button" aria-label="Play"><svg class="glyph play-glyph" aria-hidden="true"><use href="#i-play"/></svg><svg class="glyph pause-glyph" aria-hidden="true"><use href="#i-pause"/></svg></button>
               <button class="icon-button" id="now-next" type="button" aria-label="Next"><svg class="glyph"><use href="#i-next"/></svg></button>
               <button class="icon-button mode" id="now-repeat" type="button" aria-pressed="false" aria-label="Repeat off"><svg class="glyph"><use href="#i-repeat" id="now-repeat-glyph"/></svg></button>
             </div>
@@ -188,10 +190,6 @@
             <div class="segmented glass views-switch" id="now-switch" role="group" aria-label="Show" hidden></div>
             <button class="capsule glass button views-view" id="now-view" type="button" aria-haspopup="dialog" aria-expanded="false" hidden>View</button>
           </div>
-          <div class="now-lines">
-            <p class="meta" id="instrument-line" hidden></p>
-            <p class="meta" id="keyboard-line" hidden></p>
-          </div>
           <!-- The volumes' sliders, each in a small popover over its capsule. -->
           <div class="popover glass" id="channel-volume-pop" role="dialog" aria-labelledby="channel-volume-label" hidden>
             <p class="popover-title" id="channel-volume-label">Channel volume</p>
@@ -200,62 +198,42 @@
           <div class="popover glass" id="tablet-volume-pop" role="dialog" aria-labelledby="tablet-volume-title" hidden>
             <p class="popover-title" id="tablet-volume-title">Tablet volume</p>
             <input class="range" id="tablet-volume-range" type="range" min="0" max="100" step="1" aria-label="Tablet sound volume">
-            <p class="meta" id="tablet-volume-note"></p>
           </div>
         </div>
         <aside class="now-side glass" id="now-side" aria-label="Up next"></aside>
       </div>
     </section>
 
-    <section id="section-queue" data-page="queue" hidden>
-      <div class="page-head"><h1>Up next</h1></div>
-      <div class="content card queue-card" id="queue-full"></div>
-    </section>
-
+    <!-- The Library: Pieces · Playlists · Composers · Channels (v1.20 — M53: the channels' cards here), Add music in its
+         head opening the upload sheet. -->
     <section id="section-library" data-page="library" hidden>
-      <div class="page-head"><h1>Library</h1></div>
+      <div class="page-head">
+        <h1>Library</h1>
+        <div class="head-tools">
+          <button class="capsule glass button" id="add-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="add-sheet"><svg class="glyph" aria-hidden="true"><use href="#g-plus"/></svg><span>Add music</span></button>
+        </div>
+      </div>
       <div class="lib-tools">
+        <div class="segmented lib-kind" id="lib-kind" role="group" aria-label="Show"></div>
         <div class="segmented" id="lib-genre" role="group" aria-label="Genre"></div>
         <label class="field search-field"><svg class="glyph" aria-hidden="true"><use href="#g-search"/></svg><input id="lib-search" type="search" placeholder="Search titles and composers" aria-label="Search the library" autocomplete="off" maxlength="200"></label>
         <div class="segmented" id="lib-view" role="group" aria-label="Show as"></div>
       </div>
-      <div class="chips lib-chips" id="lib-chips" role="group" aria-label="Show"></div>
+      <div class="chips lib-chips" id="lib-chips" role="group" aria-label="Pieces"></div>
       <div class="crumb" id="lib-crumb" hidden></div>
+      <div class="lib-channels" id="lib-channels" hidden>
+        <div class="channel-bar" id="channel-bar" hidden><button class="outlined" id="channel-stop" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-off"/></svg><span>Stop the channel</span></button></div>
+        <div class="tiles" id="channel-tiles"></div>
+      </div>
       <ul class="rows card" id="lib-rows"></ul>
       <p class="empty" id="lib-empty" hidden></p>
       <div class="more-button" id="lib-more" hidden><button class="outlined" type="button">Show more</button></div>
     </section>
 
-    <section id="section-channels" data-page="channels" hidden>
-      <div class="page-head"><h1>Channels</h1><div class="head-tools"><button class="outlined" id="channel-stop" type="button" hidden>Stop the channel</button></div></div>
-      <div class="tiles" id="channel-tiles"></div>
-      <p class="empty" id="channels-empty" hidden>The channels are being worked out from the library.</p>
-    </section>
-
-    <section id="section-schedule" data-page="schedule" hidden>
-      <div class="page-head"><h1>Schedule</h1><div class="head-tools"><button class="outlined" id="schedule-add" type="button">Add schedule</button></div></div>
-      <div class="content" id="schedule-body"></div>
-    </section>
-
-    <section id="section-requests" data-page="requests" hidden>
-      <div class="page-head"><h1>Requests</h1></div>
-      <div class="content stack">
-        <div>
-          <ul class="rows card" id="requests-rows"></ul>
-          <p class="empty" id="requests-empty">No requests waiting.</p>
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>Guests</h2></div>
-          <div class="setting"><div class="label">Guests can request</div><button class="switch" role="switch" type="button" id="guests-open" aria-checked="false" aria-label="Guests can request"></button></div>
-          <div class="setting"><div class="label">Approve requests first</div><button class="switch" role="switch" type="button" id="guests-approve" aria-checked="false" aria-label="Approve requests first"></button></div>
-          <p class="note inset" id="guests-address"></p>
-        </div>
-      </div>
-    </section>
-
-    <section id="section-add" data-page="add" hidden>
-      <div class="page-head"><h1>Add</h1></div>
-      <div class="content" id="add-body"></div>
+    <!-- Quiet times (v1.20): quiet.js fills it the first time it shows; while the module is not there, the head alone. -->
+    <section id="section-quiet" data-page="quiet" hidden>
+      <div class="page-head"><h1>Quiet times</h1><div class="head-tools" id="quiet-tools"></div></div>
+      <div id="quiet-body"></div>
     </section>
 
     <section id="section-studio" data-page="studio" hidden>
@@ -263,17 +241,11 @@
       <div class="content" id="studio-body"></div>
     </section>
 
-    <!-- Settings (the section's key stays piano): settings.js fills it when it is there (v1.18 — M47b); until then the
-         built-in page shows. -->
-    <section id="section-piano" data-page="piano" hidden>
-      <div class="page-head"><h1>Settings</h1><div class="head-tools" id="piano-tools"></div></div>
-      <div id="piano-body"></div>
-    </section>
-
-    <!-- System: system.js fills it; its item stays hidden until the module is there. -->
-    <section id="section-system" data-page="system" hidden>
-      <div class="page-head"><h1>System</h1><div class="head-tools" id="system-tools"></div></div>
-      <div id="system-body"></div>
+    <!-- Settings: settings.js fills it when it is there (v1.18 — M47b), System its first page and Guests among them
+         (v1.20 — M53); until then the built-in page shows. -->
+    <section id="section-settings" data-page="settings" hidden>
+      <div class="page-head"><h1>Settings</h1><div class="head-tools" id="settings-tools"></div></div>
+      <div id="settings-body"></div>
     </section>
 
     <footer class="page-foot">
@@ -281,24 +253,29 @@
     </footer>
   </main>
 
-  <!-- Phones: the four places in a glass bar at the foot, the other sections in the More sheet. -->
+  <!-- Phones: the same five places in a glass bar at the foot. -->
   <nav class="tab-bar glass" aria-label="Sections">
-    <button class="tab-item" type="button" data-section="now"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-now"/></svg></span><span>Now playing</span></button>
-    <button class="tab-item" type="button" data-section="queue"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg></span><span>Up next</span></button>
+    <button class="tab-item" type="button" data-section="now"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-now"/></svg><span class="count" data-count="requests" hidden>0</span></span><span>Now playing</span></button>
     <button class="tab-item" type="button" data-section="library"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-library"/></svg></span><span>Library</span></button>
-    <button class="tab-item" type="button" id="tab-more" aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-more"/></svg></span><span>More</span></button>
+    <button class="tab-item" type="button" data-section="quiet"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-moon"/></svg></span><span>Quiet times</span></button>
+    <button class="tab-item" type="button" data-section="studio"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg></span><span>Studio</span></button>
+    <button class="tab-item" type="button" data-section="settings"><span class="tab-pill"><svg class="glyph" aria-hidden="true"><use href="#g-gear"/></svg></span><span>Settings</span></button>
   </nav>
-  <dialog class="sheet more-sheet" id="more-sheet" aria-labelledby="more-title">
-    <div class="sheet-body">
-      <p class="eyebrow" id="more-title">More</p>
-      <button class="nav-item" type="button" data-section="channels"><svg class="glyph" aria-hidden="true"><use href="#g-channels"/></svg><span>Channels</span></button>
-      <button class="nav-item" type="button" data-section="schedule"><svg class="glyph" aria-hidden="true"><use href="#g-schedule"/></svg><span>Schedule</span></button>
-      <button class="nav-item" type="button" data-section="requests"><svg class="glyph" aria-hidden="true"><use href="#g-requests"/></svg><span>Requests</span><span class="count" data-count="requests" hidden>0</span></button>
-      <button class="nav-item" type="button" data-section="add"><svg class="glyph" aria-hidden="true"><use href="#g-add"/></svg><span>Add</span></button>
-      <button class="nav-item" type="button" data-section="studio"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span></button>
-      <button class="nav-item" type="button" data-section="piano"><svg class="glyph" aria-hidden="true"><use href="#g-piano"/></svg><span>Settings</span></button>
-      <button class="nav-item" type="button" data-section="system" hidden><svg class="glyph" aria-hidden="true"><use href="#g-system"/></svg><span>System</span></button>
+
+  <!-- The sheets (the editors' glass): Up next below 1100 px, with the guests' requests at its top; Add music. -->
+  <dialog class="sheet panel-sheet" id="queue-sheet" aria-labelledby="queue-sheet-title">
+    <div class="sheet-head">
+      <h2 id="queue-sheet-title">Up next</h2>
+      <button class="icon-button small" id="queue-close" type="button" aria-label="Close"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button>
     </div>
+    <div class="sheet-scroll queue-card" id="queue-full"></div>
+  </dialog>
+  <dialog class="sheet panel-sheet" id="add-sheet" aria-labelledby="add-sheet-title">
+    <div class="sheet-head">
+      <h2 id="add-sheet-title">Add music</h2>
+      <button class="icon-button small" id="add-close" type="button" aria-label="Close"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button>
+    </div>
+    <div class="sheet-scroll add-body" id="add-body"></div>
   </dialog>
 </div>
 </body>
