@@ -147,7 +147,7 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
         backend.clearViews()
     }
 
-    /** Approve on the tablet (the Library's banner): the piece joins Up next, as from the panel. */
+    /** Approve on the tablet (the Library's banner): the piece joins Up next, as from the panel, and waits for Play (v1.20 — M54). */
     fun approve(id: Long) {
         graph.appScope.launch {
             val request = requests.take(id) ?: return@launch

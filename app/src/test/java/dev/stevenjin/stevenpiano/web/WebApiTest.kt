@@ -33,6 +33,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.schedule.QuietNow
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -211,7 +212,7 @@ class WebApiTest {
         assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display", "quiet"), json.keys().asSequence().toSet())
         assertTrue("Album colours behind the player, on until turned off (v1.15 — M41)", json.getBoolean("albumBackdrop"))
         // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
         assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
@@ -238,10 +239,17 @@ class WebApiTest {
         )
         assertTrue(job.isNull("progress"))
         assertEquals("Kept as take", job.getString("line"))
-        assertTrue("no schedule ahead: null, not missing", json.getJSONObject("schedule").isNull("next"))
-        val scheduled = WebApi.state(state.copy(schedule = WebScheduleState("Next: Wednesday 12:30, Calm", 7)), pending = 0).getJSONObject("schedule")
-        assertEquals("Next: Wednesday 12:30, Calm", scheduled.getString("next"))
-        assertEquals(7, scheduled.getInt("revision"))
+        assertTrue("timed plays were removed (v1.20 — M54): the schedule stays for older pages, its next null", json.getJSONObject("schedule").isNull("next"))
+        assertEquals(setOf("next", "revision"), json.getJSONObject("schedule").keys().asSequence().toSet())
+        // Quiet times (v1.20 — M54): {now, until, overridden, next}, the times epoch ms or null, never missing.
+        val calm = json.getJSONObject("quiet")
+        assertEquals(setOf("now", "until", "overridden", "next"), calm.keys().asSequence().toSet())
+        assertFalse(calm.getBoolean("now") || calm.getBoolean("overridden"))
+        assertTrue(calm.isNull("until") && calm.isNull("next"))
+        val quiet = WebApi.state(state.copy(quiet = QuietNow(now = true, until = 1_800_000_000_000L, overridden = true, next = 1_800_000_600_000L)), pending = 0).getJSONObject("quiet")
+        assertTrue(quiet.getBoolean("now") && quiet.getBoolean("overridden"))
+        assertEquals(1_800_000_000_000L, quiet.getLong("until"))
+        assertEquals(1_800_000_600_000L, quiet.getLong("next"))
         assertEquals(2, json.getJSONObject("requests").getInt("pending"))
         assertEquals("http://100.101.2.3:8737", json.getJSONObject("web").getString("address"))
         assertTrue(json.getJSONObject("import").getBoolean("running"))

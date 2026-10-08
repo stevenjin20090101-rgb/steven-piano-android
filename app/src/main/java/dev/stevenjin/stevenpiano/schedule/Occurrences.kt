@@ -28,17 +28,18 @@ data class Occurrence(val scheduleId: Long, val edge: Edge, val at: ZonedDateTim
 }
 
 /**
- * When schedules start and end (DESIGN.md › v1.6.2 — M19). Pure: every answer comes from the
- * schedules and a time given, in that time's zone, so the tests set the clock and the zone.
+ * When schedules start and end (DESIGN.md › v1.6.2 — M19; since v1.20 — M54 only the quiet times' blocks are given
+ * it, for the one alarm). Pure: every answer comes from the schedules and a time given, in that time's zone, so the
+ * tests set the clock and the zone.
  *
  * - A schedule starts at [ScheduleEntity.startMinute] on each day its [ScheduleEntity.days] bit
  *   is set (Monday 1, Tuesday 2 … Sunday 64). An end time not after the start
- *   ([ScheduleEntity.endMinute]) is past midnight: the run ends the next day. No end time ("until
- *   the end") has no end here: what it started plays out.
+ *   ([ScheduleEntity.endMinute]) is past midnight: the run ends the next day. No end time has no
+ *   end here.
  * - Local times go through [ZonedDateTime]: a start that falls in the hour the clocks skip in
- *   spring comes that much later (02:30 plays at 03:30), and one in the hour autumn repeats plays
- *   once, at the first of the two.
- * - Only enabled, well-formed schedules count ([ScheduleRules.problem]).
+ *   spring comes that much later (02:30 starts at 03:30), and one in the hour autumn repeats
+ *   starts once, at the first of the two.
+ * - Only enabled, well-formed schedules count: a day, times of day, an end not its start.
  */
 object Occurrences {
     /** At the same instant an end comes before a start (a run ending as another begins), then by schedule. */
@@ -120,8 +121,11 @@ object Occurrences {
         return ZonedDateTime.of(date, timeOf(end), zone)
     }
 
-    private fun counts(entry: ScheduleEntity): Boolean =
-        entry.enabled && ScheduleRules.timesProblem(entry.days, entry.startMinute, entry.endMinute) == null
+    private fun counts(entry: ScheduleEntity): Boolean {
+        val minutes = 0 until MINUTES_PER_DAY
+        val end = entry.endMinute
+        return entry.enabled && entry.days in 1..ALL_DAYS && entry.startMinute in minutes && (end == null || end in minutes && end != entry.startMinute)
+    }
 
     private fun timeOf(minute: Int): LocalTime = LocalTime.of(minute / MINUTES_PER_HOUR, minute % MINUTES_PER_HOUR)
 

@@ -42,7 +42,7 @@ class RunningNowTest {
         assertEquals(RunningNow.OFF, row.getValue("relay").state)
         assertEquals(RunningNow.IDLE to "Nothing to fetch", row.getValue("covers").let { it.state to it.detail })
         assertEquals("Nothing importing", row.getValue("import").detail)
-        assertEquals("Nothing scheduled", row.getValue("schedule").detail)
+        assertEquals("the quiet times' row (v1.20 — M54)", RunningNow.IDLE to "No quiet times set", row.getValue("schedule").let { it.state to it.detail })
         assertEquals(RunningNow.IDLE to "The piano sound isn't on this tablet yet", row.getValue("sound").let { it.state to it.detail })
     }
 

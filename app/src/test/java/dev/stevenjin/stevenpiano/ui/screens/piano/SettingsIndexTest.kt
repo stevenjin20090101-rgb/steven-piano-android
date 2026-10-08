@@ -97,7 +97,13 @@ class SettingsIndexTest {
     fun `label hits come first, in the hub's order`() {
         val volume = SettingsIndex.search("volume").map { it.label }
         assertEquals(listOf("Piano volume", "Tablet volume", "Channel volume"), volume.take(3))
-        assertTrue("then what only a synonym names", "Add schedule" in volume.drop(3))
+        // Quiet times (v1.20 — M54): its own name first, then what only a synonym names ("downtime", "class", "schedule").
+        val quiet = SettingsIndex.search("quiet time").map { it.label }
+        assertEquals("Quiet times", quiet.first())
+        for (word in listOf("downtime", "silent", "class", "schedule")) {
+            assertTrue("$word finds Quiet times", SettingsIndex.search(word).any { it.label == "Quiet times" })
+        }
+        assertTrue("then what only a synonym names", "Add section" in SettingsIndex.search("schedule").map { it.label })
     }
 
     @Test

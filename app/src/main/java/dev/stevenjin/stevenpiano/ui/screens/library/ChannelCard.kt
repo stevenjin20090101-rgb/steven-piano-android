@@ -71,9 +71,8 @@ private val BandHeight = 56.dp
  * hairline top edge (a scrim, not glass: nothing behind it moves), holding the name in Title and
  * "12 PIECES", "ADD MORE PIECES" for a pool too small to play, or while it plays the live dot and
  * "PLAYING". On the band everything is the content colour, as on glass. Tap plays the channel
- * ([onPlay]); long-press offers Set volume ([onSetVolume]) and Schedule ([onSchedule], the schedule
- * editor with the channel chosen; v1.6.2). [connected] lights the dot red; otherwise it is the
- * hollow ring, as everywhere.
+ * ([onPlay]); long-press offers Set volume ([onSetVolume]; Schedule went with timed plays in v1.20 — M54).
+ * [connected] lights the dot red; otherwise it is the hollow ring, as everywhere.
  */
 @Composable
 fun ChannelCard(
@@ -82,7 +81,6 @@ fun ChannelCard(
     connected: Boolean,
     onPlay: () -> Unit,
     onSetVolume: () -> Unit,
-    onSchedule: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -121,7 +119,6 @@ fun ChannelCard(
         }
         GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             MenuItem("Set volume", { menu = false }, onSetVolume)
-            MenuItem("Schedule", { menu = false }, onSchedule)
         }
     }
 }

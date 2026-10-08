@@ -17,11 +17,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Where the schedules hear from Android (not exported: only the system and the app's own alarm
- * reach it). [ACTION_FIRE] is the one alarm going off ([AndroidAlarmScheduler]): what is due at
- * its minute runs ([Schedules.onAlarm]). A restart of the tablet (the alarm is lost with it), a
- * changed clock or time zone, the app updated, and exact alarms granted all plan the alarm again.
- * The broadcast is held open ([goAsync]) until the schedules have been read and the alarm set
- * again; a start's longer work (waiting for the piano) runs on under the playback service.
+ * reach it). [ACTION_FIRE] is the one alarm going off ([AndroidAlarmScheduler]) at a quiet time's
+ * block's start or end (v1.20 — M54): the gate works the quiet out again ([Schedules.onAlarm]). A
+ * restart of the tablet (the alarm is lost with it), a changed clock or time zone, the app updated,
+ * and exact alarms granted all plan the alarm again. The broadcast is held open ([goAsync]) until
+ * the blocks have been read, the alarm set again and the gate asked.
  */
 class ScheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

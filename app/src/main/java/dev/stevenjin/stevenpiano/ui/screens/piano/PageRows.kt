@@ -62,9 +62,10 @@ object PageRows {
     val TABLET_VOLUME = AppRow("tablet.volume", TabletSoundCopy.VOLUME, SettingsPage.TabletSound, null, listOf("speaker volume", "loudness"))
     val SOUND_FILE = AppRow("tablet.soundfont", TabletSoundCopy.title(), SettingsPage.TabletSound, null, listOf("SoundFont", "download", "samples"))
 
-    // ---- PLAYING › Schedule -------------------------------------------------------------------------
-    val ADD_SCHEDULE = AppRow("schedule.add", "Add schedule", SettingsPage.Schedule, null, listOf("timer", "alarm", "play at a time", "schedule volume"))
-    val EXACT_ALARMS = AppRow("schedule.alarms", "Allow exact alarms", SettingsPage.Schedule, null, listOf("alarms and reminders"))
+    // ---- PLAYING › Quiet times (v1.20 — M54) ----------------------------------------------------------
+    val PLAY_ANYWAY = AppRow("quiet.anyway", "Play anyway", SettingsPage.Quiet, null, listOf("override", "lift the quiet"))
+    val ADD_SECTION = AppRow("quiet.add", "Add section", SettingsPage.Quiet, null, listOf("quiet", "downtime", "silent", "class", "schedule", "block"))
+    val EXACT_ALARMS = AppRow("quiet.alarms", "Allow exact alarms", SettingsPage.Quiet, null, listOf("alarms and reminders"))
 
     // ---- SHARING › Web panel ------------------------------------------------------------------------
     const val PANEL = "Panel"
@@ -124,7 +125,7 @@ object PageRows {
         CHECK_PIANO_UPDATES,
         PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
-        ADD_SCHEDULE, EXACT_ALARMS,
+        PLAY_ANYWAY, ADD_SECTION, EXACT_ALARMS,
         WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
         FIND_COVERS, RECONNECT,

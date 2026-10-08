@@ -20,6 +20,7 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.library.PackState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.studio.JobState
 import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
@@ -49,7 +50,10 @@ object RunningNow {
     const val OFF = "off"
     const val PROBLEM = "problem"
 
-    /** The rows' keys, in the order they are listed. */
+    /**
+     * The rows' keys, in the order they are listed. "schedule" is the quiet times' row since 1.20 (M54), its key kept for
+     * the panels that know it.
+     */
     val KEYS = listOf("player", "link", "web", "relay", "covers", "import", "studio", "pack", "update", "firmware", "schedule", "sound")
 
     /**
@@ -92,9 +96,12 @@ object RunningNow {
     /** Studio's [jobs] (oldest first), and why it can't run here ([unavailable]; null when it can). */
     data class Studio(val jobs: List<StudioJob> = emptyList(), val unavailable: String? = null)
 
+    /** Quiet times (v1.20 — M54): whether a block is [on] now, whether Play anyway [lifted] it, the Quiet times page's [line]. */
+    data class Quiet(val on: Boolean = false, val lifted: Boolean = false, val line: String = QuietCopy.NONE_SET)
+
     /**
-     * Everything the rows are built from; [schedule] is the next start's line ("Next: Wednesday 12:30, Calm"), [now] the
-     * wall clock (epoch ms) and [zone] its zone, for the times shown.
+     * Everything the rows are built from; [quiet] the quiet times' (v1.20 — M54), [now] the wall clock (epoch ms) and
+     * [zone] its zone, for the times shown.
      */
     data class Inputs(
         val player: Player = Player(),
@@ -107,7 +114,7 @@ object RunningNow {
         val pack: PackState = PackState.Idle,
         val update: UpdateState = UpdateState.Idle,
         val firmware: FirmwareState = FirmwareState.Idle,
-        val schedule: String? = null,
+        val quiet: Quiet = Quiet(),
         val sound: TabletSoundState = TabletSoundState(),
         val now: Long = 0,
         val zone: ZoneId = ZoneId.systemDefault(),
@@ -125,7 +132,7 @@ object RunningNow {
         pack(inputs.pack, inputs.locale),
         update(inputs.update, inputs.locale),
         firmware(inputs.firmware),
-        schedule(inputs.schedule),
+        quiet(inputs.quiet),
         sound(inputs.sound, inputs.locale),
     )
 
@@ -269,8 +276,9 @@ object RunningNow {
         is FirmwareState.Failed -> Activity("firmware", "Piano firmware", PROBLEM, fragment(f.message))
     }
 
-    private fun schedule(next: String?): Activity =
-        if (next != null) Activity("schedule", "Schedule", WAITING, next) else Activity("schedule", "Schedule", IDLE, "Nothing scheduled")
+    /** Quiet times: waiting while a block holds the piano, else idle; its line is the Quiet times page's. */
+    private fun quiet(q: Quiet): Activity =
+        Activity("schedule", QuietCopy.TITLE, if (q.on && !q.lifted) WAITING else IDLE, q.line)
 
     private fun sound(s: TabletSoundState, locale: Locale): Activity {
         val download = s.download

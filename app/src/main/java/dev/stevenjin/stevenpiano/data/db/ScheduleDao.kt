@@ -10,34 +10,28 @@
 package dev.stevenjin.stevenpiano.data.db
 
 import androidx.room.Dao
+import androidx.room.Insert
 import androidx.room.Query
-import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
-/** The schedules table ([ScheduleEntity]); created in schema v3, used from M19 (app 1.6.2). */
+/**
+ * The schedules table ([ScheduleEntity]); created in schema v3, used from M19 (app 1.6.2). Since 1.20 (M54) only the
+ * quiet times' blocks ([ScheduleKind.QUIET]) are read or written: the timed plays' rows stay in the table, never read.
+ */
 @Dao
 interface ScheduleDao {
-    /** Every schedule, by the time it starts. */
-    @Query("SELECT * FROM schedules ORDER BY startMinute, id")
-    fun observeAll(): Flow<List<ScheduleEntity>>
+    /** The quiet times' blocks, in the order they were saved (section by section), as they change. */
+    @Query("SELECT * FROM schedules WHERE kind = 'QUIET' ORDER BY id")
+    fun observeQuiet(): Flow<List<ScheduleEntity>>
 
-    /** Every schedule now, by the time it starts: what an alarm reads when it goes off. */
-    @Query("SELECT * FROM schedules ORDER BY startMinute, id")
-    suspend fun list(): List<ScheduleEntity>
+    /** The quiet times' blocks now, in the order they were saved: what the alarm planner reads. */
+    @Query("SELECT * FROM schedules WHERE kind = 'QUIET' ORDER BY id")
+    suspend fun quiet(): List<ScheduleEntity>
 
-    @Query("SELECT * FROM schedules WHERE id = :id")
-    suspend fun byId(id: Long): ScheduleEntity?
+    /** Every quiet time's block goes: the first half of replacing them all, in one transaction with [insertAll]. */
+    @Query("DELETE FROM schedules WHERE kind = 'QUIET'")
+    suspend fun deleteQuiet()
 
-    @Query("SELECT COUNT(*) FROM schedules")
-    suspend fun count(): Int
-
-    /** Adds [schedule] (id 0) or replaces the one with its id. Returns the new row's id, or -1 when it replaced one. */
-    @Upsert
-    suspend fun upsert(schedule: ScheduleEntity): Long
-
-    @Query("DELETE FROM schedules WHERE id = :id")
-    suspend fun delete(id: Long)
-
-    @Query("UPDATE schedules SET enabled = :enabled WHERE id = :id")
-    suspend fun setEnabled(id: Long, enabled: Boolean)
+    @Insert
+    suspend fun insertAll(rows: List<ScheduleEntity>)
 }

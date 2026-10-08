@@ -43,7 +43,7 @@ class RoutesTest {
     fun `every page has its own route under the Piano tab`() {
         assertEquals(
             listOf(
-                "instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "tablet-sound", "schedule", "remote", "guests",
+                "instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "playback", "tablet-sound", "quiet", "remote", "guests",
                 "system", "display", "kiosk", "updates", "artwork", "help",
             ),
             SettingsPage.entries.map { it.key },
@@ -60,9 +60,10 @@ class RoutesTest {
         assertEquals("piano/updates", PianoRoutes.page(SettingsPage.Updates))
         assertEquals("piano/artwork", PianoRoutes.page(SettingsPage.Artwork))
         assertEquals("piano/help", PianoRoutes.page(SettingsPage.Help))
-        assertEquals("piano/schedule", PianoRoutes.page(SettingsPage.Schedule))
-        assertEquals("Schedule", SettingsPage.Schedule.title)
-        assertNull(SettingsPage.Schedule.piano)
+        assertEquals("piano/quiet", PianoRoutes.page(SettingsPage.Quiet))
+        assertEquals("Schedule became Quiet times (v1.20 — M54)", "Quiet times", SettingsPage.Quiet.title)
+        assertNull(SettingsPage.Quiet.piano)
+        assertNull("a saved Schedule page reads as none", SettingsPage.of("schedule"))
         assertEquals("piano/kiosk", PianoRoutes.page(SettingsPage.Kiosk))
         assertEquals("Kiosk", SettingsPage.Kiosk.title)
         assertNull(SettingsPage.Kiosk.piano)
@@ -101,7 +102,7 @@ class RoutesTest {
         assertEquals(
             listOf(
                 "Instrument", "Keyboard", "Sound and touch", "Lights and screen", "Pedal", "Firmware and status", "Playback", "Tablet sound",
-                "Schedule", "Web panel", "Guests", "System", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about",
+                "Quiet times", "Web panel", "Guests", "System", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about",
             ),
             SettingsPage.entries.map { it.title },
         )

@@ -12,8 +12,6 @@ package dev.stevenjin.stevenpiano.web
 import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.data.LibraryScope
-import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
-import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
@@ -23,8 +21,6 @@ import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
-import dev.stevenjin.stevenpiano.schedule.SaveResult
-import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import java.io.File
@@ -34,7 +30,8 @@ import java.util.Locale
  * Everything the web panel reads and does, and nothing else (DESIGN.md › v1.5.1 — M18): the
  * player's state and commands, the library's lists and art, the channels, the piano's settings,
  * the app's playback preferences, the guests' catalogue and queue, the PIN's hash, imports,
- * (v1.6.2 — M19) the schedules, and (v1.7 — M23) Studio.
+ * (v1.7 — M23) Studio, and (v1.20 — M54) the quiet times; the schedules' timed plays (v1.6.2 — M19)
+ * were removed in 1.20.
  * The server ([WebServer]) sees the app only through this; the app's own ([AppWebBackend]) runs
  * every player command on the main thread, where `Player` lives, and the tests' fake records what
  * it is asked. Every call is made from one of the server's request threads.
@@ -148,18 +145,6 @@ interface WebBackend {
     /** The panel's PIN as it is kept (salted and hashed); null while none is set. */
     suspend fun pinHash(): PinHash?
 
-    /** Piano › Schedule as the panel shows it: every schedule by start time, the next start, the last one's outcome, whether exact alarms are allowed. */
-    suspend fun schedules(): WebSchedules
-
-    /** What a schedule's target is called (a channel's name, a playlist's, a piece's title); null when there is no such one. */
-    suspend fun scheduleTarget(kind: ScheduleKind, target: String): String?
-
-    /** Saves a schedule the panel made or changed, already checked (no [ScheduleDraft.problem], its target found). */
-    suspend fun saveSchedule(draft: ScheduleDraft): SaveResult
-
-    /** Deletes schedule [id]; false when there is none. */
-    suspend fun deleteSchedule(id: Long): Boolean
-
     /** Studio (v1.7 — M23): whether it runs here, its models and its jobs (the state carries them too). */
     suspend fun studio(): WebStudio
 
@@ -228,6 +213,20 @@ interface WebBackend {
 
     /** Piece [pieceId]'s own cover goes, and no lookup brings one back. */
     suspend fun coverRemove(pieceId: Long): dev.stevenjin.stevenpiano.data.art.CoverChange
+
+    // ---- Quiet times (v1.20 — M54) -----------------------------------------------------------------------------------
+
+    /** The quiet now: the state's, and what weighs every route that would play. */
+    suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow
+
+    /** Piano › Quiet times as the panel shows it: the sections, and the quiet now. */
+    suspend fun quiet(): WebQuiet
+
+    /** Every section, already checked ([dev.stevenjin.stevenpiano.schedule.QuietTimes.validate]): they replace the ones kept. */
+    suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection>)
+
+    /** Play anyway: true when a block is on (the quiet lifts until it ends), false when none is. */
+    suspend fun overrideQuiet(): Boolean
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
@@ -495,9 +494,9 @@ data class CatalogueList(val key: String, val name: String, val pieces: List<Web
 /**
  * Everything `/api/state` carries but the requests waiting. [monochrome]: Artwork in black and
  * white is on, so the panel draws portraits without colour, as the app does. [albumBackdrop]: Album
- * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [schedule]: the next
- * start's line for Now playing with nothing loaded, and a revision that changes whenever the
- * schedules do, so an open Schedule page reads them again.
+ * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [schedule]: kept
+ * for older pages, its next start always null since timed plays were removed (v1.20 — M54). [quiet]: the quiet
+ * times now (v1.20 — M54).
  */
 data class WebState(
     val player: WebPlayer = WebPlayer(),
@@ -515,6 +514,8 @@ data class WebState(
     val instruments: WebInstruments = WebInstruments(),
     /** The display settings the panel's View control mirrors (v1.13 — M32). */
     val display: WebDisplay = WebDisplay(),
+    /** The quiet times now (v1.20 — M54): `{now, until, overridden, next}`. */
+    val quiet: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
 )
 
 /**
@@ -563,14 +564,11 @@ data class WebInstrument(val kind: String = "steven", val name: String = "Steven
 /** The keyboard chosen: its [name], "usb", "bluetooth" or "virtual", and "connected", "connecting", "disconnected", "pairing" or "unavailable". */
 data class WebKeyboard(val name: String, val transport: String, val state: String)
 
-/** The schedules in the state: the next start ("Next: Wednesday 12:30, Calm", null with none ahead) and a revision of the list. */
+/**
+ * The schedules in the state, kept for older pages (v1.6.2 — M19): the next start (always null since timed plays were
+ * removed in 1.20) and a revision of the list (0).
+ */
 data class WebScheduleState(val next: String? = null, val revision: Int = 0)
-
-/** A schedule as the panel lists it: its row, what its target is called, and the two lines the tablet shows ("Weekdays 12:30", "Calm channel · until 13:15 · 70%"). */
-data class WebSchedule(val entry: ScheduleEntity, val name: String, val whenLine: String, val whatLine: String)
-
-/** Piano › Schedule for the panel: the rows, the next start's line, the last one's outcome, and whether Android allows exact alarms. */
-data class WebSchedules(val schedules: List<WebSchedule>, val next: String?, val last: String?, val exactAlarms: Boolean)
 
 /**
  * The preferences the panel may change (`PUT /api/settings`); null leaves one as it is. The
@@ -711,4 +709,12 @@ data class WebSettings(
     val settings: dev.stevenjin.stevenpiano.settings.PianoSettings = dev.stevenjin.stevenpiano.settings.PianoSettings(),
     val fullPower: Boolean? = null,
     val repeatMs: Int? = null,
+)
+
+// ---- Quiet times (v1.20 — M54) ------------------------------------------------------------------------------------------
+
+/** `GET /api/quiet`: the sections as they are kept, and the quiet now. */
+data class WebQuiet(
+    val sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection> = emptyList(),
+    val now: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
 )

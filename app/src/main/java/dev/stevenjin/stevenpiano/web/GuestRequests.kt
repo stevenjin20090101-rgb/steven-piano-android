@@ -20,7 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * wait ([Outcome.Wait]). With Approve requests first a request waits in [pending] (at most
  * [maxPending]) until the person approves or dismisses it, on the panel or on the tablet's
  * Library; without it the piece joins Up next at once, and while [maxPending] guests' pieces are
- * still waiting there the list is full. [requested] holds the queue entries guests asked for, so
+ * still waiting there the list is full. A request never starts playback (v1.20 — M54): with nothing
+ * playing it waits in Up next for someone to press Play (`Player.queueWaiting`), and during a quiet
+ * time it still goes in. [requested] holds the queue entries guests asked for, so
  * Up next can mark them. No free text ever comes in: a request is a piece's id, checked against
  * the catalogue by the caller. Thread-safe.
  */
@@ -43,7 +45,7 @@ class GuestRequests(
         /** It waits for approval. */
         data class Pending(val request: Request) : Outcome
 
-        /** It goes into Up next now (the caller adds it, then [noteQueued]). */
+        /** It goes into Up next now, never starting playback (the caller adds it, then [noteQueued]). */
         data object Queue : Outcome
     }
 

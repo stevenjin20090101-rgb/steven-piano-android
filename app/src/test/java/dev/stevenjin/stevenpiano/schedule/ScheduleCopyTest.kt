@@ -9,7 +9,6 @@
 
 package dev.stevenjin.stevenpiano.schedule
 
-import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.DayOfWeek
@@ -17,7 +16,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/** What the schedules say, on the tablet and in the web panel: the design's own lines. */
+/** How days and times read, on the tablet and in the web panel: the design's own lines. */
 class ScheduleCopyTest {
     private val wednesday = ZonedDateTime.of(LocalDateTime.parse("2026-09-30T12:30"), ZoneId.of("America/New_York"))
 
@@ -33,42 +32,11 @@ class ScheduleCopyTest {
     }
 
     @Test
-    fun `a row reads its days and start over what it plays, until when and how loud`() {
-        assertEquals("Weekdays 12:30", ScheduleCopy.whenLine(31, 750))
-        assertEquals("Every day 07:05", ScheduleCopy.whenLine(127, 425))
-        assertEquals("Calm channel · until 13:15 · 70%", ScheduleCopy.whatLine(ScheduleKind.CHANNEL, "Calm", 795, 70))
-        assertEquals("Evening · until the end", ScheduleCopy.whatLine(ScheduleKind.PLAYLIST, "Evening", null, null))
-        assertEquals("Clair de lune · until 00:30 · 0%", ScheduleCopy.whatLine(ScheduleKind.PIECE, "Clair de lune", 30, 0))
-    }
-
-    @Test
-    fun `the next start, the hub's value, and what the last one did`() {
-        assertEquals("Next: Wednesday 12:30, Calm", ScheduleCopy.next(wednesday, "Calm"))
-        assertEquals("Next Wed 12:30", ScheduleCopy.hub(wednesday))
-        assertEquals("None", ScheduleCopy.hub(null))
-        assertEquals("Missed: Wednesday 12:30 (piano not connected)", ScheduleCopy.missed(wednesday, ScheduleCopy.NO_PIANO))
-        assertEquals("Last: Wednesday 12:30, Calm channel", ScheduleCopy.played(wednesday, ScheduleKind.CHANNEL, "Calm"))
-        assertEquals("Last: Wednesday 12:30, Evening", ScheduleCopy.played(wednesday, ScheduleKind.PLAYLIST, "Evening"))
-    }
-
-    @Test
-    fun `the last line shows for six days, so its weekday is always the last such day`() {
-        val line = "Missed: Monday 10:32 (piano not connected)"
-        val at = 1_000_000L
-        assertEquals(line, ScheduleCopy.recent(line, at, at))
-        assertEquals(line, ScheduleCopy.recent(line, at, at + ScheduleCopy.LAST_SHOWN_MS - 1))
-        assertEquals(null, ScheduleCopy.recent(line, at, at + ScheduleCopy.LAST_SHOWN_MS))
-        assertEquals("a clock set back", null, ScheduleCopy.recent(line, at, at - 1))
-        assertEquals("a line kept before its time was", null, ScheduleCopy.recent(line, null, at))
-        assertEquals(null, ScheduleCopy.recent(null, at, at))
-    }
-
-    @Test
     fun `times are the tablet's, on the 24-hour clock`() {
         assertEquals("00:00", ScheduleCopy.clock(0))
         assertEquals("09:05", ScheduleCopy.clock(545))
         assertEquals("23:59", ScheduleCopy.clock(1_439))
         assertEquals("12:30", ScheduleCopy.clock(wednesday))
-        assertEquals("Calm", ScheduleCopy.channelFallback("calm"))
+        assertEquals("Wednesday 12:30", ScheduleCopy.moment(wednesday))
     }
 }

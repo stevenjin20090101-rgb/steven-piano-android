@@ -391,7 +391,8 @@ class WebService : Service() {
             panel.requests.pending.map { },
             panel.requests.requested.map { },
             panel.status.map { },
-            graph.schedules.entries.map { },
+            // Quiet times (v1.20 — M54): a block beginning or ending, Play anyway, the sections saved.
+            graph.quiet.state.map { },
             // Studio (v1.7 — M23): its jobs, its models, the pieces waiting for Keep or Discard, whether it runs here.
             graph.studio.jobs.jobs.map { },
             graph.studio.models.installed.map { },

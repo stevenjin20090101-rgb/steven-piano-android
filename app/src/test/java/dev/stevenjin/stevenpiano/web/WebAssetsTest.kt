@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.toArgb
 import dev.stevenjin.stevenpiano.ui.theme.AttentionInk
 import dev.stevenjin.stevenpiano.ui.theme.AttentionPaper
 
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
 import dev.stevenjin.stevenpiano.ui.SettingNotes
 import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
@@ -329,5 +331,41 @@ class WebAssetsTest {
         assertTrue("loaded the first time a piece's menu asks for it", app.contains("import('./covers.js').then((m) => m.open(host, piece))"))
         assertFalse("never at the page's start", text("index.html").contains("covers.js"))
         assertTrue("offered for the library's pieces only", app.contains("piece.genre === 'classical' || piece.genre === 'modern' ? [['Find a cover…'"))
+    }
+
+    // ---- Quiet times (v1.20 — M54) ------------------------------------------------------------------------------------
+
+    @Test
+    fun `the Quiet times module is on the list, asks only through the host from its ROOT, links its own styles, and says what the tablet says (v1_20 M54)`() {
+        assertEquals(WebAssets.Asset("quiet.js", WebAssets.JS), WebAssets.PANEL["/quiet.js"])
+        assertEquals(WebAssets.Asset("quiet.css", WebAssets.CSS), WebAssets.PANEL["/quiet.css"])
+        val js = text("quiet.js")
+        assertTrue("the module the frame creates", js.contains("export function create(host, body, tools)"))
+        for (banned in listOf("fetch(", "WebSocket(", "XMLHttpRequest", "setAttribute('style'", "cssText", "innerHTML")) assertFalse("quiet.js holds $banned", js.contains(banned))
+        val paths = Regex("['`\"]/api/").findAll(js).map { it.range.first }.toList()
+        assertEquals("its two routes and the override", 3, paths.size)
+        for (at in paths) assertEquals("quiet.js: every /api/ path starts from host.ROOT (at $at)", "host.ROOT + ", js.substring(maxOf(0, at - 12), at))
+        assertTrue("its styles, linked once by the module", js.contains("href: 'quiet.css'") && js.contains("document.head.append("))
+        // The tablet's limits and words (schedule/QuietTimes.kt, QuietCopy.kt), so both editors say the same.
+        for ((name, value) in listOf("MAX_SECTIONS" to QuietTimes.MAX_SECTIONS, "MAX_BLOCKS" to QuietTimes.MAX_BLOCKS, "MAX_NAME" to QuietTimes.MAX_NAME, "GAP_MINUTES" to QuietTimes.GAP_MINUTES)) {
+            assertTrue("$name = $value", js.contains("const $name = $value;"))
+        }
+        for (word in listOf(
+            QuietTimes.TOO_MANY_SECTIONS, QuietTimes.NO_NAME, QuietTimes.LONG_NAME, QuietTimes.SAME_NAME, QuietTimes.NO_DAY, QuietTimes.NO_BLOCK,
+            QuietTimes.TOO_MANY_BLOCKS, QuietTimes.NOT_A_TIME, QuietTimes.SAME_TIMES, QuietCopy.NOTE, QuietCopy.PLAY_ANYWAY,
+        )) {
+            assertTrue(word, js.contains(word))
+        }
+        assertTrue("the week's window", js.contains("const WEEK_FROM = 6 * 60;") && js.contains("const WEEK_TO = 22 * 60;"))
+        // Tokens only: no pure black or white, red the live dot's alone (style.css), nothing forced.
+        val css = text("quiet.css").replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "").replace("white-space", "")
+        for (forbidden in listOf("#000", "#fff", "#FFF", "white", "black", "rgb(0", "rgb(255", "var(--live)", "!important", "url(")) {
+            assertFalse("quiet.css names $forbidden", css.contains(forbidden))
+        }
+        assertTrue("the blocks hatched with tokens", css.contains("repeating-linear-gradient(135deg, color-mix(in srgb, var(--primary)"))
+        // The guests' page: the resting line from the catalogue's quiet, its words the design's.
+        val request = text("request.js")
+        assertTrue(request.contains("resting(data.quiet);"))
+        assertTrue(request.contains("`The piano is resting until \${clock(quiet.until)}. Your request will wait until then.`"))
     }
 }

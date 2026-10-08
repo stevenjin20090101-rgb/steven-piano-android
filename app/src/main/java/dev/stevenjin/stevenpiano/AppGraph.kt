@@ -20,6 +20,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import androidx.room.withTransaction
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
 import dev.stevenjin.stevenpiano.admin.KioskMode
@@ -103,6 +104,8 @@ import dev.stevenjin.stevenpiano.record.RecordingPieces
 import dev.stevenjin.stevenpiano.record.RecordingSession
 import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.record.RecordingStore
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.schedule.QuietGate
 import dev.stevenjin.stevenpiano.schedule.Schedules
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.LibraryService
@@ -401,9 +404,10 @@ class AppGraph(private val app: Application) {
 
     /**
      * The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23), and
-     * what it sends the piano goes to the tablet's piano sound too (v1.8 — M25).
+     * what it sends the piano goes to the tablet's piano sound too (v1.8 — M25). While a quiet time holds (v1.20 — M54,
+     * [quiet]) it starts nothing.
      */
-    val player: Player by lazy { Player(pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink) }
+    val player: Player by lazy { Player(pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink, quiet = { quiet.holds() }) }
 
     /**
      * The tablet's piano sound (v1.8 — M25): the Upright Piano KW SoundFont (downloaded on demand from the
@@ -747,8 +751,17 @@ class AppGraph(private val app: Application) {
         File("/proc/self/status").readLines().firstOrNull { it.startsWith("VmHWM:") }?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()
     }.getOrNull() ?: -1L
 
-    /** Timed play (Piano › Schedule): the schedules, the one exact alarm that keeps the next of them, and what runs them. */
-    val schedules: Schedules by lazy { Schedules(app, this, database.schedules()) }
+    /**
+     * The schedules table and its one exact alarm (v1.20 — M54: the quiet times' blocks alone; timed plays were removed),
+     * each save of the quiet times one transaction.
+     */
+    val schedules: Schedules by lazy { Schedules(app, this, database.schedules()) { block -> database.withTransaction { block() } } }
+
+    /**
+     * Quiet times' gate (Piano › Quiet times, v1.20 — M54): whether a block is on now and whether Play anyway lifted it;
+     * the player starts nothing while one holds, and stops as a block begins ([start]).
+     */
+    val quiet: QuietGate by lazy { QuietGate(schedules.quietRows) }
 
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
     val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }
@@ -893,6 +906,9 @@ class AppGraph(private val app: Application) {
         web.start()
         firmwareUpdater.start()
         schedules.start()
+        // At a quiet time's start anything playing stops, with the stop sequence; on a start inside one too (v1.20 — M54).
+        // Not while the piano's firmware is updated: the updater stopped the player first, and the link is its.
+        quiet.start(appScope) { if (!player.locked) player.stop() }
         studio.start()
         appScope.launch {
             val s = settingsRepository.settings.first()
@@ -1144,7 +1160,7 @@ class AppGraph(private val app: Application) {
     /**
      * What the System pages' running rows ([RunningNow]) are built from now, the wall clock [now]: the app's own state, read
      * where each part keeps it (v1.18 — M46's gathering for the web panel's `/api/system`, lifted here in M50 so the tablet's
-     * own System page gathers it the same way). A schedule that can't be read is none. Any thread.
+     * own System page gathers it the same way). The quiet times' line (v1.20 — M54) is the Quiet times page's. Any thread.
      */
     suspend fun runningInputs(now: Long = System.currentTimeMillis()): RunningNow.Inputs {
         val prefs = settings.value
@@ -1155,14 +1171,8 @@ class AppGraph(private val app: Application) {
         val playerState = player.state.value
         val piece = playerState.piece
         val kind = pianoLink.kind.value
-        val schedule = try {
-            schedules.nextNow()?.line
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "The next schedule couldn't be read for the System page")
-            null
-        }
+        val quietNow = quiet.now(now)
+        val quietLine = QuietCopy.status(quietNow, QuietCopy.at(now, java.time.ZoneId.systemDefault()))
         return RunningNow.Inputs(
             player = RunningNow.Player(
                 status = playerState.status,
@@ -1195,7 +1205,7 @@ class AppGraph(private val app: Application) {
             pack = libraryPack.state.value,
             update = updater.state.value,
             firmware = firmwareUpdater.state.value,
-            schedule = schedule,
+            quiet = RunningNow.Quiet(quietNow.now, quietNow.overridden, quietLine),
             sound = tabletSound.state.value,
             now = now,
         )

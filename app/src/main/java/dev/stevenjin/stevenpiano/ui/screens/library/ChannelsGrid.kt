@@ -74,7 +74,6 @@ fun LazyListScope.channelsGrid(
     connected: Boolean,
     onPlay: (String) -> Unit,
     onSetVolume: (String) -> Unit,
-    onSchedule: (String) -> Unit,
     entrance: ListEntrance,
     reduced: Boolean,
     fade: Modifier = Modifier,
@@ -89,7 +88,6 @@ fun LazyListScope.channelsGrid(
                     connected = connected,
                     onPlay = { onPlay(channel.key) },
                     onSetVolume = { onSetVolume(channel.key) },
-                    onSchedule = { onSchedule(channel.key) },
                     modifier = Modifier.weight(1f),
                 )
             }

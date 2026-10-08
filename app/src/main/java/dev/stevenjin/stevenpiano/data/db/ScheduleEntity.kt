@@ -13,24 +13,34 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/** What a schedule plays. Stored by name. */
+/**
+ * What a schedule is. Stored by name (Room's own enum converter, the column TEXT), so a kind added later needs no
+ * migration: QUIET (v1.20 — M54) came without one.
+ */
 enum class ScheduleKind {
-    /** A playlist; the target is its id. */
+    /** A playlist; the target is its id. Timed plays were removed in 1.20: kept, never run. */
     PLAYLIST,
 
-    /** A channel; the target is its key ("calm"). */
+    /** A channel; the target is its key ("calm"). Kept, never run (1.20). */
     CHANNEL,
 
-    /** One piece; the target is its id. */
+    /** One piece; the target is its id. Kept, never run (1.20). */
     PIECE,
+
+    /**
+     * One block of a quiet time (v1.20 — M54, `schedule.QuietTimes`): the target is its section's name, [ScheduleEntity.days]
+     * the section's days, both minutes required, no volume. The piano stays silent from its start to its end.
+     */
+    QUIET,
 }
 
 /**
- * A time the piano plays by itself (DESIGN.md › v1.5, Schedules, M19): on [days] (a bit a day,
- * Monday 1, Tuesday 2 … Sunday 64) at [startMinute] (minutes after local midnight), [kind] and
- * [target] say what plays, until [endMinute] or the end of it (null), at [volumePct] or as the
- * piano is (null), while [enabled]. Created in schema v3 (app 1.5) so that 1.6 needs no second
- * migration; read and written from M19 (app 1.6.2) by `schedule.ScheduleRepository`.
+ * A row of the schedules table (DESIGN.md › v1.5, Schedules, M19): on [days] (a bit a day, Monday 1, Tuesday 2 …
+ * Sunday 64) at [startMinute] (minutes after local midnight) until [endMinute] (an end not after the start is the next
+ * day). Until 1.20 a time the piano played by itself, [kind] and [target] saying what, at [volumePct] or as the piano
+ * was (null), while [enabled]; those rows stay in the table, unshown and never run. Since 1.20 (M54) the only rows
+ * written are quiet times' blocks ([ScheduleKind.QUIET]). Created in schema v3 (app 1.5) so that 1.6 needed no second
+ * migration.
  */
 @Entity(tableName = "schedules")
 data class ScheduleEntity(

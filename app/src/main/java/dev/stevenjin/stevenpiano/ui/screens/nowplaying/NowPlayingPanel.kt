@@ -80,7 +80,7 @@ import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
 import dev.stevenjin.stevenpiano.ui.components.screenHeaderHeight
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
-import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
+import dev.stevenjin.stevenpiano.ui.screens.quiet.QuietCapsule
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
@@ -150,6 +150,8 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
             if (state.loading) ProgressHairline(null)
             state.problem?.let { OutlinedBanner(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
             StudioReviewBanner(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            // A piece loaded during a quiet time (v1.20 — M54): its capsule and Play anyway over it.
+            if (piece != null) QuietCapsule(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), translucent = backdrop != null)
             if (piece != null) {
                 PanelPiece(piece, state, player, playback, link is LinkState.Connected, onOpenPiano, onAbout = { about = piece.pieceId })
             } else if (!state.loading) {
@@ -159,9 +161,9 @@ fun NowPlayingPanel(playback: PlaybackStarter, onOpenPiano: () -> Unit, modifier
                         .padding(32.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.6.2 — M19).
+                    // During a quiet time (v1.20 — M54) its capsule and Play anyway, over the empty line.
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
+                        QuietCapsule(Modifier.padding(bottom = 16.dp))
                         Text(
                             "Choose a piece from the library.",
                             style = MaterialTheme.typography.bodyLarge,

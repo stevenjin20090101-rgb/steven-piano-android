@@ -56,6 +56,7 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.settings.PianoSettings
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
@@ -91,7 +92,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.ReadWhileShown
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SYSTEM_ROW_MS
-import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SchedulePage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.QuietTimesPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SystemPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.TabletSoundPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.UpdatesPage
@@ -101,6 +102,7 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import dev.stevenjin.stevenpiano.web.WebStatus
+import java.time.ZonedDateTime
 
 /** The hub's column beside the open page on wide screens. */
 private val HubWidth = 360.dp
@@ -293,7 +295,7 @@ private fun PianoHub(
     val web by vm.web.collectAsStateWithLifecycle()
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val firmwarePiano by vm.firmwarePiano.collectAsStateWithLifecycle()
-    val nextSchedule by vm.nextSchedule.collectAsStateWithLifecycle()
+    val quiet by vm.quiet.collectAsStateWithLifecycle()
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     val kind by vm.instrumentKind.collectAsStateWithLifecycle()
     val midi = kind == InstrumentKind.MidiPiano
@@ -303,14 +305,14 @@ private fun PianoHub(
     ReadWhileShown(SYSTEM_ROW_MS, vm::readSystem)
     val system by vm.system.collectAsStateWithLifecycle()
     val attention = rememberAttention(vm, system)
-    val summaries = remember(piano, settings, web, firmware, firmwarePiano, nextSchedule, keyboard, instrument, linkWords, update, system, attention) {
+    val summaries = remember(piano, settings, web, firmware, firmwarePiano, quiet, keyboard, instrument, linkWords, update, system, attention) {
         GroupSummaries.from(
             piano,
             settings,
             web,
             firmware,
             (firmwarePiano as? FirmwarePiano.Connected)?.text,
-            nextSchedule?.occurrence?.at,
+            QuietCopy.hub(quiet, ZonedDateTime.now()),
             keyboard,
             GroupSummaries.instrumentLine(instrument, linkWords),
             update,
@@ -447,7 +449,7 @@ private fun SettingsPageView(
                         SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm, firmwareReport(vm), vm)
                         SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                         SettingsPage.TabletSound -> TabletSoundPage(appSettings(vm), vm)
-                        SettingsPage.Schedule -> SchedulePage()
+                        SettingsPage.Quiet -> QuietTimesPage()
                         SettingsPage.Remote -> RemotePage(appSettings(vm), webStatus(vm), vm)
                         SettingsPage.Guests -> GuestsPage(appSettings(vm), webStatus(vm), vm)
                         SettingsPage.System -> SystemPage(vm, gate, onOpenPage)

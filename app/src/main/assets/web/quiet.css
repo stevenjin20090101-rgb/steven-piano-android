@@ -1,0 +1,128 @@
+/* ============================================================================
+   Steven Piano - Android player for the self-playing acoustic piano
+   Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+   Original author & creator: Steven Jin.
+   Licensed under the MIT License (see LICENSE). This copyright and attribution
+   notice MUST be preserved in all copies or substantial portions of the work.
+   Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+   ============================================================================ */
+
+/* The Quiet times page's own styles (DESIGN.md › v1.20 — M54: quiet.js, which links this file once). Everything sits
+   under the page's root (.quiet-page) or its editor's sheet (.quiet-sheet); the shared classes (.card, .card-head,
+   .chips, .chip, .field, .outlined, .sheet, .note…) are style.css's and are not redefined. Tokens only: the blocks are
+   hatched in the content colour inside a tertiary edge; red stays the live dot's, amber "needs attention". */
+
+/* ---- The quiet now -------------------------------------------------------------------------------------------- */
+
+.quiet-page .quiet-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px var(--inset);
+}
+
+.quiet-page .quiet-status .glyph { color: var(--tertiary); }
+
+.quiet-page .quiet-line { flex: 1; min-width: 0; font-size: 17px; line-height: 24px; }
+
+/* ---- The week at a glance: a gutter of hours, then Monday to Sunday, 6:00 to 22:00 down ------------------------ */
+
+.quiet-page .quiet-week { padding: 14px var(--inset) 18px; }
+
+.quiet-page .quiet-grid {
+  display: grid;
+  grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+  grid-template-rows: 22px 200px;
+}
+
+.quiet-page .quiet-day {
+  overflow: hidden;
+  text-align: center;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.quiet-page .quiet-hours { position: relative; }
+
+.quiet-page .quiet-hours span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.quiet-page .quiet-col { position: relative; border-left: 1px solid var(--hairline); }
+
+.quiet-page .quiet-col:last-child { border-right: 1px solid var(--hairline); }
+
+.quiet-page .quiet-rule { position: absolute; left: 0; right: 0; height: 1px; background: var(--hairline); }
+
+/* A block: hatched in the content colour over a faint wash of it, inside a tertiary edge. */
+.quiet-page .quiet-block {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  min-height: 2px;
+  border: 1px solid var(--tertiary);
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--primary) 34%, transparent) 0 1px, transparent 1px 6px),
+    color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+/* ---- The sections ------------------------------------------------------------------------------------------- */
+
+.quiet-page .quiet-section .card-head { align-items: center; }
+
+.quiet-page .quiet-chips { padding: 6px var(--inset) 16px; }
+
+/* A block's chip only reads: no press, the times in tabular figures. */
+.quiet-page .chip.static { cursor: default; color: var(--primary); font-variant-numeric: tabular-nums; }
+
+/* ---- The editor, in the editors' sheet ------------------------------------------------------------------------- */
+
+.quiet-sheet {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 24px;
+}
+
+.quiet-sheet .quiet-editor { display: grid; padding: 18px 0 4px; }
+
+.quiet-sheet .editor-title { padding: 0 var(--inset) 8px; font-size: 22px; line-height: 28px; font-weight: 600; }
+
+.quiet-sheet .section-head { padding: 18px var(--inset) 6px; }
+
+.quiet-sheet .quiet-days { flex-direction: column; padding-top: 4px; }
+
+.quiet-sheet .quiet-block-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px var(--inset);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.quiet-sheet .quiet-time { width: auto; min-width: 112px; font-variant-numeric: tabular-nums; }
+
+.quiet-sheet .quiet-block-row .icon-button { margin-left: auto; }
+
+.quiet-sheet .quiet-problem { color: var(--primary); }
+
+.quiet-sheet .editor-actions {
+  align-items: center;
+  margin-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.quiet-sheet .editor-actions .spacer { flex: 1; }

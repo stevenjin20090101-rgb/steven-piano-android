@@ -35,7 +35,7 @@ object HubGroups {
     val all: List<HubGroup> = listOf(
         HubGroup("Instruments", pages(SettingsPage.Instrument, SettingsPage.Keyboard)),
         HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
-        HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Schedule)),
+        HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Quiet)),
         HubGroup("Sharing", pages(SettingsPage.Remote, SettingsPage.Guests)),
         HubGroup("This tablet", pages(SettingsPage.System, SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help)),
     )

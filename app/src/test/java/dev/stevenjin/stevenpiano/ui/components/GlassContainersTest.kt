@@ -41,9 +41,10 @@ class GlassContainersTest {
                 }
             }
             .toList()
-        // The time picker's dialog is laid out by hand on BasicAlertDialog, its surface GlassDialogSurface.
-        assertEquals(listOf("ScheduleEditorSheet.kt: BasicAlertDialog("), found.map { it.replace(Regex(":\\d+:"), ":") })
-        val picker = File(sources, "ui/screens/schedule/ScheduleEditorSheet.kt").readText()
+        // The time picker's dialog is laid out by hand on BasicAlertDialog, its surface GlassDialogSurface (the quiet times'
+        // editor's since v1.20 — M54, the schedule editor's before).
+        assertEquals(listOf("QuietEditorSheet.kt: BasicAlertDialog("), found.map { it.replace(Regex(":\\d+:"), ":") })
+        val picker = File(sources, "ui/screens/quiet/QuietEditorSheet.kt").readText()
         assertTrue("the time picker's dialog is on the dialogs' glass", "GlassDialogSurface" in picker)
     }
 

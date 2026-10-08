@@ -33,7 +33,6 @@ import dev.stevenjin.stevenpiano.data.PlaylistOrder
 import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
-import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportBatch
 import dev.stevenjin.stevenpiano.data.imports.ImportItem
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
@@ -44,8 +43,6 @@ import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
-import dev.stevenjin.stevenpiano.schedule.SaveResult
-import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.service.PlaybackService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -202,7 +199,7 @@ class AppWebBackend(
             guests = guests(),
             monochrome = settings.artworkMonochrome,
             albumBackdrop = settings.albumBackdrop,
-            schedule = WebScheduleState(graph.schedules.nextNow()?.line, graph.schedules.revision),
+            schedule = WebScheduleState(),   // timed plays were removed in 1.20 (M54): nothing next, ever
             studio = studio(),
             instruments = WebInstruments.of(
                 graph.pianoLink.kind.value,
@@ -219,6 +216,7 @@ class AppWebBackend(
                 chordNames = settings.chordNames,
                 handColours = settings.handColours,
             ),
+            quiet = graph.quiet.now(),
         )
     }
 
@@ -550,34 +548,15 @@ class AppWebBackend(
 
     override suspend fun guestSettings(): GuestSettings = guests()
 
+    /** A guest's request never starts playback (v1.20 — M54): it joins Up next, and with nothing queued waits, loaded, for Play. */
     override suspend fun queueRequested(pieceId: Long): List<Long> = onMain {
         val player = graph.player
         val before = player.state.value.queue.uids.toHashSet()
-        if (player.addToQueue(listOf(pieceId))) startPlayback()
+        player.queueWaiting(listOf(pieceId))
         player.state.value.queue.uids.filter { it !in before }
     }
 
     override suspend fun pinHash(): PinHash? = graph.settingsRepository.webPin()?.let { PinHash.restore(it.salt, it.hash) }
-
-    override suspend fun schedules(): WebSchedules {
-        val schedules = graph.schedules
-        return WebSchedules(
-            schedules = schedules.rowsNow().map { WebSchedule(it.entry, it.name, it.whenLine, it.whatLine) },
-            next = schedules.nextNow()?.line,
-            last = schedules.lastNow(),
-            exactAlarms = schedules.exactAllowed.value,
-        )
-    }
-
-    override suspend fun scheduleTarget(kind: ScheduleKind, target: String): String? = graph.schedules.nameOf(kind, target)
-
-    override suspend fun saveSchedule(draft: ScheduleDraft): SaveResult = graph.schedules.save(draft)
-
-    override suspend fun deleteSchedule(id: Long): Boolean {
-        if (graph.schedules.repository.get(id) == null) return false
-        graph.schedules.delete(id)
-        return true
-    }
 
     override suspend fun studio(): WebStudio {
         val studio = graph.studio
@@ -897,6 +876,19 @@ class AppWebBackend(
         graph.artwork.coverPicker.choose(pieceId, searchId, index)
 
     override suspend fun coverRemove(pieceId: Long): dev.stevenjin.stevenpiano.data.art.CoverChange = graph.artwork.coverPicker.remove(pieceId)
+
+    // ---- Quiet times (v1.20 — M54) ----------------------------------------------------------------------------------------
+
+    override suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow = graph.quiet.now()
+
+    override suspend fun quiet(): WebQuiet = WebQuiet(graph.schedules.sections(), graph.quiet.now())
+
+    /** Every section, checked by the route; kept in one transaction and the alarm planned again (the gate follows the table). */
+    override suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection>) {
+        graph.schedules.saveQuiet(sections)?.let { throw ApiError(400, "quiet", it) }
+    }
+
+    override suspend fun overrideQuiet(): Boolean = graph.quiet.override()
 }
 
 /** The piano's Full power setting, by its firmware name (v1.18 — M47b: the Settings page's line under Velocity). */

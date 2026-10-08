@@ -42,7 +42,7 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
-import dev.stevenjin.stevenpiano.schedule.NextSchedule
+import dev.stevenjin.stevenpiano.schedule.QuietNow
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
@@ -116,8 +116,8 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     override fun cancelFirmware() = graph.firmwareUpdater.cancel()
 
-    /** The next schedule's start (the hub's Schedule row). */
-    val nextSchedule: StateFlow<NextSchedule?> = graph.schedules.next
+    /** The quiet times now (v1.20 — M54: the hub's Quiet times row). */
+    val quiet: StateFlow<QuietNow> = graph.quiet.state
 
     /** The tablet's piano sound (v1.8 — M25): its mode and volume as set, the piano's link, the SoundFont and its download. */
     val tabletSound: StateFlow<TabletSoundState> = graph.tabletSound.state

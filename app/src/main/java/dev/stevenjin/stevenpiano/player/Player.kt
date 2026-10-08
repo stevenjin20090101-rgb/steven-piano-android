@@ -85,6 +85,11 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * While the piano's firmware is updated (v1.6 — M21) the player is [lock]ed: nothing starts,
  * resumes, seeks or sounds from the Keys screen until [unlock], and the reason shows as the
  * [PlayerState.problem]; [stopQuietly] stops and waits for the stop sequence to be written first.
+ * Nothing starts a piece by itself (v1.20 — M54): a person's Play, a tap or the web panel does, and once one has, Up
+ * next follows on up to [MAX_IN_A_ROW] pieces; a guest's request joins Up next and waits for Play ([queueWaiting]).
+ * While a quiet time holds ([quiet]: a block is on and nobody chose Play anyway) the start paths ([play], [playAll],
+ * [resume], [next], [previous], [skipToQueueEntry], the end of a piece) start nothing; what is added to an empty queue
+ * waits, loaded, for Play. The Keys screen's keys and a keyboard's still sound: a person is at the piano.
  */
 class Player(
     private val link: PianoLink,
@@ -99,6 +104,8 @@ class Player(
     private val trail: (String) -> Unit = {},
     /** The tablet's piano sound (v1.8 — M25): what the link is sent goes here too, after it, at the same moment. */
     tablet: MidiSink? = null,
+    /** Whether a quiet time holds now (v1.20 — M54, `schedule.QuietGate`): no start path starts a piece meanwhile. Main thread. */
+    private val quiet: () -> Boolean = { false },
 ) : ChannelDeck {
     private val engine = PlaybackEngine(if (tablet == null) link else TeeSink(link, tablet))
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -144,8 +151,8 @@ class Player(
     private var channelUids: Set<Long> = emptySet()
 
     /**
-     * Pieces played one after another since a person or a schedule last started playback, the current one included
-     * (v1.19): auto-advance stops after [MAX_IN_A_ROW]; the next piece then waits, loaded, for Play.
+     * Pieces played one after another since a person last started playback, the current one included (v1.19):
+     * auto-advance stops after [MAX_IN_A_ROW]; the next piece then waits, loaded, for Play.
      */
     @Volatile
     private var inARow = 0
@@ -180,7 +187,7 @@ class Player(
 
     /** Plays [pieceId]; Next, Previous and auto-advance then move through [queue] (shuffled when shuffle is on). A channel ends. */
     fun play(pieceId: Long, queue: List<Long> = listOf(pieceId)) {
-        if (locked) return
+        if (locked || quiet()) return
         setQueue(Queue.startingAt(pieceId, queue, this.queue, random), channel = null)
         startCurrent()
     }
@@ -191,7 +198,7 @@ class Player(
      * something else takes over.
      */
     override fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String?) {
-        if (pieceIds.isEmpty() || locked) return
+        if (pieceIds.isEmpty() || locked || quiet()) return
         val all = Queue.all(pieceIds, shuffle, queue, random)
         channelUids = if (channel == null) emptySet() else all.entries.mapTo(HashSet()) { it.uid }
         // The queue and its channel in one update: a watcher never sees the new queue without its channel.
@@ -211,6 +218,26 @@ class Player(
         val started = enqueue(pieceIds) { it.addToQueue(pieceIds) }
         if (!started && channel != null && channel == _state.value.channel) channelUids = channelUids + (before until queue.nextUid)
         return started
+    }
+
+    /**
+     * A guest's request (v1.20 — M54), which never starts playback: [pieceIds] join the end of the queue, and with
+     * nothing in it yet the first is loaded at its start, ready, and waits for someone's Play (as the piece after
+     * [MAX_IN_A_ROW] does). While the player is locked they join the queue unloaded: Play loads the first ([resume]).
+     */
+    fun queueWaiting(pieceIds: List<Long>) {
+        if (pieceIds.isEmpty()) return
+        if (queue.current != null) {
+            setQueue(queue.addToQueue(pieceIds))
+            return
+        }
+        waitLoaded(pieceIds)
+    }
+
+    /** With nothing queued: [pieceIds] become the queue, the first loaded at its start without playing. */
+    private fun waitLoaded(pieceIds: List<Long>) {
+        setQueue(Queue.startingAt(pieceIds.first(), pieceIds, queue, random), channel = null)
+        startCurrent(start = false)
     }
 
     /** The notification was dismissed while paused: the channel is over (the queue stays as it was). */
@@ -248,7 +275,7 @@ class Player(
 
     /** Plays queue entry [uid] now; the entries skipped stay behind it. An entry the playing channel did not deal ends the channel. */
     fun skipToQueueEntry(uid: Long) {
-        if (locked) return
+        if (locked || quiet()) return
         val skipped = queue.skipTo(uid)
         if (skipped === queue) return
         setQueue(skipped, channel = if (uid in channelUids) _state.value.channel else null)
@@ -265,7 +292,13 @@ class Player(
     }
 
     fun resume() {
-        if (locked) return
+        if (locked || quiet()) return
+        // A current entry that never loaded (a request that came while the player was locked): Play loads and plays it.
+        val shown = _state.value
+        if (shown.piece == null && !shown.loading && shown.problem == null && queue.current != null) {
+            startCurrent()
+            return
+        }
         if (inARow == 0) inARow = 1   // after the stop at MAX_IN_A_ROW, a person's Play starts a new run
         command { engine.play(it) }
     }
@@ -284,14 +317,14 @@ class Player(
     }
 
     fun next() {
-        if (!queue.hasNext || locked) return
+        if (!queue.hasNext || locked || quiet()) return
         setQueue(queue.next())
         startCurrent()
     }
 
     /** Restarts the piece when more than 3 s in (or first in the queue), else plays the one before. */
     fun previous() {
-        if (locked) return
+        if (locked || quiet()) return
         if (queue.previousRestarts(positionMicrosNow())) {
             seek(0L)
         } else {
@@ -492,6 +525,10 @@ class Player(
         if (pieceIds.isEmpty()) return false
         if (queue.current == null) {
             if (locked) return false
+            if (quiet()) {   // v1.20 — M54: they wait, the first loaded, for a Play after the quiet time
+                waitLoaded(pieceIds)
+                return false
+            }
             play(pieceIds.first(), pieceIds)
             return true
         }
@@ -670,8 +707,9 @@ class Player(
             val ended = queue.current ?: return@launch
             val after = queue.afterEnd() ?: return@launch
             val again = after.current?.uid == ended.uid
-            if (inARow >= MAX_IN_A_ROW) {
-                // Enough in a row (v1.19): the next piece waits, ready at its start, until a person or a schedule plays.
+            if (inARow >= MAX_IN_A_ROW || quiet()) {
+                // Enough in a row (v1.19), or a quiet time holds (v1.20 — M54): the next piece waits, ready at its start,
+                // until a person plays it.
                 inARow = 0
                 if (again) {
                     scheduler.submit { now -> engine.seek(0L, now) }
@@ -798,7 +836,7 @@ class Player(
 
         private const val AUTO_ADVANCE_DELAY_MS = 1_500L
 
-        /** At most this many pieces play one after another before the player waits for a person or a schedule (v1.19). */
+        /** At most this many pieces play one after another before the player waits for a person (v1.19). */
         const val MAX_IN_A_ROW = 4
         private const val NANOS_PER_MS = 1_000_000L
         private const val MICROS_PER_MS = 1_000L
