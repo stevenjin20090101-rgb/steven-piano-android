@@ -15,7 +15,9 @@ import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
-import dev.stevenjin.stevenpiano.schedule.ScheduleRules
+import dev.stevenjin.stevenpiano.schedule.QuietBlock
+import dev.stevenjin.stevenpiano.schedule.QuietNow
+import dev.stevenjin.stevenpiano.schedule.QuietSection
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import org.junit.After
@@ -106,8 +108,9 @@ class WebServerTest {
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
         assertEquals(
-            "the table's thirty routes that change something (the schedules' three from 1.6.2, Studio's three from 1.7, the System page's two and the cover picker's three from 1.18)",
-            30,
+            "the table's thirty-two routes that change something (the schedules' three from 1.6.2, gone since 1.20 but still behind the checks, " +
+                "Studio's three from 1.7, the System page's two and the cover picker's three from 1.18, the quiet times' two from 1.20)",
+            32,
             writes.size,
         )
         for (route in writes) {
@@ -980,86 +983,145 @@ class WebServerTest {
     }
 
     @Test
-    fun `schedules are listed, made, changed and deleted, each checked as the app's editor checks them`() {
+    fun `timed plays are gone (v1_20 M54), the schedules' writes answer 410 and reach nothing, and their read lists none`() {
         val (_, http) = start()
         val token = login(http)
-        val auth = mapOf("Cookie" to "sp_session=$token")
         backend.calls.clear()
-        val empty = http.get("/api/schedules", auth).json()
-        assertEquals(0, empty.getJSONArray("schedules").length())
-        assertTrue(empty.isNull("next"))
-        assertTrue(empty.getBoolean("exactAlarms"))
-
+        val listed = http.get("/api/schedules", mapOf("Cookie" to "sp_session=$token"))
+        assertEquals(200, listed.status)
+        val none = listed.json()
+        assertEquals(0, none.getJSONArray("schedules").length())
+        assertTrue(none.isNull("next") && none.isNull("last") && none.getBoolean("exactAlarms"))
         val calm = """{"days":31,"startMinute":750,"kind":"channel","target":"calm","endMinute":795,"volumePct":70}"""
-        val made = http.api("POST", "/api/schedules", calm, session = token)
-        assertEquals(made.toString(), 201, made.status)
-        val schedule = made.json().getJSONObject("schedule")
-        assertEquals(1L, schedule.getLong("id"))
-        assertEquals("Weekdays 12:30", schedule.getString("when"))
-        assertEquals("Calm channel · until 13:15 · 70%", schedule.getString("what"))
-        assertTrue("enabled unless it says otherwise", schedule.getBoolean("enabled"))
+        for ((method, path) in listOf("POST" to "/api/schedules", "PUT" to "/api/schedules/1", "DELETE" to "/api/schedules/1")) {
+            val gone = http.api(method, path, if (method == "DELETE") null else calm, session = token)
+            assertEquals("$method $path", 410, gone.status)
+            assertEquals("gone", gone.json().getString("error"))
+            assertEquals("Timed plays were removed in 1.20.", gone.json().getString("message"))
+        }
+        assertEquals("nothing reached the app", emptyList<String>(), backend.calls.toList())
+        val state = http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).json()
+        assertTrue("the state's schedule stays for older pages, never with a next start", state.getJSONObject("schedule").isNull("next"))
+    }
 
-        fun post(json: String) = http.api("POST", "/api/schedules", json, session = token)
-        val refused = listOf(
-            """{"days":0,"startMinute":750,"kind":"channel","target":"calm"}""",
-            """{"days":128,"startMinute":750,"kind":"channel","target":"calm"}""",
-            """{"days":31,"startMinute":1440,"kind":"channel","target":"calm"}""",
-            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","endMinute":750}""",
-            """{"days":31,"startMinute":"750","kind":"channel","target":"calm"}""",
-            """{"days":31,"startMinute":750,"kind":"radio","target":"calm"}""",
-            """{"days":31,"startMinute":750,"kind":"channel","target":"Calm Channel"}""",
-            """{"days":31,"startMinute":750,"kind":"channel","target":"jazz"}""",
-            """{"days":31,"startMinute":750,"kind":"playlist","target":"99"}""",
-            """{"days":31,"startMinute":750,"kind":"piece","target":"0"}""",
-            """{"days":31,"startMinute":750,"kind":"piece","target":3}""",
-            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","volumePct":101}""",
-            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","enabled":"yes"}""",
-            """{"days":31,"startMinute":750,"kind":"channel","target":"calm","name":"Calm"}""",
-            """{"days":31,"startMinute":750,"kind":"channel"}""",
+    @Test
+    fun `quiet times are read with a session, written with the header too, strictly and all at once, and lifted by Play anyway (v1_20 M54)`() {
+        val (_, http) = start()
+        assertEquals(401, http.get("/api/quiet").status)
+        assertEquals(401, http.api("PUT", "/api/quiet", """{"sections":[]}""").status)
+        assertEquals(401, http.api("POST", "/api/quiet/override").status)
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        backend.calls.clear()
+        assertEquals("the header too", 403, http.api("PUT", "/api/quiet", """{"sections":[]}""", session = token, panel = false).status)
+        assertEquals(403, http.api("POST", "/api/quiet/override", session = token, panel = false).status)
+        assertEquals("nothing refused reached the app", emptyList<String>(), backend.calls.toList())
+
+        val school = """{"name":"School days","days":[1,2,3,4,5],"blocks":[{"start":"08:40","end":"09:30"},{"start":"09:40","end":"10:30"}]}"""
+        val night = """{"name":"Night","days":[1,2,3,4,5,6,7],"blocks":[{"start":"21:00","end":"07:00"}]}"""
+        val saved = http.api("PUT", "/api/quiet", """{"sections":[$school,$night]}""", session = token)
+        assertEquals(saved.toString(), 204, saved.status)
+        assertEquals(
+            listOf(
+                QuietSection("School days", 31, listOf(QuietBlock(520, 570), QuietBlock(580, 630))),
+                QuietSection("Night", 127, listOf(QuietBlock(1260, 420))),
+            ),
+            backend.sectionsHeld.toList(),
         )
-        for (body in refused) assertEquals(body, 400, post(body).status)
-        assertEquals("the day rule in the app's words", "Choose at least one day.", post(refused[0]).json().getString("message"))
-        assertEquals("That channel, playlist or piece isn't in the library.", post(refused[7]).json().getString("message"))
-        assertEquals("only the first save reached the app", 1, backend.calls.size)
+        val read = http.get("/api/quiet", cookie).json()
+        assertEquals(setOf("sections", "now"), read.keys().asSequence().toSet())
+        val first = read.getJSONArray("sections").getJSONObject(0)
+        assertEquals("School days", first.getString("name"))
+        assertEquals("[1,2,3,4,5]", first.getJSONArray("days").toString())
+        assertEquals("08:40", first.getJSONArray("blocks").getJSONObject(0).getString("start"))
+        assertEquals("09:30", first.getJSONArray("blocks").getJSONObject(0).getString("end"))
+        assertEquals(setOf("now", "until", "overridden", "next"), read.getJSONObject("now").keys().asSequence().toSet())
 
-        assertEquals(201, post("""{"days":64,"startMinute":1410,"kind":"playlist","target":"10","endMinute":30,"volumePct":null,"enabled":false}""").status)
-        assertEquals(201, post("""{"days":127,"startMinute":420,"kind":"piece","target":"3"}""").status)
-        val listed = http.get("/api/schedules", auth).json()
-        val rows = listed.getJSONArray("schedules")
-        assertEquals("by start time", listOf(3L, 1L, 2L), (0 until rows.length()).map { rows.getJSONObject(it).getLong("id") })
-        val late = rows.getJSONObject(2)
-        assertEquals("Sundays 23:30", late.getString("when"))
-        assertEquals("Evening · until 00:30", late.getString("what"))
-        assertTrue(late.isNull("volumePct"))
-        assertFalse(late.getBoolean("enabled"))
-        assertEquals("no volume given: none", "Für Elise · until the end", rows.getJSONObject(0).getString("what"))
-        assertEquals("Next: Wednesday 12:30, Calm", listed.getString("next"))
+        fun put(body: String) = http.api("PUT", "/api/quiet", body, session = token)
+        val refused = listOf(
+            """{"sections":[$school],"extra":1}""",
+            """{"sections":{}}""",
+            """{"sections":[{"name":"School days","days":[1],"blocks":[{"start":"8:40","end":"09:30"}]}]}""",
+            """{"sections":[{"name":"School days","days":[8],"blocks":[{"start":"08:40","end":"09:30"}]}]}""",
+            """{"sections":[{"name":"School days","days":[1],"blocks":[{"start":"08:40","end":"09:30","volume":70}]}]}""",
+            """{"sections":[{"name":"School days","days":[1],"blocks":[{"start":"08:40","end":"08:40"}]}]}""",
+            """{"sections":[{"name":"","days":[1],"blocks":[{"start":"08:40","end":"09:30"}]}]}""",
+            """{"sections":[{"name":"School days","days":[],"blocks":[{"start":"08:40","end":"09:30"}]}]}""",
+            """{"sections":[{"name":"School days","days":[1],"blocks":[{"start":"08:40","end":"09:30"},{"start":"09:00","end":"09:50"}]}]}""",
+            """{"sections":[$school,$school]}""",
+        )
+        for (body in refused) assertEquals(body, 400, put(body).status)
+        assertEquals("the editor's words", "8:40–9:30 and 9:00–9:50 overlap.", put(refused[8]).json().getString("message"))
+        assertEquals("quiet", put(refused[8]).json().getString("error"))
+        val thirteen = (1..13).joinToString(",") { """{"name":"S$it","days":[1],"blocks":[{"start":"08:40","end":"09:30"}]}""" }
+        assertEquals("twelve sections at most", "There can be 12 sections at most.", put("""{"sections":[$thirteen]}""").json().getString("message"))
+        assertEquals("only the first save reached the app", listOf("quiet save 2"), backend.calls.toList())
+        assertEquals("every section may go", 204, put("""{"sections":[]}""").status)
 
-        val changed = http.api("PUT", "/api/schedules/1", """{"days":31,"startMinute":760,"kind":"channel","target":"calm","endMinute":null,"volumePct":40,"enabled":false}""", session = token)
-        assertEquals(204, changed.status)
-        assertEquals(760, backend.schedulesHeld.getValue(1).startMinute)
-        assertEquals(null, backend.schedulesHeld.getValue(1).endMinute)
-        assertEquals(404, http.api("PUT", "/api/schedules/99", calm, session = token).status)
-        assertEquals(400, http.api("PUT", "/api/schedules/1", """{"days":31}""", session = token).status)
-        assertEquals("no id 0: a new schedule is a POST", 404, http.api("PUT", "/api/schedules/0", calm, session = token).status)
-        val patch = http.api("PATCH", "/api/schedules/1", calm, session = token)
-        assertEquals(405, patch.status)
-        assertEquals("PUT, DELETE", patch.header("allow"))
+        // Play anyway: 409 when no block is on, 204 while one is.
+        val notQuiet = http.api("POST", "/api/quiet/override", session = token)
+        assertEquals(409, notQuiet.status)
+        assertEquals("not-quiet", notQuiet.json().getString("error"))
+        backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L, next = null)
+        assertEquals(204, http.api("POST", "/api/quiet/override", session = token).status)
+        assertTrue(backend.quietHeld.overridden)
+    }
 
-        assertEquals(204, http.api("DELETE", "/api/schedules/1", session = token).status)
-        assertEquals("deleted once", 404, http.api("DELETE", "/api/schedules/1", session = token).status)
-        assertEquals(2, backend.schedulesHeld.size)
+    @Test
+    fun `while a quiet time holds, every route that would play answers 409 and reaches nothing, and after Play anyway they play (v1_20 M54)`() {
+        val (_, http) = start()
+        val token = login(http)
+        backend.state = WebState(player = WebPlayer(queue = dev.stevenjin.stevenpiano.player.QueueSnapshot(listOf(1, 2), listOf(8, 9), 0)))
+        backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L, next = 1_800_000_600_000L)
+        backend.calls.clear()
+        fun post(path: String, body: String) = http.api("POST", path, body, session = token)
+        val plays = listOf(
+            "/api/play" to """{"pieceId":1}""",
+            "/api/play-all" to """{"ids":[1,2]}""",
+            "/api/play-all" to """{"playlistId":10}""",
+            "/api/transport" to """{"action":"toggle"}""",
+            "/api/transport" to """{"action":"resume"}""",
+            "/api/transport" to """{"action":"next"}""",
+            "/api/transport" to """{"action":"previous"}""",
+            "/api/queue" to """{"action":"skip","uid":9}""",
+            "/api/channels/calm/play" to "{}",
+        )
+        for ((path, body) in plays) {
+            val refused = post(path, body)
+            assertEquals("$path $body", 409, refused.status)
+            assertEquals("quiet", refused.json().getString("error"))
+            assertTrue(refused.json().getString("message"), refused.json().getString("message").matches(Regex("Quiet until .+\\. Use Play anyway\\.")))
+        }
+        assertEquals("nothing that would play reached the app", emptyList<String>(), backend.calls.toList())
+        // What doesn't start a piece goes on: pause, stop, a piece added to Up next (it waits, loaded, for Play).
+        assertEquals(204, post("/api/transport", """{"action":"pause"}""").status)
+        assertEquals(204, post("/api/transport", """{"action":"stop"}""").status)
+        assertEquals(204, post("/api/queue", """{"action":"add","ids":[3]}""").status)
+        assertEquals("a bad body is still a bad body", 400, post("/api/play", """{"pieceId":"1"}""").status)
+        assertEquals(listOf("transport pause", "transport stop", "queue Add(ids=[3])"), backend.calls.toList())
 
-        repeat(ScheduleRules.MAX_SCHEDULES - 2) { assertEquals(201, post(calm).status) }
-        val full = post(calm)
-        assertEquals(409, full.status)
-        assertEquals("too-many", full.json().getString("error"))
+        assertEquals(204, http.api("POST", "/api/quiet/override", session = token).status)
+        backend.calls.clear()
+        assertEquals(204, post("/api/play", """{"pieceId":1}""").status)
+        assertEquals(204, post("/api/transport", """{"action":"next"}""").status)
+        assertEquals(listOf("play 1 queue=null", "transport next"), backend.calls.toList())
+        val state = http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).json()
+        assertTrue(state.has("quiet"))
+    }
 
-        backend.exactAlarms = false
-        backend.lastOutcome = "Missed: Wednesday 12:30 (piano not connected)"
-        val told = http.get("/api/schedules", auth).json()
-        assertFalse(told.getBoolean("exactAlarms"))
-        assertEquals("Missed: Wednesday 12:30 (piano not connected)", told.getString("last"))
+    @Test
+    fun `the guests' catalogue says when the piano rests, while a quiet time holds it (v1_20 M54)`() {
+        val (_, http) = start()
+        assertTrue("no quiet time: null", http.get("/api/public/catalogue").json().isNull("quiet"))
+        backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L, next = null)
+        val resting = http.get("/api/public/catalogue").json().getJSONObject("quiet")
+        assertEquals(setOf("until"), resting.keys().asSequence().toSet())
+        assertEquals(1_800_000_000_000L, resting.getLong("until"))
+        backend.quietHeld = backend.quietHeld.copy(overridden = true)
+        assertTrue("lifted by Play anyway: the piano plays", http.get("/api/public/catalogue").json().isNull("quiet"))
+        // A request still goes in, quiet or not.
+        backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L)
+        assertEquals(202, http.api("POST", "/api/public/request", """{"pieceId":1}""", panel = false).status)
     }
 
     @Test

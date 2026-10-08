@@ -20,13 +20,13 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
- * Keeps the one alarm ([AlarmScheduler]) set for whatever the schedules do next
- * ([Occurrences.next]: a start, or the end of a run going on), and cancelled when nothing will.
- * [replan] runs after every change to the schedules (the app follows the table), after every
- * alarm (from the alarm's own minute, so another start at that minute is not planned again: it
- * was due with it), when the tablet has restarted, when the clock or the time zone changes, and
- * when Android grants exact alarms. Without exact alarms nothing is planned: [exactAllowed] tells
- * the Schedule page to ask. One plan at a time.
+ * Keeps the one alarm ([AlarmScheduler]) set for whatever the [entries] do next ([Occurrences.next]: a start, or the
+ * end of a run going on), and cancelled when nothing will. Since 1.20 (M54) the entries are the quiet times' blocks
+ * alone: the alarm wakes the tablet as a block begins (the player stops) and ends. [replan] runs after every change to
+ * them (the app follows the table), after every alarm (from the alarm's own minute, so another edge at that minute is
+ * not planned again: it was due with it), when the tablet has restarted, when the clock or the time zone changes, and
+ * when Android grants exact alarms. Without exact alarms nothing is planned: [exactAllowed] tells the Quiet times page
+ * to ask. One plan at a time.
  */
 class SchedulePlanner(
     private val entries: suspend () -> List<ScheduleEntity>,

@@ -41,7 +41,8 @@ enum class Route(val path: String, val label: String, @param:DrawableRes val ico
  * page it shows, for the four whose rows come from the piano's settings table. The constants keep their
  * older names where the page was renamed (Feel is Sound and touch, Lighting is Lights and screen, Remote
  * is Web panel); the [title] is the one name the person reads. Studio, a page from v1.7, is its own tab
- * since v1.12 (M30): a saved "studio" page reads as none.
+ * since v1.12 (M30): a saved "studio" page reads as none; so does a saved "schedule" page since Schedule
+ * became Quiet times (v1.20 — M54).
  */
 enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?) {
     Instrument("instrument", "Instrument", null),
@@ -52,7 +53,8 @@ enum class SettingsPage(val key: String, val title: String, val piano: PianoPage
     Firmware("firmware", PianoPage.Firmware.title, PianoPage.Firmware),
     Playback("playback", "Playback", null),
     TabletSound("tablet-sound", "Tablet sound", null),
-    Schedule("schedule", "Schedule", null),
+    /** Quiet times (v1.20 — M54), where Schedule was (its timed plays were removed). */
+    Quiet("quiet", "Quiet times", null),
     Remote("remote", "Web panel", null),
     Guests("guests", "Guests", null),
     System("system", "System", null),

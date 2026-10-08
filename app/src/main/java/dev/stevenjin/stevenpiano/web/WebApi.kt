@@ -16,7 +16,6 @@ import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.PromptBuilder
 import dev.stevenjin.stevenpiano.data.TextLimits
-import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.piano.PianoPage
 import dev.stevenjin.stevenpiano.piano.PianoSetting
@@ -28,7 +27,6 @@ import dev.stevenjin.stevenpiano.player.Performance
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
-import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import org.json.JSONArray
 import org.json.JSONException
@@ -64,13 +62,13 @@ object WebApi {
      * The body of a request that declared [contentLength] bytes (null: none declared), read from
      * [input] to exactly that length and never past [MAX_BODY]; then parsed ([parse]).
      */
-    fun readObject(input: InputStream, contentLength: Long?, contentType: String?, chunked: Boolean): JSONObject {
+    fun readObject(input: InputStream, contentLength: Long?, contentType: String?, chunked: Boolean, maxDepth: Int = MAX_DEPTH): JSONObject {
         if (chunked || contentLength == null) throw ApiError(411, "length", "The request must say how long its body is.")
         if (contentLength > MAX_BODY) throw ApiError(413, "too-large", "The request is larger than 64 KB.")
         if (contentLength < 0) throw ApiError(400, "length", "The request's length is not a length.")
         if (!isJson(contentType)) throw ApiError(415, "type", "The request must be JSON.")
         val bytes = readExactly(input, contentLength.toInt())
-        return parse(bytes)
+        return parse(bytes, maxDepth)
     }
 
     /** Whether [contentType] is JSON (`application/json`, with or without a charset, which must then be UTF-8). */
@@ -81,8 +79,8 @@ object WebApi {
         return charset == null || charset == "utf-8"
     }
 
-    /** [bytes] as one JSON object: strict UTF-8, nested at most [MAX_DEPTH] deep. */
-    fun parse(bytes: ByteArray): JSONObject {
+    /** [bytes] as one JSON object: strict UTF-8, nested at most [maxDepth] deep ([MAX_DEPTH]; the quiet times' five, [QUIET_DEPTH]). */
+    fun parse(bytes: ByteArray, maxDepth: Int = MAX_DEPTH): JSONObject {
         val text = try {
             Charsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
@@ -91,7 +89,7 @@ object WebApi {
         } catch (e: CharacterCodingException) {
             throw ApiError(400, "encoding", "The request is not UTF-8.")
         }
-        if (depthOf(text) > MAX_DEPTH) throw ApiError(400, "depth", "The request is nested too deeply.")
+        if (depthOf(text) > maxDepth) throw ApiError(400, "depth", "The request is nested too deeply.")
         val value = try {
             JSONObject(text)
         } catch (e: JSONException) {
@@ -273,36 +271,6 @@ object WebApi {
     }
 
     /**
-     * `POST /api/schedules` and `PUT /api/schedules/{id}`: a schedule's fields, `{days, startMinute,
-     * kind, target, endMinute?, volumePct?, enabled?}`, read strictly and checked as the app's editor
-     * checks them ([ScheduleRules]): days a bitmask from 1 to 127 (Monday 1 … Sunday 64), minutes after
-     * midnight, kind playlist · channel · piece, the target a channel's key or an id written as text,
-     * endMinute null (or absent) to play until the end, volumePct null (or absent) for none, enabled
-     * true unless it says false. [id] is the schedule edited, 0 for a new one.
-     */
-    fun scheduleDraft(json: JSONObject, id: Long = 0): ScheduleDraft {
-        onlyKeys(json, SCHEDULE_KEYS)
-        val kind = ScheduleKind.entries.firstOrNull { it.name.lowercase() == string(json, "kind", 16) }
-            ?: throw ApiError(400, "field", "kind must be playlist, channel or piece.")
-        // Whole numbers here; whether they make a schedule is the rules' to say, in the editor's words.
-        val draft = ScheduleDraft(
-            id = id,
-            days = ruled(whole(json, "days")),
-            startMinute = ruled(whole(json, "startMinute")),
-            kind = kind,
-            target = string(json, "target", MAX_TARGET).trim(),
-            endMinute = wholeOrNull(json, "endMinute")?.let(::ruled),
-            volumePct = wholeOrNull(json, "volumePct")?.let(::ruled),
-            enabled = boolOrNull(json, "enabled") ?: true,
-        )
-        draft.problem?.let { throw ApiError(400, "schedule", it) }
-        return draft
-    }
-
-    /** A whole number as an Int for the rules, which refuse anything outside their ranges; past an Int's own, the nearest end. */
-    private fun ruled(value: Long): Int = value.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
-
-    /**
      * Setting [setting]'s new value from the panel as the piano takes it (the wire form the app's own
      * rows send), or an [ApiError]: read-only settings are never written (the key-force pair), and a
      * value outside the table's range is refused, never clamped.
@@ -460,6 +428,7 @@ object WebApi {
             .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))
             .put("display", display(s.display))
+            .put("quiet", quietNow(s.quiet))
     }
 
     /** The views of the piece playing (v1.13 — M32): `{rev, notes, hands, fingers, chords, score}`. */
@@ -548,30 +517,6 @@ object WebApi {
     private val COMPOSE_KEYS = setOf("pieceId", "mood", "key", "bpm", "minutes")
     private val KEY_KEYS = setOf("tonic", "minor")
 
-    /** A schedule: its fields as `POST` takes them, and (read-only) what its target is called and the tablet's two lines, `when` and `what`. */
-    fun schedule(s: WebSchedule): JSONObject {
-        val e = s.entry
-        return JSONObject()
-            .put("id", e.id)
-            .put("days", e.days)
-            .put("startMinute", e.startMinute)
-            .put("kind", e.kind.name.lowercase())
-            .put("target", e.target)
-            .put("endMinute", e.endMinute ?: JSONObject.NULL)
-            .put("volumePct", e.volumePct ?: JSONObject.NULL)
-            .put("enabled", e.enabled)
-            .put("name", s.name)
-            .put("when", s.whenLine)
-            .put("what", s.whatLine)
-    }
-
-    /** `GET /api/schedules`: the schedules by start time, the next start's line, the last one's outcome, and whether exact alarms are allowed. */
-    fun schedules(s: WebSchedules): JSONObject = JSONObject()
-        .put("schedules", JSONArray().apply { s.schedules.forEach { put(schedule(it)) } })
-        .put("next", s.next ?: JSONObject.NULL)
-        .put("last", s.last ?: JSONObject.NULL)
-        .put("exactAlarms", s.exactAlarms)
-
     /**
      * The socket's once-a-second message while a piece plays, and (v1.13 — M32) at once whenever the position jumps
      * (play, pause, a seek, the tempo, a load), playing or not: where it is, when that was on the tablet's monotonic
@@ -639,11 +584,6 @@ object WebApi {
 
     /** The piano's pages the panel offers: its settings (Firmware and status stays on the tablet, but Read status, All keys off and Save now). */
     private val PANEL_PAGES = listOf(PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal)
-
-    private val SCHEDULE_KEYS = setOf("days", "startMinute", "kind", "target", "endMinute", "volumePct", "enabled")
-
-    /** A schedule's target as it may come in: a channel's key or an id, never longer (the rules then check its form). */
-    private const val MAX_TARGET = 64
 
     private val SETTINGS_KEYS = setOf(
         "preRollMs", "defaultTempoPct", "transpose", "velocityPct", "foldOutOfRange", "skipDrumChannel",
@@ -864,4 +804,106 @@ object WebApi {
                 }
             },
         )
+
+    // ---- Quiet times (v1.20 — M54) ------------------------------------------------------------------------------------
+
+    /** `PUT /api/quiet`'s body is five deep (`{sections: [{blocks: [{start}]}]}`): one level past [MAX_DEPTH], for it alone. */
+    const val QUIET_DEPTH = 5
+
+    /** The quiet now, in the state and in `GET /api/quiet`: `{now, until, overridden, next}`, the times epoch ms or null. */
+    fun quietNow(q: dev.stevenjin.stevenpiano.schedule.QuietNow): JSONObject = JSONObject()
+        .put("now", q.now)
+        .put("until", q.until ?: JSONObject.NULL)
+        .put("overridden", q.overridden)
+        .put("next", q.next ?: JSONObject.NULL)
+
+    /**
+     * `GET /api/quiet`: `{sections: [{name, days: [1..7], blocks: [{start: "08:40", end: "09:30"}]}], now: {now, until,
+     * overridden, next}}`; days 1 (Monday) to 7 (Sunday), in order; times on the 24-hour clock, two-digit hours.
+     */
+    fun quiet(q: WebQuiet): JSONObject = JSONObject()
+        .put(
+            "sections",
+            JSONArray().apply {
+                q.sections.forEach { section ->
+                    put(
+                        JSONObject()
+                            .put("name", section.name)
+                            .put("days", JSONArray().apply { for (day in 1..DAYS) if (section.days and (1 shl (day - 1)) != 0) put(day) })
+                            .put(
+                                "blocks",
+                                JSONArray().apply {
+                                    section.blocks.forEach { put(JSONObject().put("start", wireTime(it.start)).put("end", wireTime(it.end))) }
+                                },
+                            ),
+                    )
+                }
+            },
+        )
+        .put("now", quietNow(q.now))
+
+    /**
+     * `PUT /api/quiet`: `{sections: [{name, days, blocks: [{start, end}]}]}`, every section at once, read strictly
+     * (nothing but those keys; days whole numbers 1 to 7; times `HH:MM`) and then checked as the tablet's editor checks
+     * them ([dev.stevenjin.stevenpiano.schedule.QuietTimes.validate]): 400 `quiet` with the editor's words.
+     */
+    fun quietSections(json: JSONObject): List<dev.stevenjin.stevenpiano.schedule.QuietSection> {
+        onlyKeys(json, setOf("sections"))
+        val list = json.opt("sections") as? JSONArray ?: throw ApiError(400, "field", "sections must be a list.")
+        if (list.length() > dev.stevenjin.stevenpiano.schedule.QuietTimes.MAX_SECTIONS) {
+            throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.schedule.QuietTimes.TOO_MANY_SECTIONS)
+        }
+        val sections = (0 until list.length()).map { i ->
+            val item = list.get(i) as? JSONObject ?: throw ApiError(400, "field", "Each section must be {name, days, blocks}.")
+            onlyKeys(item, setOf("name", "days", "blocks"))
+            val name = string(item, "name", MAX_QUIET_NAME).trim()
+            val days = item.opt("days") as? JSONArray ?: throw ApiError(400, "field", "days must be a list.")
+            if (days.length() > DAYS) throw ApiError(400, "field", "days are 1 (Monday) to 7 (Sunday), each once.")
+            var mask = 0
+            for (d in 0 until days.length()) {
+                val day = whole(days.get(d))?.takeIf { it in 1L..DAYS.toLong() } ?: throw ApiError(400, "field", "days are 1 (Monday) to 7 (Sunday).")
+                mask = mask or (1 shl (day.toInt() - 1))
+            }
+            val blocks = item.opt("blocks") as? JSONArray ?: throw ApiError(400, "field", "blocks must be a list.")
+            if (blocks.length() > dev.stevenjin.stevenpiano.schedule.QuietTimes.MAX_BLOCKS) {
+                throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.schedule.QuietTimes.TOO_MANY_BLOCKS)
+            }
+            val read = (0 until blocks.length()).map { j ->
+                val block = blocks.get(j) as? JSONObject ?: throw ApiError(400, "field", "Each block must be {start, end}.")
+                onlyKeys(block, setOf("start", "end"))
+                dev.stevenjin.stevenpiano.schedule.QuietBlock(minuteOf(string(block, "start", MAX_TIME_TEXT)), minuteOf(string(block, "end", MAX_TIME_TEXT)))
+            }
+            dev.stevenjin.stevenpiano.schedule.QuietSection(name, mask, read)
+        }
+        dev.stevenjin.stevenpiano.schedule.QuietTimes.validate(sections)?.let { throw ApiError(400, "quiet", it) }
+        return sections
+    }
+
+    /** The guests' catalogue's `quiet` (v1.20 — M54): `{until}` (epoch ms) while a quiet time holds the piano, else null. */
+    fun guestQuiet(q: dev.stevenjin.stevenpiano.schedule.QuietNow): Any =
+        q.until?.takeIf { q.holds }?.let { JSONObject().put("until", it) } ?: JSONObject.NULL
+
+    /** `GET /api/schedules` since 1.20, for older pages: no schedule, nothing next, nothing last, exact alarms fine. */
+    fun noSchedules(): JSONObject = JSONObject()
+        .put("schedules", JSONArray())
+        .put("next", JSONObject.NULL)
+        .put("last", JSONObject.NULL)
+        .put("exactAlarms", true)
+
+    /** A time as the wire has it, "08:40". */
+    private fun wireTime(minute: Int): String = dev.stevenjin.stevenpiano.schedule.ScheduleCopy.clock(minute)
+
+    /** "08:40" as minutes after midnight; anything else is refused. */
+    private fun minuteOf(text: String): Int {
+        val match = WIRE_TIME.matchEntire(text) ?: throw ApiError(400, "field", "A time is HH:MM, from 00:00 to 23:59.")
+        return match.groupValues[1].toInt() * MINUTES_PER_HOUR + match.groupValues[2].toInt()
+    }
+
+    private val WIRE_TIME = Regex("([01][0-9]|2[0-3]):([0-5][0-9])")
+    private const val DAYS = 7
+    private const val MINUTES_PER_HOUR = 60
+
+    /** A name read this far at most before it is checked (the rules allow 40 characters once trimmed), and a time's text. */
+    private const val MAX_QUIET_NAME = 256
+    private const val MAX_TIME_TEXT = 16
 }

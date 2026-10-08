@@ -14,49 +14,34 @@ import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * The schedules (the v3 `schedules` table, [ScheduleEntity]): read as they change for the page,
- * the hub and the planner, and changed only through here, by the Schedule page and the web panel.
- * A draft with a problem is never written ([ScheduleDraft.problem]); a new one past
- * [ScheduleRules.MAX_SCHEDULES] is refused. The planner follows [all], so every change plans the
- * one alarm again.
+ * The quiet times (v1.20 — M54), kept in the schedules table ([ScheduleEntity], one row a block): read as they change
+ * for the gate, the pages and the planner, and changed only through here, by the Quiet times pages of the tablet and
+ * the web panel, which give every section at once ([replaceQuiet]: the old blocks go and the new ones come in one
+ * [transaction], so nothing ever reads half of them). Sections with a problem are never written ([QuietTimes.validate]).
+ * The timed plays' rows (the kinds before 1.20) stay in the table, never read.
  */
-class ScheduleRepository(private val dao: ScheduleDao, private val clock: () -> Long = System::currentTimeMillis) {
-    /** Every schedule, by start time then id, as it changes. */
-    val all: Flow<List<ScheduleEntity>> = dao.observeAll()
+class ScheduleRepository(
+    private val dao: ScheduleDao,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val transaction: suspend (suspend () -> Unit) -> Unit = { it() },
+) {
+    /** The quiet times' blocks, in the order they were saved, as they change. */
+    val quiet: Flow<List<ScheduleEntity>> = dao.observeQuiet()
 
-    /** Every schedule now, by start time then id. */
-    suspend fun list(): List<ScheduleEntity> = dao.list()
+    /** The quiet times' blocks now. */
+    suspend fun quietRows(): List<ScheduleEntity> = dao.quiet()
 
-    suspend fun get(id: Long): ScheduleEntity? = dao.byId(id)
+    /** The sections as they are kept now. */
+    suspend fun sections(): List<QuietSection> = QuietTimes.sections(dao.quiet())
 
-    /**
-     * Saves [draft]: a new schedule when its id is 0 ([SaveResult.TooMany] when there are
-     * [ScheduleRules.MAX_SCHEDULES] already), else the one with its id, keeping when it was made
-     * ([SaveResult.Gone] when it has been deleted meanwhile). The draft must have no problem.
-     */
-    suspend fun save(draft: ScheduleDraft): SaveResult {
-        require(draft.problem == null) { "A schedule with a problem can't be saved: ${draft.problem}" }
-        if (draft.isNew) {
-            if (dao.count() >= ScheduleRules.MAX_SCHEDULES) return SaveResult.TooMany
-            val entity = draft.toEntity(createdAt = clock())
-            return SaveResult.Saved(entity.copy(id = dao.upsert(entity)))
+    /** Every section, which must have no problem ([QuietTimes.validate]): the blocks kept are these and no others. */
+    suspend fun replaceQuiet(sections: List<QuietSection>) {
+        val problem = QuietTimes.validate(sections)
+        require(problem == null) { "Quiet times with a problem can't be saved: $problem" }
+        val rows = QuietTimes.rows(sections, createdAt = clock())
+        transaction {
+            dao.deleteQuiet()
+            if (rows.isNotEmpty()) dao.insertAll(rows)
         }
-        val existing = dao.byId(draft.id) ?: return SaveResult.Gone
-        val entity = draft.toEntity(createdAt = existing.createdAt)
-        dao.upsert(entity)
-        return SaveResult.Saved(entity)
     }
-
-    suspend fun setEnabled(id: Long, enabled: Boolean) = dao.setEnabled(id, enabled)
-
-    suspend fun delete(id: Long) = dao.delete(id)
-}
-
-/** How a save went: the schedule as saved, too many schedules already, or (an edit) the schedule gone meanwhile. */
-sealed interface SaveResult {
-    data class Saved(val schedule: ScheduleEntity) : SaveResult
-
-    data object TooMany : SaveResult
-
-    data object Gone : SaveResult
 }

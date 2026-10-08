@@ -104,7 +104,7 @@ class PianoPagesTest {
             listOf(
                 listOf(SettingsPage.Instrument, SettingsPage.Keyboard),
                 listOf(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware),
-                listOf(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Schedule),
+                listOf(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Quiet),
                 listOf(SettingsPage.Remote, SettingsPage.Guests),
                 listOf(SettingsPage.System, SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help),
             ).map { pages -> pages.map { HubRow.Page(it) } },
@@ -114,7 +114,7 @@ class PianoPagesTest {
             listOf(
                 listOf("Instrument", "Keyboard"),
                 listOf("Sound and touch", "Lights and screen", "Pedal", "Firmware and status"),
-                listOf("Playback", "Tablet sound", "Schedule"),
+                listOf("Playback", "Tablet sound", "Quiet times"),
                 listOf("Web panel", "Guests"),
                 listOf("System", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about"),
             ),

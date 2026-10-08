@@ -21,6 +21,8 @@ import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.schedule.QuietNow
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.PianoSettings
@@ -195,13 +197,15 @@ class GroupSummariesTest {
     }
 
     @Test
-    fun `Schedule reads when the next one starts, or None`() {
+    fun `Quiet times reads the quiet now, or when the next block starts, or None (v1_20 M54)`() {
         val wednesday = ZonedDateTime.of(LocalDateTime.parse("2026-09-30T12:30"), ZoneId.of("America/New_York"))
-        assertEquals("None", GroupSummaries.schedule(null))
-        assertEquals("Next Wed 12:30", GroupSummaries.schedule(wednesday))
-        assertEquals("Next Sun 07:05", GroupSummaries.schedule(wednesday.plusDays(4).withHour(7).withMinute(5)))
-        assertEquals("the Schedule row reads without the piano", "Next Wed 12:30", GroupSummaries.from(PianoState.Unknown, PianoSettings(), nextSchedule = wednesday).schedule)
-        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings()).of(SettingsPage.Schedule))
+        fun ms(at: ZonedDateTime) = at.toInstant().toEpochMilli()
+        assertEquals("None", QuietCopy.hub(QuietNow(), wednesday))
+        assertEquals("Next 13:40", QuietCopy.hub(QuietNow(next = ms(wednesday.withHour(13).withMinute(40))), wednesday))
+        assertEquals("Next Mon 8:40", QuietCopy.hub(QuietNow(next = ms(wednesday.plusDays(5).withHour(8).withMinute(40))), wednesday))
+        assertEquals("Quiet until 13:15", QuietCopy.hub(QuietNow(now = true, until = ms(wednesday.withHour(13).withMinute(15))), wednesday))
+        assertEquals("the row reads without the piano", "Quiet until 9:30", GroupSummaries.from(PianoState.Unknown, PianoSettings(), quiet = "Quiet until 9:30").of(SettingsPage.Quiet))
+        assertEquals("None", GroupSummaries.from(PianoState.Unknown, PianoSettings()).of(SettingsPage.Quiet))
     }
 
     @Test

@@ -11,7 +11,9 @@
 // No PIN and no free text: a request is a piece's id from the list, one every five minutes. Titles
 // go into the page as text only. Since v1.14 (M37) the lists name their genre: a switch (All ·
 // Classical · Modern) shows when there are both, and a search over the rows already here when there
-// are more than a few; neither asks the tablet anything. A list shows 200 rows at a time.
+// are more than a few; neither asks the tablet anything. A list shows 200 rows at a time. Since
+// v1.20 (M54), while a quiet time holds the piano (the catalogue's `quiet`), a line under the head
+// says until when: a request still goes in, and waits in the queue.
 
 'use strict';
 
@@ -69,6 +71,33 @@
   /** "30 s", "4 min". */
   function wait(seconds) {
     return seconds < 60 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`;
+  }
+
+  /** "9:30" on this phone's clock; a weekday before it when it is a day or more away. */
+  function clock(ms) {
+    const at = new Date(ms);
+    const time = `${at.getHours()}:${String(at.getMinutes()).padStart(2, '0')}`;
+    return ms - Date.now() >= 24 * 3600 * 1000 ? `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][at.getDay()]} ${time}` : time;
+  }
+
+  /**
+   * While a quiet time holds the piano (v1.20 — M54, `quiet: {until}` in the catalogue; null otherwise): a line under
+   * the head, "The piano is resting until 9:30. Your request will wait until then." It stays with the thanks.
+   */
+  function resting(quiet) {
+    let line = $('guest-resting');
+    if (!quiet || !quiet.until) {
+      if (line) line.hidden = true;
+      return;
+    }
+    if (!line) {
+      line = h('p', { id: 'guest-resting', class: 'note', role: 'status' });
+      const head = document.querySelector('.guest-head');
+      if (head) head.append(line);
+      else $('catalogue').before(line);
+    }
+    line.textContent = `The piano is resting until ${clock(quiet.until)}. Your request will wait until then.`;
+    line.hidden = false;
   }
 
   async function ask(piece, button) {
@@ -201,6 +230,7 @@
       showClosed();
       return;
     }
+    resting(data.quiet);
     lists = data.lists || [];
     if (lists.length === 0) {
       $('closed').textContent = 'There is nothing to ask for yet.';

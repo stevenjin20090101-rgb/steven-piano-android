@@ -17,7 +17,7 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.piano.PianoState
-import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
@@ -26,7 +26,6 @@ import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.WebStatus
-import java.time.ZonedDateTime
 import kotlin.math.roundToInt
 import dev.stevenjin.stevenpiano.piano.PianoSettings as PianoTable
 
@@ -46,7 +45,8 @@ data class GroupSummaries(
     val display: String,
     val remote: String,
     val kiosk: String,
-    val schedule: String = ScheduleCopy.NONE,
+    /** Quiet times (v1.20 — M54): "Quiet until 9:30", "Next Mon 8:40", or "None". */
+    val quiet: String = QuietCopy.NONE,
     /** The MIDI keyboard (v1.11 — M29): "None", its name, or its name and "not connected". */
     val keyboard: String = InstrumentCopy.NONE,
     /** The instrument and its state (v1.13): "Steven Piano · Connected". */
@@ -69,7 +69,7 @@ data class GroupSummaries(
         SettingsPage.Firmware -> firmware
         SettingsPage.Playback -> playback
         SettingsPage.TabletSound -> tabletSound
-        SettingsPage.Schedule -> schedule
+        SettingsPage.Quiet -> quiet
         SettingsPage.Remote -> remote
         SettingsPage.Guests -> guests
         SettingsPage.System -> system
@@ -86,8 +86,8 @@ data class GroupSummaries(
 
         /**
          * Every row's value; [web] where the web panel listens; [firmwareUpdate] and [firmwareVersion]
-         * (Device Information's, v1.6 — M21) for Firmware and status; [nextSchedule] when the next schedule
-         * starts; [keyboard] the MIDI keyboard's state (v1.11 — M29); [instrument] the Instrument row's value
+         * (Device Information's, v1.6 — M21) for Firmware and status; [quiet] the Quiet times row's value (v1.20 —
+         * M54, [QuietCopy.hub]); [keyboard] the MIDI keyboard's state (v1.11 — M29); [instrument] the Instrument row's value
          * ([instrumentLine]); [update] the app's updater; [version] the app's version (Help and about); [systemReading] the
          * tablet's last reading and [attention] what needs attention now (System, v1.18 — M50). Studio is a tab of its own
          * since v1.12 (M30).
@@ -98,7 +98,7 @@ data class GroupSummaries(
             web: WebStatus = WebStatus(),
             firmwareUpdate: FirmwareState = FirmwareState.Idle,
             firmwareVersion: String? = null,
-            nextSchedule: ZonedDateTime? = null,
+            quiet: String = QuietCopy.NONE,
             keyboard: KeyboardState = KeyboardState(),
             instrument: String = instrumentLine(InstrumentCopy.STEVEN_PIANO, NOT_CONNECTED),
             update: UpdateState = UpdateState.Idle,
@@ -114,7 +114,7 @@ data class GroupSummaries(
             display = display(settings),
             remote = remote(settings, web),
             kiosk = kiosk(settings),
-            schedule = schedule(nextSchedule),
+            quiet = quiet,
             keyboard = InstrumentCopy.keyboardValue(keyboard),
             instrument = instrument,
             tabletSound = tabletSound(settings),
@@ -127,9 +127,6 @@ data class GroupSummaries(
 
         /** The Instrument row (v1.13): the instrument's name and its state, "Steven Piano · Connected". */
         fun instrumentLine(name: String, state: String): String = "$name · $state"
-
-        /** When the next schedule starts, "Next Wed 12:30", or "None". */
-        fun schedule(next: ZonedDateTime?): String = ScheduleCopy.hub(next)
 
         /**
          * The web panel: "Off", or "On" with the panel's address when it has one ("On · 100.101.2.3"), and

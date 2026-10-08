@@ -52,6 +52,7 @@ import dev.stevenjin.stevenpiano.ui.components.moved
 import dev.stevenjin.stevenpiano.ui.components.rememberDragReorderState
 import dev.stevenjin.stevenpiano.ui.components.reorderable
 import dev.stevenjin.stevenpiano.ui.components.reorderedBy
+import dev.stevenjin.stevenpiano.ui.screens.quiet.LocalQuietAsk
 
 /**
  * Up next: a bottom sheet with its drag handle and swipe-away. The piece playing first, then the
@@ -63,6 +64,7 @@ import dev.stevenjin.stevenpiano.ui.components.reorderedBy
 fun UpNextSheet(onDismiss: () -> Unit) {
     val graph = LocalContext.current.graph
     val vm = viewModel { UpNextViewModel(graph.player, graph.library) }
+    val ask = LocalQuietAsk.current
     val state by vm.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     // The order on screen while a drag is under way and until the queue has caught up with it.
@@ -125,7 +127,7 @@ fun UpNextSheet(onDismiss: () -> Unit) {
                 QueueRowView(
                     row,
                     Modifier.reorderable(drag, row.uid, this),
-                    onClick = { vm.skipTo(row.uid) },
+                    onClick = { ask { vm.skipTo(row.uid) } },   // during a quiet time it asks first (v1.20 — M54)
                 ) {
                     GlyphButton(R.drawable.ic_close, "Remove from queue") { vm.remove(row.uid) }
                     DragHandle(

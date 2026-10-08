@@ -157,6 +157,7 @@ object SettingsIndex {
         SettingsPage.Lighting to listOf("lighting", "LEDs", "lights"),
         SettingsPage.Firmware to listOf("version", "status"),
         SettingsPage.Remote to listOf("remote control", "web control", "browser"),
+        SettingsPage.Quiet to listOf("quiet", "downtime", "silent", "class", "schedule"),
         SettingsPage.Guests to listOf("requests", "visitors"),
         SettingsPage.System to listOf("diagnostics", "battery", "temperature", "memory", "running", "status"),
         SettingsPage.Display to listOf("theme", "look"),

@@ -11,40 +11,31 @@ package dev.stevenjin.stevenpiano.schedule
 
 import dev.stevenjin.stevenpiano.data.db.ScheduleDao
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
+import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
-/** The schedules table in memory, as Room keeps it: ids from 1, rows by start then id, every change seen by [observeAll]. */
-class FakeScheduleDao : ScheduleDao {
-    private val rows = MutableStateFlow<Map<Long, ScheduleEntity>>(emptyMap())
-    private var nextId = 1L
+/** The schedules table in memory, as Room keeps it: ids from 1, the quiet rows by id, every change seen by [observeQuiet]. */
+class FakeScheduleDao(initial: List<ScheduleEntity> = emptyList()) : ScheduleDao {
+    private val rows = MutableStateFlow(initial.associateBy { it.id })
+    private var nextId = (initial.maxOfOrNull { it.id } ?: 0L) + 1
 
-    val snapshot: List<ScheduleEntity> get() = sorted(rows.value)
+    /** Every row, of every kind, by id. */
+    val snapshot: List<ScheduleEntity> get() = rows.value.values.sortedBy { it.id }
 
-    override fun observeAll(): Flow<List<ScheduleEntity>> = rows.map(::sorted)
+    override fun observeQuiet(): Flow<List<ScheduleEntity>> = rows.map(::quietOf)
 
-    override suspend fun list(): List<ScheduleEntity> = snapshot
+    override suspend fun quiet(): List<ScheduleEntity> = quietOf(rows.value)
 
-    override suspend fun byId(id: Long): ScheduleEntity? = rows.value[id]
-
-    override suspend fun count(): Int = rows.value.size
-
-    override suspend fun upsert(schedule: ScheduleEntity): Long {
-        val replacing = schedule.id != 0L && schedule.id in rows.value
-        val id = if (schedule.id == 0L) nextId++ else schedule.id.also { nextId = maxOf(nextId, it + 1) }
-        rows.value = rows.value + (id to schedule.copy(id = id))
-        return if (replacing) -1L else id
+    override suspend fun deleteQuiet() {
+        rows.value = rows.value.filterValues { it.kind != ScheduleKind.QUIET }
     }
 
-    override suspend fun delete(id: Long) {
-        rows.value = rows.value - id
+    override suspend fun insertAll(rows: List<ScheduleEntity>) {
+        val added = rows.map { it.copy(id = nextId++) }
+        this.rows.value = this.rows.value + added.associateBy { it.id }
     }
 
-    override suspend fun setEnabled(id: Long, enabled: Boolean) {
-        val row = rows.value[id] ?: return
-        rows.value = rows.value + (id to row.copy(enabled = enabled))
-    }
-
-    private fun sorted(map: Map<Long, ScheduleEntity>): List<ScheduleEntity> = map.values.sortedWith(compareBy({ it.startMinute }, { it.id }))
+    private fun quietOf(map: Map<Long, ScheduleEntity>): List<ScheduleEntity> = map.values.filter { it.kind == ScheduleKind.QUIET }.sortedBy { it.id }
 }

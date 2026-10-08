@@ -20,10 +20,8 @@ import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
-import dev.stevenjin.stevenpiano.schedule.SaveResult
-import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
-import dev.stevenjin.stevenpiano.schedule.ScheduleDraft
-import dev.stevenjin.stevenpiano.schedule.ScheduleRules
+import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import kotlinx.coroutines.TimeoutCancellationException
@@ -328,9 +326,9 @@ class WebServer(
     ) {
         val address: String get() = session.remoteIpAddress ?: "unknown"
 
-        fun body(): JSONObject {
+        fun body(maxDepth: Int = WebApi.MAX_DEPTH): JSONObject {
             val headers = session.headers
-            return WebApi.readObject(session.inputStream, contentLength(headers), headers[CONTENT_TYPE], headers.containsKey(TRANSFER_ENCODING))
+            return WebApi.readObject(session.inputStream, contentLength(headers), headers[CONTENT_TYPE], headers.containsKey(TRANSFER_ENCODING), maxDepth)
         }
 
         fun param(name: String): String? = session.parameters[name]?.firstOrNull()
@@ -369,7 +367,8 @@ class WebServer(
         Route(Method.GET, Regex("/api/channels"), Access.READ, "/api/channels") { json(WebApi.channels(backend.channels())) },
         Route(Method.GET, Regex("/api/requests"), Access.READ, "/api/requests") { json(WebApi.requests(requests.pending.value, backend.guestSettings())) },
         Route(Method.GET, Regex("/api/piano"), Access.READ, "/api/piano") { json(WebApi.piano(backend.piano())) },
-        Route(Method.GET, Regex("/api/schedules"), Access.READ, "/api/schedules") { json(WebApi.schedules(backend.schedules())) },
+        // Timed plays were removed in 1.20 (M54): an older page still reads its Schedule page, and finds none.
+        Route(Method.GET, Regex("/api/schedules"), Access.READ, "/api/schedules") { json(WebApi.noSchedules()) },
         Route(Method.GET, Regex("/api/studio/seed"), Access.READ, "/api/studio/seed") { call -> studioSeed(call) },
         // The views of the piece playing (v1.13 — M32): its notes, its score's index and pages, the score's font. Read-only,
         // each input a bounded integer, the work bounded by NowViews.
@@ -393,7 +392,10 @@ class WebServer(
         Route(Method.POST, Regex("/api/play"), Access.WRITE, "/api/play") { call ->
             val body = call.body()
             WebApi.onlyKeys(body, setOf("pieceId", "queue"))
-            if (backend.play(WebApi.id(body, "pieceId"), WebApi.idsOrNull(body, "queue"))) noContent() else notFound()
+            val pieceId = WebApi.id(body, "pieceId")
+            val queue = WebApi.idsOrNull(body, "queue")
+            quietRefusal()?.let { return@Route it }
+            if (backend.play(pieceId, queue)) noContent() else notFound()
         },
         Route(Method.POST, Regex("/api/play-all"), Access.WRITE, "/api/play-all") { call ->
             val body = call.body()
@@ -401,17 +403,17 @@ class WebServer(
             val shuffle = WebApi.boolOrNull(body, "shuffle") ?: false
             val ids = WebApi.idsOrNull(body, "ids")
             val playlist = WebApi.wholeOrNull(body, "playlistId")
-            val started = when {
-                ids != null && playlist == null -> ids.isNotEmpty() && backend.playAll(ids, shuffle)
-                playlist != null && ids == null -> backend.playPlaylist(playlist, shuffle)
-                else -> throw ApiError(400, "field", "Give ids or playlistId.")
-            }
+            if ((ids == null) == (playlist == null)) throw ApiError(400, "field", "Give ids or playlistId.")
+            quietRefusal()?.let { return@Route it }
+            val started = if (ids != null) ids.isNotEmpty() && backend.playAll(ids, shuffle) else backend.playPlaylist(playlist!!, shuffle)
             if (started) noContent() else notFound()
         },
         Route(Method.POST, Regex("/api/transport"), Access.WRITE, "/api/transport") { call ->
             val body = call.body()
             WebApi.onlyKeys(body, setOf("action"))
-            backend.transport(Transport.of(WebApi.string(body, "action", 16)) ?: throw ApiError(400, "field", "Unknown action."))
+            val action = Transport.of(WebApi.string(body, "action", 16)) ?: throw ApiError(400, "field", "Unknown action.")
+            if (startsPlaying(action)) quietRefusal()?.let { return@Route it }
+            backend.transport(action)
             noContent()
         },
         Route(Method.POST, Regex("/api/seek"), Access.WRITE, "/api/seek") { call ->
@@ -441,9 +443,13 @@ class WebServer(
             noContent()
         },
         Route(Method.POST, Regex("/api/queue"), Access.WRITE, "/api/queue") { call ->
-            if (backend.queue(WebApi.queueCommand(call.body()))) noContent() else notFound()
+            val command = WebApi.queueCommand(call.body())
+            // Playing an entry now starts it; what is added waits while quiet (the player keeps it, loaded, for Play).
+            if (command is QueueCommand.Skip) quietRefusal()?.let { return@Route it }
+            if (backend.queue(command)) noContent() else notFound()
         },
         Route(Method.POST, Regex("/api/channels/([a-z0-9_-]{1,40})/play"), Access.WRITE, "/api/channels/calm/play") { call ->
+            quietRefusal()?.let { return@Route it }
             when (backend.playChannel(call.groups[0])) {
                 ChannelStart.STARTED -> noContent()
                 ChannelStart.TOO_SMALL -> refuse(409, "too-small", "Add more pieces: this channel needs three at least.")
@@ -494,13 +500,10 @@ class WebServer(
             backend.applySettings(WebApi.settingsChange(call.body()))
             noContent()
         },
-        Route(Method.POST, Regex("/api/schedules"), Access.WRITE, "/api/schedules") { call -> saveSchedule(WebApi.scheduleDraft(call.body())) },
-        Route(Method.PUT, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { call ->
-            saveSchedule(WebApi.scheduleDraft(call.body(), id = call.groups[0].toLong()))
-        },
-        Route(Method.DELETE, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { call ->
-            if (backend.deleteSchedule(call.groups[0].toLong())) noContent() else notFound()
-        },
+        // Timed plays were removed in 1.20 (M54): their writes are gone, for an older page that still sends them.
+        Route(Method.POST, Regex("/api/schedules"), Access.WRITE, "/api/schedules") { gone() },
+        Route(Method.PUT, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { gone() },
+        Route(Method.DELETE, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { gone() },
         Route(Method.PUT, Regex("/api/upload"), Access.WRITE, "/api/upload?name=a.mid", timed = false) { call -> upload(call) },
         // Studio (v1.7 — M23): a recording to transcribe, and a job's Cancel.
         Route(Method.PUT, Regex("/api/studio/audio"), Access.WRITE, "/api/studio/audio?name=a.wav", timed = false) { call -> studioUpload(call) },
@@ -527,9 +530,22 @@ class WebServer(
         // Guests.
         Route(Method.GET, Regex("/api/public/catalogue"), Access.PUBLIC, "/api/public/catalogue") {
             val guests = backend.guestSettings()
-            json(WebApi.catalogue(guests.open, if (guests.open) backend.catalogue() else emptyList()))
+            json(
+                WebApi.catalogue(guests.open, if (guests.open) backend.catalogue() else emptyList())
+                    .put("quiet", if (guests.open) WebApi.guestQuiet(backend.quietNow()) else JSONObject.NULL),   // v1.20 — M54
+            )
         },
         Route(Method.POST, Regex("/api/public/request"), Access.PUBLIC, "/api/public/request") { call -> guestRequest(call) },
+
+        // Quiet times (v1.20 — M54): the sections and the quiet now; every section at once; Play anyway.
+        Route(Method.GET, Regex("/api/quiet"), Access.READ, "/api/quiet") { json(WebApi.quiet(backend.quiet())) },
+        Route(Method.PUT, Regex("/api/quiet"), Access.WRITE, "/api/quiet") { call ->
+            backend.saveQuiet(WebApi.quietSections(call.body(WebApi.QUIET_DEPTH)))
+            noContent()
+        },
+        Route(Method.POST, Regex("/api/quiet/override"), Access.WRITE, "/api/quiet/override") {
+            if (backend.overrideQuiet()) noContent() else refuse(409, "not-quiet", "It isn't a quiet time now.")
+        },
     )
 
     /**
@@ -575,27 +591,6 @@ class WebServer(
         val offset = call.param("offset")?.let { it.toIntOrNull()?.takeIf { n -> n >= 0 } ?: throw ApiError(400, "field", "offset must be 0 or more.") } ?: 0
         val limit = call.param("limit")?.let { it.toIntOrNull()?.takeIf { n -> n in 1..WebLimits.PAGE_MAX } ?: throw ApiError(400, "field", "limit must be from 1 to ${WebLimits.PAGE_MAX}.") } ?: DEFAULT_PAGE
         return json(WebApi.page(backend.library(query, category, offset, limit, scope(call))))
-    }
-
-    /**
-     * A schedule the panel made ([ScheduleDraft.isNew]: 201 with it) or changed (204), once its
-     * target is found in the app (400 otherwise); 409 past [ScheduleRules.MAX_SCHEDULES], 404 for an
-     * edit of one deleted meanwhile. The alarm follows the table in the app.
-     */
-    private suspend fun saveSchedule(draft: ScheduleDraft): Response {
-        val name = backend.scheduleTarget(draft.kind!!, draft.target!!)
-            ?: throw ApiError(400, "target", "That channel, playlist or piece isn't in the library.")
-        return when (val result = backend.saveSchedule(draft)) {
-            is SaveResult.Saved -> if (!draft.isNew) {
-                noContent()
-            } else {
-                val e = result.schedule
-                val row = WebSchedule(e, name, ScheduleCopy.whenLine(e.days, e.startMinute), ScheduleCopy.whatLine(e.kind, name, e.endMinute, e.volumePct))
-                json(JSONObject().put("schedule", WebApi.schedule(row)), Response.Status.CREATED)
-            }
-            SaveResult.TooMany -> refuse(409, "too-many", "There are ${ScheduleRules.MAX_SCHEDULES} schedules already. Delete one first.")
-            SaveResult.Gone -> notFound()
-        }
     }
 
     private suspend fun login(call: Call): Response {
@@ -1150,6 +1145,30 @@ class WebServer(
     /** A JSON answer with any [status], never stored, as [refuse]'s are. */
     private fun coverAnswer(status: Int, body: JSONObject): Response =
         bytesResponse(statusOf(status), JSON, body.toString().toByteArray(Charsets.UTF_8)).also { it.addHeader("Cache-Control", "no-store") }
+
+    // ---- Quiet times (v1.20 — M54) -------------------------------------------------------------------------------------
+
+    /**
+     * 409 `quiet` while a quiet time holds the piano and nobody chose Play anyway ("Quiet until 9:30. Use Play anyway.",
+     * the time on the tablet's clock); null when a route that would play may.
+     */
+    private suspend fun quietRefusal(): Response? {
+        val quiet = backend.quietNow()
+        val until = quiet.until?.takeIf { quiet.holds } ?: return null
+        val zone = java.time.ZoneId.systemDefault()
+        val now = QuietCopy.at(System.currentTimeMillis(), zone)
+        return refuse(409, "quiet", QuietCopy.refusal(QuietCopy.until(QuietCopy.at(until, zone), now)))
+    }
+
+    /** Whether [action] would start a piece: Play (a toggle while nothing plays, or Resume), Next, Previous. */
+    private suspend fun startsPlaying(action: Transport): Boolean = when (action) {
+        Transport.RESUME, Transport.NEXT, Transport.PREVIOUS -> true
+        Transport.TOGGLE -> backend.state().player.status != PlaybackStatus.Playing
+        Transport.PAUSE, Transport.STOP -> false
+    }
+
+    /** 410 `gone`: the schedules' timed plays, removed in 1.20. */
+    private fun gone(): Response = refuse(410, "gone", "Timed plays were removed in 1.20.")
 }
 
 /**

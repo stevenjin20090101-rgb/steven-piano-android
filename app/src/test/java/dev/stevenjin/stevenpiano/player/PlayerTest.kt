@@ -27,6 +27,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,7 +41,11 @@ class PlayerTest {
     private val scope = CoroutineScope(SupervisorJob() + main)
     private val link = FakePianoLink()
     private val source = FakeSource()
-    private val player = Player(link, source, scope, prepareThread = {})
+
+    /** Whether a quiet time holds (v1.20 — M54), as the app's gate would answer: none unless a test says so. */
+    @Volatile
+    private var hush = false
+    private val player = Player(link, source, scope, prepareThread = {}, quiet = { hush })
 
     /**
      * The player saw the link connected as it started: a new connection begins with the stop sequence
@@ -457,6 +462,73 @@ class PlayerTest {
         assertNull(player.state.value.problem)
         onMain { player.play(2) }
         withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing && it.piece?.pieceId == 2L } }
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `a guest's request never starts playback, with nothing queued it waits, loaded, for Play (v1_20 M54)`() = runBlocking {
+        source.pieces[1] = piece(60, 5_000)
+        source.pieces[2] = piece(62, 5_000)
+        onMain { player.queueWaiting(listOf(1)) }
+        withTimeout(2_000) { player.state.first { it.piece?.pieceId == 1L && !it.loading } }
+        delay(300)
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
+        assertTrue("nothing reached the piano: ${link.messages}", noteOns().isEmpty())
+        onMain { player.queueWaiting(listOf(2)) }
+        assertEquals("the next request joins Up next", listOf(1L, 2L), player.state.value.queue.ids)
+        delay(200)
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
+        assertTrue("not played: nothing started", source.played.isEmpty())
+        onMain { player.resume() }   // a person's Play
+        withTimeout(2_000) { while ("90 3C 50" !in link.messages) delay(5) }
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `while a quiet time holds nothing starts, a piece added waits loaded, and once lifted Play starts again (v1_20 M54)`() = runBlocking {
+        source.pieces[1] = piece(60, 5_000)
+        source.pieces[2] = piece(62, 5_000)
+        hush = true
+        onMain {
+            player.play(1, listOf(1, 2))
+            player.playAll(listOf(1, 2), shuffle = false)
+            player.playAll(listOf(1, 2), shuffle = false, channel = "calm")
+            player.resume()
+            player.togglePlayPause()
+            player.next()
+            player.previous()
+        }
+        delay(300)
+        assertEquals("nothing reached the piano", emptyList<String>(), link.messages.toList())
+        assertTrue(player.state.value.queue.ids.isEmpty())
+        assertNull(player.state.value.channel)
+        assertFalse("added while quiet: it waits", onMain { player.addToQueue(listOf(1, 2)) })
+        withTimeout(2_000) { player.state.first { it.piece?.pieceId == 1L && !it.loading } }
+        onMain {
+            player.skipToQueueEntry(player.state.value.queue.uids[1])
+            player.resume()
+        }
+        delay(300)
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
+        assertEquals("the queue as added", 0, player.state.value.queue.index)
+        assertTrue("still nothing sounded: ${link.messages}", noteOns().isEmpty())
+        hush = false   // Play anyway lifted it, or the block ended
+        onMain { player.resume() }
+        withTimeout(2_000) { while ("90 3C 50" !in link.messages) delay(5) }
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `a piece that ends during a quiet time leaves the next one waiting, loaded, never started (v1_20 M54)`() = runBlocking {
+        source.pieces[3] = piece(64, 30)
+        source.pieces[1] = piece(60, 5_000)
+        onMain { player.play(3, listOf(3, 1)) }
+        withTimeout(2_000) { while ("90 40 50" !in link.messages) delay(5) }
+        hush = true   // a block began as it played: its end does not start the next
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 1L && !it.loading } }
+        delay(300)
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
+        assertFalse("the next piece never sounded", "90 3C 50" in link.messages)
         assertTrue(onMain { player.stopAndFlush(300) })
     }
 

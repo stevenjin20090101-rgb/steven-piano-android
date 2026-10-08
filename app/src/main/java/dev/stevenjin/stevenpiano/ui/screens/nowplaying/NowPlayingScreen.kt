@@ -113,7 +113,7 @@ import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
 import dev.stevenjin.stevenpiano.ui.components.scrollEdges
 import dev.stevenjin.stevenpiano.ui.components.secondaryText
 import dev.stevenjin.stevenpiano.ui.screens.piece.PieceDetailSheet
-import dev.stevenjin.stevenpiano.ui.screens.schedule.NextScheduleLine
+import dev.stevenjin.stevenpiano.ui.screens.quiet.QuietCapsule
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.NowPlayingComposer
 import dev.stevenjin.stevenpiano.ui.theme.NowPlayingStripTitle
@@ -292,9 +292,9 @@ private fun ColumnScope.NowPlayingContent(
                 .padding(32.dp),
             contentAlignment = Alignment.Center,
         ) {
-            // The next schedule, when one is ahead, over the empty line (DESIGN.md › v1.6.2 — M19).
+            // During a quiet time (v1.20 — M54) its capsule and Play anyway, over the empty line.
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                NextScheduleLine(Modifier.padding(bottom = 8.dp), centred = true)
+                QuietCapsule(Modifier.padding(bottom = 16.dp))
                 Text(
                     "Choose a piece from the library.",
                     style = MaterialTheme.typography.bodyLarge,
@@ -582,8 +582,8 @@ private fun PieceWords(piece: NowPlaying, channel: String?, starting: Boolean, t
 
 /**
  * The foot's row in glass capsules (v1.18 — M49): Tempo with its stepper and the tablet's speaker (v1.8 — M25) at the
- * start, "Sent to piano" at the end; the bars' glass without a blur, [translucent] over the album's colours as the bars
- * are (v1.15 — M41), so they show through.
+ * start, during a quiet time its capsule with Play anyway (v1.20 — M54), "Sent to piano" at the end; the bars' glass
+ * without a blur, [translucent] over the album's colours as the bars are (v1.15 — M41), so they show through.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -613,6 +613,7 @@ private fun FootRow(
             }
             Capsule(translucent) { TabletSoundSpeaker() }
         }
+        QuietCapsule(translucent = translucent)
         Capsule(translucent) { ConnectionLine(connected, playing, onOpenPiano, Modifier.padding(horizontal = 8.dp)) }
     }
 }

@@ -111,6 +111,9 @@ import dev.stevenjin.stevenpiano.ui.screens.library.LibraryScreen
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.NowPlayingScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoPageScreen
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoScreen
+import dev.stevenjin.stevenpiano.ui.screens.quiet.LocalPlayAnyway
+import dev.stevenjin.stevenpiano.ui.screens.quiet.LocalQuietAsk
+import dev.stevenjin.stevenpiano.ui.screens.quiet.QuietChoiceDialog
 import dev.stevenjin.stevenpiano.ui.screens.studio.StudioScreen
 import dev.stevenjin.stevenpiano.studio.JobState
 import dev.stevenjin.stevenpiano.ui.components.AuraDot
@@ -196,6 +199,9 @@ fun PianoNavHost(
     }
     var kioskSheet by rememberSaveable { mutableStateOf(false) }
     val openKioskSheet = remember { { kioskSheet = true } }
+    // Play anyway (v1.20 — M54): behind the kiosk PIN while the kiosk keeps the settings locked, from any screen.
+    val quietGate = rememberKioskGate()
+    val playAnyway: () -> Unit = remember(quietGate, playback) { { quietGate.run { playback.playAnyway() } } }
     LaunchedEffect(kiosk) { if (!kiosk) kioskSheet = false }   // kiosk mode ended some other way: no sheet left to come back
 
     LaunchedEffect(requestedTab) {
@@ -215,6 +221,8 @@ fun PianoNavHost(
         LocalFloatingPlaySlot provides floatingPlay,
         LocalBylineHold provides if (kiosk) openKioskSheet else null,
         LocalIdleState provides idle,
+        LocalPlayAnyway provides playAnyway,
+        LocalQuietAsk provides playback::whenAllowed,
     ) {
         Box(
             Modifier
@@ -334,6 +342,9 @@ fun PianoNavHost(
             DisplayOverlay(idle, kiosk, onLeave = onTouch)
         }
         if (kioskSheet && kiosk) KioskExitSheet(onDismiss = { kioskSheet = false })
+        // A play asked for during a quiet time (v1.20 — M54): its choice, and the kiosk PIN Play anyway may ask for.
+        QuietChoiceDialog(playback, quietGate)
+        KioskGateSheet(quietGate)
     }
 }
 

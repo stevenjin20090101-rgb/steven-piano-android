@@ -3602,6 +3602,12 @@ entry drafted at the end of `releases/history.json` (`"draft": true`, its notes;
 
 # v1.6.2 — M19: schedules; release 1.6.2 (versionCode 13)
 
+> **Retired in 1.20 (M54).** Timed plays were removed: `ScheduleRunner`, `StoredOutcomes`, `ScheduleDraft` /
+> `ScheduleRules`, the editor sheet, `NextScheduleLine`, the Schedule page and the panel's schedule routes' bodies are
+> gone (`GET /api/schedules` answers an empty list, its writes 410). The table, `Occurrences`, `SchedulePlanner`, the
+> alarm and its receiver stay, for quiet times' blocks alone (see "v1.20 — M54: quiet times"). What follows is M19's
+> record.
+
 Read `DESIGN.md › v1.6.2 — M19` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md`
 › M19 (binding). Built on its own branch (`m19-schedules`) beside M20 and M21: the version stays
 `versionCode` 10, `versionName` "1.5.1" and `Provenance.text` as they were; the bump (it became
@@ -8526,3 +8532,120 @@ warnings, none in this run's files. The panel was looked at in a browser
 against a stand-in for the tablet (1440, 1280, 1000, 760 and 375 px; dark and light): Now playing with requests and a
 quiet time, Play anyway, a Play refused 409, approve, Up next's sheet, the Library's four lists, Channels and Add music,
 Settings › System and Guests, Quiet times without its module, and 1.19's addresses.
+
+# v1.20 — M54: quiet times, and nothing starts a song by itself
+
+Read `DESIGN.md › v1.20 — M54` first. Plan: `~/.claude/plans/if-wer-are-doing-adaptive-stonebraker.md` §4–5. Built on
+its own branch (`m54-quiet-times`, from 1.19's `f2ca2a4`) beside M53 (the panel's frame): no version bump, no
+provenance, no release here. M53 owns every file of `assets/web/` but `quiet.js`, `quiet.css` and `request.js`.
+
+## Nothing starts a song by itself
+- **Timed plays go.** `ScheduleRunner`, `StoredOutcomes`, `ScheduleDraft` / `ScheduleRules`, `ScheduleEditorSheet`,
+  `NextScheduleLine` and `SchedulePage` are deleted, with their tests; `ScheduleCopy` keeps the days' and times' words.
+  The table keeps the old rows (never read: `ScheduleDao` reads and writes `kind = 'QUIET'` alone), and the one alarm
+  (`SchedulePlanner`, `AndroidAlarmScheduler`, `ScheduleReceiver`) plans quiet blocks' edges alone (`repository::quietRows`).
+  `PlaybackService` no longer holds itself for a schedule waiting for the piano. A channel's long press keeps Set volume.
+- **A request never starts playback.** `Player.queueWaiting(ids)`: at the end of the queue; with nothing queued the first is
+  loaded at its start without playing (`startCurrent(start = false)`, as after four in a row) and waits for Play.
+  `AppWebBackend.queueRequested` (the panel's and the tablet's Approve, and the guests' straight requests) calls it and
+  starts no service. While the player is locked such an entry stays unloaded, and Play (`resume`) loads it.
+- `GET /api/schedules` answers `{schedules: [], next: null, last: null, exactAlarms: true}` for older pages; `POST`,
+  `PUT` and `DELETE /api/schedules…` answer **410** `{error: "gone", message: "Timed plays were removed in 1.20."}`, still
+  behind the session and the header. The state keeps `schedule: {next: null, revision: 0}`.
+
+## The data and the rule
+- `ScheduleKind.QUIET`: one row a block, `target` its section's name (trimmed), `days` the section's, both minutes, no
+  volume. The kind is stored **by name** (Room's own enum converter, the column `TEXT`), so **no migration**: schema 5
+  and its exported JSON are unchanged.
+- `schedule/QuietTimes.kt` (pure): `sections(rows)` (quiet rows grouped by name and days in the order saved, blocks by
+  start), `rows(sections, createdAt)`, `validate(sections)` (12 sections, 16 blocks, a name of 1–40 characters once
+  trimmed and **no two alike** (else two sections of one name and days would merge on reading back), a day, **at least
+  one block** (a section is its rows), times of day, an end not its start, no two blocks of a section meeting on the
+  week's timeline, a block over midnight included, Sunday's into Monday's), `at(rows, now)` (the block that began last,
+  and the quiet's end carried through every block, of any section, that starts at or before it), `next(rows, now)`, and
+  `proposed(blocks, start)` (Add block: ten minutes after the last block's end, as long as it). Spans are laid out from
+  yesterday to a week ahead through `ZonedDateTime`, as `Occurrences` does.
+- `schedule/QuietCopy.kt`: the words ("Quiet until 9:30", "Quiet now · until 9:30", "Lifted until 9:30", "Next quiet time
+  Mon 8:40", "No quiet times set", the hub's, the 409's "Quiet until 9:30. Use Play anyway.").
+- `ScheduleRepository`: `quiet` (a flow), `quietRows()`, `sections()`, `replaceQuiet(sections)` (validated; `deleteQuiet`
+  then `insertAll` in one `withTransaction`, which `AppGraph` hands in). `Schedules.saveQuiet` validates, replaces and
+  plans the alarm again; `quietRows` is the gate's source.
+
+## The gate
+- `schedule/QuietGate.kt`, `AppGraph.quiet`: `now()` → `QuietNow(now, until, overridden, next)` worked out from the rows
+  and the clock every time it is asked (any thread); `holds()` is `now && !overridden`; `override()` keeps a lift in
+  memory (made at, and the quiet's end then): it holds while no block has begun since and the quiet lasts, so a new block
+  is quiet again.
+- `start(appScope, onHush)` from `AppGraph.start`: it follows the rows (`collectLatest`) and wakes at the next edge (the
+  quiet's end, the next start, the lift's end; a minute at most) to keep `state` (the screens' and the web socket's
+  trigger); as a block begins without a lift, once a block, `onHush` runs: `player.stop()`, not while the player is
+  locked for a firmware update. `Schedules.onAlarm` (the alarm at a block's start or end) plans again and calls `check`
+  once the rows are read (3 s at most), so a sleeping tablet stops on the minute; the app starting inside a block stops
+  at once.
+- `Player(quiet = { quiet.holds() })`: `play`, `playAll`, `resume`, `next`, `previous`, `skipToQueueEntry` start nothing
+  while it holds; the end of a piece leaves the next one loaded, not started (the four-in-a-row branch); Play next and Add
+  to queue on an empty queue load the first and wait. The live paths (the Keys screen, a keyboard) are untouched.
+
+## The web panel
+- Routes at the end of `WebServer.routes`: `GET /api/quiet` (session) → `{sections: [{name, days: [1..7], blocks:
+  [{start: "08:40", end: "09:30"}]}], now: {now, until, overridden, next}}`; `PUT /api/quiet` (session and header) with
+  every section, read strictly (`WebApi.quietSections`: only those keys, days 1–7, `HH:MM`) at a depth of five
+  (`WebApi.QUIET_DEPTH`, the body's own; every other body stays at four) and checked by `QuietTimes.validate`: 400
+  `quiet` in the editor's words, else 204; `POST /api/quiet/override` → 204, or 409 `not-quiet`.
+- While a quiet time holds, the routes that would play answer **409** `{error: "quiet", message: "Quiet until 9:30. Use
+  Play anyway."}` and reach nothing: `/api/play`, `/api/play-all`, `/api/transport` (toggle while nothing plays, resume,
+  next, previous; pause and stop go on), `/api/queue` skip (add and play next go on: the piece waits), and a channel's
+  play. The body is checked first, so a bad one is still 400.
+- The state (and the socket's) gains `quiet: {now, until, overridden, next}` (epoch ms or null), from `WebState.quiet`;
+  the web service pushes on `quiet.state`. The guests' catalogue gains `quiet: {until}` while the piano rests (null when
+  not, or lifted, or guests closed).
+- `assets/web/quiet.js`: `create(host, body, tools)` → `{show, hide, render}`; reads and writes only through `host`
+  from `host.ROOT`; links `quiet.css` once; the status line (from `state.quiet`), the week strip (DOM, placed through the
+  CSSOM; hatching in `quiet.css` from the tokens), the sections' cards, Add section in the head's tools; the editor in a
+  `<dialog class="sheet quiet-sheet">` with `<input type="time">` pairs, the rules mirrored for at once, the tablet's
+  refusal shown inline, Delete through `host.confirm`; it reads `/api/quiet` again when the state's quiet changes.
+  `quiet.css` and `quiet.js` are on `WebAssets.PANEL`. `request.js` shows the resting line under the head.
+
+## The tablet
+- `SettingsPage.Quiet` ("quiet", "Quiet times") in PLAYING where Schedule was; `PageRows` Play anyway, Add section,
+  Allow exact alarms; search synonyms quiet, downtime, silent, class, schedule; the hub's value `QuietCopy.hub`.
+- `ui/screens/piano/pages/QuietTimesPage.kt`, `ui/screens/quiet/QuietWeek.kt` (a canvas; `weekPieces`),
+  `QuietEditorSheet.kt` (the time picker's dialog moved here from the schedule editor: `GlassContainersTest` names it),
+  `QuietViews.kt` (`QuietCapsule`, `LocalPlayAnyway`, `QuietChoiceDialog`). `res/drawable/ic_moon.xml`.
+- `PlaybackStarter` (with the gate): a play while quiet waits as `held`; the nav host shows `QuietChoiceDialog` (Cancel,
+  Play anyway) and provides `LocalPlayAnyway`, both through one `KioskGate` (the PIN while the kiosk locks the settings),
+  and `LocalQuietAsk` (`whenAllowed`), through which Up next's tap on a row asks too. `playAnyway(action)` lifts, then
+  plays what waited, or resumes the loaded piece. The media notification's Play reaches the player alone: it starts
+  nothing while quiet.
+- Now playing (its foot, or over the empty line) and the panel beside the Library show `QuietCapsule`; the resting
+  screen shows the moon, "Quiet until 9:30" and a Play anyway pill: its touch leaves the screen as every touch does, and
+  then plays anyway (`AnywayPlace` hit-tests the pill in the canvas's coordinates; TalkBack has it as an action).
+- The System pages' "schedule" row (its key kept for the panels) reads the quiet: "Quiet times", waiting while one holds.
+
+## Simplified, and why
+- Timed plays are deleted rather than left unreachable: nothing in the app can start a song by itself any more, which is
+  the point; the rows stay, and git keeps the code.
+- Two rules beyond the brief's list: no two sections of one name (rows are grouped by name and days, so two alike would
+  read back as one), and a section needs a block (it is kept as its blocks' rows).
+- `until` is the quiet's end, carried through touching and overlapping blocks of any section; Play anyway lasts until
+  the next block begins or the quiet ends, which for the usual timetable (gaps between periods) is the block's end.
+- The resting screen keeps its rule that a touch leaves it: Play anyway there leaves and then plays anyway.
+- Times on the panel and the guests' page are the browser's clock (the tablet's in the 409's words); the editor uses the
+  browser's own time fields, as the brief says, so a browser in a 12-hour locale shows AM and PM there.
+- The panel's page was checked in a browser against a stand-in host (draw, edit, Add block, an overlap, the tablet's
+  refusal, a new section, Delete, Play anyway, a phone's width); not against a tablet, and not in M53's frame.
+
+## Tests
+`QuietTimesTest` (9: sections from rows and back, the rules and their words, midnight and the week's turn, `at` and
+`next`, touching and overlapping blocks of two sections, Add block, the words; the gate's stop once a block, Play anyway
+until the block ends and a new block quiet again, a lift ended by another section's block, the app starting inside a block;
+the repository's one transaction keeping the timed plays' rows). `PlayerTest` (+3: a request waits loaded and Play plays
+it; nothing starts while quiet, an addition waits, and once lifted Play starts; a piece ending in a quiet time leaves the
+next one loaded, unplayed). `WebServerTest` (−1, +4: timed plays gone, 410 and an empty list; the quiet routes' access, a
+strict body, the rules' 400s, the override's 409 and 204; every play route 409 while quiet and reaching nothing, pause,
+stop and add going on, and after Play anyway playing; the catalogue's `quiet`; the write routes 30 → 32). `WebApiTest`
+(the state's keys gain `quiet`), `WebAssetsTest` (+1: `quiet.js` and `quiet.css` on the list, the module's rules, the
+tablet's words and limits, the stylesheet's tokens, the guests' line), and the tests that name the page (routes, hub,
+summaries, search, the System row, the time picker's dialog). `ScheduleRunnerTest` and `ScheduleDraftTest` went with
+their code. No migration test: no migration (schema 5 and `app/schemas/…/5.json` unchanged). 1,650 → 1,648 unit tests
+(12 skipped), none failing, with `--rerun`; `lintDebug`: 0 errors, the same 30 warnings, none in this run's code.

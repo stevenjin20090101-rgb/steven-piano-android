@@ -14,6 +14,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -29,15 +30,19 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -48,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -59,8 +65,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +83,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.Provenance
+import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.art.ArtKey
 import dev.stevenjin.stevenpiano.data.art.ArtSize
@@ -82,6 +92,7 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.NowPlaying
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.PlayerState
+import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
@@ -89,6 +100,7 @@ import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.components.ArtBackdrop
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
@@ -102,9 +114,13 @@ import dev.stevenjin.stevenpiano.ui.components.secondaryText
 import dev.stevenjin.stevenpiano.ui.rememberChannelName
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.RollClock
 import dev.stevenjin.stevenpiano.ui.screens.nowplaying.rememberFrameNanos
+import dev.stevenjin.stevenpiano.ui.screens.quiet.LocalPlayAnyway
+import dev.stevenjin.stevenpiano.ui.screens.quiet.quietUntil
+import dev.stevenjin.stevenpiano.ui.screens.quiet.rememberQuiet
 import dev.stevenjin.stevenpiano.ui.theme.Backdrop
 import dev.stevenjin.stevenpiano.ui.theme.DisplayTheme
 import dev.stevenjin.stevenpiano.ui.theme.EyebrowLarge
+import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
@@ -143,6 +159,10 @@ private val MARGIN_TOP_AND_FOOT = 16.dp
  * beneath is live at once. In kiosk mode (DESIGN.md › v1.6.1 — M20) it is also the resting state
  * with nothing loaded: the byline, and while guests may request, the request page's code; the
  * screen then stays on only as Android's "stay on while plugged in" says (kiosk mode sets it).
+ *
+ * During a quiet time (v1.20 — M54), at the foot opposite the live dot: the moon, "Quiet until 9:30" and Play anyway.
+ * A touch there leaves the resting screen as any touch does, and then plays anyway ([LocalPlayAnyway]: behind the
+ * kiosk PIN while the kiosk is on).
  */
 @Composable
 fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
@@ -157,6 +177,15 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
     val channel = rememberChannelName(state.channel)
     val connected = link is LinkState.Connected
     val playing = state.status == PlaybackStatus.Playing
+    // Quiet times (v1.20 — M54): what the foot says while one holds, held as the screen fades away.
+    val quiet = heldWhile(!resting, rememberQuiet())
+    val until = if (quiet.holds) quietUntil(quiet) else null
+    val anyway = remember { AnywayPlace() }
+    val playAnyway = LocalPlayAnyway.current
+    SideEffect {
+        anyway.shown = until != null
+        anyway.action = playAnyway
+    }
 
     BackHandler(enabled = resting, onBack = onLeave)
     val view = LocalView.current
@@ -181,13 +210,19 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
-                .onPlaced { words.canvas = it }
-                .then(if (resting) Modifier.leaveOnTouch(piece?.title, onLeave) else Modifier),
+                .onPlaced {
+                    words.canvas = it
+                    anyway.canvas = it
+                }
+                .then(if (resting) Modifier.leaveOnTouch(piece?.title, onLeave, anyway) else Modifier),
         ) {
             val drift = rememberDrift()
             val insets = restingInsets(resting)
+            val quietLine: (@Composable (Modifier) -> Unit)? = until?.let { shown ->
+                { modifier -> RestingQuiet(shown, onLeave, anyway, modifier) }
+            }
             if (piece != null && settings.standbyShows == StandbyShows.PAPER_ROLL) {
-                PaperRoll(piece, state, connected, playing, channel, insets, drift)
+                PaperRoll(piece, state, connected, playing, channel, insets, drift, quietLine)
             } else {
                 // No album colours at rest (v1.19, Steven's choice): the canvas stays plain, black by default. Now playing
                 // keeps them (Album colours on Piano › Display).
@@ -202,7 +237,7 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
                     veilArea = if (black) words.side else null,
                 )
                 OnBackdrop(backdrop != null) {
-                    ArtAndNotes(piece, connected, playing, channel, insets, drift, words)
+                    ArtAndNotes(piece, connected, playing, channel, insets, drift, words, quietLine)
                 }
             }
         }
@@ -236,9 +271,10 @@ private const val BESIDE_SHARE = 0.55f
 
 /**
  * While resting: any touch leaves, and nothing beneath sees it (the whole gesture is consumed);
- * TalkBack reads the piece and offers the same as a click.
+ * TalkBack reads the piece and offers the same as a click. A touch on Play anyway, while a quiet
+ * time shows it ([anyway]), plays anyway once it has left (v1.20 — M54).
  */
-private fun Modifier.leaveOnTouch(title: String?, onLeave: () -> Unit): Modifier = this
+private fun Modifier.leaveOnTouch(title: String?, onLeave: () -> Unit, anyway: AnywayPlace): Modifier = this
     .semantics {
         contentDescription = if (title != null) "Resting screen: $title" else "Resting screen"
         onClick(label = "Leave the resting screen") {
@@ -248,8 +284,10 @@ private fun Modifier.leaveOnTouch(title: String?, onLeave: () -> Unit): Modifier
     }
     .pointerInput(Unit) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false).consume()
+            val down = awaitFirstDown(requireUnconsumed = false)
+            down.consume()
             onLeave()
+            if (anyway.hit(down.position)) anyway.action()
             do {
                 val event = awaitPointerEvent()
                 event.changes.forEach { it.consume() }
@@ -296,7 +334,16 @@ private class Held<T>(var value: T)
  * kiosk mode with nothing loaded, the request page's code there instead, or nothing.
  */
 @Composable
-private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean, channel: String?, insets: PaddingValues, drift: State<IntOffset>, words: WordsPlace) {
+private fun ArtAndNotes(
+    piece: NowPlaying?,
+    connected: Boolean,
+    playing: Boolean,
+    channel: String?,
+    insets: PaddingValues,
+    drift: State<IntOffset>,
+    words: WordsPlace,
+    quiet: (@Composable (Modifier) -> Unit)?,
+) {
     val reduced = rememberReducedMotion()
     val twoPane = LocalAppFrame.current.twoPane
     // The byline's two lines and a gap, kept clear above the piece and, so it stands in the middle, below it.
@@ -340,6 +387,7 @@ private fun ArtAndNotes(piece: NowPlaying?, connected: Boolean, playing: Boolean
                     modifier = Modifier.semantics { contentDescription = if (connected) "Sent to piano" else "Not connected" },
                 )
             }
+            quiet?.invoke(Modifier.align(Alignment.BottomEnd))
         }
     }
 }
@@ -544,6 +592,7 @@ private fun PaperRoll(
     channel: String?,
     insets: PaddingValues,
     drift: State<IntOffset>,
+    quiet: (@Composable (Modifier) -> Unit)?,
 ) {
     val canvas = MaterialTheme.colorScheme.surface
     PieceArt(
@@ -610,13 +659,74 @@ private fun PaperRoll(
         HairlineDivider()
         KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, clock = roll)
         Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             LiveDot(live = connected, breathing = playing)
             Spacer(Modifier.width(8.dp))
             Text(
                 if (connected) "Sent to piano" else "Not connected",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (quiet != null) {
+                Spacer(Modifier.weight(1f))
+                quiet(Modifier)
+            }
+        }
+    }
+}
+
+/**
+ * Where Play anyway stands on the resting screen (v1.20 — M54), in the canvas's own coordinates, as it is laid out;
+ * whether it [shown] now, and what it does ([action]). Read by the touch that leaves.
+ */
+private class AnywayPlace {
+    var canvas: LayoutCoordinates? = null
+    var shown = false
+    var action: () -> Unit = {}
+    private var bounds = Rect.Zero
+
+    fun report(pill: LayoutCoordinates) {
+        val canvas = canvas?.takeIf { it.isAttached && pill.isAttached } ?: return
+        bounds = canvas.localBoundingBoxOf(pill)
+    }
+
+    /** Whether a touch at [at] (the canvas's coordinates) landed on Play anyway while it shows. */
+    fun hit(at: Offset): Boolean = shown && bounds.contains(at)
+}
+
+/**
+ * The resting screen's quiet time (v1.20 — M54): the moon and "Quiet until 9:30" in the secondary ink, and Play anyway
+ * as an outlined pill. Its touch is the resting screen's ([leaveOnTouch]); TalkBack offers Play anyway as an action.
+ */
+@Composable
+private fun RestingQuiet(until: String, onLeave: () -> Unit, anyway: AnywayPlace, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(R.drawable.ic_moon), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Text(QuietCopy.capsule(until), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Spacer(Modifier.width(12.dp))
+        Box(
+            Modifier
+                .heightIn(min = 48.dp)
+                .onGloballyPositioned(anyway::report)
+                .semantics {
+                    role = Role.Button
+                    onClick(label = QuietCopy.PLAY_ANYWAY) {
+                        onLeave()
+                        anyway.action()
+                        true
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                QuietCopy.PLAY_ANYWAY,
+                Modifier
+                    .border(Hairline, LocalTertiary.current, CircleShape)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
             )
         }
     }

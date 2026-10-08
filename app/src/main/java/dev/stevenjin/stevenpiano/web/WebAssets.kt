@@ -78,6 +78,9 @@ object WebAssets {
         "/system.css" to Asset("system.css", CSS),
         // The cover picker (v1.18 — M48): a module the page imports the first time a piece's menu asks for it.
         "/covers.js" to Asset("covers.js", JS),
+        // Quiet times (v1.20 — M54): the page's module, imported the first time its section shows, and its own styles, which it links.
+        "/quiet.js" to Asset("quiet.js", JS),
+        "/quiet.css" to Asset("quiet.css", CSS),
     )
 
     val PUBLIC: Map<String, Asset> = mapOf(
