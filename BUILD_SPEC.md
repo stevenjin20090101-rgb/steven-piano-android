@@ -8649,3 +8649,13 @@ tablet's words and limits, the stylesheet's tokens, the guests' line), and the t
 summaries, search, the System row, the time picker's dialog). `ScheduleRunnerTest` and `ScheduleDraftTest` went with
 their code. No migration test: no migration (schema 5 and `app/schemas/…/5.json` unchanged). 1,650 → 1,648 unit tests
 (12 skipped), none failing, with `--rerun`; `lintDebug`: 0 errors, the same 30 warnings, none in this run's code.
+
+## The release: 1.20 (versionCode 30)
+
+Cut from `main` after M53 (`1190c49`) and M54 (`9f976c7`): 1,649 unit tests green, lint 0 errors. Steven chose the look
+from two inline mocks on 2026-10-08 (five menu items; quiet times in sections of blocks; silent with Play anyway; set on
+the panel and the tablet; nothing starts a song by itself, four in a row kept). One look on the tablet-size emulator,
+upgraded in place: through the panel's routes, three sections saved (`PUT /api/quiet` 204), a block covering the moment
+made Play answer 409 "Quiet until 14:20. Use Play anyway."; in headless Chrome the five-item rail with the mark, Now
+playing's "Quiet until" and Play anyway, the Quiet times page with its week strip and sections; on the tablet, Piano ›
+Quiet times with the same sections. Not checked: the school tablet itself, which still ran 1.17 that morning.

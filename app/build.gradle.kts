@@ -37,10 +37,10 @@ android {
         applicationId = "dev.stevenjin.stevenpiano"
         minSdk = 26
         targetSdk = 34
-        // -PversionCodeOverride=30 builds a copy that reads as newer than the one installed, for the
+        // -PversionCodeOverride=31 builds a copy that reads as newer than the one installed, for the
         // updater's emulator test (README > Updates); every real build takes the number below.
-        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 29
-        versionName = "1.19"
+        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 30
+        versionName = "1.20"
     }
 
     signingConfigs {
