@@ -807,20 +807,22 @@ internet or any server of ours.
    Scan it with your phone, or type the address into a browser on a device with
    Tailscale, and enter the PIN.
 
-**The panel** has what the app has: Now playing (the time running, the transport,
-tempo, a channel's volume), Up next (reorder, remove, clear), the Library (the
-**All · Classical · Modern** switch, which the browser remembers; search, playlists,
-composers, or artists under Modern; Play, Play next, Add to queue), Channels, Schedule (see
-*Schedules*), Requests, **Add** (drop `.mid`/`.midi` files or a `.zip` on it, up
-to 8 MB and 64 MB: they upload one at a time and the tablet imports them, with the
-tally; a zip becomes a playlist and loose files go into **Uploads**, and under the
-tally "In the playlist MIDI" with **Open the playlist**) and **Piano** (the piano's
-Sound and touch, Lights and screen and Pedal settings, Read status, All keys off, Save to the piano now; while another MIDI
-piano plays, only a note that they are Steven Piano's). Now playing and Piano also show,
-read-only, the instrument and the keyboard ("Instrument: Steven Piano", "Keyboard:
-FP-30X · Live · Recording"); Live and recording are the tablet's alone. It updates as
-things change on the tablet, and it follows the browser's light or dark, or its own
-**Appearance** chips.
+**The panel** has what the app has, in five places (1.20): **Now playing** (the time
+running, the transport, tempo, a channel's volume; **Up next** beside it, or as a sheet
+from its head on a narrower window, to reorder, remove or clear, with the guests'
+requests at its top to approve or decline), the **Library** (**Pieces · Playlists ·
+Composers · Channels**, the **All · Classical · Modern** switch, which the browser
+remembers, search, artists under Modern; Play, Play next, Add to queue; **Add music**:
+drop `.mid`/`.midi` files or a `.zip` on it or on the page, up to 8 MB and 64 MB: they
+upload one at a time and the tablet imports them, with the tally; a zip becomes a
+playlist and loose files go into **Uploads**, and under the tally "In the playlist MIDI"
+with **Open the playlist**), **Quiet times**, **Studio** and **Settings** (**System**
+first: the tablet, the controller and the piano, with Read status, All keys off and the
+other tools, and, read-only, the instrument and the keyboard; Playback; the piano's Sound
+and touch, Lights and screen and Pedal settings with Save to the piano, or while another
+MIDI piano plays only a note that they are Steven Piano's; **Guests**; the panel's
+**Appearance**). Live and recording are the tablet's alone. It updates as things change on
+the tablet, and the browser's tab shows the app's icon.
 
 From 1.13 the panel's **Now playing** shows the music as the tablet does, in step with it:
 the **sheet music** (its cursor, the notes sounding turning yellow, fingering and chord

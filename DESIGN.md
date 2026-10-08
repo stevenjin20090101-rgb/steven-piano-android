@@ -2969,3 +2969,57 @@ cover…**: a sheet in the editors' glass with the piece's title and composer, a
 "title composer", and the covers found as tiles (the picture at 96 px, the album, the artist). A tap makes one the piece's
 own ("Cover changed."), credited on the piece sheet as a found cover is; **Remove this piece's cover** (after a word) brings
 the portrait or the roll card back. Neither is ever undone by a lookup. The tablet asks Apple: one search in 4 s.
+
+# v1.20 — M53: the panel, calmer
+
+Steven asked (2026-10-08) for a web panel less bare and less busy: "remove the random text where it says connected and
+stuff; add more animations and icons; … reduce [the menu], there are too many menu options", then the app's icon in the
+browser's tab and left of the name. Designed by Fable from two inline mocks; he chose five places. Everything the panel
+did, it still does; the guests' page and the poster gain only the icon.
+
+- **Five places**, the same in the rail, the tab strip (600–899 px) and the phones' bar, each a stroke glyph and its
+  name, no group headings: **Now playing** (play-circle), **Library** (books), **Quiet times** (moon), **Studio**
+  (sparkles), **Settings** (gear). The More sheet is gone. Where the other places of 1.19 went:
+  - **Up next** stands beside Now playing from 1100 px as before; below that an **Up next** capsule in Now playing's head
+    opens it as a sheet (the editors' glass; at a phone's foot).
+  - **Requests**: the guests' requests waiting are a **Requests** group at the top of Up next (the card and the sheet),
+    each row with approve (a check) and decline (a cross); their number is a badge on Now playing in the rail and the bar
+    (and on the Up next capsule). Approving says "Added to Up next."
+  - **Channels** are the fourth of the Library's lists: **Pieces · Playlists · Composers · Channels**, each with its glyph
+    (under Pieces, All · Favorites · Recent). The channels' cards show in the Library's body, Stop the channel over them
+    while one plays; the genre switch stands aside there (the channels are every genre's).
+  - **Add** is **Add music**, a capsule (plus) in the Library's head opening the upload view as a sheet. Files dropped
+    anywhere on Now playing or the Library go up as the sheet's zone sends them (recordings on Studio as its zone does),
+    the sheet opening on their progress; nowhere does a dropped file replace the panel.
+  - **System** is the first page of **Settings** (gauge), the same page in the pane; its head's capsules (what needs
+    attention, how old the figures are) stand in Settings' head while it shows, and its columns follow the pane's width.
+    **Guests** is a page there too: Guests can request, Approve requests first, and the guests' address.
+  - **Quiet times** (v1.20 — M54) is a page of its own, made by its module; until the module is there, its head alone.
+  - **Schedule** is gone: timed plays were removed in 1.20.
+  - Old addresses open the new homes: `#queue` Now playing (the sheet open below 1100 px), `#requests` Now playing,
+    `#channels` Library › Channels, `#add` Library with Add music open, `#system` Settings › System, `#piano` Settings,
+    `#schedule` Quiet times.
+- **No stray text.** The rail's head is **the mark**, "Steven Piano" and a status dot (live while the panel is connected);
+  the "Connected · host" line is gone. A short pill under the name appears only when something is wrong:
+  "Reconnecting…" (the panel's link down, or the piano offline through the relay) or "Piano not connected". Now playing
+  loses the Instrument and Keyboard lines, the tablet sound's note and the next schedule's line (Settings › System says the
+  instrument, the keyboard and the tablet sound); its head keeps one small **Piano** capsule with the live dot. The rail's
+  foot shows the battery and the temperature as a glyph and a figure, the piano's line only while it needs attention.
+- **Quiet now.** While a quiet time holds and nobody has lifted it, Now playing's head shows **Quiet until 9:30** (moon)
+  and **Play anyway**, which lifts it until the block ends ("Quiet lifted until 9:30."); a Play the tablet refuses
+  meanwhile says so in its words.
+- **The mark**: the app's launcher icon (the three bars on the camera body's surface) as `favicon.svg`, the browser
+  tab's icon on the panel, the guests' page and the poster, and 24 px with 6 px corners left of the name.
+- **Icons**, one stroke style (the sprite's): the Library's four lists, Settings' pages (System and Guests new), Up next's
+  row actions (up, down, remove; approve, decline), the empty states (a 32 px glyph over the line), the main buttons and
+  capsules (Add music, Up next, Play anyway, Save to the piano, System's tools).
+- **Motion** (smooth and responsive; transforms and opacity only, on the app's curves; nothing loops but the album's
+  colours while a piece plays, and status while it lasts; every one a cut under reduced motion):
+  - a section change cross-fades with a 6 px rise (200 ms, ease-out);
+  - lists and cover grids come in on their first show of a visit, each item 30 ms after the one before, 300 ms at most
+    in all (Up next's sheet each time it opens);
+  - Now playing's cover cross-fades to a new piece's and settles from 0.96 (300 ms);
+  - a press scales to 0.97 (100 ms); play and pause cross-fade (200 ms);
+  - a cover in the Library lifts 2 px under a fine pointer;
+  - sheets rise 12 px and fade in (220 ms); a toast slides up (the offline line down);
+  - the bars ease to each value (uploads, Studio's models and jobs, System's meters: 200 ms; the dials as before).

@@ -8430,3 +8430,99 @@ in a row** (`Player.MAX_IN_A_ROW`; `inARow` counts pieces started one after anot
 resets it to one, auto-advance and Repeat one add one; past four, auto-advance loads the next piece without playing it,
 or seeks Repeat one's piece to its start, and the next Play starts a new run), and **no album colours on the resting
 screen** (`DisplayScreen` asks `rememberBackdrop` with `on = false`; Now playing keeps them). 1,650 unit tests green.
+
+# v1.20 — M53: the panel, calmer
+
+Fable's design (DESIGN.md › v1.20 — M53), Opus coding, one lean run in a worktree (`m53-panel-calm`) beside M54's quiet
+times: no emulator, no version bump, no signing. Web assets only, and `WebAssets.kt`'s lines for the mark.
+
+## The frame (`index.html`, `app.js` › Sections, `style.css` › The frame)
+- `SECTIONS = ['now', 'library', 'quiet', 'studio', 'settings']`: the rail's `.section-list` and the `.tab-bar` hold the
+  same five `[data-section]` buttons (a `g-…` glyph, a label; `.count[data-count="requests"]` on Now playing); no
+  `.nav-group`, no More sheet. `#section-settings` (`#settings-body`, `#settings-tools`; was `section-piano`) and
+  `#section-quiet` (`#quiet-body`, `#quiet-tools`) are new; `section-queue`, `-channels`, `-schedule`, `-requests`,
+  `-add` and `-system` are gone. `route(hash)` (the start, `hashchange`, `host.show`) maps 1.19's addresses, then `show()`.
+- The head: `img.mark` (`favicon.svg`, 24 px, 6 px corners), `.piano-name`, `#conn-dot` (`role="img"`, live while the
+  socket is open) and `#conn-pill` (`renderStatus()`: "Reconnecting…" once the socket has dropped or the relay says
+  offline, else "Piano not connected" while `state.link.state` isn't connected, else hidden; `connection.socket` is null
+  until the socket first opens, so a load never flashes it). `.identity` is a grid, the pill on its own row.
+- The sprite gains `g-moon`, `g-gear`, `g-note`, `g-playlist`, `g-person`, `g-guests`, `g-play`, `g-up`, `g-down`, `g-x`
+  and `g-check` (`.glyph-stroke`); nothing is taken out of it.
+
+## Now playing and Up next
+- Head: `#quiet-capsule` and `#quiet-override` (`renderQuiet()`: while `state.quiet.now && !state.quiet.overridden`,
+  absent on older tablets; `timeOfDay(until)`; Play anyway `POST ROOT + '/api/quiet/override'`, then a toast), `#queue-open`
+  (`.up-next-button`, hidden from 1100 px) and `.link-capsule` "Piano" (`#link-dot`, a visually hidden `#link-state`). A
+  Play refused with 409 `quiet` goes through `failed()`. Gone: `.now-lines`, `#tablet-volume-note` and `tabletLine()`, the
+  next schedule under the unloaded title (`instrumentLines()` stays for the built-in Settings page).
+- `nowArt(piece)`: a new `artKey(piece, 'full')` lays the old, decoded `<img>` back over the box as `.ghost` (fading out
+  300 ms) and gives the box `.settle` (0.96 → 1, 300 ms); not on the first draw nor under reduced motion; a roll card's
+  CSSOM mask is not copied. The play button holds `.play-glyph` and `.pause-glyph`; `.playing` cross-fades them.
+- `renderUpNext(container, compact)` (`#now-side`, the sheet's `#queue-full`): a `.requests-group` and a `.queue-group`
+  made once per container; `renderRequests` and `renderQueue` each skip a draw that changes nothing. `requestsLoad()` reads
+  `/api/requests` when the state's `requests.pending` changes and as the sheet opens (nothing with none waiting; a failed
+  read is quiet); approve `POST /api/requests/<id>/approve` ("Added to Up next."), decline `…/dismiss`; the row goes at
+  once, a refusal says why and reads again. Row tools are `g-up`, `g-down`, `g-x`; under a finger the handle goes.
+- `SHEETS`, `openSheet()`/`closeSheet()`: `dialog.sheet.panel-sheet` (`.sheet-head`, `.sheet-scroll`), one at a time,
+  closed by Escape, Close, a tap begun on the scrim, a section change, and (Up next) the window reaching 1100 px.
+
+## Library
+- `#lib-kind`: `segmented()` takes `[key, label, glyph]` and rebuilds when its words change; `chooseKind()` (Pieces keeps
+  its category) bumps `libraryAsked`, so an answer for the list before is dropped; `kindOf()` is pieces while searching.
+  `#lib-chips` is All · Favorites · Recent under Pieces; `#lib-genre` is hidden on Channels. `channelsLoad()` goes through
+  `libraryAsk`; `showListBody(channels)` swaps `#lib-rows` and `#lib-channels` (`#channel-bar`, `#channel-tiles`), each
+  letting go of its pictures. Empty states: `emptyLine()`/`setEmpty()`. On a phone the four share the width by name.
+- `#add-open` opens `#add-sheet` (`renderAdd()` once into `#add-body`); `addFiles()` opens it. A document `dragover`/`drop`
+  sends files no zone took to `addFiles` (Now playing, Library) or `addRecordings` (Studio), elsewhere `dropEffect` none.
+  Upload rows and Studio's models and jobs (`keyedRows`) are kept in place, so their bars ease.
+
+## Settings and System (`settings.js`, `system.js`, `system.css`)
+- Pages: System (`g-system`), Playback, the piano's three, Guests (`g-guests`), Panel; nothing stored opens System.
+  System's page is `system.js`'s `create(host, .system-holder, .system-tools)` through `host.system()`, made once; its
+  capsules (`display: contents`) stand in Settings' head while it shows (the link capsule and Save hidden), and its
+  `show()`/`hide()`/`render()` follow whether it shows. Without system.js there is no System page. `open(page)` serves
+  `#system` (`modules.settings.opening`). Guests: `PUT /api/settings {webGuests}`, `{webApproveFirst}` (off while guests
+  can't request), the guests' address; the list says "Off", "On" or "On · approve first", as the tablet's hub does.
+- `vitals()`: the battery and the temperature as a glyph and a figure, their names visually hidden; the piano's line only
+  while attention() flags it. `system.css`: `.system-holder` is the container `system` (three cards from 960 px, two
+  below, one below 600; Running now beside Today and Tools from 760; a task's two lines below 560); meters and bars ease.
+
+## The seam, the mark, the motion
+- `modules = { settings, quiet }` (`load: () => import('./settings.js')`, `import('./quiet.js')`); `openQuiet()` shows
+  quiet.js's page once it is in, and while it is missing (404) the section's head alone. `loadSystem()` imports system.js
+  once, for `startSystem()` and `host.system`; `host.show` goes through `route()`.
+- `favicon.svg`: `viewBox="18 18 72 72"` (the adaptive icon's safe area), a `#0E0E0E` `rect` with `rx="18"`, the
+  launcher's path in `#F2F2F2`, the banner in a comment; no script, no reference. `WebAssets.SVG`; `/favicon.svg` in
+  `PANEL` and `PUBLIC`; `<link rel="icon" href="favicon.svg" type="image/svg+xml">` on the three pages (relative, so it
+  works under `/p/<id>/`).
+- `style.css` › Motion: `--ease-enter`/`--ease-leave`; `.page > .entering` (`rise-in`, 200 ms) and `.page > .leaving`
+  (`crossFade()` lays the old section where it stood, `inert`, `fade-out` 200 ms, `finishLeaving()` at 220 ms or the next
+  change; `.page` is positioned); `.enter` with `--i` (`staggerIn(key, items)`, once per key a visit, `--i` at most 10,
+  keys `library:<list>`, `queue`, `sheet`); `:active` 0.97 with `transform 100ms` in each control's transitions; the cover
+  lift; `dialog.sheet[open]`/`.confirm[open]` `sheet-in` 220 ms; `toast-in`/`toast-down`; `.progress > span` width 200 ms.
+  The reduced-motion block cuts each; `app.js` skips the cross-fade, the stagger and the ghost.
+- Removed with Schedule: `scheduleLoad` and the editor, `.schedule-*`, `.time-*`, `.row .title.off`, `.choice.off`; the
+  guests' switches and the Requests page left `app.js` and `index.html`.
+
+## Simplified, and why
+- Favorites and Recent stay, as chips under Pieces (the four segments are the brief's), so the Library loses nothing.
+- The section cross-fade lays the old section over the page for 200 ms instead of a view transition (which takes input
+  away and morphs the box when the page was scrolled); a page opening straight on an address cuts.
+- The rail's foot is the plan of record's "battery and temperature as icon and number only" (the brief keeps the vitals).
+- System follows Settings' pane, not the window (container queries); settings.js mounts it through `host.system()`, so
+  `app.js` stays the one place that imports modules. The requests' count is also on Up next's capsule, for below 1100 px.
+- The README's paragraph on the panel names the five places.
+
+## Tests
+`WebAssetsTest`: one new test (the five places and no others in the rail and the bar, no More sheet, 1.19's addresses
+routed; no "Connected ·" in the page or the scripts, the tablet's address only in the socket's; `favicon.svg` registered in
+both lists as `image/svg+xml`, linked from the three pages and beside the name, with a viewBox, its background, the
+launcher's path, no script and nothing from elsewhere; `quiet.js` through the seam and never at the start; Quiet now and
+Play anyway; System first in Settings through `host.system()`, Guests' switches there and not in the frame; every new
+animation cut under reduced motion and none looping; no pure black or white in any served file) and the others brought to
+the new frame (the copy of the five places, Up next and the requests; no Schedule; no instrument lines under Now playing;
+the seam's ids). 1,650 → 1,651 unit tests (12 skipped), none failing, with `--rerun`; `lintDebug` 0 errors, the same 30
+warnings, none in this run's files. The panel was looked at in a browser
+against a stand-in for the tablet (1440, 1280, 1000, 760 and 375 px; dark and light): Now playing with requests and a
+quiet time, Play anyway, a Play refused 409, approve, Up next's sheet, the Library's four lists, Channels and Add music,
+Settings › System and Guests, Quiet times without its module, and 1.19's addresses.
