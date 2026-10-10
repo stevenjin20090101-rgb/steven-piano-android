@@ -233,6 +233,32 @@ class WebSocketHubTest {
     }
 
     @Test
+    fun `the microphone's frames reach the sockets and relayed browsers of the session that hears, and no one else's (v1_23 M55)`() {
+        val hearing = sessions.open()
+        val mine = Recorder()
+        val theirs = Recorder()
+        hub.attach(hearing, mine::send, mine::close)
+        hub.attach(sessions.open(), theirs::send, theirs::close)
+        mine.waitFor { it.isNotEmpty() }
+        theirs.waitFor { it.isNotEmpty() }
+        Client(server.listeningPort, hearing).use { listener ->
+            Client(server.listeningPort, sessions.open()).use { other ->
+                assertEquals(101, listener.handshake())
+                assertEquals(101, other.handshake())
+                listener.text()
+                other.text()
+                val frame = dev.stevenjin.stevenpiano.audio.ListenWire.audio(0, ByteArray(1_600))
+                assertEquals("its socket and its relayed browser", 2, hub.sendToSession(hearing, frame))
+                assertEquals("audio", JSONObject(listener.text()).getString("type"))
+                mine.waitFor { list -> list.any { JSONObject(it).getString("type") == "audio" } }
+                assertTrue(other.textsFor(300).none { JSONObject(it).getString("type") == "audio" })
+                assertTrue(theirs.texts.none { JSONObject(it).getString("type") == "audio" })
+                assertEquals("no panel of that session open", 0, hub.sendToSession(sessions.open(), frame))
+            }
+        }
+    }
+
+    @Test
     fun `stopping the hub closes the relayed browsers too`() {
         val member = Recorder()
         hub.attach(sessions.open(), member::send, member::close)

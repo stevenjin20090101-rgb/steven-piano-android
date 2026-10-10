@@ -446,6 +446,78 @@
   overflow-wrap: anywhere;
 }
 
+/* ---- Listen and test (v1.23 — M55): the tablet's microphone live in this browser, and every key struck and heard ----
+   Its rows (Listen with the time left, the level and the volume; Test every key with its progress), then the piano's 84
+   keys as seven octaves in the boards' style: the keys not heard in the attention amber, the line under them naming them. */
+
+.system-page .listen-off { padding: 4px var(--inset) 12px; }
+
+.system-page .listen-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 8px var(--inset);
+}
+
+.system-page .listen-line { font-size: 14px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+
+.system-page .listen-level {
+  flex: 1 1 80px;
+  min-width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  overflow: hidden;
+}
+
+.system-page .listen-level i {
+  display: block;
+  width: var(--fill, 0%);
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary);
+  transition: width 100ms linear;
+}
+
+.system-page .listen-volume { display: inline-flex; align-items: center; gap: 10px; min-width: 180px; flex: 1 1 180px; }
+
+.system-page .listen-volume .meta { flex: none; }
+
+.system-page .listen-volume .range { flex: 1 1 auto; width: auto; min-width: 96px; }
+
+.system-page .listen-progress { margin: 0 var(--inset) 4px; }
+
+.system-page .keymap-box { padding: 10px var(--inset) 4px; }
+
+.system-page .keymap { display: block; width: 100%; height: auto; }
+
+.system-page .keymap .case { fill: none; stroke: var(--hairline); stroke-width: 1; }
+
+.system-page .keymap .gap { fill: var(--elevated); }
+
+.system-page .keymap .nat { fill: color-mix(in srgb, var(--primary) 16%, transparent); }
+
+.system-page .keymap .nat.struck { fill: color-mix(in srgb, var(--primary) 50%, transparent); }
+
+.system-page .keymap .nat.heard { fill: color-mix(in srgb, var(--primary) 88%, transparent); }
+
+.system-page .keymap .acc { fill: color-mix(in srgb, var(--primary) 16%, transparent); }
+
+.system-page .keymap .acc.struck { fill: color-mix(in srgb, var(--primary) 32%, transparent); }
+
+.system-page .keymap .acc.heard { fill: color-mix(in srgb, var(--primary) 50%, transparent); }
+
+.system-page .keymap .now { fill: var(--primary); }
+
+.system-page .keymap .missing { fill: var(--attention); }
+
+.system-page .listen-result { margin: 0; padding: 6px var(--inset) 4px; font-size: 15px; line-height: 21px; color: var(--secondary); }
+
+.system-page .listen-result.attention { color: var(--attention); font-weight: 600; }
+
+.system-page .listen-note { padding: 4px var(--inset) 16px; }
+
 /* The head's first capsule: what needs attention first, and how many more. */
 .capsule .more { color: var(--secondary); }
 
@@ -469,6 +541,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .system-page .dial .fill { transition: none; }
+
+  .system-page .listen-level i { transition: none; }
+
+  .system-page .listen-progress i { transition: none; }
 
   .settings-page .preset { transition: none; }
 

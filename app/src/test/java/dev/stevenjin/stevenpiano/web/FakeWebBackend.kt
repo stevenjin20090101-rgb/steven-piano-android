@@ -322,4 +322,25 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         quietHeld = quietHeld.copy(overridden = true)
         return true
     }
+
+    /** Listening and the key test (v1.23 — M55): what a start answers (started by default), and the sessions that asked. */
+    var listenAnswer: dev.stevenjin.stevenpiano.audio.ListenAnswer = dev.stevenjin.stevenpiano.audio.ListenAnswer.Started
+    var keyTestAnswer: dev.stevenjin.stevenpiano.audio.ListenAnswer = dev.stevenjin.stevenpiano.audio.ListenAnswer.Started
+    val askedBy: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    override suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer {
+        record("listen start")
+        askedBy += token
+        return listenAnswer
+    }
+
+    override suspend fun listenStop() = record("listen stop")
+
+    override suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer {
+        record("keytest start")
+        askedBy += token
+        return keyTestAnswer
+    }
+
+    override suspend fun keyTestStop() = record("keytest stop")
 }

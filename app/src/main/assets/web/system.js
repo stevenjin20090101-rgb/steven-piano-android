@@ -18,6 +18,9 @@
 
 const NEEDS_FIRMWARE = 'Needs newer firmware';
 
+/** A key held on (v1.23 — M55; the tablet's Attention.KEY_HELD). */
+const KEY_HELD = 'A key is held on';
+
 /** Android's thermal status (SystemReading.THERMAL_WORDS), 0–6, and the dial's word for each. */
 const THERMAL = ['none', 'light', 'moderate', 'severe', 'critical', 'emergency', 'shutdown'];
 const THERMAL_WORDS = ['Normal', 'Warm', 'Warm', 'Hot', 'Hot', 'Hot', 'Hot'];
@@ -85,6 +88,10 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export function attention(sys, state) {
   const items = [];
   if (!sys || typeof sys !== 'object') return items;
+  const piano = sys.piano || {};
+  const connected = piano.link && piano.link.state === 'connected';
+  // A key held on (v1.23 — M55): the piano still holds a key 5 s after anything last played. First of all: it can overheat.
+  if (connected && piano.keyHeld === true) items.push({ part: 'held', text: KEY_HELD, short: 'key held' });
   const tablet = sys.tablet || {};
   const battery = tablet.battery || {};
   const thermal = tablet.thermal || {};
@@ -105,9 +112,7 @@ export function attention(sys, state) {
   const free = finite(storage.free);
   if (free !== null && free < STORAGE_LOW_BYTES) items.push({ part: 'storage', text: "The tablet's storage is almost full", short: 'full' });
 
-  const piano = sys.piano || {};
   const diag = piano.diag || {};
-  const connected = piano.link && piano.link.state === 'connected';
   if (connected) {
     const missing = Array.isArray(diag.boards) ? diag.boards.filter((b) => b === 'missing').length : 0;
     if (missing > 0) {
@@ -203,7 +208,7 @@ export function vitals(host, node) {
     set(heat, celsius === null ? '—' : hot ? capital(hot.short) : `${Math.round(celsius)} °C`, !!hot);
     const instrument = state && state.instruments && state.instruments.instrument;
     const linkState = (state && state.link && state.link.state) || (sys && sys.piano && sys.piano.link && sys.piano.link.state) || null;
-    const trouble = instrument && instrument.kind === 'midi' ? null : first(['boards', 'chip', 'heap']);
+    const trouble = instrument && instrument.kind === 'midi' ? null : first(['held', 'boards', 'chip', 'heap']);
     const flagged = !!trouble && linkState === 'connected';
     set(piano, flagged ? capital(trouble.short) : '—', flagged);
     piano.node.hidden = !flagged;
@@ -236,7 +241,7 @@ export function create(host, body, tools) {
   let showing = false;
   let history = null;
   let historyAt = 0;
-  const timers = { system: 0, refresh: 0, history: 0, tick: 0, soon: 0 };
+  const timers = { system: 0, refresh: 0, history: 0, tick: 0, soon: 0, left: 0 };
 
   // ---- The head's tools: what needs attention first, and how old the figures are ----------------------------------
 
@@ -343,9 +348,55 @@ export function create(host, body, tools) {
     h('div', { class: 'tools' }, readStatus, covers, reconnectButton, keysOff, download),
     report);
 
+  // ---- Listen and test (v1.23 — M55): the tablet's microphone live in this browser, and every key struck and heard -----
+
+  const ear = makeEar();
+  /** Whether this panel asked to hear: its Listen, its test. Only then does it play the frames its session is sent. */
+  const hear = { live: false, test: false };
+  /** What the last state said, so a hearing's end (on → off) lets this panel's ears go. */
+  const seen = { live: false, running: false };
+  /** Whether the ear plays now: it rests only when this panel stops hearing, never on a state that came before its own. */
+  let hearing = false;
+  const refused = { live: '', test: '' };
+  const listenOff = h('p', { class: 'note listen-off', hidden: true, text: LISTEN_OFF });
+  const listenButton = h('button', { class: 'outlined', type: 'button' });
+  const listenLeft = h('span', { class: 'listen-line' });
+  const levelFill = h('i');
+  const level = h('div', { class: 'listen-level', hidden: true, 'aria-hidden': 'true' }, levelFill);
+  const volume = h('input', { class: 'range', type: 'range', min: '0', max: '100', step: '1', 'aria-label': 'Volume in this browser' });
+  const volumeBox = h('label', { class: 'listen-volume', hidden: true }, h('span', { class: 'meta', text: 'Volume' }), volume);
+  const listenRow = h('div', { class: 'listen-row' }, listenButton, listenLeft, level, volumeBox);
+  const testButton = h('button', { class: 'outlined', type: 'button' });
+  const testLine = h('span', { class: 'listen-line' });
+  const testRow = h('div', { class: 'listen-row' }, testButton, testLine);
+  const testFill = h('i');
+  const testBar = h('div', { class: 'bar listen-progress', hidden: true, 'aria-hidden': 'true' }, testFill);
+  const keymap = makeKeyMap(h);
+  const result = h('p', { class: 'listen-result', role: 'status' });
+  const listenCard = h('section', { class: 'card listen-card', 'aria-label': 'Listen and test' },
+    h('div', { class: 'card-head' }, glyph('g-mic'), h('h2', { text: 'Listen and test' }), h('span', { class: 'meta', text: "The tablet's microphone" })),
+    listenOff, listenRow, testRow, testBar, keymap.node, result,
+    h('p', { class: 'meta listen-note', text: "Played live in this browser from the tablet's microphone. Nothing is recorded." }));
+  volume.value = String(Math.round(ear.volume() * 100));
+  volume.style.setProperty('--fill', `${volume.value}%`);
+  volume.addEventListener('input', () => {
+    volume.style.setProperty('--fill', `${volume.value}%`);
+    ear.setVolume(Number(volume.value) / 100);
+  });
+  listenButton.addEventListener('click', () => toggleListen());
+  testButton.addEventListener('click', () => toggleTest());
+  // The frames the socket brings this session (app.js, host.audio), for as long as the page lives: played only when asked.
+  if (typeof host.audio === 'function') {
+    host.audio((message) => {
+      if (!hear.live && !hear.test) return;
+      const heard = ear.play(message, host.RELAYED ? LEAD_RELAYED_S : LEAD_S);
+      if (heard !== null) levelFill.style.setProperty('--fill', `${Math.round(heard * 100)}%`);
+    });
+  }
+
   const root = h('div', { class: 'system-page' },
     h('div', { class: 'sys-grid' }, tabletCard, controllerCard, pianoCard),
-    h('div', { class: 'sys-lower' }, runningCard, h('div', { class: 'stack' }, todayCard, toolsCard)));
+    h('div', { class: 'sys-lower' }, runningCard, h('div', { class: 'stack' }, listenCard, todayCard, toolsCard)));
   fill(body, root);
 
   // ---- What the state says -----------------------------------------------------------------------------------------
@@ -384,6 +435,7 @@ export function create(host, body, tools) {
     paintPiano(sys, m, parts);
     paintRunning(sys);
     paintTools();
+    paintListen();
   }
 
   function paintHead(items) {
@@ -566,7 +618,7 @@ export function create(host, body, tools) {
     const repeat = ready ? finite(diag.repeatms) : null;
     repeatFact.set(repeat !== null ? `${Math.round(repeat)} ms` : missing);
     const active = ready ? finite(diag.active) : null;
-    activeFact.set(active !== null ? Math.round(active).toLocaleString() : missing);
+    activeFact.set(active !== null ? Math.round(active).toLocaleString() : missing, active !== null && parts.has('held'));
     const trips = ready ? finite(diag.trips) : null;
     tripsFact.set(trips !== null ? `${Math.round(trips).toLocaleString()} ${Math.round(trips) === 1 ? 'release' : 'releases'} since start` : missing);
 
@@ -651,6 +703,108 @@ export function create(host, body, tools) {
     const ready = pianoReady();
     if (!working.has(readStatus)) readStatus.disabled = !ready;
     if (!working.has(keysOff)) keysOff.disabled = !ready;
+  }
+
+  /** Listen and test, from the state's `listen` and `keytest` (v1.23 — M55). */
+  function paintListen() {
+    const listen = (st && st.listen) || {};
+    const test = (st && st.keytest) || {};
+    const allowed = listen.allowed === true;
+    const until = finite(listen.until);
+    const live = listen.on === true && until !== null;
+    const running = test.running === true;
+    // A hearing that ended (the five minutes, a Stop anywhere, the tablet's switch) lets this panel's ears go.
+    if (seen.live && !live) hear.live = false;
+    if (seen.running && !running) hear.test = false;
+    seen.live = live;
+    seen.running = running;
+    const now = hear.live || hear.test;
+    if (hearing && !now) ear.rest();
+    hearing = now;
+    level.hidden = !now;
+    volumeBox.hidden = !now;
+    listenOff.hidden = allowed || running;
+    listenRow.hidden = !allowed && !live;
+    testRow.hidden = !allowed && !running;
+    label(listenButton, hear.live ? 'g-stop' : 'g-mic', hear.live ? 'Stop' : 'Listen');
+    label(testButton, running ? 'g-stop' : 'g-keys', running ? 'Stop' : 'Test every key');
+    if (!working.has(listenButton)) listenButton.disabled = !allowed && !hear.live;
+    if (!working.has(testButton)) testButton.disabled = !allowed && !running;
+    paintLeft();
+    clearInterval(timers.left);
+    timers.left = live && showing ? setInterval(paintLeft, 1000) : 0;
+
+    const total = finite(test.total) || 84;
+    const done = finite(test.done) || 0;
+    const key = finite(test.key);
+    setText(testLine, running ? (key !== null ? `Key ${done} of ${total}` : done === 0 ? 'Listening to the room…' : 'Checking the last keys…') : refused.test);
+    testBar.hidden = !running;
+    if (running) testFill.style.setProperty('--fill', `${Math.round((done / Math.max(1, total)) * 1000) / 10}%`);
+    const results = Array.isArray(test.results) ? test.results.filter((r) => r && typeof r.key === 'number') : null;
+    const words = running ? '' : results ? resultLine(results) : typeof test.stopped === 'string' ? test.stopped : 'Not tested yet';
+    setText(result, words);
+    result.hidden = running;
+    result.classList.toggle('attention', !!results && results.some((r) => r.heard === false));
+    keymap.set(test, running ? `Key ${done} of ${total}` : words);
+  }
+
+  /** "4:12 left" while a panel listens live, or why this panel's Listen was refused. */
+  function paintLeft() {
+    const listen = (st && st.listen) || {};
+    const until = finite(listen.until);
+    if (listen.on === true && until !== null) setText(listenLeft, leftWords(until - Date.now(), hear.live));
+    else setText(listenLeft, refused.live);
+  }
+
+  /** Listen, or Stop (any signed-in panel may stop it): the room live in this browser for five minutes at most. */
+  async function toggleListen() {
+    if (working.has(listenButton)) return;
+    if (hear.live) {
+      hear.live = false;
+      paintListen();
+      await busy(listenButton, () => host.post(host.ROOT + '/api/listen/stop'));
+      return;
+    }
+    if (!ear.wake()) {
+      host.toast("This browser can't play the tablet's sound.");
+      return;
+    }
+    refused.live = '';
+    hear.live = true;   // at once: the state saying so may come before the answer does
+    paintListen();
+    await busy(listenButton, async () => {
+      try {
+        await host.post(host.ROOT + '/api/listen/start');
+      } catch (e) {
+        hear.live = false;
+        refused.live = (e && e.status === 409 && e.message) || '';
+        throw e;
+      }
+    });
+    paintListen();
+  }
+
+  /** Test every key, or Stop: the piano strikes its 84 keys in turn while this browser hears it (if it can play sound). */
+  async function toggleTest() {
+    if (working.has(testButton)) return;
+    const test = (st && st.keytest) || {};
+    if (test.running === true) {
+      await busy(testButton, () => host.post(host.ROOT + '/api/keytest/stop'));
+      return;
+    }
+    refused.test = '';
+    hear.test = ear.wake();   // at once, as Listen's; a browser that can't play sound still runs the test
+    paintListen();
+    await busy(testButton, async () => {
+      try {
+        await host.post(host.ROOT + '/api/keytest/start');
+      } catch (e) {
+        hear.test = false;
+        refused.test = (e && e.status === 409 && e.message) || '';
+        throw e;
+      }
+    });
+    paintListen();
   }
 
   // ---- Today: the day's battery and temperatures -----------------------------------------------------------------------
@@ -826,7 +980,8 @@ export function create(host, body, tools) {
     clearInterval(timers.history);
     clearInterval(timers.tick);
     clearTimeout(timers.soon);
-    timers.system = timers.refresh = timers.history = timers.tick = timers.soon = 0;
+    clearInterval(timers.left);
+    timers.system = timers.refresh = timers.history = timers.tick = timers.soon = timers.left = 0;
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -1049,6 +1204,241 @@ function makeBoards(h) {
         if (state !== 'unknown') spoken.push(`C${i + 1} ${state === 'ok' ? 'OK' : 'missing'}`);
       });
       svgEl.setAttribute('aria-label', spoken.length ? `Power boards: ${spoken.join(', ')}` : 'Power boards: not known');
+    },
+  };
+}
+
+// ---- Listen and test's parts (v1.23 — M55) ---------------------------------------------------------------------------
+
+/** The card's words while listening is off on the tablet (the tablet's ListenCopy.OFF_HOW). */
+const LISTEN_OFF = 'Listening is off on the tablet. To hear the room, turn on Listening from the panel on the tablet: Piano › System.';
+
+/** How far ahead the sound is played (s): the network's unevenness never breaks it up; more through the relay. */
+const LEAD_S = 0.25;
+const LEAD_RELAYED_S = 0.5;
+
+/** Past this much sound waiting to play (s), a frame is dropped: the room stays live, never minutes behind. */
+const MOST_BEHIND_S = 1.2;
+
+/** The volume in this browser, kept here (0–1). */
+const VOLUME_KEY = 'steven-piano-listen-volume';
+
+/** µ-law to linear (G.711, the tablet's Mulaw.decode), full scale 1: a value for each of the 256 bytes. */
+const MULAW = (() => {
+  const table = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const bits = ~i & 0xff;
+    const exponent = (bits >> 4) & 0x07;
+    const mantissa = bits & 0x0f;
+    const magnitude = (((mantissa << 3) + 0x84) << exponent) - 0x84;
+    table[i] = ((bits & 0x80) !== 0 ? -magnitude : magnitude) / 32768;
+  }
+  return table;
+})();
+
+/**
+ * The room in this browser: the socket's µ-law frames decoded and played with Web Audio, each just after the one before,
+ * through one gain (the volume, kept in this browser). Sound may start only from a tap, so [wake] is called from one.
+ */
+function makeEar() {
+  let context = null;
+  let gain = null;
+  let next = 0;
+  let volume = keptVolume();
+  return {
+    /** From a tap: ready to play (the context made or woken); false when this browser can't play sound. */
+    wake() {
+      const Context = window.AudioContext || window.webkitAudioContext;
+      if (!Context) return false;
+      try {
+        if (!context) {
+          context = new Context();
+          gain = context.createGain();
+          gain.gain.value = volume;
+          gain.connect(context.destination);
+        }
+        if (context.state === 'suspended') context.resume().catch(() => {});
+      } catch (e) {
+        return false;
+      }
+      next = 0;
+      return true;
+    },
+    /** A frame ([message], `{seq, rate, codec, data}`) played after the last, [lead] seconds ahead at first; its level, 0–1. */
+    play(message, lead) {
+      if (!context || !message || typeof message.data !== 'string' || message.codec !== 'mulaw') return null;
+      let bytes;
+      try {
+        bytes = atob(message.data);
+      } catch (e) {
+        return null;
+      }
+      const count = bytes.length;
+      if (count === 0) return null;
+      const samples = new Float32Array(count);
+      let sum = 0;
+      for (let i = 0; i < count; i++) {
+        const v = MULAW[bytes.charCodeAt(i) & 0xff];
+        samples[i] = v;
+        sum += v * v;
+      }
+      const loud = levelOf(sum / count);
+      if (context.state === 'suspended') context.resume().catch(() => {});   // the page has had its tap already
+      const now = context.currentTime;
+      if (next < now + 0.02) next = now + lead;   // the first frame, or after a gap
+      if (next - now > lead + MOST_BEHIND_S) return loud;   // too far behind: this one is dropped
+      const rate = finite(message.rate) || 16000;
+      try {
+        const buffer = context.createBuffer(1, count, rate);
+        buffer.getChannelData(0).set(samples);
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(gain);
+        source.start(next);
+        next += count / rate;
+      } catch (e) {
+        return null;
+      }
+      return loud;
+    },
+    volume: () => volume,
+    setVolume(value) {
+      volume = clamp(value, 0, 1);
+      if (gain) gain.gain.value = volume;
+      try {
+        localStorage.setItem(VOLUME_KEY, String(volume));
+      } catch (e) {
+        // Private browsing: it holds for this page only.
+      }
+    },
+    /** Nothing more to play: the context sleeps until the next tap. */
+    rest() {
+      next = 0;
+      if (context && context.state === 'running') context.suspend().catch(() => {});
+    },
+  };
+}
+
+function keptVolume() {
+  try {
+    const value = Number(localStorage.getItem(VOLUME_KEY));
+    return localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(value) ? clamp(value, 0, 1) : 0.8;
+  } catch (e) {
+    return 0.8;
+  }
+}
+
+/** A frame's loudness for the meter: its mean square as decibels, −60 dB to 0, as 0–1. */
+function levelOf(meanSquare) {
+  if (!(meanSquare > 0)) return 0;
+  const db = 10 * Math.log10(meanSquare);
+  return clamp((db + 60) / 60, 0, 1);
+}
+
+/** The note names, C to B (the tablet's ListenCopy). */
+const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+
+/** "C2", "F♯4": MIDI [key] (60 is C4). */
+function keyName(key) {
+  return NOTE_NAMES[((key % 12) + 12) % 12] + (Math.floor(key / 12) - 1);
+}
+
+/** "All 84 keys sounded", or "3 keys didn't sound: C2, F♯4, A6" ("1 key didn't sound: C2"), as the tablet says it. */
+function resultLine(results) {
+  const missing = results.filter((r) => r.heard === false).map((r) => r.key).sort((a, b) => a - b);
+  if (missing.length === 0) return `All ${results.length} keys sounded`;
+  const names = missing.map(keyName).join(', ');
+  return missing.length === 1 ? `1 key didn't sound: ${names}` : `${missing.length} keys didn't sound: ${names}`;
+}
+
+/** "4:12 left" ([mine]: this panel's), or "Listening on another panel · 4:12 left". */
+function leftWords(ms, mine) {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  const left = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} left`;
+  return mine ? left : `Listening on another panel · ${left}`;
+}
+
+/** A button's glyph and words, changed only when they change. */
+function label(button, glyphId, text) {
+  const key = `${glyphId}|${text}`;
+  if (buttonLabels.get(button) === key) return;
+  buttonLabels.set(button, key);
+  button.replaceChildren(glyphNode(glyphId), document.createTextNode(text));
+}
+
+/** What each button shows now (kept in the module, never as a data- attribute in the page). */
+const buttonLabels = new WeakMap();
+
+/** A glyph of the frame's sprite, as host.glyph draws it (for the parts made outside create()). */
+function glyphNode(id) {
+  const svgEl = svgNode('svg', { class: 'glyph', 'aria-hidden': 'true' });
+  svgEl.append(svgNode('use', { href: `#${id}` }));
+  return svgEl;
+}
+
+/** The naturals' places in an octave (C D E F G A B), and the sharps' (after C, D, F, G, A): [position, semitones above C]. */
+const NATURAL_STEPS = [0, 2, 4, 5, 7, 9, 11];
+const SHARP_STEPS = [[0, 1], [1, 3], [3, 6], [4, 8], [5, 10]];
+
+/**
+ * The piano's 84 keys as seven octaves, C1 to C7, in the board octaves' style: while a test runs the keys struck so far, the
+ * one struck now in the content colour, those to come faint; then the keys heard as an answering board's, the keys not
+ * heard in the attention amber (the line under it names them).
+ */
+function makeKeyMap(h) {
+  const svgEl = svgNode('svg', { class: 'keymap', viewBox: '0 0 420 48', role: 'img', 'aria-label': 'Keyboard map', focusable: 'false' });
+  const keys = new Map();
+  for (let o = 0; o < 7; o++) {
+    const x = o * 60;
+    const first = 24 + o * 12;
+    const group = svgNode('g');
+    group.append(svgNode('rect', { class: 'case', x: x + 2, y: 2, width: 56, height: 44, rx: 6 }));
+    NATURAL_STEPS.forEach((step, k) => {
+      const rect = svgNode('rect', { class: 'nat pending', x: n2(x + 4 + k * 7.5), y: 5, width: 6.3, height: 38, rx: 1.5 });
+      keys.set(first + step, { rect, kind: 'nat' });
+      group.append(rect);
+    });
+    for (const [k, step] of SHARP_STEPS) {
+      group.append(svgNode('rect', { class: 'gap', x: n2(x + 4 + k * 7.5 + 3.8), y: 5, width: 6, height: 23.8, rx: 1.6 }));
+      const rect = svgNode('rect', { class: 'acc pending', x: n2(x + 4 + k * 7.5 + 4.6), y: 5, width: 4.4, height: 23, rx: 1.2 });
+      keys.set(first + step, { rect, kind: 'acc' });
+      group.append(rect);
+    }
+    svgEl.append(group);
+  }
+  const names = [];
+  for (let o = 0; o < 7; o++) names.push(h('span', { text: `C${o + 1}` }));
+  const node = h('div', { class: 'keymap-box' }, svgEl, h('div', { class: 'board-labels', 'aria-hidden': 'true' }, names));
+  let shown = '';
+  return {
+    node,
+    /** The key test's state ([test]); [spoken], what its line says, for screen readers. */
+    set(test, spoken) {
+      const running = test.running === true;
+      const current = finite(test.key);
+      const done = finite(test.done) || 0;
+      const total = finite(test.total) || 84;
+      const results = !running && Array.isArray(test.results) ? test.results : null;
+      const heard = results ? new Map(results.map((r) => [r.key, r.heard === true])) : null;
+      const key = `${running}|${current}|${done}|${results ? results.map((r) => (r.heard === true ? 1 : 0)).join('') : '-'}`;
+      svgEl.setAttribute('aria-label', `Keyboard map: ${spoken}`);
+      if (key === shown) return;
+      shown = key;
+      for (const [note, { rect, kind }] of keys) {
+        let shade = 'pending';
+        if (running) {
+          if (note === current) shade = 'now';
+          else if (current !== null ? note < current : done >= total) shade = 'struck';
+        } else if (heard) {
+          shade = heard.get(note) === false ? 'missing' : 'heard';
+        }
+        rect.setAttribute('class', `${kind} ${shade}`);
+      }
+      names.forEach((name, o) => {
+        let missing = false;
+        for (let i = 0; i < 12 && heard; i++) if (heard.get(24 + o * 12 + i) === false) missing = true;
+        name.className = missing ? 'missing' : '';
+      });
     },
   };
 }

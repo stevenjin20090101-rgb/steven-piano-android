@@ -14,6 +14,7 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -117,6 +118,31 @@ class AttentionTest {
         val covers = items(Attention.Inputs(running = listOf(row("covers", RunningNow.WAITING, "Artwork"))))
         assertEquals(listOf(Attention.Item(Attention.Part.Running, "Album covers are waiting", "covers")), covers)
         assertTrue(items(Attention.Inputs(running = listOf(row("covers", RunningNow.RUNNING), row("relay", RunningNow.WAITING)))).isEmpty())
+    }
+
+    @Test
+    fun `a key held on 5 s after anything last played comes first of all (v1_23 M55)`() {
+        // The piano's facts came in at 10 s; nothing had played since 4 s: 6 s of quiet, and the piano holds a key.
+        assertTrue(HeldKey.held(active = 1, factsAt = 10_000, quietSince = 4_000))
+        assertTrue("5 s exactly", HeldKey.held(active = 2, factsAt = 9_000, quietSince = 4_000))
+        assertFalse("4.9 s: the piece's last keys may still be letting go", HeldKey.held(active = 1, factsAt = 8_900, quietSince = 4_000))
+        assertFalse("something plays now", HeldKey.held(active = 1, factsAt = 10_000, quietSince = null))
+        assertFalse("no key held", HeldKey.held(active = 0, factsAt = 10_000, quietSince = 4_000))
+        assertFalse("firmware without !active", HeldKey.held(active = null, factsAt = 10_000, quietSince = 4_000))
+        assertFalse("no facts yet", HeldKey.held(active = 1, factsAt = null, quietSince = 4_000))
+        assertEquals("the piano's own reading", 3L, PianoDiag(mapOf("active" to "3")).active)
+
+        val quiet = QuietSince(start = 1_000)
+        assertEquals(1_000L, quiet.since)
+        quiet.see(playing = true, now = 2_000)
+        assertEquals(null, quiet.since)
+        quiet.see(playing = false, now = 3_000)
+        quiet.see(playing = false, now = 4_000)
+        assertEquals("quiet since it last stopped, not since it was last told", 3_000L, quiet.since)
+
+        val held = items(Attention.Inputs(reading = calm.copy(battery = calm.battery.copy(percent = 5, charging = false)), keyHeld = true))
+        assertEquals(listOf(Attention.Item(Attention.Part.Held, "A key is held on"), Attention.Item(Attention.Part.Battery, "The tablet's battery is low · 5%")), held)
+        assertTrue(items(Attention.Inputs(reading = calm, keyHeld = false)).isEmpty())
     }
 
     @Test

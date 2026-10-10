@@ -172,7 +172,8 @@ class MainActivity : ComponentActivity() {
     /**
      * In the foreground a foreground service may start: composers never looked up are fetched now, and
      * the web panel, if on, listens. Opened again after "Unlock for now", the kiosk locks again; and
-     * the adb way back (`debug.stevenpiano.releaseowner`) is looked for, as on every new intent.
+     * the adb way back (`debug.stevenpiano.releaseowner`) is looked for, as on every new intent. The
+     * microphone may hear for the web panel from now (v1.23 — M55), and only until the activity stops.
      */
     override fun onStart() {
         super.onStart()
@@ -180,6 +181,7 @@ class MainActivity : ComponentActivity() {
         graph.startWebIfOn(this)
         graph.kiosk.appOpened()   // back after "Unlock for now": locked again
         graph.releaseOwnerIfAsked()   // the adb way back, which `am start` reaches (DeviceOwnerRelease)
+        graph.listening.foreground(true)   // v1.23 — M55: the microphone may hear only while the app is in front
     }
 
     /**
@@ -198,6 +200,7 @@ class MainActivity : ComponentActivity() {
             graph.liveThru.setOnScreen(false)   // v1.11 — M29: the keyboard's keys let go too; Live waits for the Keys tab
             if (graph.recording.recording) graph.recording.stop(TakeEnd.AppLeft)   // and a take ends, saved
             graph.kiosk.appLeft()
+            graph.listening.foreground(false)   // v1.23 — M55: and the microphone stops (Android would hear only silence)
         }
     }
 

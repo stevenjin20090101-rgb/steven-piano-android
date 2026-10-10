@@ -132,8 +132,12 @@ class TabletSound(
     var active = false
         private set
 
-    /** What the player sends beside the link. */
-    val sink: MidiSink = voice.sink { active }
+    /** What the player sends beside the link: nothing while the key test holds the sound silent ([mute], v1.23 — M55). */
+    val sink: MidiSink = voice.sink { active && !muted }
+
+    /** Held silent for the key test (v1.23 — M55): the tablet's sound would fool the microphone. Read on the player's thread. */
+    @Volatile
+    private var muted = false
 
     @Volatile
     private var playing = false
@@ -168,6 +172,17 @@ class TabletSound(
         if (playing == on) return
         playing = on
         poke()
+    }
+
+    /**
+     * The key test (v1.23 — M55) holds the tablet's sound silent ([on]): what sounds fades at once and nothing more is
+     * queued until it lets go; the mode and the volume stay as they are.
+     */
+    fun mute(on: Boolean) {
+        if (muted == on) return
+        muted = on
+        if (on) voice.silence()
+        log(if (on) "Tablet sound: silent for the key test" else "Tablet sound: back after the key test")
     }
 
     /** Audio focus went elsewhere: everything sounding has gone (the output did it); nothing to hold open. */

@@ -429,6 +429,8 @@ object WebApi {
             .put("studio", studio(s.studio))
             .put("display", display(s.display))
             .put("quiet", quietNow(s.quiet))
+            .put("listen", listen(s.listen))   // v1.23 — M55
+            .put("keytest", keyTest(s.keytest))
     }
 
     /** The views of the piece playing (v1.13 — M32): `{rev, notes, hands, fingers, chords, score}`. */
@@ -672,7 +674,8 @@ object WebApi {
                     .put("state", p.state)
                     .put("facts", p.facts?.let { JSONObject(it as Map<*, *>) }.orNull())
                     .put("factsAt", p.factsAt.orNull())
-                    .put("diag", pianoDiag(p.facts)),
+                    .put("diag", pianoDiag(p.facts))
+                    .put("keyHeld", p.keyHeld),   // v1.23 — M55: a key the piano holds 5 s after anything last played
             )
             .put(
                 "running",
@@ -906,4 +909,24 @@ object WebApi {
     /** A name read this far at most before it is checked (the rules allow 40 characters once trimmed), and a time's text. */
     private const val MAX_QUIET_NAME = 256
     private const val MAX_TIME_TEXT = 16
+
+    // ---- Listening and the key test (v1.23 — M55) ---------------------------------------------------------------------
+
+    /** The tablet's microphone in the state: `{on, until, allowed}`, [until] epoch ms or null. */
+    fun listen(l: dev.stevenjin.stevenpiano.audio.ListenState): JSONObject = JSONObject()
+        .put("on", l.on)
+        .put("until", l.until ?: JSONObject.NULL)
+        .put("allowed", l.allowed)
+
+    /**
+     * The key test in the state: `{running, key, done, total, results: [{key, heard}] | null, stopped}`, [key] the one being
+     * struck (null between), [stopped] why the last test ended early (null when it ran to its end, or none ran).
+     */
+    fun keyTest(k: dev.stevenjin.stevenpiano.audio.KeyTestState): JSONObject = JSONObject()
+        .put("running", k.running)
+        .put("key", k.key ?: JSONObject.NULL)
+        .put("done", k.done)
+        .put("total", k.total)
+        .put("results", k.results?.let { list -> JSONArray().apply { list.forEach { put(JSONObject().put("key", it.key).put("heard", it.heard)) } } } ?: JSONObject.NULL)
+        .put("stopped", k.stopped ?: JSONObject.NULL)
 }

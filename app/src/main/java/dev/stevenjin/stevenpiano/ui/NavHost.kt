@@ -98,6 +98,7 @@ import dev.stevenjin.stevenpiano.ui.components.LocalFloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
 import dev.stevenjin.stevenpiano.ui.components.LocalOnGlass
 import dev.stevenjin.stevenpiano.ui.components.LocalReducedTransparency
+import dev.stevenjin.stevenpiano.ui.components.MicrophoneBanner
 import dev.stevenjin.stevenpiano.ui.components.MiniPlayer
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
@@ -340,6 +341,8 @@ fun PianoNavHost(
             }
             // Composed last, a sibling after the frame: above the glass bar, the mini player and the rail.
             DisplayOverlay(idle, kiosk, onLeave = onTouch)
+            // While the microphone is on (v1.23 — M55): on every screen, the resting screen too, with Stop.
+            MicrophoneBanner(Modifier.align(Alignment.TopCenter))
         }
         if (kioskSheet && kiosk) KioskExitSheet(onDismiss = { kioskSheet = false })
         // A play asked for during a quiet time (v1.20 — M54): its choice, and the kiosk PIN Play anyway may ask for.

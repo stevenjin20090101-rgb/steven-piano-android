@@ -247,7 +247,7 @@ object SystemCopy {
      * ([link]; none while another instrument plays), the pedal board, I²C errors, the repeat period, the keys held now and
      * the hold watchdog; then every other fact it gives, under its own name.
      */
-    fun pianoFacts(mode: Mode, diag: PianoDiag?, link: LinkState, boardsAttention: Boolean): List<Fact> {
+    fun pianoFacts(mode: Mode, diag: PianoDiag?, link: LinkState, boardsAttention: Boolean, heldAttention: Boolean = false): List<Fact> {
         val ready = diag?.takeIf { mode == Mode.Ready }
         val needs = mode == Mode.Ready || mode == Mode.Old
         fun fact(label: String, value: String?, attention: Boolean = false) = Fact(label, value, needs = value == null && needs, attention = attention && value != null)
@@ -268,7 +268,7 @@ object SystemCopy {
             fact("Pedal board", ready?.pedalBoard?.let(::capital)),
             fact("I²C errors", ready?.i2cFails?.let(::count)),
             fact("Repeat period", ready?.repeatMs?.let { "$it ms" }),
-            fact("Keys held now", ready?.active?.let(::count)),
+            fact("Keys held now", ready?.active?.let(::count), heldAttention),   // amber while a key is held on (v1.23 — M55)
             fact("Hold watchdog", ready?.trips?.let { "${count(it)} ${if (it == 1L) "release" else "releases"} since start" }),
         )
         val others = ready?.facts.orEmpty().filterKeys { it !in SHOWN_FACTS }.toSortedMap().map { (name, value) -> Fact(name, value) }

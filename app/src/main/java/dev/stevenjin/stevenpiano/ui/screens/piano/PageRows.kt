@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
 
@@ -89,6 +90,10 @@ object PageRows {
     val FIND_COVERS = AppRow("system.covers", "Find missing covers", SettingsPage.System, TOOLS, listOf("album covers", "artwork", "look again"))
     val RECONNECT = AppRow("system.reconnect", "Reconnect the piano", SettingsPage.System, TOOLS, listOf("bluetooth", "link", "connect again"))
 
+    // ---- THIS TABLET › System › Listen and test (v1.23 — M55) ------------------------------------------------------------
+    val LISTEN_FROM_PANEL = AppRow("system.listen", ListenCopy.SWITCH, SettingsPage.System, ListenCopy.TITLE, listOf("microphone", "mic", "listen", "hear the room", "privacy"))
+    val TEST_EVERY_KEY = AppRow("system.keytest", ListenCopy.TEST, SettingsPage.System, ListenCopy.TITLE, listOf("stuck key", "key test", "sweep", "dead key", "microphone"))
+
     // ---- THIS TABLET › Display ----------------------------------------------------------------------
     const val APPEARANCE_SECTION = "Appearance"
     const val RESTING_SECTION = "Resting screen"
@@ -128,7 +133,7 @@ object PageRows {
         PLAY_ANYWAY, ADD_SECTION, EXACT_ALARMS,
         WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
-        FIND_COVERS, RECONNECT,
+        FIND_COVERS, RECONNECT, LISTEN_FROM_PANEL, TEST_EVERY_KEY,
         APPEARANCE, MONOCHROME, ALBUM_BACKDROP, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,
         KIOSK_MODE, KIOSK_UNLOCK, KIOSK_PIN,
         CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES,

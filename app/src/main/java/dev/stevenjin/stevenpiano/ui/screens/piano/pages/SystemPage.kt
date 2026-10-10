@@ -131,10 +131,11 @@ import kotlinx.coroutines.delay
 
 /**
  * What the System page and the hub's System row show of the tablet: its [reading], what [running] lists and whether the
- * player was [loading] a piece then (its row's word), read [at] (epoch ms).
+ * player was [loading] a piece then (its row's word), read [at] (epoch ms); and (v1.23 — M55) whether the piano held a key
+ * on then ([keyHeld], `diag.HeldKey`).
  */
 @Immutable
-data class SystemNow(val reading: SystemReading, val running: List<RunningNow.Activity>, val at: Long, val loading: Boolean = false)
+data class SystemNow(val reading: SystemReading, val running: List<RunningNow.Activity>, val at: Long, val loading: Boolean = false, val keyHeld: Boolean = false)
 
 /** The day's samples ([dev.stevenjin.stevenpiano.diag.SystemHistory]), oldest first, as read [at] (epoch ms). */
 @Immutable
@@ -155,7 +156,8 @@ const val SYSTEM_ROW_MS = 60_000L
  * **Tablet** (battery and temperature dials, memory and storage meters, Wi-Fi, running for, the screen), the
  * **Controller** and the **Piano** (the chip's temperature and memory, the seven power boards as seven octaves, the facts;
  * "Needs newer firmware" for what the piano doesn't report, "Not connected" without it, a row at the foot to Firmware and
- * status), **Running now** (the app's twelve rows, each with its dot, detail, bar and word), **Today** (the day's battery
+ * status), **Listen and test** (v1.23 — M55, [ListenCard]: Listening from the panel, and Test every key with its keyboard
+ * map), **Running now** (the app's twelve rows, each with its dot, detail, bar and word), **Today** (the day's battery
  * and temperature) and **Tools** (Read status, Find missing covers, Reconnect the piano after a word, All keys off, Share
  * diagnostics; the ones that change the piano through [gate]). The tablet is read every 5 s and the piano's facts asked
  * every 15 s, only while the page shows ([ReadWhileShown]); [onOpenPage] opens another page of the tab.
@@ -187,6 +189,7 @@ fun SystemPage(vm: PianoViewModel, gate: KioskGate, onOpenPage: (SettingsPage) -
             { TabletCard(system?.reading, parts) },
             { ControllerCard(mode, diag, instrument, parts) },
             { PianoCard(vm, mode, diag, link, instrument, parts, onOpenPage) },
+            { ListenCard(vm, gate) },   // v1.23 — M55: Listening from the panel, and Test every key
             { RunningCard(vm, system, link) },
             { TodayCard(day) },
             { ToolsCard(vm, gate) },
@@ -264,6 +267,7 @@ internal fun rememberAttention(vm: PianoViewModel, system: SystemNow?): List<Att
                 piano = PianoDiag.of(kind, link, piano),
                 cloudOn = vm.cloudLink(settings, cloud) != null,
                 cloud = cloud,
+                keyHeld = system?.keyHeld == true,
             ),
         )
     }
@@ -352,7 +356,7 @@ private fun PianoCard(
     val boards = diag?.boards?.takeIf { mode == SystemCopy.Mode.Ready }
     SystemCard(SystemCopy.PIANO, SystemCopy.pianoLine(mode, boards, instrument)) {
         Boards(boards)
-        for (fact in SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts)) FactRow(fact)
+        for (fact in SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts, Attention.Part.Held in parts)) FactRow(fact)
         FootRow(
             SettingsPage.Firmware.title,
             GroupSummaries.firmware(piano, firmware, (firmwarePiano as? FirmwarePiano.Connected)?.text),
@@ -483,7 +487,7 @@ private fun ToolsCard(vm: PianoViewModel, gate: KioskGate) {
 /** A card of the page: the elevated surface with the cards' 12 dp corners, its name (a heading) with its line, then [content]. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SystemCard(title: String, line: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun SystemCard(title: String, line: String, content: @Composable ColumnScope.() -> Unit) {
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(bottom = 8.dp)) {
             FlowRow(
@@ -600,7 +604,7 @@ private fun LevelRow(label: String, level: SystemCopy.Level?, attention: Boolean
 
 /** A rounded meter of [share] (0–1; null: empty) in [color] over a faint track, [thickness] tall; it eases to each new value. */
 @Composable
-private fun Meter(share: Float?, color: Color, thickness: Dp, modifier: Modifier = Modifier) {
+internal fun Meter(share: Float?, color: Color, thickness: Dp, modifier: Modifier = Modifier) {
     val track = MaterialTheme.colorScheme.onSurface.copy(alpha = TRACK_ALPHA)
     val reduced = rememberReducedMotion()
     val eased by animateFloatAsState(share?.coerceIn(0f, 1f) ?: 0f, Motion.timed(Motion.StandardMs, reduced), label = "meter")
@@ -786,7 +790,7 @@ private fun FootRow(label: String, value: String, onClick: () -> Unit) {
 
 /** A line of a card in the secondary colour: what is being read, or the day in a sentence. */
 @Composable
-private fun CardNote(text: String) {
+internal fun CardNote(text: String) {
     Text(
         text,
         Modifier
@@ -962,7 +966,7 @@ private object Apart : Arrangement.Horizontal {
 }
 
 /** The small figures under the boards and on the chart: the eyebrow's size without its tracking. */
-private val SmallFigures: TextStyle
+internal val SmallFigures: TextStyle
     @Composable get() = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
 
 private val SystemPageWidth = 1120.dp

@@ -2146,3 +2146,43 @@ new host is reached, the relay is unchanged. Where each part is held, and the te
   600 px cover again and again from Apple's image hosts, each within the 6 MB cap.
 - **Apple's stop can follow a panel's searches**: the 4 s floor keeps them under Apple's own rate, but should Apple answer
   429 anyway, every lookup waits an hour.
+
+## 1.23 — the microphone: listening and the key test (pre-audit notes, M55)
+
+2026-10-10, notes written with M55 for the next audit, not an audit (BUILD_SPEC.md › v1.23 — M55). The web panel can now
+hear the room through the tablet's microphone, live, and have the piano strike every key while it listens. It is the
+first time the app captures sound, at a school. No new host is reached, nothing new listens, the relay is unchanged (it
+already passes the tablet's socket text verbatim). Where each safeguard is held, and the test that holds it:
+
+- **Off by default, at the tablet.** Listening from the panel (Piano › System) is off until a person at the tablet turns it
+  on, behind the kiosk PIN while the kiosk locks the settings; turning it on asks Android for `RECORD_AUDIO` first, and
+  without the permission it stays off. Off, every start is refused ("Listening is off on the tablet.", 409 `listen-off`);
+  turning it off ends every hearing and the key test (`ListeningTest`, `KeyTestTest`).
+- **Only in the foreground.** The microphone starts only while the activity is started (Android forbids it from the
+  background) and stops when it stops (`Listening.foreground`, MainActivity); otherwise 409 `away` (`ListeningTest`).
+- **A banner while it hears**, on every screen and the resting screen, "Microphone on · listening from the web panel", with
+  Stop for anyone at the tablet, no PIN (`MicrophoneBanner`).
+- **Signed-in sessions only, and only the one that asked.** The four routes are `Access.WRITE` (a session, `X-Steven-Piano:
+  1`, the panel's own origin), no route on the guests' Wi-Fi listener, behind the relay's gate as every route is
+  (`WebServerTest`: the write loop, 36 routes, the guests' loop; `WebServerRelayTest`). The frames go over the panel's socket
+  (itself only for a session, from the panel's origin) to the sockets and relayed browsers whose session token is the one
+  that started the hearing, and no other (`WebSocketHub.sendToSession`; `WebSocketHubTest`, `ListeningTest`). One live
+  listener at a time (409 `busy`); any signed-in session may stop it.
+- **Nothing is recorded or kept.** A frame is µ-law encoded, sent and dropped; nothing is written to storage, the logs or the
+  diagnostics (which say only whether the switch is on). The key test holds about a second of sound in memory while it checks
+  each key, none after; its results (which keys sounded) stay in memory until the next test.
+- **It ends by itself**: live listening after five minutes, when its session ends (logout, a new PIN: checked each second),
+  or after 15 s without an open page of that session; the key test after its 84 keys (about 39 s). A slow socket never
+  holds up the microphone (a sender thread drops the oldest of 8 frames).
+- **The key test strikes the piano through the player's own path** (the router's re-strike guard and reference counts, the
+  firmware update's lock), refused while a piece plays, a quiet time holds, an update runs or the piano is not connected;
+  Stop sends the player's stop sequence at once; the tablet's own sound is silenced meanwhile (`KeyTestTest`).
+
+### Residuals (stated honestly)
+
+- **Whoever holds the panel's PIN can hear the room** where the tablet stands, for five minutes at a time and again after,
+  from anywhere the relay reaches, once someone at the tablet has turned the switch on. The banner says so on the tablet,
+  but a room with nobody looking at it would not know.
+- **Two tabs of one signed-in browser both receive the sound** (they share the session); each plays only what it asked for.
+- **The sound crosses the relay** as the panel's other socket messages do: TLS to the relay and to the browser, but the
+  relay (the owner's own Cloudflare account) sees it in the clear.

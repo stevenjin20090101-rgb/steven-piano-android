@@ -404,6 +404,7 @@
       }
       if (message.type === 'state') onState(message);
       else if (message.type === 'progress') onProgress(message);
+      else if (message.type === 'audio') onAudio(message);   // v1.23 — M55: the tablet's microphone, to this session alone
     });
     ws.addEventListener('close', () => {
       if (socket !== ws) return;
@@ -426,6 +427,16 @@
         retryMs = Math.min(retryMs * 2, 15000);
       }
     }
+  }
+
+  /**
+   * The tablet's microphone (v1.23 — M55): the socket carries its frames only to the sessions that asked to hear it; each
+   * goes to the listeners a module gave through host.audio (the System page's Listen and test card), and nowhere else.
+   */
+  const audioListeners = new Set();
+
+  function onAudio(message) {
+    for (const listener of audioListeners) guarded(() => listener(message));
   }
 
   function closeSocket() {
@@ -3023,6 +3034,11 @@
     confirm,
     /** system.js (v1.20 — M53: Settings' System page): a promise of the module, or of null while it is not there. */
     system: () => loadSystem(),
+    /** The microphone's frames (v1.23 — M55): [listener] hears each `audio` message; the function returned lets it go. */
+    audio: (listener) => {
+      audioListeners.add(listener);
+      return () => audioListeners.delete(listener);
+    },
   });
 
   const modules = {

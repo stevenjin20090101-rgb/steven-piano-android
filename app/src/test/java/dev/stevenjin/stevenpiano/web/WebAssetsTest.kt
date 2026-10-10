@@ -14,7 +14,10 @@ import androidx.compose.ui.graphics.toArgb
 import dev.stevenjin.stevenpiano.ui.theme.AttentionInk
 import dev.stevenjin.stevenpiano.ui.theme.AttentionPaper
 
+import dev.stevenjin.stevenpiano.audio.Mulaw
+import dev.stevenjin.stevenpiano.diag.Attention
 import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
 import dev.stevenjin.stevenpiano.ui.SettingNotes
@@ -397,6 +400,35 @@ class WebAssetsTest {
         assertTrue("loaded the first time a piece's menu asks for it", app.contains("import('./covers.js').then((m) => m.open(host, piece))"))
         assertFalse("never at the page's start", text("index.html").contains("covers.js"))
         assertTrue("offered for the library's pieces only", app.contains("piece.genre === 'classical' || piece.genre === 'modern' ? [['Find a cover…'"))
+    }
+
+    // ---- Listen and test (v1.23 — M55) -------------------------------------------------------------------------------
+
+    @Test
+    fun `the System page's Listen and test card asks through the host, says what the tablet says, and plays only what its panel asked for (v1_23 M55)`() {
+        val js = text("system.js")
+        for (route in listOf("/api/listen/start", "/api/listen/stop", "/api/keytest/start", "/api/keytest/stop")) {
+            assertTrue(route, js.contains("host.ROOT + '$route'"))
+        }
+        for (words in listOf(
+            ListenCopy.TITLE, ListenCopy.LINE, ListenCopy.TEST, ListenCopy.OFF_HOW, ListenCopy.STARTING, ListenCopy.CHECKING, ListenCopy.NOT_TESTED,
+            Attention.KEY_HELD,
+        )) {
+            assertTrue(words, js.contains(words))
+        }
+        assertTrue("the tablet's result line", js.contains("`All \${results.length} keys sounded`") && js.contains("keys didn't sound: \${names}`") && js.contains("`1 key didn't sound: \${names}`"))
+        assertTrue("the tablet's progress", js.contains("`Key \${done} of \${total}`"))
+        assertTrue("the tablet's note names", js.contains("['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']"))
+        assertTrue("a key held on, first of all", js.contains("items.push({ part: 'held', text: KEY_HELD, short: 'key held' })"))
+        // The socket's frames reach the modules that asked for them, and the card plays them only when this panel asked.
+        val app = text("app.js")
+        assertTrue(app.contains("else if (message.type === 'audio') onAudio(message);") && app.contains("audio: (listener) => {"))
+        assertTrue(js.contains("if (!hear.live && !hear.test) return;"))
+        assertTrue("sound starts from a tap", js.contains("window.AudioContext || window.webkitAudioContext"))
+        // µ-law decoded as the tablet's Mulaw.decode.
+        assertTrue(js.contains("const magnitude = (((mantissa << 3) + 0x84) << exponent) - 0x84;"))
+        assertEquals(32_124, Mulaw.decode(0x80.toByte()))
+        assertTrue("the mic's glyph in the sprite", text("index.html").contains("<symbol id=\"g-mic\""))
     }
 
     // ---- Quiet times (v1.20 — M54) ------------------------------------------------------------------------------------

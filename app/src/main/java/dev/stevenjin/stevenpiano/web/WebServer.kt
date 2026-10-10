@@ -546,6 +546,19 @@ class WebServer(
         Route(Method.POST, Regex("/api/quiet/override"), Access.WRITE, "/api/quiet/override") {
             if (backend.overrideQuiet()) noContent() else refuse(409, "not-quiet", "It isn't a quiet time now.")
         },
+
+        // Listening and the key test (v1.23 — M55): the tablet's microphone, live, to the session that asks alone; and every key
+        // struck in turn and heard. The bodies are not read; a refusal is 409 {error, message} in the tablet's words.
+        Route(Method.POST, Regex("/api/listen/start"), Access.WRITE, "/api/listen/start") { call -> heard(call) { backend.listenStart(it) } },
+        Route(Method.POST, Regex("/api/listen/stop"), Access.WRITE, "/api/listen/stop") {
+            backend.listenStop()
+            noContent()
+        },
+        Route(Method.POST, Regex("/api/keytest/start"), Access.WRITE, "/api/keytest/start") { call -> heard(call) { backend.keyTestStart(it) } },
+        Route(Method.POST, Regex("/api/keytest/stop"), Access.WRITE, "/api/keytest/stop") {
+            backend.keyTestStop()
+            noContent()
+        },
     )
 
     /**
@@ -1169,6 +1182,20 @@ class WebServer(
 
     /** 410 `gone`: the schedules' timed plays, removed in 1.20. */
     private fun gone(): Response = refuse(410, "gone", "Timed plays were removed in 1.20.")
+
+    // ---- Listening and the key test (v1.23 — M55) ----------------------------------------------------------------------
+
+    /**
+     * A start asked by [call]'s session (its token, which the microphone's frames are sent to and nothing else): 204 when
+     * it began, 409 `{error, message}` with the tablet's reason when refused.
+     */
+    private suspend fun heard(call: Call, start: suspend (String) -> dev.stevenjin.stevenpiano.audio.ListenAnswer): Response {
+        val token = call.token ?: return refuse(401, "session", "Enter the PIN first.")
+        return when (val answer = start(token)) {
+            dev.stevenjin.stevenpiano.audio.ListenAnswer.Started -> noContent()
+            is dev.stevenjin.stevenpiano.audio.ListenAnswer.Refused -> refuse(409, answer.code, answer.message)
+        }
+    }
 }
 
 /**
