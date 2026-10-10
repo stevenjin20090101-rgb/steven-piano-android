@@ -692,6 +692,13 @@ enum class SystemTool(val key: String) {
 
     /** Drop the piano's link and connect again (never while a firmware update runs). */
     RECONNECT("reconnect"),
+
+    /**
+     * Install the app's update from a distance (v1.23): check, download, verify and install the release on offer, then
+     * start again on it. Without a tap where Android allows one (the device owner; Android 12 and later when this app
+     * installed the version it replaces); otherwise Android asks on the tablet's screen. Never while a firmware update runs.
+     */
+    UPDATE("update"),
     ;
 
     companion object {

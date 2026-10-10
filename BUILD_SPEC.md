@@ -8787,3 +8787,14 @@ and `DiagnosticsExporterTest` (the new keys and line). 1,649 → 1,667 unit test
 `lintDebug` 0 errors, the same 30 warnings, none in this run's code. The panel's card was run in a browser against a
 stand-in host (Listen's sound scheduled and stopped, the test's progress, the map with three keys not heard, listening off,
 dark, light, a phone's width); the tablet's card and banner were not seen on a device.
+
+## The release: 1.23 (versionCode 33)
+
+M55 (`e36ab2d`, merged as `37e386b`) and the remote update tool: `SystemTool.UPDATE` (`POST /api/system/tool {name:
+"update"}`, 409 busy during a firmware update) runs `AppGraph.updateFromAfar()`: a check now, then the Update button's
+own path (`UpdateService` for a release on offer, `Updater.install` for one already verified), and once Android reports
+it installed, `restartForUpdate` starts the app again on it (a 20-minute wait at most). It installs without a tap only
+where Android allows (the device owner, or Android 12 and later when this app installed the version it replaces); else
+Android asks on the tablet. The panel's Tools card gains Install the update, after a confirmation. 1,672 tests green,
+lint 0 errors. Seen once on the demo emulator: the panel's System page with Listen and test, and Listen refused with
+"Listening is off on the tablet." Not seen: the microphone on real hardware, the key test with a piano, a remote update.

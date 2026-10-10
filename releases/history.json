@@ -273,5 +273,14 @@
     "minSdk": 26,
     "tag": "v1.22",
     "publishedAt": "2026-10-10"
+  },
+  {
+    "versionCode": 33,
+    "versionName": "1.23",
+    "notes": "Listen and test every key, from the web panel: Test every key strikes the piano's 84 keys in turn while the tablet's microphone plays live in your browser, then marks any key that didn't sound; Listen plays the room live for up to 5 minutes. Listening is off until someone switches on Listening from the panel on the tablet (Piano › System); a banner shows on the tablet while the microphone is on, and nothing is recorded. System says 'A key is held on' when the piano reports a key energized with nothing playing. New tool: Install the update, so later updates can be installed from the panel without anyone at the tablet, where Android allows it.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.23/steven-piano-1.23.apk",
+    "minSdk": 26,
+    "tag": "v1.23",
+    "draft": true
   }
 ]

@@ -844,6 +844,7 @@ class AppWebBackend(
             SystemToolResult.DONE
         }
         SystemTool.RECONNECT -> if (onMain { graph.reconnectPiano() }) SystemToolResult.DONE else SystemToolResult.BUSY
+        SystemTool.UPDATE -> if (onMain { graph.updateFromAfar() }) SystemToolResult.DONE else SystemToolResult.BUSY
     }
 
     override suspend fun diagnostics(): ByteArray? = withContext(Dispatchers.IO) {

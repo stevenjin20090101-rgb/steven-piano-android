@@ -1073,11 +1073,11 @@ class WebServer(
 
     // ---- The System page (v1.18 — M46) ---------------------------------------------------------
 
-    /** `POST /api/system/tool` `{name}`: `covers` or `reconnect` (409 busy while a firmware update runs); any other name 400. */
+    /** `POST /api/system/tool` `{name}`: `covers`, `reconnect` or `update` (409 busy while a firmware update runs); any other name 400. */
     private suspend fun systemTool(call: Call): Response {
         val body = call.body()
         WebApi.onlyKeys(body, setOf("name"))
-        val tool = SystemTool.of(WebApi.string(body, "name", 16)) ?: throw ApiError(400, "field", "The tool must be covers or reconnect.")
+        val tool = SystemTool.of(WebApi.string(body, "name", 16)) ?: throw ApiError(400, "field", "The tool must be covers, reconnect or update.")
         return when (backend.systemTool(tool)) {
             SystemToolResult.DONE -> noContent()
             SystemToolResult.BUSY -> refuse(409, "busy", "The piano is being updated. Try again once it has finished.")

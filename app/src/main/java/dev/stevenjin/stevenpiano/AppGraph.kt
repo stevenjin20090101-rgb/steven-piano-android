@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano
 
+import kotlinx.coroutines.withTimeoutOrNull
+import dev.stevenjin.stevenpiano.update.UpdateState
 import android.Manifest
 import android.app.Application
 import android.content.Context
@@ -837,6 +839,40 @@ class AppGraph(private val app: Application) {
     }
 
     /** Restart after a silent update: the piano is silenced first, then the new code starts. */
+    /**
+     * The app's update installed from a distance (v1.23, the panel's Install the update): checked now, then downloaded,
+     * verified and handed to Android as the Update button does; once installed it starts again on the new version by
+     * itself, the piano silenced first. False (nothing done) while a firmware update runs.
+     */
+    fun updateFromAfar(): Boolean {
+        if (firmwareUpdater.state.value.busy) return false
+        appScope.launch {
+            updateChecker.checkNow()
+            when (val state = updater.state.value) {
+                is UpdateState.ReadyToInstall -> {
+                    restartOnceInstalled()
+                    updater.install(state.manifest, state.file, app)
+                }
+                is UpdateState.Available, is UpdateState.Failed -> if (state.manifest != null) {
+                    restartOnceInstalled()
+                    dev.stevenjin.stevenpiano.service.UpdateService.start(app)
+                }
+                else -> Unit
+            }
+        }
+        return true
+    }
+
+    /** After an update started from a distance: when Android reports it installed, the app starts again on it. */
+    private fun restartOnceInstalled() {
+        appScope.launch {
+            val ended = withTimeoutOrNull(REMOTE_UPDATE_WAIT_MS) {
+                updater.state.first { it is UpdateState.Installed || (it is UpdateState.Failed) }
+            }
+            if (ended is UpdateState.Installed && ended.restartNeeded) restartForUpdate(app)
+        }
+    }
+
     fun restartForUpdate(from: Context) = updateInstaller.restart(from) {
         player.silenceLive()
         player.stopAndFlush(INSTALL_FLUSH_MS)
@@ -1362,6 +1398,9 @@ class AppGraph(private val app: Application) {
 
         /** Whether a person switched Full power off (v1.22): its own small preference file, read when the piano connects. */
         const val FULL_POWER_CHOICE = "full_power"
+
+        /** How long an update started from a distance may take to download and install before the wait for it ends. */
+        const val REMOTE_UPDATE_WAIT_MS = 20 * 60_000L
         const val FULL_POWER_CHOSEN_OFF = "chosenOff"
 
         /** The piano's Full power, which the firmware turns off when the volume goes below 100. */

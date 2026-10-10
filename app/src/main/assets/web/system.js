@@ -340,12 +340,13 @@ export function create(host, body, tools) {
   const covers = tool('g-image', 'Find missing covers', findCovers);
   const reconnectButton = tool('g-link', 'Reconnect the piano', reconnect);
   const keysOff = tool('g-off', 'All keys off', allKeysOff);
+  const updateApp = tool('g-download', 'Install the update', installUpdate);
   const download = h('a', { class: 'outlined', href: host.ROOT + '/api/system/diagnostics', download: 'steven-piano-diagnostics.zip' },
     glyph('g-download'), h('span', { text: 'Download diagnostics' }));
   download.addEventListener('click', () => host.toast('Gathering the diagnostics…'));
   const toolsCard = h('section', { class: 'card', 'aria-label': 'Tools' },
     h('div', { class: 'card-head' }, h('h2', { text: 'Tools' })),
-    h('div', { class: 'tools' }, readStatus, covers, reconnectButton, keysOff, download),
+    h('div', { class: 'tools' }, readStatus, covers, reconnectButton, keysOff, updateApp, download),
     report);
 
   // ---- Listen and test (v1.23 — M55): the tablet's microphone live in this browser, and every key struck and heard -----
@@ -907,6 +908,19 @@ export function create(host, body, tools) {
       host.toast('Looking again for the missing covers.');
       soon();
     });
+  }
+
+  /** The app's update from a distance (v1.23): the tablet checks, installs and starts again by itself. */
+  function installUpdate(button) {
+    const run = () => busy(button, async () => {
+      await host.post(host.ROOT + '/api/system/tool', { name: 'update' });
+      host.toast('The tablet is looking for the update. If there is one it installs it and starts again; this page reconnects by itself.');
+      soon();
+    });
+    const title = 'Install the update?';
+    const message = 'The tablet downloads the latest Steven Piano, installs it and starts again: the music stops for a minute. Running now shows how it goes.';
+    if (typeof host.confirm === 'function') host.confirm({ title, message, action: 'Install', run });
+    else if (window.confirm(`${title} ${message}`)) run();
   }
 
   function reconnect(button) {
