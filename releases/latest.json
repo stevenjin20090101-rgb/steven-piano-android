@@ -1,9 +1,9 @@
 {
-  "versionCode": 31,
-  "versionName": "1.21",
-  "notes": "Quiet times on the web panel now show as a week calendar: days across, hours down, each block with its times (and its section's name when it is long enough), today marked with a line at the time now; tap a block to edit its section. The menu's head just says Connected when all is well.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.21/steven-piano-1.21.apk",
-  "sha256": "e8ceeb2e129de10e47713141139e79d8a79e703c6cc97503ac0f72342c216654",
-  "sizeBytes": 14171296,
+  "versionCode": 32,
+  "versionName": "1.22",
+  "notes": "Fire safety: Full power now stays on until someone switches it off. The app turns it back on whenever the piano reports it off without that choice, so a preset (Soft, Cinematic, Expressive), a lower piano volume or a channel's volume no longer switch the piano to PWM drive, which can break the link to its power boards and leave a key on. Switching Full power off asks first, and stays off until someone switches it on again. Channel volume no longer lowers the piano while Full power is on.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.22/steven-piano-1.22.apk",
+  "sha256": "de4ffb7e4f18944edacdc482ec0c48e89de75b12420a5ac7d837a57f4a8443fc",
+  "sizeBytes": 14173268,
   "minSdk": 26
 }
