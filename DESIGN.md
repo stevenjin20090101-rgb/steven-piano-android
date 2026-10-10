@@ -3104,3 +3104,17 @@ Designed from an inline mock; approved the same day.
   9:30. Use Play anyway."
 - **The guests' page**: while a quiet time holds the piano, under its head, "The piano is resting until 9:30. Your request
   will wait until then." A request still goes in.
+
+# v1.22 — Full power stays on until switched off
+
+Steven, 2026-10-10: "default to Full power always on, as PWM mode sometimes makes the I²C communication break", which can
+leave a key on (a fire risk); then "on until selected off". Found: Soft, Cinematic and Expressive turn Full power off on the
+piano, and a channel's volume under 100 % lowered the piano's own volume, which the firmware answers by turning Full
+power off, so every channel at 70 % played in PWM mode. Now (`piano/PianoSettingsRepository.kt`): Full power is kept on
+unless a person switched it off (`fullPowerChosenOff`, a small preference file `full_power`, written by the Full power
+switch alone); whenever the piano reports it off without that choice (a new connection, a preset, another device) the
+app sends `fullpower 1` and saves; a volume under 100 % is never sent while it is on (the Piano volume slider and a
+channel's volume hold); a preset keeps it on (`volume 100`, `fullpower 1`, `save` after the preset). Switching it off
+asks first, on the tablet (`GlassAlertDialog`) and on the panel (`host.confirm`). Tests: five in
+`PianoSettingsRepositoryTest` (found off → on and saved; a person's off kept; switching off recorded; no volume under
+100 while on; a preset keeps it on); the older volume tests run with Full power switched off by a person.

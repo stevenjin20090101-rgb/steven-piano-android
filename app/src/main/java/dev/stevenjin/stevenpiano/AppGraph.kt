@@ -477,7 +477,13 @@ class AppGraph(private val app: Application) {
 
     /** The piano's own settings over its console, read on every connection; nothing asked of it while its firmware updates (v1.18 — M46). */
     val pianoSettings: PianoSettingsRepository by lazy {
-        PianoSettingsRepository(stevenLink, appScope, updating = { firmwareUpdater.state.value.busy })
+        PianoSettingsRepository(
+            stevenLink,
+            appScope,
+            updating = { firmwareUpdater.state.value.busy },
+            fullPowerChosenOff = { fullPowerChoice.getBoolean(FULL_POWER_CHOSEN_OFF, false) },
+            chooseFullPower = { on -> fullPowerChoice.edit().putBoolean(FULL_POWER_CHOSEN_OFF, !on).apply() },
+        )
     }
 
     /** The channels, in their order on screen (Calm, Epic, Baroque…), read from the app's assets the first time, off the main thread. */
@@ -496,6 +502,9 @@ class AppGraph(private val app: Application) {
             scope = appScope,
         )
     }
+
+    /** A person's Full power choice (v1.22), kept apart from the settings: on until switched off. */
+    private val fullPowerChoice by lazy { app.getSharedPreferences(FULL_POWER_CHOICE, android.content.Context.MODE_PRIVATE) }
 
     /**
      * The piano's volume for a channel: held while it plays and put back after, with Full power
@@ -1250,6 +1259,10 @@ class AppGraph(private val app: Application) {
 
         /** The piano's own volume setting, which a channel holds while it plays. */
         const val PIANO_VOLUME = "volume"
+
+        /** Whether a person switched Full power off (v1.22): its own small preference file, read when the piano connects. */
+        const val FULL_POWER_CHOICE = "full_power"
+        const val FULL_POWER_CHOSEN_OFF = "chosenOff"
 
         /** The piano's Full power, which the firmware turns off when the volume goes below 100. */
         const val PIANO_FULL_POWER = "fullpower"

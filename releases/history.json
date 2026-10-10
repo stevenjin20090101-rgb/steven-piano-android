@@ -262,5 +262,14 @@
     "minSdk": 26,
     "tag": "v1.21",
     "publishedAt": "2026-10-08"
+  },
+  {
+    "versionCode": 32,
+    "versionName": "1.22",
+    "notes": "Fire safety: Full power now stays on until someone switches it off. The app turns it back on whenever the piano reports it off without that choice, so a preset (Soft, Cinematic, Expressive), a lower piano volume or a channel's volume no longer switch the piano to PWM drive, which can break the link to its power boards and leave a key on. Switching Full power off asks first, and stays off until someone switches it on again. Channel volume no longer lowers the piano while Full power is on.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.22/steven-piano-1.22.apk",
+    "minSdk": 26,
+    "tag": "v1.22",
+    "draft": true
   }
 ]

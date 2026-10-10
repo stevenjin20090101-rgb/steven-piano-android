@@ -26,8 +26,14 @@ object PlaybackCopy {
     val EXPRESSIONS = listOf("Off", "Light", "Full")
 
     const val FULL_POWER_ON =
-        "Full power is on: every note strikes at full strength. Turn it off on Sound and touch to hear dynamics and expression."
-    const val FULL_POWER_OFF = "Dynamics are heard with Full power off."
+        "Full power is on: every note strikes at full strength, and the piano's power boards stay steady. It stays on until someone switches it off."
+    const val FULL_POWER_OFF = "Dynamics are heard with Full power off, but it can unsettle the piano's power boards."
+
+    /** Asked before Full power goes off (v1.22): PWM drive can break the I²C link to the power boards and leave a key on. */
+    const val FULL_POWER_OFF_TITLE = "Turn Full power off?"
+    const val FULL_POWER_OFF_WARNING =
+        "Without Full power the piano drives its keys with PWM, which can break the link to its power boards and leave a key on. It stays off until someone switches it on again."
+    const val FULL_POWER_OFF_ACTION = "Turn off"
 
     /** The line under Velocity: what the connected piano's Full power means for dynamics, as it reports it. */
     fun fullPower(piano: PianoState): String {

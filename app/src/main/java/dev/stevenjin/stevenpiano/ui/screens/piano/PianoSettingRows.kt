@@ -21,6 +21,8 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import dev.stevenjin.stevenpiano.ui.PlaybackCopy
+import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -235,14 +237,29 @@ private fun SettingRow(setting: PianoSetting, ready: PianoState.Ready?, actions:
     val change: (String) -> Unit = { actions.setPianoValue(setting.name, it) }
     val spoken = setting.spoken(wire)
     when (val kind = setting.kind) {
-        SettingKind.Switch -> SwitchRow(
-            setting.label,
-            checked = wire != null && wire.trim() != "0",
-            onChange = { change(PianoSettings.wire(it)) },
-            enabled = enabled,
-            note = setting.note,
-            stateDescription = spoken,
-        )
+        SettingKind.Switch -> {
+            // Full power goes off only after a warning (v1.22, fire safety); everything else at once.
+            var askOff by remember { mutableStateOf(false) }
+            SwitchRow(
+                setting.label,
+                checked = wire != null && wire.trim() != "0",
+                onChange = { on -> if (!on && setting.name == FULL_POWER_SETTING) askOff = true else change(PianoSettings.wire(on)) },
+                enabled = enabled,
+                note = setting.note,
+                stateDescription = spoken,
+            )
+            if (askOff) {
+                GlassAlertDialog(
+                    onDismissRequest = { askOff = false },
+                    title = { Text(PlaybackCopy.FULL_POWER_OFF_TITLE) },
+                    text = { Text(PlaybackCopy.FULL_POWER_OFF_WARNING) },
+                    confirmButton = {
+                        TextButton(onClick = { askOff = false; change(PianoSettings.wire(false)) }) { Text(PlaybackCopy.FULL_POWER_OFF_ACTION) }
+                    },
+                    dismissButton = { TextButton(onClick = { askOff = false }) { Text("Keep on") } },
+                )
+            }
+        }
         is SettingKind.Stepper -> {
             val value = wire?.toIntOrNull()
             StepperRow(setting.label, unit = setting.unit, enabled = enabled, description = "${setting.label}, $spoken", note = setting.note) {
@@ -484,3 +501,6 @@ private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
 }
 
 private const val BOARDS = 7
+
+/** The piano's Full power switch, which asks before it goes off (v1.22). */
+private const val FULL_POWER_SETTING = "fullpower"

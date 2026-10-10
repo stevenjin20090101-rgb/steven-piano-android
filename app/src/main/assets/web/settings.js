@@ -30,8 +30,11 @@ const NOTES = {
   webApproveFirst: 'A request waits for you before it plays',
 };
 const FULL_POWER_ON =
-  'Full power is on: every note strikes at full strength. Turn it off on Sound and touch to hear dynamics and expression.';
-const FULL_POWER_OFF = 'Dynamics are heard with Full power off.';
+  "Full power is on: every note strikes at full strength, and the piano's power boards stay steady. It stays on until someone switches it off.";
+const FULL_POWER_OFF_TITLE = 'Turn Full power off?';
+const FULL_POWER_OFF_WARNING =
+  'Without Full power the piano drives its keys with PWM, which can break the link to its power boards and leave a key on. It stays off until someone switches it on again.';
+const FULL_POWER_OFF = "Dynamics are heard with Full power off, but it can unsettle the piano's power boards.";
 
 /** Dynamic range's and Expression's choices on the wire and as the tablet's chips name them. */
 const RANGES = [['narrow', 'Narrow'], ['natural', 'Natural'], ['wide', 'Wide']];
@@ -484,7 +487,18 @@ export function create(host, body, tools) {
         if (typeof v === 'boolean') return v;
         return v === undefined ? null : v.trim() !== '0';
       };
-      return row(label, lines, switchControl(label, read, (on) => sendPiano(name, on), enabled), enabled);
+      // Full power goes off only after a warning (v1.22, fire safety); a cancel puts the switch back.
+      let control = null;
+      const write = (on) => {
+        if (on || name !== 'fullpower') {
+          sendPiano(name, on);
+          return;
+        }
+        host.confirm({ title: FULL_POWER_OFF_TITLE, message: FULL_POWER_OFF_WARNING, action: 'Turn off', run: () => sendPiano(name, false) });
+        setTimeout(() => control && control.update(), 0);
+      };
+      control = switchControl(label, read, write, enabled);
+      return row(label, lines, control, enabled);
     }
     if (kind.type === 'choice') {
       const options = Array.isArray(kind.options) ? kind.options.map(String) : [];

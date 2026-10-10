@@ -65,6 +65,15 @@ class PianoSettingsRepository(
     private val updating: () -> Boolean = { false },
     /** The wall clock, for [factsAt]. */
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Whether a person switched Full power off (v1.22, fire safety): until one does, Full power stays on. PWM drive can
+     * break the I²C link to the power boards and leave a key on, so the app turns Full power back on whenever the piano
+     * reports it off without that choice (a preset, a lower volume, another device), refuses a volume under 100 % while
+     * it is on, and keeps it on through a preset.
+     */
+    private val fullPowerChosenOff: () -> Boolean = { false },
+    /** Records a person's Full power switch: on true, off false. */
+    private val chooseFullPower: (Boolean) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<PianoState>(PianoState.Unknown)
     val state: StateFlow<PianoState> = _state.asStateFlow()
@@ -243,6 +252,12 @@ class PianoSettingsRepository(
                 log("Not sent: $name $value")
                 return
             }
+            if (name == FULL_POWER && !temporary) chooseFullPower(value.trim() != "0")
+            if (name == VOLUME && keepsFullPower() && (value.toFloatOrNull() ?: FULL_VOLUME) < FULL_VOLUME) {
+                log("Not sent: $name $value (Full power stays on until it is switched off)")
+                publish()
+                return
+            }
             if (temporary) {
                 held += name
                 temporaryWrites += name
@@ -264,9 +279,41 @@ class PianoSettingsRepository(
 
         fun preset(command: String) {
             if (!ready || PianoSettings.presets.none { it.command == command }) return
+            val keep = keepsFullPower()
             flushPending()   // a change waiting out its 150 ms came first, so it goes first
             send(command)
+            if (keep) {
+                // Soft, Cinematic and Expressive turn Full power off on the piano: it stays on (v1.22), and is saved so.
+                send("$VOLUME ${FULL_VOLUME.toInt()}")
+                send("$FULL_POWER 1")
+                send(PianoAction.Save.command)
+            }
             readAll()
+        }
+
+        /** Whether Full power is on and must stay on: on now, and no person has switched it off. */
+        private fun keepsFullPower(): Boolean = values[FULL_POWER]?.trim() != "0" && !fullPowerChosenOff()
+
+        /** Set while the app turns Full power back on, so it asks once until the piano answers. */
+        private var restoring = false
+
+        /**
+         * Full power off without a person's choice (a preset, a lower volume, another device, a new connection to a piano
+         * where it was off): turned back on and saved (v1.22, the default Steven chose: on until switched off).
+         */
+        private fun restoreFullPower() {
+            if (!ready || dump != null) return
+            if (values[FULL_POWER]?.trim() != "0") {
+                restoring = false
+                return
+            }
+            if (restoring || fullPowerChosenOff()) return
+            restoring = true
+            log("Full power was off without being switched off: turned back on")
+            latest[FULL_POWER] = "1"
+            debounce.remove(FULL_POWER)?.cancel()
+            write(FULL_POWER)
+            save()
         }
 
         fun action(action: PianoAction, key: Int) {
@@ -454,6 +501,7 @@ class PianoSettingsRepository(
 
         private fun publish() {
             _state.value = PianoState.Ready(values.toMap(), facts.toMap(), lastError, errorAbout)
+            restoreFullPower()
         }
     }
 
@@ -468,6 +516,11 @@ class PianoSettingsRepository(
 
     private companion object {
         const val TAG = "PianoSettings"
+
+        /** Full power, and the volume that turns it off on the piano below 100 % (v1.22). */
+        const val FULL_POWER = "fullpower"
+        const val VOLUME = "volume"
+        const val FULL_VOLUME = 100f
         const val DEBOUNCE_MS = 150L
         const val READ_TIMEOUT_MS = 2_000L
         const val STATUS_SILENCE_MS = 300L

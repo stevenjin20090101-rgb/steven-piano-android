@@ -31,9 +31,13 @@ class PianoSettingsRepositoryTest {
     private val piano = EmulatedConsole()
     private val console = FakeConsole(piano::handle)
 
+    /** A person's Full power choice (v1.22): off when true. */
+    private var chosenOff = false
+    private val choices = mutableListOf<Boolean>()
+
     private fun TestScope.connected(with: FakeConsole? = console): PianoSettingsRepository {
         link.connectedWith(with)
-        return PianoSettingsRepository(link, backgroundScope, log = {}).also {
+        return PianoSettingsRepository(link, backgroundScope, log = {}, fullPowerChosenOff = { chosenOff }, chooseFullPower = { choices += it; chosenOff = !it }).also {
             it.start()
             runCurrent()
         }
@@ -181,6 +185,7 @@ class PianoSettingsRepositoryTest {
 
     @Test
     fun `volume is read back with full power, which the piano turns off below 100`() = runTest {
+        chosenOff = true   // Full power switched off by a person (v1.22): the piano's volume may move
         val repo = connected()
         console.clearSent()
         repo.set("volume", 80)
@@ -211,7 +216,7 @@ class PianoSettingsRepositoryTest {
         assertEquals("ledbright out of range (0..255)", refused.lastError)
         assertEquals("ledbright", refused.errorAbout)
         assertEquals("the piano kept its value", "160", refused.values["ledbright"])
-        repo.set("volume", 80)
+        repo.set("ledbright", 120)
         settle()
         assertNull(repo.ready().lastError)
         assertNull(repo.ready().errorAbout)
@@ -244,6 +249,7 @@ class PianoSettingsRepositoryTest {
 
     @Test
     fun `a preset is sent, then everything is read again`() = runTest {
+        chosenOff = true   // Full power switched off by a person (v1.22): the piano's volume may move
         val repo = connected()
         console.clearSent()
         repo.set("gap", 100)
@@ -401,6 +407,7 @@ class PianoSettingsRepositoryTest {
 
     @Test
     fun `a held value is sent and read back, but never saved`() = runTest {
+        chosenOff = true   // Full power switched off by a person (v1.22): the piano's volume may move
         val repo = connected()
         console.clearSent()
         repo.holdTemporarily("volume", 60)
@@ -413,6 +420,7 @@ class PianoSettingsRepositoryTest {
 
     @Test
     fun `a save due while a value is held waits for its release, and the old value goes back first`() = runTest {
+        chosenOff = true   // Full power switched off by a person (v1.22): the piano's volume may move
         val repo = connected()
         repo.set("ledbright", 40)
         settle()
@@ -427,6 +435,7 @@ class PianoSettingsRepositoryTest {
 
     @Test
     fun `a volume the person chooses while one is held stands, and is saved`() = runTest {
+        chosenOff = true   // Full power switched off by a person (v1.22): the piano's volume may move
         val repo = connected()
         repo.holdTemporarily("volume", 60)
         settle()
@@ -442,6 +451,7 @@ class PianoSettingsRepositoryTest {
 
     @Test
     fun `after the link dropped and came back, a release still puts the volume back, unsaved`() = runTest {
+        chosenOff = true   // Full power switched off by a person (v1.22): the piano's volume may move
         val repo = connected()
         repo.holdTemporarily("volume", 60)
         settle()
@@ -459,5 +469,57 @@ class PianoSettingsRepositoryTest {
 
     private companion object {
         const val DEBOUNCE_AND_A_BIT = 151L
+    }
+
+    // ---- Full power stays on until a person switches it off (v1.22, fire safety) -----------------------------------
+
+    @Test
+    fun `a piano found with Full power off has it turned back on and saved`() = runTest {
+        piano.handle("fullpower 0")
+        val repo = connected()
+        settle()
+        assertTrue(console.sent.containsAll(listOf("fullpower 1", "save")))
+        assertEquals("1", repo.ready().values["fullpower"])
+    }
+
+    @Test
+    fun `a person's choice of off is kept`() = runTest {
+        piano.handle("fullpower 0")
+        chosenOff = true
+        val repo = connected()
+        settle()
+        assertFalse("fullpower 1" in console.sent)
+        assertEquals("0", repo.ready().values["fullpower"])
+    }
+
+    @Test
+    fun `switching it off is recorded as the person's choice, and stays off`() = runTest {
+        val repo = connected()
+        repo.set("fullpower", false)
+        settle()
+        assertEquals(listOf(false), choices)
+        assertTrue("fullpower 0" in console.sent)
+        assertFalse("fullpower 1" in console.sent)
+        assertEquals("0", repo.ready().values["fullpower"])
+    }
+
+    @Test
+    fun `a volume under 100 is not sent while Full power is on`() = runTest {
+        val repo = connected()
+        repo.set("volume", 55)
+        repo.holdTemporarily("volume", 70)
+        settle()
+        assertFalse(console.sent.any { it.startsWith("volume ") })
+        assertEquals("1", repo.ready().values["fullpower"])
+    }
+
+    @Test
+    fun `a preset that turns Full power off keeps it on, and saved`() = runTest {
+        val repo = connected()
+        repo.preset("soft")
+        settle()
+        val after = console.sent.dropWhile { it != "soft" }
+        assertEquals(listOf("soft", "volume 100", "fullpower 1", "save"), after.take(4))
+        assertEquals("1", repo.ready().values["fullpower"])
     }
 }
