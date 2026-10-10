@@ -22,6 +22,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.audio.KeyTestState
+import dev.stevenjin.stevenpiano.audio.ListenAnswer
+import dev.stevenjin.stevenpiano.audio.ListenState
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.audio.TabletSoundState
 import dev.stevenjin.stevenpiano.ble.LinkState
@@ -372,7 +375,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
                     val at = System.currentTimeMillis()
                     val reading = graph.systemProbe.read()
                     val inputs = graph.runningInputs(at)
-                    SystemNow(reading, RunningNow.of(inputs), at, loading = inputs.player.loading)
+                    SystemNow(reading, RunningNow.of(inputs), at, loading = inputs.player.loading, keyHeld = graph.keyHeld())
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -403,6 +406,35 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** Reconnect the piano: the player paused and the piano silenced, then the link made again; false during a firmware update. */
     fun reconnectPiano(): Boolean = graph.reconnectPiano()
+
+    // ---- Listen and test (v1.23 — M55) -----------------------------------------------------------------------------
+
+    /** The tablet's microphone: on, until when, allowed (the switch and Android's permission). */
+    val listen: StateFlow<ListenState> = graph.listening.state
+
+    /** The key test: running, the key struck, the results of the last. */
+    val keyTest: StateFlow<KeyTestState> = graph.keyTest.state
+
+    /** Whether Android allows the microphone now. */
+    fun microphoneAllowed(): Boolean = graph.microphoneAllowed()
+
+    /** Listening from the panel on or off; on only after Android allowed the microphone (the page asks first). */
+    fun setListenFromPanel(on: Boolean) = edit { setListenFromPanel(on) }
+
+    /**
+     * Android allowed the microphone: Listening from the panel on, and the microphone's state says so at once (the switch was
+     * perhaps on already, its permission taken away since: no setting changes then).
+     */
+    fun microphoneGranted() {
+        setListenFromPanel(true)
+        graph.listening.refresh()
+    }
+
+    /** Test every key from the tablet (no sound here): null when it began, else why not, in words. */
+    fun testEveryKey(): String? = (graph.keyTest.start(null) as? ListenAnswer.Refused)?.message
+
+    /** The key test's Stop: it ends at once with the player's stop sequence. */
+    fun stopKeyTest() = graph.keyTest.stop()
 
     /** Check now: asks the server whatever the switch says, in the app's scope so leaving the tab does not stop it. */
     fun checkNow() {

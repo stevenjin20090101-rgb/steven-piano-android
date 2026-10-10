@@ -217,6 +217,8 @@ class AppWebBackend(
                 handColours = settings.handColours,
             ),
             quiet = graph.quiet.now(),
+            listen = graph.listening.state.value,   // v1.23 — M55
+            keytest = graph.keyTest.state.value,
         )
     }
 
@@ -807,6 +809,7 @@ class AppWebBackend(
                 state = pianoOf(piano).state,
                 facts = (piano as? PianoState.Ready)?.facts,
                 factsAt = graph.pianoSettings.factsAt.value,
+                keyHeld = graph.keyHeld(),   // v1.23 — M55
             ),
             running = dev.stevenjin.stevenpiano.diag.RunningNow.of(inputs),
             web = WebSystemWeb(
@@ -889,6 +892,16 @@ class AppWebBackend(
     }
 
     override suspend fun overrideQuiet(): Boolean = graph.quiet.override()
+
+    // ---- Listening and the key test (v1.23 — M55) --------------------------------------------------------------------------
+
+    override suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.listening.startLive(token) }
+
+    override suspend fun listenStop() = onMain { graph.listening.stopLive() }
+
+    override suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.keyTest.start(token) }
+
+    override suspend fun keyTestStop() = onMain { graph.keyTest.stop() }
 }
 
 /** The piano's Full power setting, by its firmware name (v1.18 — M47b: the Settings page's line under Velocity). */

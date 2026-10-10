@@ -22,8 +22,8 @@ import kotlin.math.roundToInt
  * row says the first. Pure, so it is tested on the JVM.
  */
 object Attention {
-    /** What an item colours on the page: a dial, a meter, the boards, a running row. */
-    enum class Part { Battery, Heat, Memory, Storage, Boards, Chip, Heap, Relay, Running }
+    /** What an item colours on the page: a dial, a meter, the boards, a running row; (v1.23 — M55) the keys held now. */
+    enum class Part { Battery, Heat, Memory, Storage, Boards, Chip, Heap, Relay, Running, Held }
 
     /** One thing that needs attention: the [part] it colours, the sentence that says it ([text]), the running row's [key]. */
     data class Item(val part: Part, val text: String, val key: String? = null)
@@ -31,7 +31,8 @@ object Attention {
     /**
      * Everything the rule reads: the tablet's [reading] (null before the first), what [running] lists, the piano's facts
      * ([piano]: null unless Steven Piano is connected and has answered, [PianoDiag.of]), whether the web panel is on the
-     * internet ([cloudOn]: remote access on and the tablet enrolled, the panel's `web.cloud`) and how its link stands ([cloud]).
+     * internet ([cloudOn]: remote access on and the tablet enrolled, the panel's `web.cloud`) and how its link stands ([cloud]);
+     * and (v1.23 — M55) whether the piano holds a key on ([keyHeld], [HeldKey]).
      */
     data class Inputs(
         val reading: SystemReading? = null,
@@ -39,7 +40,11 @@ object Attention {
         val piano: PianoDiag? = null,
         val cloudOn: Boolean = false,
         val cloud: CloudStatus = CloudStatus.Off,
+        val keyHeld: Boolean = false,
     )
+
+    /** A key held on (v1.23 — M55): first of all, since a key held down can overheat. */
+    const val KEY_HELD = "A key is held on"
 
     /** Where attention starts (system.js's constants). */
     const val BATTERY_LOW_PCT = 20
@@ -65,9 +70,13 @@ object Attention {
     /** The covers' running row, which needs attention while it waits out Apple's stop. */
     private const val COVERS = "covers"
 
-    /** Everything that needs attention now, in the panel's order: the tablet, the piano, the internet link, what runs. */
+    /**
+     * Everything that needs attention now, in the panel's order: a key held on (v1.23 — M55), the tablet, the piano, the
+     * internet link, what runs.
+     */
     fun of(inputs: Inputs): List<Item> {
         val items = mutableListOf<Item>()
+        if (inputs.keyHeld) items += Item(Part.Held, KEY_HELD)
         inputs.reading?.let { reading ->
             val battery = reading.battery
             val percent = battery.percent

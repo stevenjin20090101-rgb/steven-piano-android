@@ -191,7 +191,7 @@ class WebSocketHub(
         }
     }
 
-    private inner class HubSocket(handshake: NanoHTTPD.IHTTPSession, private val token: String?) : NanoWSD.WebSocket(handshake) {
+    private inner class HubSocket(handshake: NanoHTTPD.IHTTPSession, val token: String?) : NanoWSD.WebSocket(handshake) {
         override fun onOpen() {
             open += this
             val first = try {
@@ -245,6 +245,29 @@ class WebSocketHub(
                 // Gone already.
             }
         }
+    }
+
+    // ---- Listening (v1.23 — M55) ------------------------------------------------------------------------------------
+
+    /**
+     * Sends [text] (the microphone's frames) to the open sockets and relayed browsers of the session [token] alone, never
+     * to anyone else's; how many it reached (none: no panel of that session is open).
+     */
+    fun sendToSession(token: String, text: String): Int {
+        var reached = 0
+        for (socket in open) {
+            if (socket.token == token && socket.isOpen) {
+                socket.sendQuietly(text)
+                reached++
+            }
+        }
+        for (member in members) {
+            if (member.token == token) {
+                member.sendQuietly(text)
+                reached++
+            }
+        }
+        return reached
     }
 
     /** The handshake as NanoWSD reads it, but for its input: every frame the page sends passes [FrameGuard] first. */

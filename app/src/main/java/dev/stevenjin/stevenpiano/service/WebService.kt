@@ -407,6 +407,9 @@ class WebService : Service() {
             graph.keyboard.state.map { },
             graph.liveThru.state.map { it.open }.distinctUntilChanged().map { },
             graph.recording.state.map { it is RecordingState.Recording }.distinctUntilChanged().map { },
+            // Listening and the key test (v1.23 — M55): the microphone on or off, its time, the key struck, the results.
+            graph.listening.state.map { },
+            graph.keyTest.state.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created

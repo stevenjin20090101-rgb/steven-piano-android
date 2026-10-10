@@ -227,6 +227,26 @@ interface WebBackend {
 
     /** Play anyway: true when a block is on (the quiet lifts until it ends), false when none is. */
     suspend fun overrideQuiet(): Boolean
+
+    // ---- Listening and the key test (v1.23 — M55) -------------------------------------------------------------------
+
+    /**
+     * The panel's Listen, for the session [token]: the room through the tablet's microphone, live, to that session's
+     * sockets alone, for five minutes at most; refused with its reason (listening off on the tablet, the app not in the
+     * foreground, another session listening, the microphone unable to start).
+     */
+    suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer =
+        dev.stevenjin.stevenpiano.audio.ListenAnswer.Refused(dev.stevenjin.stevenpiano.audio.ListenAnswer.OFF, dev.stevenjin.stevenpiano.ui.ListenCopy.OFF)
+
+    /** The panel's Stop: live listening ends (a key test hears on). */
+    suspend fun listenStop() = Unit
+
+    /** Test every key, asked by the session [token], which hears it live; refused with its reason. */
+    suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer =
+        dev.stevenjin.stevenpiano.audio.ListenAnswer.Refused(dev.stevenjin.stevenpiano.audio.ListenAnswer.OFF, dev.stevenjin.stevenpiano.ui.ListenCopy.OFF)
+
+    /** The key test's Stop: it ends at once with the player's stop sequence. */
+    suspend fun keyTestStop() = Unit
 }
 
 /** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
@@ -516,6 +536,10 @@ data class WebState(
     val display: WebDisplay = WebDisplay(),
     /** The quiet times now (v1.20 — M54): `{now, until, overridden, next}`. */
     val quiet: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
+    /** The tablet's microphone (v1.23 — M55): `{on, until, allowed}`. */
+    val listen: dev.stevenjin.stevenpiano.audio.ListenState = dev.stevenjin.stevenpiano.audio.ListenState(),
+    /** The key test (v1.23 — M55): `{running, key, done, total, results, stopped}`. */
+    val keytest: dev.stevenjin.stevenpiano.audio.KeyTestState = dev.stevenjin.stevenpiano.audio.KeyTestState(),
 )
 
 /**
@@ -637,7 +661,8 @@ data class WebSystem(
 /**
  * The piano's side: its [link] ([WebLink]'s state and name) and the link's [mtu], what the app knows of its settings
  * ([state], [WebPianoState.state]'s word), its [facts] as they stand (every one, known to the app or not; null until it
- * has answered) and when one last came in ([factsAt], epoch ms).
+ * has answered) and when one last came in ([factsAt], epoch ms); and (v1.23 — M55) whether it holds a key on
+ * ([keyHeld], `diag.HeldKey`).
  */
 data class WebSystemPiano(
     val link: WebLink = WebLink("disconnected"),
@@ -645,6 +670,7 @@ data class WebSystemPiano(
     val state: String = "unknown",
     val facts: Map<String, String>? = null,
     val factsAt: Long? = null,
+    val keyHeld: Boolean = false,
 )
 
 /** The web panel: the devices signed in ([sessions]), the panels open ([sockets]: the listeners' and the relay's), guests on, the relay. */

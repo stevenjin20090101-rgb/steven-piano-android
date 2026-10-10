@@ -8682,3 +8682,108 @@ channel's volume hold); a preset keeps it on (`volume 100`, `fullpower 1`, `save
 asks first, on the tablet (`GlassAlertDialog`) and on the panel (`host.confirm`). Tests: five in
 `PianoSettingsRepositoryTest` (found off → on and saved; a person's off kept; switching off recorded; no volume under
 100 while on; a preset keeps it on); the older volume tests run with Full power switched off by a person.
+
+# v1.23 — M55: listen and test every key
+
+Read `DESIGN.md › v1.23 — M55` first. Designed by the app session (Opus), chosen by Steven on 2026-10-10; built in a worktree
+(`m55-listen`, from 1.21's `34ce6c0`) beside the integrator's Full power work on `main`, which owns `piano/PianoSettings*.kt`,
+`channels/LoudnessHold.kt`, the Feel page, `ui/PlaybackCopy.kt`, `assets/web/settings.js` and the piano-setting routes: none
+of them is touched (`PianoSettings.testKeys` is only read). No emulator, no version bump, no signing, no release.
+
+## The microphone (`audio/`)
+- `Microphone` / `AndroidMicrophone`: `AudioRecord` at 16 kHz mono PCM16 from `VOICE_RECOGNITION` (no AGC or noise
+  suppression to hide a note), four frames of Android buffer, read on "steven-piano-mic" (`THREAD_PRIORITY_AUDIO`) as
+  `MicFrame(samples[1600], index, startNanos)`; a frame's time from `AudioRecord.getTimestamp(MONOTONIC)`, else the read's
+  end less 100 ms. One `Hearing` per start (a late thread never ends a newer one). `RECORD_AUDIO` in the manifest, with
+  `android.hardware.microphone` not required.
+- `Mulaw` (G.711: bias 0x84, clip 32,635) and `ListenWire.audio(seq, ulaw)`, built by hand:
+  `{"type":"audio","seq":n,"rate":16000,"codec":"mulaw","data":"<base64>"}`, about 2.2 KB a frame (the relay's frame is 64 KB).
+- `Listening` (AppGraph's `listening`, main thread): `allowedNow` (the setting `listenFromPanel` and the permission),
+  `foreground(on)` (MainActivity's `onStart` / `onStop`), `startLive(token)` (refusals `listen-off`, `away`, `busy` while
+  another valid session listens, `microphone`; the same session again starts its five minutes again), `stopLive()`,
+  `tap(token?, frames, ended)` / `untap()` for the key test (`Ears`), `stopAll()`, `refresh()`; `state: ListenState(on, until,
+  allowed, panel)`. A frame goes to the key test's ears on the microphone's thread, then, as one message, to each hearing
+  session through `send(token, text)` (`WebSocketHub.sendToSession`: that session's listener sockets and relayed browsers
+  alone) on a sender thread that drops the oldest of 8 waiting frames. A tick a second (sessions looked up off the main
+  thread): the switch, `LIVE_MS` (5 min), a session no longer valid, `UNHEARD_MS` (15 s without reaching a socket of it).
+- AppGraph: `followListening()` (the switch off ends the key test and every hearing), `stopListening()` (the banner's Stop),
+  `microphoneAllowed()`. `TabletSound.mute(on)`: the sink passes nothing while the key test runs, and what sounds fades.
+
+## The key test (`audio/KeyTest.kt`, `KeyCheck.kt`)
+- `KeyTest(scope, piano: KeyTest.Piano, ears: Ears, nanos)`: `start(token?)` → `ListenAnswer.Started` or `Refused(code,
+  message)`: `not-connected`, `playing` (Playing or loading), `quiet` (QuietCopy's words), `updating` (locked or the updater
+  busy), `listen-off`, `testing`, then the ears' own. The sweep: 600 ms of the room, then keys 24..107, each `noteOn(key,
+  100)` (the player's `liveNoteOn`), 150 ms, `noteOff`, 300 ms; 500 ms after the last; about 38.9 s. Before each strike it
+  stops, saying why, when the piano disconnects or a piece starts (no stop sequence: a piece's keys are not the test's) or a
+  quiet time begins or an update starts (the stop sequence). `stop()`: the key down let go, then `stopSequence()` (the
+  player's `allKeysOff`). `state: KeyTestState(running, key, done, total, results, stopped)`; results stay until the next test.
+- `KeyTake`: strikes and frames meet on `System.nanoTime`'s clock (the latest frame's own time maps a strike to a sample);
+  a key is checked once its window has been heard, and frames no key needs are let go (about a second held).
+- `KeyCheck.heard(samples, at, key)`: Hann-windowed Goertzel at the fundamental and harmonics 2–4 (none over 7.2 kHz), the
+  300 ms from +30 ms against the 120 ms before; a rise of 6 dB on any one is "sounded". The baseline is also never under the
+  room's noise (the before window's whole power spread over every frequency as white noise would be, plus 6 dB) nor under a
+  floor of digital silence, so a room's noise never passes for a key.
+
+## A key held on (`diag/HeldKey.kt`)
+- `QuietSince` (AppGraph's `quietSince`, fed by `followPlaying()`: a piece playing or loading, the key test, Live) and
+  `HeldKey.held(active, factsAt, quietSince)`: `!active` > 0 in facts that came in 5 s or more after anything last played.
+  `AppGraph.keyHeld()` for Steven Piano connected and ready. `Attention.Inputs.keyHeld` → `Part.Held`, "A key is held on",
+  first; `SystemNow.keyHeld`; Keys held now amber (`SystemCopy.pianoFacts(heldAttention)`). The panel: `/api/system`'s
+  `piano.keyHeld`, first in `attention()`, the rail's piano line ("Key held"), Keys held now amber.
+
+## The web panel
+- Routes at the end of `WebServer.routes`, all `Access.WRITE` (the session, the header, the panel's origin; bodies not read):
+  `POST /api/listen/start` and `/api/keytest/start` (204, or 409 `{error, message}` in the tablet's words; the session's
+  token is what the frames go to), `/api/listen/stop` and `/api/keytest/stop` (204, any session). `WebBackend` gains the
+  four (defaults refuse), `AppWebBackend` runs them on the main thread. The state gains `listen: {on, until, allowed}` and
+  `keytest: {running, key, done, total, results: [{key, heard}] | null, stopped}`; the web service pushes on both flows.
+- `app.js`: the socket's `audio` messages go to `host.audio(listener)`'s listeners and nowhere else. `index.html`: `g-mic`,
+  `g-stop`.
+- `system.js`: the Listen and test card in the stack beside Running now (before Today and Tools): Listen / Stop with the
+  time left ("4:12 left", the browser's clock against `until`), a level meter (the frame's power, −60 dB to 0) and a volume
+  slider (`.range`, kept in `localStorage`); Test every key / Stop with "Key 37 of 84" and a bar; the keyboard map (SVG, the
+  boards' geometry; `.nat`, `.acc` over a `.gap`, `pending`, `struck`, `now`, `heard`, `missing`) and the line. Web Audio:
+  one context made by the tap, frames decoded through a 256-value µ-law table into 16 kHz buffers scheduled one after
+  another 0.25 s ahead (0.5 s through the relay); past 1.2 s behind a frame is dropped. A panel plays only what it asked for
+  (`hear.live`, `hear.test`, set at once on the tap and let go when the state says the hearing ended). `system.css`: the
+  card's classes, tokens only, the meter's and the bar's easing cut under reduced motion.
+
+## The tablet
+- `ui/screens/piano/pages/ListenCard.kt` (the System page's card after Piano): the switch (`SwitchRow`, through the kiosk
+  gate; on asks `RECORD_AUDIO` with `rememberLauncherForActivityResult`, then saves), Test every key / Stop (`gate` for the
+  start), its bar, `KeyMap` (Canvas, the `Boards` geometry), the line. `SystemPage.kt`'s `SystemCard`, `Meter`, `CardNote`,
+  `SmallFigures` are internal for it. `PageRows.LISTEN_FROM_PANEL`, `TEST_EVERY_KEY`. `ui/ListenCopy.kt`, the words.
+- `ui/components/MicrophoneBanner.kt` in `PianoNavHost`, after the resting screen: a glass capsule at the top while
+  `listening.state.on` (`res/drawable/ic_mic.xml`), Stop → `AppGraph.stopListening()`.
+- `settings`: `listenFromPanel` (default false), `setListenFromPanel`; Share diagnostics' settings.txt says it.
+
+## Simplified, and why
+- **A noise floor under the 6 dB rule.** Two single-frequency readings of a room's noise differ by 6 dB or more about one
+  time in five, so a quiet room would have "heard" many keys; the rise must now also stand clear of the room's noise
+  (`KeyCheck`'s notes). A real note stands tens of dB above it.
+- **The sweep takes about 39 s**, not 38: 600 ms of the room first (the first key's baseline) and 500 ms after the last
+  (its sound reaching the microphone).
+- **One listening at a time** is one live listener: another session's Listen is refused ("Someone is listening already.");
+  the key test hears through the same microphone and goes to its own starter as well. Any signed-in session may stop either.
+- **The state's `keytest` adds `stopped`**, why the last test ended early, so the panel can say it.
+- **Live listening ends when no page of its session has been open for 15 s**, besides the five minutes and the session's
+  end, so a closed tab never leaves the tablet hearing.
+- **Velocity 100 goes through the player's velocity percentage**, as the Keys screen's keys do (the player's own path).
+- **The bass**: a tablet's microphone hears little under about 100 Hz, so the lowest keys are heard by their harmonics 3
+  and 4 (C1's are 98 and 131 Hz).
+
+## Tests
+`KeyCheckTest` (4: a sweep of synthetic notes, all heard; C2, F♯4 and A6 silent, those three and the line; a quiet room,
+a loud one and digital silence, none heard; the power's scale), `MulawTest` (2: every sample within half a step, every
+byte back to itself, G.711's figures; the message's shape and size), `KeyTestTest` (4: the refusals in the brief's order;
+the timing, 84 keys low to high at 450 ms, 150 ms, velocity 100, in a simulated room whose three silent keys come out not
+heard; Stop's stop sequence; ending by itself when a piece starts, the piano goes or the microphone stops), `ListeningTest`
+(4: off and away refused, one session at a time; frames to the hearing sessions alone; five minutes, a session ended, no
+page open; the switch off, the screen left and the microphone failing end everything), `WebServerTest` (+1: the four
+routes' access, refusals and the state; the write routes 32 → 36), `WebSocketHubTest` (+1: frames reach the hearing
+session's socket and relayed browser alone), `AttentionTest` (+1: a key held on, first; `HeldKey`'s 5 s; `QuietSince`),
+`WebAssetsTest` (+1: the card's routes from `host.ROOT`, the tablet's words, `host.audio`, the µ-law table), `WebApiTest`
+and `DiagnosticsExporterTest` (the new keys and line). 1,649 → 1,667 unit tests (12 skipped), none failing, with `--rerun`;
+`lintDebug` 0 errors, the same 30 warnings, none in this run's code. The panel's card was run in a browser against a
+stand-in host (Listen's sound scheduled and stopped, the test's progress, the map with three keys not heard, listening off,
+dark, light, a phone's width); the tablet's card and banner were not seen on a device.

@@ -9,7 +9,12 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.audio.KeyResult
+import dev.stevenjin.stevenpiano.audio.KeyTestState
+import dev.stevenjin.stevenpiano.audio.ListenAnswer
+import dev.stevenjin.stevenpiano.audio.ListenState
 import dev.stevenjin.stevenpiano.data.art.CoverChange
+import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.data.art.CoverSearch
 import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
@@ -108,9 +113,10 @@ class WebServerTest {
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
         assertEquals(
-            "the table's thirty-two routes that change something (the schedules' three from 1.6.2, gone since 1.20 but still behind the checks, " +
-                "Studio's three from 1.7, the System page's two and the cover picker's three from 1.18, the quiet times' two from 1.20)",
-            32,
+            "the table's thirty-six routes that change something (the schedules' three from 1.6.2, gone since 1.20 but still behind the checks, " +
+                "Studio's three from 1.7, the System page's two and the cover picker's three from 1.18, the quiet times' two from 1.20, " +
+                "listening's and the key test's four from 1.23)",
+            36,
             writes.size,
         )
         for (route in writes) {
@@ -1002,6 +1008,70 @@ class WebServerTest {
         assertEquals("nothing reached the app", emptyList<String>(), backend.calls.toList())
         val state = http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).json()
         assertTrue("the state's schedule stays for older pages, never with a next start", state.getJSONObject("schedule").isNull("next"))
+    }
+
+    @Test
+    fun `listening and the key test start for the session that asks, refuse in the tablet's words, stop for any session, and show in the state (v1_23 M55)`() {
+        val (_, http) = start()
+        for (path in listOf("/api/listen/start", "/api/listen/stop", "/api/keytest/start", "/api/keytest/stop")) {
+            assertEquals("$path without a session", 401, http.api("POST", path).status)
+        }
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        backend.calls.clear()
+        for (path in listOf("/api/listen/start", "/api/keytest/start")) {
+            assertEquals("$path without the header", 403, http.api("POST", path, session = token, panel = false).status)
+            assertEquals("$path is a POST", 405, http.get(path, cookie).status)
+        }
+        assertEquals("nothing refused reached the app", emptyList<String>(), backend.calls.toList())
+
+        assertEquals(204, http.api("POST", "/api/listen/start", session = token).status)
+        assertEquals(204, http.api("POST", "/api/keytest/start", session = token).status)
+        assertEquals("the microphone's frames go to the session that asked", listOf(token, token), backend.askedBy.toList())
+        val other = sessions.open()
+        assertEquals("any signed-in session may stop it", 204, http.api("POST", "/api/listen/stop", session = other).status)
+        assertEquals(204, http.api("POST", "/api/keytest/stop", session = other).status)
+        assertEquals(listOf("listen start", "keytest start", "listen stop", "keytest stop"), backend.calls.toList())
+
+        val refusals = listOf(
+            ListenAnswer.Refused(ListenAnswer.OFF, ListenCopy.OFF),
+            ListenAnswer.Refused(ListenAnswer.AWAY, ListenCopy.AWAY),
+            ListenAnswer.Refused(ListenAnswer.BUSY, ListenCopy.BUSY),
+        )
+        for (refusal in refusals) {
+            backend.listenAnswer = refusal
+            val answer = http.api("POST", "/api/listen/start", session = token)
+            assertEquals(409, answer.status)
+            assertEquals(refusal.code, answer.json().getString("error"))
+            assertEquals(refusal.message, answer.json().getString("message"))
+        }
+        for (refusal in listOf(
+            ListenAnswer.Refused(ListenAnswer.NOT_CONNECTED, ListenCopy.NOT_CONNECTED),
+            ListenAnswer.Refused(ListenAnswer.PLAYING, ListenCopy.PLAYING),
+            ListenAnswer.Refused(ListenAnswer.QUIET, "Quiet until 9:30. Use Play anyway."),
+            ListenAnswer.Refused(ListenAnswer.UPDATING, ListenCopy.UPDATING),
+            ListenAnswer.Refused(ListenAnswer.TESTING, ListenCopy.TESTING),
+        )) {
+            backend.keyTestAnswer = refusal
+            val answer = http.api("POST", "/api/keytest/start", session = token)
+            assertEquals(409, answer.status)
+            assertEquals(setOf("error", "message"), answer.json().keys().asSequence().toSet())
+            assertEquals(refusal.message, answer.json().getString("message"))
+        }
+
+        backend.state = WebState(
+            listen = ListenState(on = true, until = 1_800_000_300_000L, allowed = true, panel = true),
+            keytest = KeyTestState(results = listOf(KeyResult(24, true), KeyResult(25, false))),
+        )
+        val state = http.get("/api/state", cookie).json()
+        val listen = state.getJSONObject("listen")
+        assertEquals(setOf("on", "until", "allowed"), listen.keys().asSequence().toSet())
+        assertEquals(1_800_000_300_000L, listen.getLong("until"))
+        val test = state.getJSONObject("keytest")
+        assertEquals(setOf("running", "key", "done", "total", "results", "stopped"), test.keys().asSequence().toSet())
+        assertEquals(84, test.getInt("total"))
+        assertFalse(test.getJSONArray("results").getJSONObject(1).getBoolean("heard"))
+        assertTrue(test.isNull("key") && test.isNull("stopped"))
     }
 
     @Test

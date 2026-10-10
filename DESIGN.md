@@ -3118,3 +3118,68 @@ channel's volume hold); a preset keeps it on (`volume 100`, `fullpower 1`, `save
 asks first, on the tablet (`GlassAlertDialog`) and on the panel (`host.confirm`). Tests: five in
 `PianoSettingsRepositoryTest` (found off → on and saved; a person's off kept; switching off recorded; no volume under
 100 while on; a preset keeps it on); the older volume tests run with Full power switched off by a person.
+
+# v1.23 — M55: listen and test every key
+
+Steven asked (2026-10-10) for "the capability to turn on the microphone on the tablet, so I can hear it sweep every key, to
+see if any key is stuck, remotely": a key that stays on at the school can overheat (fire safety drives every decision
+here). He chose a **key test** (the piano strikes every key in turn while the tablet's microphone plays live in his browser;
+afterwards a keyboard map marks any key that didn't sound) **plus live listening** (Listen plays the room live and stops by
+itself after five minutes), on the LAN and through the relay alike.
+
+## The microphone, and its safeguards (a school)
+
+- **Listening from the panel**, a switch on the tablet's Piano › System (its card **Listen and test**, behind the kiosk PIN
+  as the page is), **off by default**. Turning it on asks Android for the microphone first; Android refusing leaves it off
+  with a line saying where to allow it. Off (or without Android's permission), every start is refused: "Listening is off on
+  the tablet."
+- **Only in the foreground**: Android forbids starting the microphone from the background, so the tablet hears only while
+  Steven Piano is in front (on the school tablet, always: the kiosk); otherwise a start is refused, "Open Steven Piano on the
+  tablet to listen.", and leaving the screen stops whatever hears.
+- **A banner on every screen**, the resting screen too, while the microphone is on: a glass capsule at the top, the
+  microphone, "Microphone on · listening from the web panel" ("Microphone on · testing every key" for the tablet's own test)
+  and **Stop**, which ends everything that hears (no PIN: anyone at the tablet may stop it).
+- **Nothing is recorded or kept**: each 100 ms of the room goes out and is gone. The key test holds about a second of it at a
+  time while it checks each key, and none once it is over.
+- **To the panel that asked, and no one else**: the sound goes over the panel's socket only to the sessions that asked to hear
+  it (signed in with the PIN), never to another panel and never to the guests' page. One listening at a time: another panel's
+  Listen meanwhile is refused, "Someone is listening already."; any signed-in panel may stop it.
+- **It ends by itself**: live listening after five minutes, when its panel's session ends (logged out, the PIN changed) or when
+  no page of that session has been open for 15 s.
+
+## Test every key
+
+- The app strikes the piano's 84 keys (C1 to B7) in turn, low to high, one every 450 ms, each 150 ms long at velocity 100,
+  through the player's own path and its safety (the router's re-strike guard and reference counts, the firmware update's lock).
+  About 39 s, with 0.6 s of the room before the first key. The tablet's own piano sound is silent meanwhile: it would fake a
+  result.
+- Refused, with the reason in words: the piano not connected ("The piano isn't connected."); a piece playing ("Stop the music
+  first."); a quiet time not lifted ("Quiet until 9:30. Use Play anyway."); a firmware update running; listening off; another
+  test running. **Stop** ends it at once with the player's stop sequence. It ends by itself, saying why, when the piano
+  disconnects, a piece starts, a quiet time begins, an update starts or the microphone stops.
+- **The check**, by ear, for each key: the energy at its fundamental and its harmonics 2 to 4 in the 300 ms from 30 ms after
+  its strike, against the same frequencies in the 120 ms before it; a rise of 6 dB on any of them is "sounded", else "not
+  heard". The results stay in memory until the next test.
+- **The result**: the 84 keys as seven octaves in the board octaves' style (the keys struck so far, the one struck now in the
+  content colour, those to come faint while it runs), every key not heard in the attention amber, and a line: "All 84 keys
+  sounded" or "3 keys didn't sound: C2, F♯4, A6".
+
+## A key held on
+
+- When nothing plays (no piece, no key test, no keyboard through Live) and the piano still says it holds a key (`!active`,
+  firmware 2.0.1) in facts read 5 s or more after anything last played, **"A key is held on"** is the first thing that needs
+  attention on both System pages (the head, the hub's row, the panel's rail), and Keys held now turns amber.
+
+## On the web panel (Settings › System)
+
+- A **Listen and test** card, beside Today and Tools: **Listen** (the room live in this browser, started by the tap, the time
+  left, a level meter, a volume slider kept in this browser, **Stop**), **Test every key** (its progress, "Key 37 of 84", the
+  same live sound, **Stop**), then the keyboard map and its line, and "Played live in this browser from the tablet's
+  microphone. Nothing is recorded." While listening is off on the tablet the card says so and how to turn it on.
+- The sound plays with Web Audio from the µ-law frames, a quarter of a second behind (half through the relay) so the
+  network's unevenness never breaks it up; a panel plays only what it asked for.
+
+## On the tablet (Piano › System)
+
+- The same card: the **Listening from the panel** switch and **Test every key** (no live sound here; its progress and the same
+  map and line). Search finds them by microphone, listen, stuck key, key test and sweep.

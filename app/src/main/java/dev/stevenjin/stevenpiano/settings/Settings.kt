@@ -221,6 +221,11 @@ data class PianoSettings(
     val midiOutId: String? = null,
     /** The MIDI piano's name as shown, with [midiOutId]. */
     val midiOutName: String? = null,
+    /**
+     * Listening from the panel (Piano › System, v1.23 — M55): the web panel may hear the room through the tablet's
+     * microphone, live, and test every key by ear; off at first (a school), and only with Android's permission besides.
+     */
+    val listenFromPanel: Boolean = false,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -478,6 +483,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         }
     }
 
+    /** Listening from the panel on or off (v1.23 — M55); turning it on asks Android for the microphone first (the System page). */
+    suspend fun setListenFromPanel(on: Boolean) = edit { it[LISTEN_FROM_PANEL] = on }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -587,6 +595,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
                 ?.takeIf { it == InstrumentChoice.STEVEN_PIANO || this[MIDI_OUT_ID] != null } ?: defaults.instrumentKind,
             midiOutId = this[MIDI_OUT_ID],
             midiOutName = this[MIDI_OUT_ID]?.let { this[MIDI_OUT_NAME] },
+            listenFromPanel = this[LISTEN_FROM_PANEL] ?: defaults.listenFromPanel,
         )
     }
 
@@ -669,6 +678,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val INSTRUMENT_KIND = stringPreferencesKey("instrumentKind")
         val MIDI_OUT_ID = stringPreferencesKey("midiOutId")
         val MIDI_OUT_NAME = stringPreferencesKey("midiOutName")
+        val LISTEN_FROM_PANEL = booleanPreferencesKey("listenFromPanel")
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256

@@ -241,6 +241,8 @@ object DiagnosticsText {
         line("instrumentKind", s.instrumentKind)
         line("midiOutId", s.midiOutId)
         line("midiOutName", s.midiOutName)
+        // Listening from the panel (v1.23 — M55): whether the panel may hear the room through the microphone.
+        line("listenFromPanel", s.listenFromPanel)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

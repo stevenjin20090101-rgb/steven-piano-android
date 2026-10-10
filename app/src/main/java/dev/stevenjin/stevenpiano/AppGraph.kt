@@ -9,9 +9,11 @@
 
 package dev.stevenjin.stevenpiano
 
+import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -20,12 +22,16 @@ import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.room.withTransaction
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
 import dev.stevenjin.stevenpiano.admin.KioskMode
 import dev.stevenjin.stevenpiano.admin.OwnerRelease
+import dev.stevenjin.stevenpiano.audio.AndroidMicrophone
 import dev.stevenjin.stevenpiano.audio.AudioOut
+import dev.stevenjin.stevenpiano.audio.KeyTest
+import dev.stevenjin.stevenpiano.audio.Listening
 import dev.stevenjin.stevenpiano.audio.PianoVoice
 import dev.stevenjin.stevenpiano.audio.TabletSound
 import dev.stevenjin.stevenpiano.ble.BlePermissions
@@ -60,7 +66,10 @@ import dev.stevenjin.stevenpiano.diag.CrashReports
 import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.diag.DiagnosticsExporter
 import dev.stevenjin.stevenpiano.diag.DiagnosticsText
+import dev.stevenjin.stevenpiano.diag.HeldKey
 import dev.stevenjin.stevenpiano.diag.LinkLog
+import dev.stevenjin.stevenpiano.diag.PianoDiag
+import dev.stevenjin.stevenpiano.diag.QuietSince
 import dev.stevenjin.stevenpiano.diag.RunningNow
 import dev.stevenjin.stevenpiano.diag.SystemHistory
 import dev.stevenjin.stevenpiano.diag.SystemProbe
@@ -919,6 +928,7 @@ class AppGraph(private val app: Application) {
         // Not while the piano's firmware is updated: the updater stopped the player first, and the link is its.
         quiet.start(appScope) { if (!player.locked) player.stop() }
         studio.start()
+        followListening()   // v1.23 — M55
         appScope.launch {
             val s = settingsRepository.settings.first()
             // The keyboard first (v1.11 — M29): its address is foreign to the piano's link before that link scans.
@@ -926,6 +936,7 @@ class AppGraph(private val app: Application) {
             keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
             restoreInstrument(s)
             followLive()
+            followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
             launch {
                 recording.recoverPending()   // takes a crash left behind (v1.11 — M29), beside the rest
                 recording.drawMissingCovers()   // then a cover for each recording made before 1.14 (v1.14 — M37)
@@ -1238,6 +1249,95 @@ class AppGraph(private val app: Application) {
                 }
                 delay(SystemHistory.EVERY_MS)
             }
+        }
+    }
+
+    // ---- Listening and the key test (v1.23 — M55) -------------------------------------------------------------------
+
+    /** Whether Android allows the microphone (asked for only by Listening from the panel's switch, Piano › System). */
+    fun microphoneAllowed(): Boolean = ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * The tablet's microphone for the web panel (DESIGN.md › v1.23 — M55): only with Listening from the panel on and Android's
+     * permission, only while the app is in the foreground ([MainActivity] says so), each frame to the hearing sessions'
+     * sockets alone, through the web service's hub (the listeners' and the relay's), nothing kept.
+     */
+    val listening: Listening by lazy {
+        Listening(
+            appScope,
+            AndroidMicrophone(app),
+            allowedNow = { settings.value.listenFromPanel && microphoneAllowed() },
+            sessionValid = { web.sessions.isValid(it) },
+            send = { token, text -> web.hub?.sendToSession(token, text) ?: 0 },
+        )
+    }
+
+    /** Test every key (v1.23 — M55): every strike through the player's live path, the microphone hearing which keys sounded. */
+    val keyTest: KeyTest by lazy { KeyTest(appScope, keyTestPiano, listening) }
+
+    /** The piano as the key test strikes it: the player's live keys and stop sequence, the instrument's link, the gates. */
+    private val keyTestPiano = object : KeyTest.Piano {
+        override val connected: Boolean get() = pianoLink.state.value is LinkState.Connected
+
+        override val playing: Boolean get() = player.state.value.let { it.status == PlaybackStatus.Playing || it.loading }
+
+        override fun quiet(): String? {
+            val now = this@AppGraph.quiet.now()
+            val until = now.until?.takeIf { now.holds } ?: return null
+            val zone = java.time.ZoneId.systemDefault()
+            return QuietCopy.refusal(QuietCopy.until(QuietCopy.at(until, zone), QuietCopy.at(System.currentTimeMillis(), zone)))
+        }
+
+        override val updating: Boolean get() = player.locked || firmwareUpdater.state.value.busy
+
+        override fun noteOn(key: Int, velocity: Int) = player.liveNoteOn(key, velocity)
+
+        override fun noteOff(key: Int) = player.liveNoteOff(key)
+
+        override fun stopSequence() = player.allKeysOff()
+
+        override fun muteTablet(on: Boolean) = tabletSound.mute(on)
+    }
+
+    /** Since when nothing has played (a piece, the key test, a keyboard through Live): what a key held on is weighed against. */
+    val quietSince = QuietSince(System.currentTimeMillis())
+
+    /**
+     * Whether the piano holds a key on now ([HeldKey]): Steven Piano connected and answering says it holds a key, in facts
+     * that came in 5 s or more after anything last played.
+     */
+    fun keyHeld(): Boolean =
+        HeldKey.held(PianoDiag.of(pianoLink.kind.value, pianoLink.state.value, pianoSettings.state.value)?.active, pianoSettings.factsAt.value, quietSince.since)
+
+    /** The banner's Stop: the key test ends with the player's stop sequence, and nothing hears any more. */
+    fun stopListening() {
+        keyTest.stop()
+        listening.stopAll()
+    }
+
+    /**
+     * Listening from the panel turned off: the key test ends, with the stop sequence, and every hearing with it. From [settings]
+     * itself, so what [listening] reads of it is already the new value.
+     */
+    private fun followListening() {
+        appScope.launch {
+            settings.map { it.listenFromPanel }.distinctUntilChanged().collect { on ->
+                if (!on) keyTest.stop()
+                listening.refresh()
+            }
+        }
+    }
+
+    /** What plays, as [quietSince] follows it. */
+    private fun followPlaying() {
+        appScope.launch {
+            combine(
+                player.state.map { it.status == PlaybackStatus.Playing || it.loading },
+                keyTest.state.map { it.running },
+                liveThru.state.map { it.open },
+            ) { piece, test, live -> piece || test || live }
+                .distinctUntilChanged()
+                .collect { quietSince.see(it, System.currentTimeMillis()) }
         }
     }
 
