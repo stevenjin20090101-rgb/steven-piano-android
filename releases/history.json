@@ -290,8 +290,10 @@
     "versionName": "1.24",
     "notes": "A safer, leaner Steven Piano. Signing in to the web panel now lasts 90 days and works only the way you signed in (Tailscale or the internet link). Listen, Test every key and Install the update ask for the PIN again first. Wrong guesses from strangers over the internet can no longer lock your own browsers out, and the panel has Sign out (Settings › Panel). 'Panel on Wi‑Fi too' is gone: the full panel needs Tailscale or the internet link, both encrypted, and the school Wi‑Fi only ever gets the guests' page. Quiet times no longer need an alarm permission. Under the hood, code left over from older versions was removed and duplicates merged; every feature stays, and signed-in browsers stay signed in.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.24/steven-piano-1.24.apk",
+    "sha256": "4a28ba7317177a5711386dd7219d6ee15845b9a078134ecbb05efa03f19fc00c",
+    "sizeBytes": 14203153,
     "minSdk": 26,
     "tag": "v1.24",
-    "draft": true
+    "publishedAt": "2026-10-13"
   }
 ]
