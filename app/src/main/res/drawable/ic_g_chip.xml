@@ -7,13 +7,16 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- Library tab: books on a shelf. Tinted where it is used. -->
+<!-- The web panel's stroke glyph g-chip (1.7 at a 24 box, round caps and joins): Firmware and status: a chip with its pins. Tinted where it is used. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FF000000"
-        android:pathData="M4,5h3v14H4z M8.5,5h3v14h-3z M13,19L16.62,5.48L19.52,6.26L15.9,19.78Z" />
+        android:pathData="M 8,8 h 8 v 8 H 8 z M 10,4.5 V 8 M 14,4.5 V 8 M 10,16 v 3.5 M 14,16 v 3.5 M 4.5,10 H 8 M 4.5,14 H 8 M 16,10 h 3.5 M 16,14 h 3.5"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

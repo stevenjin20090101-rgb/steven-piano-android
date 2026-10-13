@@ -7,17 +7,22 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- Keys tab: a keyboard. Tinted where it is used. -->
+<!-- The web panel's stroke glyph g-help (1.7 at a 24 box, round caps and joins): Help and about: a question mark in a ring. Tinted where it is used. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FF000000"
-        android:fillType="evenOdd"
-        android:pathData="M3,5h18v14H3z M5,7v10h14V7z" />
+        android:pathData="M4,12 A8,8 0 1,1 20,12 A8,8 0 1,1 4,12 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#FF000000"
-        android:pathData="M8.47,7h2.4v6h-2.4z M13.13,7h2.4v6h-2.4z M9.17,13h1v4h-1z M13.83,13h1v4h-1z" />
+        android:pathData="M 9.7,9.6 a 2.3,2.3,0,1,1,3.3,2.1 c -0.7,0.4,-1,0.9,-1,1.7 v 0.3 M 12,16.7 v 0.1"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

@@ -19,14 +19,14 @@ import dev.stevenjin.stevenpiano.piano.PianoPage
  * The five destinations, in bar and rail order. They navigate; they never act. Library keeps the
  * books, Now playing the roll, Keys takes the keyboard, Studio (v1.12 — M30) writes music from an idea,
  * and Piano (the connection and settings) the sliders. Piano is a nested graph: its hub and its pages
- * ([PianoRoutes]) all belong to it.
+ * ([PianoRoutes]) all belong to it. Each [icon] is the web panel's stroke glyph for the place (v1.25 — M59).
  */
 enum class Route(val path: String, val label: String, @param:DrawableRes val icon: Int) {
-    Library("library", "Library", R.drawable.ic_tab_library),
-    NowPlaying("now-playing", "Now playing", R.drawable.ic_stat_piano),
-    Keys("keys", "Keys", R.drawable.ic_tab_keys),
-    Studio("studio", "Studio", R.drawable.ic_tab_studio),
-    Piano("piano", "Piano", R.drawable.ic_tab_piano),
+    Library("library", "Library", R.drawable.ic_g_library),
+    NowPlaying("now-playing", "Now playing", R.drawable.ic_g_now),
+    Keys("keys", "Keys", R.drawable.ic_g_keys),
+    Studio("studio", "Studio", R.drawable.ic_g_studio),
+    Piano("piano", "Piano", R.drawable.ic_g_piano),
     ;
 
     companion object {
@@ -42,27 +42,29 @@ enum class Route(val path: String, val label: String, @param:DrawableRes val ico
  * older names where the page was renamed (Feel is Sound and touch, Lighting is Lights and screen, Remote
  * is Web panel); the [title] is the one name the person reads. Studio, a page from v1.7, is its own tab
  * since v1.12 (M30): a saved "studio" page reads as none; so does a saved "schedule" page since Schedule
- * became Quiet times (v1.20 — M54).
+ * became Quiet times (v1.20 — M54). [glyph] leads the page's row on the hub (v1.25 — M59): the web panel's stroke
+ * glyph, or one drawn in its style where a panel glyph would repeat a tab on the same screen (the panel's keys,
+ * sparkle and sliders are the Keys, Studio and Piano tabs').
  */
-enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?) {
-    Instrument("instrument", "Instrument", null),
-    Keyboard("keyboard", "Keyboard", null),
-    Feel("feel", PianoPage.Feel.title, PianoPage.Feel),
-    Lighting("lighting", PianoPage.Lighting.title, PianoPage.Lighting),
-    Pedal("pedal", PianoPage.Pedal.title, PianoPage.Pedal),
-    Firmware("firmware", PianoPage.Firmware.title, PianoPage.Firmware),
-    Playback("playback", "Playback", null),
-    TabletSound("tablet-sound", "Tablet sound", null),
+enum class SettingsPage(val key: String, val title: String, val piano: PianoPage?, @param:DrawableRes val glyph: Int) {
+    Instrument("instrument", "Instrument", null, R.drawable.ic_g_link),
+    Keyboard("keyboard", "Keyboard", null, R.drawable.ic_g_plug),
+    Feel("feel", PianoPage.Feel.title, PianoPage.Feel, R.drawable.ic_g_hammer),
+    Lighting("lighting", PianoPage.Lighting.title, PianoPage.Lighting, R.drawable.ic_g_bulb),
+    Pedal("pedal", PianoPage.Pedal.title, PianoPage.Pedal, R.drawable.ic_g_pedal),
+    Firmware("firmware", PianoPage.Firmware.title, PianoPage.Firmware, R.drawable.ic_g_chip),
+    Playback("playback", "Playback", null, R.drawable.ic_g_play),
+    TabletSound("tablet-sound", "Tablet sound", null, R.drawable.ic_g_speaker),
     /** Quiet times (v1.20 — M54), where Schedule was (its timed plays were removed). */
-    Quiet("quiet", "Quiet times", null),
-    Remote("remote", "Web panel", null),
-    Guests("guests", "Guests", null),
-    System("system", "System", null),
-    Display("display", "Display", null),
-    Kiosk("kiosk", "Kiosk", null),
-    Updates("updates", "Updates", null),
-    Artwork("artwork", "Library and artwork", null),
-    Help("help", "Help and about", null),
+    Quiet("quiet", "Quiet times", null, R.drawable.ic_g_moon),
+    Remote("remote", "Web panel", null, R.drawable.ic_g_grid),
+    Guests("guests", "Guests", null, R.drawable.ic_g_guests),
+    System("system", "System", null, R.drawable.ic_g_system),
+    Display("display", "Display", null, R.drawable.ic_g_contrast),
+    Kiosk("kiosk", "Kiosk", null, R.drawable.ic_g_lock),
+    Updates("updates", "Updates", null, R.drawable.ic_g_download),
+    Artwork("artwork", "Library and artwork", null, R.drawable.ic_g_image),
+    Help("help", "Help and about", null, R.drawable.ic_g_help),
     ;
 
     companion object {

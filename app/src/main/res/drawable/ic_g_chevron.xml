@@ -7,13 +7,16 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- Piano tab (the connection and the settings): three sliders with their knobs. Tinted where it is used. -->
+<!-- The web panel's stroke glyph g-chevron (1.7 at a 24 box, round caps and joins): a row that opens a page: the chevron, pointing at the row's end. Tinted where it is used. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FF000000"
-        android:pathData="M3,5h18v2H3z M3,11h18v2H3z M3,17h18v2H3z M5,6a3,3 0 1,1 6,0a3,3 0 1,1 -6,0z M12,12a3,3 0 1,1 6,0a3,3 0 1,1 -6,0z M7,18a3,3 0 1,1 6,0a3,3 0 1,1 -6,0z" />
+        android:pathData="M 9.5,6 l 6,6 l -6,6"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

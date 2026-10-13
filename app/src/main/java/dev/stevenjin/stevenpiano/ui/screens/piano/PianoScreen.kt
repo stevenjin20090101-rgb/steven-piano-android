@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -117,8 +118,9 @@ private val PAGE_RISE = 8.dp
  * replaces everything under the field with the results ([SettingsIndex]); a result opens its page scrolled
  * to its row, lit once, its fold opened ([PianoViewModel.jumpTo]), or the screen it moved to ([onOpenTab]).
  * Phones show the hub alone and a page row pushes its page over it ([onOpenPage]). Wide screens set the hub
- * in a 360 dp column with the open page beside it, set off by a hairline; the open page's row is filled with
- * the elevated surface, and rows there only change which page is open (Sound and touch at first); while the
+ * in a 360 dp column with the open page beside it, set off by a hairline; each row leads with its page's glyph and the
+ * open page's row is filled with the content colour at 12 % (v1.25 — M59), and rows there only change which page is
+ * open (Sound and touch at first); while the
  * Instrument page is open there, the card leaves its Connect or Disconnect to the page. A phone turned
  * upright with a page open beside the hub puts that page back over it ([onReopenPage]). [tab] is the tab's
  * graph entry: the hub and its pages share one [PianoViewModel] through it, and the piano saves its
@@ -393,6 +395,7 @@ private fun HubRowView(
             row.page.title,
             summaries.of(row.page),
             onClick = { onPage(row.page) },
+            glyph = painterResource(row.page.glyph),
             selected = selected?.let { it == row.page },
             // Firmware and status during an update opens without the PIN: its chevron, not the padlock.
             locked = gate.locked && !LockedFirmware.opensUnlocked(row.page, firmware),
@@ -419,8 +422,9 @@ private fun SettingsPageView(
     val anchors = remember(page) { AnchorHost() }
     val jump by vm.jump.collectAsStateWithLifecycle()
     JumpEffect(jump, page, anchors, scroll, vm::jumpDone)
-    // System's cards sit two to a row on a wide pane (v1.18 — M50): its column, and its header with it, run wider.
-    val width = if (page == SettingsPage.System) Modifier.systemPageWidth() else Modifier.readingWidth()
+    // System's cards sit two to a row on a wide pane (v1.18 — M50), and Quiet times' week takes the page's width (v1.25 —
+    // M59): their columns, and their headers with them, run wider than the reading width.
+    val width = if (page == SettingsPage.System || page == SettingsPage.Quiet) Modifier.systemPageWidth() else Modifier.readingWidth()
     GlassHeaderPane(scroll = scroll, modifier = modifier, header = { PageHeader(page.title, onBack, width) }) {
         val floating = LocalFloatingPadding.current
         Column(
