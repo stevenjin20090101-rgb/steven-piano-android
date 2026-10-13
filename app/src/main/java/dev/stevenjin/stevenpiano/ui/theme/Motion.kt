@@ -10,6 +10,9 @@
 package dev.stevenjin.stevenpiano.ui.theme
 
 import android.content.ContentResolver
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -25,6 +28,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
@@ -96,11 +101,34 @@ object Motion {
 
 // True when the person has turned animations off at the system level ("Remove animations" / animator
 // duration scale 0). Decorative motion must then be a cut; the roll still scrolls because it is content and
-// progress, not decoration.
+// progress, not decoration. Followed while the app is open (v1.25 — M59), as the glass's accessibility states are
+// (rememberGlassAccessibility): turned off or on in the system's settings, it takes effect at once.
 @Composable
 fun rememberReducedMotion(): Boolean {
-    val resolver = LocalContext.current.contentResolver
-    return remember(resolver) { reducedMotion(resolver) }
+    val app = LocalContext.current.applicationContext
+    return remember(app) { ReducedMotion.state(app.contentResolver) }.value
+}
+
+/**
+ * The animator duration scale, watched for the whole process: one observer, registered on the application's resolver
+ * by the first reader and kept while the process lives (every screen reads it, so it is never idle for long), its
+ * state read in composition so a change recomposes what reads it.
+ */
+private object ReducedMotion {
+    private var watched: State<Boolean>? = null
+
+    fun state(resolver: ContentResolver): State<Boolean> {
+        watched?.let { return it }
+        val state = mutableStateOf(reducedMotion(resolver))
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                state.value = reducedMotion(resolver)
+            }
+        }
+        runCatching { resolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer) }
+        watched = state
+        return state
+    }
 }
 
 /** [rememberReducedMotion] outside composition (a modifier node reads it when it is attached). */

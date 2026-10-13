@@ -21,11 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -38,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -52,6 +49,7 @@ import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassPopover
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
+import dev.stevenjin.stevenpiano.ui.components.MenuChoice
 import dev.stevenjin.stevenpiano.ui.components.SplitAxis
 import dev.stevenjin.stevenpiano.ui.components.switchColors
 import dev.stevenjin.stevenpiano.ui.label
@@ -113,8 +111,8 @@ fun ViewMenu(settings: PianoSettings, plan: NotesPlan, frame: AppFrame) {
                     Column(Modifier.selectableGroup()) {
                         val shown = ViewShow.of(plan)
                         for (option in ViewShow.entries) {
-                            MenuOption(option.label, selected = option == shown) {
-                                if (option == shown) return@MenuOption
+                            MenuChoice(option.label, selected = option == shown, onClick = {
+                                if (option == shown) return@MenuChoice
                                 val share = when (option) {
                                     ViewShow.BOTH -> if (ViewShow.of(plan.split) == ViewShow.BOTH) plan.split else axis.defaultShare
                                     ViewShow.NOTES -> 0f
@@ -122,7 +120,7 @@ fun ViewMenu(settings: PianoSettings, plan: NotesPlan, frame: AppFrame) {
                                     ViewShow.ART -> null
                                 }
                                 if (share == null) write { setNotesArtOnly(true) } else write { setNotesSplit(axis == SplitAxis.Stacked, share) }
-                            }
+                            })
                         }
                     }
                 }
@@ -131,9 +129,9 @@ fun ViewMenu(settings: PianoSettings, plan: NotesPlan, frame: AppFrame) {
                     val choices = frame.noteDisplayChoices
                     val display = if (frame.wide) settings.noteDisplay.rollStyle else settings.noteDisplay
                     for (choice in choices) {
-                        MenuOption(choice.label, selected = choice == display) {
+                        MenuChoice(choice.label, selected = choice == display, onClick = {
                             if (choice != display) write { setNoteDisplay(choice) }
-                        }
+                        })
                     }
                 }
                 Spacer(Modifier.size(8.dp))
@@ -154,26 +152,6 @@ internal const val VIEW_LABEL = "View"
 private fun MenuEyebrow(text: String) {
     // On glass the eyebrow takes the secondary grey: nothing tertiary sits on glass (DESIGN.md › v1.9).
     Eyebrow(text, Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp).semantics { heading() }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-/** One choice: a checkmark when it is the current one (its room kept when not), then its name; 48 dp tall. */
-@Composable
-private fun MenuOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(MaterialTheme.shapes.small)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(24.dp)) {
-            if (selected) Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-    }
 }
 
 /** A switch row: its label (and [note] under it, in the eyebrow style and sentence case), the switch at the end; 48 dp tall. */

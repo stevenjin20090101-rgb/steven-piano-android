@@ -97,7 +97,8 @@ val PianoShapes = Shapes(
     extraLarge = RoundedCornerShape(24.dp),
 )
 
-// Follows the system appearance. There is no in-app switch (DESIGN.md › Colour).
+// The app's appearance: [darkTheme] is what Piano › Display › Appearance chose (Follow system, the default, Light or
+// Dark; DESIGN.md › v1.5 — M17), as MainActivity reads it. Every token below follows it.
 @Composable
 fun PianoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

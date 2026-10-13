@@ -296,7 +296,10 @@ internal fun recordingNote(state: RecordingState): String? = when (state) {
  * Android ends every touch in progress when the display rotates (each window gets a cancel), which
  * would let go of every key a finger holds. So while any key is held the activity keeps its
  * orientation; once the last key is let go it may turn again, and a rotation asked for meanwhile
- * happens then. Leaving the screen gives the orientation back as it was.
+ * happens then. Leaving the screen gives the orientation back as it was. On large screens (600 dp
+ * and wider) Android 16 ignores an app's orientation request, this hold included: there a rotation
+ * still cancels the touches and every held key is let go, which is the safe direction for the piano
+ * (nothing is left sounding); the person presses the keys again.
  */
 @Composable
 private fun HoldOrientationWhileHeld(touches: KeyTouches, pressedVersion: MutableIntState) {
