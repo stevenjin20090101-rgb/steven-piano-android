@@ -14,7 +14,6 @@ import dev.stevenjin.stevenpiano.data.art.CoverNote
 import dev.stevenjin.stevenpiano.data.art.Png
 import dev.stevenjin.stevenpiano.data.art.StudioCover
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
-import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.midi.SmfParser
 import dev.stevenjin.stevenpiano.midi.SmfWriter
 import kotlinx.coroutines.CancellationException
@@ -52,12 +51,6 @@ interface RecordingStore {
 
     /** [png] becomes the piece's own cover (v1.14 — M37); false when it could not be kept. */
     suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = false
-
-    /** The recordings without a cover of their own (made before 1.14), newest first. */
-    suspend fun withoutCover(): List<Long> = emptyList()
-
-    /** The piece's notes as its file holds them (null: none to read; it may throw when the file can't be read). */
-    suspend fun notes(pieceId: Long): NoteList? = null
 }
 
 /** A recording saved: the piece, its title, how long it lasts and how many notes it has. */
@@ -155,28 +148,6 @@ class RecordingPieces(
     }
 
     /**
-     * At start (v1.14 — M37): a cover for each recording made before covers were drawn, from its own notes (seeded by
-     * its id), newest first, one at a time; one whose file can't be read is left for the next start. Returns how many.
-     */
-    suspend fun drawMissingCovers(): Int {
-        var drawn = 0
-        for (id in store.withoutCover()) {
-            val notes = try {
-                store.notes(id)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                null
-            } catch (e: OutOfMemoryError) {
-                null
-            } ?: continue
-            if (cover(id) { CoverInput.of(notes, null, null, null, id * MISSING_SEED) }) drawn++
-        }
-        if (drawn > 0) log("Recording: $drawn cover" + (if (drawn == 1) "" else "s") + " drawn for recordings made before them")
-        return drawn
-    }
-
-    /**
      * Piece [id]'s own cover, drawn by Studio's generator ([StudioCover], 768 px, a PNG) from what [input] reads. False
      * when it could not be drawn or kept: the recording is saved all the same.
      */
@@ -228,7 +199,6 @@ class RecordingPieces(
         const val KIOSK_UNDECIDED = 30
 
         /** A recording made before covers is seeded by its id times this, as Studio's older pieces are. */
-        private const val MISSING_SEED = 7_919L
 
         private const val PENDING = "pending-"
         private const val MID = ".mid"

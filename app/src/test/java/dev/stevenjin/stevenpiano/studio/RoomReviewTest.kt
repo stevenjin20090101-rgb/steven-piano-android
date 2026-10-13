@@ -14,15 +14,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * Keep or Discard on Studio's history (v1.12 — M30): a Studio piece waits while its turn says "made"; a recording
- * still waits in the old DataStore set; the first start after the upgrade imports the old set exactly once (the
- * backfill's "kept" turns of the pieces it named wait again), and a set that can't be read is tried again later.
- * A mistake here would lose a person's Keep or Discard, or bring back a question already answered.
+ * still waits in the DataStore set. A mistake here would lose a person's Keep or Discard, or bring back a question
+ * already answered.
  */
 class RoomReviewTest {
     /** Studio's history as the DAO keeps it: just the rows, with the same rules as [dev.stevenjin.stevenpiano.data.db.GenerationSql]. */
@@ -48,10 +45,6 @@ class RoomReviewTest {
 
         override suspend fun undecided(): List<Long> = rows.filter { it.undecided }.sortedBy { it.createdAt }.mapNotNull { it.pieceId }
 
-        override suspend fun reopen(ids: Collection<Long>) {
-            rows.replaceAll { if (it.outcome == GenerationEntity.KEPT && it.pieceId in ids) it.copy(outcome = GenerationEntity.MADE) else it }
-        }
-
         override suspend fun decide(pieceId: Long, kept: Boolean): Boolean {
             val i = rows.indexOfFirst { it.pieceId == pieceId && it.outcome == GenerationEntity.MADE }
             if (i < 0) return false
@@ -72,20 +65,14 @@ class RoomReviewTest {
         override suspend fun setCover(id: Long, kind: String, seed: Long) = Unit
     }
 
-    /** The "studio" DataStore's set and flag; [readable] false is a store that can't be read. */
+    /** The "studio" DataStore's set. */
     private class Old(vararg ids: Long) : WaitingSet {
         var set = ids.toSet()
-        var flag = false
-        var readable = true
 
-        override suspend fun read(): Set<Long>? = if (readable) set else null
+        override suspend fun read(): Set<Long> = set
 
-        override suspend fun imported(): Boolean = readable && flag
-
-        override suspend fun edit(imported: Boolean?, change: (Set<Long>) -> Set<Long>): Boolean {
-            if (!readable) return false
+        override suspend fun edit(change: (Set<Long>) -> Set<Long>): Boolean {
             set = change(set)
-            if (imported != null) flag = imported
             return true
         }
     }
@@ -98,36 +85,9 @@ class RoomReviewTest {
     )
 
     @Test
-    fun `the first start imports the old set once - Studio's pieces wait on their turns, a recording stays in the set`() = runBlocking {
-        val history = backfilled()
-        val old = Old(4, 6, 99)   // 99: a recording, which has no turn
-        val review = RoomReview(history, old)
-        assertEquals(setOf(4L, 6L, 99L), review.undecided())
-        assertEquals(listOf("made", "kept", "made"), listOf(4L, 5L, 6L).map(history::outcome))
-        assertEquals(setOf(99L), old.set)
-        assertTrue(old.flag)
-        // Keep piece 4; the next start must not ask about it again.
-        review.decided(4, kept = true)
-        assertEquals("kept", history.outcome(4))
-        assertEquals(setOf(6L, 99L), RoomReview(history, old).undecided())
-    }
-
-    @Test
-    fun `a set that can't be read imports nothing now and is tried again at the next start`() = runBlocking {
-        val history = backfilled()
-        val old = Old(5).apply { readable = false }
-        assertEquals(emptySet<Long>(), RoomReview(history, old).undecided())
-        assertEquals("kept", history.outcome(5))
-        assertFalse(old.flag)
-        old.readable = true
-        assertEquals(setOf(5L), RoomReview(history, old).undecided())
-        assertEquals("made", history.outcome(5))
-    }
-
-    @Test
     fun `a Studio piece waits on its turn, a recording in the set, and Keep or Discard reach the right one`() = runBlocking {
         val history = backfilled()
-        val old = Old().apply { flag = true }
+        val old = Old()
         val review = RoomReview(history, old)
         history.begin(GenerationEntity(createdAt = 30, kind = "compose", pieceId = 7, outcome = GenerationEntity.MADE))
         review.waiting(7)   // Studio's: its turn says so already

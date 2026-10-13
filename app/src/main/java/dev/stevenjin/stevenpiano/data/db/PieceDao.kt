@@ -106,13 +106,6 @@ interface PieceDao {
     )
     fun head(playlistId: Long, limit: Int): Flow<List<PieceHead>>
 
-    /** The pieces by [composerKey] without a cover of their own (no picture in their `piece:<id>` artwork row), newest first (v1.14 — M37). */
-    @Query(
-        "SELECT p.id FROM pieces p LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
-            "WHERE p.composerKey = :composerKey AND a.imagePath IS NULL ORDER BY p.id DESC",
-    )
-    suspend fun withoutCover(composerKey: String): List<Long>
-
     /**
      * The pieces whose album cover may be looked up (v1.15 — M40): Classical (1) or Modern (2), so none made here; no
      * picture in their `piece:<id>` row; their `cover:<id>` lookup never made or failed (a failure waits its day in the
@@ -153,23 +146,6 @@ interface PieceDao {
     /** Whether any piece is grouped under [composerKey] (v1.10.1 — M28, D3). */
     @Query("SELECT EXISTS(SELECT 1 FROM pieces WHERE composerKey = :composerKey)")
     suspend fun hasComposerKey(composerKey: String): Boolean
-
-    /**
-     * The pieces an upload before 1.10.1 left loose (v1.10.1 — M28, D4, `UploadRepair`): no collection, in no
-     * playlist, a folder in their path (`sourceName`), and none made in Studio ([studio], its composer).
-     */
-    @Query(
-        "SELECT * FROM pieces p WHERE (p.collection IS NULL OR p.collection = '') AND instr(p.sourceName, '/') > 1 " +
-            "AND p.composer != :studio AND NOT EXISTS (SELECT 1 FROM collection_pieces cp WHERE cp.pieceId = p.id)",
-    )
-    suspend fun loose(studio: String): List<PieceEntity>
-
-    /** A piece's names and the keys made from them, and nothing else of it (the repair of older uploads). */
-    @Query(
-        "UPDATE pieces SET title = :title, composer = :composer, composerKey = :composerKey, composerShort = :composerShort, " +
-            "searchText = :searchText, titleKey = :titleKey WHERE id = :id",
-    )
-    suspend fun setNames(id: Long, title: String, composer: String, composerKey: String, composerShort: String, searchText: String, titleKey: String)
 
     /** The ids of the pieces among [shas] (at most 500 at a time), in no particular order (v1.10.1 — M28, D2). */
     @Query("SELECT id, sha256 FROM pieces WHERE sha256 IN (:shas)")

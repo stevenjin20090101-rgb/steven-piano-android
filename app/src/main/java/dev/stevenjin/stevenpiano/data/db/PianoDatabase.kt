@@ -13,7 +13,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * The library. Schema v6 (app 1.24 — M57): the schedules table holds the quiet times alone, without the timed plays'
@@ -44,15 +43,9 @@ abstract class PianoDatabase : RoomDatabase() {
     abstract fun generations(): GenerationDao
 
     companion object {
-        /** [onOpen] runs as the database first opens, before any query (the one-off [TextRepair]). */
-        fun open(context: Context, onOpen: (SupportSQLiteDatabase) -> Unit = {}): PianoDatabase =
+        fun open(context: Context): PianoDatabase =
             Room.databaseBuilder(context, PianoDatabase::class.java, "steven-piano.db")
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
-                .addCallback(
-                    object : Callback() {
-                        override fun onOpen(db: SupportSQLiteDatabase) = onOpen(db)
-                    },
-                )
                 .build()
     }
 }

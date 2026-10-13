@@ -43,9 +43,6 @@ interface GenerationDao {
     @Query(GenerationSql.INTERRUPT_PENDING)
     suspend fun interruptPending(): Int
 
-    @Query(GenerationSql.REOPEN)
-    suspend fun reopen(ids: List<Long>): Int
-
     @Query(GenerationSql.DECIDE)
     suspend fun decide(pieceId: Long, outcome: String): Int
 

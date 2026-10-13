@@ -58,8 +58,6 @@ import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
 import dev.stevenjin.stevenpiano.data.builtin.StudioPlaylist
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
-import dev.stevenjin.stevenpiano.data.db.TextRepair
-import dev.stevenjin.stevenpiano.data.db.UploadRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
@@ -94,7 +92,6 @@ import dev.stevenjin.stevenpiano.instruments.LiveTimingHold
 import dev.stevenjin.stevenpiano.instruments.MidiDevices
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.midi.KeyEvents
-import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
@@ -174,7 +171,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
@@ -198,17 +194,7 @@ class AppGraph(private val app: Application) {
     val appearance: StateFlow<Appearance?> =
         settingsRepository.settings.map { it.appearance }.stateIn(appScope, SharingStarted.Eagerly, null)
 
-    /** Opening it runs the one-off repair of text imported before 1.2 capped it ([TextRepair]), before any query. */
-    private val database: PianoDatabase by lazy {
-        PianoDatabase.open(app) { db ->
-            TextRepair.runOnce(
-                db,
-                due = { runBlocking { !settingsRepository.textRepairDone() } },
-                done = { runBlocking { settingsRepository.markTextRepairDone() } },
-                log = { Log.w(TAG, it) },
-            )
-        }
-    }
+    private val database: PianoDatabase by lazy { PianoDatabase.open(app) }
     private val pieceFiles = PieceFiles(app.filesDir)
     val library: LibraryRepository by lazy { LibraryRepository(database, pieceFiles) }
 
@@ -241,25 +227,6 @@ class AppGraph(private val app: Application) {
     /** Studio's history (v1.12 — M30): the turns of its conversation, and the one record of its pieces' Keep or Discard. */
     val studioHistory: Generations by lazy { RoomGenerations(database.generations()) }
 
-    /**
-     * The one-time repair of uploads imported before 1.10.1 ([UploadRepair], v1.10.1 — M28, D4), off the main
-     * thread, unless it has run already (`uploadRepairDone`); its lines go to the link's trail, naming the
-     * playlists in debug builds only. True when it named some artist. A failure is logged and leaves it due, so
-     * the next start tries again (what it did by then stays: those pieces are in their playlist).
-     */
-    private suspend fun repairUploadsOnce(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            if (settingsRepository.uploadRepairDone()) return@withContext false
-            val done = UploadRepair.run(library, log = LinkLog::warn, named = { name -> if (BuildConfig.DEBUG) " $name" else "" })
-            settingsRepository.markUploadRepairDone()
-            done.any { it.filled > 0 }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "The repair of older uploads failed; it runs again at the next start", e)
-            false
-        }
-    }
 
     private val importState = MutableStateFlow(ImportProgress.Idle)
     val importProgress: StateFlow<ImportProgress> = importState.asStateFlow()
@@ -702,10 +669,6 @@ class AppGraph(private val app: Application) {
             override suspend fun discard(pieceId: Long) = studioReview.discard(pieceId)
 
             override suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = studioLibrary.setCover(pieceId, png)
-
-            override suspend fun withoutCover(): List<Long> = library.recordingsWithoutCover()
-
-            override suspend fun notes(pieceId: Long): NoteList = library.load(pieceId).midi.notes
         }
         RecordingSession(
             recorder,
@@ -877,14 +840,9 @@ class AppGraph(private val app: Application) {
             runCatching { LibraryPack.sweep(File(app.cacheDir, LibraryPack.CACHE_DIR), before = startedAt) }
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
         }
-        // First, once, uploads imported before 1.10.1 become playlists, their artists filled (v1.10.1 — M28, D4). Then the
-        // built-in playlists follow the library: now (the first query opens the database), and two seconds after a run of
-        // renames ends (imports refresh them from ImportService). Then artwork for the artists the repair named.
-        appScope.launch {
-            val named = repairUploadsOnce()
-            refreshBuiltIns()
-            if (named && settingsRepository.settings.first().fetchArtworkAutomatically) artwork.requestDue(force = false)
-        }
+        // The built-in playlists follow the library: now (the first query opens the database), and two seconds after a run
+        // of renames ends (imports refresh them from ImportService).
+        appScope.launch { refreshBuiltIns() }
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         pianoSettings.start()
         appScope.launch {
@@ -959,10 +917,7 @@ class AppGraph(private val app: Application) {
             restoreInstrument(s)
             followLive()
             followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
-            launch {
-                recording.recoverPending()   // takes a crash left behind (v1.11 — M29), beside the rest
-                recording.drawMissingCovers()   // then a cover for each recording made before 1.14 (v1.14 — M37)
-            }
+            launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
             // connects with the same switch; by cable it needs no permission.
             if (s.autoConnect) {

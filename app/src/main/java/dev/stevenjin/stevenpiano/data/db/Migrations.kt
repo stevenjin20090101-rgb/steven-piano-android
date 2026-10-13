@@ -138,8 +138,8 @@ object SchemaV3 {
 /**
  * Schema v3 (apps 1.5 to 1.11) to v4 (app 1.12 — M30): Studio's history gets its table, `studio_generations`,
  * and every piece Studio made before (composer "Made in Studio", apps 1.7 to 1.11) gets a turn: a composition when
- * its sheet's line says what it was in the manner of, else a transcription; "kept" until the one-off import
- * (`RoomReview`) reopens the ones the old store said were still waiting. Nothing is dropped or rewritten.
+ * its sheet's line says what it was in the manner of, else a transcription; "kept" (apps 1.12 to 1.23 then reopened,
+ * once, the ones the old store said were still waiting). Nothing is dropped or rewritten.
  * [SchemaV4.DDL] is copied from Room's generated `schemas/…/4.json` (SchemaV4Test holds the two equal). Runs
  * inside Room's migration transaction.
  */

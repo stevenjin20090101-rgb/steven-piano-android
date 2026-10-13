@@ -137,19 +137,6 @@ class RecordingSession(
         }
     }
 
-    /** At start, after [recoverPending] (v1.14 — M37): a cover for each recording made before covers were drawn. */
-    suspend fun drawMissingCovers() {
-        withContext(io) {
-            try {
-                pieces.drawMissingCovers()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log("Recording: the older recordings' covers couldn't be drawn (${e.javaClass.simpleName})")
-            }
-        }
-    }
-
     /** "Nothing was played." for a moment, then nothing. */
     private fun empty() {
         _state.value = RecordingState.Empty

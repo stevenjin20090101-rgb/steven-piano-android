@@ -39,9 +39,6 @@ interface Generations {
     /** The pieces waiting for Keep or Discard, oldest first. */
     suspend fun undecided(): List<Long>
 
-    /** The one-off import: these pieces wait again (their turns were backfilled as kept). */
-    suspend fun reopen(ids: Collection<Long>)
-
     /** Keep or Discard: false when no waiting turn has [pieceId]. */
     suspend fun decide(pieceId: Long, kept: Boolean): Boolean
 
@@ -84,10 +81,6 @@ class RoomGenerations(private val dao: GenerationDao) : Generations {
 
     override suspend fun undecided(): List<Long> = dao.undecided()
 
-    override suspend fun reopen(ids: Collection<Long>) {
-        for (chunk in ids.toList().chunked(CHUNK)) dao.reopen(chunk)
-    }
-
     override suspend fun decide(pieceId: Long, kept: Boolean): Boolean =
         dao.decide(pieceId, if (kept) GenerationEntity.KEPT else GenerationEntity.DISCARDED) > 0
 
@@ -102,11 +95,6 @@ class RoomGenerations(private val dao: GenerationDao) : Generations {
     override suspend fun withoutCover(): List<GenerationEntity> = dao.withoutCover()
 
     override suspend fun setCover(id: Long, kind: String, seed: Long) = dao.setCover(id, kind, seed)
-
-    private companion object {
-        /** Ids per statement: under SQLite's 999-variable limit. */
-        const val CHUNK = 500
-    }
 }
 
 /** No history: a Studio made without one (tests that don't look at it). */
@@ -124,8 +112,6 @@ object NoGenerations : Generations {
     override suspend fun forPiece(pieceId: Long): GenerationEntity? = null
 
     override suspend fun undecided(): List<Long> = emptyList()
-
-    override suspend fun reopen(ids: Collection<Long>) = Unit
 
     override suspend fun decide(pieceId: Long, kept: Boolean): Boolean = false
 
