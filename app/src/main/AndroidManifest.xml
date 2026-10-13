@@ -203,7 +203,7 @@
             android:foregroundServiceType="dataSync" />
 
         <!-- The web panel's server (Piano › Remote control › Web control): it listens on the tablet's tailnet
-             address (the panel) and its Wi-Fi address (guests only, unless Panel on Wi-Fi too), never on all
+             address (the panel) and its Wi-Fi address (guests only), never on all
              addresses, only while the switch is on and a PIN is set. Not exported: only the app starts it.
              v1.10 — M26: with remote access over the internet on (and the PIN set) it also keeps the tablet's
              one outbound connection to the owner's relay (Steven Piano Cloud), Web control on or not. -->
