@@ -13,6 +13,7 @@ import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.ListenCopy
+import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
@@ -46,6 +47,12 @@ object PageRows {
 
     // ---- THE PIANO › Firmware and status (drawn by the page, beside the table's rows) -------------------
     val CHECK_PIANO_UPDATES = AppRow("firmware.check", FirmwareCopy.CHECK, SettingsPage.Firmware, "Firmware", listOf("firmware update", "upgrade"))
+
+    // The piano's Bluetooth lock (v1.25 — M58), under FIRMWARE on firmware 2.1.0 and later.
+    val LOCK = AppRow("firmware.lock", LockCopy.LOCK, SettingsPage.Firmware, "Firmware", listOf("locked", "claim", "security", "this tablet"))
+    val LOCK_PAIR = AppRow("firmware.pair", LockCopy.PAIR, SettingsPage.Firmware, "Firmware", listOf("new tablet", "phone", "add a device", "pairing window"))
+    val LOCK_UNLOCK = AppRow("firmware.unlock", LockCopy.UNLOCK, SettingsPage.Firmware, "Firmware", listOf("forget", "remove the lock", "unclaim"))
+    val LOCK_GUEST = AppRow("firmware.guest", LockCopy.GUEST, SettingsPage.Firmware, "Firmware", listOf("guest play", "iPad", "GarageBand", "visitors"))
 
     // ---- PLAYING › Playback -------------------------------------------------------------------------
     val PAUSE = AppRow("playback.pause", "Pause before each piece", SettingsPage.Playback, null, listOf("gap between pieces", "pre-roll", "wait"))
@@ -125,7 +132,7 @@ object PageRows {
     val all: List<AppRow> = listOf(
         CONNECTION, AUTO_CONNECT, STEVEN_PIANO, ANOTHER_PIANO, ALL_KEYS_OFF,
         CHOOSE_KEYBOARD, FORGET_KEYBOARD,
-        CHECK_PIANO_UPDATES,
+        CHECK_PIANO_UPDATES, LOCK, LOCK_PAIR, LOCK_UNLOCK, LOCK_GUEST,
         PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
         PLAY_ANYWAY, ADD_SECTION,

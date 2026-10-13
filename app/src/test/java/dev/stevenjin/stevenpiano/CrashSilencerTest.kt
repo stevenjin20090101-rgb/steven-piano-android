@@ -10,11 +10,21 @@
 package dev.stevenjin.stevenpiano
 
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
+import dev.stevenjin.stevenpiano.ble.LinkError
+import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.ble.LinkTrust
+import dev.stevenjin.stevenpiano.ble.LockGate
+import dev.stevenjin.stevenpiano.ble.Trust
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 /** The crash handler (the v1.2 audit, F3): the piano's stop goes out first, then Android's handler gets the crash. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class CrashSilencerTest {
     private var delegated: Throwable? = null
     private val previous = Thread.UncaughtExceptionHandler { _, e -> delegated = e }
@@ -29,13 +39,28 @@ class CrashSilencerTest {
     }
 
     @Test
-    fun `no link, or no connection, is not silenced, and the crash still goes on`() {
+    fun `no link is not silenced, a link is always asked, and its own connection decides, the crash still goes on`() {
         CrashSilencer({ null }, previous).uncaughtException(Thread.currentThread(), crash)
         assertSame(crash, delegated)
         val link = FakePianoLink().apply { disconnect() }
         delegated = null
         CrashSilencer({ link }, previous).uncaughtException(Thread.currentThread(), crash)
-        assertEquals(emptyList<Long>(), link.emergencySilences)
+        assertEquals("asked: a link without a connection has nothing to send (its own rule)", listOf(200L), link.emergencySilences)
+        assertSame(crash, delegated)
+    }
+
+    @Test
+    fun `the stop goes out while the piano's lock holds the link back, untrusted (v1_25 M58)`() = runTest {
+        val link = FakePianoLink()   // connected
+        val trust = MutableStateFlow(LinkTrust(connection = 0, trust = Trust.Pending))
+        val gate = LockGate(link, trust, backgroundScope)
+        runCurrent()
+        assertEquals("the player sees it not connected yet", LinkState.Connecting, gate.state.value)
+        CrashSilencer({ gate }, previous).uncaughtException(Thread.currentThread(), crash)
+        assertEquals(listOf(200L), link.emergencySilences)
+        trust.value = LinkTrust(connection = 0, trust = Trust.Refused(LinkError.LockedOut))
+        CrashSilencer({ gate }, previous).uncaughtException(Thread.currentThread(), crash)
+        assertEquals("read only, too", listOf(200L, 200L), link.emergencySilences)
         assertSame(crash, delegated)
     }
 

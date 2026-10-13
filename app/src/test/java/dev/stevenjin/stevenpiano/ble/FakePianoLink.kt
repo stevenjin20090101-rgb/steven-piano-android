@@ -62,6 +62,16 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
     /** Every [expectRestart] window asked for, in order. */
     val restartsExpected = mutableListOf<Long>()
 
+    /** The piano's address while connected (v1.25 — M58: the lock keeps its key by it); null until a test sets it. */
+    var addressOnConnect: String? = null
+
+    /** The [LinkState.Connected.connection] its next connection reports (0 unless a test numbers them). */
+    var connectionNumber = 0L
+
+    @Volatile
+    override var address: String? = null
+        private set
+
     override fun expectRestart(withinMs: Long) {
         synchronized(restartsExpected) { restartsExpected += withinMs }
     }
@@ -73,13 +83,15 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
         console = consoleOnConnect
         ota = otaOnConnect
         version.value = firmwareVersionOnConnect
-        _state.value = LinkState.Connected("Steven Piano", 255)
+        this.address = addressOnConnect
+        _state.value = LinkState.Connected("Steven Piano", 255, connection = connectionNumber)
     }
 
     override fun disconnect() {
         console = null
         ota = null
         version.value = null
+        address = null
         _state.value = LinkState.Disconnected
     }
 
@@ -88,6 +100,7 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
         console = null
         ota = null
         version.value = null
+        address = null
         _state.value = LinkState.Reconnecting(1)
     }
 
@@ -104,7 +117,8 @@ class FakePianoLink(private val clock: NanoClock = NanoClock.System) : PianoLink
     fun connectedWith(with: FakeConsole?) {
         consoleOnConnect = with
         console = with
-        _state.value = LinkState.Connected("Steven Piano", 255)
+        address = addressOnConnect
+        _state.value = LinkState.Connected("Steven Piano", 255, connection = connectionNumber)
     }
 
     override fun send(batch: MidiBatch, dropPending: Boolean) {

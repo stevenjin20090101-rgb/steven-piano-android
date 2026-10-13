@@ -150,6 +150,15 @@ object FirmwareFailures {
     /** ERR 6 or 8: the piano refused this release itself. */
     const val REFUSED_HINT = "The piano refused this release."
 
+    /**
+     * ERR 11 (v1.25 — M58, firmware 2.1.0): the piano is locked and this connection hasn't proved the tablet's key; also why
+     * nothing is sent while the piano doesn't accept this tablet (the Bluetooth lock: read only).
+     */
+    const val NOT_AUTHORISED = "The piano didn't accept this tablet (not authorised)."
+
+    /** ERR 12 (v1.25 — M58, firmware 2.1.0): BEGIN's version, or the image's signed tag, isn't newer than what the piano runs. */
+    const val NOT_NEWER = "That firmware isn't newer than the piano's."
+
     /** The piano came back on its old firmware: the new one did not confirm itself. */
     fun rolledBack(reported: String): String = "The piano restarted but reports $reported — it rolled back."
 }

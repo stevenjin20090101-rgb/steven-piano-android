@@ -338,10 +338,17 @@ class FirmwareUpdater(
         return Ed25519.verify(publicKey, digest, manifest.signature(), platformEd25519)
     }
 
-    /** Why the image can't go now, or null: connected to a piano that can take it, and the tablet charged enough. */
+    /**
+     * Why the image can't go now, or null: connected to a piano that can take it, which accepts this tablet (v1.25 — M58:
+     * read only under its Bluetooth lock, nothing is sent; while the lock is still being proved, not yet), and the tablet
+     * charged enough.
+     */
     private fun precondition(): String? {
         if (link.state.value !is LinkState.Connected) return FirmwareFailures.NOT_CONNECTED
         if (link.ota == null) return FirmwareFailures.NOT_UPDATABLE
+        val lock = (pianoState.value as? PianoState.Ready)?.lock
+        if (lock != null && lock.phase.readOnly) return FirmwareFailures.NOT_AUTHORISED
+        if (lock != null && !lock.writable) return FirmwareFailures.NOT_CONNECTED
         val power = power()
         val percent = power.percent
         if (percent != null && percent < MIN_BATTERY_PERCENT && !power.charging) return FirmwareFailures.LOW_BATTERY
@@ -447,6 +454,8 @@ class FirmwareUpdater(
             val hint = when (code) {
                 SAFE_MODE -> FirmwareFailures.SAFE_MODE_HINT
                 BAD_SIGNATURE, IMAGE_INVALID -> FirmwareFailures.REFUSED_HINT
+                NOT_AUTHORISED -> FirmwareFailures.NOT_AUTHORISED
+                NOT_NEWER -> FirmwareFailures.NOT_NEWER
                 else -> null
             }
             Outcome.Refused("ERR $code (${OtaFrames.errorName(code)}) $where", retryable = code !in NOT_RETRYABLE, hint = hint)
@@ -682,7 +691,14 @@ class FirmwareUpdater(
         private const val BAD_SIGNATURE = 6
         private const val IMAGE_INVALID = 8
 
-        /** ERRs Retry would not mend: too large, a bad signature, an invalid image. */
-        private val NOT_RETRYABLE = setOf(2, BAD_SIGNATURE, IMAGE_INVALID)
+        /** v1.25 — M58 (firmware 2.1.0): the piano is locked and this connection unproved; the image is not newer. */
+        private const val NOT_AUTHORISED = 11
+        private const val NOT_NEWER = 12
+
+        /**
+         * ERRs Retry would not mend: too large, a bad signature, an invalid image; not authorised (a new connection proves
+         * the key again) and not newer (never mended).
+         */
+        private val NOT_RETRYABLE = setOf(2, BAD_SIGNATURE, IMAGE_INVALID, NOT_AUTHORISED, NOT_NEWER)
     }
 }

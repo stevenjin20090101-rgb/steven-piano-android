@@ -88,6 +88,12 @@ interface PianoLink : MidiSink {
      * giving up on it.
      */
     fun expectRestart(withinMs: Long) {}
+
+    /**
+     * The piano's Bluetooth address while connected (v1.25 — M58: the key the tablet keeps for the piano's lock is kept
+     * by it), set before [state] turns Connected; null while not connected, and for a link that has none.
+     */
+    val address: String? get() = null
 }
 
 /** [PianoLink.firmwareVersion] for a link that never knows one. */
@@ -101,9 +107,11 @@ sealed interface LinkState {
     /**
      * [epoch] changes with every new connection, and whenever the link lost a packet the piano
      * needed: the player re-syncs (silence, then the pedal again) when it sees a new one, even if
-     * the drop between two connections was too quick for it to see.
+     * the drop between two connections was too quick for it to see. [connection] (v1.25 — M58)
+     * numbers the connections themselves, so a lost packet keeps it: the piano's lock trusts one
+     * connection at a time, and what was proved on one never carries to the next.
      */
-    data class Connected(val name: String, val mtu: Int, val epoch: Long = 0) : LinkState
+    data class Connected(val name: String, val mtu: Int, val epoch: Long = 0, val connection: Long = 0) : LinkState
     data class Reconnecting(val attempt: Int) : LinkState
 
     /** [otherAddress]: for [LinkError.OtherPiano], the piano that was found, which the person may choose. */
@@ -190,8 +198,26 @@ sealed interface LinkError {
     data object NoMidi : LinkError {
         override val message = "This tablet has no MIDI, so it can't play a MIDI piano."
     }
+
+    /**
+     * The piano is locked to another device (v1.25 — M58, firmware 2.1.0's Bluetooth lock): connected, but this tablet
+     * holds no key for it, so it may only read the piano. Its pairing window lets this tablet claim it again.
+     */
+    data object LockedOut : LinkError {
+        override val message = LOCKED_OUT_COPY
+    }
+
+    /** The piano refused this tablet's proof of its key, or didn't answer it within 3 s (v1.25 — M58): read only. */
+    data object NotAccepted : LinkError {
+        override val message = NOT_ACCEPTED_COPY
+    }
 }
 
 private const val NOT_FOUND_COPY = "Can't find Steven Piano. Make sure it's powered on, within range, and that no iPad, phone " +
     "or Mac is connected to it — it hides while another device is connected."
 private const val LOCATION_HINT_COPY = "On some devices, Bluetooth scanning also needs Location turned on."
+
+/** How a piano locked to another device lets this tablet in (BLE_LOCK.md: the button in the lighting buttons' popup). */
+const val PAIR_AGAIN_COPY = "On the piano's screen press and hold a lighting button, tap Let a new tablet pair, then reconnect."
+const val LOCKED_OUT_COPY = "This piano is locked to another device. $PAIR_AGAIN_COPY"
+const val NOT_ACCEPTED_COPY = "The piano didn't accept this tablet. $PAIR_AGAIN_COPY"

@@ -80,6 +80,8 @@ import kotlin.concurrent.withLock
  * ([OtaEvent.Lost]), and stale frames never outlive their session. [expectRestart]: after an
  * update's OK the piano restarts on purpose, so for that window a drop is reconnected whatever
  * auto-connect says, with the first scan after [RESTART_SCAN_AFTER_MS] rather than 20 s.
+ * The piano's lock (v1.25 — M58): each connection has its own [LinkState.Connected.connection] number, and the
+ * piano's [address] is known from Connected on, for the key the tablet keeps for it.
  * Other MIDI devices (v1.11 — M29): a keyboard or a MIDI piano this app opens through Android's MIDI
  * service advertises the same BLE-MIDI service. [isForeign] names them (the registry of MIDI devices
  * answers it): a scan never connects to one, nor takes one another app holds for the piano. A nameless
@@ -167,6 +169,9 @@ class GattPianoLink(
     override val ota: OtaChannel?
         get() = if (otaReady) otaChannel else null
 
+    override val address: String?
+        get() = readyAddress
+
     // Owned by the executor's thread.
     private enum class Phase { None, Connecting, Negotiating, Ready }
 
@@ -186,6 +191,13 @@ class GattPianoLink(
 
     /** Bumped for each connection and each packet given up on; see [LinkState.Connected.epoch]. */
     private var epoch = 0L
+
+    /** Bumped for each connection only; see [LinkState.Connected.connection]. */
+    private var connections = 0L
+
+    /** The piano's address while Ready, for any thread ([address]). */
+    @Volatile
+    private var readyAddress: String? = null
     private var mtu = DEFAULT_MTU
     private var discoveryRetried = false
     private var connectRetried = false
@@ -788,6 +800,7 @@ class GattPianoLink(
         error = null
         errorOther = null
         epoch++
+        connections++
         connectRetried = false
         behindLogged.set(false)
         executor.cancel(startScan)
@@ -802,6 +815,7 @@ class GattPianoLink(
         readyConnection = connection
         val name = piano?.name ?: PianoBluetooth.NAME
         val address = piano?.address ?: preferredAddress
+        readyAddress = address ?: connection.address
         publish()
         log("Connected to $name (${connection.address}), MTU $mtu, " + if (hasConsole) "with its console" else "no console")
         address?.let {
@@ -950,6 +964,7 @@ class GattPianoLink(
         gatt = null
         ready = false
         readyConnection = null
+        readyAddress = null
         consoleReady = false
         writer.clear()
         consoleQueue.clear()
@@ -1276,7 +1291,7 @@ class GattPianoLink(
 
     private fun publish() {
         _state.value = when {
-            phase == Phase.Ready -> LinkState.Connected(piano?.name ?: PianoBluetooth.NAME, mtu, epoch)
+            phase == Phase.Ready -> LinkState.Connected(piano?.name ?: PianoBluetooth.NAME, mtu, epoch, connections)
             reconnecting -> LinkState.Reconnecting(attempt)
             scanning -> LinkState.Scanning
             phase != Phase.None -> LinkState.Connecting

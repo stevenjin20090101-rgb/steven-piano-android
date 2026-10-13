@@ -85,7 +85,7 @@ class GattOtaTest {
         assertNull(link.ota)
         gatt.versionRead("2.0.0+a1b2c3d\u0000")
         executor.runDue()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), link.state.value)
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1, connection = 1), link.state.value)
         assertEquals("2.0.0+a1b2c3d", link.firmwareVersion.value)
         assertNotNull(link.ota)
         assertEquals(250, link.ota!!.maxChunk)
@@ -97,7 +97,7 @@ class GattOtaTest {
     fun `older firmware has neither, and connects as before`() {
         val gatt = connectUpTo(version = false, ota = false)
         assertEquals(0, gatt.versionReads)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), link.state.value)
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1, connection = 1), link.state.value)
         assertNull(link.firmwareVersion.value)
         assertNull(link.ota)
         assertTrue("nothing new in the log", logged.none { it.startsWith("Firmware") })

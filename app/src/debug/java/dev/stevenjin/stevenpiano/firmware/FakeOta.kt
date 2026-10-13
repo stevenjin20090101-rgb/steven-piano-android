@@ -57,6 +57,12 @@ enum class FakeOta(val key: String) {
     /** OK, and the piano never comes back. */
     NoComeBack("nocomeback"),
 
+    /** ERR 11 at BEGIN: the piano's Bluetooth lock doesn't trust this connection (firmware 2.1.0; v1.25 — M58). */
+    NotAuthorised("err11"),
+
+    /** A piano with 2.1.0's version checks, on 2.0.2: § 5's image has no version tag, so after END, ERR 12 (v1.25 — M58). */
+    NotNewer("err12"),
+
     /** Firmware older than 2.0.0: no version and no update service. */
     Old("old"),
     ;
@@ -66,6 +72,7 @@ enum class FakeOta(val key: String) {
         get() = when (this) {
             Old -> null
             UpToDate -> "2.1.0+a1b2c3d"
+            NotNewer -> "$TAG_CHECKING+a1b2c3d"
             else -> OtaExample.RUNNING
         }
 
@@ -76,6 +83,8 @@ enum class FakeOta(val key: String) {
             Disconnect -> OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, dropAfterAcks = 40)
             HashMismatch -> OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, hashMismatch = true)
             Signature -> OtaPiano.Script(publicKey = FirmwareKeys.author)
+            NotAuthorised -> OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, authorised = { false })
+            NotNewer -> OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, runningVersion = TAG_CHECKING)
             else -> OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test)
         }
 
@@ -99,6 +108,9 @@ enum class FakeOta(val key: String) {
 
     companion object {
         const val PROPERTY = "debug.stevenpiano.fakeota"
+
+        /** The version [NotNewer]'s piano runs: `tools/ota-sim`'s fake, 2.0.2 with 2.1.0's checks. */
+        private const val TAG_CHECKING = "2.0.2"
         private const val NEWER_APP = 99
         private const val ANY_APP = 1
 

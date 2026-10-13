@@ -18,10 +18,21 @@ import java.util.Locale
  * Plausible defaults (the firmware's own, lights on). A stand-in for the screen to talk to, not a
  * model of the instrument: replies are shortened, every out-of-range number says "out of range",
  * and nothing plays. Not thread-safe.
+ * With a [lock] (v1.25 — M58), it is a 2.1.0 piano: the lock's facts close the dump, `claim`, `auth` and
+ * `lock …` are the lock's, and on a claimed piano an untrusted connection gets "refused — not
+ * authorised" for anything but reading, `off` and `broadcast`. Without one it is 2.0.x, as before.
  */
-class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS) {
+class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: EmulatedLock? = null) {
     private val facts = LinkedHashMap(facts)
     private val values = LinkedHashMap<String, String>().apply { TUNABLES.forEach { put(it.name, it.default) } }
+
+    /** A new connection (the lock's trust and nonce are each connection's own). */
+    fun connected() {
+        lock?.connected()
+    }
+
+    /** Whether notes and the pedal from this connection play: no lock, an open piano, a trusted connection or guest play. */
+    fun notesAllowed(): Boolean = lock?.notesAllowed() ?: true
 
     /** The piano's fact [name] (without its "!") now reads [value]: a firmware update's `!fw` and `!ota` (v1.6 — M21). */
     fun setFact(name: String, value: String) {
@@ -34,8 +45,12 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS) {
         if (command.isEmpty()) return emptyList()
         val name = command.substringBefore(' ')
         val argument = command.substringAfter(' ', "").trim()
+        if (name in REFUSED) return listOf("  refused over Bluetooth — use the USB console")
+        lock?.let { piano ->
+            piano.handle(command)?.let { return it }
+            if (!piano.allows(command)) return listOf(EmulatedLock.NOT_AUTHORISED)
+        }
         return when {
-            name in REFUSED -> listOf("  refused over Bluetooth — use the USB console")
             command == "dump" -> dump()
             name == "get" -> listOf(read(argument) ?: "  unknown setting")
             command == "status" -> status()
@@ -55,11 +70,16 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS) {
         }
     }
 
-    /** The value [name] holds, as `dump` writes it; facts with their "!". */
-    fun valueOf(name: String): String? = if (name.startsWith("!")) facts[name.removePrefix("!")] else values[name]
+    /** The value [name] holds, as `dump` writes it; facts with their "!" (the lock's too). */
+    fun valueOf(name: String): String? {
+        if (!name.startsWith("!")) return values[name]
+        val fact = name.removePrefix("!")
+        return facts[fact] ?: lock?.fact(fact)
+    }
 
     private fun dump(): List<String> =
-        facts.map { (name, value) -> "!$name=$value" } + values.map { (name, value) -> "$name=$value" } + "end"
+        facts.map { (name, value) -> "!$name=$value" } + lock?.facts().orEmpty().map { (name, value) -> "!$name=$value" } +
+            values.map { (name, value) -> "$name=$value" } + "end"
 
     private fun read(name: String): String? = valueOf(name)?.let { "$name=$it" }
 
