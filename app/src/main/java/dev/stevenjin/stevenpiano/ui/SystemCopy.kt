@@ -167,6 +167,22 @@ object SystemCopy {
         null -> null
     }
 
+    /** The Tablet card's Debugging row (v1.25 — M58), amber while it needs attention ([Attention.debugging]). */
+    const val DEBUGGING = "Debugging"
+
+    /** What debugging is on: "USB", "Wireless", "USB and wireless", "Developer options on"; "Off"; null before a reading. */
+    fun debugging(reading: SystemReading?): String? {
+        val debug = reading?.debug ?: return null
+        return when {
+            debug.usb == true && debug.wireless == true -> "USB and wireless"
+            debug.usb == true -> "USB"
+            debug.wireless == true -> "Wireless"
+            debug.wireless == null && debug.developer == true -> "Developer options on"
+            debug.usb == null && debug.wireless == null && debug.developer == null -> null
+            else -> "Off"
+        }
+    }
+
     // ---- The controller and the piano ----------------------------------------------------------------------
 
     /** The controller card's line: the instrument that plays instead, "Not connected", or the chip and its firmware. */

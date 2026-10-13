@@ -23,7 +23,7 @@ import kotlin.math.roundToInt
  */
 object Attention {
     /** What an item colours on the page: a dial, a meter, the boards, a running row; (v1.23 — M55) the keys held now. */
-    enum class Part { Battery, Heat, Memory, Storage, Boards, Chip, Heap, Relay, Running, Held }
+    enum class Part { Battery, Heat, Memory, Storage, Boards, Chip, Heap, Debugging, Relay, Running, Held }
 
     /** One thing that needs attention: the [part] it colours, the sentence that says it ([text]), the running row's [key]. */
     data class Item(val part: Part, val text: String, val key: String? = null)
@@ -99,6 +99,8 @@ object Attention {
             piano.temp?.takeIf { it >= CHIP_HOT_C }?.let { items += Item(Part.Chip, "The controller is hot · ${it.roundToInt()} °C") }
             piano.heapMin?.takeIf { it < HEAP_LOW_BYTES }?.let { items += Item(Part.Heap, "The controller ran low on memory") }
         }
+        // v1.25 — M58: debugging left on (wireless debugging is an open port with full control of the tablet).
+        inputs.reading?.let { reading -> debugging(reading.debug)?.let { items += Item(Part.Debugging, it) } }
         if (inputs.cloudOn && inputs.cloud !is CloudStatus.Connected) items += Item(Part.Relay, "The internet link is not connected")
         for (row in inputs.running) {
             if (row.state == RunningNow.PROBLEM) items += Item(Part.Running, "${row.title} needs attention", row.key)
@@ -109,6 +111,24 @@ object Attention {
         }
         return items
     }
+
+    /**
+     * What debugging is on (v1.25 — M58), in the words the item and the panel say: USB, wireless or both; when Android won't
+     * say whether wireless debugging is on, "Developer options are on" while they are and USB debugging is off (wireless
+     * debugging lives there). Null when nothing is.
+     */
+    fun debugging(debug: DebugReading): String? = when {
+        debug.usb == true && debug.wireless == true -> USB_AND_WIRELESS
+        debug.usb == true -> USB_DEBUGGING
+        debug.wireless == true -> WIRELESS_DEBUGGING
+        debug.wireless == null && debug.developer == true -> DEVELOPER_OPTIONS
+        else -> null
+    }
+
+    const val USB_DEBUGGING = "USB debugging is on"
+    const val WIRELESS_DEBUGGING = "Wireless debugging is on"
+    const val USB_AND_WIRELESS = "USB and wireless debugging are on"
+    const val DEVELOPER_OPTIONS = "Developer options are on"
 
     /**
      * The tablet's heat in a word: [HOT] from 42 °C on the battery ([celsius]), else Android's [status] in a word; "Normal"

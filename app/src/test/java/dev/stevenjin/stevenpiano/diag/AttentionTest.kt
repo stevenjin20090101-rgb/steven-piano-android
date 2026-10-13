@@ -146,6 +146,18 @@ class AttentionTest {
     }
 
     @Test
+    fun `debugging left on is said, USB and wireless apart, developer options only when wireless can't be read (v1_25 M58)`() {
+        fun said(debug: DebugReading) = tablet(calm.copy(debug = debug)).singleOrNull { it.part == Attention.Part.Debugging }?.text
+        assertEquals("USB debugging is on", said(DebugReading(usb = true, wireless = false, developer = true)))
+        assertEquals("Wireless debugging is on", said(DebugReading(usb = false, wireless = true, developer = true)))
+        assertEquals("USB and wireless debugging are on", said(DebugReading(usb = true, wireless = true, developer = true)))
+        assertEquals("Developer options are on", said(DebugReading(usb = false, wireless = null, developer = true)))
+        assertNull("developer options alone, wireless read as off: nothing", said(DebugReading(usb = false, wireless = false, developer = true)))
+        assertNull(said(DebugReading(usb = false, wireless = false, developer = false)))
+        assertNull("a tablet that can't say", said(DebugReading()))
+    }
+
+    @Test
     fun `everything at once comes most pressing first, as the panel lists it`() {
         val everything = Attention.Inputs(
             reading = SystemReading(
@@ -153,6 +165,7 @@ class AttentionTest {
                 thermal = ThermalReading(status = 4),
                 memory = MemoryReading(low = true),
                 storage = StorageReading(free = 1),
+                debug = DebugReading(usb = true, wireless = false, developer = true),
             ),
             running = listOf(row("covers", RunningNow.WAITING), row("firmware", RunningNow.PROBLEM)),
             piano = PianoDiag(mapOf("boards" to "missing", "temp" to "80", "heapmin" to "1")),
@@ -161,7 +174,8 @@ class AttentionTest {
         assertEquals(
             listOf(
                 Attention.Part.Battery, Attention.Part.Battery, Attention.Part.Heat, Attention.Part.Memory, Attention.Part.Storage,
-                Attention.Part.Boards, Attention.Part.Chip, Attention.Part.Heap, Attention.Part.Relay, Attention.Part.Running, Attention.Part.Running,
+                Attention.Part.Boards, Attention.Part.Chip, Attention.Part.Heap, Attention.Part.Debugging, Attention.Part.Relay,
+                Attention.Part.Running, Attention.Part.Running,
             ),
             Attention.of(everything).map { it.part },
         )

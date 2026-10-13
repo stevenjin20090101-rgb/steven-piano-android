@@ -154,7 +154,8 @@ const val SYSTEM_ROW_MS = 60_000L
  * System (THIS TABLET, v1.18 — M50; DESIGN.md › v1.18 — M50): the web panel's System page (M47b) in the app's own
  * components and appearance. A line saying what needs attention first, then cards in one column, or two on a tablet on
  * its side (the app's 840 dp and up, [LocalAppFrame]) when the page has room for two cards of 360 dp: the
- * **Tablet** (battery and temperature dials, memory and storage meters, Wi-Fi, running for, the screen), the
+ * **Tablet** (battery and temperature dials, memory and storage meters, Wi-Fi, running for, the screen, and from v1.25 —
+ * M58 debugging, amber while USB or wireless debugging is on), the
  * **Controller** and the **Piano** (the chip's temperature and memory, the seven power boards as seven octaves, the facts;
  * "Needs newer firmware" for what the piano doesn't report, "Not connected" without it, a row at the foot to Firmware and
  * status), **Listen and test** (v1.23 — M55, [ListenCard]: Listening from the panel, and Test every key with its keyboard
@@ -326,6 +327,8 @@ private fun TabletCard(reading: SystemReading?, parts: Set<Attention.Part>) {
         CardFact(SystemCopy.Fact(SystemCopy.networkLabel(reading), SystemCopy.network(reading)))
         CardFact(SystemCopy.Fact("Running for", reading?.uptimeMs?.let { SystemCopy.duration(it / MS_PER_S) }))
         CardFact(SystemCopy.Fact("Screen", SystemCopy.screen(reading)))
+        // v1.25 — M58: USB or wireless debugging left on, amber (wireless debugging is an open port with full control).
+        CardFact(SystemCopy.Fact(SystemCopy.DEBUGGING, SystemCopy.debugging(reading), attention = Attention.Part.Debugging in parts))
     }
 }
 
