@@ -67,7 +67,8 @@ interface ImportStore {
  * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
  * (an [OutOfMemoryError]) counts as failed, and so does a file whose sender or database throws
  * anything else: one bad file never ends the import, nor the app. One import runs at a time;
- * [progress] follows it, and always finishes; a quiet one ([importOpened]) keeps a progress of its own.
+ * [progress] follows it, and always finishes, a cancelled import's too (v1.25 — M58: Android's time
+ * for data sync ran out, and what was saved stays); a quiet one ([importOpened]) keeps a progress of its own.
  */
 class Importer(
     private val store: ImportStore,
@@ -86,7 +87,7 @@ class Importer(
             val opened = try {
                 openSource(context, source) { job?.isActive == false }
             } catch (e: CancellationException) {
-                throw e
+                cancelled(e, progress)
             } catch (e: Exception) {   // unreadable zip, revoked grant, vanished folder, a provider that throws
                 log("Couldn't open the import" + detail(e))
                 return@withContext ImportProgress(done = 1, total = 1, failed = 1).also { progress.value = it }
@@ -116,7 +117,7 @@ class Importer(
     private suspend fun runOpened(opened: OpenedSource, sink: MutableStateFlow<ImportProgress>): ImportProgress = try {
         opened.use { run(it, sink) }
     } catch (e: CancellationException) {
-        throw e
+        cancelled(e, sink)
     } catch (e: RuntimeException) {   // not a file's fault (each is caught on its own): the rest count as failed
         log("The import stopped" + detail(e))
         val last = sink.value
@@ -230,6 +231,15 @@ class Importer(
 
     /** An exception's message for the log, in debug builds only: it may name a file or a URI. */
     private fun detail(e: Throwable): String = if (BuildConfig.DEBUG) ": ${e.message}" else ""
+
+    /**
+     * An import cancelled where it was (v1.25 — M58: ImportService stops when Android's time for data sync runs out):
+     * what was saved stays, and [sink] finishes there, so neither the import bar nor the panel shows it running on.
+     */
+    private fun cancelled(e: CancellationException, sink: MutableStateFlow<ImportProgress>): Nothing {
+        sink.value = sink.value.copy(current = null, finished = true)
+        throw e
+    }
 
     private sealed interface Outcome {
         /** The piece's SHA-256, when its bytes were read. */
