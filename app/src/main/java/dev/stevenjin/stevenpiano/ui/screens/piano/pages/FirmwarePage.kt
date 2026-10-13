@@ -155,7 +155,8 @@ private fun LockRows(lock: PianoLock, settings: PianoSettingsRepository) {
     val can = lock.manageable
     Anchored(PageRows.LOCK_PAIR.anchor) {
         ActionRow(note = LockCopy.PAIR_NOTE) {
-            ActionButton(LockCopy.PAIR, onClick = settings::openPairing, enabled = can && lock.piano != LockWord.Pairing)
+            // An open piano lets any device claim it already; a window open now needs no second.
+            ActionButton(LockCopy.PAIR, onClick = settings::openPairing, enabled = can && lock.piano == LockWord.Claimed)
         }
     }
     var asking by rememberSaveable { mutableStateOf(false) }
