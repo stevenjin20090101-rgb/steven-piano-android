@@ -58,12 +58,6 @@ enum class NoteDisplay {
 }
 
 /**
- * What Now playing showed on medium and expanded widths until v1.11: the score and the notes, or either alone. Read
- * once, to seed the split that replaced it (v1.12 — M31a): Notes only as 0, Score only as 1.
- */
-enum class WideLayout { STAFF_AND_NOTES, NOTES_ONLY, STAFF_ONLY }
-
-/**
  * The app's appearance (Piano › Display › APPEARANCE, DESIGN.md › v1.5 — M17): as the system sets
  * it (the default), or the paper roll or the camera body whatever the system says.
  */
@@ -178,8 +172,6 @@ data class PianoSettings(
     val webGuests: Boolean = false,
     /** A guest's request waits for the person's Approve (Approve requests first); off, it joins Up next at once. */
     val webApproveFirst: Boolean = true,
-    /** The whole panel on the Wi-Fi address too, not only the request page (Panel on Wi-Fi too): the PIN then travels unencrypted. */
-    val webOnWifi: Boolean = false,
     /** A name the panel also answers to (a tailnet name such as "piano-tablet"), besides its address; null: none. */
     val webHostName: String? = null,
     /** Whether a panel PIN is set. */
@@ -292,19 +284,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The re-strike time: 0 (or below) is Auto; anything else is held to 60–250 ms in tens. */
     suspend fun setRestrike(ms: Int) = edit { it[RESTRIKE_MS] = PlaybackLimits.restrikeMs(ms) }
 
-    /**
-     * Now playing's split for one arrangement (v1.12 — M31a): [stacked] or side by side, held to 0-1; a share that
-     * is not a number is refused. The first write after an older build's Wide layout keeps that choice for the other
-     * arrangement too, then forgets it.
-     */
+    /** Now playing's split for one arrangement (v1.12 — M31a): [stacked] or side by side, held to 0-1; a share that is not a number is refused. */
     suspend fun setNotesSplit(stacked: Boolean, share: Float) {
         if (!share.isFinite()) return
         edit {
-            it.legacySplit()?.let { seed ->
-                if (it[NOTES_SPLIT_STACKED] == null) it[NOTES_SPLIT_STACKED] = seed
-                if (it[NOTES_SPLIT_SIDE] == null) it[NOTES_SPLIT_SIDE] = seed
-            }
-            it.remove(WIDE_LAYOUT)
             it.remove(NOTES_ART_ONLY)   // a split chosen shows the views again (v1.18 — M49)
             it[if (stacked) NOTES_SPLIT_STACKED else NOTES_SPLIT_SIDE] = share.coerceIn(0f, 1f)
         }
@@ -351,7 +334,15 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setWebApproveFirst(on: Boolean) = edit { it[WEB_APPROVE_FIRST] = on }
 
-    suspend fun setWebOnWifi(on: Boolean) = edit { it[WEB_ON_WIFI] = on }
+    /**
+     * Panel on Wi-Fi too as it was set before 1.24 (v1.24 — M56 removed it): on or off, or null once its key is gone (never
+     * set, or `web.WebPanel.retireWifiPanel` has run). Housekeeping for that upgrade alone. Settings that can't be read throw
+     * (IOException), so the upgrade can tell them from a key that is gone.
+     */
+    suspend fun wifiPanelBefore(): Boolean? = store.data.first()[WEB_ON_WIFI]
+
+    /** Panel on Wi-Fi too's key goes (v1.24 — M56), once the upgrade has dealt with it. */
+    suspend fun forgetWifiPanel() = edit { it.remove(WEB_ON_WIFI) }
 
     /** A name the panel answers to besides its address, lower-cased; blank or null forgets it. The web panel checks its form first. */
     suspend fun setWebHostName(name: String?) = edit {
@@ -551,8 +542,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             velocityFloor = (this[VELOCITY_FLOOR] ?: defaults.velocityFloor).coerceIn(PlaybackLimits.VelocityFloor),
             expression = ExpressionLevel.entries.firstOrNull { it.name == this[EXPRESSION] } ?: defaults.expression,
             restrikeMs = PlaybackLimits.restrikeMs(this[RESTRIKE_MS] ?: defaults.restrikeMs),
-            notesSplitStacked = this[NOTES_SPLIT_STACKED].asShare() ?: legacySplit(),
-            notesSplitSide = this[NOTES_SPLIT_SIDE].asShare() ?: legacySplit(),
+            notesSplitStacked = this[NOTES_SPLIT_STACKED].asShare(),
+            notesSplitSide = this[NOTES_SPLIT_SIDE].asShare(),
             notesArtOnly = this[NOTES_ART_ONLY] ?: defaults.notesArtOnly,
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
             shuffle = this[SHUFFLE] ?: defaults.shuffle,
@@ -574,7 +565,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             webEnabled = this[WEB_ENABLED] ?: defaults.webEnabled,
             webGuests = this[WEB_GUESTS] ?: defaults.webGuests,
             webApproveFirst = this[WEB_APPROVE_FIRST] ?: defaults.webApproveFirst,
-            webOnWifi = this[WEB_ON_WIFI] ?: defaults.webOnWifi,
             webHostName = this[WEB_HOST_NAME],
             webPinSet = this[WEB_PIN_SALT] != null && this[WEB_PIN_HASH] != null,
             kioskEnabled = this[KIOSK_ENABLED] ?: defaults.kioskEnabled,
@@ -613,21 +603,12 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val VELOCITY_FLOOR = intPreferencesKey("velocityFloor")
         val EXPRESSION = stringPreferencesKey("expression")
         val RESTRIKE_MS = intPreferencesKey("restrikeMs")
-        /** v1.1-1.11's Wide layout, read only to seed the split (v1.12 — M31a). */
-        val WIDE_LAYOUT = stringPreferencesKey("wideLayout")
         val NOTES_SPLIT_STACKED = floatPreferencesKey("notesSplitStacked")
         val NOTES_SPLIT_SIDE = floatPreferencesKey("notesSplitSide")
         val NOTES_ART_ONLY = booleanPreferencesKey("notesArtOnly")
 
         /** A stored split as read: held to 0-1; not a number reads as the default. */
         fun Float?.asShare(): Float? = this?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
-
-        /** What an older build's Wide layout says of the split: Notes only 0, Score only 1, else nothing. */
-        fun Preferences.legacySplit(): Float? = when (this[WIDE_LAYOUT]) {
-            WideLayout.NOTES_ONLY.name -> 0f
-            WideLayout.STAFF_ONLY.name -> 1f
-            else -> null
-        }
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
         val SHUFFLE = booleanPreferencesKey("shuffle")
         val REPEAT = stringPreferencesKey("repeat")
@@ -648,6 +629,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val WEB_ENABLED = booleanPreferencesKey("webEnabled")
         val WEB_GUESTS = booleanPreferencesKey("webGuests")
         val WEB_APPROVE_FIRST = booleanPreferencesKey("webApproveFirst")
+
+        /** Panel on Wi-Fi too, removed in 1.24 (M56): read once by the upgrade, then forgotten ([wifiPanelBefore], [forgetWifiPanel]). */
         val WEB_ON_WIFI = booleanPreferencesKey("webOnWifi")
         val WEB_HOST_NAME = stringPreferencesKey("webHostName")
         val WEB_PIN_SALT = stringPreferencesKey("webPinSalt")

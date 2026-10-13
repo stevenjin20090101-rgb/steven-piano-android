@@ -155,7 +155,7 @@ class RelayClientTest {
     @Test
     fun `a relay that doesn't answer in the subprotocol is closed, and nothing it sends meanwhile is read`() {
         relay.protocolAnswer = "something-else"
-        val token = sessions.open()
+        val token = sessions.open(Sessions.Transport.RELAY)
         // Sent the moment the handshake is answered, ahead of the tablet's close.
         relay.greeting = listOf(
             RelayMessage.Hello(PIANO, HOST, PREFIX, Caps(), 5),
@@ -178,7 +178,7 @@ class RelayClientTest {
     @Test
     fun `a request goes to the web panel and its answer comes back with its headers and body`() {
         val tablet = connected()
-        val token = sessions.open()
+        val token = sessions.open(Sessions.Transport.RELAY)
         tablet.say(RelayMessage.Req(7, "GET", "/api/state", "", mapOf("host" to HOST, "cookie" to "sp_session=$token"), "203.0.113.9", PREFIX, false))
         val res = tablet.await<RelayMessage.Res> { it.id == 7L }
         assertEquals(200, res.status)
@@ -205,7 +205,7 @@ class RelayClientTest {
     fun `an upload streams under the credit window, a chunk at a time, and reaches the app whole`() {
         val window = 128 * 1024
         val tablet = connected(caps = Caps(chunk = 64 * 1024, window = window))
-        val token = sessions.open()
+        val token = sessions.open(Sessions.Transport.RELAY)
         val zip = ByteArray(1_000_000) { (it % 251).toByte() }
         val headers = mapOf(
             "host" to HOST, "cookie" to "sp_session=$token", "x-steven-piano" to "1", "origin" to "https://$HOST",
@@ -237,7 +237,7 @@ class RelayClientTest {
     @Test
     fun `eight requests at most are answered at once, past them 503 busy, and an aborted one gets no answer`() {
         val tablet = connected()
-        val token = sessions.open()
+        val token = sessions.open(Sessions.Transport.RELAY)
         val headers = mapOf("host" to HOST, "cookie" to "sp_session=$token", "x-steven-piano" to "1", "content-type" to "application/json", "content-length" to "13", "origin" to "https://$HOST")
         // Eight requests whose bodies never come hold the tablet's eight places.
         for (id in 100L until 108L) tablet.say(RelayMessage.Req(id, "POST", "/api/play", "", headers, "203.0.113.9", PREFIX, true))
@@ -259,7 +259,7 @@ class RelayClientTest {
     @Test
     fun `a browser's socket is bridged for a session from the panel's origin, hears the hub, and ends either way`() {
         val tablet = connected()
-        val token = sessions.open()
+        val token = sessions.open(Sessions.Transport.RELAY)
         val headers = mapOf("cookie" to "sp_session=$token", "origin" to "https://$HOST", "host" to HOST)
         tablet.say(RelayMessage.WsOpen(3, headers, "203.0.113.9"))
         tablet.await<RelayMessage.WsAccept> { it.id == 3L }
@@ -276,6 +276,9 @@ class RelayClientTest {
         assertEquals(403, tablet.await<RelayMessage.WsRefuse> { it.id == 5L }.status)
         tablet.say(RelayMessage.WsOpen(6, headers + ("host" to "evil.example"), "203.0.113.9"))
         assertEquals(403, tablet.await<RelayMessage.WsRefuse> { it.id == 6L }.status)
+        // A session opened on the tablet's own address is never good through the relay (v1.24 — M56).
+        tablet.say(RelayMessage.WsOpen(8, headers + ("cookie" to "sp_session=${sessions.open(Sessions.Transport.TAILNET)}"), "203.0.113.9"))
+        assertEquals(401, tablet.await<RelayMessage.WsRefuse> { it.id == 8L }.status)
 
         tablet.say(RelayMessage.WsOpen(7, headers, "203.0.113.9"))
         tablet.await<RelayMessage.WsAccept> { it.id == 7L }

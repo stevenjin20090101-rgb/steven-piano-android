@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.web
 import android.content.Context
 import dev.stevenjin.stevenpiano.AppGraph
 import dev.stevenjin.stevenpiano.settings.PianoSettings
+import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.StoredPin
 import dev.stevenjin.stevenpiano.update.CloudOverride
 import dev.stevenjin.stevenpiano.web.relay.CloudAddress
@@ -27,22 +28,21 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 /**
  * Where the web service listens, as the Remote page, its hub row and the notification show it:
- * [running] while it is up; the tablet's [tailnet] and [wifi] addresses it listens on (digits only);
- * [panelOnWifi] when the Wi-Fi one serves the whole panel. [problem] says why it is not running
- * when it should be ("Android refused to start the web service.").
+ * [running] while it is up; the tablet's [tailnet] and [wifi] addresses it listens on (digits only).
+ * [problem] says why it is not running when it should be ("Android refused to start the web service.").
  */
 data class WebStatus(
     val running: Boolean = false,
     val tailnet: String? = null,
     val wifi: String? = null,
-    val panelOnWifi: Boolean = false,
     val problem: String? = null,
 ) {
-    /** Where the panel is reached: the tailnet address, else the Wi-Fi one if it serves the panel too. */
-    val panelHost: String? get() = tailnet ?: wifi?.takeIf { panelOnWifi }
+    /** Where the panel is reached on the tablet's networks: the tailnet address alone (the Wi-Fi's serves guests only, v1.24 — M56). */
+    val panelHost: String? get() = tailnet
 
     val panelUrl: String? get() = panelHost?.let { "http://$it:${WebAddress.PORT}" }
 
@@ -52,9 +52,9 @@ data class WebStatus(
 
 /**
  * The web panel's state that outlives any one listener, one per process in [AppGraph]: the
- * sessions and the login guard (shared by the tailnet and Wi-Fi listeners, so a PIN guessed on one
- * is counted on both), the guests' requests (the panel's Requests page and the tablet's Library
- * banner act on the same list), the [backend] the listeners serve, and the [status] the web
+ * sessions (each bound to the way it was opened, the tablet's own address or the relay: v1.24 — M56)
+ * and the listeners' login guard, the guests' requests (the panel's Requests page and the tablet's
+ * Library banner act on the same list), the [backend] the listeners serve, and the [status] the web
  * service reports. Changing the PIN here ends every session. Steven Piano Cloud (v1.10 — M26)
  * shares all of it but the login guard: its [cloud] status as the web service reports it, the relay's
  * secret sealed in the settings ([cloudSecrets]), the enrolments made here ([enrolments]), the public
@@ -147,6 +147,12 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
         backend.clearViews()
     }
 
+    /**
+     * Panel on Wi-Fi too retired (v1.24 — M56), first thing in the web service, before any listener or the relay reads a
+     * session: [retireWifiPanel] with the app's sessions and settings.
+     */
+    suspend fun retireWifiPanel() = retireWifiPanel(sessions, graph.settingsRepository)
+
     /** Approve on the tablet (the Library's banner): the piece joins Up next, as from the panel, and waits for Play (v1.20 — M54). */
     fun approve(id: Long) {
         graph.appScope.launch {
@@ -189,5 +195,24 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
     /** The web service made a relay client ([relay]), or stopped it (null). */
     fun reportRelay(client: RelayClient?) {
         heldRelay = client
+    }
+
+    companion object {
+        /**
+         * Panel on Wi-Fi too's end (v1.24 — M56). Read the old switch from [settings]; when it was on, every session not yet
+         * bound to a transport goes ([Sessions.dropUnbound]): kept from before 1.24, its cookie may have crossed the Wi-Fi in
+         * the clear; then the switch's key goes. Nothing when the key is gone already. Running it again changes nothing, and
+         * a stop between its steps only means the sessions are dropped again next time. Settings that can't be read count as
+         * on (the sessions go, the key stays for the next time).
+         */
+        internal suspend fun retireWifiPanel(sessions: Sessions, settings: SettingsRepository) {
+            val wasOn = try {
+                settings.wifiPanelBefore() ?: return
+            } catch (e: IOException) {
+                null
+            }
+            if (wasOn != false) withContext(Dispatchers.IO) { sessions.dropUnbound() }
+            if (wasOn != null) settings.forgetWifiPanel()
+        }
     }
 }

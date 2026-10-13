@@ -8798,3 +8798,97 @@ where Android allows (the device owner, or Android 12 and later when this app in
 Android asks on the tablet. The panel's Tools card gains Install the update, after a confirmation. 1,672 tests green,
 lint 0 errors. Seen once on the demo emulator: the panel's System page with Listen and test, and Listen refused with
 "Listening is off on the tablet." Not seen: the microphone on real hardware, the key test with a piano, a remote update.
+
+# v1.24 — M56: a safer panel sign-in
+
+Read `DESIGN.md › v1.24 — M56` first. Designed by the app session, approved by Steven on 2026-10-12 (plan
+`if-wer-are-doing-adaptive-stonebraker.md` › Design details); built in a worktree (`m56-web-security`, from 1.23's `9d00887`)
+beside M57's clean-out, which owns every other file. No emulator, no version bump, no signing, no release.
+
+## Sessions (`web/WebAuth.kt`)
+- `Sessions(store, max = 32, clock, random)`, rows `digest → Row(transport?, signedIn, used)` plus, in memory only,
+  `confirmedUntil` and `wrongConfirms`. `Sessions.Transport { TAILNET, RELAY }` (keys `tailnet`, `relay`).
+- `open(t)` (bound, confirmed for `CONFIRM_MS`; the least recently used row goes past 32); `isValid(token, t)`: signed in
+  under `VALID_MS` (90 days) and bound to `t`, an unbound row binding there and saved at once; marks the use, saved past
+  `SAVE_AFTER_MS` as before. `isValid(token)`: under 90 days on any transport, binding nothing (Listening's look,
+  `AppGraph.listening`). `knownDevice(token, t)`: a row on `t` signed in under `KNOWN_MS` (365 days), binding an unbound one.
+  `confirm`, `confirmed` (under `CONFIRM_MS`, 5 min), `wrongConfirm` (true once `CONFIRM_TRIES`, 3, in a row have ended the
+  session, or it had ended). `close`, `closeAll`, `dropUnbound`, `count()` (sessions valid now). `Sessions.digest(token)`.
+- Rows are forgotten a year after the sign-in or the last use, or stamped more than `AHEAD_MS` (a day) ahead of the clock.
+- `SessionStore.load(now): Loaded(sessions, old)`, `save(Map<String, SessionRecord>)`. `FileSessionStore`:
+  `{"v":2,"sessions":{"<digest>":{"t":"tailnet","in":<ms>,"used":<ms>}}}` (`t` absent while unbound), anything not exactly
+  that shape (or the old one) reads as none. The old `{"<digest>": <last used>}` reads as unbound rows signed in at `now`
+  (`old = true`), and `Sessions` writes the new form at once; a row a year unused under the old rule stays gone.
+- `WebCookies.SESSION_MAX_AGE_S = KNOWN_MS / 1000` (a year, as before); one `Set-Cookie` per answer.
+
+## The server (`web/WebServer.kt`, `WebSocketHub.kt`, `relay/RelayClient.kt`)
+- `Edge.transport`: `RELAY` when relayed, else `TAILNET` (the Tailscale listener and the debug loopback; the Wi-Fi listener
+  is guests only and reads no session). READ and WRITE check `isValid(token, edge.transport)`.
+  `admitSocket(cookies, origin, expected, transport)`: the listeners' `/ws` asks with `TAILNET`, the relay client's
+  `ws.open` with `RELAY`. The hub's `sessionValid(token, transport)`: a listener's socket is checked as `TAILNET`, a
+  relayed member as `RELAY`, at every ping.
+- `POST /api/confirm {pin}` (`Access.WRITE`): `LoginGuard.attempt("confirm:<digest>", shared = false)`; right → `confirm`,
+  204; wrong → 403 `{error: "wrong", message, retryAfter}`, or on the third in a row 401 `session` with
+  `WebCookies.endSession` (the session closed). `needsConfirm(call)` → 403 `{error: "confirm"}` unless `confirmed`:
+  `/api/listen/start`, `/api/keytest/start`, and `/api/system/tool` for `update` (after its body is read).
+- `login`: a cookie that is `knownDevice` on this transport → key `device:<digest>`, `shared = false`; its `Wrong` with a
+  wait (the key's own lock, the fifth in a row at `LoginGuard.THRESHOLD`) closes that row; `Right` closes it and opens the
+  new session. Otherwise the address and the shared gate, as before.
+- Removed: the `/api/schedules` routes (now 404) and `gone()`; `DeadlineInput.deadlined`,
+  `SteadyServerSocket.failuresInARow`.
+
+## The lockout (`LoginGuard`)
+- `succeeded(key)` clears its key alone. The shared record keeps `lastFailure`; a wrong try `globalQuietMs` after the last
+  forgets its count and doubling first (`GLOBAL_QUIET_MS` 1 h; `forRelay`: `RELAY_GLOBAL_QUIET_MS` 24 h).
+- `attempt(key, shared, check)` beside `attempt(key, check)` (shared); `waitMs(key, shared = true)`,
+  `failed(key, shared = true)`: unshared, the global record is neither read nor counted. `KioskPinGuard` is unchanged.
+
+## Panel on Wi-Fi too, removed
+- `WebAddress.plan(choice, loopback)`: the tailnet with the panel, the Wi-Fi guests only, the loopback with the panel.
+  `WebStatus` loses `panelOnWifi`; `panelHost = tailnet`. `WebAddress.url` and `WebAssets.NAMES` (tests only) are gone.
+- `settings`: `PianoSettings.webOnWifi` and `setWebOnWifi` go; the key `webOnWifi` stays private for the upgrade:
+  `wifiPanelBefore()` (reads without swallowing an IOException) and `forgetWifiPanel()`. `RemotePage` loses the row and
+  `WIFI_NOTE`; `PianoViewModel.setWebOnWifi` and Share diagnostics' line go.
+- `WebPanel.retireWifiPanel()` → `WebPanel.retireWifiPanel(sessions, settings)`, run first in `WebService.watch()` (before
+  the hub, a listener or the relay): the old switch on → `dropUnbound()`; then `forgetWifiPanel()`. Nothing when the key is
+  gone; settings that can't be read count as on (the unbound rows go, the key stays).
+- Also gone: `WideLayout`, `legacySplit` and `setNotesSplit`'s seeding from it (versions before 1.12).
+
+## The panel
+- `app.js`: `call(method, path, body, confirmed)`: a 403 `confirm` (unless `confirmed`) awaits `confirmIt(path)`, then the
+  request once more; declined, an `ApiError` with `quiet`, which `failed()` keeps silent. `confirmIt`: one dialog at a
+  time, its words from the path (`confirmFor`), `run` posting `/api/confirm` (a 401 puts its message on the gate).
+  `confirm({title, message, action, run, pin})` now resolves true or false; with `pin` it is a form: the gate's
+  `pin-field` (numeric, autofocus), `#confirm-note` for "That PIN isn't right." and the countdown, a 401 closing it.
+- `settings.js`: the Panel page's last row, `#sign-out-note` and **Sign out** (`POST /api/logout`, then `location.reload()`).
+- `style.css`: `.confirm .pin-field` (the field across the dialog, 52 px), `.confirm #confirm-note` (its line's height kept).
+
+## Simplified, and why
+- **`Sessions.Transport`, not a top-level `Transport`**: the web package already has `Transport` (the playback actions in
+  `WebBackend.kt`), so the brief's enum is nested in `Sessions`.
+- **A known device's "five wrong in a row"** is the login guard's own per-key lock (`THRESHOLD`, unshared), not a second
+  counter.
+- **The hub's transports follow from the socket's kind** (a listener's or a relayed member) rather than a new parameter.
+- **`retireWifiPanel` is a companion function** with an instance wrapper, so it is tested without Android, and fails
+  safe: settings that can't be read drop the unbound rows.
+- **Sign out reloads the page** rather than showing the gate in place: nothing of the panel stays in the browser's memory.
+- **`count()`** (Running now's "devices signed in") counts sessions valid now, not known devices.
+
+## Tests
+`WebAuthTest` (+6, 3 rewritten: 90 days despite daily use and a year as a known device, the clock a day ahead; transport
+binding and an unbound row bound by its first use; confirm's five minutes and three strikes; the old table read and written
+again, a year-unused row left out; the Wi-Fi panel's retirement, on, off and unset, twice, and a stop between its steps;
+the file's two forms and their corruptions; a right PIN keeps the shared count, a quiet hour or day forgets it; unshared
+tries), `WebServerTest` (+5: 90 days over HTTP and a known device past the shut gate; five wrong forget it, a right PIN
+keeps the gate's count, a quiet hour clears it; a relay session 401 on a listener over HTTP and the socket; the three
+starts' confirm and its five minutes, covers and reconnect never asked; `/api/confirm`'s header, origin, Host, body, 403
+and three strikes; write routes 36 → 34, the schedules' 404), `WebServerRelayTest` (+2: a tailnet session 401 through the
+relay and the reverse; Listen's confirm and three strikes with the relay's cookie; the relay's gate kept by a right PIN,
+forgotten in a day, passed by a known device), `WebSocketHubTest` (+1: each socket's session on its own transport),
+`RelayClientTest` (a tailnet session refused 401 at `ws.open`), `WebAddressTest`, `WebAssetsTest` (+1: the panel's
+confirm and Sign out), `SettingsRepositoryTest` (−1: Wide layout's seed, gone), `DiagnosticsExporterTest`,
+`GroupSummariesTest`. 1,672 → 1,686 unit tests
+(12 skipped), none failing, with `--rerun`; `lintDebug` 0 errors and the same 31 warnings; the compiler's warnings
+unchanged. The panel's dialog and Sign out were run in a browser against a stand-in tablet: the PIN asked before Listen,
+a wrong PIN, the 3 s countdown, the right PIN and the retried start, Cancel, the third wrong PIN ending on the gate, Sign
+out back to the gate; the tablet's Web panel page was not seen on a device.

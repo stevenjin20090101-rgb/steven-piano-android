@@ -155,23 +155,6 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun `an older build's Wide layout seeds both arrangements - Notes only 0, Score only 1 - and the first write keeps it and forgets it (v1_12 M31a)`() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        for ((legacy, seed) in listOf("NOTES_ONLY" to 0f, "STAFF_ONLY" to 1f, "STAFF_AND_NOTES" to null, "SOMETHING_NEW" to null)) {
-            val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "legacy-$legacy.preferences_pb") }
-            val repository = SettingsRepository(store)
-            store.edit { it[stringPreferencesKey("wideLayout")] = legacy }
-            assertEquals(legacy, PianoSettings(notesSplitStacked = seed, notesSplitSide = seed), repository.settings.first())
-            // The person drags the stacked divider: the side-by-side share keeps what Wide layout said, and the old key goes.
-            repository.setNotesSplit(stacked = true, share = 0.5f)
-            assertEquals(legacy, PianoSettings(notesSplitStacked = 0.5f, notesSplitSide = seed), repository.settings.first())
-            assertEquals(legacy, null, store.data.first()[stringPreferencesKey("wideLayout")])
-            assertEquals(legacy, seed, store.data.first()[floatPreferencesKey("notesSplitSide")])
-        }
-        scope.cancel()
-    }
-
-    @Test
     fun `fingering and chord names start on, hand colours off, and all three are remembered`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "waterfall.preferences_pb") }
@@ -326,16 +309,15 @@ class SettingsRepositoryTest {
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "web.preferences_pb") }
         val repository = SettingsRepository(store)
         val first = repository.settings.first()
-        assertEquals(listOf(false, false, true, false), listOf(first.webEnabled, first.webGuests, first.webApproveFirst, first.webOnWifi))
+        assertEquals(listOf(false, false, true), listOf(first.webEnabled, first.webGuests, first.webApproveFirst))
         assertEquals(null, first.webHostName)
         assertEquals(false, first.webPinSet)
         repository.setWebEnabled(true)
         repository.setWebGuests(true)
         repository.setWebApproveFirst(false)
-        repository.setWebOnWifi(true)
         repository.setWebHostName("  Piano-Tablet ")
         val read = repository.settings.first()
-        assertEquals(listOf(true, true, false, true), listOf(read.webEnabled, read.webGuests, read.webApproveFirst, read.webOnWifi))
+        assertEquals(listOf(true, true, false), listOf(read.webEnabled, read.webGuests, read.webApproveFirst))
         assertEquals("piano-tablet", read.webHostName)
         repository.setWebHostName(" ")
         assertEquals(null, repository.settings.first().webHostName)

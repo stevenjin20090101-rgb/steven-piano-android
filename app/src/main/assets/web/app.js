@@ -102,8 +102,12 @@
     }
   }
 
-  /** A request to the tablet: JSON both ways; every change carries the panel's header, which no other site's page can send. */
-  async function call(method, path, body) {
+  /**
+   * A request to the tablet: JSON both ways; every change carries the panel's header, which no other site's page can send.
+   * Listen, Test every key and Install the update answer 403 `confirm` until the session has confirmed it's you (v1.24 —
+   * M56): the PIN is asked for (confirmIt) and the request sent once more; closed without it, the request fails quietly.
+   */
+  async function call(method, path, body, confirmed) {
     const init = { method, credentials: 'same-origin', cache: 'no-store', headers: {} };
     if (method !== 'GET') init.headers['X-Steven-Piano'] = '1';
     if (method !== 'GET' && method !== 'DELETE') {
@@ -136,8 +140,52 @@
       showGate();
       throw new ApiError(401, data);
     }
+    if (response.status === 403 && data && data.error === 'confirm' && !confirmed) {
+      if (await confirmIt(path)) return call(method, path, body, true);
+      const declined = new ApiError(403, data);
+      declined.quiet = true;   // the person closed the PIN's dialog: nothing to say
+      throw declined;
+    }
     if (!response.ok) throw new ApiError(response.status, data);
     return data;
+  }
+
+  /** What "Confirm it's you" names each request it asks for (v1.24 — M56). */
+  function confirmFor(path) {
+    if (path === ROOT + '/api/listen/start') return 'listen to the room';
+    if (path === ROOT + '/api/keytest/start') return 'test every key';
+    if (path === ROOT + '/api/system/tool') return 'install the update';
+    return 'go on';
+  }
+
+  /**
+   * "Confirm it's you" (v1.24 — M56): the tablet's PIN in the dialog's PIN mode, sent to /api/confirm; true once the tablet
+   * took it. One dialog at a time: a second request asking meanwhile waits for the same answer.
+   */
+  let confirming = null;
+  function confirmIt(path) {
+    if (!confirming) {
+      confirming = confirm({
+        title: "Confirm it's you",
+        message: `Enter the tablet's PIN to ${confirmFor(path)}.`,
+        action: 'Confirm',
+        pin: true,
+        run: async (pin) => {
+          try {
+            await call('POST', ROOT + '/api/confirm', { pin }, true);
+          } catch (e) {
+            // The third wrong PIN ended the session (call() has shown the gate): the gate says why.
+            if (e && e.status === 401 && e.body && e.body.message) $('gate-note').textContent = e.body.message;
+            throw e;
+          }
+        },
+      }).catch(() => false).then((ok) => {
+        confirming = null;
+        if (!ok && !$('gate').hidden) $('pin').focus();   // the third wrong PIN ended the session: the sign-in gate
+        return ok;
+      });
+    }
+    return confirming;
   }
 
   /**
@@ -227,7 +275,7 @@
   }
 
   function failed(e) {
-    if (e && e.status === 401) return;
+    if (e && (e.status === 401 || e.quiet)) return;
     toast(e && e.message ? e.message : 'That did not work.');
   }
 
@@ -3146,31 +3194,118 @@
 
   /**
    * A small glass dialog: [title], [message], Cancel and [action]'s button; [run] is called on the action. Escape, a tap
-   * outside and Cancel close it; the focus starts on Cancel and goes back where it was.
+   * outside and Cancel close it; the focus starts on Cancel and goes back where it was. With [pin] (v1.24 — M56, "Confirm
+   * it's you"): a six-digit field, where the focus starts, and [run] is given the PIN and waited for: the dialog closes once
+   * it resolves; a wrong PIN is said under the field, with a countdown while the tablet asks for a wait (as the sign-in
+   * gate's); an ended session (401) closes it, the gate showing. Resolves true once [run] has run (with [pin], once it
+   * succeeded), false when the dialog closed without it.
    */
-  function confirm({ title, message, action, run }) {
-    const cancel = h('button', { class: 'outlined', type: 'button', text: 'Cancel' });
-    const act = h('button', { class: 'outlined filled', type: 'button', text: action || 'OK' });
-    const dialog = h('dialog', { class: 'confirm', 'aria-labelledby': 'confirm-title', 'aria-describedby': message ? 'confirm-message' : null },
-      h('div', { class: 'confirm-body' },
+  function confirm({ title, message, action, run, pin }) {
+    return new Promise((resolve) => {
+      let ran = false;
+      let timer = null;
+      const cancel = h('button', { class: 'outlined', type: 'button', text: 'Cancel' });
+      const act = h('button', { class: 'outlined filled', type: pin ? 'submit' : 'button', text: action || 'OK' });
+      const field = pin
+        ? h('input', {
+          class: 'pin-field', type: 'password', inputmode: 'numeric', pattern: '[0-9]*', maxlength: '6', autocomplete: 'off', autofocus: true,
+          'aria-label': 'PIN', 'aria-describedby': 'confirm-note',
+        })
+        : null;
+      const note = pin ? h('p', { class: 'note', id: 'confirm-note', role: 'status', 'aria-live': 'polite' }) : null;
+      const body = h(pin ? 'form' : 'div', { class: 'confirm-body', novalidate: !!pin },
         h('h2', { id: 'confirm-title', text: title || '' }),
         message ? h('p', { class: 'note', id: 'confirm-message', text: message }) : null,
-        h('div', { class: 'confirm-actions' }, cancel, act)));
-    const close = () => {
-      if (dialog.open) dialog.close();
-    };
-    dialog.addEventListener('close', () => dialog.remove());
-    dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) close();   // the scrim
+        field,
+        note,
+        h('div', { class: 'confirm-actions' }, cancel, act));
+      const dialog = h('dialog', { class: 'confirm', 'aria-labelledby': 'confirm-title', 'aria-describedby': message ? 'confirm-message' : null }, body);
+      const close = () => {
+        if (dialog.open) dialog.close();
+      };
+      dialog.addEventListener('close', () => {
+        clearInterval(timer);
+        dialog.remove();
+        resolve(ran);
+      });
+      dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) close();   // the scrim
+      });
+      cancel.addEventListener('click', close);
+      if (!pin) {
+        act.addEventListener('click', () => {
+          ran = true;
+          close();
+          if (typeof run === 'function') Promise.resolve().then(run).catch(failed);
+        });
+      } else {
+        /** The tablet's wait, counted down in seconds under the field, which waits it out. */
+        const wait = (seconds, lead) => {
+          clearInterval(timer);
+          let left = seconds;
+          const tick = () => {
+            if (left <= 0) {
+              clearInterval(timer);
+              note.textContent = '';
+              field.disabled = false;
+              act.disabled = false;
+              field.focus();
+              return;
+            }
+            note.textContent = `${lead} Try again in ${left} s.`;
+            left -= 1;
+          };
+          field.disabled = true;
+          act.disabled = true;
+          tick();
+          timer = setInterval(tick, 1000);
+        };
+        field.addEventListener('input', () => {
+          const digits = field.value.replace(/\D/g, '').slice(0, 6);
+          if (digits !== field.value) field.value = digits;
+        });
+        body.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (act.disabled) return;
+          const digits = field.value.replace(/\D/g, '');
+          if (digits.length !== 6) {
+            note.textContent = 'The PIN is six digits.';
+            return;
+          }
+          act.disabled = true;
+          try {
+            await run(digits);
+            ran = true;
+            close();
+            return;
+          } catch (e) {
+            field.value = '';
+            const status = e && e.status;
+            const error = e && e.body && e.body.error;
+            const seconds = (e && e.body && e.body.retryAfter) || 0;
+            if (status === 401) {
+              close();
+              return;
+            }
+            if (status === 403 && error === 'wrong') {
+              if (seconds > 0) wait(seconds, "That PIN isn't right.");
+              else note.textContent = "That PIN isn't right.";
+            } else if (status === 429) {
+              wait(seconds || 30, 'Too many tries.');
+            } else {
+              note.textContent = (e && e.message) || 'That did not work.';
+            }
+          }
+          if (!field.disabled) {
+            act.disabled = false;
+            field.focus();
+          }
+        });
+      }
+      document.body.append(dialog);
+      dialog.showModal();
+      (field || cancel).focus();
     });
-    cancel.addEventListener('click', close);
-    act.addEventListener('click', () => {
-      close();
-      if (typeof run === 'function') Promise.resolve().then(run).catch(failed);
-    });
-    document.body.append(dialog);
-    dialog.showModal();
-    cancel.focus();
   }
 
   // ---- Start ----------------------------------------------------------------------------------------------

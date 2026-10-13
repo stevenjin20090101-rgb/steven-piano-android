@@ -9,6 +9,8 @@
 
 package dev.stevenjin.stevenpiano.web
 
+import dev.stevenjin.stevenpiano.web.Sessions.Transport.RELAY
+import dev.stevenjin.stevenpiano.web.Sessions.Transport.TAILNET
 import fi.iki.elonen.NanoWSD
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +74,7 @@ class WebSocketHubTest {
 
     @Test
     fun `a socket gets the state as it opens, then each change, coalesced to ten a second`() {
-        val token = sessions.open()
+        val token = sessions.open(TAILNET)
         Client(server.listeningPort, token).use { client ->
             assertEquals(101, client.handshake())
             val first = JSONObject(client.text())
@@ -90,7 +92,7 @@ class WebSocketHubTest {
 
     @Test
     fun `while a piece plays, progress once a second (here a quarter)`() {
-        val token = sessions.open()
+        val token = sessions.open(TAILNET)
         Client(server.listeningPort, token).use { client ->
             assertEquals(101, client.handshake())
             client.text()
@@ -103,9 +105,9 @@ class WebSocketHubTest {
 
     @Test
     fun `two sockets at most`() {
-        val a = Client(server.listeningPort, sessions.open())
-        val b = Client(server.listeningPort, sessions.open())
-        val c = Client(server.listeningPort, sessions.open())
+        val a = Client(server.listeningPort, sessions.open(TAILNET))
+        val b = Client(server.listeningPort, sessions.open(TAILNET))
+        val c = Client(server.listeningPort, sessions.open(TAILNET))
         try {
             assertEquals(101, a.handshake())
             a.text()
@@ -120,7 +122,7 @@ class WebSocketHubTest {
 
     @Test
     fun `a socket whose session ends is closed at its next ping`() {
-        val token = sessions.open()
+        val token = sessions.open(TAILNET)
         Client(server.listeningPort, token).use { client ->
             assertEquals(101, client.handshake())
             client.text()
@@ -133,7 +135,7 @@ class WebSocketHubTest {
 
     @Test
     fun `a frame too large for the guard ends the socket before its payload is read`() {
-        val token = sessions.open()
+        val token = sessions.open(TAILNET)
         Client(server.listeningPort, token).use { client ->
             assertEquals(101, client.handshake())
             client.text()
@@ -153,7 +155,7 @@ class WebSocketHubTest {
         )
         quick.startListening()
         try {
-            Client(quick.listeningPort, sessions.open()).use { client ->
+            Client(quick.listeningPort, sessions.open(TAILNET)).use { client ->
                 assertEquals(101, client.handshake())
                 client.text()
                 Thread.sleep(1_500)   // three deadlines, the page silent meanwhile (its pongs unsent)
@@ -167,7 +169,7 @@ class WebSocketHubTest {
 
     @Test
     fun `stopping the hub closes every socket`() {
-        val client = Client(server.listeningPort, sessions.open())
+        val client = Client(server.listeningPort, sessions.open(TAILNET))
         client.use {
             assertEquals(101, it.handshake())
             it.text()
@@ -180,7 +182,7 @@ class WebSocketHubTest {
     @Test
     fun `a relayed browser hears the state as it attaches, then each change and the progress (v1_10 M26)`() {
         val member = Recorder()
-        assertTrue(hub.attach(sessions.open(), member::send, member::close) != null)
+        assertTrue(hub.attach(sessions.open(RELAY), member::send, member::close) != null)
         member.waitFor { it.size >= 1 }
         assertEquals("state", JSONObject(member.texts.first()).getString("type"))
         changes.tryEmit(Unit)
@@ -194,13 +196,13 @@ class WebSocketHubTest {
 
     @Test
     fun `four relayed browsers at most, apart from the listeners' two sockets`() {
-        val members = (1..WebSocketHub.MAX_MEMBERS).map { Recorder().also { r -> assertTrue(hub.attach(sessions.open(), r::send, r::close) != null) } }
+        val members = (1..WebSocketHub.MAX_MEMBERS).map { Recorder().also { r -> assertTrue(hub.attach(sessions.open(RELAY), r::send, r::close) != null) } }
         assertEquals(4, hub.memberCount)
         assertTrue(!hub.hasMemberRoom())
         val fifth = Recorder()
-        assertEquals(null, hub.attach(sessions.open(), fifth::send, fifth::close))
+        assertEquals(null, hub.attach(sessions.open(RELAY), fifth::send, fifth::close))
         assertTrue("the listeners' sockets keep their own room", hub.hasRoom())
-        Client(server.listeningPort, sessions.open()).use { client ->
+        Client(server.listeningPort, sessions.open(TAILNET)).use { client ->
             assertEquals(101, client.handshake())
             assertEquals("state", JSONObject(client.text()).getString("type"))
             // A change reaches the listener's socket and every member alike.
@@ -212,11 +214,11 @@ class WebSocketHubTest {
 
     @Test
     fun `a relayed browser whose session ends is closed at the next ping, and a detached one hears nothing more`() {
-        val token = sessions.open()
+        val token = sessions.open(RELAY)
         val ending = Recorder()
         hub.attach(token, ending::send, ending::close)
         val leaving = Recorder()
-        val member = hub.attach(sessions.open(), leaving::send, leaving::close)!!
+        val member = hub.attach(sessions.open(RELAY), leaving::send, leaving::close)!!
         ending.waitFor { it.isNotEmpty() }
         leaving.waitFor { it.isNotEmpty() }
         member.detach()
@@ -234,34 +236,52 @@ class WebSocketHubTest {
 
     @Test
     fun `the microphone's frames reach the sockets and relayed browsers of the session that hears, and no one else's (v1_23 M55)`() {
-        val hearing = sessions.open()
+        // Since 1.24 (M56) a session lives on one way in: one hears on a listener's socket, another through the relay.
+        val hearing = sessions.open(TAILNET)
+        val hearingThere = sessions.open(RELAY)
         val mine = Recorder()
         val theirs = Recorder()
-        hub.attach(hearing, mine::send, mine::close)
-        hub.attach(sessions.open(), theirs::send, theirs::close)
+        hub.attach(hearingThere, mine::send, mine::close)
+        hub.attach(sessions.open(RELAY), theirs::send, theirs::close)
         mine.waitFor { it.isNotEmpty() }
         theirs.waitFor { it.isNotEmpty() }
         Client(server.listeningPort, hearing).use { listener ->
-            Client(server.listeningPort, sessions.open()).use { other ->
+            Client(server.listeningPort, sessions.open(TAILNET)).use { other ->
                 assertEquals(101, listener.handshake())
                 assertEquals(101, other.handshake())
                 listener.text()
                 other.text()
                 val frame = dev.stevenjin.stevenpiano.audio.ListenWire.audio(0, ByteArray(1_600))
-                assertEquals("its socket and its relayed browser", 2, hub.sendToSession(hearing, frame))
+                assertEquals("its socket", 1, hub.sendToSession(hearing, frame))
                 assertEquals("audio", JSONObject(listener.text()).getString("type"))
+                assertEquals("its relayed browser", 1, hub.sendToSession(hearingThere, frame))
                 mine.waitFor { list -> list.any { JSONObject(it).getString("type") == "audio" } }
                 assertTrue(other.textsFor(300).none { JSONObject(it).getString("type") == "audio" })
                 assertTrue(theirs.texts.none { JSONObject(it).getString("type") == "audio" })
-                assertEquals("no panel of that session open", 0, hub.sendToSession(sessions.open(), frame))
+                assertTrue("never the other's socket", listener.textsFor(300).none { JSONObject(it).getString("type") == "audio" })
+                assertEquals("no panel of that session open", 0, hub.sendToSession(sessions.open(TAILNET), frame))
             }
         }
     }
 
     @Test
+    fun `each socket's session is checked on its own transport at every ping (M56)`() {
+        val wrongWay = Recorder()
+        hub.attach(sessions.open(TAILNET), wrongWay::send, wrongWay::close)   // a Tailscale session never holds a relayed browser
+        val deadline = System.currentTimeMillis() + 2_000
+        while (wrongWay.closes.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals(listOf("4000 The session has ended."), wrongWay.closes.toList())
+        val rightWay = Recorder()
+        hub.attach(sessions.open(RELAY), rightWay::send, rightWay::close)
+        Thread.sleep(500)   // two pings
+        assertEquals(emptyList<String>(), rightWay.closes.toList())
+        assertEquals(1, hub.memberCount)
+    }
+
+    @Test
     fun `stopping the hub closes the relayed browsers too`() {
         val member = Recorder()
-        hub.attach(sessions.open(), member::send, member::close)
+        hub.attach(sessions.open(RELAY), member::send, member::close)
         hub.stop()
         assertEquals(listOf("1001 The panel is off."), member.closes.toList())
         assertEquals(0, hub.memberCount)

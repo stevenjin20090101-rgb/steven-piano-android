@@ -2186,3 +2186,68 @@ already passes the tablet's socket text verbatim). Where each safeguard is held,
 - **Two tabs of one signed-in browser both receive the sound** (they share the session); each plays only what it asked for.
 - **The sound crosses the relay** as the panel's other socket messages do: TLS to the relay and to the browser, but the
   relay (the owner's own Cloudflare account) sees it in the clear.
+
+## 1.24 — a safer panel sign-in (notes, M56)
+
+2026-10-12, notes written with M56 for the next audit, not an audit (BUILD_SPEC.md › v1.24 — M56). Steven asked for a full
+audit with hidden vulnerabilities fixed; a read-only sweep of the panel found five, all fixed here. Where each fix is held,
+and the test that holds it:
+
+- **Panel on Wi-Fi too sent the PIN and a year-long cookie over plain HTTP.** Removed: the Wi-Fi listener serves the
+  guests' page, its API and the poster only, always (`WebAddress.plan`; `WebAddressTest`, `WebServerTest`'s guests-only
+  loop over every panel route). On the first start of 1.24, before any listener, the hub or the relay reads a session,
+  `WebPanel.retireWifiPanel` drops every session kept from before if the switch had been on (their cookies may have crossed
+  the Wi-Fi in the clear), then forgets the switch; twice is the same as once, and settings that can't be read count as
+  on (`WebAuthTest`).
+- **The tailnet and the relay shared one table**, so a cookie taken on one way in worked on the other. Each session is now
+  bound to its transport (`Sessions.Transport`: the tablet's own address, Tailscale or the debug loopback; or the relay),
+  and is refused 401 on the other, for every route and for the socket at its admission and at every ping
+  (`WebServerTest`, `WebServerRelayTest`, `WebSocketHubTest`, `RelayClientTest`). Sessions kept from before are unbound
+  and bind to the first transport they are used on, safe because a browser sends a cookie only to the origin that set it
+  (`WebAuthTest`).
+- **Sessions lasted a year from their last use.** Now 90 days from the sign-in, however often used; the cookie's year
+  (`Max-Age` unchanged, one `Set-Cookie` per answer for the relay) only marks a known device after that, which opens
+  nothing (`WebAuthTest`, `WebServerTest`). The table holds 32 rows, each forgotten a year after its sign-in, or when
+  stamped more than a day ahead of the tablet's clock.
+- **The microphone and the update tool were open to any session.** `POST /api/listen/start`, `/api/keytest/start` and
+  `/api/system/tool {name: "update"}` answer 403 `confirm` until the session has given the PIN again (`POST /api/confirm`,
+  a write route: the session, `X-Steven-Piano: 1`, the panel's origin), which holds five minutes in memory; signing in
+  counts. A wrong PIN is 403 `wrong` (401 would send the panel to its sign-in); the third in a row ends the session and
+  clears its cookie. Its tries are weighed one at a time under `confirm:<digest>`, outside the shared gate: a stolen session
+  gets three guesses, then nothing (`WebServerTest`, `WebServerRelayTest`, `WebAuthTest`). Covers, Reconnect and the
+  stops never ask.
+- **A right PIN reset the shared lockout**, so the owner's own sign-ins handed a distributed brute force its free tries
+  again. `LoginGuard.succeeded` now clears its own key alone; the shared count is forgotten only after a quiet period
+  without a wrong try, an hour on the listeners' guard and a day on the relay's (`WebAuthTest`, `WebServerTest`,
+  `WebServerRelayTest`). The brute-force figures of audit delta 3 stand (about 1,440 tries a day on the tailnet, 24
+  through the relay).
+- **The lever that leaves**: someone who keeps sending wrong PINs through the relay can hold its sign-in shut for an hour at
+  a time (delta 3). A browser whose cookie marks a known device on that transport (signed in there within the year) is
+  now weighed under `device:<digest>`, outside the shared gate: five wrong in a row forget it and it meets the gates as
+  anyone's; a right PIN replaces its session (`WebServerTest`, `WebServerRelayTest`). So the gate can be held shut for
+  strangers, not for Steven's own browsers. The kiosk PIN's guard is unchanged.
+- **Also**: Sign out on the panel (Settings › Panel, the existing logout, this browser only); the dead timed-play routes
+  (`/api/schedules`, 410 since 1.20) are gone and answer 404 (`WebServerTest`).
+
+**Ports and transports, as they stand:**
+
+| Where | Port | Serves | Sessions read |
+|---|---|---|---|
+| The tablet's Tailscale address (`tun*`/`tailscale*`, 100.64/10) | TCP 8737, HTTP (WireGuard underneath) | the whole panel | `TAILNET` |
+| The tablet's Wi-Fi address (`wlan*`, RFC 1918) | TCP 8737, HTTP | the guests' page, its API, the poster | none |
+| 127.0.0.1, debug builds on an emulator only | TCP 8737, HTTP (`adb forward`) | the whole panel | `TAILNET` |
+| The relay (outbound `wss://` from the tablet; browsers over HTTPS to Cloudflare) | none on the tablet | the whole panel and, while open, the guests' page | `RELAY` |
+
+Nothing binds the any-address; nothing listens while the web panel is off.
+
+### Residuals (stated honestly)
+
+- **A session's 90 days are a ceiling, not an idle limit**: a phone lost while signed in stays signed in until its 90 days
+  are up, the PIN changes or the web panel is turned off (Sign out works only from the browser itself).
+- **A known device's cookie, if stolen, is five guesses at the PIN** past the relay's shut gate (then it is forgotten);
+  the same as a fresh address gets when the gate is open.
+- **The confirmation and its wrong count live in memory**: a restart of the app forgets them. The PIN is asked again,
+  and a stolen session's count of wrong tries starts again, so it could make two guesses (one PBKDF2 derivation each)
+  per restart of the app without ending; it cannot cause a restart itself (Install the update needs the PIN).
+- **The relay (Steven's own Cloudflare account) still sees the PIN and the cookies in the clear**, as delta 3 said: TLS
+  ends at Cloudflare.

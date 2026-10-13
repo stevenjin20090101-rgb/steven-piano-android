@@ -267,7 +267,7 @@ on the tablet*). Made by Steven Jin. Version 1.23.
   quietest note, expression, the re-strike time, folding, drum
   channel; **Tablet sound**: the tablet's own piano sound and *Tablet volume*;
   **Quiet times**: the hours the piano stays silent, see *Quiet times*), **SHARING** (**Web panel**: the
-  panel, its PIN, *Also on Wi-Fi* and the panel over the internet; **Guests**: the
+  panel, its PIN and the panel over the internet; **Guests**: the
   guests' switches and the poster) and **THIS TABLET** (**System**: the tablet's battery,
   temperature, memory and storage, the piano's controller and power boards, what the app is
   running, the day's chart and a few tools, read live while it is open; **Display**: appearance,
@@ -280,7 +280,7 @@ on the tablet*). Made by Steven Jin. Version 1.23.
   ("Piano volume 70%", "Reactive · 62%"); on a phone it opens its page over the list
   (back returns), on a tablet or a phone on its side the page opens beside it.
 - **Web panel**: the piano from any browser on your phone or laptop, over
-  Tailscale and behind a six-digit PIN: Now playing, Up next, the library,
+  Tailscale or the internet link (*Cloud*) and behind a six-digit PIN: Now playing, Up next, the library,
   channels, requests, adding MIDI files and zips, and the piano's settings, all
   live (see *Web panel*).
 - **Guests' requests**: a printed poster's QR code opens a request page on the
@@ -835,11 +835,20 @@ Falling notes, Fingering, Chord names and Hand colours. The score turns its page
 works through Steven Piano Cloud too; the first time, the score's font (about 0.9 MB) comes
 from the tablet, then the browser keeps it.
 
-From 1.15 a browser that has entered the PIN **stays signed in** for a year, across
-restarts of the app and of the browser; a new phone or computer still needs the PIN. A
-new PIN or turning the web panel off signs every browser out: do that if a phone that
-had the panel is lost. Five wrong PINs close the gate for 30 seconds, then longer each
-time, up to ten minutes.
+A browser that has entered the PIN **stays signed in**, across restarts of the app and of
+the browser, for **90 days** from the PIN (from 1.24; a year since 1.15), however often it is
+used; then it asks for the PIN again. A new phone or computer needs the PIN, and so does the
+same browser on the other way in: a browser signed in over Tailscale is not signed in through
+the internet link, nor the other way round. **Sign out** (Settings › Panel) signs this browser
+out and shows the PIN again; other signed-in devices stay signed in. A new PIN or turning the
+web panel off signs every browser out: do that if a phone that had the panel is lost. Five
+wrong PINs close the gate for 30 seconds, then longer each time, up to ten minutes.
+
+From 1.24 three things ask for the tablet's PIN again first, **Confirm it's you**, even in a
+browser that is signed in: **Listen** and **Test every key** (Settings › System › Listen and
+test, which hear the room through the tablet's microphone) and **Install the update**
+(Settings › System › Tools). The PIN, once given, holds for five minutes; signing in counts.
+Three wrong PINs there in a row sign that browser out.
 
 From 1.18 the tablet also answers the panel's System routes (behind the PIN like the rest): its battery, temperature,
 memory and network, what the app is doing, the piano's own facts and Share diagnostics' zip, for the System page a
@@ -870,13 +879,13 @@ opened.
   changes, print it again (a reservation for the tablet on the Wi-Fi's router keeps the
   address).
 
-The Wi-Fi address serves only the request page and the poster. **Panel on Wi-Fi too**
-serves the whole panel there as well, for a Wi-Fi without Tailscale, but read its note:
-**over Wi-Fi the PIN travels unencrypted**, as does everything the panel shows, so
-anyone on that network who records its traffic can read the PIN and use the panel.
-Leave it off on any Wi-Fi that is not your own; Tailscale encrypts everything. Some
-school networks keep devices from reaching each other (client isolation): guests'
-phones then cannot reach the request page, and only Tailscale works.
+The Wi-Fi address serves only the request page and the poster: **the panel needs
+Tailscale or the internet link** (*Cloud*), both encrypted. *Panel on Wi-Fi too* is gone
+from 1.24: over Wi-Fi the PIN and the session's cookie travelled unencrypted, so anyone
+on that network who recorded its traffic could have used the panel. If it was on, every
+browser signed in before the update enters the PIN once more. Some school networks keep
+devices from reaching each other (client isolation): guests' phones then cannot reach the
+request page, and only Tailscale works.
 
 ## Cloud
 
@@ -927,9 +936,11 @@ id.
 
 **PIN tries from the internet** have a gate of their own, stricter than the tailnet's: after ten wrong PINs
 in a row, from anywhere, the panel's sign-in through the relay waits a minute, then longer each time, up to
-an hour (some 24 tries a day, so a six-digit PIN can't be ground through). Someone who keeps sending wrong
-PINs can keep that sign-in shut; a browser already signed in stays signed in, and the tablet and the
-tailnet are not affected.
+an hour (some 24 tries a day, so a six-digit PIN can't be ground through); a right PIN no longer reopens it
+early (from 1.24), a day without a wrong one does. Someone who keeps sending wrong PINs can keep that sign-in
+shut for strangers, but not for you: a browser signed in through the internet link within the past year gets
+in all the same (five wrong PINs in a row and it is treated as a stranger), a browser signed in now stays
+signed in, and the tablet and the tailnet are not affected.
 
 ## Updating the piano's firmware
 
@@ -1505,15 +1516,16 @@ The full audit, every finding and what was done about it, is in
   a log*).
 - **What comes in (the web panel, off at first):** the app listens on port 8737 only on
   the tablet's Tailscale address (the whole panel, behind the PIN) and its Wi-Fi address
-  (the request page and the poster only, unless *Panel on Wi-Fi too*), never on every
-  address. The panel's PIN is kept only as a salted PBKDF2 hash; every change needs the
+  (the request page and the poster only, always from 1.24), never on every address. The
+  panel's PIN is kept only as a salted PBKDF2 hash; a session lasts 90 days and works only
+  on the way it was opened (Tailscale or the internet link); every change needs the
   session and a header no other site can send; no other site's page can use the panel;
-  uploads and requests are capped before they are read. The panel is plain HTTP: over
-  Tailscale that is encrypted by Tailscale, over Wi-Fi it is not. With *Remote access over
-  the internet* on, the same panel also comes in through your relay, over HTTPS, behind the
-  same PIN, which the tablet checks, never the relay, with a stricter gate for PIN tries from
-  the internet. The details, and what is left, are in the audit's 1.5.1 section and its 1.10
-  audit (delta 3).
+  the microphone and an update ask for the PIN again; uploads and requests are capped
+  before they are read. The panel is plain HTTP, which Tailscale encrypts. With *Remote
+  access over the internet* on, the same panel also comes in through your relay, over
+  HTTPS, behind the same PIN, which the tablet checks, never the relay, with a stricter
+  gate for PIN tries from the internet. The details, and what is left, are in the audit's
+  1.5.1 section, its 1.10 audit (delta 3) and its 1.24 notes.
 - **Updates** install only a file whose SHA-256 matches the manifest and that Android
   accepts as signed with the release key (see *Updates*); on the school tablet the
   device owner role is used for silent updates and, once it is turned on, kiosk mode,

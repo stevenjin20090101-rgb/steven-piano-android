@@ -100,11 +100,11 @@ class WebServerRelayTest {
             val body = if (path.startsWith("/api/upload")) "0123456789" else "{}"
             val what = "$method $path"
             val (lanAnswer, relayed) = if (method == "GET") {
-                http.get(path, mapOf("Cookie" to "sp_session=${sessions.open()}")) to
-                    relayed(method, path, headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+                http.get(path, mapOf("Cookie" to "sp_session=${lanSession()}")) to
+                    relayed(method, path, headers = mapOf("cookie" to "sp_session=${relaySession()}"))
             } else {
-                http.api(method, path, body, session = sessions.open(), extra = mapOf("Origin" to "http://127.0.0.1:$port")) to
-                    relayed(method, path, body.toByteArray(), panelHeaders(sessions.open()))
+                http.api(method, path, body, session = lanSession(), extra = mapOf("Origin" to "http://127.0.0.1:$port")) to
+                    relayed(method, path, body.toByteArray(), panelHeaders(relaySession()))
             }
             assertSameAnswer(what, lanAnswer, relayed)
         }
@@ -113,23 +113,23 @@ class WebServerRelayTest {
     @Test
     fun `the views' bytes and the font come through the relay as over a listener (v1_13 M32)`() {
         for (path in listOf("/api/now/notes?rev=3", "/api/now/score?w=800&h=600", "/api/now/score/1/page/0", "/api/font/bravura.otf?v=${WebAssets.FONT_VERSION}")) {
-            val lanAnswer = http.get(path, mapOf("Cookie" to "sp_session=${sessions.open()}"))
-            val relayedAnswer = relayed("GET", path, headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+            val lanAnswer = http.get(path, mapOf("Cookie" to "sp_session=${lanSession()}"))
+            val relayedAnswer = relayed("GET", path, headers = mapOf("cookie" to "sp_session=${relaySession()}"))
             assertSameAnswer("GET $path", lanAnswer, relayedAnswer)
             assertEquals(path, 200, relayedAnswer.status)
             assertTrue(path, relayedAnswer.body.contentEquals(lanAnswer.body))
             assertEquals("nosniff", relayedAnswer.headers["X-Content-Type-Options"])
         }
-        val notes = relayed("GET", "/api/now/notes", headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+        val notes = relayed("GET", "/api/now/notes", headers = mapOf("cookie" to "sp_session=${relaySession()}"))
         assertEquals("application/octet-stream", notes.headers["Content-Type"])
         assertEquals("no-store", notes.headers["Cache-Control"])
         assertEquals("SPNT-notes", String(notes.body))
-        val font = relayed("GET", "/api/font/bravura.otf", headers = mapOf("cookie" to "sp_session=${sessions.open()}"))
+        val font = relayed("GET", "/api/font/bravura.otf", headers = mapOf("cookie" to "sp_session=${relaySession()}"))
         assertEquals("font/otf", font.headers["Content-Type"])
         assertEquals("private, max-age=31536000, immutable", font.headers["Cache-Control"])
         // 202 while a layout runs comes back as it is; and nothing without a session.
         backend.scoreAnswer = dev.stevenjin.stevenpiano.web.NowAnswer.Working(500)
-        assertEquals(202, relayed("GET", "/api/now/score?w=800&h=600", headers = mapOf("cookie" to "sp_session=${sessions.open()}")).status)
+        assertEquals(202, relayed("GET", "/api/now/score?w=800&h=600", headers = mapOf("cookie" to "sp_session=${relaySession()}")).status)
         assertEquals(401, relayed("GET", "/api/font/bravura.otf").status)
         assertEquals(401, relayed("GET", "/api/now/notes").status)
     }
@@ -146,12 +146,12 @@ class WebServerRelayTest {
             "GET /nothing" to (http.get("/nothing/here") to relayed("GET", "/nothing/here")),
             "POST /app.js" to (http.send("POST", "/app.js", "x".toByteArray()) to relayed("POST", "/app.js", "x".toByteArray())),
             "GET /api/state no session" to (http.get("/api/state") to relayed("GET", "/api/state")),
-            "PATCH schedule" to (http.api("PATCH", "/api/schedules/1", "{}", session = sessions.open()) to relayed("PATCH", "/api/schedules/1", "{}".toByteArray(), panelHeaders(sessions.open(), origin = null))),
+            "PATCH quiet" to (http.api("PATCH", "/api/quiet", "{}", session = lanSession()) to relayed("PATCH", "/api/quiet", "{}".toByteArray(), panelHeaders(relaySession(), origin = null))),
             "POST play without the header" to (
-                http.api("POST", "/api/play", """{"pieceId":1}""", session = sessions.open(), panel = false) to
-                    relayed("POST", "/api/play", """{"pieceId":1}""".toByteArray(), panelHeaders(sessions.open(), origin = null) - "x-steven-piano")
+                http.api("POST", "/api/play", """{"pieceId":1}""", session = lanSession(), panel = false) to
+                    relayed("POST", "/api/play", """{"pieceId":1}""".toByteArray(), panelHeaders(relaySession(), origin = null) - "x-steven-piano")
                 ),
-            "GET library bad limit" to (http.get("/api/library?limit=500", mapOf("Cookie" to "sp_session=${sessions.open()}")) to relayed("GET", "/api/library?limit=500", headers = mapOf("cookie" to "sp_session=${sessions.open()}"))),
+            "GET library bad limit" to (http.get("/api/library?limit=500", mapOf("Cookie" to "sp_session=${lanSession()}")) to relayed("GET", "/api/library?limit=500", headers = mapOf("cookie" to "sp_session=${relaySession()}"))),
         )
         for ((what, pair) in pairs) assertSameAnswer(what, pair.first, pair.second)
 
@@ -169,35 +169,92 @@ class WebServerRelayTest {
     /**
      * Audit delta 3: as the web service makes it, the relay's server weighs PIN tries with a guard of its own
      * ([LoginGuard.forRelay]). Wrong PINs from many internet addresses close the relay's sign-in after ten,
-     * for a minute and longer, and never the listeners' (the tailnet's and the Wi-Fi's owner still signs in);
-     * the listeners' W1 gate would have let twenty through before even five seconds.
+     * for a minute and longer, and never the listeners' (the tailnet's owner still signs in); the listeners'
+     * W1 gate would have let twenty through before even five seconds. Since 1.24 (M56): a right PIN no longer
+     * reopens it, a quiet day does; and a browser signed in over the relay within the year, a known device,
+     * signs in while it is shut.
      */
     @Test
-    fun `the relay's PIN tries have a stricter gate of their own, and never close the listeners' (audit delta 3)`() {
+    fun `the relay's PIN tries have a stricter gate of their own, a right PIN no longer reopens it, and a known device passes it shut (audit delta 3, M56)`() {
         backend.pin = PIN
         val relayGuard = LoginGuard.forRelay(clock = { now })
         val server = WebServer(WebServer.Config(RELAY_CONFIG_HOST, 0, tempDir = tmp.newFolder()), backend, sessions, relayGuard, requests, assets, sockets)
-        fun login(pin: String, address: String): RelayedResponse {
+        fun login(pin: String, address: String, cookie: String? = null): RelayedResponse {
             val body = """{"pin":"$pin"}""".toByteArray()
-            val headers = panelHeaders(null) + mapOf("host" to RELAY_HOST, "content-length" to body.size.toString())
+            val headers = panelHeaders(cookie) + mapOf("host" to RELAY_HOST, "content-length" to body.size.toString())
             return RelayedResponse.write(server.serveRelayed(RelayedSession("POST", "/api/login", "", headers, address, ByteArrayInputStream(body)), RELAY_HOST, PREFIX))
         }
+        // Steven's own browser signed in over the relay ninety days ago: its session is over, its browser a known device.
+        val signedIn = login("482913", "203.0.113.7")
+        assertEquals(204, signedIn.status)
+        val device = signedIn.headers["Set-Cookie"]!!.substringAfter('=').substringBefore(';')
+        now += Sessions.VALID_MS
+        assertEquals(401, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$device")).status)
         // Ten wrong PINs, each from an address of its own (none reaches its own five), then the gate is shut for everyone.
         repeat(LoginGuard.RELAY_GLOBAL_THRESHOLD) { assertEquals(401, login("000000", "198.51.100.${it + 1}").status) }
         val shut = login("482913", "203.0.113.200")
         assertEquals("even the right PIN waits: the relay's gate is shut", 429, shut.status)
         assertEquals("60", shut.headers["Retry-After"])
+        // But not for the known device, from wherever it is now: its new session's cookie, the relay's, the answer's one.
+        val back = login("482913", "192.0.2.50", cookie = device)
+        assertEquals(204, back.status)
+        val cookie = back.headers["Set-Cookie"]!!
+        assertTrue(cookie, Regex("sp_session=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Max-Age=31536000; Secure").matches(cookie))
+        assertEquals(200, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=${cookie.substringAfter('=').substringBefore(';')}")).status)
         // The listeners' gate is untouched: the owner on the tailnet signs in.
         assertEquals(204, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
-        // A minute on, the right PIN over the relay opens it again (and clears the relay's count).
+        // A minute on, the right PIN gets in, and leaves the count where it was: the next wrong PIN shuts it for two minutes.
         now += 60_000
         assertEquals(204, login("482913", "203.0.113.200").status)
-        assertEquals(401, login("000000", "198.51.100.99").status)
+        val again = login("000000", "198.51.100.99")
+        assertEquals(401, again.status)
+        assertEquals(120, JSONObject(String(again.body)).getInt("retryAfter"))
+        // A day without a wrong PIN forgets it.
+        now += LoginGuard.RELAY_GLOBAL_QUIET_MS
+        assertEquals(0, JSONObject(String(login("000000", "198.51.100.98").body)).getInt("retryAfter"))
+    }
+
+    @Test
+    fun `a session opened on the tablet's own address gets 401 through the relay, and the relay's on the listener (M56)`() {
+        val lanToken = lanSession()
+        val relayToken = relaySession()
+        assertEquals(401, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$lanToken")).status)
+        assertEquals(401, relayed("POST", "/api/play", """{"pieceId":1}""".toByteArray(), panelHeaders(lanToken)).status)
+        assertEquals(401, relayed("POST", "/api/confirm", """{"pin":"482913"}""".toByteArray(), panelHeaders(lanToken)).status)
+        assertEquals(200, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$relayToken")).status)
+        assertEquals(401, http.get("/api/state", mapOf("Cookie" to "sp_session=$relayToken")).status)
+        assertEquals(200, http.get("/api/state", mapOf("Cookie" to "sp_session=$lanToken")).status)
+        assertEquals("nothing reached the app", emptyList<String>(), backend.calls.toList())
+    }
+
+    @Test
+    fun `over the relay Listen asks to confirm it's you, and the third wrong PIN ends the session with the relay's cookie cleared (M56)`() {
+        backend.pin = PIN
+        val token = relaySession()
+        now += Sessions.CONFIRM_MS
+        val asks = relayed("POST", "/api/listen/start", "{}".toByteArray(), panelHeaders(token))
+        assertEquals(403, asks.status)
+        assertEquals("confirm", JSONObject(String(asks.body)).getString("error"))
+        val pin = """{"pin":"482913"}""".toByteArray()
+        assertEquals("from another site", 403, relayed("POST", "/api/confirm", pin, panelHeaders(token, origin = "https://evil.example")).status)
+        assertEquals("without the header", 403, relayed("POST", "/api/confirm", pin, panelHeaders(token) - "x-steven-piano").status)
+        assertEquals(204, relayed("POST", "/api/confirm", pin, panelHeaders(token)).status)
+        assertEquals(204, relayed("POST", "/api/listen/start", "{}".toByteArray(), panelHeaders(token)).status)
+        repeat(Sessions.CONFIRM_TRIES - 1) {
+            val wrong = relayed("POST", "/api/confirm", """{"pin":"000000"}""".toByteArray(), panelHeaders(token))
+            assertEquals(403, wrong.status)
+            assertEquals("wrong", JSONObject(String(wrong.body)).getString("error"))
+        }
+        val third = relayed("POST", "/api/confirm", """{"pin":"000000"}""".toByteArray(), panelHeaders(token))
+        assertEquals(401, third.status)
+        assertEquals("sp_session=; HttpOnly; SameSite=Strict; Path=/p/abcdefgh2345/; Max-Age=0; Secure", third.headers["Set-Cookie"])
+        assertEquals(401, relayed("GET", "/api/state", headers = mapOf("cookie" to "sp_session=$token")).status)
+        assertEquals(listOf("listen start"), backend.calls.toList())
     }
 
     @Test
     fun `only the relay's own host, and its own https origin, are answered`() {
-        val token = sessions.open()
+        val token = relaySession()
         for (host in listOf("relay.test:443", "RELAY.TEST.evil.example", "127.0.0.1:$port", "evil.example", "")) {
             val answer = relayed("GET", "/api/state", headers = mapOf("host" to host, "cookie" to "sp_session=$token"))
             assertEquals(host, 403, answer.status)
@@ -210,7 +267,7 @@ class WebServerRelayTest {
             assertEquals("origin", JSONObject(String(play.body)).getString("error"))
         }
         assertEquals(204, relayed("POST", "/api/play", """{"pieceId":1}""".toByteArray(), panelHeaders(token)).status)
-        assertEquals("the listener refuses the relay's origin", 403, http.api("POST", "/api/play", """{"pieceId":1}""", session = token, extra = mapOf("Origin" to "https://relay.test")).status)
+        assertEquals("the listener refuses the relay's origin", 403, http.api("POST", "/api/play", """{"pieceId":1}""", session = lanSession(), extra = mapOf("Origin" to "https://relay.test")).status)
         assertEquals("and the relay's host", 403, http.get("/api/state", mapOf("Host" to "relay.test", "Cookie" to "sp_session=$token")).status)
         assertEquals(listOf("play 1 queue=null"), backend.calls.toList())
     }
@@ -266,7 +323,7 @@ class WebServerRelayTest {
 
     @Test
     fun `what NanoHTTPD would refuse before a route is refused over the relay too`() {
-        val token = sessions.open()
+        val token = relaySession()
         val cases = listOf(
             session("BREW", "/", null, mapOf("cookie" to "sp_session=$token")) to 501,
             session("GET", "/api/composers/%zz", null, mapOf("cookie" to "sp_session=$token")) to 400,
@@ -294,7 +351,7 @@ class WebServerRelayTest {
 
     @Test
     fun `an upload over the relay reaches the app as over a listener`() {
-        val token = sessions.open()
+        val token = relaySession()
         val midi = ByteArray(2_000) { it.toByte() }
         val answer = relayed("PUT", "/api/upload?name=..%2FChopin%20-%20Nocturne.MID", midi, panelHeaders(token))
         assertEquals(202, answer.status)
@@ -305,19 +362,27 @@ class WebServerRelayTest {
     }
 
     @Test
-    fun `a socket is admitted for a session from the panel's own origin only`() {
-        val token = sessions.open()
+    fun `a socket is admitted for a session opened through the relay, from the panel's own origin only, never a Tailscale one (M56)`() {
+        val token = relaySession()
         val cookies = mapOf("sp_session" to token)
-        assertEquals(WebServer.SOCKET_ADMITTED, relay.admitSocket(cookies, ORIGIN, ORIGIN))
-        assertEquals(401, relay.admitSocket(emptyMap(), ORIGIN, ORIGIN))
-        assertEquals(401, relay.admitSocket(mapOf("sp_session" to "A".repeat(43)), ORIGIN, ORIGIN))
-        assertEquals(403, relay.admitSocket(cookies, null, ORIGIN))
-        assertEquals(403, relay.admitSocket(cookies, "http://relay.test", ORIGIN))
+        val onRelay = Sessions.Transport.RELAY
+        assertEquals(WebServer.SOCKET_ADMITTED, relay.admitSocket(cookies, ORIGIN, ORIGIN, onRelay))
+        assertEquals(401, relay.admitSocket(emptyMap(), ORIGIN, ORIGIN, onRelay))
+        assertEquals(401, relay.admitSocket(mapOf("sp_session" to "A".repeat(43)), ORIGIN, ORIGIN, onRelay))
+        assertEquals(403, relay.admitSocket(cookies, null, ORIGIN, onRelay))
+        assertEquals(403, relay.admitSocket(cookies, "http://relay.test", ORIGIN, onRelay))
+        assertEquals("a Tailscale session through the relay", 401, relay.admitSocket(mapOf("sp_session" to lanSession()), ORIGIN, ORIGIN, onRelay))
+        assertEquals("the relay's on a listener", 401, lan.admitSocket(cookies, "http://127.0.0.1:$port", "http://127.0.0.1:$port", Sessions.Transport.TAILNET))
         sessions.close(token)
-        assertEquals(401, relay.admitSocket(cookies, ORIGIN, ORIGIN))
+        assertEquals(401, relay.admitSocket(cookies, ORIGIN, ORIGIN, onRelay))
     }
 
     // ---- Helpers ------------------------------------------------------------------------------
+
+    /** A session opened on the tablet's own address (the listener here), and one opened through the relay (v1.24 — M56). */
+    private fun lanSession(): String = sessions.open(Sessions.Transport.TAILNET)
+
+    private fun relaySession(): String = sessions.open(Sessions.Transport.RELAY)
 
     private fun panelHeaders(token: String?, origin: String? = ORIGIN): Map<String, String> = buildMap {
         put("content-type", "application/json")

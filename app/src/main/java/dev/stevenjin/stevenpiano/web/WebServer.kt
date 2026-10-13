@@ -68,16 +68,19 @@ interface WebSockets {
  * half, one per address the web service listens on ([Config.host]; never the any-address).
  *
  * - **Routes** are exactly [routes]: every other path is a static file from [WebAssets]' allow-list
- *   or a 404, and a listener that is [Config.guestOnly] (the Wi-Fi one, unless Panel on Wi-Fi too)
- *   knows only the public ones, answering 404 to the rest.
+ *   or a 404, and a listener that is [Config.guestOnly] (the Wi-Fi one, always since 1.24) knows only
+ *   the public ones, answering 404 to the rest.
  * - **Every request** must name this listener in its `Host` ([allowedHosts]: its address and port, or
  *   a name the person gave, `webHostName`), or it is refused 403: a page that rebinds its own name to
  *   the tablet's address never gets an answer.
- * - **The panel's routes** need the `sp_session` cookie ([Sessions]; 401 without); those that change
- *   anything also need `X-Steven-Piano: 1` (403 without), which no other site's page can send: the
- *   server never answers with CORS headers, so a browser refuses to send it cross-site. A request
+ * - **The panel's routes** need the `sp_session` cookie of a session opened on this way in ([Sessions],
+ *   bound to its [Sessions.Transport] since 1.24: a listener's or the relay's; 401 without); those that
+ *   change anything also need `X-Steven-Piano: 1` (403 without), which no other site's page can send:
+ *   the server never answers with CORS headers, so a browser refuses to send it cross-site. A request
  *   that says where it came from (`Origin`) must come from the panel itself. Login needs the header
- *   and no session; the public routes (the request page and its API, the poster) need neither.
+ *   and no session; the public routes (the request page and its API, the poster) need neither. The
+ *   microphone's two starts and Install the update also need the session to have confirmed it's you
+ *   in the last five minutes (v1.24 — M56: [needsConfirm], `POST /api/confirm`).
  * - **Every response** carries [securityHeaders] and closes its connection (NanoHTTPD never skips a
  *   body a handler did not read, so keep-alive could take the rest of a refused upload for the next
  *   request; closing also frees the pool's threads at once). APIs are `Cache-Control: no-store`.
@@ -113,7 +116,7 @@ class WebServer(
 
     /**
      * One listener: the address it binds ([host]), its [port] (0 in tests: any free one),
-     * [guestOnly] for the Wi-Fi address without Panel on Wi-Fi too, the other [names] requests may
+     * [guestOnly] for the Wi-Fi address (guests only, always since 1.24), the other [names] requests may
      * call it by (the person's `webHostName`; "localhost" for the emulator's loopback listener),
      * [tempDir] (`cacheDir/web`) for the server's temporary files and the uploads, and
      * [requestDeadlineMs], how long a whole request (its head and any JSON body) may take to arrive.
@@ -219,9 +222,9 @@ class WebServer(
         val cookies = WebCookies.parse(session.headers[COOKIE])
         val token = cookies[WebCookies.SESSION]
         when (route.access) {
-            Access.READ -> if (!sessions.isValid(token)) return refuse(401, "session", "Enter the PIN first.")
+            Access.READ -> if (!sessions.isValid(token, edge.transport)) return refuse(401, "session", "Enter the PIN first.")
             Access.WRITE -> {
-                if (!sessions.isValid(token)) return refuse(401, "session", "Enter the PIN first.")
+                if (!sessions.isValid(token, edge.transport)) return refuse(401, "session", "Enter the PIN first.")
                 checkHeaderAndOrigin(session, host, edge)?.let { return it }
             }
             Access.LOGIN -> checkHeaderAndOrigin(session, host, edge)?.let { return it }
@@ -274,7 +277,8 @@ class WebServer(
 
     private fun socket(session: IHTTPSession, host: String): Response {
         if (session.method != Method.GET || session.uri != SOCKET_PATH || config.guestOnly) return notFound()
-        when (admitSocket(WebCookies.parse(session.headers[COOKIE]), session.headers[ORIGIN], "$HTTP://$host")) {
+        // A listener's socket: the tablet's own address, so a session opened there (v1.24 — M56).
+        when (admitSocket(WebCookies.parse(session.headers[COOKIE]), session.headers[ORIGIN], "$HTTP://$host", Sessions.Transport.TAILNET)) {
             401 -> return refuse(401, "session", "Enter the PIN first.")
             403 -> return refuse(403, "origin", "This request came from another site.")
         }
@@ -284,12 +288,13 @@ class WebServer(
     }
 
     /**
-     * Whether a socket may open for a page with [cookies] that says it came from [origin]: 401 without a
-     * valid session, 403 unless [origin] is exactly [expectedOrigin] (the panel's own page), else
-     * [SOCKET_ADMITTED]. The listeners' `/ws` asks it, and the relay's bridged sockets (v1.10 — M26).
+     * Whether a socket may open on [transport] for a page with [cookies] that says it came from [origin]: 401
+     * without a session valid on [transport] (v1.24 — M56), 403 unless [origin] is exactly [expectedOrigin] (the
+     * panel's own page), else [SOCKET_ADMITTED]. The listeners' `/ws` asks it, and the relay's bridged sockets
+     * (v1.10 — M26).
      */
-    fun admitSocket(cookies: Map<String, String>, origin: String?, expectedOrigin: String): Int = when {
-        !sessions.isValid(cookies[WebCookies.SESSION]) -> 401
+    fun admitSocket(cookies: Map<String, String>, origin: String?, expectedOrigin: String, transport: Sessions.Transport): Int = when {
+        !sessions.isValid(cookies[WebCookies.SESSION], transport) -> 401
         origin != expectedOrigin -> 403
         else -> SOCKET_ADMITTED
     }
@@ -367,8 +372,6 @@ class WebServer(
         Route(Method.GET, Regex("/api/channels"), Access.READ, "/api/channels") { json(WebApi.channels(backend.channels())) },
         Route(Method.GET, Regex("/api/requests"), Access.READ, "/api/requests") { json(WebApi.requests(requests.pending.value, backend.guestSettings())) },
         Route(Method.GET, Regex("/api/piano"), Access.READ, "/api/piano") { json(WebApi.piano(backend.piano())) },
-        // Timed plays were removed in 1.20 (M54): an older page still reads its Schedule page, and finds none.
-        Route(Method.GET, Regex("/api/schedules"), Access.READ, "/api/schedules") { json(WebApi.noSchedules()) },
         Route(Method.GET, Regex("/api/studio/seed"), Access.READ, "/api/studio/seed") { call -> studioSeed(call) },
         // The views of the piece playing (v1.13 — M32): its notes, its score's index and pages, the score's font. Read-only,
         // each input a bounded integer, the work bounded by NowViews.
@@ -500,10 +503,6 @@ class WebServer(
             backend.applySettings(WebApi.settingsChange(call.body()))
             noContent()
         },
-        // Timed plays were removed in 1.20 (M54): their writes are gone, for an older page that still sends them.
-        Route(Method.POST, Regex("/api/schedules"), Access.WRITE, "/api/schedules") { gone() },
-        Route(Method.PUT, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { gone() },
-        Route(Method.DELETE, Regex("/api/schedules/([1-9]\\d{0,17})"), Access.WRITE, "/api/schedules/1") { gone() },
         Route(Method.PUT, Regex("/api/upload"), Access.WRITE, "/api/upload?name=a.mid", timed = false) { call -> upload(call) },
         // Studio (v1.7 — M23): a recording to transcribe, and a job's Cancel.
         Route(Method.PUT, Regex("/api/studio/audio"), Access.WRITE, "/api/studio/audio?name=a.wav", timed = false) { call -> studioUpload(call) },
@@ -516,6 +515,8 @@ class WebServer(
             sessions.close(call.token)
             noContent().also { it.addHeader("Set-Cookie", WebCookies.endSession(call.edge.cookiePath, call.edge.secure)) }
         },
+        // Confirm it's you (v1.24 — M56): the PIN again, before the microphone or an update starts.
+        Route(Method.POST, Regex("/api/confirm"), Access.WRITE, "/api/confirm") { call -> confirm(call) },
         // The System page's two (v1.18 — M46): the piano's live facts now (the body is not read), and a tool by name.
         Route(Method.POST, Regex("/api/system/refresh"), Access.WRITE, "/api/system/refresh") { json(JSONObject().put("refreshed", backend.refreshPiano())) },
         Route(Method.POST, Regex("/api/system/tool"), Access.WRITE, "/api/system/tool") { call -> systemTool(call) },
@@ -548,13 +549,14 @@ class WebServer(
         },
 
         // Listening and the key test (v1.23 — M55): the tablet's microphone, live, to the session that asks alone; and every key
-        // struck in turn and heard. The bodies are not read; a refusal is 409 {error, message} in the tablet's words.
-        Route(Method.POST, Regex("/api/listen/start"), Access.WRITE, "/api/listen/start") { call -> heard(call) { backend.listenStart(it) } },
+        // struck in turn and heard. The bodies are not read; a refusal is 409 {error, message} in the tablet's words. A start
+        // needs the session to have confirmed it's you (v1.24 — M56); a stop never does.
+        Route(Method.POST, Regex("/api/listen/start"), Access.WRITE, "/api/listen/start") { call -> needsConfirm(call) ?: heard(call) { backend.listenStart(it) } },
         Route(Method.POST, Regex("/api/listen/stop"), Access.WRITE, "/api/listen/stop") {
             backend.listenStop()
             noContent()
         },
-        Route(Method.POST, Regex("/api/keytest/start"), Access.WRITE, "/api/keytest/start") { call -> heard(call) { backend.keyTestStart(it) } },
+        Route(Method.POST, Regex("/api/keytest/start"), Access.WRITE, "/api/keytest/start") { call -> needsConfirm(call) ?: heard(call) { backend.keyTestStart(it) } },
         Route(Method.POST, Regex("/api/keytest/stop"), Access.WRITE, "/api/keytest/stop") {
             backend.keyTestStop()
             noContent()
@@ -606,22 +608,74 @@ class WebServer(
         return json(WebApi.page(backend.library(query, category, offset, limit, scope(call))))
     }
 
+    /**
+     * `POST /api/login {pin}`: a new session on this way in, its cookie the answer's one `Set-Cookie`. A try is weighed by its
+     * address and the gate for everyone; but a browser whose cookie marks a known device here (v1.24 — M56: signed in on this
+     * transport within the year, [Sessions.knownDevice]) is weighed under its own key, `device:<digest>`, outside the gate for
+     * everyone, so whoever holds that gate shut (the relay's) keeps no such browser out. Its fifth wrong PIN in a row (the
+     * key's own lock, [LoginGuard.THRESHOLD]) forgets the device, and its next tries meet the gates as anyone's; a right PIN
+     * replaces its session with the new one.
+     */
     private suspend fun login(call: Call): Response {
         val body = call.body()
         WebApi.onlyKeys(body, setOf("pin"))
         val pin = WebApi.string(body, "pin", MAX_PIN_TEXT)
-        val address = call.address
-        val wait = guard.waitMs(address)
+        val transport = call.edge.transport
+        val device = call.token?.takeIf { sessions.knownDevice(it, transport) }
+        val key = device?.let { DEVICE_KEY + Sessions.digest(it) } ?: call.address
+        val shared = device == null
+        val wait = guard.waitMs(key, shared)
         if (wait > 0) return waitResponse(wait)
         val hash = backend.pinHash() ?: return refuse(403, "no-pin", "Set a PIN on the tablet first.")
         // Checked and counted as one step, one try at a time (LoginGuard.attempt): tries sent at once can't all slip past the wait.
-        return when (val attempt = guard.attempt(address) { hash.matches(pin) }) {
+        return when (val attempt = guard.attempt(key, shared) { hash.matches(pin) }) {
             is LoginGuard.Attempt.Wait -> waitResponse(attempt.ms)
-            is LoginGuard.Attempt.Wrong ->
+            is LoginGuard.Attempt.Wrong -> {
+                if (device != null && attempt.waitMs > 0) sessions.close(device)   // the device's fifth wrong PIN in a row
                 json(WebApi.error("wrong", "That PIN isn't right.").put("retryAfter", seconds(attempt.waitMs)), Response.Status.UNAUTHORIZED)
-            LoginGuard.Attempt.Right -> noContent().also { it.addHeader("Set-Cookie", WebCookies.session(sessions.open(), call.edge.cookiePath, call.edge.secure)) }
+            }
+            LoginGuard.Attempt.Right -> {
+                device?.let(sessions::close)   // the browser's new session takes its place
+                noContent().also { it.addHeader("Set-Cookie", WebCookies.session(sessions.open(transport), call.edge.cookiePath, call.edge.secure)) }
+            }
         }
     }
+
+    /**
+     * `POST /api/confirm {pin}` (v1.24 — M56, "Confirm it's you"): the tablet's PIN again, from a signed-in session, before
+     * the microphone or an update starts ([needsConfirm]). Weighed one try at a time under the session's own key,
+     * `confirm:<digest>`, outside the gate for everyone (the session is the gate here). Right: 204, and the session may start
+     * them for [Sessions.CONFIRM_MS]. Wrong: 403 `{error: "wrong", retryAfter}`, not 401 (which sends the panel back to its
+     * sign-in); the third wrong PIN in a row ends the session: 401, its cookie cleared.
+     */
+    private suspend fun confirm(call: Call): Response {
+        val body = call.body()
+        WebApi.onlyKeys(body, setOf("pin"))
+        val pin = WebApi.string(body, "pin", MAX_PIN_TEXT)
+        val token = call.token ?: return refuse(401, "session", "Enter the PIN first.")
+        val hash = backend.pinHash() ?: return refuse(403, "no-pin", "Set a PIN on the tablet first.")
+        return when (val attempt = guard.attempt(CONFIRM_KEY + Sessions.digest(token), shared = false) { hash.matches(pin) }) {
+            is LoginGuard.Attempt.Wait -> waitResponse(attempt.ms)
+            is LoginGuard.Attempt.Wrong -> if (sessions.wrongConfirm(token)) {
+                refuse(401, "session", "That PIN wasn't right three times. Enter it again to sign in.")
+                    .also { it.addHeader("Set-Cookie", WebCookies.endSession(call.edge.cookiePath, call.edge.secure)) }
+            } else {
+                json(WebApi.error("wrong", "That PIN isn't right.").put("retryAfter", seconds(attempt.waitMs)), Response.Status.FORBIDDEN)
+            }
+            LoginGuard.Attempt.Right -> {
+                sessions.confirm(token)
+                noContent()
+            }
+        }
+    }
+
+    /**
+     * 403 `{error: "confirm"}` unless [call]'s session confirmed it's you, or signed in, within the last five minutes (v1.24 —
+     * M56): Listen, Test every key and Install the update. The panel then asks for the PIN (`POST /api/confirm`) and sends the
+     * request once more. Null when it may go on.
+     */
+    private fun needsConfirm(call: Call): Response? =
+        if (sessions.confirmed(call.token)) null else refuse(403, "confirm", "Confirm it's you: enter the tablet's PIN.")
 
     private suspend fun guestRequest(call: Call): Response {
         val body = call.body()
@@ -858,6 +912,12 @@ class WebServer(
         /** Cookies are `Secure` wherever the page is HTTPS. */
         val secure: Boolean get() = scheme == HTTPS
 
+        /**
+         * The sessions this edge reads (v1.24 — M56): the relay's, or the tablet's own address's (the Tailscale listener, and
+         * the debug emulator's loopback; the Wi-Fi listener, guests only, reads none).
+         */
+        val transport: Sessions.Transport get() = if (relayed) Sessions.Transport.RELAY else Sessions.Transport.TAILNET
+
         /** The panel's own origin at [host]: what a request from its page says in `Origin`. */
         fun origin(host: String): String = "$scheme://$host"
     }
@@ -874,6 +934,10 @@ class WebServer(
 
         /** The guests' pages: over the relay, only while Guests can request is on. */
         private val GUEST_PAGES = setOf(POSTER_PATH, REQUEST_PAGE, "/request.js")
+
+        /** The login guard's keys (v1.24 — M56) for a known device's sign-in and a session's "Confirm it's you", each before a token's digest. */
+        private const val DEVICE_KEY = "device:"
+        private const val CONFIRM_KEY = "confirm:"
     }
 
     /** What kinds of file may be uploaded, and how large. */
@@ -1073,11 +1137,15 @@ class WebServer(
 
     // ---- The System page (v1.18 — M46) ---------------------------------------------------------
 
-    /** `POST /api/system/tool` `{name}`: `covers`, `reconnect` or `update` (409 busy while a firmware update runs); any other name 400. */
+    /**
+     * `POST /api/system/tool` `{name}`: `covers`, `reconnect` or `update` (409 busy while a firmware update runs; `update` only
+     * once the session confirmed it's you, v1.24 — M56); any other name 400.
+     */
     private suspend fun systemTool(call: Call): Response {
         val body = call.body()
         WebApi.onlyKeys(body, setOf("name"))
         val tool = SystemTool.of(WebApi.string(body, "name", 16)) ?: throw ApiError(400, "field", "The tool must be covers, reconnect or update.")
+        if (tool == SystemTool.UPDATE) needsConfirm(call)?.let { return it }
         return when (backend.systemTool(tool)) {
             SystemToolResult.DONE -> noContent()
             SystemToolResult.BUSY -> refuse(409, "busy", "The piano is being updated. Try again once it has finished.")
@@ -1180,9 +1248,6 @@ class WebServer(
         Transport.PAUSE, Transport.STOP -> false
     }
 
-    /** 410 `gone`: the schedules' timed plays, removed in 1.20. */
-    private fun gone(): Response = refuse(410, "gone", "Timed plays were removed in 1.20.")
-
     // ---- Listening and the key test (v1.23 — M55) ----------------------------------------------------------------------
 
     /**
@@ -1209,9 +1274,6 @@ class WebServer(
  */
 internal open class SteadyServerSocket(private val pause: (Long) -> Unit = ::pauseQuietly) : ServerSocket() {
     private var failures = 0
-
-    /** Failures in a row so far. */
-    val failuresInARow: Int get() = failures
 
     override fun accept(): Socket {
         try {
@@ -1261,9 +1323,6 @@ internal class DeadlineInput(
 ) : InputStream() {
     @Volatile
     private var deadline: Long = nanos() + deadlineMs * NANOS_PER_MS
-
-    /** Whether the deadline still holds. */
-    val deadlined: Boolean get() = deadline != LIFTED
 
     override fun read(): Int {
         arm()
@@ -1401,8 +1460,11 @@ object WebCookies {
     const val SESSION = "sp_session"
     const val GUEST = "sp_guest"
 
-    /** How long a browser keeps the session cookie, in seconds: [Sessions.IDLE_MS], a year. */
-    const val SESSION_MAX_AGE_S = Sessions.IDLE_MS / 1_000
+    /**
+     * How long a browser keeps the session cookie, in seconds: a year from the sign-in, [Sessions.KNOWN_MS]. Its session acts
+     * for the first 90 days of it ([Sessions.VALID_MS]); after that the cookie marks a known device (v1.24 — M56).
+     */
+    const val SESSION_MAX_AGE_S = Sessions.KNOWN_MS / 1_000
 
     /** 16 random bytes, URL-safe base64 without padding. */
     val GUEST_ID = Regex("[A-Za-z0-9_-]{22}")
@@ -1424,8 +1486,8 @@ object WebCookies {
     /**
      * The session cookie: never readable by scripts, never sent with another site's request, for the
      * whole panel at [path] (`/` on a listener, `/p/<id>/` through the relay), only over HTTPS when
-     * [secure] (the relay), and kept a year ([SESSION_MAX_AGE_S], v1.15 — M42) rather than until the
-     * browser closes, as long as the tablet keeps a session unused.
+     * [secure] (the relay), and kept a year from the sign-in ([SESSION_MAX_AGE_S], v1.15 — M42) rather
+     * than until the browser closes: 90 days of a session, then a known device (v1.24 — M56).
      */
     fun session(token: String, path: String = "/", secure: Boolean = false): String =
         "$SESSION=$token; HttpOnly; SameSite=Strict; Path=$path; Max-Age=$SESSION_MAX_AGE_S" + secureFlag(secure)

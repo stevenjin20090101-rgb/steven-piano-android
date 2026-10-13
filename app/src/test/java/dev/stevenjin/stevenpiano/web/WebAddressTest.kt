@@ -67,20 +67,29 @@ class WebAddressTest {
     }
 
     @Test
-    fun `the listeners are the tailnet's with the panel, the Wi-Fi's for guests unless Panel on Wi-Fi too, loopback only on the emulator`() {
+    fun `the listeners are the tailnet's with the panel, the Wi-Fi's for guests always, and the emulator's loopback with the panel (M56)`() {
         val both = WebChoice(v4("100.101.2.3"), v4("192.168.1.20"))
         assertEquals(
             listOf(ListenerPlan("100.101.2.3", guestOnly = false), ListenerPlan("192.168.1.20", guestOnly = true)),
-            WebAddress.plan(both, panelOnWifi = false, loopback = false),
+            WebAddress.plan(both, loopback = false),
         )
-        assertEquals(ListenerPlan("192.168.1.20", guestOnly = false), WebAddress.plan(both, panelOnWifi = true, loopback = false)[1])
+        assertEquals(
+            "the Wi-Fi alone: guests only, never the panel",
+            listOf(ListenerPlan("192.168.1.20", guestOnly = true)),
+            WebAddress.plan(WebChoice(null, v4("192.168.1.20")), loopback = false),
+        )
         assertEquals(
             ListenerPlan("127.0.0.1", guestOnly = false, names = listOf("localhost")),
-            WebAddress.plan(WebChoice(null, null), panelOnWifi = false, loopback = true).single(),
+            WebAddress.plan(WebChoice(null, null), loopback = true).single(),
         )
-        assertEquals("no network, no listener", emptyList<ListenerPlan>(), WebAddress.plan(WebChoice(null, null), panelOnWifi = true, loopback = false))
-        val every = WebAddress.plan(both, panelOnWifi = true, loopback = true).map { it.address }
-        assertFalse("never the any-address", "0.0.0.0" in every)
+        assertEquals("no network, no listener", emptyList<ListenerPlan>(), WebAddress.plan(WebChoice(null, null), loopback = false))
+        val every = WebAddress.plan(both, loopback = true)
+        assertEquals(listOf(false, true, false), every.map { it.guestOnly })
+        assertFalse("never the any-address", "0.0.0.0" in every.map { it.address })
+        // Where the panel is shown: the tailnet address alone, whatever the Wi-Fi's.
+        assertEquals("http://100.101.2.3:8737", WebStatus(running = true, tailnet = "100.101.2.3", wifi = "192.168.1.20").panelUrl)
+        assertNull(WebStatus(running = true, wifi = "192.168.1.20").panelUrl)
+        assertEquals("http://192.168.1.20:8737/request", WebStatus(running = true, wifi = "192.168.1.20").guestUrl)
     }
 
     @Test
@@ -103,7 +112,6 @@ class WebAddressTest {
         val wifiOnly = WebAddress.choose(listOf(NetInterface("wlan0", listOf(ip("10.0.2.16")))))
         assertNull(wifiOnly.tailnet)
         assertEquals(v4("10.0.2.16"), wifiOnly.wifi)
-        assertEquals("http://10.0.2.16:8737/request", WebAddress.url(v4("10.0.2.16"), "/request"))
         assertEquals(8737, WebAddress.PORT)
     }
 }

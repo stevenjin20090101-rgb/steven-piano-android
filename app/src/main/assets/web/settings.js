@@ -65,6 +65,9 @@ const PIANO_PAGES = [
 /** The panel's appearance, as host.appearance names it, and its words. */
 const APPEARANCES = [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']];
 
+/** Under Sign out (v1.24 — M56). */
+const SIGN_OUT_NOTE = 'This browser only. Other signed-in devices stay signed in.';
+
 /** A change waits this long for the next before it is sent (today's debounce), and a sent one this long to come back. */
 const SEND_MS = 150;
 const SETTLE_MS = 3000;
@@ -782,7 +785,7 @@ export function create(host, body, tools) {
     ];
   }
 
-  // ---- Panel (this browser's appearance, and Album colours behind the player) -----------------------------------------
+  // ---- Panel (this browser's appearance, Album colours behind the player, and Sign out) ---------------------------------
 
   const appearanceNow = () => {
     try {
@@ -813,7 +816,27 @@ export function create(host, body, tools) {
     const backdrop = switchControl('Album colours behind the player', albumBackdrop, (on) => sendPref('albumBackdrop', on), backdropEnabled);
     return [h('section', { class: 'card', 'aria-label': 'Panel' },
       row('Appearance', [h('span', { class: 'meta', text: 'In this browser only' })], appearance, () => true, true),
-      row('Album colours behind the player', [h('span', { class: 'meta', text: NOTES.albumBackdrop })], backdrop, backdropEnabled))];
+      row('Album colours behind the player', [h('span', { class: 'meta', text: NOTES.albumBackdrop })], backdrop, backdropEnabled),
+      h('div', { class: 'setting' }, h('div', { class: 'label' }, h('span', { class: 'meta', id: 'sign-out-note', text: SIGN_OUT_NOTE })), signOutButton()))];
+  }
+
+  /**
+   * Sign out (v1.24 — M56), as the tablet's buttons with a line beside them: this browser's session ends on the tablet (the
+   * panel's logout), then the page loads again, which opens at the PIN gate with nothing of the panel kept in it.
+   */
+  function signOutButton() {
+    const button = h('button', { class: 'outlined', type: 'button', 'aria-describedby': 'sign-out-note', text: 'Sign out' });
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await host.post(host.ROOT + '/api/logout');
+        location.reload();
+      } catch (e) {
+        button.disabled = false;
+        host.failed(e);
+      }
+    });
+    return button;
   }
 
   // ---- The list: each page with its glyph, its name and one line of what is set --------------------------------------

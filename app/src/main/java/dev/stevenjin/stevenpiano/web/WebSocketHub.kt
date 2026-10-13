@@ -35,8 +35,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * positionMs, at}`: the page runs its clock on from there at the tempo). The page sends nothing
  * that is read; its frames are bounded ([FrameGuard]) and dropped. Every [pingMs] each socket is
  * pinged (its pong keeps the socket's read alive under the server's read timeout) and closed if its
- * session has ended ([sessionValid]: logged out, the PIN changed, the panel turned off). At most
- * [maxSockets] are open at once: each holds one of the server's four threads while it is open.
+ * session has ended ([sessionValid]: logged out, the PIN changed, the panel turned off, 90 days since
+ * its sign-in). At most [maxSockets] are open at once: each holds one of the server's four threads
+ * while it is open.
  *
  * Browsers that reach the panel through the relay (v1.10 — M26) are [Member]s ([attach]): their
  * sockets end at the relay, which bridges them over the tablet's one connection, so the hub hands
@@ -45,11 +46,15 @@ import java.util.concurrent.CopyOnWriteArrayList
  * apart from the listeners' [maxSockets]; they are not pinged (the relay keeps the browsers awake
  * and the tablet's connection has its own pings), but checked at every ping all the same and
  * closed once their session has ended; the relay's side ends one with [Member.detach].
+ *
+ * Each socket carries its transport (v1.24 — M56): a listener's socket is the tablet's own address's
+ * ([Sessions.Transport.TAILNET]), a member the relay's ([Sessions.Transport.RELAY]), and its session
+ * is checked on that transport alone.
  */
 class WebSocketHub(
     private val stateMessage: suspend () -> String,
     private val progressMessage: () -> String?,
-    private val sessionValid: (String?) -> Boolean,
+    private val sessionValid: (String?, Sessions.Transport) -> Boolean,
     private val maxSockets: Int = MAX_SOCKETS,
     private val minGapMs: Long = MIN_GAP_MS,
     private val pingMs: Long = PING_MS,
@@ -76,13 +81,14 @@ class WebSocketHub(
     /** Whether another relayed browser may attach. */
     fun hasMemberRoom(): Boolean = members.size < maxMembers
 
+    /** A listener's socket, its session and origin checked ([WebServer.admitSocket], on the tablet's own address). */
     override fun open(handshake: NanoHTTPD.IHTTPSession): NanoWSD.WebSocket {
         val token = WebCookies.parse(handshake.headers["cookie"])[WebCookies.SESSION]
         return HubSocket(GuardedHandshake(handshake), token)
     }
 
     /**
-     * A browser's socket bridged by the relay, whose session ([token]) and origin were checked
+     * A browser's socket bridged by the relay, whose session ([token], the relay's) and origin were checked
      * ([WebServer.admitSocket]): the hub's messages go to [send], and [close] ends it (its code and
      * reason, for the relay to pass on). Null when [maxMembers] are attached already. The whole state
      * follows at once, as a listener's socket gets it on opening.
@@ -136,7 +142,7 @@ class WebSocketHub(
                 while (isActive) {
                     delay(pingMs)
                     for (socket in open) socket.keepAlive()
-                    for (member in members) if (!sessionValid(member.token)) member.end(CLOSE_SESSION_ENDED, "The session has ended.")
+                    for (member in members) if (!sessionValid(member.token, member.transport)) member.end(CLOSE_SESSION_ENDED, "The session has ended.")
                 }
             },
         )
@@ -164,6 +170,9 @@ class WebSocketHub(
      * nothing to close.
      */
     inner class Member internal constructor(internal val token: String?, private val send: (String) -> Unit, private val close: (Int, String) -> Unit) {
+        /** Its session's transport: the relay's. */
+        internal val transport = Sessions.Transport.RELAY
+
         fun detach() {
             members -= this
         }
@@ -192,6 +201,9 @@ class WebSocketHub(
     }
 
     private inner class HubSocket(handshake: NanoHTTPD.IHTTPSession, val token: String?) : NanoWSD.WebSocket(handshake) {
+        /** Its session's transport: the tablet's own address (only the Tailscale listener and the debug loopback open sockets). */
+        val transport = Sessions.Transport.TAILNET
+
         override fun onOpen() {
             open += this
             val first = try {
@@ -226,7 +238,7 @@ class WebSocketHub(
 
         /** A ping, or the end when its session is over. */
         fun keepAlive() {
-            if (!sessionValid(token)) {
+            if (!sessionValid(token, transport)) {
                 closeQuietly(NanoWSD.WebSocketFrame.CloseCode.PolicyViolation, "The session has ended.")
                 return
             }

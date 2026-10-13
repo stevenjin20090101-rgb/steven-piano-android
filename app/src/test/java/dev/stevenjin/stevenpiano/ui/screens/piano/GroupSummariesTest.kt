@@ -214,7 +214,6 @@ class GroupSummariesTest {
         assertEquals("Off", GroupSummaries.remote(PianoSettings(), WebStatus(running = true, tailnet = "100.101.2.3")))
         assertEquals("On · 100.101.2.3", GroupSummaries.remote(on, WebStatus(running = true, tailnet = "100.101.2.3", wifi = "192.168.1.20")))
         assertEquals("guests only on the Wi-Fi: no panel address", "On", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20")))
-        assertEquals("On · 192.168.1.20", GroupSummaries.remote(on, WebStatus(running = true, wifi = "192.168.1.20", panelOnWifi = true)))
         assertEquals("On", GroupSummaries.remote(on, WebStatus()))
         assertEquals("the Remote row reads without the piano", "Off", GroupSummaries.from(PianoState.Unknown, PianoSettings()).remote)
     }

@@ -91,9 +91,11 @@ import java.io.IOException
  * panel's address.
  *
  * It listens where [WebAddress.choose] says and nowhere else: the tailnet address serves the whole
- * panel; the Wi-Fi address serves guests only (the request page, the poster, the public API)
- * unless Panel on Wi-Fi too is on; never the any-address. Both listeners share the process's
- * sessions, login guard, guests' requests and socket hub ([dev.stevenjin.stevenpiano.web.WebPanel]).
+ * panel; the Wi-Fi address serves guests only (the request page, the poster, the public API),
+ * always since 1.24 (M56); never the any-address. Both listeners share the process's sessions,
+ * login guard, guests' requests and socket hub ([dev.stevenjin.stevenpiano.web.WebPanel]); before
+ * either starts, the retired Panel on Wi-Fi too is dealt with
+ * ([dev.stevenjin.stevenpiano.web.WebPanel.retireWifiPanel]).
  * The listeners start again whenever the networks change (a callback that sees VPNs too, and a
  * look every 30 s besides), and all stop when the switch turns off, the PIN goes, or Android asks
  * ([onTimeout]). While the player plays it holds a partial wake lock (ten minutes at a time,
@@ -162,8 +164,17 @@ class WebService : Service() {
         super.onDestroy()
     }
 
-    /** Follows the switch, the PIN, Panel on Wi-Fi too and the networks; and the player, for the wake lock. */
+    /**
+     * Follows the switch, the PIN and the networks; and the player, for the wake lock. First of all, before any listener or
+     * the relay reads a session, Panel on Wi-Fi too is retired (v1.24 — M56); should the settings fail to say, it is tried
+     * again at the next start.
+     */
     private suspend fun watch() {
+        try {
+            graph.web.retireWifiPanel()
+        } catch (e: IOException) {
+            Log.w(TAG, "Panel on Wi-Fi too couldn't be retired yet")
+        }
         watchNetworks()
         startHub()
         scope.launch {
@@ -311,7 +322,7 @@ class WebService : Service() {
      */
     private suspend fun listen(settings: PianoSettings) {
         val choice = withContext(Dispatchers.IO) { WebAddress.choose(WebAddress.list()) }
-        val wanted = WebAddress.plan(choice, settings.webOnWifi, loopback = LoggingPianoLink.isWanted())
+        val wanted = WebAddress.plan(choice, loopback = LoggingPianoLink.isWanted())
         if (wanted == listening && servers.isNotEmpty() && servers.size == wanted.size && servers.all { it.isAlive }) return
         stopListening()
         val started = withContext(Dispatchers.IO) { wanted.mapNotNull(::server) }
@@ -322,7 +333,6 @@ class WebService : Service() {
             running = true,
             tailnet = choice.tailnet?.hostAddress?.takeIf { it in bound },
             wifi = choice.wifi?.hostAddress?.takeIf { it in bound },
-            panelOnWifi = settings.webOnWifi,
         )
         graph.web.report(status)
         post(status)
@@ -377,7 +387,7 @@ class WebService : Service() {
             progressMessage = {
                 if (player.state.value.status != PlaybackStatus.Playing) null else progress(player)
             },
-            sessionValid = panel.sessions::isValid,
+            sessionValid = { token, transport -> panel.sessions.isValid(token, transport) },
             // The moment the position jumps (v1.13 — M32), playing or not, while a piece is loaded.
             jumpMessage = { if (player.state.value.piece == null) null else progress(player) },
         )
