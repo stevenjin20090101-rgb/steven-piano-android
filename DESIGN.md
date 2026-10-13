@@ -3183,3 +3183,45 @@ itself after five minutes), on the LAN and through the relay alike.
 
 - The same card: the **Listening from the panel** switch and **Test every key** (no live sound here; its progress and the same
   map and line). Search finds them by microphone, listen, stuck key, key test and sweep.
+
+# v1.24 — M56: a safer panel sign-in
+
+Steven asked (2026-10-10) for a full audit with any hidden vulnerability fixed. The panel is reached from the internet
+through the relay and on the school's network, and a read-only sweep found: Panel on Wi-Fi too sent the PIN and a
+year-long cookie over plain HTTP; the tailnet and the relay shared one table of sessions, so a cookie taken on the Wi-Fi
+also worked over the internet; sessions lasted a year; the microphone and Install the update were open to any session;
+and a right PIN reopened the gate that counts everyone's wrong tries. He chose a stronger sign-in, the end of Panel on
+Wi-Fi too, and a Sign out on the panel.
+
+## Sessions
+- A session lasts **90 days from its sign-in**, however often it is used. The browser keeps its cookie a year, and for
+  the rest of that year it marks a **known device**: it opens nothing, but its next sign-in skips the gate for everyone.
+- A session is **bound to the way it was opened**: the tablet's own address (Tailscale, or the debug emulator's loopback)
+  or the relay. It is never good on the other, over HTTP or the socket, so a cookie taken on one way in opens nothing on
+  the other. Sessions from before 1.24 stay signed in, unbound, and bind to the first way they are used (a browser sends a
+  cookie only where it was set). The table keeps 32 at most.
+
+## Confirm it's you
+- **Listen**, **Test every key** and **Install the update** ask for the tablet's PIN again, in a small dialog over the
+  panel: "Confirm it's you", "Enter the tablet's PIN to listen to the room." (to test every key, to install the update),
+  a six-digit field and **Confirm**. A wrong PIN says "That PIN isn't right." under the field, with "Try again in 3 s."
+  while the tablet asks for a wait, as the sign-in gate does. Once given, it holds **five minutes**; a fresh sign-in counts.
+- **The third wrong PIN in a row** there signs that browser out: the dialog closes on the sign-in gate, which says why.
+- Covers, Reconnect, the stops and everything else never ask. Closing the dialog leaves things as they were, quietly.
+
+## The gate for everyone
+- A right PIN no longer reopens it: the count of wrong tries spread over many addresses is forgotten only after a quiet
+  hour (a day on the relay) without one. So someone who keeps sending wrong PINs over the internet can hold the relay's
+  sign-in shut for strangers, but **any browser signed in through it within the past year still gets in**: its own count
+  of five, after which it is treated as a stranger. The kiosk PIN is unchanged.
+
+## Panel on Wi-Fi too, gone
+- The Tailscale address serves the whole panel, the Wi-Fi address the guests' page and poster only, always; the debug
+  emulator's loopback serves the panel. The tablet's Web panel page loses Also on Wi-Fi, and without a Tailscale address
+  says: "No Tailscale address yet: the panel needs Tailscale. Guests can use http://…/request".
+- On the first start of 1.24 (before anything listens), if the switch had been on, every session from before goes (their
+  cookies may have crossed the Wi-Fi in the clear) and those browsers enter the PIN once more; then the switch is forgotten.
+
+## Sign out
+- The panel's **Settings › Panel** ends with **Sign out** beside "This browser only. Other signed-in devices stay signed
+  in.": this browser's session ends on the tablet and the page opens again at the PIN.
