@@ -53,9 +53,9 @@ import kotlinx.coroutines.withContext
 private const val PIECES_SHOWN = 30
 
 /**
- * A search over the library's titles and composers, in a sheet (the schedule editor's Pieces, v1.6.2 —
- * M19; the compose sheet's In the manner of, v1.7 — M24); before one, the piece chosen ([chosenId]) and
- * the ones played or added last. A row chosen calls [onChoose] with its id.
+ * A search over the library's titles and composers, in a sheet (the compose sheet's In the manner of, v1.7
+ * — M24); before one, the piece chosen ([chosenId]) and the ones played or added last. A row chosen calls
+ * [onChoose] with its id.
  */
 @Composable
 fun PieceSearch(chosenId: Long?, onChoose: (Long) -> Unit) {

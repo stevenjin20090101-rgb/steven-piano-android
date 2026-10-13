@@ -9,24 +9,15 @@
 
 package dev.stevenjin.stevenpiano.data.db
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
  * What a schedule is. Stored by name (Room's own enum converter, the column TEXT), so a kind added later needs no
- * migration: QUIET (v1.20 — M54) came without one.
+ * migration: QUIET (v1.20 — M54) came without one. The timed plays' kinds (PLAYLIST, CHANNEL, PIECE), never run since
+ * 1.20, went with their rows in schema v6 (v1.24 — M57).
  */
 enum class ScheduleKind {
-    /** A playlist; the target is its id. Timed plays were removed in 1.20: kept, never run. */
-    PLAYLIST,
-
-    /** A channel; the target is its key ("calm"). Kept, never run (1.20). */
-    CHANNEL,
-
-    /** One piece; the target is its id. Kept, never run (1.20). */
-    PIECE,
-
     /**
      * One block of a quiet time (v1.20 — M54, `schedule.QuietTimes`): the target is its section's name, [ScheduleEntity.days]
      * the section's days, both minutes required, no volume. The piano stays silent from its start to its end.
@@ -37,10 +28,8 @@ enum class ScheduleKind {
 /**
  * A row of the schedules table (DESIGN.md › v1.5, Schedules, M19): on [days] (a bit a day, Monday 1, Tuesday 2 …
  * Sunday 64) at [startMinute] (minutes after local midnight) until [endMinute] (an end not after the start is the next
- * day). Until 1.20 a time the piano played by itself, [kind] and [target] saying what, at [volumePct] or as the piano
- * was (null), while [enabled]; those rows stay in the table, unshown and never run. Since 1.20 (M54) the only rows
- * written are quiet times' blocks ([ScheduleKind.QUIET]). Created in schema v3 (app 1.5) so that 1.6 needed no second
- * migration.
+ * day). Since 1.20 (M54) a quiet time's block ([ScheduleKind.QUIET], its section's name the [target]). Created in
+ * schema v3 (app 1.5); schema v6 (v1.24 — M57) dropped the timed plays' rows and their `volumePct` and `enabled`.
  */
 @Entity(tableName = "schedules")
 data class ScheduleEntity(
@@ -50,7 +39,5 @@ data class ScheduleEntity(
     val kind: ScheduleKind,
     val target: String,
     val endMinute: Int? = null,
-    val volumePct: Int? = null,
-    @ColumnInfo(defaultValue = "1") val enabled: Boolean = true,
     val createdAt: Long,
 )

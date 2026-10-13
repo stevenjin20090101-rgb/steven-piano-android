@@ -35,8 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * powered piano does. [consoleMode] is asked on each connection: `adb shell setprop
  * debug.stevenpiano.console none` connects to a piano without a console (older firmware), `mute`
  * to one whose console never answers; anything else, the full console. `debug.stevenpiano.piano
- * away` is a piano switched off: the scan ends unfound after the real one's 12 s (v1.6.2, for a
- * schedule's missed start). Its connections (not the
+ * away` is a piano switched off: the scan ends unfound after the real one's 12 s. Its connections (not the
  * MIDI it logs) also go to [LinkLog], so the diagnostics share has a link log on the emulator too.
  * The firmware (v1.6 — M21): with `debug.stevenpiano.fakeota` naming a [FakeOta] scenario, the
  * emulated piano reports its version and has the update service ([EmulatedOta]), and after an
@@ -213,7 +212,7 @@ class LoggingPianoLink(
         /** The real scan's timeout (PianoScanner), for the piano that stays away. */
         private const val SCAN_TIMEOUT_MS = 12_000L
 
-        /** `debug.stevenpiano.piano away`: no piano to find (a schedule's missed start, on the emulator). Read with getprop each time. */
+        /** `debug.stevenpiano.piano away`: no piano to find (on the emulator). Read with getprop each time. */
         private fun pianoAway(): Boolean = runCatching {
             ProcessBuilder("getprop", PIANO_PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() } == "away"
         }.getOrDefault(false)

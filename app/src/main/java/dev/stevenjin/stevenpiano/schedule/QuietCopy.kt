@@ -37,7 +37,7 @@ object QuietCopy {
         "until it ends. Play anyway lifts it until the block ends."
 
     /** "9:30", "13:05", "0:40". */
-    fun clock(minute: Int): String = "%d:%02d".format(Locale.ROOT, minute / Occurrences.MINUTES_PER_HOUR, minute % Occurrences.MINUTES_PER_HOUR)
+    fun clock(minute: Int): String = "%d:%02d".format(Locale.ROOT, minute / QuietTimes.MINUTES_PER_HOUR, minute % QuietTimes.MINUTES_PER_HOUR)
 
     fun clock(at: ZonedDateTime): String = "%d:%02d".format(Locale.ROOT, at.hour, at.minute)
 

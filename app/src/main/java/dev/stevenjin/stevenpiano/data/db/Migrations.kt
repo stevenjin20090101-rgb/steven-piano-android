@@ -231,3 +231,36 @@ object SchemaV5 {
     /** [values] as an SQL list of string literals, sorted, each quoted with its quotes doubled. */
     private fun list(values: Collection<String>): String = values.sorted().joinToString(", ") { "'" + it.replace("'", "''") + "'" }
 }
+
+/**
+ * Schema v5 (apps 1.14 to 1.23) to v6 (app 1.24 — M57): the schedules table keeps the quiet times' blocks alone. The
+ * timed plays, never run since 1.20 (M54), go with their rows and their two columns (`volumePct`, `enabled`): the table
+ * is made again as SQLite rebuilds one (a new table, the QUIET rows copied with their ids, the old one dropped, the new
+ * one renamed), [SchemaV6.CREATE_SCHEDULES] as Room generated it in `schemas/…/6.json` (SchemaV6Test holds the two
+ * equal). No other table is touched. Runs inside Room's migration transaction.
+ */
+val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        SchemaV6.STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/** Schema v6's statements, the schedules table as Room generated it in `6.json`. Pure: unit-tested. */
+object SchemaV6 {
+    /** 6.json's createSql for the schedules table, with the new table's name filled in. */
+    const val CREATE_SCHEDULES =
+        "CREATE TABLE IF NOT EXISTS `_new_schedules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `days` INTEGER NOT NULL, " +
+            "`startMinute` INTEGER NOT NULL, `kind` TEXT NOT NULL, `target` TEXT NOT NULL, `endMinute` INTEGER, `createdAt` INTEGER NOT NULL)"
+
+    /** The quiet times' blocks, as they were, ids and all; nothing else. */
+    const val COPY_QUIET =
+        "INSERT INTO `_new_schedules` (`id`, `days`, `startMinute`, `kind`, `target`, `endMinute`, `createdAt`) " +
+            "SELECT `id`, `days`, `startMinute`, `kind`, `target`, `endMinute`, `createdAt` FROM `schedules` WHERE `kind` = 'QUIET'"
+
+    const val DROP_OLD = "DROP TABLE `schedules`"
+
+    const val RENAME = "ALTER TABLE `_new_schedules` RENAME TO `schedules`"
+
+    /** The migration's statements, in order. */
+    val STATEMENTS: List<String> = listOf(CREATE_SCHEDULES, COPY_QUIET, DROP_OLD, RENAME)
+}

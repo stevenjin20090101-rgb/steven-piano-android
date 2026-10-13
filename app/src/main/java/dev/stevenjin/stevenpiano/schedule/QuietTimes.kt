@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.schedule
 
 import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
 import dev.stevenjin.stevenpiano.data.db.ScheduleKind
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -22,7 +23,7 @@ import java.util.Locale
  */
 data class QuietBlock(val start: Int, val end: Int) {
     /** How long it lasts, in minutes: 1 to 1439 for a block that can be saved, 0 when its end is its start. */
-    val minutes: Int get() = Math.floorMod(end - start, Occurrences.MINUTES_PER_DAY)
+    val minutes: Int get() = Math.floorMod(end - start, QuietTimes.MINUTES_PER_DAY)
 }
 
 /** A section of quiet times: its [name] ("School days"), its [days] (a bit a day, Monday 1 … Sunday 64), its [blocks]. */
@@ -34,8 +35,8 @@ data class QuietSpell(val since: ZonedDateTime, val until: ZonedDateTime)
 /**
  * Quiet times (DESIGN.md › v1.20 — M54), pure: sections of days, each with blocks, kept as one [ScheduleKind.QUIET]
  * row a block (its section's name as the target, its days, both minutes). Every answer comes from the rows and a time
- * given, in that time's zone, through [ZonedDateTime] as [Occurrences] works (a block in the hour the clocks skip
- * starts that much later; midnight is crossed into the next day).
+ * given, in that time's zone, through [ZonedDateTime] (a block in the hour the clocks skip starts that much later; one
+ * in the hour autumn repeats starts at the first of the two; midnight is crossed into the next day).
  *
  * - [sections] builds the sections from the rows; [rows] the rows from sections; [validate] says what keeps sections
  *   from being saved, in the editor's words.
@@ -43,6 +44,21 @@ data class QuietSpell(val since: ZonedDateTime, val until: ZonedDateTime)
  *   block (of any section) that starts before it ends or as it ends. [next] is the next block's start.
  */
 object QuietTimes {
+    /** Every day's bit: Monday to Sunday. */
+    const val ALL_DAYS = 127
+
+    /** Monday to Friday. */
+    const val WEEKDAYS = 31
+
+    /** Saturday and Sunday. */
+    const val WEEKENDS = 96
+
+    const val MINUTES_PER_HOUR = 60
+    const val MINUTES_PER_DAY = 1_440
+
+    /** The day's bit in a section's days: Monday 1 … Sunday 64. */
+    fun dayBit(day: DayOfWeek): Int = 1 shl (day.value - 1)
+
     const val MAX_SECTIONS = 12
     const val MAX_BLOCKS = 16
     const val MAX_NAME = 40
@@ -67,17 +83,15 @@ object QuietTimes {
     private const val DAYS_BEFORE = 1L
     private const val DAYS_AFTER = 7L
 
-    private val MINUTES = 0 until Occurrences.MINUTES_PER_DAY
-
-    fun isQuiet(row: ScheduleEntity): Boolean = row.kind == ScheduleKind.QUIET
+    private val MINUTES = 0 until MINUTES_PER_DAY
 
     /**
      * The sections [rows] hold: the quiet rows grouped by name and days, in the order they were saved (by id), each
-     * section's blocks by start. Rows of the other kinds, and quiet rows without an end, are none of a section's.
+     * section's blocks by start. A row without an end is none of a section's.
      */
     fun sections(rows: List<ScheduleEntity>): List<QuietSection> =
         rows.asSequence()
-            .filter { isQuiet(it) && it.endMinute != null }
+            .filter { it.endMinute != null }
             .sortedBy { it.id }
             .groupBy { it.target to it.days }
             .map { (key, list) ->
@@ -94,8 +108,6 @@ object QuietTimes {
                     kind = ScheduleKind.QUIET,
                     target = section.name.trim(),
                     endMinute = block.end,
-                    volumePct = null,
-                    enabled = true,
                     createdAt = createdAt,
                 )
             }
@@ -116,7 +128,7 @@ object QuietTimes {
             if (name.length > MAX_NAME) return LONG_NAME
             if (name.any { it.isISOControl() }) return NO_NAME
             if (!names.add(name.lowercase(Locale.ROOT))) return SAME_NAME
-            if (section.days !in 1..Occurrences.ALL_DAYS) return NO_DAY
+            if (section.days !in 1..ALL_DAYS) return NO_DAY
             if (section.blocks.isEmpty()) return NO_BLOCK
             if (section.blocks.size > MAX_BLOCKS) return TOO_MANY_BLOCKS
             for (block in section.blocks) {
@@ -135,12 +147,12 @@ object QuietTimes {
      */
     private fun overlap(section: QuietSection): String? {
         class Piece(val from: Int, val to: Int, val block: Int)
-        val week = Occurrences.MINUTES_PER_DAY * DAYS_IN_WEEK
+        val week = MINUTES_PER_DAY * DAYS_IN_WEEK
         val pieces = ArrayList<Piece>()
         section.blocks.forEachIndexed { index, block ->
             for (day in 0 until DAYS_IN_WEEK) {
                 if (section.days and (1 shl day) == 0) continue
-                val from = day * Occurrences.MINUTES_PER_DAY + block.start
+                val from = day * MINUTES_PER_DAY + block.start
                 val to = from + block.minutes
                 if (to <= week) {
                     pieces += Piece(from, to, index)
@@ -196,10 +208,10 @@ object QuietTimes {
      * block yet, [start] for [DEFAULT_LENGTH_MINUTES]. Times wrap past midnight.
      */
     fun proposed(blocks: List<QuietBlock>, start: Int): QuietBlock {
-        val last = blocks.lastOrNull() ?: return QuietBlock(start, (start + DEFAULT_LENGTH_MINUTES) % Occurrences.MINUTES_PER_DAY)
+        val last = blocks.lastOrNull() ?: return QuietBlock(start, (start + DEFAULT_LENGTH_MINUTES) % MINUTES_PER_DAY)
         val length = last.minutes.takeIf { it > 0 } ?: DEFAULT_LENGTH_MINUTES
-        val from = (last.start + last.minutes + GAP_MINUTES) % Occurrences.MINUTES_PER_DAY
-        return QuietBlock(from, (from + length) % Occurrences.MINUTES_PER_DAY)
+        val from = (last.start + last.minutes + GAP_MINUTES) % MINUTES_PER_DAY
+        return QuietBlock(from, (from + length) % MINUTES_PER_DAY)
     }
 
     /** Every quiet block's run from yesterday to a week ahead, in [now]'s zone. */
@@ -208,10 +220,10 @@ object QuietTimes {
         val spans = ArrayList<Span>()
         for (row in rows) {
             val end = row.endMinute ?: continue
-            if (!isQuiet(row) || row.days !in 1..Occurrences.ALL_DAYS || row.startMinute !in MINUTES || end !in MINUTES || end == row.startMinute) continue
+            if (row.days !in 1..ALL_DAYS || row.startMinute !in MINUTES || end !in MINUTES || end == row.startMinute) continue
             for (ahead in 0L..DAYS_BEFORE + DAYS_AFTER) {
                 val date: LocalDate = first.plusDays(ahead)
-                if (row.days and Occurrences.dayBit(date.dayOfWeek) == 0) continue
+                if (row.days and dayBit(date.dayOfWeek) == 0) continue
                 val start = ZonedDateTime.of(date, timeOf(row.startMinute), now.zone)
                 val stop = ZonedDateTime.of(if (end > row.startMinute) date else date.plusDays(1), timeOf(end), now.zone)
                 if (stop.isAfter(start)) spans += Span(start, stop)
@@ -222,7 +234,7 @@ object QuietTimes {
 
     private class Span(val start: ZonedDateTime, val end: ZonedDateTime)
 
-    private fun timeOf(minute: Int): LocalTime = LocalTime.of(minute / Occurrences.MINUTES_PER_HOUR, minute % Occurrences.MINUTES_PER_HOUR)
+    private fun timeOf(minute: Int): LocalTime = LocalTime.of(minute / MINUTES_PER_HOUR, minute % MINUTES_PER_HOUR)
 
     private val BLOCK_ORDER = compareBy<QuietBlock>({ it.start }, { it.end })
 

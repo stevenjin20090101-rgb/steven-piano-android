@@ -67,7 +67,6 @@ object PageRows {
     // ---- PLAYING › Quiet times (v1.20 — M54) ----------------------------------------------------------
     val PLAY_ANYWAY = AppRow("quiet.anyway", "Play anyway", SettingsPage.Quiet, null, listOf("override", "lift the quiet"))
     val ADD_SECTION = AppRow("quiet.add", "Add section", SettingsPage.Quiet, null, listOf("quiet", "downtime", "silent", "class", "schedule", "block"))
-    val EXACT_ALARMS = AppRow("quiet.alarms", "Allow exact alarms", SettingsPage.Quiet, null, listOf("alarms and reminders"))
 
     // ---- SHARING › Web panel ------------------------------------------------------------------------
     const val PANEL = "Panel"
@@ -130,7 +129,7 @@ object PageRows {
         CHECK_PIANO_UPDATES,
         PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
-        PLAY_ANYWAY, ADD_SECTION, EXACT_ALARMS,
+        PLAY_ANYWAY, ADD_SECTION,
         WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
         FIND_COVERS, RECONNECT, LISTEN_FROM_PANEL, TEST_EVERY_KEY,

@@ -253,7 +253,7 @@ fun ComposeSheet(onDismiss: () -> Unit, start: ComposeStart = ComposeStart(), tu
     }
 }
 
-/** A wrapping row of chips, as the schedule editor's. */
+/** A wrapping row of chips. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChipRow(content: @Composable () -> Unit) {

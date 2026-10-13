@@ -9,11 +9,6 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano.pages
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
@@ -68,34 +62,25 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import java.time.ZonedDateTime
 
-/** Under Allow exact alarms. */
-const val QUIET_ALARMS_NOTE = "Quiet times begin on the minute with an exact alarm, which Android asks you to allow. Until then the app stops the piano only while it is awake."
-
 /** With no section yet. */
 const val NO_SECTIONS = "No quiet times yet: the piano plays whenever someone asks it to."
 
 /**
  * Quiet times (DESIGN.md › v1.20 — M54), in the PLAYING group where Schedule was: at the top the quiet now, "Quiet now ·
  * until 9:30" with Play anyway, or "Next quiet time 9:40"; the week at a glance ([QuietWeek]); a card a section (its
- * name, its days, its blocks as chips, Edit); Add section, with what quiet times do; Allow exact alarms when Android
- * refuses them. The editor is [QuietEditorSheet]. Behind the kiosk PIN as the other pages are (the page shows locked
- * until it is given).
+ * name, its days, its blocks as chips, Edit); Add section, with what quiet times do. The editor is [QuietEditorSheet].
+ * Behind the kiosk PIN as the other pages are (the page shows locked until it is given).
  */
 @Composable
 fun QuietTimesPage() {
     val context = LocalContext.current
     val schedules = context.graph.schedules
     val rows by schedules.quietRows.collectAsStateWithLifecycle()
-    val exact by schedules.exactAllowed.collectAsStateWithLifecycle()
     val quiet = rememberQuiet()
     val playAnyway = LocalPlayAnyway.current
     val sections = remember(rows) { QuietTimes.sections(rows.orEmpty()) }
     // The section being edited: its place, NEW for a new one, NONE while the editor is closed.
     var editing by rememberSaveable { mutableIntStateOf(NONE) }
-    LifecycleResumeEffect(Unit) {
-        schedules.recheckExact()   // the person may come back from Android's Alarms & reminders
-        onPauseOrDispose { }
-    }
 
     Anchored(PageRows.PLAY_ANYWAY.anchor) {
         Row(
@@ -117,13 +102,6 @@ fun QuietTimesPage() {
         }
     }
     QuietWeek(sections, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-    if (!exact) {
-        Anchored(PageRows.EXACT_ALARMS.anchor) {
-            ActionRow(note = QUIET_ALARMS_NOTE) {
-                ActionButton(PageRows.EXACT_ALARMS.label, onClick = { openExactAlarmSettings(context) })
-            }
-        }
-    }
     if (sections.isEmpty()) {
         SectionRule()
         if (rows != null) NoteLine(NO_SECTIONS)
@@ -178,15 +156,6 @@ private fun SectionCard(section: QuietSection, onEdit: () -> Unit) {
         }
     }
     HairlineDivider(startInset = 16.dp)
-}
-
-/** Android's page for this app's exact alarms (Android 12+), else the app's own settings page. */
-private fun openExactAlarmSettings(context: Context) {
-    val app = Uri.fromParts("package", context.packageName, null)
-    val exact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, app) else null
-    val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, app)
-    val opened = exact != null && runCatching { context.startActivity(exact) }.isSuccess
-    if (!opened) runCatching { context.startActivity(details) }
 }
 
 private const val NONE = -1

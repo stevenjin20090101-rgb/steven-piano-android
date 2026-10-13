@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
  * where the sheet has a half-open state) inside the glass. Where the glass cannot be drawn
  * (transparency reduced, below API 31), today's sheet: the elevated tone, and the hairline. The
  * blur runs only while the sheet is open. Every sheet in the app is one: Up next, the piece sheet,
- * Add, the PIN sheets, a channel's volume, the schedule editor, Compose, the QR code, a share.
+ * Add, the PIN sheets, a channel's volume, the quiet times' editor, Compose, the QR code, a share.
  * [content] sits as in Material's sheet, under the grabber, clear of the system bars.
  */
 @OptIn(ExperimentalMaterial3Api::class)

@@ -10,39 +10,33 @@
 package dev.stevenjin.stevenpiano.schedule
 
 import java.time.DayOfWeek
-import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * How days and times read (DESIGN.md › v1.6.2 — M19), on the tablet and in the web panel alike: "Weekdays",
- * "Mon, Wed, Fri", "Wednesday 12:30". Times here are on the 24-hour clock with two-digit hours, as the logs keep them;
- * quiet times' own words are [QuietCopy]'s. The timed plays' lines went with them in 1.20 (M54). Pure.
+ * How days read (DESIGN.md › v1.6.2 — M19), on the tablet and in the web panel alike: "Weekdays", "Mon, Wed, Fri";
+ * and the web panel's wire time, "08:40". Quiet times' own words are [QuietCopy]'s. The timed plays' lines went with
+ * them in 1.20 (M54). Pure.
  */
 object ScheduleCopy {
     /** "Every day", "Weekdays", "Weekends", "Wednesdays" for one day, else the days in week order: "Mon, Wed, Fri". */
     fun days(mask: Int): String {
-        when (mask and Occurrences.ALL_DAYS) {
-            Occurrences.ALL_DAYS -> return "Every day"
-            Occurrences.WEEKDAYS -> return "Weekdays"
-            Occurrences.WEEKENDS -> return "Weekends"
+        when (mask and QuietTimes.ALL_DAYS) {
+            QuietTimes.ALL_DAYS -> return "Every day"
+            QuietTimes.WEEKDAYS -> return "Weekdays"
+            QuietTimes.WEEKENDS -> return "Weekends"
             0 -> return "No days"
         }
-        val chosen = DayOfWeek.entries.filter { mask and Occurrences.dayBit(it) != 0 }
+        val chosen = DayOfWeek.entries.filter { mask and QuietTimes.dayBit(it) != 0 }
         return if (chosen.size == 1) full(chosen.single()) + "s" else chosen.joinToString(", ") { short(it) }
     }
 
-    /** "07:45", "12:30", "23:05". */
-    fun clock(minute: Int): String = "%02d:%02d".format(Locale.ROOT, minute / Occurrences.MINUTES_PER_HOUR, minute % Occurrences.MINUTES_PER_HOUR)
-
-    fun clock(at: ZonedDateTime): String = "%02d:%02d".format(Locale.ROOT, at.hour, at.minute)
+    /** "07:45", "12:30", "23:05": the web panel's quiet times on the wire. */
+    fun clock(minute: Int): String = "%02d:%02d".format(Locale.ROOT, minute / QuietTimes.MINUTES_PER_HOUR, minute % QuietTimes.MINUTES_PER_HOUR)
 
     /** "Wednesday". */
     fun full(day: DayOfWeek): String = day.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
 
     /** "Wed". */
     fun short(day: DayOfWeek): String = day.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-
-    /** "Wednesday 12:30". */
-    fun moment(at: ZonedDateTime): String = "${full(at.dayOfWeek)} ${clock(at)}"
 }

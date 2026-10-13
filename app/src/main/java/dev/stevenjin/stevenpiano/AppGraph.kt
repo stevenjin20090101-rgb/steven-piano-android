@@ -13,8 +13,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import dev.stevenjin.stevenpiano.update.UpdateState
 import android.Manifest
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
@@ -771,11 +773,8 @@ class AppGraph(private val app: Application) {
         File("/proc/self/status").readLines().firstOrNull { it.startsWith("VmHWM:") }?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()
     }.getOrNull() ?: -1L
 
-    /**
-     * The schedules table and its one exact alarm (v1.20 — M54: the quiet times' blocks alone; timed plays were removed),
-     * each save of the quiet times one transaction.
-     */
-    val schedules: Schedules by lazy { Schedules(app, this, database.schedules()) { block -> database.withTransaction { block() } } }
+    /** The schedules table (v1.20 — M54: the quiet times' blocks alone; timed plays were removed), each save of the quiet times one transaction. */
+    val schedules: Schedules by lazy { Schedules(this, database.schedules()) { block -> database.withTransaction { block() } } }
 
     /**
      * Quiet times' gate (Piano › Quiet times, v1.20 — M54): whether a block is on now and whether Play anyway lifted it;
@@ -959,10 +958,21 @@ class AppGraph(private val app: Application) {
         startSystemSamples()
         web.start()
         firmwareUpdater.start()
-        schedules.start()
         // At a quiet time's start anything playing stops, with the stop sequence; on a start inside one too (v1.20 — M54).
         // Not while the piano's firmware is updated: the updater stopped the player first, and the link is its.
         quiet.start(appScope) { if (!player.locked) player.stop() }
+        // A clock or time zone changed by hand moves the blocks' edges: the gate weighs the quiet again at once (v1.24 — M57).
+        ContextCompat.registerReceiver(
+            app,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) = quiet.clockChanged()
+            },
+            IntentFilter().apply {
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         studio.start()
         followListening()   // v1.23 — M55
         appScope.launch {
