@@ -79,7 +79,7 @@ class StudioPiecesTest {
         assertEquals("Clair de lune (live)" to "Made in Studio", names)
         assertEquals("Made in Studio · Sep 28, 2026", library.described[41])
         val midi = SmfParser.parse(bytes)
-        assertEquals("Clair de lune (live)", midi.sequenceName)
+        assertEquals("Clair de lune (live)", midi.sequenceNames.firstOrNull())
         assertEquals(listOf("Made in Studio, 2026-09-28 14:03:05"), midi.texts)
         assertEquals(3, midi.noteCount)
         val notes = (0 until 3).map { i -> midi.notes.run { listOf(startMicros[i], endMicros[i], note(i).toLong(), velocity(i).toLong()) } }
@@ -104,7 +104,7 @@ class StudioPiecesTest {
         assertEquals(title to "Made in Studio", names)
         assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", library.described[41])
         val midi = SmfParser.parse(bytes)
-        assertEquals(title, midi.sequenceName)
+        assertEquals(title, midi.sequenceNames.firstOrNull())
         assertEquals(listOf("Made in Studio, 2026-09-28 14:03:05"), midi.texts)
         assertEquals("96 bpm", 625_000, midi.tempoMap.tempoAt(0))
         assertEquals(listOf(0L, 480L, 960L), (0 until 3).map { midi.tempoMap.microsToTicks(midi.notes.startMicros[it]) })

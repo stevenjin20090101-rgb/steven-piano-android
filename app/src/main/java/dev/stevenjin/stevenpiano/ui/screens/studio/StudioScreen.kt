@@ -122,6 +122,7 @@ import dev.stevenjin.stevenpiano.studio.TurnRecord
 import dev.stevenjin.stevenpiano.studio.compose.PreviewRoll
 import dev.stevenjin.stevenpiano.studio.style.StylePrompt
 import dev.stevenjin.stevenpiano.studio.style.StyleResult
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.LocalIdleState
@@ -716,7 +717,7 @@ private fun Steps(job: StudioJob, jobs: List<StudioJob>, installed: Set<String>)
     val quiet = LocalTertiary.current
     FlowRow(Modifier.padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (waitingForModel) {
-            Text("Downloading the composing model · ${StudioCopy.megabytes(download!!.bytes, download.total)}", style = MaterialTheme.typography.bodyMedium.merge(Tabular), color = ink)
+            Text("Downloading the composing model · ${Format.megabytes(download!!.bytes, download.total)}", style = MaterialTheme.typography.bodyMedium.merge(Tabular), color = ink)
         } else {
             val steps = job.steps.ifEmpty { listOf(job.step) }
             steps.forEachIndexed { i, step ->
@@ -943,7 +944,7 @@ private fun ModelRow(model: ModelEntry, installed: Boolean, download: StudioJob?
             when {
                 running != null -> ActionButton("Cancel", onClick = { vm.cancelJob(running.id) }, description = "Cancel the download of the ${model.title.lowercase()} model")
                 installed -> ActionButton("Remove", onClick = { vm.removeModel(model) }, description = "Remove the ${model.title.lowercase()} model")
-                else -> ActionButton("Download", onClick = { vm.download(model) }, description = "Download the ${model.title.lowercase()} model, ${StudioCopy.size(model.sizeBytes)}")
+                else -> ActionButton("Download", onClick = { vm.download(model) }, description = "Download the ${model.title.lowercase()} model, ${Format.size(model.sizeBytes)}")
             }
         }
     }

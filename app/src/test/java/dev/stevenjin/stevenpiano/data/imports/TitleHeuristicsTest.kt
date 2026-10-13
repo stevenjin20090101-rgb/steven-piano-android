@@ -13,6 +13,8 @@ import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics.Metadata
 import dev.stevenjin.stevenpiano.data.imports.TitleHeuristics.Source
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -154,12 +156,12 @@ class TitleHeuristicsTest {
         assertEquals("Coldplay", zip.artistFolderOf("MIDI/Coldplay/Sparks.mid"))
         assertEquals("the folder that holds the file", "Adele", zip.artistFolderOf("MIDI/Pop/Adele/Hello.mid"))
         assertEquals("a file in the root has none", null, zip.artistFolderOf("MIDI/Cornfield Chase - Hans Zimmer.mid"))
-        assertTrue(zip.isArtist("Hans Zimmer"))
-        assertTrue("compared by the folded whole name", zip.isArtist("hans  zimmer"))
-        assertFalse("the root is no artist", zip.isArtist("MIDI"))
-        assertFalse(zip.isArtist("Zimmer"))
+        assertNotNull(zip.artistNamed("Hans Zimmer"))
+        assertNotNull("compared by the folded whole name", zip.artistNamed("hans  zimmer"))
+        assertNull("the root is no artist", zip.artistNamed("MIDI"))
+        assertNull(zip.artistNamed("Zimmer"))
         assertEquals("only a folder that holds a file is an artist's", setOf("coldplay", "hans zimmer", "adele"), zip.artistKeys)
-        assertFalse(zip.isArtist("Pop"))
+        assertNull(zip.artistNamed("Pop"))
         assertEquals("Hans Zimmer", zip.artistNamed("hans  zimmer"))
         assertEquals("reversed against the import's own folders, the artist spelt as the folder is", Metadata("Cornfield Chase", "Hans Zimmer", null, Source.REVERSED),
             TitleHeuristics.metadata("Cornfield Chase - hans zimmer.mid", null, emptyList(), null, zip::artistNamed))

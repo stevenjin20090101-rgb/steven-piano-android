@@ -37,27 +37,27 @@ class StandbyTextTest {
 
     @Test
     fun `the piece's own notes come first`() {
-        assertEquals(clairDeLune.description, StandbyText.description(clairDeLune, debussy))
-        assertEquals(clairDeLune.description, StandbyText.description(clairDeLune, null))
+        assertEquals(clairDeLune.description, StandbyText.notes(clairDeLune, debussy)?.text)
+        assertEquals(clairDeLune.description, StandbyText.notes(clairDeLune, null)?.text)
     }
 
     @Test
     fun `without notes of its own the piece takes its composer's`() {
-        assertEquals(debussy.description, StandbyText.description(null, debussy))
+        assertEquals(debussy.description, StandbyText.notes(null, debussy)?.text)
         val lookedUp = listOf(
             clairDeLune.copy(description = null, status = ArtworkStatus.NOT_FOUND),
             clairDeLune.copy(description = null, status = ArtworkStatus.FAILED),
             clairDeLune.copy(description = "  \n "),
             clairDeLune.copy(status = ArtworkStatus.FAILED),   // a failed row's old text is not shown
         )
-        for (row in lookedUp) assertEquals(debussy.description, StandbyText.description(row, debussy))
+        for (row in lookedUp) assertEquals(debussy.description, StandbyText.notes(row, debussy)?.text)
     }
 
     @Test
     fun `with no notes anywhere nothing is said, never a placeholder`() {
-        assertNull(StandbyText.description(null, null))
-        assertNull(StandbyText.description(clairDeLune.copy(status = ArtworkStatus.NOT_FOUND), debussy.copy(description = null)))
-        assertNull(StandbyText.description(null, debussy.copy(description = "", status = ArtworkStatus.OK)))
+        assertNull(StandbyText.notes(null, null)?.text)
+        assertNull(StandbyText.notes(clairDeLune.copy(status = ArtworkStatus.NOT_FOUND), debussy.copy(description = null))?.text)
+        assertNull(StandbyText.notes(null, debussy.copy(description = "", status = ArtworkStatus.OK))?.text)
     }
 
     @Test
@@ -68,8 +68,8 @@ class StandbyTextTest {
             fetchedAt = 1,
             status = ArtworkStatus.OK,
         )
-        assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", StandbyText.description(studio, null))
-        assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", StandbyText.description(studio, debussy))
+        assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", StandbyText.notes(studio, null)?.text)
+        assertEquals("Made in Studio · in the manner of Clair de lune (Claude Debussy)", StandbyText.notes(studio, debussy)?.text)
     }
 
     @Test
@@ -101,7 +101,7 @@ class StandbyTextTest {
     @Test
     fun `the notes are one paragraph, so no line is spent on a break`() {
         val two = debussy.copy(description = "  Claude Debussy was a French composer.\n\nHe is seen as the first Impressionist\tcomposer.  ")
-        assertEquals("Claude Debussy was a French composer. He is seen as the first Impressionist composer.", StandbyText.description(null, two))
+        assertEquals("Claude Debussy was a French composer. He is seen as the first Impressionist composer.", StandbyText.notes(null, two)?.text)
         assertEquals("Suite bergamasque, L. 75", StandbyText.oneParagraph("Suite bergamasque,\r\nL. 75").replace(' ', ' '))
         assertEquals("a b", StandbyText.oneParagraph("a b"))   // a no-break space stays one
     }

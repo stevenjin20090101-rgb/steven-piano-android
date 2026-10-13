@@ -77,7 +77,7 @@ fun GlassHeaderPane(
     val scrolled = remember(scroll) { derivedStateOf { scroll?.canScrollBackward == true } }
     val presence = animateFloatAsState(
         targetValue = if (scrolled.value) 1f else 0f,
-        animationSpec = if (reduced) snap() else tween(Motion.FastMs),
+        animationSpec = if (reduced) snap() else tween(Motion.QuickMs),
         label = "header glass",
     )
     val slots = remember { PaneSlots() }

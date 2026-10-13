@@ -25,10 +25,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import dev.stevenjin.stevenpiano.schedule.Occurrences
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.schedule.QuietSection
+import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import java.time.DayOfWeek
@@ -60,7 +60,7 @@ fun weekPieces(sections: List<QuietSection>): List<WeekPiece> {
                 if (block.end > block.start) {
                     add(day, block.start, block.end)
                 } else {
-                    add(day, block.start, Occurrences.MINUTES_PER_DAY)
+                    add(day, block.start, QuietTimes.MINUTES_PER_DAY)
                     add((day + 1) % DAYS, 0, block.end)
                 }
             }
@@ -82,7 +82,7 @@ fun QuietWeek(sections: List<QuietSection>, modifier: Modifier = Modifier) {
     val ink = MaterialTheme.colorScheme.onSurface
     val style = MaterialTheme.typography.labelSmall.copy(color = tertiary)
     val days = remember(measurer, style) { DayOfWeek.entries.map { measurer.measure(ScheduleCopy.short(it), style) } }
-    val hours = remember(measurer, style) { RULED.map { measurer.measure(QuietCopy.clock(it * Occurrences.MINUTES_PER_HOUR), style) } }
+    val hours = remember(measurer, style) { RULED.map { measurer.measure(Format.timeOfDay(it * QuietTimes.MINUTES_PER_HOUR), style) } }
     val pieces = remember(sections) { weekPieces(sections) }
     Canvas(
         modifier
@@ -100,7 +100,7 @@ fun QuietWeek(sections: List<QuietSection>, modifier: Modifier = Modifier) {
             drawText(label, topLeft = Offset(gutter + column * day + (column - label.size.width) / 2f, 0f))
         }
         RULED.forEachIndexed { i, hour ->
-            val at = y(hour * Occurrences.MINUTES_PER_HOUR)
+            val at = y(hour * QuietTimes.MINUTES_PER_HOUR)
             drawLine(hairline, Offset(gutter, at), Offset(size.width, at), strokeWidth = line)
             val label = hours[i]
             drawText(label, topLeft = Offset(0f, (at - label.size.height / 2f).coerceIn(head, size.height - label.size.height)))

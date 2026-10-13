@@ -100,7 +100,6 @@ class UpdateSourceTest {
     fun `the firmware source reaches its manifest, its binaries and the asset hosts, and names no APK`() {
         val source = UpdateSource.firmware
         assertEquals(manifest, source.manifestUrl)
-        assertTrue(source.isProduction)
         assertTrue(source.allowsHop(manifest))
         assertTrue(source.allowsHop(binary))
         assertTrue(source.allowsHop("https://objects.githubusercontent.com/any/path?sig=1"))
@@ -163,7 +162,6 @@ class UpdateSourceTest {
     fun `the models' source reaches its list, its files and the asset hosts, and nothing of the app's or the firmware's`() {
         val source = UpdateSource.models
         assertEquals(models, source.manifestUrl)
-        assertTrue(source.isProduction)
         assertTrue(source.allowsHop(models))
         assertTrue(source.allowsHop(model))
         assertTrue(source.allowsHop("https://objects.githubusercontent.com/any/path?sig=1"))
@@ -182,7 +180,6 @@ class UpdateSourceTest {
     @Test
     fun `the emulator's models server is one origin, onnx files only`() {
         val local = UpdateSource.localModels("http://10.0.2.2:8766/models.json")!!
-        assertFalse(local.isProduction)
         assertTrue(local.allowsHop("http://10.0.2.2:8766/models.json"))
         assertTrue(local.allowsModel("http://10.0.2.2:8766/transcription-v1.onnx"))
         assertFalse(local.allowsModel("http://10.0.2.2:8766/app.apk"))
@@ -263,7 +260,6 @@ class UpdateSourceTest {
     fun `the library's source reaches its manifest, its zips and the asset hosts, and nothing of the others'`() {
         val source = UpdateSource.library
         assertEquals(library, source.manifestUrl)
-        assertTrue(source.isProduction)
         assertTrue(source.allowsHop(library))
         assertTrue(source.allowsHop(pack))
         assertTrue(source.allowsHop("https://objects.githubusercontent.com/any/path?sig=1"))
@@ -287,7 +283,6 @@ class UpdateSourceTest {
     @Test
     fun `the emulator's library server is one origin, zips only, beside what the library reaches`() {
         val local = UpdateSource.localLibrary("http://10.0.2.2:8767/library.json")!!
-        assertFalse(local.isProduction)
         assertEquals("http://10.0.2.2:8767/library.json", local.manifestUrl)
         assertTrue(local.allowsHop("http://10.0.2.2:8767/library.json"))
         assertTrue(local.allowsHop("http://10.0.2.2:8767/library-v2.zip"))

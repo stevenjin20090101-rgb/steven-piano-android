@@ -114,7 +114,7 @@ class RecordingPiecesTest {
         assertEquals(listOf(1L), store.recordings())
         assertEquals(setOf(1L), store.waiting)
         val piece = SmfParser.parse(store.files.getValue(1))
-        assertEquals(title, piece.sequenceName)
+        assertEquals(title, piece.sequenceNames.firstOrNull())
         assertEquals(listOf("Recorded live, 2026-10-01 14:05:33"), piece.texts)
         assertEquals(listOf(21, 60), (0 until piece.noteCount).map { piece.notes.note(it) }.sorted())
         assertEquals("every pedal value kept", listOf(70, 0), piece.events.filter { it.command == 0xB0 && it.data1 == 64 }.map { it.data2 })
@@ -257,13 +257,5 @@ class RecordingSessionTest {
         assertNotNull(saved)
         assertEquals(TakeEnd.Silence, saved!!.ended)
         assertFalse(session.recording)
-    }
-
-    @Test
-    fun `the take's time reads as a clock`() {
-        assertEquals("0:00", RecordingSession.clock(0))
-        assertEquals("0:42", RecordingSession.clock(42_900_000_000L))
-        assertEquals("12:05", RecordingSession.clock(725_000_000_000L))
-        assertEquals("1:00:00", RecordingSession.clock(3_600_000_000_000L))
     }
 }

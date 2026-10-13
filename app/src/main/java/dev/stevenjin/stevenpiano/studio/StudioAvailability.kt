@@ -13,7 +13,8 @@ import ai.onnxruntime.OrtEnvironment
 import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
+import dev.stevenjin.stevenpiano.Emulator
+import dev.stevenjin.stevenpiano.SystemProperty
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -182,12 +183,10 @@ class StudioAvailability(
         /** `debug.stevenpiano.studio`, read once per process, and only in debug builds on an emulator. */
         private fun overrideProperty(): String? {
             if (overrideRead) return cachedOverride
-            val value = if (!LoggingPianoLink.isWanted()) {
+            val value = if (!Emulator.on) {
                 null
             } else {
-                runCatching {
-                    ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-                }.getOrNull()?.ifEmpty { null }
+                SystemProperty.read(PROPERTY).ifEmpty { null }
             }
             cachedOverride = value
             overrideRead = true

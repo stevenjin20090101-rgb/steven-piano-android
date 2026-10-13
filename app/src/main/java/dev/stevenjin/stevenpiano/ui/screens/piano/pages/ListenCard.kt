@@ -26,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -48,7 +47,9 @@ import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
+import dev.stevenjin.stevenpiano.ui.components.SmallFigures
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
+import dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry
 import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
 import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
@@ -210,7 +211,7 @@ private fun KeyMap(test: KeyTestState) {
                 val first = KeyTest.KEYS.first + o * SEMITONES
                 val missing = heard != null && (first until first + SEMITONES).any { heard[it] == false }
                 Text(
-                    ListenCopy.keyName(first),
+                    KeyboardGeometry.name(first),
                     Modifier.weight(1f),
                     style = SmallFigures,
                     color = if (missing) amber else tertiary,

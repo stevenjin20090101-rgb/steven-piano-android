@@ -14,6 +14,7 @@ import dev.stevenjin.stevenpiano.data.db.ScheduleKind
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -28,8 +29,8 @@ import java.time.ZonedDateTime
 
 /**
  * Quiet times (DESIGN.md › v1.20 — M54): sections built from the rows and back, what may be saved, the quiet at a moment
- * across midnight and across sections, the next block; the gate's stop as a block begins and Play anyway's lift; the
- * repository replacing the quiet rows alone.
+ * across midnight and across sections, the next block; the gate's stop as a block begins, on a clock set by hand too,
+ * and Play anyway's lift; the repository replacing the quiet rows.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class QuietTimesTest {
@@ -45,38 +46,37 @@ class QuietTimesTest {
     private fun block(from: String, to: String) = QuietBlock(hm(from), hm(to))
 
     private fun quiet(id: Long, name: String, days: Int, from: String, to: String) =
-        ScheduleEntity(id, days, hm(from), ScheduleKind.QUIET, name, hm(to), null, true, createdAt = 0)
+        ScheduleEntity(id, days, hm(from), ScheduleKind.QUIET, name, hm(to), createdAt = 0)
 
-    private val monday = Occurrences.dayBit(java.time.DayOfWeek.MONDAY)
-    private val sunday = Occurrences.dayBit(java.time.DayOfWeek.SUNDAY)
+    private val monday = QuietTimes.dayBit(java.time.DayOfWeek.MONDAY)
+    private val sunday = QuietTimes.dayBit(java.time.DayOfWeek.SUNDAY)
 
     @Test
     fun `sections come from the quiet rows, by name and days in the order saved, their blocks by start, and go back to rows`() {
         val rows = listOf(
-            quiet(1, "School days", Occurrences.WEEKDAYS, "09:40", "10:30"),
-            ScheduleEntity(2, Occurrences.WEEKDAYS, 750, ScheduleKind.CHANNEL, "calm", 795, 70, true, createdAt = 0),   // a timed play's row
-            quiet(3, "Night", Occurrences.ALL_DAYS, "21:00", "07:00"),
-            quiet(4, "School days", Occurrences.WEEKDAYS, "08:40", "09:30"),
-            quiet(5, "School days", Occurrences.WEEKENDS, "10:00", "11:00"),
+            quiet(1, "School days", QuietTimes.WEEKDAYS, "09:40", "10:30"),
+            quiet(3, "Night", QuietTimes.ALL_DAYS, "21:00", "07:00"),
+            quiet(4, "School days", QuietTimes.WEEKDAYS, "08:40", "09:30"),
+            quiet(5, "School days", QuietTimes.WEEKENDS, "10:00", "11:00"),
         )
         val sections = QuietTimes.sections(rows)
         assertEquals(
             listOf(
-                QuietSection("School days", Occurrences.WEEKDAYS, listOf(block("08:40", "09:30"), block("09:40", "10:30"))),
-                QuietSection("Night", Occurrences.ALL_DAYS, listOf(block("21:00", "07:00"))),
-                QuietSection("School days", Occurrences.WEEKENDS, listOf(block("10:00", "11:00"))),
+                QuietSection("School days", QuietTimes.WEEKDAYS, listOf(block("08:40", "09:30"), block("09:40", "10:30"))),
+                QuietSection("Night", QuietTimes.ALL_DAYS, listOf(block("21:00", "07:00"))),
+                QuietSection("School days", QuietTimes.WEEKENDS, listOf(block("10:00", "11:00"))),
             ),
             sections,
         )
         val kept = QuietTimes.rows(sections, createdAt = 42).mapIndexed { i, row -> row.copy(id = i + 1L) }
-        assertTrue(kept.all { it.kind == ScheduleKind.QUIET && it.volumePct == null && it.enabled && it.createdAt == 42L })
+        assertTrue(kept.all { it.kind == ScheduleKind.QUIET && it.createdAt == 42L })
         assertEquals("back again, the same", sections, QuietTimes.sections(kept))
         assertEquals("a name is kept trimmed", "Night", QuietTimes.rows(listOf(QuietSection("  Night ", 1, listOf(block("21:00", "07:00")))), 0).single().target)
     }
 
     @Test
     fun `what may be saved, in the editors' words`() {
-        val school = QuietSection("School days", Occurrences.WEEKDAYS, listOf(block("08:40", "09:30"), block("09:40", "10:30")))
+        val school = QuietSection("School days", QuietTimes.WEEKDAYS, listOf(block("08:40", "09:30"), block("09:40", "10:30")))
         assertNull(QuietTimes.validate(listOf(school)))
         assertNull("none at all", QuietTimes.validate(emptyList()))
         assertEquals(QuietTimes.TOO_MANY_SECTIONS, QuietTimes.validate((1..13).map { school.copy(name = "S$it") }))
@@ -84,7 +84,7 @@ class QuietTimesTest {
         assertEquals(QuietTimes.NO_NAME, QuietTimes.validate(listOf(school.copy(name = "   "))))
         assertEquals(QuietTimes.LONG_NAME, QuietTimes.validate(listOf(school.copy(name = "x".repeat(41)))))
         assertNull(QuietTimes.validate(listOf(school.copy(name = " " + "x".repeat(40) + " "))))
-        assertEquals(QuietTimes.SAME_NAME, QuietTimes.validate(listOf(school, school.copy(name = "school DAYS ", days = Occurrences.WEEKENDS))))
+        assertEquals(QuietTimes.SAME_NAME, QuietTimes.validate(listOf(school, school.copy(name = "school DAYS ", days = QuietTimes.WEEKENDS))))
         assertEquals(QuietTimes.NO_DAY, QuietTimes.validate(listOf(school.copy(days = 0))))
         assertEquals(QuietTimes.NO_DAY, QuietTimes.validate(listOf(school.copy(days = 128))))
         assertEquals(QuietTimes.NO_BLOCK, QuietTimes.validate(listOf(school.copy(blocks = emptyList()))))
@@ -98,7 +98,7 @@ class QuietTimesTest {
         assertEquals("the same block twice", "8:40–9:30 and 8:40–9:30 overlap.", QuietTimes.validate(listOf(school.copy(blocks = listOf(block("08:40", "09:30"), block("08:40", "09:30"))))))
         // A block crossing midnight: into the next morning's on weekdays, not on a Monday alone (Tuesday is not its day).
         val night = listOf(block("21:00", "07:00"), block("06:00", "08:00"))
-        assertEquals("6:00–8:00 and 21:00–7:00 overlap.", QuietTimes.validate(listOf(QuietSection("Night", Occurrences.WEEKDAYS, night))))
+        assertEquals("6:00–8:00 and 21:00–7:00 overlap.", QuietTimes.validate(listOf(QuietSection("Night", QuietTimes.WEEKDAYS, night))))
         assertNull(QuietTimes.validate(listOf(QuietSection("Night", monday, night))))
         // Sunday night's runs into Monday's.
         assertEquals("1:00–3:00 and 22:00–2:00 overlap.", QuietTimes.validate(listOf(QuietSection("Late", sunday or monday, listOf(block("22:00", "02:00"), block("01:00", "03:00"))))))
@@ -107,7 +107,7 @@ class QuietTimesTest {
 
     @Test
     fun `the quiet at a moment, across midnight, and the next block`() {
-        val rows = listOf(quiet(1, "Night", monday, "21:00", "07:00"), quiet(2, "School days", Occurrences.WEEKDAYS, "08:40", "09:30"))
+        val rows = listOf(quiet(1, "Night", monday, "21:00", "07:00"), quiet(2, "School days", QuietTimes.WEEKDAYS, "08:40", "09:30"))
         assertNull(QuietTimes.at(rows, at("2026-10-05", "20:59")))
         assertEquals(QuietSpell(at("2026-10-05", "21:00"), at("2026-10-06", "07:00")), QuietTimes.at(rows, at("2026-10-05", "21:00")))
         assertEquals("Monday night runs into Tuesday", QuietSpell(at("2026-10-05", "21:00"), at("2026-10-06", "07:00")), QuietTimes.at(rows, at("2026-10-06", "06:59")))
@@ -117,7 +117,6 @@ class QuietTimesTest {
         assertEquals("strictly after", at("2026-10-06", "08:40"), QuietTimes.next(rows, at("2026-10-05", "21:00")))
         assertEquals("Friday's last, then Monday's", at("2026-10-12", "08:40"), QuietTimes.next(rows, at("2026-10-09", "09:00")))
         assertNull(QuietTimes.next(emptyList(), at("2026-10-05", "09:00")))
-        assertNull("a timed play's row is no quiet", QuietTimes.at(listOf(rows[1].copy(kind = ScheduleKind.PLAYLIST)), at("2026-10-05", "09:00")))
     }
 
     @Test
@@ -160,7 +159,7 @@ class QuietTimesTest {
         val gate = QuietGate(rows, clock = { clock }, zone = { zone })
         var hushes = 0
         gate.start(backgroundScope) { hushes++ }
-        rows.value = listOf(quiet(1, "School days", Occurrences.WEEKDAYS, "08:40", "09:30"), quiet(2, "School days", Occurrences.WEEKDAYS, "09:40", "10:30"))
+        rows.value = listOf(quiet(1, "School days", QuietTimes.WEEKDAYS, "08:40", "09:30"), quiet(2, "School days", QuietTimes.WEEKDAYS, "09:40", "10:30"))
         runCurrent()
         assertEquals(QuietNow(next = ms(at("2026-10-05", "08:40"))), gate.state.value)
         assertFalse(gate.override())
@@ -208,22 +207,57 @@ class QuietTimesTest {
     }
 
     @Test
-    fun `the repository replaces every quiet block at once and keeps the timed plays' rows`() = runBlocking {
-        val timed = ScheduleEntity(1, Occurrences.WEEKDAYS, 750, ScheduleKind.CHANNEL, "calm", 795, 70, true, createdAt = 0)
-        val dao = FakeScheduleDao(listOf(timed, quiet(2, "Old", monday, "08:00", "09:00")))
+    fun `a clock set by hand into a block stops the player exactly once, and the wait is planned again from the new time (v1_24 M57)`() = runTest {
+        var wall = ms(at("2026-10-05", "07:00"))   // the tablet's clock, less the test's own time
+        val rows = MutableStateFlow<List<ScheduleEntity>?>(
+            listOf(quiet(1, "School days", QuietTimes.WEEKDAYS, "08:40", "09:30"), quiet(2, "School days", QuietTimes.WEEKDAYS, "09:40", "10:30")),
+        )
+        val gate = QuietGate(rows, clock = { wall + testScheduler.currentTime }, zone = { zone })
+        var hushes = 0
+        gate.start(backgroundScope) { hushes++ }
+        runCurrent()
+        assertEquals(0, hushes)
+
+        // Android's TIME_SET: the clock is set forward into the first block. The gate weighs it at once (clockChanged runs
+        // check, and its loop starts again with another): the player stops, and only once.
+        wall = ms(at("2026-10-05", "09:00")) - testScheduler.currentTime
+        gate.clockChanged()
+        runCurrent()
+        assertEquals("a jump into a block stops the player", 1, hushes)
+        assertTrue(gate.state.value.holds)
+        gate.clockChanged()
+        advanceTimeBy(5 * 60_000L)   // the gate's own minutes inside the same block
+        assertEquals("once a block, however often it is weighed", 1, hushes)
+
+        // Set back to two seconds before the next block: without the new plan the loop slept on to its old minute, about a
+        // minute late; planned again from the new time, the block's start stops the player on time.
+        advanceTimeBy(1_000L)
+        wall = ms(at("2026-10-05", "09:39")) + 58_000L - testScheduler.currentTime
+        gate.clockChanged()
+        runCurrent()
+        assertEquals("not quiet yet", 1, hushes)
+        assertFalse(gate.state.value.now)
+        advanceTimeBy(2_100L)
+        assertEquals("the next block's start stops the player on time", 2, hushes)
+        assertTrue(gate.state.value.holds)
+    }
+
+    @Test
+    fun `the repository replaces every quiet block at once`() = runBlocking {
+        val dao = FakeScheduleDao(listOf(quiet(1, "Old", monday, "08:00", "09:00")))
         var transactions = 0
         val repository = ScheduleRepository(dao, clock = { 7L }) { block ->
             transactions++
             block()
         }
-        val school = QuietSection("School days", Occurrences.WEEKDAYS, listOf(block("08:40", "09:30"), block("09:40", "10:30")))
+        val school = QuietSection("School days", QuietTimes.WEEKDAYS, listOf(block("08:40", "09:30"), block("09:40", "10:30")))
         repository.replaceQuiet(listOf(school))
         assertEquals(1, transactions)
         assertEquals(listOf(school), repository.sections())
-        assertEquals("the timed play's row stays, never read", timed, dao.snapshot.first())
-        assertEquals(3, dao.snapshot.size)
+        assertEquals("the old block went", 2, dao.snapshot.size)
         assertThrows(IllegalArgumentException::class.java) { runBlocking { repository.replaceQuiet(listOf(school.copy(days = 0))) } }
+        assertEquals("a section with a problem is never written", listOf(school), repository.sections())
         repository.replaceQuiet(emptyList())
-        assertEquals(listOf(timed), dao.snapshot)
+        assertEquals(emptyList<ScheduleEntity>(), dao.snapshot)
     }
 }

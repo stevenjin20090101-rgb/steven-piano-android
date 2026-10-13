@@ -10,7 +10,6 @@
 package dev.stevenjin.stevenpiano.studio.compose
 
 import dev.stevenjin.stevenpiano.midi.MidiPiece
-import dev.stevenjin.stevenpiano.midi.SmfWriter
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -20,8 +19,8 @@ import kotlin.math.min
  * (docs/STUDIO_SPIKE.md › The contract for M23 and M24). Music is a run of events of three tokens each,
  * in arrival-time order: a time, a duration and a note. Times count 10 ms ticks from the context's
  * origin, durations 10 ms ticks, and a note is instrument × 128 + pitch (the piano is instrument 0,
- * drums 128). The control block (anticipated events) and the special tokens are never generated; a
- * sequence without controls starts with [AUTOREGRESS].
+ * drums 128). The control block (anticipated events, from 27,513) and the special tokens (from 55,025: SEPARATOR,
+ * AUTOREGRESS, ANTICIPATE) are never generated; a sequence without controls starts with [AUTOREGRESS].
  */
 object Amt {
     const val TIME_OFFSET = 0
@@ -30,11 +29,8 @@ object Amt {
 
     /** The note of a padding event (time, 0, REST): the package puts one wherever a second passes without an event. */
     const val REST = 27_512
-    const val CONTROL_OFFSET = 27_513
-    const val SPECIAL_OFFSET = 55_025
     const val SEPARATOR = 55_025
     const val AUTOREGRESS = 55_026
-    const val ANTICIPATE = 55_027
     const val VOCAB_SIZE = 55_028
 
     /** Time tokens 0–9,999: 100 s from the context's origin. */
@@ -44,7 +40,6 @@ object Amt {
     const val MAX_DUR = 1_000
     const val MAX_PITCH = 128
     const val MAX_INSTR = 129
-    const val MAX_NOTE = MAX_PITCH * MAX_INSTR
     const val TICKS_PER_SECOND = 100
 
     /** The model's positions: the flag and 341 events. */
@@ -92,7 +87,7 @@ data class SeedNote(val on: Double, val off: Double, val key: Int)
 /**
  * MIDI into the model's tokens and back (v1.7 — M24): a port of the `anticipation` package's
  * `midi_to_events` (`convert.py`: `midi_to_compound` then `compound_to_events`) and of the `ops.py`
- * helpers a prompt needs (`clip`, `pad`, `translate`, `min_time`, `max_time`), plus decoding. Pure.
+ * helpers a prompt needs (`clip`, `pad`, `min_time`, `max_time`), plus decoding. Pure.
  * The seed of `tools/studio/fixtures/bach_bwv846.mid` comes out token for token as the fixture has it.
  */
 object AmtTokenizer {
@@ -231,15 +226,6 @@ object AmtTokenizer {
         return out
     }
 
-    /** The events without their rests (`ops.unpad`). */
-    fun unpad(events: List<AmtEvent>): List<AmtEvent> = events.filterNot { it.isRest }
-
-    /** Every event [dt] ticks later (earlier when negative); none may move before 0. */
-    fun translate(events: List<AmtEvent>, dt: Int): List<AmtEvent> = events.map {
-        require(it.time + dt >= 0) { "an event would move before 0" }
-        it.copy(time = it.time + dt)
-    }
-
     /** The latest onset; 0 for none (`ops.max_time`). */
     fun maxTime(events: List<AmtEvent>): Int = events.maxOfOrNull { it.time } ?: 0
 
@@ -266,7 +252,8 @@ object AmtTokenizer {
     /**
      * [tokens] back into events: a leading [Amt.AUTOREGRESS] is skipped, then whole triples of a time,
      * a duration and a note (or rest). Anything else (a control, a special token, a partial event) is
-     * refused.
+     * refused. Kept for the tests (v1.24 — M57): it is how they read the model's tokens back against the
+     * package's fixtures, and what the sampler fed the model.
      */
     fun decode(tokens: IntArray): List<AmtEvent> {
         val start = if (tokens.isNotEmpty() && tokens[0] == Amt.AUTOREGRESS) 1 else 0
@@ -283,17 +270,4 @@ object AmtTokenizer {
         }
         return out
     }
-
-    /**
-     * The events' notes for [SmfWriter], rests and drums left out: onsets and ends to the microsecond
-     * (10,000 per tick), keys as the model gave them, every one at [velocity] until [Postprocess]
-     * shapes them (72 is the package's own `events_to_compound` default).
-     */
-    fun toNotes(events: List<AmtEvent>, velocity: Int = DEFAULT_VELOCITY): List<SmfWriter.Note> =
-        events.filter { !it.isRest && it.instrument < Amt.MAX_INSTR - 1 }.map {
-            SmfWriter.Note(it.time * MICROS_PER_TICK, (it.time + it.duration) * MICROS_PER_TICK, it.pitch, velocity)
-        }
-
-    const val DEFAULT_VELOCITY = 72
-    const val MICROS_PER_TICK = 10_000L
 }

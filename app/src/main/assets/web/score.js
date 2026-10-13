@@ -25,7 +25,7 @@ const GRID = 16;
 const TOO_LARGE = 'This score is too large to show.';
 
 /** PageTurn.pagesShown: the cursor's page, and with two slots the next (on its last system, or at the start) or the previous. */
-export function pagesShown(cursorSystem, systemCount, perPage, pages) {
+function pagesShown(cursorSystem, systemCount, perPage, pages) {
   const slots = Math.min(Math.max(pages, 1), 2);
   const shown = new Array(slots).fill(-1);
   if (systemCount <= 0) return shown;
@@ -46,7 +46,7 @@ export function pagesShown(cursorSystem, systemCount, perPage, pages) {
 }
 
 /** PageTurn.browsing: [first] and, with two slots, the page after it (even pages left). */
-export function browsingPages(first, pageCount, pages) {
+function browsingPages(first, pageCount, pages) {
   const slots = Math.min(Math.max(pages, 1), 2);
   const last = Math.max(pageCount - 1, 0);
   let start = Math.min(Math.max(first, 0), last);

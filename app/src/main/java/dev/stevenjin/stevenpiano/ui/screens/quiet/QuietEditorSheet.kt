@@ -57,12 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
-import dev.stevenjin.stevenpiano.schedule.Occurrences
 import dev.stevenjin.stevenpiano.schedule.QuietBlock
 import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.schedule.QuietSection
 import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
@@ -244,10 +244,10 @@ fun QuietEditorSheet(index: Int?, sections: List<QuietSection>, onDismiss: () ->
 }
 
 /** A new section: weekdays, one block from the next whole hour. */
-private fun fresh(): QuietSection = QuietSection("", Occurrences.WEEKDAYS, listOf(QuietTimes.proposed(emptyList(), nextHour())))
+private fun fresh(): QuietSection = QuietSection("", QuietTimes.WEEKDAYS, listOf(QuietTimes.proposed(emptyList(), nextHour())))
 
 /** The next whole hour, minutes after midnight. */
-private fun nextHour(): Int = (LocalTime.now().hour + 1) % HOURS_PER_DAY * Occurrences.MINUTES_PER_HOUR
+private fun nextHour(): Int = (LocalTime.now().hour + 1) % HOURS_PER_DAY * QuietTimes.MINUTES_PER_HOUR
 
 /** A chip a day, Monday first, then Weekdays and Every day, which set the days at once and show when they are what is chosen. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -261,13 +261,13 @@ private fun DayChips(days: Int, onChange: (Int) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             for (day in DayOfWeek.entries) {
-                val bit = Occurrences.dayBit(day)
+                val bit = QuietTimes.dayBit(day)
                 SheetChip(ScheduleCopy.short(day), days and bit != 0, description = ScheduleCopy.full(day)) { onChange(days xor bit) }
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SheetChip("Weekdays", days == Occurrences.WEEKDAYS) { onChange(Occurrences.WEEKDAYS) }
-            SheetChip("Every day", days == Occurrences.ALL_DAYS) { onChange(Occurrences.ALL_DAYS) }
+            SheetChip("Weekdays", days == QuietTimes.WEEKDAYS) { onChange(QuietTimes.WEEKDAYS) }
+            SheetChip("Every day", days == QuietTimes.ALL_DAYS) { onChange(QuietTimes.ALL_DAYS) }
         }
     }
     HairlineDivider(startInset = 16.dp)
@@ -276,8 +276,8 @@ private fun DayChips(days: Int, onChange: (Int) -> Unit) {
 /** A block: from and to on the app's outlined buttons (each opens the picker), "The next day" under it when it crosses midnight, and its remove glyph. */
 @Composable
 private fun BlockRow(block: QuietBlock, onStart: () -> Unit, onEnd: () -> Unit, onRemove: () -> Unit) {
-    val from = QuietCopy.clock(block.start)
-    val to = QuietCopy.clock(block.end)
+    val from = Format.timeOfDay(block.start)
+    val to = Format.timeOfDay(block.end)
     Row(
         Modifier
             .fillMaxWidth()
@@ -311,14 +311,14 @@ private fun BlockRow(block: QuietBlock, onStart: () -> Unit, onEnd: () -> Unit, 
  * dialogs' glass as the app's other dialogs (DESIGN.md › v1.9; the elevated tone where the glass
  * cannot be drawn). Its own dialog surface: Material's TimePickerDialog lays the paper tinted by the
  * ink's elevation overlay, a grey that is none of the app's tokens; the picker itself is clear, so
- * the glass shows through it, and only its dial and its fields are drawn. (The schedule editor's, until 1.20.)
+ * the glass shows through it, and only its dial and its fields are drawn.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     val state = rememberTimePickerState(
-        initialHour = minute / Occurrences.MINUTES_PER_HOUR,
-        initialMinute = minute % Occurrences.MINUTES_PER_HOUR,
+        initialHour = minute / QuietTimes.MINUTES_PER_HOUR,
+        initialMinute = minute % QuietTimes.MINUTES_PER_HOUR,
         is24Hour = true,
     )
     val ink = MaterialTheme.colorScheme.onSurface
@@ -356,7 +356,7 @@ private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDism
                 )
                 Row(Modifier.align(Alignment.End)) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = { onPick(state.hour * Occurrences.MINUTES_PER_HOUR + state.minute) }) { Text("Done") }
+                    TextButton(onClick = { onPick(state.hour * QuietTimes.MINUTES_PER_HOUR + state.minute) }) { Text("Done") }
                 }
             }
         }

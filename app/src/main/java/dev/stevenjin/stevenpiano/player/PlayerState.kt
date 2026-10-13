@@ -94,8 +94,6 @@ data class QueueSnapshot(
     /** The pieces after the current one, in playing order. */
     val upNextIds: List<Long> get() = ids.drop(index + 1)
 
-    val upNextUids: List<Long> get() = uids.drop(index + 1)
-
     /** Next has somewhere to go (Repeat all wraps to the top). */
     val hasNext: Boolean get() = index + 1 < ids.size || (repeat == RepeatMode.ALL && ids.isNotEmpty())
 
@@ -141,7 +139,5 @@ data class PlayerState(
      */
     val channel: String? = null,
 ) {
-    val queueIndex: Int get() = queue.index
-
     val queueSize: Int get() = queue.ids.size
 }

@@ -32,7 +32,7 @@ class SmfParserTest {
         )
         assertEquals(0, piece.format)
         assertEquals(480, piece.ppq)
-        assertEquals("Nocturne", piece.sequenceName)
+        assertEquals("Nocturne", piece.sequenceNames.firstOrNull())
         assertEquals(
             listOf("0 90 3C 5A", "500000 80 3C 00", "500000 90 40 46", "1000000 80 40 00"),
             piece.events.hex(),
@@ -239,9 +239,9 @@ class SmfParserTest {
     fun `text is UTF-8 when valid, else Latin-1`() {
         val utf8 = SmfParser.parse(SmfBuilder().track { name(0, "Frédéric") }.build())
         val latin1 = SmfParser.parse(SmfBuilder().track { name(0, "Frédéric", Charsets.ISO_8859_1) }.build())
-        assertEquals("Frédéric", utf8.sequenceName)
-        assertEquals("Frédéric", latin1.sequenceName)
-        assertNull(SmfParser.parse(SmfBuilder().track { noteOn(0, 60) }.build()).sequenceName)
+        assertEquals("Frédéric", utf8.sequenceNames.firstOrNull())
+        assertEquals("Frédéric", latin1.sequenceNames.firstOrNull())
+        assertNull(SmfParser.parse(SmfBuilder().track { noteOn(0, 60) }.build()).sequenceNames.firstOrNull())
     }
 
     @Test

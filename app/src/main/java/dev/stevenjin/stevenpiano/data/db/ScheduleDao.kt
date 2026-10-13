@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * The schedules table ([ScheduleEntity]); created in schema v3, used from M19 (app 1.6.2). Since 1.20 (M54) only the
- * quiet times' blocks ([ScheduleKind.QUIET]) are read or written: the timed plays' rows stay in the table, never read.
+ * quiet times' blocks ([ScheduleKind.QUIET]) are read or written; since schema v6 (v1.24 — M57) they are all it holds.
  */
 @Dao
 interface ScheduleDao {
@@ -24,7 +24,7 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE kind = 'QUIET' ORDER BY id")
     fun observeQuiet(): Flow<List<ScheduleEntity>>
 
-    /** The quiet times' blocks now, in the order they were saved: what the alarm planner reads. */
+    /** The quiet times' blocks now, in the order they were saved. */
     @Query("SELECT * FROM schedules WHERE kind = 'QUIET' ORDER BY id")
     suspend fun quiet(): List<ScheduleEntity>
 

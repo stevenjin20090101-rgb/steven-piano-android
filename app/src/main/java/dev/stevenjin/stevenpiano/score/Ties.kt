@@ -36,31 +36,10 @@ object Ties {
 
     private fun values(compound: Boolean) = if (compound) COMPOUND_VALUES else VALUES
 
-    /** Whether one written value, plain or dotted, lasts [sixteenths] (in a [compound] metre, one of its values). */
-    fun representable(sixteenths: Int, compound: Boolean = false): Boolean {
-        for (v in values(compound)) if (v == sixteenths) return true
-        return false
-    }
-
     /** The longest single value that fits in [sixteenths] (a sixteenth for anything shorter). */
     fun largest(sixteenths: Int, compound: Boolean = false): Int {
         for (v in values(compound)) if (v <= sixteenths) return v
         return 1
-    }
-
-    /**
-     * [sixteenths] as tied values, largest first (5 is 4 + 1, 7 is 6 + 1, 10 is 8 + 2; in a
-     * [compound] metre 18 is 12 + 6), into [out] from [at], at most [max] of them; returns how many.
-     */
-    fun split(sixteenths: Int, out: IntArray, compound: Boolean = false, at: Int = 0, max: Int = out.size - at): Int {
-        var left = sixteenths
-        var count = 0
-        while (left > 0 && count < max) {
-            val v = largest(left, compound)
-            out[at + count++] = v
-            left -= v
-        }
-        return count
     }
 
     /** The written value of [sixteenths] at [ppq]: [Quantize.value] of that many ticks. */
@@ -75,8 +54,9 @@ object Ties {
     /**
      * The written pieces of a note from [start] to [end] (ticks, on the grid; [step] ticks a sixteenth)
      * that starts in bar [bar] of bars from [barStart] to [barEnd] ([compound] for each bar in a
-     * compound metre): split at every bar line it crosses, each bar's piece split into values
-     * ([split]). Writes each piece's onset to [outTick] and its length in sixteenths to [outLength], at
+     * compound metre): split at every bar line it crosses, each bar's piece split into tied values,
+     * largest first ([largest]: 5 is 4 + 1, 7 is 6 + 1, 10 is 8 + 2; in a compound metre 18 is 12 + 6).
+     * Writes each piece's onset to [outTick] and its length in sixteenths to [outLength], at
      * most [max] pieces (the note is cut there), and returns how many. A piece shorter than half a
      * sixteenth (an end a hair past a bar line) is dropped, and nothing is written past the last bar
      * or past [MAX_EMPTY_BARS] bars in a row that hold none of the note (the v1.3 delta audit, L4: a

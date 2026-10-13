@@ -12,7 +12,6 @@ package dev.stevenjin.stevenpiano.studio.compose
 import dev.stevenjin.stevenpiano.studio.StudioFailure
 import kotlinx.coroutines.CancellationException
 import kotlin.math.exp
-import kotlin.math.min
 import kotlin.random.Random
 
 /** Why the sampler stopped: its token budget spent, the piece's end time reached, or the model ended it (SEPARATOR). */

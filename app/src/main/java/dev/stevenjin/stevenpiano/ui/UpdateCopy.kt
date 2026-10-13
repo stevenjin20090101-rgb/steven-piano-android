@@ -27,13 +27,9 @@ object UpdateCopy {
     fun installed(versionName: String, restartNeeded: Boolean = true): String =
         if (restartNeeded) "Updated to $versionName; restart to use it" else "Updated to $versionName"
 
-    /** The progress row: "Downloading 1.4 · 1.2 of 2.3 MB". */
+    /** The progress row: "Downloading 1.4 · 1 of 14 MB" ([Format.megabytes]). */
     fun downloading(versionName: String, bytes: Long, total: Long, locale: Locale = Locale.getDefault()): String =
-        "Downloading $versionName · ${megabytes(bytes, total, locale)}"
-
-    /** "1.2 of 2.3 MB", in decimal megabytes as Android counts them, one decimal. */
-    fun megabytes(bytes: Long, total: Long, locale: Locale = Locale.getDefault()): String =
-        "${oneDecimal(bytes, locale)} of ${oneDecimal(total, locale)} MB"
+        "Downloading $versionName · ${Format.megabytes(bytes, total, locale)}"
 
     fun notificationTitle(versionName: String?): String =
         if (versionName == null) "Downloading Steven Piano" else "Downloading Steven Piano $versionName"
@@ -56,6 +52,4 @@ object UpdateCopy {
         is UpdateState.Installed -> null
         else -> state.manifest?.let { "Version ${it.versionName} is available." }
     }
-
-    private fun oneDecimal(bytes: Long, locale: Locale): String = "%.1f".format(locale, bytes.coerceAtLeast(0L) / 1_000_000.0)
 }

@@ -42,10 +42,10 @@ internal class RollClock(private val player: Player) : SongClock {
         if (!easing) return actual
         val t = (frameNanos - easeStart) / EASE_NANOS
         if (t >= 1f) return actual
-        return easeFrom + ((actual - easeFrom) * Motion.EaseOut.transform(t.coerceAtLeast(0f))).toLong()
+        return easeFrom + ((actual - easeFrom) * Motion.Enter.transform(t.coerceAtLeast(0f))).toLong()
     }
 
     private companion object {
-        const val EASE_NANOS = Motion.RollStartMs * 1_000_000f
+        const val EASE_NANOS = Motion.EmphasisedMs * 1_000_000f
     }
 }

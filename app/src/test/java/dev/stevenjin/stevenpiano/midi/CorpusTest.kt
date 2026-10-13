@@ -321,7 +321,7 @@ class CorpusTest {
                 assertTrue(where, score.x[i] >= system.left && score.x[i] <= metrics.pageWidth)
             }
             // M13's engraving: tied heads in their systems' runs, and every mark finite and on its page.
-            for (h in score.noteCount until score.headCount) {
+            for (h in score.noteCount until score.x.size) {
                 val system = score.systems[score.system[h]]
                 assertTrue(where, h in system.firstTied until system.tiedEnd)
                 assertTrue(where, score.x[h] >= system.left && score.x[h] <= metrics.pageWidth)
@@ -341,7 +341,7 @@ class CorpusTest {
                 tally.quantized = score.quantized
                 tally.notes = score.noteCount.toLong()
                 tally.bars = score.bars.count.toLong()
-                tally.tied = (score.headCount - score.noteCount).toLong()
+                tally.tied = (score.x.size - score.noteCount).toLong()
                 tally.beams = (0 until score.beams.size).count { score.beams.level[it].toInt() == 1 }.toLong()
                 tally.rests = score.rests.size.toLong()
                 tally.ties = score.ties.size.toLong()

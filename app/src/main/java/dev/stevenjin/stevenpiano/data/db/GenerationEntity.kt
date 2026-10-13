@@ -106,9 +106,6 @@ object GenerationSql {
     /** At start: a turn that was running when the app stopped can't finish. */
     const val INTERRUPT_PENDING = "UPDATE studio_generations SET outcome = 'interrupted' WHERE outcome = 'pending'"
 
-    /** The one-off import: pieces the DataStore said were waiting go back from kept (the backfill's guess) to made. */
-    const val REOPEN = "UPDATE studio_generations SET outcome = 'made' WHERE outcome = 'kept' AND pieceId IN (:ids)"
-
     /** Keep or Discard: a waiting piece's turn says which. */
     const val DECIDE = "UPDATE studio_generations SET outcome = :outcome WHERE pieceId = :pieceId AND outcome = 'made'"
 

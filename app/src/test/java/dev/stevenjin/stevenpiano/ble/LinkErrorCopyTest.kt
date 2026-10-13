@@ -10,44 +10,21 @@
 package dev.stevenjin.stevenpiano.ble
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The Piano tab's words for each reason a connection failed, and how the link's log spells Bluetooth's numbers and names. */
+/**
+ * How the link's failures are put into words where something varies (a code, a device's name, Location), and how the
+ * link's log spells Bluetooth's numbers and names (v1.24 — M57: the rules, not each reason's copy).
+ */
 class LinkErrorCopyTest {
-    private val notFound = "Can't find Steven Piano. Make sure it's powered on, within range, and that no iPad, phone or Mac is " +
-        "connected to it — it hides while another device is connected."
-
     @Test
-    fun `each new reason reads exactly as specified, with its number`() {
-        assertEquals(notFound, LinkError.NotFound().message)
-        assertEquals("$notFound On some devices, Bluetooth scanning also needs Location turned on.", LinkError.NotFound(locationOff = true).message)
-        assertEquals(
-            "This device is paired with Steven Piano in Bluetooth settings. Forget it there, then tap Retry.",
-            LinkError.Paired.message,
-        )
-        assertEquals(
-            "Found Steven Piano but the connection failed (code 133). Tap Retry; if it keeps failing, restart the piano.",
-            LinkError.ConnectFailed(133).message,
-        )
-        assertEquals(
-            "Found Steven Piano but the connection failed (timeout). Tap Retry; if it keeps failing, restart the piano.",
-            LinkError.ConnectFailed(null).message,
-        )
-        assertEquals(
-            "Bluetooth scanning isn't available right now (code 2). Turn Bluetooth off and on, then tap Retry.",
-            LinkError.ScanFailed(2).message,
-        )
-    }
-
-    @Test
-    fun `the reasons kept from before read as they did`() {
-        assertEquals("Bluetooth is off. Turn it on to connect to the piano.", LinkError.BluetoothOff.message)
-        assertEquals("Steven Piano needs permission to find and connect to the piano.", LinkError.PermissionMissing.message)
-        assertEquals("Location is off. This phone needs it on to find Bluetooth devices.", LinkError.LocationOff.message)
-        assertEquals(
-            "Another piano called Steven Piano is nearby, not the one this phone knows. Connect to it only if it's yours.",
-            LinkError.OtherPiano.message,
-        )
+    fun `a reason carries its code, or the timeout, and Location only when it is off`() {
+        assertTrue(LinkError.ConnectFailed(133).message.contains("(code 133)"))
+        assertTrue(LinkError.ConnectFailed(null).message.contains("(timeout)"))
+        assertTrue(LinkError.ScanFailed(2).message.contains("(code 2)"))
+        val plain = LinkError.NotFound().message
+        assertEquals("$plain On some devices, Bluetooth scanning also needs Location turned on.", LinkError.NotFound(locationOff = true).message)
     }
 
     @Test
@@ -60,25 +37,23 @@ class LinkErrorCopyTest {
     fun `names from the air are made safe for one log line`() {
         assertEquals("(no name)", BleCodes.name(null))
         assertEquals("\"Steven Piano\"", BleCodes.name(PianoBluetooth.NAME))
-        assertEquals("\"a?b?c?d\"", BleCodes.name("a\nb\u0000c d"))
+        assertEquals("\"a?b?c?d\"", BleCodes.name("a\nb\u0000c\u2028d"))
         assertEquals("\"" + "x".repeat(40) + "\"", BleCodes.name("x".repeat(40)))
         assertEquals("\"" + "x".repeat(40) + "…\"", BleCodes.name("x".repeat(41)))
     }
 
     @Test
     fun `codes are spelled out for the log, unknown ones kept as numbers`() {
-        assertEquals("133 (GATT_ERROR: Android's catch-all)", BleCodes.gattStatus(133))
+        assertTrue(BleCodes.gattStatus(133).startsWith("133 ("))
         assertEquals("4242", BleCodes.gattStatus(4242))
-        assertEquals("6 (scanning too frequently)", BleCodes.scanFailure(6))
-        assertEquals("-1 (no scanner: Bluetooth is off)", BleCodes.scanFailure(PianoScanner.NO_SCANNER))
+        assertTrue(BleCodes.scanFailure(6).startsWith("6 ("))
         assertEquals("99", BleCodes.scanFailure(99))
     }
 
     @Test
-    fun `a MIDI piano's problems name it and say what to do (v1_11 M29)`() {
-        assertEquals("FP-30X isn't connected. Plug it into the tablet or switch it on nearby, then tap Retry.", LinkError.InstrumentGone("FP-30X").message)
-        assertEquals("Another app is using FP-30X. Close it, then tap Retry.", LinkError.InstrumentBusy("FP-30X").message)
-        assertEquals("FP-30X asks to pair. Accept the request, or pair it in Bluetooth settings, then tap Retry.", LinkError.InstrumentPairing("FP-30X").message)
-        assertEquals("This tablet has no MIDI, so it can't play a MIDI piano.", LinkError.NoMidi.message)
+    fun `a MIDI piano's problems name it (v1_11 M29)`() {
+        for (error in listOf(LinkError.InstrumentGone("FP-30X"), LinkError.InstrumentBusy("FP-30X"), LinkError.InstrumentPairing("FP-30X"))) {
+            assertTrue(error.message, error.message.contains("FP-30X"))
+        }
     }
 }

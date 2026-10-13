@@ -17,6 +17,7 @@ import org.junit.Before
 import org.junit.Test
 import java.util.Locale
 
+/** The import's counting, plurals and how its summary is put together (v1.24 — M57: the rules, not each line's copy). */
 class ImportCopyTest {
     private val original = Locale.getDefault()
 
@@ -28,7 +29,6 @@ class ImportCopyTest {
 
     @Test
     fun `a running import counts files looked at`() {
-        assertEquals("Looking for MIDI files…", ImportCopy.running(ImportProgress(finished = false)))
         assertEquals("Imported 1,204 of 1,727", ImportCopy.running(ImportProgress(done = 1_204, total = 1_727, finished = false)))
     }
 
@@ -53,7 +53,6 @@ class ImportCopyTest {
         assertEquals("Those pieces are already in the library · in the playlist MIDI.", ImportCopy.summary(ImportProgress(done = 2, total = 2, duplicates = 2, playlist = midi)))
         assertEquals("In the playlist MIDI. 1 file couldn't be read.", ImportCopy.summary(ImportProgress(done = 2, total = 2, duplicates = 1, failed = 1, playlist = midi)))
         assertEquals("Imported 1 piece · in the playlist Uploads.", ImportCopy.summary(ImportProgress(done = 1, total = 1, imported = 1, playlist = ImportedPlaylist(15, "Uploads"))))
-        assertEquals("In the playlist MIDI", ImportCopy.inPlaylist("MIDI"))
     }
 
     @Test
@@ -61,7 +60,6 @@ class ImportCopyTest {
         assertEquals("Add 3 files to the library?", ImportCopy.addShared(3))
         assertEquals("Add 1 file to the library?", ImportCopy.addShared(1))
         assertEquals("Add 500 files to the library?", ImportCopy.addShared(500))
-        assertEquals("Another app sent this file. Adding copies it into Steven Piano.", ImportCopy.sharedDetail(1))
     }
 
     @Test

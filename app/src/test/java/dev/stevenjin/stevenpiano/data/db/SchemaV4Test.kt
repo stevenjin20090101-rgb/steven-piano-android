@@ -10,7 +10,6 @@
 package dev.stevenjin.stevenpiano.data.db
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -100,14 +99,13 @@ class SchemaV4Test {
     }
 
     @Test
-    fun `the history's statements - the one-off import, Keep and Discard, Made in Studio, interrupted turns and the trim`() {
+    fun `the history's statements - Keep and Discard, Made in Studio, interrupted turns and the trim`() {
         connect("sql.db").use { db ->
             v3.ddl.forEach { db.exec(it) }
             fillAsVersion111(db)
             migrate(db)
-            // The old store said pieces 4 and 6 still waited (and 99, a recording, which has no turn).
-            assertEquals(2, db.update(GenerationSql.REOPEN.replace(":ids", "4, 6, 99")))
-            assertEquals(0, db.update(GenerationSql.REOPEN.replace(":ids", "4, 6, 99")))   // run again: nothing more
+            // Pieces 4 and 6 wait for Keep or Discard (apps 1.12 to 1.23 reopened them from the old store at their first start).
+            db.exec("UPDATE studio_generations SET outcome = 'made' WHERE pieceId IN (4, 6)")
             assertEquals(listOf("4", "6"), query(db, GenerationSql.UNDECIDED).map { it[0] })
             assertEquals(1, db.update(GenerationSql.DECIDE.replace(":outcome", "'kept'").replace(":pieceId", "4")))
             assertEquals(0, db.update(GenerationSql.DECIDE.replace(":outcome", "'discarded'").replace(":pieceId", "4")))   // decided already

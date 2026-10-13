@@ -37,17 +37,14 @@ class AmtTokenizerTest {
         assertEquals(v.getInt("DUR_OFFSET"), Amt.DUR_OFFSET)
         assertEquals(v.getInt("NOTE_OFFSET"), Amt.NOTE_OFFSET)
         assertEquals(v.getInt("REST"), Amt.REST)
-        assertEquals(v.getInt("CONTROL_OFFSET"), Amt.CONTROL_OFFSET)
-        assertEquals(v.getInt("SPECIAL_OFFSET"), Amt.SPECIAL_OFFSET)
         assertEquals(v.getInt("SEPARATOR"), Amt.SEPARATOR)
         assertEquals(v.getInt("AUTOREGRESS"), Amt.AUTOREGRESS)
-        assertEquals(v.getInt("ANTICIPATE"), Amt.ANTICIPATE)
         assertEquals(v.getInt("VOCAB_SIZE"), Amt.VOCAB_SIZE)
         assertEquals(v.getInt("MAX_TIME"), Amt.MAX_TIME)
         assertEquals(v.getInt("MAX_DUR"), Amt.MAX_DUR)
         assertEquals(v.getInt("MAX_PITCH"), Amt.MAX_PITCH)
         assertEquals(v.getInt("MAX_INSTR"), Amt.MAX_INSTR)
-        assertEquals(v.getInt("MAX_NOTE"), Amt.MAX_NOTE)
+        assertEquals(v.getInt("MAX_NOTE"), Amt.MAX_PITCH * Amt.MAX_INSTR)
         assertEquals(v.getInt("TIME_RESOLUTION"), Amt.TICKS_PER_SECOND)
         assertEquals(v.getInt("CONTEXT_SIZE"), Amt.CONTEXT)
         assertEquals(11_000, Amt.PIANO_FIRST)
@@ -91,19 +88,15 @@ class AmtTokenizerTest {
         val notes = piece.notes
         val inWindow = (0 until notes.size).filter { notes.startMicros[it] <= 15_005_000L }
         assertEquals(inWindow.size, events.size)
-        val half = AmtTokenizer.MICROS_PER_TICK / 2 + 1
+        val microsPerTick = 10_000L   // 100 ticks a second
+        val half = microsPerTick / 2 + 1
         for ((e, i) in events.zip(inWindow)) {
             assertEquals(0, e.instrument)
             assertEquals(notes.note(i), e.pitch)
-            assertTrue("onset ${e.time} vs ${notes.startMicros[i]}", abs(e.time * AmtTokenizer.MICROS_PER_TICK - notes.startMicros[i]) <= half)
+            assertTrue("onset ${e.time} vs ${notes.startMicros[i]}", abs(e.time * microsPerTick - notes.startMicros[i]) <= half)
             val length = notes.endMicros[i] - notes.startMicros[i]
-            assertTrue("duration ${e.duration} vs $length", abs(e.duration * AmtTokenizer.MICROS_PER_TICK - length) <= half)
+            assertTrue("duration ${e.duration} vs $length", abs(e.duration * microsPerTick - length) <= half)
         }
-        // As notes for the MIDI writer: the same keys and times, velocities left for the post-processor.
-        val written = AmtTokenizer.toNotes(events)
-        assertEquals(71, written.size)
-        assertEquals(events.first().time * 10_000L, written.first().onMicros)
-        assertTrue(written.all { it.velocity == AmtTokenizer.DEFAULT_VELOCITY })
     }
 
     @Test
@@ -130,7 +123,7 @@ class AmtTokenizerTest {
                 if (random.nextInt(8) == 0) {
                     AmtEvent.rest(random.nextInt(Amt.MAX_TIME))
                 } else {
-                    AmtEvent(random.nextInt(Amt.MAX_TIME), random.nextInt(Amt.MAX_DUR), random.nextInt(Amt.MAX_NOTE))
+                    AmtEvent(random.nextInt(Amt.MAX_TIME), random.nextInt(Amt.MAX_DUR), random.nextInt(Amt.MAX_PITCH * Amt.MAX_INSTR))
                 }
             }
             val tokens = AmtTokenizer.tokens(events)
@@ -145,7 +138,7 @@ class AmtTokenizerTest {
     fun `decoding refuses controls, special tokens and partial events`() {
         val bad = listOf(
             intArrayOf(Amt.AUTOREGRESS, 10, Amt.DUR_OFFSET + 5),                 // a partial event
-            intArrayOf(10, Amt.DUR_OFFSET + 5, Amt.CONTROL_OFFSET + 11_060),     // an anticipated note
+            intArrayOf(10, Amt.DUR_OFFSET + 5, Amt.REST + 1 + 11_060),           // an anticipated note (the controls follow REST)
             intArrayOf(Amt.SEPARATOR, Amt.SEPARATOR, Amt.SEPARATOR),
             intArrayOf(10, 11_060, Amt.DUR_OFFSET + 5),                          // slots swapped
             intArrayOf(Amt.DUR_OFFSET, Amt.DUR_OFFSET, 11_060),
@@ -180,13 +173,13 @@ class AmtTokenizerTest {
             padded,
         )
         assertEquals("a gap of exactly a second needs none", listOf(AmtEvent(0, 5, 60), AmtEvent(100, 5, 60)), AmtTokenizer.pad(listOf(AmtEvent(0, 5, 60), AmtEvent(100, 5, 60))))
-        assertEquals(events, AmtTokenizer.unpad(padded))
+        assertEquals(events, padded.filterNot { it.isRest })
         assertEquals(listOf(AmtEvent(350, 20, 64), AmtEvent(400, 20, 67)), AmtTokenizer.clip(events, 350, 400))
         assertEquals(listOf(AmtEvent(0, 20, 60)), AmtTokenizer.clip(events, 0, 349))
         assertEquals(400, AmtTokenizer.maxTime(events))
         assertEquals(0, AmtTokenizer.minTime(events))
         assertEquals(0, AmtTokenizer.maxTime(emptyList()))
-        assertEquals(listOf(AmtEvent(50, 20, 64), AmtEvent(100, 20, 67)), AmtTokenizer.translate(AmtTokenizer.clip(events, 350, 400), -300))
+        assertEquals(listOf(AmtEvent(50, 20, 64), AmtEvent(100, 20, 67)), AmtTokenizer.clip(events, 350, 400).map { it.copy(time = it.time - 300) })
     }
 
     @Test

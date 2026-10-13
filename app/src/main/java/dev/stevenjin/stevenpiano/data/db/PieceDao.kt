@@ -74,10 +74,6 @@ interface PieceDao {
     @Query("UPDATE pieces SET genre = :genre WHERE composerKey = :composerKey AND genre != 0")
     suspend fun setComposerGenre(composerKey: String, genre: Int)
 
-    /** The first [limit] Modern pieces by title: the guests' list. */
-    @Query("SELECT * FROM pieces WHERE genre = 2 ORDER BY titleKey LIMIT :limit")
-    suspend fun modern(limit: Int): List<PieceEntity>
-
     /**
      * Studio's default seed (v1.7 — M24): the piece played last whose composer isn't [except] (Studio's
      * own pieces), else the first such by title; null when there is none.
@@ -109,13 +105,6 @@ interface PieceDao {
             "WHERE cp.collectionId = :playlistId ORDER BY cp.position, p.titleKey LIMIT :limit",
     )
     fun head(playlistId: Long, limit: Int): Flow<List<PieceHead>>
-
-    /** The pieces by [composerKey] without a cover of their own (no picture in their `piece:<id>` artwork row), newest first (v1.14 — M37). */
-    @Query(
-        "SELECT p.id FROM pieces p LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
-            "WHERE p.composerKey = :composerKey AND a.imagePath IS NULL ORDER BY p.id DESC",
-    )
-    suspend fun withoutCover(composerKey: String): List<Long>
 
     /**
      * The pieces whose album cover may be looked up (v1.15 — M40): Classical (1) or Modern (2), so none made here; no
@@ -157,23 +146,6 @@ interface PieceDao {
     /** Whether any piece is grouped under [composerKey] (v1.10.1 — M28, D3). */
     @Query("SELECT EXISTS(SELECT 1 FROM pieces WHERE composerKey = :composerKey)")
     suspend fun hasComposerKey(composerKey: String): Boolean
-
-    /**
-     * The pieces an upload before 1.10.1 left loose (v1.10.1 — M28, D4, `UploadRepair`): no collection, in no
-     * playlist, a folder in their path (`sourceName`), and none made in Studio ([studio], its composer).
-     */
-    @Query(
-        "SELECT * FROM pieces p WHERE (p.collection IS NULL OR p.collection = '') AND instr(p.sourceName, '/') > 1 " +
-            "AND p.composer != :studio AND NOT EXISTS (SELECT 1 FROM collection_pieces cp WHERE cp.pieceId = p.id)",
-    )
-    suspend fun loose(studio: String): List<PieceEntity>
-
-    /** A piece's names and the keys made from them, and nothing else of it (the repair of older uploads). */
-    @Query(
-        "UPDATE pieces SET title = :title, composer = :composer, composerKey = :composerKey, composerShort = :composerShort, " +
-            "searchText = :searchText, titleKey = :titleKey WHERE id = :id",
-    )
-    suspend fun setNames(id: Long, title: String, composer: String, composerKey: String, composerShort: String, searchText: String, titleKey: String)
 
     /** The ids of the pieces among [shas] (at most 500 at a time), in no particular order (v1.10.1 — M28, D2). */
     @Query("SELECT id, sha256 FROM pieces WHERE sha256 IN (:shas)")

@@ -15,10 +15,9 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * The quiet times (v1.20 — M54), kept in the schedules table ([ScheduleEntity], one row a block): read as they change
- * for the gate, the pages and the planner, and changed only through here, by the Quiet times pages of the tablet and
- * the web panel, which give every section at once ([replaceQuiet]: the old blocks go and the new ones come in one
- * [transaction], so nothing ever reads half of them). Sections with a problem are never written ([QuietTimes.validate]).
- * The timed plays' rows (the kinds before 1.20) stay in the table, never read.
+ * for the gate and the pages, and changed only through here, by the Quiet times pages of the tablet and the web panel,
+ * which give every section at once ([replaceQuiet]: the old blocks go and the new ones come in one [transaction], so
+ * nothing ever reads half of them). Sections with a problem are never written ([QuietTimes.validate]).
  */
 class ScheduleRepository(
     private val dao: ScheduleDao,
@@ -27,9 +26,6 @@ class ScheduleRepository(
 ) {
     /** The quiet times' blocks, in the order they were saved, as they change. */
     val quiet: Flow<List<ScheduleEntity>> = dao.observeQuiet()
-
-    /** The quiet times' blocks now. */
-    suspend fun quietRows(): List<ScheduleEntity> = dao.quiet()
 
     /** The sections as they are kept now. */
     suspend fun sections(): List<QuietSection> = QuietTimes.sections(dao.quiet())

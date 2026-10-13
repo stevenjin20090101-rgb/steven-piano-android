@@ -13,8 +13,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import dev.stevenjin.stevenpiano.update.UpdateState
 import android.Manifest
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
@@ -25,6 +27,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.room.withTransaction
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
@@ -40,7 +43,6 @@ import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.HandlerLinkExecutor
 import dev.stevenjin.stevenpiano.ble.LinkState
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.ble.ScanThrottle
 import dev.stevenjin.stevenpiano.channels.Channel
@@ -57,8 +59,6 @@ import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
 import dev.stevenjin.stevenpiano.data.builtin.StudioPlaylist
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
-import dev.stevenjin.stevenpiano.data.db.TextRepair
-import dev.stevenjin.stevenpiano.data.db.UploadRepair
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
@@ -75,16 +75,12 @@ import dev.stevenjin.stevenpiano.diag.QuietSince
 import dev.stevenjin.stevenpiano.diag.RunningNow
 import dev.stevenjin.stevenpiano.diag.SystemHistory
 import dev.stevenjin.stevenpiano.diag.SystemProbe
-import dev.stevenjin.stevenpiano.firmware.FakeFirmwareServer
-import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
 import dev.stevenjin.stevenpiano.firmware.FirmwarePlayer
 import dev.stevenjin.stevenpiano.firmware.FirmwareUpdater
 import dev.stevenjin.stevenpiano.firmware.batteryState
 import dev.stevenjin.stevenpiano.instruments.AndroidMidiBluetooth
 import dev.stevenjin.stevenpiano.instruments.AndroidMidiPorts
-import dev.stevenjin.stevenpiano.instruments.CombinedMidiPorts
-import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.InstrumentSwitch
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
@@ -96,9 +92,7 @@ import dev.stevenjin.stevenpiano.instruments.LiveThru
 import dev.stevenjin.stevenpiano.instruments.LiveTimingHold
 import dev.stevenjin.stevenpiano.instruments.MidiDevices
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
-import dev.stevenjin.stevenpiano.library.LibraryOverride
 import dev.stevenjin.stevenpiano.midi.KeyEvents
-import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
@@ -145,11 +139,9 @@ import dev.stevenjin.stevenpiano.studio.StudioAvailability
 import dev.stevenjin.stevenpiano.studio.StudioPieces
 import dev.stevenjin.stevenpiano.studio.StudioReview
 import dev.stevenjin.stevenpiano.update.HttpUpdateServer
-import dev.stevenjin.stevenpiano.update.ModelsOverride
 import dev.stevenjin.stevenpiano.update.UpdateChecker
 import dev.stevenjin.stevenpiano.update.UpdateDownloader
 import dev.stevenjin.stevenpiano.update.UpdateInstaller
-import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
@@ -180,7 +172,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
@@ -204,17 +195,7 @@ class AppGraph(private val app: Application) {
     val appearance: StateFlow<Appearance?> =
         settingsRepository.settings.map { it.appearance }.stateIn(appScope, SharingStarted.Eagerly, null)
 
-    /** Opening it runs the one-off repair of text imported before 1.2 capped it ([TextRepair]), before any query. */
-    private val database: PianoDatabase by lazy {
-        PianoDatabase.open(app) { db ->
-            TextRepair.runOnce(
-                db,
-                due = { runBlocking { !settingsRepository.textRepairDone() } },
-                done = { runBlocking { settingsRepository.markTextRepairDone() } },
-                log = { Log.w(TAG, it) },
-            )
-        }
-    }
+    private val database: PianoDatabase by lazy { PianoDatabase.open(app) }
     private val pieceFiles = PieceFiles(app.filesDir)
     val library: LibraryRepository by lazy { LibraryRepository(database, pieceFiles) }
 
@@ -247,25 +228,6 @@ class AppGraph(private val app: Application) {
     /** Studio's history (v1.12 — M30): the turns of its conversation, and the one record of its pieces' Keep or Discard. */
     val studioHistory: Generations by lazy { RoomGenerations(database.generations()) }
 
-    /**
-     * The one-time repair of uploads imported before 1.10.1 ([UploadRepair], v1.10.1 — M28, D4), off the main
-     * thread, unless it has run already (`uploadRepairDone`); its lines go to the link's trail, naming the
-     * playlists in debug builds only. True when it named some artist. A failure is logged and leaves it due, so
-     * the next start tries again (what it did by then stays: those pieces are in their playlist).
-     */
-    private suspend fun repairUploadsOnce(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            if (settingsRepository.uploadRepairDone()) return@withContext false
-            val done = UploadRepair.run(library, log = LinkLog::warn, named = { name -> if (BuildConfig.DEBUG) " $name" else "" })
-            settingsRepository.markUploadRepairDone()
-            done.any { it.filled > 0 }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "The repair of older uploads failed; it runs again at the next start", e)
-            false
-        }
-    }
 
     private val importState = MutableStateFlow(ImportProgress.Idle)
     val importProgress: StateFlow<ImportProgress> = importState.asStateFlow()
@@ -294,40 +256,30 @@ class AppGraph(private val app: Application) {
      */
     val scanThrottle = ScanThrottle()
 
+    /** The piano's link: Bluetooth LE MIDI to the piano; on the emulator in debug builds, its stand-in ([Emulator]). */
     private val steven = lazy {
-        if (LoggingPianoLink.isWanted()) {
-            LoggingPianoLink()
-        } else {
-            GattPianoLink.create(
-                app,
-                onConnected = { address, name -> appScope.launch { settingsRepository.rememberDevice(address, name) } },
-                shouldReconnect = { settings.value.autoConnect },
-                isForeign = { address -> midiDevices.isForeign(address) },
-                throttle = scanThrottle,
-            )
-        }
+        Emulator.pianoLink() ?: GattPianoLink.create(
+            app,
+            onConnected = { address, name -> appScope.launch { settingsRepository.rememberDevice(address, name) } },
+            shouldReconnect = { settings.value.autoConnect },
+            isForeign = { address -> midiDevices.isForeign(address) },
+            throttle = scanThrottle,
+        )
     }
 
     /** The MIDI devices' own thread (v1.11 — M29): Android's MIDI callbacks, the keyboard's and the instrument's state and timers. */
     private val midiThread: HandlerThread by lazy { HandlerThread("steven-piano-midi").apply { start() } }
 
     /**
-     * The emulator's MIDI keyboard and MIDI piano (debug builds on an emulator only, as [LoggingPianoLink]; v1.11 — M29):
-     * the activity feeds the keyboard the bytes adb gives it.
-     */
-    val emulatedMidi: EmulatedMidiPorts? by lazy { if (EmulatedMidiPorts.isWanted()) EmulatedMidiPorts(Handler(midiThread.looper)) else null }
-
-    /**
      * Every MIDI device but Steven Piano (v1.11 — M29): Android's MIDI service (another app's ports only in debug builds,
-     * for the emulator's test device), the picker's Bluetooth search on the shared scan budget, and the addresses the
-     * piano's link must never take.
+     * for the emulator's test device; on the emulator, its keyboard and MIDI piano beside them, [Emulator]), the picker's
+     * Bluetooth search on the shared scan budget, and the addresses the piano's link must never take.
      */
     val midiDevices: MidiDevices by lazy {
         val handler = Handler(midiThread.looper)
         val android = AndroidMidiPorts(app, handler, allowVirtual = BuildConfig.DEBUG)
-        val emulated = emulatedMidi
         MidiDevices(
-            ports = if (emulated != null) CombinedMidiPorts(android, emulated) else android,
+            ports = Emulator.midiPorts(android, handler),
             bluetooth = midiBluetooth,
             executor = HandlerLinkExecutor(midiThread.looper),
             throttle = scanThrottle,
@@ -426,7 +378,7 @@ class AppGraph(private val app: Application) {
      * that plays it at the device's own output rate, and when it sounds (Piano › Tablet sound).
      */
     val tabletSound: TabletSound by lazy {
-        val source = ModelsOverride.source() ?: UpdateSource.models
+        val source = Emulator.modelsSource() ?: UpdateSource.models
         val server = HttpUpdateServer(source, log = debugLog(SOUND_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         val store = ModelStore(File(app.filesDir, MODELS_DIR), listOf(ModelCatalogue.pianoSound))
         TabletSound(
@@ -453,12 +405,12 @@ class AppGraph(private val app: Application) {
 
     /**
      * Steven's library from GitHub (v1.10 — M27): the pack's manifest and zip from this repository's release
-     * `library` (on the emulator in debug builds, the server [LibraryOverride] names), its pieces through the
+     * `library` (on the emulator in debug builds, a server on the Mac: [Emulator.librarySource]), its pieces through the
      * importer, the version loaded kept in the settings. The Library's buttons and the console's
      * `library.load` call [LibraryPack.load]; [LibraryService] holds the foreground while it runs.
      */
     val libraryPack: LibraryPack by lazy {
-        val source = LibraryOverride.source() ?: UpdateSource.library
+        val source = Emulator.librarySource() ?: UpdateSource.library
         val server = HttpUpdateServer(source, log = debugLog(LIBRARY_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         LibraryPack(
             source = source,
@@ -493,7 +445,7 @@ class AppGraph(private val app: Application) {
             appScope,
             updating = { firmwareUpdater.state.value.busy },
             fullPowerChosenOff = { fullPowerChoice.getBoolean(FULL_POWER_CHOSEN_OFF, false) },
-            chooseFullPower = { on -> fullPowerChoice.edit().putBoolean(FULL_POWER_CHOSEN_OFF, !on).apply() },
+            chooseFullPower = { on -> fullPowerChoice.edit { putBoolean(FULL_POWER_CHOSEN_OFF, !on) } },
         )
     }
 
@@ -536,8 +488,8 @@ class AppGraph(private val app: Application) {
         }
     }
 
-    /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, the test server [UpdateOverride] names. */
-    private val updateSource: UpdateSource by lazy { UpdateOverride.source() ?: UpdateSource.production }
+    /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, a test server ([Emulator.updateSource]). */
+    private val updateSource: UpdateSource by lazy { Emulator.updateSource() ?: UpdateSource.production }
     private val updateServer by lazy { HttpUpdateServer(updateSource, log = debugLog(UPDATES_TAG)) }
 
     /** Whether a newer release exists, and the updater's state, which the Piano tab shows. */
@@ -576,18 +528,12 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * Debug builds on an emulator only: the fake firmware update `debug.stevenpiano.fakeota` names
-     * (its release, its image, RFC 8032's test key); null everywhere else.
-     */
-    private val fakeOta: FakeOta? by lazy { FakeOta.fromProperty() }
-
-    /**
      * The piano's firmware updates over the Bluetooth link (v1.6 — M21): its signed releases from
      * the firmware repository, checked against the author's key; on the emulator with a fake
-     * scenario, the scenario's release and the test key.
+     * scenario, the scenario's release and the test key ([Emulator.firmware]).
      */
     val firmwareUpdater: FirmwareUpdater by lazy {
-        val fake = fakeOta
+        val fake = Emulator.firmware()
         FirmwareUpdater(
             link = stevenLink,
             pianoState = pianoSettings.state,
@@ -599,8 +545,8 @@ class AppGraph(private val app: Application) {
 
                 override suspend fun stopForUpdate(timeoutMs: Long): Boolean = player.stopQuietly(timeoutMs)
             },
-            server = if (fake != null) FakeFirmwareServer(FakeOta::fromProperty) else HttpUpdateServer(UpdateSource.firmware, log = debugLog(FIRMWARE_TAG)),
-            publicKey = if (fake != null) FirmwareKeys.rfc8032Test else FirmwareKeys.author,
+            server = fake?.server ?: HttpUpdateServer(UpdateSource.firmware, log = debugLog(FIRMWARE_TAG)),
+            publicKey = fake?.publicKey ?: FirmwareKeys.author,
             appVersionCode = BuildConfig.VERSION_CODE,
             platformEd25519 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,   // asked first where it has Ed25519; Android 14 has none
             online = network.online,
@@ -648,12 +594,12 @@ class AppGraph(private val app: Application) {
 
     /**
      * Studio (its own tab since v1.12 — M30; a Piano page from v1.7 — M23): the models (downloaded on demand from the release tagged
-     * `models`, pinned by hash; on the emulator in debug builds, the server [ModelsOverride] names), the
+     * `models`, pinned by hash; on the emulator in debug builds, a server on the Mac: [Emulator.modelsSource]), the
      * jobs (one at a time on [studioThread], a partial wake lock around each, the foreground service
      * following them), and what a transcription leaves: a piece that waits for Keep or Discard.
      */
     val studio: Studio by lazy {
-        val source = ModelsOverride.source() ?: UpdateSource.models
+        val source = Emulator.modelsSource() ?: UpdateSource.models
         val server = HttpUpdateServer(source, log = debugLog(STUDIO_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         val models = ModelStore(File(app.filesDir, MODELS_DIR))
         val library = studioLibrary
@@ -724,10 +670,6 @@ class AppGraph(private val app: Application) {
             override suspend fun discard(pieceId: Long) = studioReview.discard(pieceId)
 
             override suspend fun setCover(pieceId: Long, png: ByteArray): Boolean = studioLibrary.setCover(pieceId, png)
-
-            override suspend fun withoutCover(): List<Long> = library.recordingsWithoutCover()
-
-            override suspend fun notes(pieceId: Long): NoteList = library.load(pieceId).midi.notes
         }
         RecordingSession(
             recorder,
@@ -771,11 +713,8 @@ class AppGraph(private val app: Application) {
         File("/proc/self/status").readLines().firstOrNull { it.startsWith("VmHWM:") }?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()
     }.getOrNull() ?: -1L
 
-    /**
-     * The schedules table and its one exact alarm (v1.20 — M54: the quiet times' blocks alone; timed plays were removed),
-     * each save of the quiet times one transaction.
-     */
-    val schedules: Schedules by lazy { Schedules(app, this, database.schedules()) { block -> database.withTransaction { block() } } }
+    /** The schedules table (v1.20 — M54: the quiet times' blocks alone; timed plays were removed), each save of the quiet times one transaction. */
+    val schedules: Schedules by lazy { Schedules(this, database.schedules()) { block -> database.withTransaction { block() } } }
 
     /**
      * Quiet times' gate (Piano › Quiet times, v1.20 — M54): whether a block is on now and whether Play anyway lifted it;
@@ -902,14 +841,9 @@ class AppGraph(private val app: Application) {
             runCatching { LibraryPack.sweep(File(app.cacheDir, LibraryPack.CACHE_DIR), before = startedAt) }
             latestCrash.value = runCatching { crashReports.latestAt() }.getOrNull()
         }
-        // First, once, uploads imported before 1.10.1 become playlists, their artists filled (v1.10.1 — M28, D4). Then the
-        // built-in playlists follow the library: now (the first query opens the database), and two seconds after a run of
-        // renames ends (imports refresh them from ImportService). Then artwork for the artists the repair named.
-        appScope.launch {
-            val named = repairUploadsOnce()
-            refreshBuiltIns()
-            if (named && settingsRepository.settings.first().fetchArtworkAutomatically) artwork.requestDue(force = false)
-        }
+        // The built-in playlists follow the library: now (the first query opens the database), and two seconds after a run
+        // of renames ends (imports refresh them from ImportService).
+        appScope.launch { refreshBuiltIns() }
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         pianoSettings.start()
         appScope.launch {
@@ -959,10 +893,21 @@ class AppGraph(private val app: Application) {
         startSystemSamples()
         web.start()
         firmwareUpdater.start()
-        schedules.start()
         // At a quiet time's start anything playing stops, with the stop sequence; on a start inside one too (v1.20 — M54).
         // Not while the piano's firmware is updated: the updater stopped the player first, and the link is its.
         quiet.start(appScope) { if (!player.locked) player.stop() }
+        // A clock or time zone changed by hand moves the blocks' edges: the gate weighs the quiet again at once (v1.24 — M57).
+        ContextCompat.registerReceiver(
+            app,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) = quiet.clockChanged()
+            },
+            IntentFilter().apply {
+                addAction(Intent.ACTION_TIME_CHANGED)
+                addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         studio.start()
         followListening()   // v1.23 — M55
         appScope.launch {
@@ -973,10 +918,7 @@ class AppGraph(private val app: Application) {
             restoreInstrument(s)
             followLive()
             followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
-            launch {
-                recording.recoverPending()   // takes a crash left behind (v1.11 — M29), beside the rest
-                recording.drawMissingCovers()   // then a cover for each recording made before 1.14 (v1.14 — M37)
-            }
+            launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
             // connects with the same switch; by cable it needs no permission.
             if (s.autoConnect) {

@@ -47,6 +47,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
+import androidx.core.graphics.createBitmap
 
 /**
  * Artwork for the whole app, one per process in `AppGraph`: composers' portraits and blurbs and
@@ -375,7 +376,7 @@ class ArtworkRepository(
             bitmaps.get(key)?.let { return it }   // drawn while this one waited its turn
             withContext(io) { rollCardFiles.read(pieceId) } ?: drawRollCard(pieceId)?.also { withContext(io) { rollCardFiles.write(pieceId, it) } }
         } ?: return null
-        return Bitmap.createBitmap(RollCard.SIZE, RollCard.SIZE, Bitmap.Config.ALPHA_8)
+        return createBitmap(RollCard.SIZE, RollCard.SIZE, Bitmap.Config.ALPHA_8)
             .apply { copyPixelsFromBuffer(ByteBuffer.wrap(alpha)) }
             .also { bitmaps.put(key, it) }
     }

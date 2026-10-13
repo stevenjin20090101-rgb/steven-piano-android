@@ -13,7 +13,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -26,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import dev.stevenjin.stevenpiano.net.AppleUrls
 import dev.stevenjin.stevenpiano.net.WikipediaUrls
 
@@ -71,7 +71,7 @@ private fun BrowserLink(label: String, link: String, modifier: Modifier) {
 
 /** Sends [link] to a browser; false when none could take it. */
 private fun openInBrowser(context: Context, link: String): Boolean {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
+    val intent = Intent(Intent.ACTION_VIEW, link.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
     if (context.findActivity() == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     return runCatching { context.startActivity(intent) }.isSuccess
 }

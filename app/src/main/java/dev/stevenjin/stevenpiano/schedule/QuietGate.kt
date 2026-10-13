@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import java.time.ZoneId
@@ -37,10 +38,11 @@ data class QuietNow(val now: Boolean = false, val until: Long? = null, val overr
  * only: a block that begins after it is quiet again, and the lift goes with the quiet.
  *
  * From [start] it follows the rows and the clock on the main thread: [state] is worked out again whenever the rows
- * change, at every block's start and end (and at least once a minute, for a clock changed by hand), and as a block
- * begins without a lift [hush] runs, once a block (the player's stop sequence: at a block's start anything playing
- * stops). The alarm planner's alarm at a block's start calls [check] too, so a sleeping tablet stops on the minute; and
- * a block on as the app starts stops it at once.
+ * change, at every block's start and end (and at least once a minute), and as a block begins without a lift [hush]
+ * runs, once a block (the player's stop sequence: at a block's start anything playing stops). A block on as the app
+ * starts stops it at once; a clock or time zone changed by hand ([clockChanged], v1.24 — M57) is weighed at once, and
+ * the wait to the next edge is planned again from the new time. Anything playing holds a wake lock, so the tablet is
+ * awake to stop it.
  */
 class QuietGate(
     private val rows: StateFlow<List<ScheduleEntity>?>,
@@ -57,6 +59,9 @@ class QuietGate(
     private var hushedFor: Long? = null
     private var hush: () -> Unit = {}
     private var started = false
+
+    /** Bumped by [clockChanged]: [start]'s wait is planned again from the new time. */
+    private val clockChanges = MutableStateFlow(0)
 
     private val _state = MutableStateFlow(QuietNow())
 
@@ -89,7 +94,7 @@ class QuietGate(
         started = true
         hush = onHush
         scope.launch {
-            rows.filterNotNull().collectLatest {
+            combine(rows.filterNotNull(), clockChanges) { list, _ -> list }.collectLatest {
                 while (true) {
                     check()
                     delay(untilChange())
@@ -99,11 +104,21 @@ class QuietGate(
     }
 
     /**
-     * Works the quiet out at [at] (now; an alarm passes its own minute, never earlier than now) and keeps it in [state];
-     * a block on without a lift whose start it has not stopped for yet stops the player ([start]'s hush). Main thread.
+     * The tablet's clock or time zone changed (Android's TIME_SET or TIMEZONE_CHANGED, v1.24 — M57): the quiet is worked
+     * out again now ([check]: a jump into a block stops the player, once), and [start]'s wait is planned again from the
+     * new time. Main thread.
      */
-    fun check(at: Long = clock()) {
-        val weighed = weigh(maxOf(at, clock()))
+    fun clockChanged() {
+        check()
+        clockChanges.value++
+    }
+
+    /**
+     * Works the quiet out now and keeps it in [state]; a block on without a lift whose start it has not stopped for yet
+     * stops the player ([start]'s hush). Main thread.
+     */
+    fun check() {
+        val weighed = weigh(clock())
         _state.value = weighed.quiet
         val since = weighed.since ?: return
         if (weighed.quiet.holds && since != hushedFor) {

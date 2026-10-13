@@ -27,10 +27,10 @@ import java.util.Base64
 class PinnedKeyTest {
     @Test
     fun `the embedded key's fingerprint is the project's`() {
-        assertEquals("eab16a502f679465", FirmwareKeys.fingerprint(FirmwareKeys.author))
-        assertEquals(FirmwareKeys.AUTHOR_FINGERPRINT, FirmwareKeys.fingerprint(FirmwareKeys.author))
-        assertTrue("Provenance names the same fingerprint", Provenance.TAG.endsWith("fp ${FirmwareKeys.AUTHOR_FINGERPRINT}"))
-        assertTrue(Provenance.text.endsWith(FirmwareKeys.AUTHOR_FINGERPRINT))
+        val project = "eab16a502f679465"   // PROVENANCE.md's, and every source file's header
+        assertEquals(project, FirmwareKeys.fingerprint(FirmwareKeys.author))
+        assertTrue("Provenance names the same fingerprint", Provenance.TAG.endsWith("fp $project"))
+        assertTrue(Provenance.text.endsWith(project))
     }
 
     @Test

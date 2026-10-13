@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.SystemProperty
 
 // Liquid Glass across the functional layer (DESIGN.md › v1.9, after v1.5 — M16): two layers only. The
 // content (rows, cards, tiles, the roll, the score, the art, the resting screen) is never glass; the
@@ -126,10 +127,6 @@ fun rememberGlassAccessibility(): GlassAccessibility {
     return GlassAccessibility(reducedTransparency = highContrastText || DebugNoBlur.on, increasedContrast = highContrastText)
 }
 
-/** Whether the glass draws as today's solid surface ([rememberGlassAccessibility]). */
-@Composable
-fun rememberReducedTransparency(): Boolean = rememberGlassAccessibility().reducedTransparency
-
 /** Whether this device can blur what lies under the glass (RenderEffect, API 31 and up). */
 val GlassCanBlur: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -144,9 +141,7 @@ private object DebugNoBlur {
 
     val on: Boolean by lazy {
         if (!BuildConfig.DEBUG) return@lazy false
-        val value = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim().lowercase() }
-        }.getOrDefault("")
+        val value = SystemProperty.read(PROPERTY).lowercase()
         value.isNotEmpty() && value != "0" && value != "false" && value != "no"
     }
 }

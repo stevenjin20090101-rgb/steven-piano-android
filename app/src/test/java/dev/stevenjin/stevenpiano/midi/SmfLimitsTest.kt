@@ -149,7 +149,7 @@ class SmfLimitsTest {
     @Test
     fun `the event list reads by index without objects, and as a list of events`() {
         val events = listOf(TimedEvent(0, 0x90, 60, 80), TimedEvent(500, 0x80, 60, 0), TimedEvent(500, 0xB3, 64, 127))
-        val list = EventList.of(events)
+        val list = EventList(LongArray(3) { events[it].atMicros }, IntArray(3) { MidiBatch.pack(events[it].status, events[it].data1, events[it].data2) }, 3)
         assertEquals(events, list)
         assertEquals(500L, list.atMicros(2))
         assertEquals(0xB3, list.status(2))

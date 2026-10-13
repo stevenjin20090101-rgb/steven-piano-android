@@ -121,7 +121,6 @@ class PianoPagesTest {
             HubGroups.shown.map { group -> group.rows.map { (it as HubRow.Page).page.title } },
         )
         assertTrue("a group without rows still shows nothing", HubGroups.shown.none { it.rows.isEmpty() })
-        assertEquals("Sharing", HubGroups.groupOf(SettingsPage.Guests).title)
     }
 
     @Test

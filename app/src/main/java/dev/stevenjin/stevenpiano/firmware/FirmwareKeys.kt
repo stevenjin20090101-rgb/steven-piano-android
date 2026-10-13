@@ -35,9 +35,6 @@ object FirmwareKeys {
     fun fingerprint(key: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(key).joinToString("") { "%02x".format(it.toInt() and 0xFF) }.take(FINGERPRINT_DIGITS)
 
-    /** The fingerprint [author] has, the one the whole project carries. */
-    const val AUTHOR_FINGERPRINT = "eab16a502f679465"
-
     private const val FINGERPRINT_DIGITS = 16
 
     private val AUTHOR = bytes(

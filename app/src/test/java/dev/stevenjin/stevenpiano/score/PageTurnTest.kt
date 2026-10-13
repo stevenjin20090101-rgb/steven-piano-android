@@ -67,13 +67,6 @@ class PageTurnTest {
     }
 
     @Test
-    fun `visible systems are the pages' systems`() {
-        assertEquals(listOf(8..11, 4..7), PageTurn.visibleSystems(7, 20, 4, 2))
-        assertEquals(listOf(8..9, 4..7), PageTurn.visibleSystems(9, 10, 4, 2))
-        assertEquals(listOf(0..2, IntRange.EMPTY), PageTurn.visibleSystems(0, 3, 4, 2))
-    }
-
-    @Test
     fun `browsing shows a page and the one after, even pages on the left`() {
         assertEquals(listOf(2, 3), PageTurn.browsing(3, 5, 2).toList())
         assertEquals(listOf(4, -1), PageTurn.browsing(4, 5, 2).toList())

@@ -38,7 +38,7 @@ class SmfWriterTest {
         val piece = SmfParser.parse(bytes)
         assertEquals(0, piece.format)
         assertEquals(SmfWriter.PPQ, piece.ppq)
-        assertEquals("Clair de lune — étude", piece.sequenceName)
+        assertEquals("Clair de lune — étude", piece.sequenceNames.firstOrNull())
         assertEquals(listOf("Made in Studio · 28 Sept 2026"), piece.texts)
         assertEquals(emptyList<String>(), piece.warnings)
         assertEquals(notes.size, piece.noteCount)

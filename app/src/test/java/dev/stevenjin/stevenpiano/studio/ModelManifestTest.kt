@@ -208,13 +208,12 @@ class ModelManifestTest {
         for (model in ModelCatalogue.all) {
             assertEquals("${model.name}-v${model.version}.onnx", model.file)
             assertTrue(UpdateSource.models.allowsModel(model.url))
-            assertEquals(model, ModelCatalogue.named(model.name))
         }
-        assertNull(ModelCatalogue.named("aria"))
+        assertEquals("one name a model", ModelCatalogue.all.size, ModelCatalogue.all.map { it.name }.toSet().size)
         val piano = ModelCatalogue.pianoSound
         assertEquals("${piano.name}-v${piano.version}.sf2", piano.file)
         assertTrue(UpdateSource.models.allowsModel(piano.url, ".sf2"))
-        assertNull("the piano sound isn't one of Studio's models", ModelCatalogue.named(piano.name))
+        assertTrue("the piano sound isn't one of Studio's models", ModelCatalogue.all.none { it.name == piano.name })
         assertEquals(ModelCatalogue.all + piano, ModelCatalogue.kept)
     }
 }

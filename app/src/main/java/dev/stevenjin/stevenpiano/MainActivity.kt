@@ -15,8 +15,6 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.BadParcelableException
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.Choreographer
 import androidx.activity.ComponentActivity
@@ -39,10 +37,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
-import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
-import dev.stevenjin.stevenpiano.instruments.MidiDebugHooks
 import dev.stevenjin.stevenpiano.record.TakeEnd
 import dev.stevenjin.stevenpiano.service.ImportService
 import dev.stevenjin.stevenpiano.ui.AppFrame
@@ -218,9 +213,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun route(intent: Intent) {
         try {
-            emulatorSet(intent)
-            emulatorCrash(intent)
-            emulatorMidi(intent)
+            Emulator.onIntent(graph, intent)   // adb's hooks, debug builds on the emulator only
             val shared = sharedMidi(intent)
             if (shared.isNotEmpty()) {
                 pendingShare = shared
@@ -255,50 +248,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * The emulator only (a debug build with no piano, see [LoggingPianoLink]): `adb shell am start -n
-     * dev.stevenjin.stevenpiano/.MainActivity --es dev.stevenjin.stevenpiano.EMULATOR_SET "ledbright 300"`
-     * sets a value past the controls' ranges, so a refusal can be seen. Inert on a phone or tablet.
-     */
-    private fun emulatorSet(intent: Intent) {
-        if (!LoggingPianoLink.isWanted()) return
-        val line = stringExtra(intent, EXTRA_EMULATOR_SET)?.trim() ?: return
-        graph.pianoSettings.set(line.substringBefore(' '), line.substringAfter(' ', ""))
-    }
-
-    /**
-     * The emulator only (a debug build, as [emulatorSet]): `adb shell am start -n
-     * dev.stevenjin.stevenpiano/.MainActivity --ez dev.stevenjin.stevenpiano.EMULATOR_CRASH true`
-     * crashes the app on the main thread, outside [route]'s guard, so the crash handler, the crash
-     * report and the next launch's banner can be seen. Inert on a phone or tablet.
-     */
-    private fun emulatorCrash(intent: Intent) {
-        if (!LoggingPianoLink.isWanted() || !booleanExtra(intent, EXTRA_EMULATOR_CRASH)) return
-        Handler(Looper.getMainLooper()).post { throw IllegalStateException("A crash asked for on the emulator (debug build)") }
-    }
-
-    /**
-     * The emulator only (a debug build, as [emulatorSet]; v1.11 — M29): MIDI keyboards without a keyboard.
-     * `--es dev.stevenjin.stevenpiano.EMULATOR_MIDI "90 3C 64 80 3C 00"` plays those bytes (malformed ones
-     * too, as they are) from the emulated keyboard ([EmulatedMidiPorts]); `--ez …EMULATOR_MIDI_PLUG false`
-     * unplugs it and `true` plugs it in again; `--es …EMULATOR_MIDI_SERVICE "…"` plays bytes from the debug
-     * build's test device through Android's own MIDI service. Inert on a phone or tablet.
-     */
-    private fun emulatorMidi(intent: Intent) {
-        if (!EmulatedMidiPorts.isWanted()) return
-        stringExtra(intent, EXTRA_EMULATOR_MIDI)?.let { graph.emulatedMidi?.feed(EmulatedMidiPorts.hex(it)) }
-        stringExtra(intent, EXTRA_EMULATOR_MIDI_SERVICE)?.let { text -> MidiDebugHooks.testDeviceOutput?.invoke(EmulatedMidiPorts.hex(text)) }
-        if (intent.hasExtra(EXTRA_EMULATOR_MIDI_PLUG)) graph.emulatedMidi?.plug(booleanExtra(intent, EXTRA_EMULATOR_MIDI_PLUG))
-    }
-
     companion object {
         /** A [Route] path to open at, e.g. from the playback notification. */
         const val EXTRA_TAB = "dev.stevenjin.stevenpiano.TAB"
-        private const val EXTRA_EMULATOR_MIDI = "dev.stevenjin.stevenpiano.EMULATOR_MIDI"
-        private const val EXTRA_EMULATOR_MIDI_SERVICE = "dev.stevenjin.stevenpiano.EMULATOR_MIDI_SERVICE"
-        private const val EXTRA_EMULATOR_MIDI_PLUG = "dev.stevenjin.stevenpiano.EMULATOR_MIDI_PLUG"
-        private const val EXTRA_EMULATOR_SET = "dev.stevenjin.stevenpiano.EMULATOR_SET"
-        private const val EXTRA_EMULATOR_CRASH = "dev.stevenjin.stevenpiano.EMULATOR_CRASH"
         private const val TAG = "MainActivity"
         private const val STATE_SHARED = "dev.stevenjin.stevenpiano.state.SHARED"
 
@@ -331,13 +283,6 @@ private fun stringExtra(intent: Intent, name: String): String? = try {
     intent.getStringExtra(name)
 } catch (e: RuntimeException) {
     null
-}
-
-/** A boolean extra, false when the extras cannot be read. */
-private fun booleanExtra(intent: Intent, name: String): Boolean = try {
-    intent.getBooleanExtra(name, false)
-} catch (e: RuntimeException) {
-    false
 }
 
 /** Resumes at the next frame: called before the first one is drawn, after it. */

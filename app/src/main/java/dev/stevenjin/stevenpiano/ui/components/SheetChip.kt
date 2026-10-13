@@ -29,7 +29,7 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 
 /**
- * The app's chip on a sheet (the schedule editor, v1.6.2 — M19; the compose sheet, v1.7 — M24): the
+ * The app's chip on a sheet (the compose sheet, v1.7 — M24; the quiet times' editor, v1.20 — M54): the
  * chosen one carries a check (as the Piano tab's chip rows). On the sheet, which is the elevated tone
  * the chips are chosen in elsewhere, the chosen one takes the surface's tone inside a tertiary
  * hairline, as the web panel's chips do. TalkBack reads [description]. Pressed, it scales to 0.97 (v1.14 — motion).

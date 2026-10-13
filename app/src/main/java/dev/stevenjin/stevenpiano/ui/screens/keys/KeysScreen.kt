@@ -63,8 +63,8 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.LiveState
-import dev.stevenjin.stevenpiano.record.RecordingSession
 import dev.stevenjin.stevenpiano.record.RecordingState
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
@@ -128,12 +128,12 @@ fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
     val taking = recording is RecordingState.Recording
     val keepOn = (live.wanted && keyboard.connected) || taking
     // The take's time on the Record control, once a second while it runs.
-    var elapsed by remember { mutableStateOf(RecordingSession.clock(0L)) }
+    var elapsed by remember { mutableStateOf(Format.clock(0L)) }
     if (taking) {
         LaunchedEffect(recording) {
             while (true) {
                 val nanos = vm.elapsedNanos()
-                elapsed = RecordingSession.clock(nanos)
+                elapsed = Format.clock(nanos / 1_000_000_000L)
                 delay(1_000L - (nanos / 1_000_000L) % 1_000L)
             }
         }

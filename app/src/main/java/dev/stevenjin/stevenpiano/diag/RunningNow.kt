@@ -34,7 +34,6 @@ import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
 import dev.stevenjin.stevenpiano.update.UpdateState
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
-import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
 
@@ -214,7 +213,7 @@ object RunningNow {
                 line(listOfNotNull(ArtworkCopy.running(run), run.current)),
                 if (run.total > 0) fraction(run.done.toDouble() / run.total) else null,
             )
-            until != null -> Activity("covers", "Artwork", WAITING, "Apple asked to wait · covers again at ${clock(until, zone)}")
+            until != null -> Activity("covers", "Artwork", WAITING, "Apple asked to wait · covers again at ${Format.timeOfDay(until, zone, twoDigitHour = true)}")
             else -> Activity("covers", "Artwork", IDLE, "Nothing to fetch")
         }
     }
@@ -299,10 +298,4 @@ object RunningNow {
 
     /** 0–1, three decimals. */
     private fun fraction(value: Double): Double? = value.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0)?.let { Math.round(it * 1000) / 1000.0 }
-
-    /** "14:32" in [zone]. */
-    private fun clock(epochMs: Long, zone: ZoneId): String {
-        val at = Instant.ofEpochMilli(epochMs).atZone(zone)
-        return "%02d:%02d".format(Locale.ROOT, at.hour, at.minute)
-    }
 }

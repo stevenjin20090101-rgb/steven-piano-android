@@ -49,9 +49,6 @@ object HubGroups {
      */
     fun shown(midiPiano: Boolean): List<HubGroup> = if (midiPiano) shown.filter { it.title != PIANO } else shown
 
-    /** The group [page]'s row sits in. */
-    fun groupOf(page: SettingsPage): HubGroup = all.first { group -> group.rows.any { it == HubRow.Page(page) } }
-
     /** THE PIANO group's title. */
     const val PIANO = "The piano"
 

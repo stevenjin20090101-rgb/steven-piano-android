@@ -66,7 +66,6 @@ class ModelStoreTest {
         assertTrue(store.isInstalled(small))
         assertEquals(setOf("small"), store.refresh())
         assertEquals(setOf("small"), store.installed.value)
-        assertEquals(20_000L, store.sizeOnDisk())
     }
 
     @Test

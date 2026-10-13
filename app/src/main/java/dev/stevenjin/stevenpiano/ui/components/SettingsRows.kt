@@ -437,7 +437,7 @@ fun DisclosureRow(
         AnimatedVisibility(
             visible = open,
             enter = if (reduced) EnterTransition.None else expandVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeIn(tween(Motion.StandardMs)),
-            exit = if (reduced) ExitTransition.None else shrinkVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeOut(tween(Motion.FastMs)),
+            exit = if (reduced) ExitTransition.None else shrinkVertically(tween(Motion.StandardMs, easing = Motion.Standard)) + fadeOut(tween(Motion.QuickMs)),
             label = "disclosure",
         ) {
             Column(Modifier.fillMaxWidth()) { content() }
@@ -582,7 +582,7 @@ fun ReadingRow(label: String, shown: String, modifier: Modifier = Modifier, spok
 private fun LabelAndValue(label: String, value: String, modifier: Modifier = Modifier) {
     FlowRow(
         modifier.padding(vertical = 8.dp),
-        horizontalArrangement = ApartArrangement,
+        horizontalArrangement = Apart,
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
@@ -591,7 +591,7 @@ private fun LabelAndValue(label: String, value: String, modifier: Modifier = Mod
 }
 
 /** Items at the two ends of their line (one alone sits at the start), and at least 16 dp apart when they share it. */
-private object ApartArrangement : Arrangement.Horizontal {
+internal object Apart : Arrangement.Horizontal {
     override val spacing: Dp = 16.dp
 
     override fun Density.arrange(totalSize: Int, sizes: IntArray, layoutDirection: LayoutDirection, outPositions: IntArray) {

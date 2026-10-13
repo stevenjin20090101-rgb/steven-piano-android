@@ -76,7 +76,7 @@ class KeyboardGeometry(val width: Float, val height: Float, val visibleWhites: I
         fun clampFirst(first: Float, visibleWhites: Int): Float =
             first.coerceIn(0f, (KeyLayout.WHITE_KEYS - visibleWhites).coerceAtLeast(0).toFloat())
 
-        /** "C4", "F♯2": the name the octave labels and TalkBack use (middle C is C4). */
+        /** "C4", "F♯2": the app's one name for a key, as the octave labels, TalkBack and Test every key say it (middle C is C4). */
         fun name(key: Int): String = NAMES[key % 12] + (key / 12 - 1)
 
         private val WHITE_STEPS = intArrayOf(0, 2, 4, 5, 7, 9, 11)

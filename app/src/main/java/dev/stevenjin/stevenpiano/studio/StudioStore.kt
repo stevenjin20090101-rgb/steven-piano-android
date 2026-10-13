@@ -12,7 +12,6 @@ package dev.stevenjin.stevenpiano.studio
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -23,38 +22,25 @@ import java.io.IOException
 import java.util.Locale
 
 /**
- * The set of pieces waiting for Keep or Discard as the "studio" DataStore holds it (apps 1.7 to 1.11 kept every
- * waiting piece there; since 1.12 only the tablet's recordings, Studio's own pieces being their turns'), and
- * whether the one-off import into Studio's history has run.
+ * The set of pieces waiting for Keep or Discard as the "studio" DataStore holds it: since 1.12 the tablet's recordings,
+ * Studio's own pieces being their turns'.
  */
 interface WaitingSet {
     /** The set, or null when it can't be read (nothing is changed then). */
     suspend fun read(): Set<Long>?
 
-    suspend fun imported(): Boolean
-
-    /** [change] applied to the set, and [imported] set when given; false when it could not be written. */
-    suspend fun edit(imported: Boolean? = null, change: (Set<Long>) -> Set<Long>): Boolean
+    /** [change] applied to the set; false when it could not be written. */
+    suspend fun edit(change: (Set<Long>) -> Set<Long>): Boolean
 }
 
 /**
  * [ReviewStore] for 1.12 on (v1.12 — M30): a Studio piece waits while its turn in [generations] reads "made"
  * (the history is the one record of its Keep or Discard); any other piece (a recording) waits in [legacy], the
- * DataStore's set. A piece is either a turn's or not, so the two never speak of the same piece. The first start
- * after the upgrade imports the old set once: the turns the migration backfilled as kept for the pieces it named
- * go back to waiting, those ids leave the set, and a flag records it; if the set can't be read or written the
- * flag stays unset and the next start tries again.
+ * DataStore's set. A piece is either a turn's or not, so the two never speak of the same piece. (Apps 1.12 to 1.23
+ * also imported 1.11's set once at their first start; v1.24 — M57 dropped that.)
  */
 class RoomReview(private val generations: Generations, private val legacy: WaitingSet) : ReviewStore {
-    override suspend fun undecided(): Set<Long> {
-        val old = legacy.read()
-        if (old != null && !legacy.imported()) {
-            val studio = old.filter { generations.forPiece(it) != null }.toSet()
-            generations.reopen(studio)
-            legacy.edit(imported = true) { it - studio }
-        }
-        return generations.undecided().toSet() + (legacy.read() ?: emptySet())
-    }
+    override suspend fun undecided(): Set<Long> = generations.undecided().toSet() + (legacy.read() ?: emptySet())
 
     override suspend fun waiting(pieceId: Long) {
         if (generations.forPiece(pieceId) == null) legacy.edit { it + pieceId }
@@ -73,7 +59,7 @@ class RoomReview(private val generations: Generations, private val legacy: Waiti
 /** Studio's own small store, apart from the app's settings. */
 private val Context.studioStore: DataStore<Preferences> by preferencesDataStore(name = "studio")
 
-/** [WaitingSet] in the "studio" DataStore: the key "undecided" kept from 1.7, and the import's flag. */
+/** [WaitingSet] in the "studio" DataStore: the key "undecided" kept from 1.7. */
 class StoredWaiting(context: Context) : WaitingSet {
     private val store = context.applicationContext.studioStore
 
@@ -83,17 +69,10 @@ class StoredWaiting(context: Context) : WaitingSet {
         null
     }
 
-    override suspend fun imported(): Boolean = try {
-        store.data.first()[IMPORTED] == true
-    } catch (e: IOException) {
-        false
-    }
-
-    override suspend fun edit(imported: Boolean?, change: (Set<Long>) -> Set<Long>): Boolean = try {
+    override suspend fun edit(change: (Set<Long>) -> Set<Long>): Boolean = try {
         store.edit { prefs ->
             val now = prefs[UNDECIDED].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
             prefs[UNDECIDED] = change(now).map { it.toString() }.toSet()
-            if (imported != null) prefs[IMPORTED] = imported
         }
         true
     } catch (e: IOException) {
@@ -102,7 +81,6 @@ class StoredWaiting(context: Context) : WaitingSet {
 
     private companion object {
         val UNDECIDED = stringSetPreferencesKey("undecided")
-        val IMPORTED = booleanPreferencesKey("undecidedImported")
     }
 }
 

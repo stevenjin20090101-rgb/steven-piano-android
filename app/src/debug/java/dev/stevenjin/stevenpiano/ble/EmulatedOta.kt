@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
 /**
- * The emulated piano's update service ([LoggingPianoLink], debug builds on an emulator with a fake
+ * The emulated piano's update service ([EmulatedPianoLink], debug builds on an emulator with a fake
  * update scenario): an [OtaPiano] answers each frame, and its answers arrive on [handler]'s thread
  * after the pauses a real piano takes (READY [READY_MS] after BEGIN, each window's ACK [ACK_MS] after
  * its last frame: about 13 KB a second, 75 s for the worked example; VERIFYING, then OK

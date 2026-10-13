@@ -15,7 +15,6 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.LiveThru
 import dev.stevenjin.stevenpiano.instruments.LiveTrip
-import dev.stevenjin.stevenpiano.record.RecordingSession
 import dev.stevenjin.stevenpiano.record.TakeEnd
 import java.util.Locale
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
@@ -26,9 +25,6 @@ import dev.stevenjin.stevenpiano.instruments.MidiTransport
  * it was chosen); everything around it is the app's.
  */
 object InstrumentCopy {
-    /** The Piano tab's group. */
-    const val GROUP = "Instruments"
-
     const val NONE = "None"
 
     /** The Keyboard row's value: "None", "Roland FP-30X", or "Roland FP-30X · not connected". */
@@ -186,7 +182,7 @@ object InstrumentCopy {
 
     /** "0:42 · 318 notes" (one note: "1 note"), the length in tabular digits. */
     fun takeLine(durationMicros: Long, notes: Int): String =
-        "${RecordingSession.clock(durationMicros * 1000)} · " + String.format(Locale.ROOT, "%,d", notes) + if (notes == 1) " note" else " notes"
+        "${Format.clock(durationMicros / 1_000_000)} · " + String.format(Locale.ROOT, "%,d", notes) + if (notes == 1) " note" else " notes"
 
     /** Why a take stopped by itself, under the sheet's line; null when the person stopped it. */
     fun takeEnded(ended: TakeEnd): String? = when (ended) {

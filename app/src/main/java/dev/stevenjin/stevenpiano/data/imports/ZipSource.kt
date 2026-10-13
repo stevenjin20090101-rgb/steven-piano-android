@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.data.imports
 
+import android.annotation.SuppressLint
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -95,7 +96,12 @@ class ZipSource(private val file: File, private val deleteWhenClosed: Boolean = 
             return (resolver.openInputStream(uri) ?: throw FileNotFoundException("Can't open $uri")).use { copyToCache(it, cacheDir, declared) }
         }
 
-        /** [copyToCache] from an open stream whose size may be known ([declaredSize]). Plain java.io, so it is unit-tested. */
+        /**
+         * [copyToCache] from an open stream whose size may be known ([declaredSize]). Plain java.io, so it is unit-tested.
+         * The margin is a floor under a file of at most 64 MB, not an allocation: `usableSpace` is the question to ask (as
+         * the web panel's uploads ask it).
+         */
+        @SuppressLint("UsableSpace")
         fun copyToCache(
             input: InputStream,
             cacheDir: File,

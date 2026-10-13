@@ -13,7 +13,6 @@ import dev.stevenjin.stevenpiano.studio.StudioFixtures.amplitude
 import dev.stevenjin.stevenpiano.studio.StudioFixtures.sine
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -25,13 +24,25 @@ import kotlin.math.sqrt
  * output is the same whatever pieces the input comes in.
  */
 class ResampleTest {
+    /** [input] (mono, at [fromRate]) at [toRate], in one piece, as WavReader's [Resampler] makes it. */
+    private fun convert(input: FloatArray, fromRate: Int, toRate: Int): FloatArray {
+        val resampler = Resampler(fromRate, toRate)
+        val out = FloatBuilder(resampler.outputLength(input.size.toLong()).toInt() + 1)
+        resampler.push(input, input.size, out)
+        resampler.finish(out)
+        return out.toArray()
+    }
+
+    /** [input] at the transcription model's rate. */
+    private fun to16k(input: FloatArray, fromRate: Int) = convert(input, fromRate, Resample.MODEL_RATE)
+
     /** Away from the ends, where the filter reaches past the input. */
     private fun middle(out: FloatArray) = out.size / 8 until out.size * 7 / 8
 
     @Test
     fun `a 1 kHz tone at 44_1 kHz is a 1 kHz tone at 16 kHz, at its level`() {
         val input = sine(44_100, 1_000.0, 44_100)
-        val out = Resample.to16k(input, 44_100)
+        val out = to16k(input, 44_100)
         assertEquals("ceil(44,100 × 16,000 / 44,100)", 16_000, out.size)
         val range = middle(out)
         val level = amplitude(out, 16_000, 1_000.0, range.first, range.last + 1)
@@ -47,7 +58,7 @@ class ResampleTest {
     @Test
     fun `tones above 8 kHz are filtered out before they can fold back`() {
         for ((rate, tone) in listOf(44_100 to 10_000.0, 44_100 to 12_000.0, 48_000 to 9_000.0, 48_000 to 15_000.0, 22_050 to 10_000.0)) {
-            val out = Resample.to16k(sine(rate, tone, rate), rate)
+            val out = to16k(sine(rate, tone, rate), rate)
             val range = middle(out)
             val alias = 16_000 - tone   // where the tone would land if it folded
             val folded = amplitude(out, 16_000, alias, range.first, range.last + 1)
@@ -60,7 +71,7 @@ class ResampleTest {
     @Test
     fun `the pass band reaches past 6 kHz at every common rate`() {
         for (rate in listOf(22_050, 32_000, 44_100, 48_000, 96_000)) {
-            val out = Resample.to16k(sine(rate, 6_000.0, rate), rate)
+            val out = to16k(sine(rate, 6_000.0, rate), rate)
             val range = middle(out)
             assertEquals("6 kHz at $rate Hz", 0.5, amplitude(out, 16_000, 6_000.0, range.first, range.last + 1), 0.005)
         }
@@ -68,7 +79,7 @@ class ResampleTest {
 
     @Test
     fun `upsampling 8 kHz keeps the tone and leaves no image`() {
-        val out = Resample.to16k(sine(8_000, 1_000.0, 8_000), 8_000)
+        val out = to16k(sine(8_000, 1_000.0, 8_000), 8_000)
         assertEquals(16_000, out.size)
         val range = middle(out)
         assertEquals(0.5, amplitude(out, 16_000, 1_000.0, range.first, range.last + 1), 0.003)
@@ -76,15 +87,9 @@ class ResampleTest {
     }
 
     @Test
-    fun `16 kHz is left as it is`() {
-        val input = sine(16_000, 440.0, 1_000)
-        assertSame(input, Resample.to16k(input, 16_000))
-    }
-
-    @Test
     fun `the output is the same whatever pieces the input comes in`() {
         val input = FloatArray(30_000) { ((it * 7919) % 2001 - 1000) / 1000f }   // noise-like, every frequency
-        val whole = Resample.convert(input, 44_100, 16_000)
+        val whole = convert(input, 44_100, 16_000)
         for (piece in listOf(1, 7, 333, 4_096, 29_999)) {
             val resampler = Resampler(44_100, 16_000)
             val out = FloatBuilder(16)
@@ -102,8 +107,8 @@ class ResampleTest {
 
     @Test
     fun `silence stays silent and DC keeps its level`() {
-        assertTrue(Resample.to16k(FloatArray(5_000), 44_100).all { it == 0f })
-        val dc = Resample.to16k(FloatArray(44_100) { 0.25f }, 44_100)
+        assertTrue(to16k(FloatArray(5_000), 44_100).all { it == 0f })
+        val dc = to16k(FloatArray(44_100) { 0.25f }, 44_100)
         for (i in middle(dc)) assertTrue("sample $i: ${dc[i]}", abs(dc[i] - 0.25f) < 0.0005f)
     }
 }

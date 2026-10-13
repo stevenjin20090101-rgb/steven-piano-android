@@ -23,7 +23,6 @@ import dev.stevenjin.stevenpiano.data.db.PieceSummary
 import dev.stevenjin.stevenpiano.data.db.PlaylistEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistPieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
-import dev.stevenjin.stevenpiano.data.db.UploadRepair
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.imports.ImportBatch
@@ -61,7 +60,7 @@ class LibraryRepository(
     private val files: PieceFiles,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
-) : PieceSource, ImportStore, BuiltInStore, UploadRepair.Store {
+) : PieceSource, ImportStore, BuiltInStore {
     private val pieces = db.pieces()
     private val playlists = db.playlists()
     private val renamed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -104,9 +103,6 @@ class LibraryRepository(
 
     /** A playlist's first [limit] pieces in its order (v1.14 — M37): its cover, when the first has one of its own. */
     fun playlistHead(playlistId: Long, limit: Int = 4): Flow<List<PieceHead>> = pieces.head(playlistId, limit)
-
-    /** The recordings without a cover of their own (made before 1.14), newest first: the start's drawing (v1.14 — M37). */
-    suspend fun recordingsWithoutCover(): List<Long> = pieces.withoutCover(ComposerNames.RECORDED_LIVE_KEY)
 
     /**
      * The pieces whose album cover may be looked up, Modern first, newest first (v1.15 — M40; [PieceDao.coverCandidates]),
@@ -156,9 +152,6 @@ class LibraryRepository(
         if (composerKey.isBlank() || Genres.madeHere(composerKey)) return
         pieces.setComposerGenre(composerKey, genre)
     }
-
-    /** The first [limit] Modern pieces by title (v1.14 — M37): the guests' Modern list. */
-    suspend fun modernPieces(limit: Int): List<PieceEntity> = pieces.modern(limit)
 
     /**
      * New title and composer; the composer is read as a file name's is on import ([ComposerNames.resolve]:
@@ -370,19 +363,6 @@ class LibraryRepository(
             piece.collection?.let { name -> link(playlistId(name, imported = true), id) }
         }
         inserted
-    }
-
-    override suspend fun loosePieces(): List<PieceEntity> = pieces.loose(ComposerNames.STUDIO)
-
-    /**
-     * One transaction of the repair of older uploads (v1.10.1 — M28, D4): [renamed]'s names and keys (and
-     * nothing else of them), then [ids] after the last piece of the playlist called [name], found or made.
-     */
-    override suspend fun repairChunk(name: String, renamed: List<PieceEntity>, ids: List<Long>): ImportedPlaylist? = db.withTransaction {
-        renamed.forEach { pieces.setNames(it.id, it.title, it.composer, it.composerKey, it.composerShort, it.searchText, it.titleKey) }
-        val playlist = playlists.byId(playlistId(playlistName(name), imported = true)) ?: return@withTransaction null
-        ids.forEach { link(playlist.id, it) }
-        ImportedPlaylist(playlist.id, playlist.name)
     }
 
     /**

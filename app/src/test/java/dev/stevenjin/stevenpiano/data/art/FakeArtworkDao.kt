@@ -20,8 +20,6 @@ class FakeArtworkDao : ArtworkDao {
     private val table = MutableStateFlow<Map<String, ArtworkEntity>>(emptyMap())
     val rows: Map<String, ArtworkEntity> get() = table.value
 
-    override fun observe(key: String): Flow<ArtworkEntity?> = table.map { it[key] }
-
     override suspend fun get(key: String): ArtworkEntity? = table.value[key]
 
     override fun observeAll(): Flow<List<ArtworkEntity>> = table.map { it.values.toList() }

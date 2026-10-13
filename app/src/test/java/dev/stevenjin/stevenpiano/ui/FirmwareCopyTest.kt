@@ -18,7 +18,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Locale
 
-/** The Firmware page's words (DESIGN.md › v1.6 — M21). */
+/** The Firmware page's rules (DESIGN.md › v1.6 — M21): versions, sizes, percentages, time left, which line shows when. */
 class FirmwareCopyTest {
     private val manifest = FirmwareManifest.parse(OtaExample.manifestJson())
 
@@ -26,7 +26,6 @@ class FirmwareCopyTest {
     fun `the piano's version reads as release and build`() {
         assertEquals("2.0.0 · a1b2c3d", FirmwareCopy.version("2.0.0+a1b2c3d"))
         assertEquals("a version that isn't semver shows as it came", "emulator", FirmwareCopy.version("emulator"))
-        assertEquals("Unknown — this firmware has no version. Flash 2.0.0 over USB once.", FirmwareCopy.NO_VERSION)
     }
 
     @Test
@@ -43,14 +42,10 @@ class FirmwareCopyTest {
     }
 
     @Test
-    fun `the outcome and the check's line`() {
+    fun `the outcome, and which state has a line under the check`() {
         assertEquals("Updated to 2.1.0", FirmwareCopy.done("2.1.0", confirming = false))
         assertEquals("Updated to 2.1.0 · confirming…", FirmwareCopy.done("2.1.0", confirming = true))
-        assertEquals("Update the piano to 2.1.0", FirmwareCopy.update("2.1.0"))
         assertNull(FirmwareCopy.checkLine(FirmwareState.Idle))
-        assertEquals("Checking for piano updates…", FirmwareCopy.checkLine(FirmwareState.Checking))
-        assertEquals("The piano's firmware is up to date.", FirmwareCopy.checkLine(FirmwareState.UpToDate("2.1.0")))
-        assertEquals("Version 2.1.0 is available.", FirmwareCopy.checkLine(FirmwareState.Available(manifest)))
         assertEquals(
             FirmwareFailures.OFFLINE,
             FirmwareCopy.checkLine(FirmwareState.Failed(FirmwareFailures.OFFLINE, retryable = true, manifest = manifest, check = true)),
@@ -61,9 +56,6 @@ class FirmwareCopyTest {
     @Test
     fun `the notification's line follows the transfer, and is gone once it is over`() {
         assertEquals("Downloading · 0.4 MB", FirmwareCopy.progress(FirmwareState.Downloading(manifest, 400_000, 991_232)))
-        assertEquals("Checking the download…", FirmwareCopy.progress(FirmwareState.Verifying(manifest)))
-        assertEquals("The piano is checking the update…", FirmwareCopy.progress(FirmwareState.PianoVerifying(manifest)))
-        assertEquals("Restarting the piano…", FirmwareCopy.progress(FirmwareState.Restarting(manifest)))
         assertNull(FirmwareCopy.progress(FirmwareState.Done("2.1.0")))
         assertEquals(0.5f, FirmwareCopy.fraction(FirmwareState.Sending(manifest, 495_616, 991_232, 0))!!, 0.0001f)
         assertNull(FirmwareCopy.fraction(FirmwareState.Restarting(manifest)))

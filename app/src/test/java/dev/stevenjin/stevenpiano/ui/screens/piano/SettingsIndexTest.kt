@@ -79,8 +79,8 @@ class SettingsIndexTest {
         assertEquals("Velocity curve", first("VEL CUR").label)
         assertEquals("Velocity curve", first("  velocity   curve ").label)
         assertEquals("Tablet volume", first("tab vol").label)
-        assertEquals("Also on Wi-Fi", first("wifi").label)
-        assertEquals("Also on Wi-Fi", first("wi-fi").label)
+        assertEquals("Auto-connect on launch", first("autoconnect").label)
+        assertEquals("Auto-connect on launch", first("auto-connect").label)
         assertEquals("I²C errors", first("i2c").label)
         assertEquals("Half-pedalling", first("pédal half").label)
         assertEquals("Steven's library", first("stevens").label)
@@ -133,7 +133,12 @@ class SettingsIndexTest {
 
     @Test
     fun `the new notes are one plain line each, sentence case, under 60 characters`() {
-        for (note in SettingNotes.all) {
+        // Every note: the piano's table and each constant of SettingNotes (a const val is a static String field).
+        val constants = SettingNotes::class.java.declaredFields
+            .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+            .map { it.get(null) as String }
+        assertTrue("the notes are found", constants.size >= 20)
+        for (note in SettingNotes.piano.values + constants) {
             assertTrue(note, note.length < 60)
             assertTrue(note, note.first().isUpperCase())
             assertFalse(note, note.endsWith("."))

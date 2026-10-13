@@ -119,9 +119,6 @@ class UpdateSource private constructor(
         return allowsLibraryFile(url)
     }
 
-    /** Whether this is the production source (the only one release builds have). */
-    val isProduction: Boolean get() = origin == null
-
     companion object {
         const val REPOSITORY = "stevenjin20090101-rgb/steven-piano-android"
         const val MANIFEST_HOST = "raw.githubusercontent.com"

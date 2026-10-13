@@ -87,6 +87,9 @@ class SamplerTest {
         }
     }
 
+    /** The first control token: the control block (anticipated events) and then the special tokens follow REST. */
+    private val controls = Amt.REST + 1
+
     /** Ten events, times 0–360 (the current time 360), keys 60–69. */
     private val seed = List(10) { AmtEvent(it * 40, 30, 60 + it) }
 
@@ -95,14 +98,14 @@ class SamplerTest {
         // Everything it must not have is likelier: controls, specials, other instruments, the past, a rest out of its slot.
         val model = ScriptedModel { _ ->
             logits(0f).apply {
-                fill(100f, Amt.CONTROL_OFFSET, Amt.VOCAB_SIZE)
+                fill(100f, controls, Amt.VOCAB_SIZE)
                 fill(50f, Amt.PIANO_LAST + 1, Amt.REST)
                 fill(60f, 0, 360)
                 this[Amt.REST] = 30f
                 this[11_060] = 35f
             }
         }
-        val out = Sampler(model).generate(seed, SamplingSettings.Greedy, budget = 30)
+        val out = Sampler(model).generate(seed, SamplingSettings(0.0, 1.0), budget = 30)
         assertEquals(30, out.tokens.size)
         assertEquals(Stop.Budget, out.stop)
         assertTrue("the first time allowed: now", out.events.all { it.time == 360 })
@@ -118,7 +121,7 @@ class SamplerTest {
         for (settings in listOf(SamplingSettings(1.0, 1.0), SamplingSettings(1.15, 0.98), SamplingSettings(0.8, 0.9))) {
             val model = ScriptedModel { context ->
                 logits(0f).apply {
-                    fill(100f, Amt.CONTROL_OFFSET, Amt.VOCAB_SIZE)
+                    fill(100f, controls, Amt.VOCAB_SIZE)
                     fill(50f, Amt.PIANO_LAST + 1, Amt.REST)
                     this[Amt.REST] = if (ScriptedModel.slot(context) == 2) 1f else 80f
                     fill(60f, 0, ScriptedModel.lastTime(context))
@@ -151,7 +154,7 @@ class SamplerTest {
         val script: (List<Int>) -> FloatArray = { context ->
             logits(0f).apply { if (ScriptedModel.slot(context) == 0 && context.size >= 40) this[Amt.SEPARATOR] = 50f }
         }
-        val kept = Sampler(ScriptedModel(script)).generate(seed, SamplingSettings.Greedy, budget = 90)
+        val kept = Sampler(ScriptedModel(script)).generate(seed, SamplingSettings(0.0, 1.0), budget = 90)
         assertEquals(Stop.Budget, kept.stop)
         assertEquals(90, kept.tokens.size)
         val ended = Sampler(ScriptedModel(script)).generate(seed, SamplingSettings(0.0, 1.0, allowEnd = true), budget = 90)
@@ -189,7 +192,7 @@ class SamplerTest {
             this[11_060] = Float.NaN
             this[11_067] = Float.POSITIVE_INFINITY
         }
-        assertEquals(11_062, sampler.pick(tie, tokens, tokens.size, SamplingSettings.Greedy))
+        assertEquals(11_062, sampler.pick(tie, tokens, tokens.size, SamplingSettings(0.0, 1.0)))
         assertEquals(setOf(11_062, 11_064), List(2_000) { sampler.pick(tie, tokens, tokens.size, SamplingSettings(1.0, 0.9)) }.toSet())
         try {
             sampler.pick(logits(), tokens, tokens.size, SamplingSettings(1.0, 0.9))
@@ -214,7 +217,7 @@ class SamplerTest {
             }
         }
         val threeSixties = listOf(AmtEvent(0, 20, 60), AmtEvent(10, 20, 60), AmtEvent(20, 20, 60))
-        val out = Sampler(model).generate(threeSixties, SamplingSettings.Greedy, budget = 36)
+        val out = Sampler(model).generate(threeSixties, SamplingSettings(0.0, 1.0), budget = 36)
         assertEquals(listOf(60, 64, 60, 60, 60, 60, 64, 60, 60, 60, 60, 64), out.events.map { it.pitch })
         assertEquals((1..12).map { 20 + 15 * it }, out.events.map { it.time })
     }
@@ -240,7 +243,7 @@ class SamplerTest {
                 }
             }
         }
-        val out = Sampler(model).generate(listOf(AmtEvent(0, 30, 60)), SamplingSettings.Greedy, budget = 900)
+        val out = Sampler(model).generate(listOf(AmtEvent(0, 30, 60)), SamplingSettings(0.0, 1.0), budget = 900)
         val events = out.events
         assertEquals(300, events.size)
         val struck = HashMap<Int, Int>()
@@ -264,10 +267,10 @@ class SamplerTest {
     fun `the window slides before it is full, to the last 170 events with their times from the earliest`() {
         val model = steady(gap = 7, duration = 30, notes = 12)
         val seedEvents = List(10) { AmtEvent(1_000 + 7 * it, 30, 60) }
-        val out = Sampler(model).generate(seedEvents, SamplingSettings.Greedy, budget = 3_000)
+        val out = Sampler(model).generate(seedEvents, SamplingSettings(0.0, 1.0), budget = 3_000)
         assertEquals(1_000, out.events.size)
         assertEquals("times carry on across every slide", (1..1_000).map { 1_063 + 7 * it }, out.events.map { it.time })
-        assertArrayEquals("the seed, from its earliest time", AmtTokenizer.prompt(AmtTokenizer.translate(seedEvents, -1_000)), model.prefills.first())
+        assertArrayEquals("the seed, from its earliest time", AmtTokenizer.prompt(seedEvents.map { it.copy(time = it.time - 1_000) }), model.prefills.first())
         assertTrue(out.slides >= 4)
         assertEquals(out.slides + 1, model.prefills.size)
         val all = seedEvents + out.events
@@ -283,7 +286,7 @@ class SamplerTest {
     @Test
     fun `sparse music slides before its times pass 9,999, keeping the last 50 s`() {
         val model = steady(gap = 900, duration = 100, notes = 5)
-        val out = Sampler(model).generate(listOf(AmtEvent(0, 100, 60)), SamplingSettings.Greedy, budget = 90)
+        val out = Sampler(model).generate(listOf(AmtEvent(0, 100, 60)), SamplingSettings(0.0, 1.0), budget = 90)
         assertEquals(30, out.events.size)
         assertEquals((1..30).map { 900 * it }, out.events.map { it.time })
         assertTrue(out.slides >= 2)
@@ -296,7 +299,7 @@ class SamplerTest {
     @Test
     fun `onEvent hears every whole event once it is written, in order, with the tokens made and how far along (v1_12)`() {
         val heard = ArrayList<Triple<AmtEvent, Int, Float>>()
-        val out = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 3_000, endTime = 5_360, onEvent = { e, made, f -> heard += Triple(e, made, f) })
+        val out = Sampler(steady()).generate(seed, SamplingSettings(0.0, 1.0), budget = 3_000, endTime = 5_360, onEvent = { e, made, f -> heard += Triple(e, made, f) })
         assertEquals("each whole event once, in order", out.events, heard.map { it.first })
         assertEquals("after its note token", (1..out.events.size).map { it * 3 }, heard.map { it.second })
         val start = AmtTokenizer.maxTime(seed)
@@ -307,14 +310,14 @@ class SamplerTest {
         assertTrue("how far along never goes back", heard.zipWithNext().all { (a, b) -> b.third >= a.third })
         // A partial event at the budget is never heard.
         val partial = ArrayList<AmtEvent>()
-        val cut = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 250, onEvent = { e, _, _ -> partial += e })
+        val cut = Sampler(steady()).generate(seed, SamplingSettings(0.0, 1.0), budget = 250, onEvent = { e, _, _ -> partial += e })
         assertEquals(cut.events, partial)
     }
 
     @Test
     fun `the budget, the end time, progress every 100 tokens, a cancel and the memory guard`() {
         val heard = ArrayList<Pair<Int, Float>>()
-        val partial = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 250) { made, fraction -> heard += made to fraction }
+        val partial = Sampler(steady()).generate(seed, SamplingSettings(0.0, 1.0), budget = 250) { made, fraction -> heard += made to fraction }
         assertEquals(250, partial.tokens.size)
         assertEquals("a last partial event isn't one", 83, partial.events.size)
         assertEquals("the budget's share, then done", listOf(100 to 0.4f, 200 to 0.8f, 250 to 1f), heard)
@@ -322,14 +325,14 @@ class SamplerTest {
 
         // With an end time, the music's share written counts when it is the larger: 25 ticks an event from 360 to 5,360.
         val far = ArrayList<Pair<Int, Float>>()
-        val timed = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 3_000, endTime = 5_360) { made, fraction -> far += made to fraction }
+        val timed = Sampler(steady()).generate(seed, SamplingSettings(0.0, 1.0), budget = 3_000, endTime = 5_360) { made, fraction -> far += made to fraction }
         assertEquals(Stop.EndTime, timed.stop)
         assertEquals(listOf(100, 200, 300, 400, 500, 597), far.map { it.first })
         // At token 300 the 100th event's note is being written: the 99th event's time is the latest (2,835).
         val expected = listOf(0.165f, 0.33f, 0.495f, 0.665f, 0.83f, 1f)
         for ((got, want) in far.map { it.second }.zip(expected)) assertEquals(want, got, 1e-6f)
 
-        val ended = Sampler(steady()).generate(seed, SamplingSettings.Greedy, budget = 3_000, endTime = 1_000)
+        val ended = Sampler(steady()).generate(seed, SamplingSettings(0.0, 1.0), budget = 3_000, endTime = 1_000)
         assertEquals(Stop.EndTime, ended.stop)
         assertEquals("nothing at or past the end", (1..25).map { 360 + 25 * it }, ended.events.map { it.time })
         assertEquals(75, ended.tokens.size)
@@ -337,7 +340,7 @@ class SamplerTest {
         var asked = 0
         val model = steady()
         try {
-            Sampler(model, cancelled = { ++asked > 50 }).generate(seed, SamplingSettings.Greedy, budget = 3_000)
+            Sampler(model, cancelled = { ++asked > 50 }).generate(seed, SamplingSettings(0.0, 1.0), budget = 3_000)
             fail("not cancelled")
         } catch (e: CancellationException) {
             assertEquals("asked before the prefill and before each token", 51, asked)
@@ -345,7 +348,7 @@ class SamplerTest {
         }
         var checks = 0
         try {
-            Sampler(steady(), memoryHolds = { ++checks < 3 }).generate(seed, SamplingSettings.Greedy, budget = 3_000)
+            Sampler(steady(), memoryHolds = { ++checks < 3 }).generate(seed, SamplingSettings(0.0, 1.0), budget = 3_000)
             fail("not stopped")
         } catch (e: StudioFailure) {
             assertEquals(ComposeFailures.RAN_OUT, e.message)
@@ -355,7 +358,7 @@ class SamplerTest {
 
     @Test
     fun `a prompt carries its seed, sampling, budget and end time`() {
-        val prompt = Prompt(seed, 360, 700, 60, SamplingSettings.Greedy, Mood.Calm, MusicKey.C, 120, 0, 1.0, "Test")
+        val prompt = Prompt(seed, 360, 700, 60, SamplingSettings(0.0, 1.0), Mood.Calm, MusicKey.C, 120, 0, 1.0, "Test")
         val model = steady(gap = 50)
         val out = Sampler(model).generate(prompt)
         assertArrayEquals(prompt.tokens, model.prefills.single())

@@ -162,12 +162,12 @@ class PromptBuilderTest {
     fun `a seed starts at its first note, stays on the piano's keys, and one without notes is refused`() {
         val late = midi(Triple(2_880L, 480L, 60), Triple(3_360L, 480L, 64))
         val prompt = PromptBuilder.build(SeedPiece("Late", null, late), ComposeRequest())
-        assertEquals(listOf(AmtEvent(0, 50, 60), AmtEvent(50, 50, 64)), AmtTokenizer.unpad(prompt.events))
+        assertEquals(listOf(AmtEvent(0, 50, 60), AmtEvent(50, 50, 64)), prompt.events.filterNot { it.isRest })
         assertEquals("Late", prompt.mannerOf)
         // Keys off the piano fold by octaves; two that land on one key at one time are one note.
         val wide = midi(Triple(0L, 480L, 20), Triple(0L, 480L, 32), Triple(480L, 480L, 110), Triple(960L, 480L, 60))
         val folded = PromptBuilder.build(SeedPiece("Wide", "", wide), ComposeRequest())
-        assertEquals(listOf(32, 98, 60), AmtTokenizer.unpad(folded.events).map { it.pitch })
+        assertEquals(listOf(32, 98, 60), folded.events.filterNot { it.isRest }.map { it.pitch })
         assertEquals("Wide", folded.mannerOf)
         for (empty in listOf(midi(), SmfParser.parse(SmfBuilder(format = 0).track { noteOn(0, 36, channel = 9); noteOff(100, 36, channel = 9) }.build()))) {
             try {

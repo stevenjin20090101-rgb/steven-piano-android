@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.firmware
 
+import dev.stevenjin.stevenpiano.update.ManifestJson
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import org.json.JSONException
 import org.json.JSONObject
@@ -73,6 +74,9 @@ data class FirmwareManifest(
     fun needsNewerApp(appVersionCode: Int): Boolean = minAppVersionCode > appVersionCode
 
     companion object {
+        /** Its fields, read as every manifest's are ([ManifestJson]). */
+        private val fields = ManifestJson(::InvalidFirmwareManifest)
+
         /** A manifest is a few hundred bytes; the HTTP client reads 64 KB at most. */
         const val MAX_NOTES = 1_000
 
@@ -98,21 +102,21 @@ data class FirmwareManifest(
             } catch (e: StackOverflowError) {
                 throw InvalidFirmwareManifest("nested too deeply")
             }
-            val version = string(json, "version")
+            val version = fields.string(json, "version")
             if (!VERSION.matches(version) || version.toByteArray(Charsets.UTF_8).size > MAX_VERSION_BYTES || FirmwareVersion.parse(version) == null) {
                 throw InvalidFirmwareManifest("version")
             }
-            val build = string(json, "build")
+            val build = fields.string(json, "build")
             if (!BUILD.matches(build)) throw InvalidFirmwareManifest("build")
-            val binUrl = string(json, "binUrl")
+            val binUrl = fields.string(json, "binUrl")
             if (!UpdateSource.allowsFirmwareFile(binUrl)) throw InvalidFirmwareManifest("binUrl")
-            val sizeBytes = integer(json, "sizeBytes", 1L..UpdateSource.MAX_FIRMWARE_BYTES)
-            val sha256 = string(json, "sha256")
+            val sizeBytes = fields.integer(json, "sizeBytes", 1L..UpdateSource.MAX_FIRMWARE_BYTES)
+            val sha256 = fields.string(json, "sha256")
             if (!SHA256.matches(sha256)) throw InvalidFirmwareManifest("sha256")
-            val sig = string(json, "sig")
+            val sig = fields.string(json, "sig")
             if (sig.length != SIGNATURE_CHARS || decoded(sig)?.size != Ed25519.SIGNATURE_BYTES) throw InvalidFirmwareManifest("sig")
-            val minApp = integer(json, "minAppVersionCode", 1L..MAX_VERSION_CODE).toInt()
-            val notes = if (json.has("notes")) string(json, "notes", allowEmpty = true) else ""
+            val minApp = fields.integer(json, "minAppVersionCode", 1L..MAX_VERSION_CODE).toInt()
+            val notes = if (json.has("notes")) fields.string(json, "notes", allowEmpty = true) else ""
             val usbOnly = json.opt("usbOnly") as? Boolean ?: throw InvalidFirmwareManifest("usbOnly")
             return FirmwareManifest(
                 version = version,
@@ -122,7 +126,7 @@ data class FirmwareManifest(
                 sha256 = sha256.lowercase(Locale.ROOT),
                 sig = sig,
                 minAppVersionCode = minApp,
-                notes = cleanNotes(notes),
+                notes = ManifestJson.plain(notes, MAX_NOTES),
                 usbOnly = usbOnly,
             )
         }
@@ -131,28 +135,6 @@ data class FirmwareManifest(
             Base64.getDecoder().decode(base64)
         } catch (e: IllegalArgumentException) {
             null
-        }
-
-        /** A whole number in [range]; a JSON number only (a string of digits is refused). */
-        private fun integer(json: JSONObject, name: String, range: LongRange): Long {
-            val value = json.opt(name) as? Number ?: throw InvalidFirmwareManifest(name)
-            val whole = value.toLong()
-            if (whole.toDouble() != value.toDouble() || whole !in range) throw InvalidFirmwareManifest(name)
-            return whole
-        }
-
-        private fun string(json: JSONObject, name: String, allowEmpty: Boolean = false): String {
-            val value = json.opt(name) as? String ?: throw InvalidFirmwareManifest(name)
-            if (!allowEmpty && value.isBlank()) throw InvalidFirmwareManifest(name)
-            return value
-        }
-
-        /** Notes as plain text: line breaks kept, other control characters dropped, cut to [MAX_NOTES] on a code point. */
-        private fun cleanNotes(notes: String): String {
-            val kept = notes.filter { it == '\n' || !it.isISOControl() }.trim()
-            if (kept.length <= MAX_NOTES) return kept
-            val end = if (Character.isHighSurrogate(kept[MAX_NOTES - 1])) MAX_NOTES - 1 else MAX_NOTES
-            return kept.substring(0, end)
         }
     }
 }

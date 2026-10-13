@@ -11,6 +11,9 @@ package dev.stevenjin.stevenpiano.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.util.Locale
 
 class FormatTest {
@@ -21,8 +24,28 @@ class FormatTest {
         assertEquals("4:31", Format.clock(271))
         assertEquals("1:02:03", Format.clock(3_723))
         assertEquals("0:00", Format.clock(-5))
-        assertEquals("4:08", Format.clockMicros(248_900_000L))
         assertEquals("1:16", Format.clockMillis(76_999L))
+    }
+
+    @Test
+    fun `a time of day is H-mm, or HH-mm where asked (v1_24 M57)`() {
+        assertEquals("9:30", Format.timeOfDay(570))
+        assertEquals("0:05", Format.timeOfDay(5))
+        assertEquals("23:59", Format.timeOfDay(1_439))
+        assertEquals("09:30", Format.timeOfDay(570, twoDigitHour = true))
+        val at = ZonedDateTime.of(2026, 10, 5, 8, 40, 0, 0, ZoneId.of("Europe/London"))
+        assertEquals("8:40", Format.timeOfDay(at))
+        assertEquals("07:40", Format.timeOfDay(at.toInstant().toEpochMilli(), ZoneOffset.UTC, twoDigitHour = true))
+    }
+
+    @Test
+    fun `sizes are whole megabytes, and one decimal of gigabytes from a gigabyte (v1_24 M57)`() {
+        assertEquals("42 of 125 MB", Format.megabytes(42_300_000, 124_511_036, Locale.US))
+        assertEquals("0 of 14 MB", Format.megabytes(0, 13_700_000, Locale.US))
+        assertEquals("0.4 of 1.2 GB", Format.megabytes(420_000_000, 1_234_000_000, Locale.US))
+        assertEquals("0,4 of 1,2 GB", Format.megabytes(420_000_000, 1_234_000_000, Locale.GERMANY))
+        assertEquals("57 MB", Format.size(57_000_000, Locale.US))
+        assertEquals("1.0 GB", Format.size(1_000_000_000, Locale.US))
     }
 
     @Test

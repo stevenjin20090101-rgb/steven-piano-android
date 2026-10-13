@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.library
 
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
+import dev.stevenjin.stevenpiano.update.ManifestJson
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import org.json.JSONArray
 import org.json.JSONException
@@ -50,6 +51,9 @@ data class LibraryManifest(
     val licences: List<String> = emptyList(),
 ) {
     companion object {
+        /** Its fields, read as every manifest's are ([ManifestJson]). */
+        private val fields = ManifestJson(::InvalidLibraryManifest)
+
         /** The manifest is about 600 bytes; anything past this is not one. */
         const val MAX_BYTES = 4 * 1024
         const val MAX_VERSION = 10_000
@@ -68,22 +72,22 @@ data class LibraryManifest(
             } catch (e: StackOverflowError) {
                 throw InvalidLibraryManifest("nested too deeply")
             }
-            val version = integer(json, "version", 1L..MAX_VERSION).toInt()
-            val file = string(json, "file")
+            val version = fields.integer(json, "version", 1L..MAX_VERSION).toInt()
+            val file = fields.string(json, "file")
             if (file != fileName(version)) throw InvalidLibraryManifest("file")
-            val url = string(json, "url")
+            val url = fields.string(json, "url")
             if (!source.allowsLibrary(url) || url.substringAfterLast('/') != file) throw InvalidLibraryManifest("url")
-            val sizeBytes = integer(json, "sizeBytes", 1L..UpdateSource.MAX_LIBRARY_BYTES)
-            val sha256 = string(json, "sha256")
+            val sizeBytes = fields.integer(json, "sizeBytes", 1L..UpdateSource.MAX_LIBRARY_BYTES)
+            val sha256 = fields.string(json, "sha256")
             if (!SHA256.matches(sha256)) throw InvalidLibraryManifest("sha256")
-            val pieces = integer(json, "pieces", 1L..ImportLimits.ZIP_ENTRIES.toLong()).toInt()
-            val notes = if (json.has("notes")) plain(string(json, "notes", allowEmpty = true), MAX_NOTES) else ""
+            val pieces = fields.integer(json, "pieces", 1L..ImportLimits.ZIP_ENTRIES.toLong()).toInt()
+            val notes = if (json.has("notes")) ManifestJson.plain(fields.string(json, "notes", allowEmpty = true), MAX_NOTES) else ""
             val licences = when (val raw = json.opt("licences")) {
                 null -> emptyList()
                 is JSONArray -> {
                     if (raw.length() > MAX_LICENCES) throw InvalidLibraryManifest("licences")
                     (0 until raw.length()).map { i ->
-                        val line = (raw.opt(i) as? String)?.let { plain(it, Int.MAX_VALUE) } ?: throw InvalidLibraryManifest("licences[$i]")
+                        val line = (raw.opt(i) as? String)?.let { ManifestJson.plain(it, Int.MAX_VALUE) } ?: throw InvalidLibraryManifest("licences[$i]")
                         if (line.isEmpty() || line.length > MAX_LICENCE) throw InvalidLibraryManifest("licences[$i]")
                         line
                     }
@@ -95,28 +99,6 @@ data class LibraryManifest(
 
         /** The pack's file for [version]: `library-v<version>.zip`. */
         fun fileName(version: Int): String = "library-v$version${UpdateSource.LIBRARY_EXTENSION}"
-
-        /** A whole number in [range]; a JSON number only (a string of digits is refused). */
-        private fun integer(json: JSONObject, name: String, range: LongRange): Long {
-            val value = json.opt(name) as? Number ?: throw InvalidLibraryManifest(name)
-            val whole = value.toLong()
-            if (whole.toDouble() != value.toDouble() || whole !in range) throw InvalidLibraryManifest(name)
-            return whole
-        }
-
-        private fun string(json: JSONObject, name: String, allowEmpty: Boolean = false): String {
-            val value = json.opt(name) as? String ?: throw InvalidLibraryManifest(name)
-            if (!allowEmpty && value.isBlank()) throw InvalidLibraryManifest(name)
-            return value
-        }
-
-        /** Plain text: line breaks kept, other control characters dropped, cut to [max] on a code point. */
-        private fun plain(text: String, max: Int): String {
-            val kept = text.filter { it == '\n' || !it.isISOControl() }.trim()
-            if (kept.length <= max) return kept
-            val end = if (Character.isHighSurrogate(kept[max - 1])) max - 1 else max
-            return kept.substring(0, end)
-        }
     }
 }
 

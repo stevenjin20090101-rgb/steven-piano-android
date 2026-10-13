@@ -34,11 +34,10 @@ data class DynamicMark(val system: Int, val bar: Int, val x: Float, val y: Float
  * mark bar by bar. Bars without notes neither mark nor reset. Pure.
  */
 object Dynamics {
+    /** The softest band, pp; the bands count up by one to [FF]. */
     const val PP = 0
-    const val P = 1
-    const val MP = 2
-    const val MF = 3
-    const val F = 4
+
+    /** The loudest band, ff. */
     const val FF = 5
 
     /** In a performance a band must move this far from the last mark to be marked. */

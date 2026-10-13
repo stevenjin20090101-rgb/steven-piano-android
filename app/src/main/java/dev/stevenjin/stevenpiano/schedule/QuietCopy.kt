@@ -9,11 +9,11 @@
 
 package dev.stevenjin.stevenpiano.schedule
 
+import dev.stevenjin.stevenpiano.ui.Format
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 
 /**
  * What quiet times say (DESIGN.md › v1.20 — M54), on the tablet and in the web panel's answers alike: "Quiet until
@@ -36,21 +36,16 @@ object QuietCopy {
     const val NOTE = "During a quiet time the piano stays silent: anything playing stops as a block begins, and nothing starts " +
         "until it ends. Play anyway lifts it until the block ends."
 
-    /** "9:30", "13:05", "0:40". */
-    fun clock(minute: Int): String = "%d:%02d".format(Locale.ROOT, minute / Occurrences.MINUTES_PER_HOUR, minute % Occurrences.MINUTES_PER_HOUR)
-
-    fun clock(at: ZonedDateTime): String = "%d:%02d".format(Locale.ROOT, at.hour, at.minute)
-
     /** A block, "8:40–9:30". */
-    fun range(block: QuietBlock): String = "${clock(block.start)}–${clock(block.end)}"
+    fun range(block: QuietBlock): String = "${Format.timeOfDay(block.start)}–${Format.timeOfDay(block.end)}"
 
     /** When the quiet ends, "9:30"; a short weekday before it when that is a day or more away ("Tue 7:00"). */
     fun until(until: ZonedDateTime, now: ZonedDateTime): String =
-        if (ChronoUnit.HOURS.between(now, until) >= HOURS_PER_DAY) "${ScheduleCopy.short(until.dayOfWeek)} ${clock(until)}" else clock(until)
+        if (ChronoUnit.HOURS.between(now, until) >= HOURS_PER_DAY) "${ScheduleCopy.short(until.dayOfWeek)} ${Format.timeOfDay(until)}" else Format.timeOfDay(until)
 
     /** When the next block starts, "9:40" today, else with its short weekday, "Mon 8:40". */
     fun next(next: ZonedDateTime, now: ZonedDateTime): String =
-        if (next.toLocalDate() == now.toLocalDate()) clock(next) else "${ScheduleCopy.short(next.dayOfWeek)} ${clock(next)}"
+        if (next.toLocalDate() == now.toLocalDate()) Format.timeOfDay(next) else "${ScheduleCopy.short(next.dayOfWeek)} ${Format.timeOfDay(next)}"
 
     /** The capsule on Now playing and the resting screen, "Quiet until 9:30". */
     fun capsule(until: String): String = "Quiet until $until"

@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.audio
 
 import dev.stevenjin.stevenpiano.ui.ListenCopy
+import dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -74,9 +75,9 @@ class KeyCheckTest {
         val rate = Tones.RATE
         val sine = Tones.pcm(DoubleArray(rate) { 0.5 * kotlin.math.sin(2 * Math.PI * 440.0 * it / rate) })
         for (length in listOf(1_920, 4_800)) assertEquals(0.0625, KeyCheck.power(sine, 1_000, 1_000 + length, 440.0, rate), 0.002)
-        assertEquals("A4", ListenCopy.keyName(69))
-        assertEquals("C1", ListenCopy.keyName(24))
-        assertEquals("B7", ListenCopy.keyName(107))
+        assertEquals("A4", KeyboardGeometry.name(69))
+        assertEquals("C1", KeyboardGeometry.name(24))
+        assertEquals("B7", KeyboardGeometry.name(107))
         assertEquals(440.0, KeyCheck.frequency(69), 1e-9)
     }
 }

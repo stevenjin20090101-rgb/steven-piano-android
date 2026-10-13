@@ -34,9 +34,6 @@ interface GenerationDao {
     @Query("SELECT * FROM studio_generations WHERE pieceId = :pieceId LIMIT 1")
     suspend fun forPiece(pieceId: Long): GenerationEntity?
 
-    @Query("SELECT * FROM studio_generations WHERE pieceId IN (:pieceIds)")
-    suspend fun forPieces(pieceIds: List<Long>): List<GenerationEntity>
-
     @Query(GenerationSql.UNDECIDED)
     suspend fun undecided(): List<Long>
 
@@ -45,9 +42,6 @@ interface GenerationDao {
 
     @Query(GenerationSql.INTERRUPT_PENDING)
     suspend fun interruptPending(): Int
-
-    @Query(GenerationSql.REOPEN)
-    suspend fun reopen(ids: List<Long>): Int
 
     @Query(GenerationSql.DECIDE)
     suspend fun decide(pieceId: Long, outcome: String): Int

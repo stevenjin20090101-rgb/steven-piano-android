@@ -67,12 +67,12 @@ fun Modifier.scrollEdges(state: ScrollableState): Modifier {
     val rail = if (frame.rail) floating.calculateStartPadding(direction) else 0.dp
     val topShown = animateFloatAsState(
         if (top > 0.dp && state.canScrollBackward) 1f else 0f,
-        if (reduced) snap() else tween(Motion.FastMs),
+        if (reduced) snap() else tween(Motion.QuickMs),
         label = "scroll edge, top",
     )
     val bottomShown = animateFloatAsState(
         if (bottom > 0.dp && state.canScrollForward) 1f else 0f,
-        if (reduced) snap() else tween(Motion.FastMs),
+        if (reduced) snap() else tween(Motion.QuickMs),
         label = "scroll edge, bottom",
     )
     // Whether this container's start edge is the rail's edge (a pane beside the rail, not the one beyond it).

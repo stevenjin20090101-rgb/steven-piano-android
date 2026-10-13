@@ -14,8 +14,7 @@ package dev.stevenjin.stevenpiano.data
  * or another app's file name can carry megabytes of text; a library row that large no longer fits
  * Android's 2 MB cursor window, every query returning it throws, and the Library (the start tab)
  * would crash on every launch. So text is cut on the way in, to these many characters, counted in
- * code points (a surrogate pair is never split): the unit SQLite's `substr()` counts in, so the
- * one-off repair of older rows (`TextRepair`) cuts at the same places.
+ * code points (a surrogate pair is never split), the unit SQLite's `substr()` counts in.
  */
 object TextLimits {
     const val TITLE = 200

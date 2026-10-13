@@ -96,7 +96,7 @@ fun Dial(label: String, value: DialValue, low: String, high: String, modifier: M
     val shown = value.figure != null
     val arc = remember { Animatable(0f) }
     val target = value.share?.coerceIn(0f, 1f) ?: 0f
-    LaunchedEffect(target, reduced) { arc.animateTo(target, Motion.timed(Motion.SlowMs, reduced, Motion.EaseOut)) }
+    LaunchedEffect(target, reduced) { arc.animateTo(target, Motion.timed(Motion.SlowMs, reduced, Motion.Enter)) }
     val accent = if (value.attention && shown) attention else content
 
     val top = value.max.coerceAtLeast(1f)

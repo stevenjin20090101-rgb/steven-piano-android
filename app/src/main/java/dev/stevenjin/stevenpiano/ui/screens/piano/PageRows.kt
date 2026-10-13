@@ -14,6 +14,7 @@ import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
+import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
 
 /**
@@ -66,7 +67,6 @@ object PageRows {
     // ---- PLAYING › Quiet times (v1.20 — M54) ----------------------------------------------------------
     val PLAY_ANYWAY = AppRow("quiet.anyway", "Play anyway", SettingsPage.Quiet, null, listOf("override", "lift the quiet"))
     val ADD_SECTION = AppRow("quiet.add", "Add section", SettingsPage.Quiet, null, listOf("quiet", "downtime", "silent", "class", "schedule", "block"))
-    val EXACT_ALARMS = AppRow("quiet.alarms", "Allow exact alarms", SettingsPage.Quiet, null, listOf("alarms and reminders"))
 
     // ---- SHARING › Web panel ------------------------------------------------------------------------
     const val PANEL = "Panel"
@@ -74,7 +74,6 @@ object PageRows {
     val WEB_PANEL = AppRow("web.switch", "Web panel", SettingsPage.Remote, PANEL, listOf("remote control", "web control", "browser", "phone"))
     val WEB_ADDRESS = AppRow("web.address", "Panel address", SettingsPage.Remote, PANEL, listOf("QR code", "link", "URL", "Tailscale"))
     val WEB_PIN = AppRow("web.pin", "Web panel PIN", SettingsPage.Remote, PANEL, listOf("set a PIN", "change PIN", "password"))
-    val ALSO_ON_WIFI = AppRow("web.wifi", "Also on Wi-Fi", SettingsPage.Remote, PANEL, listOf("local network", "LAN", "panel on Wi-Fi too"))
     val OVER_INTERNET = AppRow("web.internet", "Web panel over the internet", SettingsPage.Remote, OVER_THE_INTERNET, listOf("cloud", "remote access", "relay", "anywhere"))
     val RELAY_ADDRESS = AppRow("web.relay", "Relay address", SettingsPage.Remote, OVER_THE_INTERNET, listOf("cloud address", "host"))
     val ENROL = AppRow("web.enrol", "Enrol with code", SettingsPage.Remote, OVER_THE_INTERNET, listOf("enroll", "console", "cloud"))
@@ -86,9 +85,8 @@ object PageRows {
     val POSTER = AppRow("guests.poster", "Print the request poster", SettingsPage.Guests, null, listOf("QR code", "print", "sign"))
 
     // ---- THIS TABLET › System (v1.18 — M50: drawn by the page, on its Tools card) ---------------------
-    const val TOOLS = "Tools"
-    val FIND_COVERS = AppRow("system.covers", "Find missing covers", SettingsPage.System, TOOLS, listOf("album covers", "artwork", "look again"))
-    val RECONNECT = AppRow("system.reconnect", "Reconnect the piano", SettingsPage.System, TOOLS, listOf("bluetooth", "link", "connect again"))
+    val FIND_COVERS = AppRow("system.covers", SystemCopy.FIND_COVERS, SettingsPage.System, SystemCopy.TOOLS, listOf("album covers", "artwork", "look again"))
+    val RECONNECT = AppRow("system.reconnect", SystemCopy.RECONNECT, SettingsPage.System, SystemCopy.TOOLS, listOf("bluetooth", "link", "connect again"))
 
     // ---- THIS TABLET › System › Listen and test (v1.23 — M55) ------------------------------------------------------------
     val LISTEN_FROM_PANEL = AppRow("system.listen", ListenCopy.SWITCH, SettingsPage.System, ListenCopy.TITLE, listOf("microphone", "mic", "listen", "hear the room", "privacy"))
@@ -130,8 +128,8 @@ object PageRows {
         CHECK_PIANO_UPDATES,
         PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
-        PLAY_ANYWAY, ADD_SECTION, EXACT_ALARMS,
-        WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
+        PLAY_ANYWAY, ADD_SECTION,
+        WEB_PANEL, WEB_ADDRESS, WEB_PIN, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
         FIND_COVERS, RECONNECT, LISTEN_FROM_PANEL, TEST_EVERY_KEY,
         APPEARANCE, MONOCHROME, ALBUM_BACKDROP, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,

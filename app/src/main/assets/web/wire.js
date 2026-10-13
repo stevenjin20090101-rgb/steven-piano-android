@@ -12,10 +12,10 @@
 // checked against the bytes before a typed array is made over them, and a version this page doesn't know asks for
 // a reload instead of guessing.
 
-export const NOTES_MAGIC = 0x544E5053;
-export const INDEX_MAGIC = 0x49535053;
-export const PAGE_MAGIC = 0x50535053;
-export const VERSION = 1;
+const NOTES_MAGIC = 0x544E5053;
+const INDEX_MAGIC = 0x49535053;
+const PAGE_MAGIC = 0x50535053;
+const VERSION = 1;
 
 export const OP = { RECT: 1, GLYPH: 2, TEXT: 3, QUAD: 4, CURVE: 5, CLIP: 6, END: 7 };
 const OP_WORDS = [0, 5, 4, 5, 9, 7, 3, 1];

@@ -192,9 +192,6 @@ class ScoreLayout internal constructor(
     /** How high each system's notes reach above its treble staff: where the tempo mark and chord names go. */
     val skyline: ScoreSkyline = ScoreSkyline.None,
 ) {
-    /** Every head: the notes' own and the tied ones. */
-    val headCount: Int get() = x.size
-
     /** How many tied heads note [note] has. */
     fun tiedHeadCount(note: Int): Int = tiedFrom[note + 1] - tiedFrom[note]
 

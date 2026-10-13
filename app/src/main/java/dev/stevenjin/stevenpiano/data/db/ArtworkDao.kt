@@ -18,9 +18,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ArtworkDao {
     @Query("SELECT * FROM artwork WHERE `key` = :key")
-    fun observe(key: String): Flow<ArtworkEntity?>
-
-    @Query("SELECT * FROM artwork WHERE `key` = :key")
     suspend fun get(key: String): ArtworkEntity?
 
     /** Every row: the grids and rows read one shared map of these instead of a query each. */
