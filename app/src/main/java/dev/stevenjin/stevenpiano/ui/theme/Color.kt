@@ -15,8 +15,9 @@ import androidx.compose.ui.graphics.Color
 // contrast figures; every text token clears 4.5:1 on its surface and the primary /
 // secondary pair clears 7:1 in dark.
 //
-// RED HAS EXACTLY ONE MEANING: the piano is live. It is used by LiveDot and nothing
-// else. Never a button fill, never text, never a highlight, never an error colour.
+// RED HAS EXACTLY ONE MEANING: notes are going to the piano (v1.25 — M59: a connection alone is
+// the content colour's filled dot). It is used by LiveDot and nothing else. Never a button fill,
+// never text, never a highlight, never an error colour.
 
 // ---- Dark: "the camera body" (default) ------------------------------------------
 val InkSurface       = Color(0xFF0E0E0E)   // app background
@@ -68,3 +69,9 @@ val AttentionInk      = Color(0xFFE6A23C)   //  8.8:1 / 8.0:1 on InkSurface / In
 val AttentionPaper    = Color(0xFF9A5B00)   //  4.8:1 / 5.2:1 on PaperSurface / PaperElevated
 
 val DisplayBlack      = Color(0xFF000000)   // display mode's canvas only (DisplayTheme): the one pure black in the app
+
+// ---- What is chosen (DESIGN.md › v1.25 — M59) -----------------------------------
+// The rail's place, the hub's open page and today in the quiet times' week sit on the content
+// colour at this opacity, as the web panel's chosen items do: the elevated surface they sat on
+// before read about 1.05:1 beside the paper, too faint to see.
+const val SelectedAlpha = 0.12f

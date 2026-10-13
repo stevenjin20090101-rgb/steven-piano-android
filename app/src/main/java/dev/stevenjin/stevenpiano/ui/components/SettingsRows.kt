@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -81,6 +82,7 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalDisabledGlyph
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
+import dev.stevenjin.stevenpiano.ui.theme.SelectedAlpha
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 
 // The Piano tab's rows (DESIGN.md › v1.5): one set for the piano's settings and the app's, so every
@@ -93,9 +95,12 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 /** How far a row's text sits from the start edge, and where its hairline starts. */
 private val RowInset = 16.dp
 
-/** A section's header: its name in the eyebrow style, a heading for TalkBack, then a full-width hairline. */
+/**
+ * A section's header: its name in the eyebrow style, a heading for TalkBack, then a full-width hairline; [rule] false
+ * leaves the hairline out, over cards that have their own edges (the quiet times' sections, v1.25 — M59).
+ */
 @Composable
-fun SectionEyebrow(text: String, modifier: Modifier = Modifier) {
+fun SectionEyebrow(text: String, modifier: Modifier = Modifier, rule: Boolean = true) {
     Column(modifier.fillMaxWidth()) {
         Eyebrow(
             text,
@@ -103,7 +108,7 @@ fun SectionEyebrow(text: String, modifier: Modifier = Modifier) {
                 .padding(start = RowInset, top = 24.dp, bottom = 8.dp)
                 .semantics { heading() },
         )
-        HairlineDivider()
+        if (rule) HairlineDivider()
     }
 }
 
@@ -340,12 +345,13 @@ fun ChoiceRow(
 }
 
 /**
- * A row that opens a page: the label at the start, the page's one-line [value] in the secondary
- * colour and a chevron in the tertiary one at the end. A value too long to sit beside the label
- * (large text) goes under it. [selected] marks the page open beside the hub on wide screens: the
- * row is filled with the elevated surface edge to edge; null on phones, where a row navigates.
- * [locked]: settings locked in kiosk mode, a padlock in the chevron's place (the page opens after
- * the kiosk PIN).
+ * A row that opens a page: [glyph] at the start (v1.25 — M59: the page's stroke glyph, 24 dp, in the secondary
+ * colour), 16 dp, the label, the page's one-line [value] in the secondary colour and, 16 dp on, the chevron in the
+ * tertiary one, 12 dp from the end. A value too long to sit beside the label (large text) goes under it. [selected]
+ * marks the page open beside the hub on wide screens: the row is filled edge to edge with the content colour at
+ * [SelectedAlpha] and its glyph takes the content colour (v1.25 — M59; the elevated surface it was filled with read
+ * about 1.05:1 on the paper); null on phones, where a row navigates. [locked]: settings locked in kiosk mode, a padlock
+ * in the chevron's place (the page opens after the kiosk PIN).
  */
 @Composable
 fun NavRow(
@@ -353,6 +359,7 @@ fun NavRow(
     value: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    glyph: Painter? = null,
     selected: Boolean? = null,
     locked: Boolean = false,
 ) {
@@ -362,22 +369,27 @@ fun NavRow(
         Modifier.selectable(selected, role = Role.Button, onClick = onClick)
     }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val ink = MaterialTheme.colorScheme.onSurface
     Row(
         modifier
             .fillMaxWidth()
-            .then(if (selected == true) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)
+            .then(if (selected == true) Modifier.background(ink.copy(alpha = SelectedAlpha)) else Modifier)
             .heightIn(min = 56.dp)
             .then(tap)
             .padding(start = RowInset, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (glyph != null) {
+            Icon(glyph, contentDescription = null, modifier = Modifier.size(24.dp), tint = if (selected == true) ink else MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(16.dp))
+        }
         LabelAndValue(label, value, Modifier.weight(1f))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(16.dp))
         if (locked) {
             LockGlyph(Modifier.padding(3.dp))   // in the chevron's 24 dp
         } else {
             Icon(
-                painterResource(R.drawable.ic_chevron_right),
+                painterResource(R.drawable.ic_g_chevron),
                 contentDescription = null,
                 modifier = Modifier
                     .size(24.dp)
@@ -425,7 +437,7 @@ fun DisclosureRow(
             LabelAndValue(label, value, Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
             Icon(
-                painterResource(R.drawable.ic_chevron_right),
+                painterResource(R.drawable.ic_g_chevron),
                 contentDescription = null,
                 modifier = Modifier
                     .size(24.dp)

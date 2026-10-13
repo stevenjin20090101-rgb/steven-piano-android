@@ -18,10 +18,12 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.PlaybackCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.update.UpdateState
@@ -33,7 +35,8 @@ import dev.stevenjin.stevenpiano.piano.PianoSettings as PianoTable
  * The one-line values on the hub's page rows (DESIGN.md › v1.5, v1.13 — M31b), worked out from what the
  * app already holds: the piano's last report and the app's own preferences. Never a read from the
  * piano. While the piano has not answered (not connected, still reading, or firmware without the
- * settings) its four rows read [UNKNOWN] and still open their pages.
+ * settings) its four rows read [UNKNOWN] and still open their pages. Where the web panel's settings list says
+ * the same thing (its `summary()`), the rows use its words (v1.25 — M59).
  */
 @Immutable
 data class GroupSummaries(
@@ -150,28 +153,40 @@ data class GroupSummaries(
         /** Kiosk mode: "On" or "Off" ("On" while unlocked for now too: it locks again). */
         fun kiosk(settings: PianoSettings): String = if (settings.kioskEnabled) "On" else OFF
 
-        /** "Full power" while full power is on, else "Piano volume 70%". */
+        /**
+         * "Full power on" (every note at full strength: the volume is the piano's whole, so it goes unsaid), else "Full
+         * power off · Volume 70%"; the volume alone from firmware that doesn't report Full power.
+         */
         fun feel(piano: PianoState): String {
             val values = (piano as? PianoState.Ready)?.values ?: return UNKNOWN
-            if (values["fullpower"]?.let(::on) == true) return "Full power"
-            val volume = values["volume"]?.toFloatOrNull() ?: return UNKNOWN
-            return "Piano volume ${Format.percent(volume.roundToInt())}"
+            val full = values["fullpower"]?.let(::on)
+            if (full == true) return "Full power on"
+            val volume = values["volume"]?.toFloatOrNull()?.let { "Volume ${Format.percent(it.roundToInt())}" }
+            return when {
+                full == false -> listOfNotNull("Full power off", volume).joinToString(" · ")
+                else -> volume ?: UNKNOWN
+            }
         }
 
-        /** "Off" while the strip (or its mode) is off, else the mode and the brightness: "Reactive · 62%". */
+        /** "Strip off" while the strip (or its mode) is off, else the mode and the brightness: "Reactive · 62%". */
         fun lighting(piano: PianoState): String {
             val values = (piano as? PianoState.Ready)?.values ?: return UNKNOWN
-            if (values["leds"]?.let(::on) == false) return OFF
+            if (values["leds"]?.let(::on) == false) return STRIP_OFF
             val mode = values["ledmode"]?.let { PianoTable.named("ledmode")?.display(it) }
-            if (mode == OFF) return OFF
+            if (mode == OFF) return STRIP_OFF
             val brightness = values["ledbright"]?.let { PianoTable.named("ledbright")?.display(it) }?.toIntOrNull()?.let(Format::percent)
             return listOfNotNull(mode, brightness).joinToString(" · ").ifEmpty { UNKNOWN }
         }
 
-        /** The sustain pedal: "On" or "Off". */
+        /** The sustain pedal: "Off", "On", or "On · half-pedalling" while it plays half pedals too. */
         fun pedal(piano: PianoState): String {
             val values = (piano as? PianoState.Ready)?.values ?: return UNKNOWN
-            return values["pedalon"]?.let { if (on(it)) "On" else OFF } ?: UNKNOWN
+            val pedal = values["pedalon"] ?: return UNKNOWN
+            return when {
+                !on(pedal) -> OFF
+                values["pedalhalf"]?.let(::on) == true -> "On · half-pedalling"
+                else -> "On"
+            }
         }
 
         /** The piano's firmware version, as it reports it. */
@@ -189,11 +204,9 @@ data class GroupSummaries(
             else -> FirmwareVersion.parse(reported ?: (piano as? PianoState.Ready)?.facts?.get("fw"))?.release ?: firmware(piano)
         }
 
-        /** The pause before each piece, then the default tempo: "2 s pause · 100%", or "No pause · 100%". */
-        fun playback(settings: PianoSettings): String {
-            val pause = if (settings.preRollMs == 0) "No pause" else "${Format.seconds(settings.preRollMs)} pause"
-            return "$pause · ${Format.percent(settings.defaultTempoPct)}"
-        }
+        /** The default tempo and how a piece is played: "Tempo 100% · Expression Light". */
+        fun playback(settings: PianoSettings): String =
+            "Tempo ${Format.percent(settings.defaultTempoPct)} · Expression ${PlaybackCopy.EXPRESSIONS[settings.expression.ordinal]}"
 
         /** Tablet sound (v1.13: its own page): "Off", or when it plays and the tablet volume, "Always · 70%". */
         fun tabletSound(settings: PianoSettings): String = when (settings.tabletSound) {
@@ -202,8 +215,8 @@ data class GroupSummaries(
             TabletSoundMode.ALWAYS -> "Always · ${Format.percent(settings.tabletVolume)}"
         }
 
-        /** Display (v1.13: the app's look, now that the note views live on Now playing): "Follow system", "Light" or "Dark". */
-        fun display(settings: PianoSettings): String = settings.appearance.label
+        /** Display (v1.13: the app's look, now that the note views live on Now playing): "Follows the system", "Light" or "Dark". */
+        fun display(settings: PianoSettings): String = if (settings.appearance == Appearance.SYSTEM) "Follows the system" else settings.appearance.label
 
         /**
          * Updates (v1.13): what the updater has to say ("1.14 available", "Downloading 1.14", "Ready to
@@ -246,6 +259,7 @@ data class GroupSummaries(
         const val NOT_CONNECTED = "Not connected"
 
         private const val OFF = "Off"
+        private const val STRIP_OFF = "Strip off"
         private const val AUTOMATIC = "Automatic"
         private const val INTERNET = "Internet"
 

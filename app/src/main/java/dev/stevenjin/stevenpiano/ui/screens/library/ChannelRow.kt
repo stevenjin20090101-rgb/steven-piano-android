@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.channels.ChannelSummary
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 
 /**
  * The channels at the top of the Playlists listing (DESIGN.md › v1.5 — M17): the eyebrow
@@ -41,7 +42,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 fun ChannelRow(
     channels: List<ChannelSummary>,
     playing: String?,
-    connected: Boolean,
+    dot: LinkDot,
     onPlay: (String) -> Unit,
     onSetVolume: (String) -> Unit,
     onSeeAll: () -> Unit,
@@ -65,7 +66,7 @@ fun ChannelRow(
                 ChannelCard(
                     channel,
                     playing = channel.key == playing,
-                    connected = connected,
+                    dot = dot,
                     onPlay = { onPlay(channel.key) },
                     onSetVolume = { onSetVolume(channel.key) },
                     modifier = Modifier.width(ChannelCardWidth),

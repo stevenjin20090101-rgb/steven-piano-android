@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,9 +51,13 @@ import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoBluetooth
+import dev.stevenjin.stevenpiano.instruments.InstrumentKind
+import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.components.Card
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.FilledButton
 import dev.stevenjin.stevenpiano.ui.components.Hairline
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
@@ -71,7 +74,8 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
  * asked for here, in context, with a one-line reason. When only another piano called Steven Piano
  * answered, the phone connects to it only if the person taps Connect to it ([onConnectTo] with its
  * address). Monochrome
- * throughout: the only red is the [LiveDot]. Under a MIDI piano (v1.11 — M29) it names that
+ * throughout: the dot is filled while connected and turns the live red only while a piece [playing] goes to the piano
+ * ([LinkDot]); the card is the app's [Card] (v1.25 — M59). Under a MIDI piano (v1.11 — M29) it names that
  * instrument ([name]) with its own words ([status]), and asks for no Bluetooth permission for one on a cable
  * ([bluetooth] false). [showButton] false (v1.13 — M31b: the Instrument page is open beside the hub, with
  * Connect and Disconnect of its own): the card names the instrument and its state, so no action shows twice.
@@ -87,7 +91,7 @@ fun ConnectionCard(
     onConnectTo: (String) -> Unit,
     modifier: Modifier = Modifier,
     name: String = PianoBluetooth.NAME,
-    status: String = statusOf(link),
+    status: String = InstrumentCopy.linkWords(InstrumentKind.StevenPiano, link),
     bluetooth: Boolean = true,
     showButton: Boolean = true,
 ) {
@@ -111,11 +115,11 @@ fun ConnectionCard(
     val searching = link == LinkState.Scanning || link == LinkState.Connecting || link is LinkState.Reconnecting
     val needsPermission = bluetooth && missing.isNotEmpty() && !searching && link !is LinkState.Connected
 
-    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+    Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                LiveDot(live = link is LinkState.Connected, breathing = playing)
+                LiveDot(LinkDot.of(link is LinkState.Connected, sending = playing))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     status,
@@ -182,14 +186,6 @@ fun ConnectionCard(
  * while it is free), and a connected piano cannot be found.
  */
 private const val NOT_FOUND_TIP = "Tip: if the piano's screen reads “BLE MIDI: CONNECTED”, another device is connected to it."
-
-private fun statusOf(link: LinkState): String = when (link) {
-    is LinkState.Connected -> "Connected"
-    LinkState.Scanning -> "Looking for the piano…"
-    LinkState.Connecting -> "Connecting…"
-    is LinkState.Reconnecting -> "Reconnecting…"
-    LinkState.Disconnected, is LinkState.Error -> "Not connected"
-}
 
 /** The one-line reason, in the words Android's own permission dialog uses. */
 private fun permissionReason(): String =

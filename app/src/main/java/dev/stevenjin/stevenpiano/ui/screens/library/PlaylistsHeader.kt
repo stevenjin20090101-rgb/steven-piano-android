@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +44,7 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassPopover
+import dev.stevenjin.stevenpiano.ui.components.MenuChoice
 
 /**
  * The Playlists listing's header row (DESIGN.md › v1.10.1, D6), below the channels' row: the eyebrow
@@ -72,10 +72,10 @@ fun PlaylistsHeader(sort: PlaylistSort, onSort: (PlaylistSort) -> Unit) {
                 // As wide as its widest order (a popup offers the whole window): its end at the button's, inside the list's pane.
                 Column(Modifier.width(IntrinsicSize.Max).widthIn(min = SORT_MENU_MIN_WIDTH).selectableGroup()) {
                     PlaylistSort.entries.forEach { option ->
-                        SortOption(option, selected = option == sort) {
+                        MenuChoice(option.label, selected = option == sort, oneLine = true, onClick = {
                             open = false
                             if (option != sort) onSort(option)
-                        }
+                        })
                     }
                 }
             }
@@ -101,26 +101,6 @@ private fun SortButton(sort: PlaylistSort, onClick: () -> Unit) {
         Text(sort.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
         Spacer(Modifier.width(4.dp))
         Icon(painterResource(R.drawable.ic_chevron_down), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-    }
-}
-
-/** One order in the menu: a checkmark when it is the current one (its room kept when not), then its name. */
-@Composable
-private fun SortOption(option: PlaylistSort, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(MaterialTheme.shapes.small)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(24.dp)) {
-            if (selected) Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(option.label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
     }
 }
 

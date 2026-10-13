@@ -21,6 +21,7 @@ import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.schedule.QuietNow
 import dev.stevenjin.stevenpiano.settings.Appearance
@@ -45,21 +46,23 @@ class GroupSummariesTest {
     private val unknown = GroupSummaries.UNKNOWN
 
     @Test
-    fun `Feel reads full power, or the volume`() {
-        assertEquals("Full power", GroupSummaries.feel(ready("fullpower" to "1", "volume" to "100")))
-        assertEquals("full power wins over the volume", "Full power", GroupSummaries.feel(ready("fullpower" to "1", "volume" to "55")))
-        assertEquals("Piano volume 70%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "70")))
-        assertEquals("Piano volume 0%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "0")))
-        assertEquals("firmware without the names", unknown, GroupSummaries.feel(ready("fullpower" to "0")))
+    fun `Feel reads full power on, or off with the volume, in the panel's words (v1_25 M59)`() {
+        assertEquals("Full power on", GroupSummaries.feel(ready("fullpower" to "1", "volume" to "100")))
+        assertEquals("full power wins over the volume", "Full power on", GroupSummaries.feel(ready("fullpower" to "1", "volume" to "55")))
+        assertEquals("Full power off · Volume 70%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "70")))
+        assertEquals("Full power off · Volume 0%", GroupSummaries.feel(ready("fullpower" to "0", "volume" to "0")))
+        assertEquals("firmware without the volume", "Full power off", GroupSummaries.feel(ready("fullpower" to "0")))
+        assertEquals("firmware without Full power", "Volume 70%", GroupSummaries.feel(ready("volume" to "70")))
+        assertEquals(unknown, GroupSummaries.feel(ready()))
     }
 
     @Test
     fun `Lighting reads off, or the mode and the brightness as the piano rounds it`() {
-        assertEquals("Off", GroupSummaries.lighting(ready("leds" to "0", "ledmode" to "3", "ledbright" to "160")))
+        assertEquals("Strip off", GroupSummaries.lighting(ready("leds" to "0", "ledmode" to "3", "ledbright" to "160")))
         assertEquals("Reactive · 62%", GroupSummaries.lighting(ready("leds" to "1", "ledmode" to "3", "ledbright" to "160")))
         assertEquals("Static · 100%", GroupSummaries.lighting(ready("leds" to "1", "ledmode" to "1", "ledbright" to "255")))
         assertEquals("the firmware's own (40 x 100) / 255", "Rainbow · 15%", GroupSummaries.lighting(ready("leds" to "1", "ledmode" to "2", "ledbright" to "40")))
-        assertEquals("a strip whose mode is Off is off", "Off", GroupSummaries.lighting(ready("leds" to "1", "ledmode" to "0", "ledbright" to "160")))
+        assertEquals("a strip whose mode is Off is off", "Strip off", GroupSummaries.lighting(ready("leds" to "1", "ledmode" to "0", "ledbright" to "160")))
         assertEquals("Reactive", GroupSummaries.lighting(ready("leds" to "1", "ledmode" to "3")))
         assertEquals(unknown, GroupSummaries.lighting(ready()))
     }
@@ -67,7 +70,8 @@ class GroupSummariesTest {
     @Test
     fun `Pedal reads on or off, and Firmware the version`() {
         assertEquals("On", GroupSummaries.pedal(ready("pedalon" to "1")))
-        assertEquals("Off", GroupSummaries.pedal(ready("pedalon" to "0")))
+        assertEquals("On · half-pedalling", GroupSummaries.pedal(ready("pedalon" to "1", "pedalhalf" to "1")))
+        assertEquals("Off", GroupSummaries.pedal(ready("pedalon" to "0", "pedalhalf" to "1")))
         assertEquals(unknown, GroupSummaries.pedal(ready()))
         assertEquals("1.4.0", GroupSummaries.firmware(ready(facts = mapOf("fw" to "1.4.0"))))
         assertEquals(unknown, GroupSummaries.firmware(ready(facts = mapOf("fw" to " "))))
@@ -79,24 +83,21 @@ class GroupSummariesTest {
         for (state in listOf(PianoState.Unknown, PianoState.Unsupported)) {
             val rows = GroupSummaries.from(state, PianoSettings())
             assertEquals(listOf(unknown, unknown, unknown, unknown), listOf(rows.feel, rows.lighting, rows.pedal, rows.firmware))
-            assertEquals("2 s pause · 100%", rows.playback)
-            assertEquals("Follow system", rows.display)
+            assertEquals("Tempo 100% · Expression Light", rows.playback)
+            assertEquals("Follows the system", rows.display)
         }
     }
 
     @Test
-    fun `Playback reads the pause before each piece, then the default tempo`() {
-        assertEquals("2 s pause · 100%", GroupSummaries.playback(PianoSettings()))
-        assertEquals("2 s pause · 85%", GroupSummaries.playback(PianoSettings(defaultTempoPct = 85)))
-        assertEquals("No pause · 100%", GroupSummaries.playback(PianoSettings(preRollMs = 0)))
-        assertEquals("0.5 s pause · 100%", GroupSummaries.playback(PianoSettings(preRollMs = 500)))
-        assertEquals("2.5 s pause · 120%", GroupSummaries.playback(PianoSettings(preRollMs = 2_500, defaultTempoPct = 120)))
-        assertEquals("5 s pause · 100%", GroupSummaries.playback(PianoSettings(preRollMs = 5_000)))
+    fun `Playback reads the default tempo and the expression, as the panel does (v1_25 M59)`() {
+        assertEquals("Tempo 100% · Expression Light", GroupSummaries.playback(PianoSettings()))
+        assertEquals("Tempo 85% · Expression Full", GroupSummaries.playback(PianoSettings(defaultTempoPct = 85, expression = ExpressionLevel.FULL)))
+        assertEquals("the pause is the page's", "Tempo 120% · Expression Off", GroupSummaries.playback(PianoSettings(preRollMs = 0, defaultTempoPct = 120, expression = ExpressionLevel.OFF)))
     }
 
     @Test
     fun `Display reads the appearance, now that the note views live on Now playing (v1_13)`() {
-        assertEquals("Follow system", GroupSummaries.display(PianoSettings()))
+        assertEquals("Follows the system", GroupSummaries.display(PianoSettings()))
         assertEquals("Dark", GroupSummaries.display(PianoSettings(appearance = Appearance.DARK)))
         val changed = PianoSettings(
             appearance = Appearance.LIGHT,
@@ -120,8 +121,8 @@ class GroupSummariesTest {
         )
         assertEquals(
             listOf(
-                "Steven Piano · Connected", "None", "Piano volume 70%", "Off", "On", "emulator", "2 s pause · 90%", "Always · 70%", "None",
-                "On · 100.101.2.3", "Off", "—", "Follow system", "Off", "Automatic", "Automatic", "Version 1.13",
+                "Steven Piano · Connected", "None", "Full power off · Volume 70%", "Strip off", "On", "emulator", "Tempo 90% · Expression Light",
+                "Always · 70%", "None", "On · 100.101.2.3", "Off", "—", "Follows the system", "Off", "Automatic", "Automatic", "Version 1.13",
             ),
             SettingsPage.entries.map { rows.of(it) },
         )

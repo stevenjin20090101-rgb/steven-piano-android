@@ -103,6 +103,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStrip
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.NoteCanvas
 import dev.stevenjin.stevenpiano.ui.components.OnBackdrop
@@ -382,9 +383,8 @@ private fun ArtAndNotes(
             ) {
                 // The dot alone, without its words (DESIGN.md › v1.7.1); TalkBack still says them.
                 LiveDot(
-                    live = connected,
-                    breathing = playing,
-                    modifier = Modifier.semantics { contentDescription = if (connected) "Sent to piano" else "Not connected" },
+                    LinkDot.of(connected, sending = playing),
+                    Modifier.semantics { contentDescription = if (connected) "Sent to piano" else "Not connected" },
                 )
             }
             quiet?.invoke(Modifier.align(Alignment.BottomEnd))
@@ -660,7 +660,7 @@ private fun PaperRoll(
         KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, clock = roll)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            LiveDot(live = connected, breathing = playing)
+            LiveDot(LinkDot.of(connected, sending = playing))
             Spacer(Modifier.width(8.dp))
             Text(
                 if (connected) "Sent to piano" else "Not connected",

@@ -61,7 +61,7 @@ fun SettingsSearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         placeholder = { Text(SettingsIndex.PLACEHOLDER) },
-        leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
+        leadingIcon = { Icon(painterResource(R.drawable.ic_g_search), contentDescription = null) },   // the panel's stroke glyph (v1.25 — M59)
         trailingIcon = if (query.isEmpty()) null else {
             { GlyphButton(R.drawable.ic_close, "Clear search") { onQuery("") } }
         },
@@ -105,7 +105,7 @@ fun SettingsResults(results: List<SettingsEntry>, locked: (SettingsEntry) -> Boo
                 LockGlyph(Modifier.padding(3.dp), description = null)
             } else {
                 Icon(
-                    painterResource(R.drawable.ic_chevron_right),
+                    painterResource(R.drawable.ic_g_chevron),
                     contentDescription = null,
                     modifier = Modifier
                         .size(24.dp)

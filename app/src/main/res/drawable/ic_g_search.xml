@@ -7,16 +7,22 @@
      notice MUST be preserved in all copies or substantial portions of the work.
      Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
      ============================================================================ -->
-<!-- Studio tab: a quaver and a spark, the tablet writing music. Tinted where it is used. -->
+<!-- The web panel's stroke glyph g-search (1.7 at a 24 box, round caps and joins): Search: a magnifier. Tinted where it is used. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FF000000"
-        android:pathData="M5,17a3,3 0 1,0 6,0a3,3 0 1,0 -6,0z M10.2,5h1.8v12h-1.8z M12,5c0.4,2.6 4,3.2 3.6,7c-0.6,-1.8 -1.9,-2.6 -3.6,-3z" />
+        android:pathData="M4.8,11 A6.2,6.2 0 1,1 17.2,11 A6.2,6.2 0 1,1 4.8,11 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#FF000000"
-        android:pathData="M18.5,2.5l0.95,2.05l2.05,0.95l-2.05,0.95l-0.95,2.05l-0.95,-2.05l-2.05,-0.95l2.05,-0.95z" />
+        android:pathData="M 15.8,15.8 L 20,20"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

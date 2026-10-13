@@ -24,11 +24,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 /**
- * "● Sent to piano" with the live dot (breathing while a piece plays), or "○ Not connected" —
- * or [notConnected], where a screen needs to say more — which opens the Piano tab. [sent] is the
- * connected line's words, where a screen needs other ones, and [live] whether its dot is the live one
- * (v1.11 — M29: the Keys tab's "○ Keyboard connected. Live is off.", whose keyboard is not sent: red
- * means sent to the piano, nothing else).
+ * "● Sent to piano" with the link's dot ([LinkDot]: filled while connected, the live red breathing while a piece
+ * [playing] goes to the piano), or "○ Not connected" — or [notConnected], where a screen needs to say more — which
+ * opens the Piano tab. [sent] is the connected line's words, where a screen needs other ones, and [live] whether this
+ * line's notes go to the piano at all (v1.11 — M29: the Keys tab's "● Keyboard connected. Live is off.", whose keyboard
+ * is not sent, so its dot never turns red: red means notes going to the piano, nothing else).
  */
 @Composable
 fun ConnectionLine(
@@ -48,7 +48,7 @@ fun ConnectionLine(
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LiveDot(live = connected && live, breathing = playing)
+        LiveDot(LinkDot.of(connected, sending = playing && live))
         Spacer(Modifier.width(8.dp))
         Text(
             if (connected) sent else notConnected,

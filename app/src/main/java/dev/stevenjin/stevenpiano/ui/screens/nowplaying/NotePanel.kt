@@ -9,19 +9,16 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.nowplaying
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LongState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.player.NowPlaying
@@ -32,6 +29,7 @@ import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.NotesLayout
 import dev.stevenjin.stevenpiano.ui.NotesPlan
 import dev.stevenjin.stevenpiano.ui.PlaybackStarter
+import dev.stevenjin.stevenpiano.ui.components.Card
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.KeyboardStripHeight
@@ -53,15 +51,10 @@ internal val TransportHeight: Dp = 56.dp + 72.dp
 /** Room kept between the tracker bar and the glass, so a note is seen crossing into the history before it passes under the glass. */
 private val UNDER_THE_BAR = 12.dp
 
-/** The note views' card: the elevated surface with the card corners. */
+/** The note views' card: the app's [Card], the elevated surface in the card corners with its hairline and specular line (v1.25 — M59). */
 @Composable
 internal fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        content = content,
-    )
+    Card(modifier, content)
 }
 
 /**
@@ -89,7 +82,8 @@ internal fun GlassTransportPanel(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = stripHeight)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(horizontal = Hairline),   // inside the card's own hairline, which runs on beside it
                 source = source,
                 // Beside a list scrolling under its own glass (the Library's panel), this glass yields its blur for that while.
                 paused = LocalYieldBlur.current.value,
