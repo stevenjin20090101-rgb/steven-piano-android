@@ -8964,3 +8964,97 @@ Seen on the demo emulator (debug build installed over the 1.23-era build):
 - the app's only listening sockets are 8737 on the loopback (the debug panel) and on the emulator's Wi‑Fi address (guests
   only).
 Not seen live: the relay's transport binding (unit-tested), the school tablet.
+
+# v1.25 — M59: a touch of the web panel's look
+
+Branch `m59-tablet-look` from `b733dfb` (1.24), worktree `android-wt-m59`, beside M58 (Android 16 and the Bluetooth
+lock) in `android-wt-m58`, which owns `SystemPage.kt`, `FirmwarePage.kt`, `PianoSettingRows.kt`, `PageRows.kt`,
+`SystemCopy.kt` and everything outside `ui/` and `res/`: none of those changed here. Design: `~/.claude/plans/mock-m59/`
+(NOTES.md, the mock pages and pictures), with the rail narrowed by Steven (DESIGN.md › v1.25 — M59).
+
+## The rail (`NavHost.kt`)
+- `TabRail` is no longer Material's `NavigationRail`: a `Box` padded by the system bars' and cutout's vertical and start
+  insets and 8 dp, holding a `GlassSurface(RoundedCornerShape(20.dp), edge = Outline, blur = false, translucent =
+  backdrop)` 80 dp wide, its `Column` scrolling (padding 16/3/12 dp, items 2 dp apart). `RailFrame` measures the slot
+  (96 dp plus any start inset) as before, so `LocalFloatingPadding`'s start follows.
+- `RailIdentity`: `ic_mark` (a 72-unit vector of the launcher's tile and bars, drawn untinted) with `LiveDot(dot, size =
+  8.dp)` on a 2 dp surface-coloured circle, offset 5 dp out and 3 dp up from the mark's corner; the mark's semantics is the
+  dot's word (`railDotWord`); "Steven\nPiano" in `labelSmall` at 11 sp/14 sp/0.3 sp, its description "Steven Piano".
+- `RailItem`: a `Column`, `heightIn(min = 64.dp)`, 14 dp clip, `selectable(role = Tab)`, the fill and glyph tint
+  `animateColorAsState` over `Motion.timed(StandardMs, reduced)`; `TabIcon(route, tint)` keeps Studio's `AuraDot`.
+- `labelScaleThatFits(itemWidth, style)` takes the style; the rail passes 74 dp and `labelSmall` without tracking, and
+  caps the rail's font scale as `TabBar` does.
+- The dot: `LinkDot.of(pianoLink.state is Connected, player.state.status == Playing)`.
+- `GlassEdge.End` (the flush rail's edge) is gone; `scrollEdges` no longer draws a band beside the rail (nothing meets
+  the card's edge). `GlassTokens.RailBand` stays: the panel's `--glass-rail-band` mirrors it (`WebAssetsTest`).
+
+## Glyphs (`res/drawable/ic_g_*.xml`, `Routes.kt`)
+- 24 vector drawables from the panel's `g-*` symbols (`assets/web/index.html`) and the eight M59 drew (plug, hammer, bulb,
+  pedal, speaker, contrast, lock, help; `mock.js`): 1.7 strokes with round caps and joins, `#FF000000` strokes and fills
+  (tinted where used). Circles became two arcs, the hammer's rotated rounded rectangle a `<group android:rotation>`, and
+  every path's numbers are spelled out ("l-.9.9" → "l -0.9,0.9"), so Android reads them as the browser does.
+  `ic_tab_library/keys/studio/piano` went (unused); `ic_stat_piano` stays for the notifications.
+- `Route.icon` takes `ic_g_library`, `ic_g_now`, `ic_g_keys`, `ic_g_studio`, `ic_g_piano`; `SettingsPage` gains `glyph`
+  (DESIGN.md's table). `SettingsSearch` uses `ic_g_search` and `ic_g_chevron`.
+
+## Rows (`SettingsRows.kt`, `PianoScreen.kt`)
+- `NavRow(…, glyph: Painter? = null, …)`: the 24 dp glyph, 16 dp, `LabelAndValue`, 16 dp (8 before), `ic_g_chevron`; the
+  selected fill `onSurface.copy(alpha = SelectedAlpha)` (`Color.kt`, 0.12) instead of `surfaceVariant`, the selected
+  glyph `onSurface`. `DisclosureRow` turns `ic_g_chevron`. `SectionEyebrow(…, rule = true)`.
+- `HubRowView` passes `painterResource(page.glyph)`. The Quiet times page takes `systemPageWidth()`, as System does.
+
+## The dot (`LiveDot.kt` and its readers)
+- `enum class LinkDot { NotConnected, Connected, Sending }`, `LinkDot.of(connected, sending)`; `LiveDot(state, modifier,
+  breathing = true, size = Dp.Unspecified)` animates `filled` (ring → dot) and `live` (ink → red, `lerp`) over 320 ms
+  through `Motion.timed`, and breathes only while `Sending`. `LiveDot(live, breathing, modifier)` stays for M58's
+  `SystemPage.StateDot` (its Running now row, red only while notes go out).
+- Readers: `ConnectionLine` (`sending = playing && live`), `ConnectionCard`, `DisplayScreen` (twice), `FactRow`
+  (`PianoFacts.kt`: `fact.live` read as connected, never sending), and `ChannelCard`/`ChannelRow`/`channelsGrid`, which
+  take `dot: LinkDot` from `LibraryScreen` instead of `connected`.
+
+## Card (`ui/components/Card.kt`)
+- `Card(modifier, content: ColumnScope)`: `clip(shapes.medium)`, `background(surfaceVariant)`, then over the content a
+  1 dp `LocalGlassEdge` rect one hairline down and the outline stroked 2 dp in `LocalHairline` (half of it inside the
+  clip). `ConnectionCard` (its `Surface`), `NotePanel.Panel`, `QuietWeek` and the quiet times' `SectionCard` use it; the
+  transport's glass over a roll card is inset by a hairline at each side.
+
+## Quiet times (`QuietWeek.kt`, `QuietTimesPage.kt`)
+- `WeekPiece` carries `section`, `name`, `start` and `end` (the whole block); `weekPieces` fills them. New pure
+  `pieceAt(pieces, minute, reach)`: the piece under the minute, else the nearest within `reach` minutes.
+- `QuietWeek(sections, onEdit, modifier)`: a `Card` (padding 14/16/18), a 28 dp head `Row` (the gutter, seven
+  `DayName`s; today's on a `SelectedAlpha` pill as tall as the row), and a 480 dp body `Row`: `HourLabels` (a `Layout`
+  placing 6:00…22:00 at their rules, end 8 dp before the columns) and seven `DayColumn`s, each a `Layout` of
+  `WeekBlock`s with `drawBehind` rules (start, and end on Sunday; every hour, odd ones at 0.45 alpha), a 4 % wash today,
+  `drawWithContent` for the now line and dot, and `pointerInput` sending a tap through `pieceAt` (24 dp of reach).
+  The gutter is `max(48.dp, measured "22:00" + 8.dp)` in the labels' style. `rememberMinute()` ticks at each minute.
+- `WeekBlock`: `clip` (0/6/6/0), 14 % fill, a 3 dp edge drawn behind, `clearAndSetSemantics` (description, `Role.Button`,
+  `onClick("Edit")`); lines = `(480 dp × minutes ÷ 960 − 1 dp) ÷ 14 sp`; the times read with a zero-width space after
+  the dash, which Android's line breaker otherwise keeps whole before digits.
+- `QuietTimesPage`: `ic_g_moon` at 24 dp, `READING_SECTIONS` while the rows are null, `SectionEyebrow("Sections", rule =
+  false)`, `SectionCard` on a `Card` (margins 16/12, head 16/16/6, chips 6/16/16, name `bodyLarge` medium).
+
+## Words (`GroupSummaries.kt`)
+- `feel`: "Full power on"; "Full power off · Volume 70%" ("Full power off" without a volume, "Volume 70%" without Full
+  power); `lighting`: "Strip off" for the strip or its mode off; `pedal`: "On · half-pedalling" with `pedalhalf`;
+  `playback`: "Tempo 100% · Expression Light" (`PlaybackCopy.EXPRESSIONS`); `display`: "Follows the system". The panel's
+  "Not connected" / "Reading…" stay "—" on the tablet, whose status line under the connection card says them.
+
+## Small fixes
+- `rememberReducedMotion()` reads a process-wide `State` updated by one `ContentObserver` on
+  `ANIMATOR_DURATION_SCALE`, registered on the application's resolver by the first reader.
+- `MenuChoice(label, selected, onClick, modifier, oneLine)` in `GlassMenu.kt` replaces `ViewMenu.MenuOption` and
+  `PlaylistsHeader.SortOption`.
+- `ConnectionCard`'s status defaults to `InstrumentCopy.linkWords(StevenPiano, link)` (its own copy went).
+- Comments: `Theme.kt` (the appearance is Display's choice), `Color.kt` (red's one meaning), `KeysScreen.kt` (Android 16
+  ignores the orientation hold on large screens; a rotation lets every key go, the safe direction).
+
+## Tests
+`QuietWeekTest` (2: a piece carries its section and whole block where the window cuts it; a press opens the block
+under it, else the nearest within reach, else none). `GroupSummariesTest` follows the panel's words. 1,652 → 1,654 unit
+tests (12 skipped), none failing, with `--rerun`; `lintDebug` 0 errors, 21 warnings, the same 21 as on 1.24.
+
+## Seen on the emulator (`steven_piano_audit`, 1280 × 800 dp, Android 14, debug build)
+The Piano hub with Sound and touch (paper and ink), Quiet times with Steven's three sections at Thursday 12:40 (the
+now line through Assembly), Now playing in ink with Clair de lune sending (the rail's and the capsule's dots red; ink
+again on pause), the Library, Keys, the not-connected rings, and the rail and the week at 1.5x text. A press on
+Assembly, and one 15 dp above Monday's 8:40 block, opened their sections' editors.

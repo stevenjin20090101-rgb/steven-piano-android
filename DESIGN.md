@@ -3244,3 +3244,89 @@ unused", with Studio and every feature in use staying. Nothing a person does cha
 - **Behind the scenes**: about 2,300 lines of the app went (code nothing called, code only the tests called, the one-time
   repairs for versions before 1.14, and copies of the same thing kept in several places), and about 1,300 lines of the
   emulator's stand-ins moved into the debug build, so a release carries none of them.
+
+# v1.25 — M59: a touch of the web panel's look
+
+Steven said (2026-10-10) that he loves how the web panel looks and asked for "a tiny bit" of it on the tablet. Fable drew
+it (`~/.claude/plans/mock-m59/`), and on 2026-10-13 Steven approved it beside today's screens with one change: the rail
+stays as thin as it was. The tabs and their order, the layouts, the tokens and light and dark stay as they were.
+
+## The rail
+- A floating card of regular glass, **80 dp wide**, 8 dp in from the left, from under the status bar and from the bottom
+  (above the navigation bar), in 20 dp corners, its hairline and specular line all the way round. Screens start 96 dp
+  in: the card and its two gaps. Nothing passes beneath it, so it never blurs; over Now playing's album colours it is
+  the surface at the bars' 0.72, as the header is, and the colours show round it.
+- At its top the app's **mark** (the launcher icon's tile and three bars, 28 dp, 7 dp corners) with the **piano's dot**
+  on its corner (8 dp, ringed 2 dp in the surface), and under it **"Steven Piano"** on two centred lines, 11 sp medium.
+  Steven asked for the name there rather than a word for the dot. TalkBack reads the dot's state as the mark:
+  "Connected", "Not connected", "Sending notes to the piano". (On the ink the tile is the ink itself, so the bars show
+  alone, as the launcher icon does there.)
+- The **five places** in today's order, each its glyph (24 dp) over its label (12 sp medium, one line), at least 64 dp
+  tall in 14 dp corners. The chosen one sits on the **content colour at 12 %** with its glyph in the content colour; the
+  elevated surface it had before read about 1.05:1 on the paper. The others' glyphs are the secondary grey; every label
+  is the content colour (text on a bar's glass). The fill eases in 200 ms, a cut with animations off. Labels follow the
+  system font up to 1.5x as far as "Now playing" still fits on one line, and shrink rather than wrap. Studio keeps its
+  aura dot while a job runs. A window too short for the card (a phone on its side) lets it scroll.
+- Phones keep the bottom tab bar as it was, with the new glyphs.
+
+## Red keeps one meaning
+- A link's dot has three states: **a ring** while not connected, **filled in the content colour** while connected and
+  silent, and **the live red**, breathing, only while notes go to the piano (a piece playing to it: the state the "Sent
+  to piano" capsule reads). A connection alone is never red any more. So read the rail's dot, the connection card's,
+  the "Sent to piano" capsule and lines (Now playing, its panel beside the Library, Keys), the resting screen's, a
+  playing channel's card, and the Bluetooth row on the System and Firmware pages (which never knows of notes, so is
+  never red). The System page's Running now row was already red only while notes go out. The Keys tab's "Keyboard
+  connected. Live is off." dot is filled, never red.
+
+## The glyphs
+- The web panel's stroke glyphs (1.7 at a 24 box, round caps and joins) on the tabs and at the start of every hub row,
+  and eight drawn in the same style where a panel glyph would repeat a tab on the same screen (the panel's keys,
+  sparkle and sliders are the Keys, Studio and Piano tabs'):
+
+| Row | Glyph | | Row | Glyph |
+| --- | --- | --- | --- | --- |
+| Instrument | link | | Tablet sound | speaker (new) |
+| Keyboard | plug (new) | | Quiet times | moon |
+| Sound and touch | hammer (new) | | Web panel | grid |
+| Lights and screen | bulb (new) | | Guests | guests |
+| Pedal | pedal (new) | | System | gauge |
+| Firmware and status | chip | | Display | contrast (new) |
+| Playback | play | | Kiosk | padlock (new) |
+| Updates | download | | Library and artwork | picture |
+| Help and about | question (new) | | | |
+
+- The tabs: Library's books, Now playing's ring and play, Keys' keyboard, Studio's sparkle, Piano's sliders. The rows'
+  chevron, the settings search field's magnifier and the quiet times' moon are stroke glyphs too.
+
+## Rows
+- A hub row: its glyph (24 dp, the secondary grey) at the 16 dp inset, 16 dp, the label and its value as before, 16 dp,
+  the stroke chevron 12 dp from the end; the hairline stays 16 dp in. The open page's row is filled edge to edge with
+  the content colour at 12 %, its glyph in the content colour.
+- With the rail floating 8 dp clear of every screen, the scroll-edge band beside it is gone: nothing meets its edge.
+
+## Cards
+- One **Card**: the elevated surface in the cards' 12 dp corners, a 1 dp hairline round it and a 1 dp specular line just
+  inside its top (white at 70 % on the paper, 10 % on the ink), straight and as wide as the card. Content, never glass.
+  The connection card, Now playing's note views (the transport's glass stands inside their side hairlines) and the
+  quiet times' week and sections stand on it; the System page's cards follow in its own restyle.
+
+## Quiet times
+- The page runs as wide as System's. The week is the panel's calendar on a card: Monday to Sunday across, 6:00 to 22:00
+  down a **480 dp** body; every hour ruled (the odd ones at 45 % of the hairline), every other one labelled in a gutter
+  measured from "22:00" at the person's text size plus 8 dp, at least 48 dp, so no label ever reaches Monday. Today's
+  name on a pill, its column washed at 4 %, and across it a 2 dp line at the time now with an 8 dp dot at its start,
+  moving with the minutes.
+- A **block** is the content colour at 14 % behind a 3 dp edge of it, square at its start and 6 dp round at its end: its
+  section's name (semibold) from 70 minutes, its times (secondary) from 30, wrapping after the dash, as many 14 sp lines
+  as its height holds, clipped without an ellipsis ("10:40–" on a 50-minute block at large text). A press on a block,
+  or within 24 dp of one, opens its section's editor; TalkBack reads "School days, Monday, 8:40–9:30" with Edit.
+- The sections are cards under SECTIONS (no rule), 12 dp apart: the name (medium) over its days, Edit, the time chips.
+  Until they are read the page says "Reading the quiet times…".
+
+## Words
+- The hub's rows say what the panel's settings list says: "Full power on", or "Full power off · Volume 70%"; "Strip
+  off"; "On · half-pedalling"; "Tempo 100% · Expression Light" for Playback; "Follows the system" for Display.
+
+## Small things
+- Turning animations off or on in Android's settings takes effect at once; the app noticed only when it started.
+- The View menu's choices and the Playlists' order are one menu choice.

@@ -253,7 +253,9 @@ on the tablet*). Made by Steven Jin. Version 1.24.
   sends a change as you make it and shows what the piano reports back; the piano
   saves your changes when you leave the tab. Bench commands (firing solenoids,
   resets, per-key force) stay at the piano's USB console.
-- **Piano**: one page of groups under **Search settings**. Type a few letters of
+- **Piano**: one page of groups under **Search settings**, each row starting with
+  its glyph, as on the web panel, and saying what is set in the panel's words
+  ("Full power on", "Strip off", "Tempo 100% · Expression Light"; 1.25). Type a few letters of
   any setting ("tab vol", "dark", "wifi") and the list gives way to what matches,
   each with where it lives ("THE PIANO › SOUND AND TOUCH › FINE TUNING"); choose
   one and its page opens at that row, lit for a moment (a folded section opens
@@ -322,7 +324,12 @@ on the tablet*). Made by Steven Jin. Version 1.24.
   of the app's own logs by any app you choose; after a crash, the Library offers
   it (see *Diagnostics*).
 - **Tablets and phones on their side**: a navigation rail on the left instead of
-  the bottom bar. Now playing shows the score and the notes together: stacked on
+  the bottom bar: since 1.25 a thin floating card of glass, as the web panel's, with
+  the app's mark and "Steven Piano" at its top and the five tabs under it, each its
+  line glyph over its name, the open one lightly shaded. The dot on the mark is the
+  piano: a ring while not connected, filled while connected, and red only while
+  notes are going to the piano (a piece playing to it), as every such dot in the app
+  now is. Now playing shows the score and the notes together: stacked on
   a small tablet or a phone on its side, side by side on a large tablet on its
   side. **Drag the divider** between them to share the screen as you like: it rests
   at a third, a half and two thirds, drag a view well past its smallest size to hide
@@ -677,7 +684,8 @@ http://10.0.2.2:8767/` builds such a test pack without publishing it.
    12 and newer). On Android 11 and older, allow **Location** and keep Location
    turned on: those versions only find Bluetooth devices with it on. The app
    never reads your location.
-3. The dot turns red and the status reads **Connected**; the piano's screen
+3. The dot fills in and the status reads **Connected** (it turns red only while
+   notes are going to the piano); the piano's screen
    reads *BLE MIDI: CONNECTED*. With *Auto-connect on launch* on (the default),
    the app reconnects by itself next time, and after a dropped link it keeps
    trying in the background.
@@ -1081,8 +1089,8 @@ reads "Quiet until 9:30" or "Next Mon 8:40"):
 1. **Add section**: a name ("School days"), its days (Weekdays and Every day are one tap), and its blocks, each from a
    time to a time ("8:40–9:30"). **Add block** proposes the next one ten minutes after the last, as long as it. A block
    that ends before it starts runs past midnight ("The next day"): 21:00–7:00 keeps the night quiet.
-2. **Save.** The page shows the week at a glance (Monday to Sunday, 6:00 to 22:00, the blocks hatched) and a card for
-   each section; **Edit** changes one, **Delete section** removes it. Up to 12 sections of 16 blocks; the blocks of one
+2. **Save.** The page shows the week as a calendar (Monday to Sunday, 6:00 to 22:00, today marked with a line at the
+   time now, each block with its section's name and times; tap a block to edit its section) and a card for each section; **Edit** changes one, **Delete section** removes it. Up to 12 sections of 16 blocks; the blocks of one
    section may not overlap (two sections may).
 
 During a block the piano is silent: whatever plays stops as the block begins, and nothing starts until it ends; nothing
@@ -1360,8 +1368,9 @@ file to the release `models`.
 - [ ] Sideload `app-release.apk` (uninstall a debug build first). The app launches
       instantly and asks for Bluetooth permission only from the Piano tab, with a
       one-line reason.
-- [ ] Connect: the dot goes live and the status reads Connected within a few
-      seconds of the piano advertising.
+- [ ] Connect: the dot fills in (the rail's too) and the status reads Connected
+      within a few seconds of the piano advertising; play a piece and both turn
+      red, pause and they are filled again.
 - [ ] With an iPad (or a Mac's Audio MIDI Setup) connected to the piano, tap
       Connect: after 12 s the card says it can't find the piano, that it hides
       while another device is connected, and how the piano's screen shows it.
