@@ -1,9 +1,9 @@
 {
-  "versionCode": 34,
-  "versionName": "1.24",
-  "notes": "A safer, leaner Steven Piano. Signing in to the web panel now lasts 90 days and works only the way you signed in (Tailscale or the internet link). Listen, Test every key and Install the update ask for the PIN again first. Wrong guesses from strangers over the internet can no longer lock your own browsers out, and the panel has Sign out (Settings › Panel). 'Panel on Wi‑Fi too' is gone: the full panel needs Tailscale or the internet link, both encrypted, and the school Wi‑Fi only ever gets the guests' page. Quiet times no longer need an alarm permission. Under the hood, code left over from older versions was removed and duplicates merged; every feature stays, and signed-in browsers stay signed in.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.24/steven-piano-1.24.apk",
-  "sha256": "4a28ba7317177a5711386dd7219d6ee15845b9a078134ecbb05efa03f19fc00c",
-  "sizeBytes": 14203153,
+  "versionCode": 35,
+  "versionName": "1.25",
+  "notes": "A new look, Android 16, and the piano's Bluetooth lock. The tablet borrows the web panel's look: a thin glass rail with the Steven Piano mark, line icons on every Piano row, cards with a thin edge, and Quiet times as a week calendar with today and the time now (tap a block to edit it). The dot by the mark is dark when the piano is connected and turns red only while notes go to the piano. The app now targets Android 16, and System warns in amber when USB or wireless debugging is on. Ready for the piano's Bluetooth lock (firmware 2.1.0, next): the tablet claims the piano and proves itself on every connection, so other phones can't play it or change its settings. Firmware and status gains Let another device pair, Unlock the piano, and Let anyone play for 1 hour (for the iPad).",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.25/steven-piano-1.25.apk",
+  "sha256": "2d2e1bbc95f1d16b18a2b34db68983ee09c9a1dad50e3e71a33f2bf88808ee40",
+  "sizeBytes": 14328461,
   "minSdk": 26
 }
