@@ -31,6 +31,7 @@ import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import dev.stevenjin.stevenpiano.ui.components.easedIn
 import dev.stevenjin.stevenpiano.ui.components.ListEntrance
 import dev.stevenjin.stevenpiano.ui.components.placement
@@ -71,7 +72,7 @@ fun LazyListScope.channelsGrid(
     channels: List<ChannelSummary>,
     columns: Int,
     playing: String?,
-    connected: Boolean,
+    dot: LinkDot,
     onPlay: (String) -> Unit,
     onSetVolume: (String) -> Unit,
     entrance: ListEntrance,
@@ -85,7 +86,7 @@ fun LazyListScope.channelsGrid(
                 ChannelCard(
                     channel,
                     playing = channel.key == playing,
-                    connected = connected,
+                    dot = dot,
                     onPlay = { onPlay(channel.key) },
                     onSetVolume = { onSetVolume(channel.key) },
                     modifier = Modifier.weight(1f),

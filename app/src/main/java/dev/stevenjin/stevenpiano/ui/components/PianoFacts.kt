@@ -49,7 +49,7 @@ import dev.stevenjin.stevenpiano.ui.theme.Tabular
 /**
  * A fact the app reads ([SystemCopy.Fact]), on the System page's cards and the piano's Firmware and status page (one
  * row for both since v1.24 — M57): its name, and its value at the end ("—" when not known, the small "Needs newer
- * firmware" tag, the amber with its words when it needs attention, the live dot before the Bluetooth row's); a value too
+ * firmware" tag, the amber with its words when it needs attention, the link's dot before the Bluetooth row's); a value too
  * long to sit beside the name goes under it. TalkBack reads "name, value". The page draws the hairlines between rows.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -75,7 +75,8 @@ fun FactRow(fact: SystemCopy.Fact) {
             fact.needs -> NeedsTag()
             else -> Row(verticalAlignment = Alignment.CenterVertically) {
                 if (fact.live != null) {
-                    LiveDot(live = fact.live, breathing = false)
+                    // The Bluetooth row's link: filled while connected, a ring when not; it never knows of notes, so never red.
+                    LiveDot(LinkDot.of(connected = fact.live, sending = false))
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(

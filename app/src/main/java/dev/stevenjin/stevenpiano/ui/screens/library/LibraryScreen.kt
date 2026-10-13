@@ -92,6 +92,7 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.KioskGate
@@ -111,6 +112,7 @@ import dev.stevenjin.stevenpiano.ui.components.easedIn
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayClearance
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayRequest
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import dev.stevenjin.stevenpiano.ui.components.ListEntrance
 import dev.stevenjin.stevenpiano.ui.components.LocalYieldBlur
 import dev.stevenjin.stevenpiano.ui.components.GlyphButton
@@ -509,9 +511,11 @@ private fun LibraryItems(
 ) {
     val columns = LocalAppFrame.current.tileColumns
     val graph = LocalContext.current.graph
-    // Which channel plays, for its card, and whether the piano is there to hear it (the dot's colour).
-    val playingChannel = graph.player.state.collectAsStateWithLifecycle().value.channel
+    // Which channel plays, for its card, and the piano link's dot beside it: red only while its notes go to the piano.
+    val player = graph.player.state.collectAsStateWithLifecycle().value
+    val playingChannel = player.channel
     val connected = graph.pianoLink.state.collectAsStateWithLifecycle().value is LinkState.Connected
+    val dot = LinkDot.of(connected, sending = player.status == PlaybackStatus.Playing)
     val listing = state.listing
     val group = state.group
     val playlistId = (group as? Group.Playlist)?.id
@@ -651,7 +655,7 @@ private fun LibraryItems(
                             ChannelRow(
                                 listing.channels,
                                 playing = playingChannel,
-                                connected = connected,
+                                dot = dot,
                                 onPlay = play::channel,
                                 onSetVolume = onSetVolume,
                                 onSeeAll = { vm.openGroup(Group.Channels) },
@@ -680,7 +684,7 @@ private fun LibraryItems(
                     }
                 }
             }
-            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, connected, play::channel, onSetVolume, entrance, reduced, faded)
+            is Listing.Channels -> channelsGrid(listing.channels, columns, playingChannel, dot, play::channel, onSetVolume, entrance, reduced, faded)
             is Listing.Composers -> {
                 item(key = "tiles-top") { Spacer(Modifier.height(8.dp)) }
                 itemsIndexed(listing.composers.chunked(columns), key = { _, row -> "tiles-k-${row.first().composerKey}" }) { index, row ->

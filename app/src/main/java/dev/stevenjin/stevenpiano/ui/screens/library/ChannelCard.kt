@@ -48,6 +48,7 @@ import dev.stevenjin.stevenpiano.ui.components.ComposerArt
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassDropdownMenu
 import dev.stevenjin.stevenpiano.ui.components.Hairline
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.Mosaic
 import dev.stevenjin.stevenpiano.ui.components.MonogramTile
@@ -72,13 +73,13 @@ private val BandHeight = 56.dp
  * "12 PIECES", "ADD MORE PIECES" for a pool too small to play, or while it plays the live dot and
  * "PLAYING". On the band everything is the content colour, as on glass. Tap plays the channel
  * ([onPlay]); long-press offers Set volume ([onSetVolume]; Schedule went with timed plays in v1.20 — M54).
- * [connected] lights the dot red; otherwise it is the hollow ring, as everywhere.
+ * [dot] is the piano link's ([LinkDot]): the live red only while the channel's notes go to the piano.
  */
 @Composable
 fun ChannelCard(
     summary: ChannelSummary,
     playing: Boolean,
-    connected: Boolean,
+    dot: LinkDot,
     onPlay: () -> Unit,
     onSetVolume: () -> Unit,
     modifier: Modifier = Modifier,
@@ -114,7 +115,7 @@ fun ChannelCard(
                         ComposerArt(composers[i].key, composers[i].name, ArtSize.Tile, cell, framed = false)
                     }
                 }
-                Band(summary.name, meta, playing, connected, Modifier.align(Alignment.BottomCenter))
+                Band(summary.name, meta, playing, dot, Modifier.align(Alignment.BottomCenter))
             }
         }
         GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -125,7 +126,7 @@ fun ChannelCard(
 
 /** The card's foot: the surface at the glass's opacity, a hairline along its top, the name and the eyebrow. */
 @Composable
-private fun Band(name: String, meta: String, playing: Boolean, connected: Boolean, modifier: Modifier) {
+private fun Band(name: String, meta: String, playing: Boolean, dot: LinkDot, modifier: Modifier) {
     val ink = MaterialTheme.colorScheme.onSurface
     Column(
         modifier
@@ -144,7 +145,7 @@ private fun Band(name: String, meta: String, playing: Boolean, connected: Boolea
             Text(name, style = MaterialTheme.typography.titleLarge, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (playing) {
-                    LiveDot(live = connected, breathing = true)
+                    LiveDot(dot)
                     Spacer(Modifier.width(6.dp))
                 }
                 Eyebrow(meta, color = ink, maxLines = 1)
