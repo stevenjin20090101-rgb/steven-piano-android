@@ -8949,3 +8949,18 @@ timed rows, leaves the other tables alone, and takes a new id after the kept one
 is planned again so it stops on time). Removed with their code: `OccurrencesTest`, `SchedulePlannerTest`,
 `TextRepairTest`, `UploadRepairTest` and the tests of members only tests used. 1,672 → 1,639 unit tests (12 skipped), none
 failing, with `--rerun`; `lintDebug` 0 errors, 21 warnings.
+
+## The release: 1.24 (versionCode 34)
+
+M56 (merged as `6bde4d1`) and M57 (merged as `9c02eb9`, the DESIGN.md and BUILD_SPEC.md tails kept both). The integrator
+then removed the last pre-1.14 housekeeping flags (`textRepairDone`, `uploadRepairDone` and their keys in `Settings.kt`,
+with their test) and README's exact-alarm paragraph. Full suite: 1,652 tests green (12 skipped); lint 0 errors and 21
+warnings (library versions, the target SDK, the services' foreground types: phase 2).
+Seen on the demo emulator (debug build installed over the 1.23-era build):
+- the quiet times came through the 5 → 6 migration identical (School days 4 blocks, Assembly 1, Night 1);
+- the session signed in before the upgrade still reads (bound on first use to the tablet's own transport);
+- `POST /api/listen/start` answers 403 `confirm`, a wrong `/api/confirm` 403 `wrong`, the right one 204, and Listen then
+  409 `listen-off` (switched off at the tablet); `covers` needs no confirmation;
+- the app's only listening sockets are 8737 on the loopback (the debug panel) and on the emulator's Wi‑Fi address (guests
+  only).
+Not seen live: the relay's transport binding (unit-tested), the school tablet.

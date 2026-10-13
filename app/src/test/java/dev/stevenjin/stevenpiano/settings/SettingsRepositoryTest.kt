@@ -468,20 +468,6 @@ class SettingsRepositoryTest {
         scope.cancel()
     }
 
-    @Test
-    fun `the repair of older uploads is housekeeping, due at first and remembered once done, never a preference`() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "repair.preferences_pb") }
-        val repository = SettingsRepository(store)
-        assertEquals(false, repository.uploadRepairDone())
-        assertEquals(false, repository.textRepairDone())
-        repository.markUploadRepairDone()
-        assertEquals(true, repository.uploadRepairDone())
-        assertEquals(true, SettingsRepository(store).uploadRepairDone())
-        assertEquals("each repair its own flag", false, repository.textRepairDone())
-        assertEquals("nothing a preference: Share diagnostics never sees it", PianoSettings(), repository.settings.first())
-        scope.cancel()
-    }
 
     @Test
     fun `no keyboard at first, one chosen is kept with its name, and forgetting it forgets both (v1_11 M29)`() = runBlocking {

@@ -27,7 +27,7 @@ keeps silent at the hours you set (see *Quiet times*), on the school tablet it c
 (see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
 piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
-on the tablet*). Made by Steven Jin. Version 1.23.
+on the tablet*). Made by Steven Jin. Version 1.24.
 
 ## What it does
 
@@ -453,7 +453,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.23.apk`.
+   `adb install ../apk/steven-piano-1.24.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -513,7 +513,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=34`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=35`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -1093,10 +1093,9 @@ anyway asks for the kiosk PIN. The Keys tab and a MIDI keyboard still play: some
 9:30. Use Play anyway." The guests' page says "The piano is resting until 9:30. Your request will wait until then.", and
 requests still go in.
 
-**The tablet keeps the times**: leave it on, with the app's battery use *Unrestricted* (see *Keep playing with the screen
-off*). An exact alarm wakes it as each block begins. Android 13 and newer allow that by themselves; on Android 12 the
-person may take it away (Settings › Apps › Special app access › Alarms & reminders): the page then shows **Allow exact
-alarms**, which opens that setting, and until then the app stops the piano only while it is awake.
+**The tablet keeps the times** while the app runs: leave it on, with the app's battery use *Unrestricted* (see *Keep
+playing with the screen off*). Anything playing keeps the tablet awake, so a block that begins mid-piece stops it on
+time, and a change of the clock or the time zone is taken at once. (Since 1.24 no alarm permission is needed.)
 
 **On the piano:**
 
