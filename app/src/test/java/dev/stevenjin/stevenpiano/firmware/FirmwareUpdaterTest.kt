@@ -411,6 +411,50 @@ class FirmwareUpdaterTest {
     }
 
     @Test
+    fun `ERR 11 at BEGIN and ERR 12 after END say why, and are never retried (v1_25 M58)`() = runTest {
+        val locked = Rig(this)
+        locked.ota.script = OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, authorised = { false })
+        locked.check()
+        locked.updater.update()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(
+            FirmwareState.Failed(FirmwareFailures.DIDNT_FINISH, retryable = false, manifest = manifest, hint = FirmwareFailures.NOT_AUTHORISED),
+            locked.updater.state.value,
+        )
+        assertTrue(locked.logged.any { it.contains("ERR 11 (not authorised)") })
+
+        val older = Rig(this)
+        older.ota.script = OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, runningVersion = "2.0.2")   // § 5's image has no tag
+        older.check()
+        older.updater.update()
+        advanceTimeBy(120_000)
+        runCurrent()
+        assertEquals(
+            FirmwareState.Failed(FirmwareFailures.DIDNT_FINISH, retryable = false, manifest = manifest, hint = FirmwareFailures.NOT_NEWER),
+            older.updater.state.value,
+        )
+        assertTrue(older.logged.any { it.contains("ERR 12 (not newer) while the piano checked the image") })
+        assertEquals(listOf("BEGIN", "END"), older.ota.controlNames)
+    }
+
+    @Test
+    fun `nothing is sent while the piano's lock reads only (v1_25 M58)`() = runTest {
+        val rig = Rig(this)
+        rig.emulated.lock = dev.stevenjin.stevenpiano.ble.EmulatedLock(dev.stevenjin.stevenpiano.ble.EmulatedLock.Mode.Claimed)
+        rig.link.drop()
+        runCurrent()
+        rig.link.connect(null)
+        runCurrent()
+        rig.check()
+        rig.updater.update()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(FirmwareFailures.NOT_AUTHORISED, (rig.updater.state.value as FirmwareState.Failed).message)
+        assertEquals("BEGIN never went", 0, rig.ota.sessions)
+    }
+
+    @Test
     fun `a hash the piano finds wrong after END is the one-line failure, with Retry`() = runTest {
         val rig = Rig(this)
         rig.ota.script = OtaPiano.Script(hashMismatch = true)

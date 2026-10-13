@@ -14,6 +14,7 @@ import dev.stevenjin.stevenpiano.midi.MidiBatch
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -88,7 +89,7 @@ class GattPianoLinkTest {
         assertEquals(1, gatt.discoveries)
         gatt.discovered()
         executor.runDue()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 247, epoch = 1), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 247, epoch = 1, connection = 1), state())
         assertTrue(gatt.highPriority)
         assertEquals(listOf(address to PianoBluetooth.NAME), remembered)
     }
@@ -167,7 +168,7 @@ class GattPianoLinkTest {
         assertEquals(1, gatt.discoveries)
         gatt.discovered()
         executor.runDue()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 23, epoch = 1), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 23, epoch = 1, connection = 1), state())
     }
 
     @Test
@@ -335,7 +336,7 @@ class GattPianoLinkTest {
         val direct = radio.connections.last()
         assertFalse(direct.autoConnect)
         finishConnecting(direct)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 2), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 2, connection = 2), state())
     }
 
     @Test
@@ -344,7 +345,7 @@ class GattPianoLinkTest {
         executor.runDue()
         val background = radio.connections.last()
         finishConnecting(background)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 2), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 2, connection = 2), state())
         val scans = radio.scans
         executor.advance(120_000)
         assertEquals("no reconnect scans once connected", scans, radio.scans)
@@ -399,7 +400,7 @@ class GattPianoLinkTest {
         radio.find(address, null)
         executor.runDue()
         finishConnecting(radio.connections.single())
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1, connection = 1), state())
     }
 
     @Test
@@ -533,6 +534,7 @@ class GattPianoLinkTest {
         link.send(notes(3), dropPending = false)
         executor.advance(5 * 41)   // 41 tries, 5 ms apart: dropped
         assertEquals(2L, (state() as LinkState.Connected).epoch)
+        assertEquals("a lost packet keeps the connection (the piano's lock trusts it still)", 1L, (state() as LinkState.Connected).connection)
         gatt.nextWrite = WriteResult.Sent
         executor.advance(5)
         val stop = gatt.writes.single().map { it.toInt() and 0xFF }
@@ -554,10 +556,13 @@ class GattPianoLinkTest {
     fun `each connection has a new epoch, so a quick drop and reconnect is never missed`() {
         val first = connectFully()
         assertEquals(1L, (state() as LinkState.Connected).epoch)
+        assertEquals("the piano's address, for the key the lock keeps (v1.25 — M58)", first.address, link.address)
         first.dropped()
         executor.runDue()
+        assertNull("no address while not connected", link.address)
         finishConnecting(radio.connections.last())
         assertEquals(2L, (state() as LinkState.Connected).epoch)
+        assertEquals("a new connection, a new number: nothing proved on the last carries over", 2L, (state() as LinkState.Connected).connection)
     }
 
     @Test
@@ -664,7 +669,7 @@ class GattPianoLinkTest {
 
         gatt.nameRead(PianoBluetooth.NAME)
         executor.runDue()
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1, connection = 1), state())
         assertEquals(listOf(address to PianoBluetooth.NAME), remembered)
         assertTrue(logged.contains("Seen $address (no name), RSSI -60 dBm, MIDI service yes: no name: a candidate, connected to in 1 s to read its name unless a named Steven Piano answers"))
         assertTrue(logged.contains("GAP Device Name \"Steven Piano\": it is the piano"))
@@ -765,7 +770,7 @@ class GattPianoLinkTest {
         assertEquals(address, gatt.address)
         finishConnecting(gatt)
         assertEquals(0, gatt.nameReads)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1, connection = 1), state())
     }
 
     @Test
@@ -804,7 +809,7 @@ class GattPianoLinkTest {
         assertEquals(address, gatt.address)
         assertFalse(gatt.autoConnect)
         finishConnecting(gatt)
-        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1), state())
+        assertEquals(LinkState.Connected(PianoBluetooth.NAME, 255, epoch = 1, connection = 1), state())
         assertTrue(logged.contains("$address \"Steven Piano\" is connected to this device already (another app holds it): connecting to it directly"))
     }
 

@@ -42,10 +42,17 @@ import kotlinx.coroutines.flow.asStateFlow
  * update's OK it restarts: it drops for [BOOT_MS] and comes back as the scenario says, pending its
  * self-test and confirmed [CONFIRM_MS] later. Without the property it has neither, as firmware
  * older than 2.0.0.
+ * The Bluetooth lock (v1.25 — M58): the emulated piano has firmware 2.1.0's lock ([EmulatedLock]), fresh from
+ * its update: open, so the app claims it as it connects. `adb shell setprop debug.stevenpiano.lock` asks for
+ * another as the next connection starts: `claimed` (by another device: read only), `pairing` (claimed by
+ * another, its window open: the app claims it), `open`, or `none` (firmware 2.0.x, no lock). Each connection
+ * has its own number and starts untrusted; a Note On or the pedal down from a connection the piano doesn't
+ * trust is logged as not played. Its address is [ADDRESS], from the documentation range.
  */
 class EmulatedPianoLink(
     private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty,
     private val fakeOta: () -> FakeOta? = FakeOta::fromProperty,
+    private val lockMode: () -> String? = ::lockModeFromProperty,
 ) : PianoLink {
     /** Which piano the emulator pretends to reach. */
     enum class ConsoleMode { Full, None, Mute }
@@ -92,6 +99,29 @@ class EmulatedPianoLink(
     /** The fake update scenario this connection plays, if any. */
     private var scenario: FakeOta? = null
 
+    /** Which lock the emulated piano has ([lockMode]'s word as last applied), and the connections made. */
+    private var lockApplied: String? = UNSET
+    private var connections = 0L
+
+    @Volatile
+    override var address: String? = null
+        private set
+
+    /** A new connection: the lock the property asks for (when it changed), untrusted, and its number. */
+    private fun connectedAgain(): LinkState.Connected {
+        val word = lockMode()
+        synchronized(emulated) {
+            if (word != lockApplied) {
+                lockApplied = word
+                emulated.lock = if (word == NO_LOCK) null else EmulatedLock(EmulatedLock.Mode.named(word) ?: EmulatedLock.Mode.Open)
+                LinkLog.shared.add("The emulated piano's lock: " + (word ?: EmulatedLock.Mode.Open.key))
+            }
+            emulated.connected()
+        }
+        address = ADDRESS
+        return LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU, connection = ++connections)
+    }
+
     private val found = Runnable {
         mode = consoleMode()
         console = if (mode == ConsoleMode.None) null else channel
@@ -107,7 +137,7 @@ class EmulatedPianoLink(
         comeUp(running)
         Log.d(TAG, "Connected (emulated), console: ${mode.name.lowercase()}, firmware: ${running ?: "no version"}")
         LinkLog.shared.add("Connected to Steven Piano (emulated), console: ${mode.name.lowercase()}" + (fake?.let { ", firmware update scenario ${it.key}" } ?: ""))
-        _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU)
+        _state.value = connectedAgain()
     }
 
     /** The piano's version and update service for this connection: firmware 2.0.0 and later have both. */
@@ -137,6 +167,7 @@ class EmulatedPianoLink(
         console = null
         ota = null
         version.value = null
+        address = null
         _state.value = LinkState.Reconnecting(1)
     }
 
@@ -153,7 +184,7 @@ class EmulatedPianoLink(
         console = if (mode == ConsoleMode.None) null else channel
         comeUp(running)
         LinkLog.shared.add("Connected to Steven Piano (emulated) again, firmware ${running ?: "no version"}")
-        _state.value = LinkState.Connected(PianoBluetooth.NAME, LOGGED_MTU)
+        _state.value = connectedAgain()
     }
 
     override fun expectRestart(withinMs: Long) {
@@ -182,13 +213,21 @@ class EmulatedPianoLink(
         console = null
         ota = null
         version.value = null
+        address = null
         _state.value = LinkState.Disconnected
     }
 
     override fun send(batch: MidiBatch, dropPending: Boolean) {
         if (_state.value !is LinkState.Connected) return
+        val plays = synchronized(emulated) { emulated.notesAllowed() }
         for (i in 0 until batch.size) {
-            Log.d(TAG, "%02X %02X %02X".format(batch.status(i), batch.data1(i), batch.data2(i)))
+            val status = batch.status(i)
+            val data1 = batch.data1(i)
+            val data2 = batch.data2(i)
+            val message = "%02X %02X %02X".format(status, data1, data2)
+            // What a piano that doesn't trust this connection drops (BLE_LOCK.md): logged, so the gate's work can be seen.
+            val dropped = !plays && !LockGate.releases(status, data1, data2)
+            Log.d(TAG, if (dropped) "$message (not played: the piano doesn't trust this connection)" else message)
         }
     }
 
@@ -208,6 +247,16 @@ class EmulatedPianoLink(
         private const val REPLY_BUFFER_LINES = 512
         private const val CONSOLE_PROPERTY = "debug.stevenpiano.console"
         private const val PIANO_PROPERTY = "debug.stevenpiano.piano"
+
+        /** `debug.stevenpiano.lock`: the emulated piano's lock, `open` (or unset), `claimed`, `pairing`, or `none` (2.0.x). */
+        private const val LOCK_PROPERTY = "debug.stevenpiano.lock"
+        private const val NO_LOCK = "none"
+        private const val UNSET = "(unset)"
+
+        /** The emulated piano's Bluetooth address, from the range RFC 7042 keeps for documentation. */
+        const val ADDRESS = "00:00:5E:00:53:01"
+
+        private fun lockModeFromProperty(): String? = SystemProperty.read(LOCK_PROPERTY).trim().ifEmpty { null }
 
         /** The real scan's timeout (PianoScanner), for the piano that stays away. */
         private const val SCAN_TIMEOUT_MS = 12_000L

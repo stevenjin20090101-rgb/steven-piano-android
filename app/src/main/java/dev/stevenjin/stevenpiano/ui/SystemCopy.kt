@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui
 
 import androidx.compose.runtime.Immutable
+import dev.stevenjin.stevenpiano.ble.LinkError
 import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.diag.AppReading
 import dev.stevenjin.stevenpiano.diag.Attention
@@ -167,6 +168,22 @@ object SystemCopy {
         null -> null
     }
 
+    /** The Tablet card's Debugging row (v1.25 — M58), amber while it needs attention ([Attention.debugging]). */
+    const val DEBUGGING = "Debugging"
+
+    /** What debugging is on: "USB", "Wireless", "USB and wireless", "Developer options on"; "Off"; null before a reading. */
+    fun debugging(reading: SystemReading?): String? {
+        val debug = reading?.debug ?: return null
+        return when {
+            debug.usb == true && debug.wireless == true -> "USB and wireless"
+            debug.usb == true -> "USB"
+            debug.wireless == true -> "Wireless"
+            debug.wireless == null && debug.developer == true -> "Developer options on"
+            debug.usb == null && debug.wireless == null && debug.developer == null -> null
+            else -> "Off"
+        }
+    }
+
     // ---- The controller and the piano ----------------------------------------------------------------------
 
     /** The controller card's line: the instrument that plays instead, "Not connected", or the chip and its firmware. */
@@ -274,14 +291,18 @@ object SystemCopy {
         return named + others
     }
 
-    /** The link as the Bluetooth row says it. */
+    /** The link as the Bluetooth row says it; under the piano's lock (v1.25 — M58), why it can't be used. */
     fun linkWord(link: LinkState): String = when (link) {
         is LinkState.Connected -> "Connected"
         LinkState.Disconnected -> NOT_CONNECTED
         LinkState.Scanning -> "Looking for it…"
         LinkState.Connecting -> "Connecting…"
         is LinkState.Reconnecting -> "Reconnecting…"
-        is LinkState.Error -> "Couldn't connect"
+        is LinkState.Error -> when (link.reason) {
+            LinkError.LockedOut -> LockCopy.LOCKED_TO_ANOTHER
+            LinkError.NotAccepted -> "Didn't accept this tablet"
+            else -> "Couldn't connect"
+        }
     }
 
     // ---- Running now ---------------------------------------------------------------------------------------
@@ -435,9 +456,13 @@ object SystemCopy {
     )
     private val TRANSPORTS = mapOf("wifi" to "Wi-Fi", "ethernet" to "Ethernet", "cellular" to "Mobile data", "vpn" to "VPN", "other" to "Connected")
 
-    /** The facts the cards show by name (and the protocol's own markers); every other fact the piano gives is a row of its own. */
+    /**
+     * The facts the cards show by name (and the protocol's own markers, and the Bluetooth lock's, which the Firmware page
+     * says in words: v1.25 — M58); every other fact the piano gives is a row of its own.
+     */
     private val SHOWN_FACTS = setOf(
         "temp", "heap", "heapmin", "heapblock", "heapsize", "tasks", "stack", "looprate", "loopms", "rssi", "active", "trips", "crashes",
         "i2cfails", "uptime", "repeatms", "reset", "ota", "fw", "boards", "pedalboard", "proto", "ble",
+        "lockproto", "lock", "auth", "nonce", "guest", "claim",
     )
 }

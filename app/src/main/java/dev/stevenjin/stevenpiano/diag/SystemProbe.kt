@@ -24,6 +24,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.os.StatFs
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.annotation.RequiresApi
 import dev.stevenjin.stevenpiano.BuildConfig
 import java.io.File
@@ -53,6 +54,8 @@ data class SystemReading(
     val storage: StorageReading = StorageReading(),
     val cpu: CpuReading = CpuReading(),
     val network: NetworkReading = NetworkReading(),
+    /** Whether debugging is on (v1.25 — M58): the System pages' amber warning. */
+    val debug: DebugReading = DebugReading(),
 ) {
     /** Memory available, as a whole percent of the total; null when either is unknown. */
     val memoryAvailablePct: Int?
@@ -121,6 +124,15 @@ data class CpuReading(val cores: Int? = null, val loadPct: Double? = null)
 data class NetworkReading(val online: Boolean? = null, val transport: String? = null, val signalDbm: Int? = null, val downKbps: Int? = null)
 
 /**
+ * Debugging on the tablet (v1.25 — M58): USB debugging ([usb], `Settings.Global.ADB_ENABLED`), wireless debugging
+ * ([wireless], Android 11's `adb_wifi_enabled`, a key Android doesn't publish: null when it can't be read or was never
+ * set) and developer options ([developer], `DEVELOPMENT_SETTINGS_ENABLED`). Wireless debugging is an open port with full
+ * control of the tablet, so the System pages warn in amber while either is on ([Attention]). The app never switches
+ * debugging off itself: the adb way back needs it.
+ */
+data class DebugReading(val usb: Boolean? = null, val wireless: Boolean? = null, val developer: Boolean? = null)
+
+/**
  * The tablet's readings for the System page (v1.18 — M46, BUILD_SPEC.md). Every read is guarded (the API level, a
  * `SecurityException`, any other failure): what the tablet cannot say reads as null, and [read] never throws. The two
  * CPU shares are worked out between one read and the next, so the first gives none. Thread-safe.
@@ -159,6 +171,21 @@ class AndroidSystemProbe(
             storage = storage(),
             cpu = CpuReading(cores = Runtime.getRuntime().availableProcessors(), loadPct = load(hardware)),
             network = network(),
+            debug = debugging(),
+        )
+    }
+
+    /** USB and wireless debugging and developer options, each null when Android won't say (DebugReading). */
+    private fun debugging(): DebugReading {
+        val resolver = app.contentResolver
+        return DebugReading(
+            usb = guarded { Settings.Global.getInt(resolver, Settings.Global.ADB_ENABLED, 0) != 0 },
+            wireless = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                guarded { Settings.Global.getString(resolver, ADB_WIFI_ENABLED)?.trim()?.toIntOrNull()?.let { it != 0 } }
+            } else {
+                false   // wireless debugging came with Android 11
+            },
+            developer = guarded { Settings.Global.getInt(resolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0 },
         )
     }
 
@@ -267,6 +294,9 @@ class AndroidSystemProbe(
 
     companion object {
         private const val PROC_STATUS = "/proc/self/status"
+
+        /** `Settings.Global.ADB_WIFI_ENABLED` (Android 11), which Android keeps out of its public API: "1" while on. */
+        private const val ADB_WIFI_ENABLED = "adb_wifi_enabled"
         private const val THREADS = "Threads:"
         private const val PERCENT = 100.0
 

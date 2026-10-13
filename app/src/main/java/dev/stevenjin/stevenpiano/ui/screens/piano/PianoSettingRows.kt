@@ -22,6 +22,9 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import dev.stevenjin.stevenpiano.diag.PianoDiag
+import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.piano.LockPhase
+import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
 import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.components.FactRow
@@ -38,9 +41,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoPage
@@ -100,14 +105,23 @@ const val UNSUPPORTED_LINE = "This piano's firmware doesn't offer settings over 
  * Why the piano's settings can't be changed yet, in one line under the connection card and at the
  * top of each piano page: "Connect to the piano to adjust its settings." while not connected;
  * "Reading the piano's settings…" over an indeterminate hairline once connected, until the piano
- * has answered; [UNSUPPORTED_LINE] for firmware without the console. Nothing once it has answered.
+ * has answered, and while its Bluetooth lock is proved (v1.25 — M58: the link shows itself
+ * connected only then, so the lock's own phase says the piano is there); [UNSUPPORTED_LINE] for
+ * firmware without the console. Nothing once it has answered (read only, the connection card says
+ * why under the hub, and each piano page under this line).
  */
 @Composable
 fun PianoStatusLine(piano: PianoState, connected: Boolean) {
+    val lock by LocalContext.current.graph.pianoSettings.lock.collectAsStateWithLifecycle()
+    val reading = connected || lock.phase == LockPhase.Reading || lock.phase == LockPhase.Proving
     when {
+        piano is PianoState.Ready && piano.lock.phase == LockPhase.Proving -> {
+            NoteLine("Reading the piano's settings…", Modifier.padding(top = 8.dp))
+            ProgressHairline(null, Modifier.padding(horizontal = 16.dp))
+        }
         piano is PianoState.Ready -> Unit
         piano == PianoState.Unsupported -> NoteLine(UNSUPPORTED_LINE, Modifier.padding(top = 8.dp))
-        connected -> {
+        reading -> {
             NoteLine("Reading the piano's settings…", Modifier.padding(top = 8.dp))
             ProgressHairline(null, Modifier.padding(horizontal = 16.dp))
         }
@@ -124,7 +138,9 @@ fun PianoStatusLine(piano: PianoState, connected: Boolean) {
  * and presets; units in each control's eyebrow. Every control shows what the piano holds and sends
  * a change the moment it is made; until the piano has answered, everything is disabled under the
  * status line. Firmware without the console gets the one line and nothing else. A refusal shows in
- * an outlined banner right under the control it concerns ("The piano said: …"). No red anywhere:
+ * an outlined banner right under the control it concerns ("The piano said: …"). While the piano's
+ * Bluetooth lock doesn't let this tablet write (v1.25 — M58: proving its key, or read only), every
+ * control shows what the piano holds and changes nothing; Read status still reads. No red anywhere:
  * a fault reads in words. [firmwareSection] (v1.6 — M21, the Firmware page) is drawn in place of
  * the table's FIRMWARE section: the version and the updates come from the link, not the console, so
  * it shows under the status line even for firmware without the console.
@@ -132,6 +148,8 @@ fun PianoStatusLine(piano: PianoState, connected: Boolean) {
 @Composable
 fun PianoPageContent(page: PianoPage, report: PianoReport, actions: PianoSettingsActions, firmwareSection: (@Composable () -> Unit)? = null) {
     PianoStatusLine(report.piano, report.connected)
+    // Read only under the piano's lock (v1.25 — M58): why, and how to let this tablet in.
+    (report.piano as? PianoState.Ready)?.lock?.let(LockCopy::readOnly)?.let { NoteLine(it, Modifier.padding(top = 8.dp)) }
     firmwareSection?.invoke()
     if (report.piano == PianoState.Unsupported) return
     val ready = report.piano as? PianoState.Ready
@@ -180,14 +198,15 @@ private fun PianoSettingsSection(
     if (title != null) SectionEyebrow(title) else SectionRule()
     val error = ready?.lastError
     val place = error?.let { placeOf(ready.errorAbout) }
+    val writable = ready?.lock?.writable == true   // v1.25 — M58: the piano's lock lets this tablet change it
     for (row in PianoSettings.rows(section)) {
         Anchored(SettingsIndex.anchorOf(row)) {
             when (row) {
                 is PianoRow.Control -> SettingRow(row.setting, ready, actions)
                 is PianoRow.Reading -> PianoFact(row.fact.name, row.fact.label, ready)
-                PianoRow.Presets -> PresetsRow(ready != null, actions)
-                PianoRow.StrikeTest -> StrikeTestRow(ready != null, actions)
-                PianoRow.TestLed -> TestLedRow(ready != null, actions)
+                PianoRow.Presets -> PresetsRow(writable, actions)
+                PianoRow.StrikeTest -> StrikeTestRow(writable, actions)
+                PianoRow.TestLed -> TestLedRow(writable, actions)
                 PianoRow.KeyForceNote -> NoteLine(KEY_FORCE_NOTE, Modifier.padding(top = 4.dp))
                 PianoRow.ReadStatus -> ReadStatusRow(ready, statusText, statusReading, actions)
                 PianoRow.SaveNow -> SaveNowRow(ready, actions)
@@ -235,7 +254,7 @@ private const val SAVE = "save"
 @Composable
 private fun SettingRow(setting: PianoSetting, ready: PianoState.Ready?, actions: PianoSettingsActions) {
     val wire = ready?.values?.get(setting.name)
-    val enabled = wire != null && !setting.readOnly
+    val enabled = wire != null && !setting.readOnly && ready.lock.writable
     val change: (String) -> Unit = { actions.setPianoValue(setting.name, it) }
     val spoken = setting.spoken(wire)
     when (val kind = setting.kind) {
@@ -447,7 +466,7 @@ private fun SaveNowRow(ready: PianoState.Ready?, actions: PianoSettingsActions) 
         ActionButton(
             SettingsIndex.SAVE_TO_PIANO,
             onClick = { actions.runPianoAction(PianoAction.Save, 0) },
-            enabled = ready != null,
+            enabled = ready?.lock?.writable == true,
             description = "Save the settings on the piano now",
         )
     }

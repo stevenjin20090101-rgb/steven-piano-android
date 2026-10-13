@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.firmware
 
+import dev.stevenjin.stevenpiano.ble.OtaPiano
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import org.json.JSONObject
 
@@ -18,7 +19,9 @@ import org.json.JSONObject
  * ([FirmwareKeys.rfc8032Test], a published test vector). The unit tests check the app against it,
  * and the fake update channel of a debug build on an emulator serves it (with § 10's example
  * manifest). Anything signed with that key is a test: the real piano refuses it, and a release
- * build checks nothing against it.
+ * build checks nothing against it. The example predates firmware 2.1.0's version tag: a piano with
+ * 2.1.0's checks answers its END `82 · E1 0C`, and [taggedImage] (the same size, so the same frames
+ * and ACKs) `82 · 83 DC 05` (BLE_OTA.md › 5, v1.25 — M58).
  */
 object OtaExample {
     const val SIZE = 991_232
@@ -34,6 +37,12 @@ object OtaExample {
 
     /** The image: byte i is (0xE9 + 7·i) & 0xFF. */
     fun image(size: Int = SIZE): ByteArray = ByteArray(size) { ((0xE9 + 7 * it) and 0xFF).toByte() }
+
+    /** Where the tagged twin carries its version tag, as `tools/ota-sim`'s `worked_example_tagged` does: in frame 991. */
+    const val TAG_AT = 247_808
+
+    /** The image with the version tag `SJPV1:2.1.0` and its NUL written at [TAG_AT]: what a 2.1.0 release holds. */
+    fun taggedImage(): ByteArray = image().also { OtaPiano.tag(VERSION).copyInto(it, TAG_AT) }
 
     /** § 10's example manifest (build, minAppVersionCode and notes illustrative), with [edit] applied. */
     fun manifestJson(edit: JSONObject.() -> Unit = {}): String = JSONObject()

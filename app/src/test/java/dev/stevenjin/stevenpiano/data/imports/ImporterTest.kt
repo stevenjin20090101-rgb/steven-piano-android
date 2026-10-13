@@ -13,7 +13,9 @@ import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -85,6 +87,22 @@ class ImporterTest {
         val result = importer.run(OpenedSource((0 until 60).map { item("f$it.mid", midi(24 + it)) }))
         assertEquals(60, result.imported)
         assertEquals(listOf(25, 25, 10), store.batchSizes)
+    }
+
+    @Test
+    fun `a cancelled import (Android's time for data sync ran out) finishes its progress where it stopped`() = runTest {
+        lateinit var job: Job
+        val items = (0 until 30).map { i ->
+            ImportItem("f$i.mid", "f$i.mid") {
+                if (i == 27) job.cancel()
+                ByteArrayInputStream(midi(24 + i))
+            }
+        }
+        job = launch { importer.importOpened(OpenedSource(items)) }
+        job.join()
+        assertTrue(job.isCancelled)
+        assertEquals("what was saved stays", listOf(25), store.batchSizes)
+        assertEquals(ImportProgress(done = 28, total = 30, imported = 25, finished = true), progress.value)
     }
 
     @Test

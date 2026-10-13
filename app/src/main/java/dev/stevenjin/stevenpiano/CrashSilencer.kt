@@ -9,7 +9,6 @@
 
 package dev.stevenjin.stevenpiano
 
-import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.PianoLink
 
 /**
@@ -18,8 +17,11 @@ import dev.stevenjin.stevenpiano.ble.PianoLink
  * at most [TIMEOUT_MS]), so no key or pedal waits for the piano to notice the lost connection or
  * for its hold watchdog. Then the crash is written down for diagnostics ([report]: the app's own
  * crash report, on the device only), and goes on to [previous], Android's own handler, exactly as
- * it would have. [link] is the piano link if one exists (the handler never creates one); it is
- * silenced only while connected. Nothing here may throw: each step is on its own.
+ * it would have. [link] is the piano link if one exists (the handler never creates one); the link
+ * itself sends the stop only while it holds a connection. That is asked of the link, not of its
+ * state (v1.25 — M58): while the piano's Bluetooth lock is being proved, or refuses this tablet,
+ * the link shows itself not connected to the player, yet the stop goes out all the same (the
+ * piano honours it untrusted). Nothing here may throw: each step is on its own.
  */
 class CrashSilencer(
     private val link: () -> PianoLink?,
@@ -28,8 +30,7 @@ class CrashSilencer(
 ) : Thread.UncaughtExceptionHandler {
     override fun uncaughtException(thread: Thread, error: Throwable) {
         try {
-            val piano = link()
-            if (piano != null && piano.state.value is LinkState.Connected) piano.emergencySilence(TIMEOUT_MS)
+            link()?.emergencySilence(TIMEOUT_MS)
         } catch (t: Throwable) {
             // The crash itself matters more: it still reaches the report and Android's handler below.
         }

@@ -2251,3 +2251,50 @@ Nothing binds the any-address; nothing listens while the web panel is off.
   per restart of the app without ending; it cannot cause a restart itself (Install the update needs the PIN).
 - **The relay (Steven's own Cloudflare account) still sees the PIN and the cookies in the clear**, as delta 3 said: TLS
   ends at Cloudflare.
+
+## 1.25 — the piano's Bluetooth lock and the debugging warning (notes, M58)
+
+2026-10-13, notes written with M58 for the next audit, not an audit (BUILD_SPEC.md › v1.25 — M58). Firmware 2.1.0 adds a
+lock to the piano's Bluetooth link (`firmware/docs/BLE_LOCK.md`): until a connection proves a key the piano keeps, the
+piano takes only reads and what releases (Note Off, CC 120/121/123, the pedal up), refuses settings and firmware updates,
+and drops notes. This is the app's side; nothing new listens and no new host is reached. Where each safeguard is held:
+
+- **The key agreement.** On an open piano, or in its 5-minute pairing window, the tablet sends a fresh X25519 public key
+  (Tink's pure-Java X25519) and reads the piano's; an all-zero shared secret (the low-order points) is refused, and K =
+  SHA-256("steven-piano-lock-v1" ‖ shared ‖ app_pub ‖ piano_pub). The private key lives for that one claim, in memory
+  (`LockCryptoTest`: RFC 7748's vectors and the firmware's own).
+- **K at rest** is sealed with an AES-256-GCM key in the Android keystore (`KeystoreSealer`, alias `steven-piano-lock`, the
+  relay token's sealer) in a DataStore of its own, by the piano's Bluetooth address. The app's data is excluded from
+  backups and device transfers, and the keystore key never leaves the device. A tablet that can't seal a key doesn't
+  claim (`canKeep` first), and a claim of an open piano whose key then couldn't be kept is undone (`PianoLockTest`).
+- **The proof** is HMAC-SHA256(K, "steven-piano-auth-v1" ‖ the piano's 16-byte nonce), one per connection, at most one
+  attempt a second, over a nonce the piano renews after every attempt; K itself never goes over the air. Trust is the
+  connection's: a reconnect proves again (`PianoLockTest`). Nothing secret is logged: release builds log the lock's steps
+  in words ("Lock: proving this tablet's key"), never the key, the proof or the nonce, and the nonce is kept out of the
+  facts the app shows (`HIDDEN_FACTS`).
+- **Fail closed, but never on the stop.** Until `auth ok`, every setting write waits (3 s at most, then read only) and the
+  player is held at Connecting by `LockGate`, which passes only what releases; the stop sequence, `off` and the crash
+  handler's emergency silence always go out, as the piano honours them untrusted (`LockGateTest`, `CrashSilencerTest`,
+  `PianoLockTest`). Firmware updates need a trusted connection, and ERR 11 (not authorised) is never retried
+  (`FirmwareUpdaterTest`).
+- **Locked out is read only**: claimed by others without a key here, a refused proof or no answer in 3 s; reads go,
+  writes and notes don't, and the screen says how to pair again on the piano itself.
+
+**Debugging.** Piano › System shows **Debugging** in amber, and the attention list "USB debugging is on" / "Wireless
+debugging is on", while either is on (`Settings.Global.ADB_ENABLED`; `adb_wifi_enabled`, a hidden key that a targetSdk 36
+app still reads; "Developer options are on" stands in where it can't be read). Read with the System page's probe; the app
+never sets `DISALLOW_DEBUGGING_FEATURES`, as adb is the documented way back into a kiosk tablet (`AttentionTest`).
+
+### Residuals (stated honestly)
+
+- **The first claim is trust on first use.** Whoever claims an open piano first holds it: just after 2.1.0's first start,
+  after Unlock the piano, and in a pairing window. The tablet claims as soon as it connects; check that the Firmware page
+  reads "Locked to this tablet" after the update.
+- **The link itself is not encrypted** (the piano refuses Bluetooth pairing, as before): someone in radio range can read
+  the notes, the settings and each connection's nonce and proof (useless again: the nonce changes after every attempt),
+  and an attacker able to take over a connection after its proof could send through it, as trust is per connection,
+  not per message. The lock keeps out a stranger's phone, not a radio expert.
+- **Guest play** lets anyone in range play notes and the pedal for its hour; **Unlock the piano** leaves it open to
+  anyone until the tablet reconnects and claims it again.
+- **The debugging warning is advice**: the app can't turn debugging off, and a paired computer keeps full control
+  through wireless debugging while it is on.

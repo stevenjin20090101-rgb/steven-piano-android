@@ -187,6 +187,8 @@ object OtaFrames {
         8 -> "image invalid"
         9 -> "timeout"
         10 -> "refused by safety"
+        11 -> "not authorised"   // v1.25 — M58: the piano is claimed and this connection hasn't proved a key (BLE_LOCK.md)
+        12 -> "not newer"   // v1.25 — M58: BEGIN's version, or the image's own tag, not newer than the piano's firmware
         else -> "unknown"
     }
 

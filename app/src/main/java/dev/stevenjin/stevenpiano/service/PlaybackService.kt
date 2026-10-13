@@ -128,7 +128,7 @@ class PlaybackService : Service() {
     private fun goForeground(state: PlayerState) {
         val notification = PlaybackNotification.build(this, state, session.token)
         try {
-            ServiceCompat.startForeground(this, PlaybackNotification.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            ServiceCompat.startForeground(this, PlaybackNotification.ID, notification, MEDIA_PLAYBACK)
             inForeground = true
         } catch (e: RuntimeException) {   // resumed from the background, where Android may refuse
             Log.w(TAG, "Playback continues outside the foreground: ${e.message}")
@@ -156,8 +156,8 @@ class PlaybackService : Service() {
     }
 
     private fun post(state: PlayerState) {
-        val allowed = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED ||
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+        val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         if (allowed) NotificationManagerCompat.from(this).notify(PlaybackNotification.ID, PlaybackNotification.build(this, state, session.token))
     }
 
@@ -190,6 +190,9 @@ class PlaybackService : Service() {
     }
 
     companion object {
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val MEDIA_PLAYBACK = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
+
         const val ACTION_START = "dev.stevenjin.stevenpiano.action.START"
         const val ACTION_TOGGLE = "dev.stevenjin.stevenpiano.action.TOGGLE"
         const val ACTION_PREVIOUS = "dev.stevenjin.stevenpiano.action.PREVIOUS"

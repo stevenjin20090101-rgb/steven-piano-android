@@ -43,6 +43,7 @@ import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.HandlerLinkExecutor
 import dev.stevenjin.stevenpiano.ble.LinkState
+import dev.stevenjin.stevenpiano.ble.LockGate
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.ble.ScanThrottle
 import dev.stevenjin.stevenpiano.channels.Channel
@@ -98,9 +99,11 @@ import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.AppleCatalog
 import dev.stevenjin.stevenpiano.net.WikipediaClient
+import dev.stevenjin.stevenpiano.piano.LockKeys
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.piano.PianoState
+import dev.stevenjin.stevenpiano.piano.StoredLockKeys
 import dev.stevenjin.stevenpiano.player.PianoFacts
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
@@ -324,6 +327,15 @@ class AppGraph(private val app: Application) {
      */
     val stevenLink: PianoLink by steven
 
+    /** The keys this tablet keeps for the pianos it claimed (v1.25 — M58), sealed by the Keystore in their own store. */
+    private val lockKeys: LockKeys by lazy { StoredLockKeys(app) }
+
+    /**
+     * Steven Piano's link as everything that plays sees it (v1.25 — M58): notes wait for the piano's Bluetooth lock, which
+     * the piano's settings claim or prove on every connection ([LockGate]); the stop and the crash silence never wait.
+     */
+    private val stevenPlays: PianoLink by lazy { LockGate(stevenLink, pianoSettings.trust, appScope) }
+
     /**
      * A MIDI piano as the app's output (v1.11 — M29), through Android's MIDI service, sent from its own thread at audio
      * priority.
@@ -349,7 +361,7 @@ class AppGraph(private val app: Application) {
     private val link = lazy {
         val saved = settings.value
         InstrumentSwitch(
-            stevenLink,
+            stevenPlays,
             midiLink,
             appScope,
             initial = if (saved.instrumentKind == InstrumentChoice.MIDI_PIANO && saved.midiOutId != null) InstrumentKind.MidiPiano else InstrumentKind.StevenPiano,
@@ -446,6 +458,8 @@ class AppGraph(private val app: Application) {
             updating = { firmwareUpdater.state.value.busy },
             fullPowerChosenOff = { fullPowerChoice.getBoolean(FULL_POWER_CHOSEN_OFF, false) },
             chooseFullPower = { on -> fullPowerChoice.edit { putBoolean(FULL_POWER_CHOSEN_OFF, !on) } },
+            lockKeys = lockKeys,   // v1.25 — M58: the piano's Bluetooth lock
+            elapsed = SystemClock::elapsedRealtime,
         )
     }
 

@@ -13,8 +13,11 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
 import dev.stevenjin.stevenpiano.firmware.FirmwareManifest
 import dev.stevenjin.stevenpiano.firmware.OtaExample
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.MessageDigest
 
 /**
  * The model of the piano's side (the emulator's stand-in and the tests' fake) answers the worked
@@ -75,6 +78,61 @@ class OtaPianoTest {
         assertEquals(listOf("84"), aborted.control(OtaFrames.abort()).hex())
         assertTrue("a stale frame gets no reply", aborted.data(OtaFrames.data(0, image, 0, 250)).isEmpty())
         assertEquals("END before every byte", listOf("E1 04"), OtaPiano().apply { control(begin()) }.control(OtaFrames.end()).hex())
+    }
+
+    /** Every frame of [bytes] at 250 a frame, then END: what the piano answered END with. */
+    private fun send(piano: OtaPiano, bytes: ByteArray): List<String> {
+        var seq = 0
+        var at = 0
+        while (at < bytes.size) {
+            val length = minOf(250, bytes.size - at)
+            piano.data(OtaFrames.data(seq++, bytes, at, length))
+            at += length
+        }
+        return piano.control(OtaFrames.end()).hex()
+    }
+
+    @Test
+    fun `firmware 2_1_0 - the worked example has no version tag, so 82 E1 0C, tagged, 82 83 DC 05 (v1_25 M58)`() {
+        val checking = OtaPiano.Script(publicKey = FirmwareKeys.rfc8032Test, runningVersion = "2.0.2")
+        val untagged = OtaPiano(script = checking)
+        assertEquals(listOf("81 FA 00 10"), untagged.control(begin()).hex())
+        assertEquals("the hash and the signature pass; the tag is missing", listOf("82", "E1 0C"), send(untagged, image))
+
+        val tagged = OtaExample.taggedImage()
+        assertEquals("the same size, so the same frames and ACKs", image.size, tagged.size)
+        assertEquals("2.1.0", OtaPiano.tagOf(tagged))
+        val sha = MessageDigest.getInstance("SHA-256").digest(tagged)
+        val piano = OtaPiano(script = OtaPiano.Script(runningVersion = "2.0.2"))   // the tagged twin isn't signed with the test key
+        assertEquals(listOf("81 FA 00 10"), piano.control(OtaFrames.begin(OtaBegin(tagged.size.toLong(), sha, ByteArray(64), "2.1.0", 16))).hex())
+        assertEquals(listOf("82", "83 DC 05", "Restart(inMs=1500)"), send(piano, tagged))
+
+        val already = OtaPiano(script = OtaPiano.Script(runningVersion = "2.1.0"))
+        assertEquals("BEGIN not newer: refused at once", listOf("E1 0C"), already.control(OtaFrames.begin(OtaBegin(tagged.size.toLong(), sha, ByteArray(64), "2.1.0", 16))).hex())
+        assertEquals("a 2.0.x piano weighs no tag: § 5 goes through", listOf("82", "83 DC 05", "Restart(inMs=1500)"), send(OtaPiano().apply { control(begin()) }, image))
+    }
+
+    @Test
+    fun `a piano whose lock doesn't trust the connection refuses BEGIN with ERR 11`() {
+        assertEquals(listOf("E1 0B"), OtaPiano(script = OtaPiano.Script(authorised = { false })).control(begin()).hex())
+        assertEquals("not authorised", OtaFrames.errorName(11))
+        assertEquals("not newer", OtaFrames.errorName(12))
+    }
+
+    @Test
+    fun `the version tag - the first well-formed one counts, as the firmware scans for it`() {
+        fun image(vararg parts: ByteArray) = parts.fold(ByteArray(8)) { acc, part -> acc + part + ByteArray(8) }
+        val marker = "SJPV1:".toByteArray()
+        assertEquals("2.1.0", OtaPiano.tagOf(image(OtaPiano.tag("2.1.0"))))
+        assertEquals("a decoy before it", "2.1.0", OtaPiano.tagOf(image(marker + "2.1.0".toByteArray() + 0x20, OtaPiano.tag("2.1.0"))))
+        assertEquals("a marker inside another", "2.1.0", OtaPiano.tagOf(image("SJPV".toByteArray() + OtaPiano.tag("2.1.0"))))
+        assertNull("17 characters is too long", OtaPiano.tagOf(image(OtaPiano.tag("1".repeat(17)))))
+        assertNull("no NUL, no tag", OtaPiano.tagOf(marker + "2.1.0".toByteArray()))
+        assertNull(OtaPiano.tagOf(image(marker + 0)))
+        assertTrue(OtaPiano.newer("2.1.0", "2.0.2"))
+        assertFalse("equal is not newer", OtaPiano.newer("2.1.0", "2.1.0"))
+        assertFalse("a suffix is ignored", OtaPiano.newer("2.1.0-rc.1", "2.1.0"))
+        assertFalse("unreadable is not newer", OtaPiano.newer("2.1", "2.0.0"))
     }
 
     @Test

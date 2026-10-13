@@ -61,7 +61,7 @@ class ArtworkService : Service() {
         val artwork = graph.artwork
         val force = intent?.getBooleanExtra(EXTRA_FORCE, false) ?: false
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(artwork.progress.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ServiceCompat.startForeground(this, ID, notificationFor(artwork.progress.value), DATA_SYNC)
         } catch (e: RuntimeException) {   // refused (the app went to the background meanwhile): fetch without the notification
             Log.w(TAG, "Fetching artwork without the foreground service: ${e.message}")
             graph.appScope.launch { artwork.requestDue(force) }
@@ -143,6 +143,9 @@ class ArtworkService : Service() {
     )
 
     companion object {
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+
         const val CHANNEL_ID = "artwork"
         private const val ID = 3
         private const val TAG = "ArtworkService"
