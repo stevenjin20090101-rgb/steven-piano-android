@@ -3244,3 +3244,58 @@ unused", with Studio and every feature in use staying. Nothing a person does cha
 - **Behind the scenes**: about 2,300 lines of the app went (code nothing called, code only the tests called, the one-time
   repairs for versions before 1.14, and copies of the same thing kept in several places), and about 1,300 lines of the
   emulator's stand-ins moved into the debug build, so a release carries none of them.
+
+# v1.25 — M58: Android 16, the debugging warning, the piano's Bluetooth lock
+
+Three things in one run (2026-10-13). The app now targets Android 16. Steven chose an amber warning while USB or wireless
+debugging is on (wireless debugging is an open port with full control of the tablet). And the piano's firmware 2.1.0
+adds a Bluetooth lock (`firmware/docs/BLE_LOCK.md`): Steven chose that the first claim happens by itself, with no visit to
+the piano, and a guest switch for his iPad. The firmware waits for this app: it is published only after 1.25 is on the
+school tablet, so nothing can lock the tablet out.
+
+## Android 16
+- **Nothing a person sees changes.** The app already drew edge to edge: a sheet sits above the keyboard and scrolls to
+  its buttons (the kiosk PIN's number pad too), and the resting screen fills the screen with the bars stepped aside.
+- **Back previews.** A slow back swipe shows Android's arrow, or moves a sheet with the finger; let go and it goes back,
+  turn back and nothing happens. Out of a composer's group back is the composers; at the kiosk's root the app stays.
+- **Turning a tablet while keys are held** still waits until they are let go: Android 16 ignores an app's orientation on
+  tablets, but not "keep the one there is now", which is what Keys asks for while a finger is down. Each key's note-off
+  goes as it is let go, and the screen turns after.
+- **Imports and Android's six hours.** Android 16 gives an app six hours a day of data sync. If an import is still
+  running when they run out, it stops where it is: what came in stays, and the Library's import line shows the tally
+  (it used to stay on "Imported 5,167 of 6,000"). When Android won't let the import hold its notification at all (the
+  app in the background, or the day's hours spent), the import runs without it, as artwork already did.
+
+## The debugging warning
+- **Piano › System**, the Tablet card: a **Debugging** row, "Off", "USB", "Wireless" or "USB and wireless", amber while
+  on. Where Android hides wireless debugging (it doesn't on 16: the app can read it), "Developer options on" stands in.
+- **What needs attention** (the System row in the Piano list): "USB debugging is on", "Wireless debugging is on" or
+  "USB and wireless debugging are on".
+- Read with the System page's other readings: every 5 s while it is open, once a minute for the row. The app never
+  turns debugging off: the adb way back needs it. Turn it off in Android's Developer options once the tablet is set up.
+
+## The piano's Bluetooth lock
+Firmware 2.1.0 keeps the keys of up to four devices. A device proves its key on every connection before the piano takes
+its notes or its settings; anyone may always stop it (the pedal up, every note off). Firmware 2.0.x has no lock, and the
+app behaves exactly as before with it.
+- **The first claim is automatic.** After 2.1.0 the piano starts open; the tablet claims it the next time it connects,
+  and keeps the key sealed in Android's keystore. From then on it proves the key each time it connects, in a fraction of
+  a second (3 s at most). Meanwhile the connection reads as "Connecting…" and the Piano list "Reading the piano's
+  settings…": no note plays and no setting is written until the piano says yes; the stop always goes.
+- **Piano › Firmware and status** gains, while the piano has the lock:
+  - **Bluetooth lock**: "Locked to this tablet", "Open: any device can claim it", "Pairing open for 5 min" or "Locked to
+    another device" ("Checking this tablet's key…" for the moment it proves it);
+  - **Let another device pair (5 min)**, while it is locked to this tablet: one more tablet or phone may claim it within
+    5 minutes (the piano's own screen can open this too);
+  - **Unlock the piano** ("Forgets every device's key."), after "Unlock the piano?" / "Any device in range could then
+    claim it. The tablet claims it again when it next connects." with **Unlock** and **Cancel**;
+  - **Let anyone play for 1 hour**, Steven's guest switch: "Others can play notes and the pedal, but not change settings
+    or update." and, while on, "52 min left".
+  These rows work only on a connection the piano trusts, and sit behind the kiosk PIN like every Piano page.
+- **A piano locked to another device** (or one that refused this tablet's key) can only be read: the connection card
+  says "This piano is locked to another device. On the piano's screen press and hold a lighting button, tap Let a new
+  tablet pair, then reconnect." (or "The piano didn't accept this tablet. …" with the same steps) with **Retry**; every
+  setting is greyed, nothing plays and the firmware can't be updated. Retry connects again, and a tablet that finds the
+  piano's pairing window open claims it.
+- **Firmware updates** say "The piano didn't accept this tablet (not authorised)." (the piano's ERR 11) and "That
+  firmware isn't newer than the piano's." (ERR 12); neither offers Try again.

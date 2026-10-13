@@ -269,7 +269,8 @@ on the tablet*). Made by Steven Jin. Version 1.24.
   **Quiet times**: the hours the piano stays silent, see *Quiet times*), **SHARING** (**Web panel**: the
   panel, its PIN and the panel over the internet; **Guests**: the
   guests' switches and the poster) and **THIS TABLET** (**System**: the tablet's battery,
-  temperature, memory and storage, the piano's controller and power boards, what the app is
+  temperature, memory and storage, whether debugging is on (amber while USB or wireless
+  debugging is), the piano's controller and power boards, what the app is
   running, the day's chart and a few tools, read live while it is open; **Display**: appearance,
   artwork in black and white, album colours behind the player and the **resting
   screen**: after a minute, its background and what it shows; **Kiosk**;
@@ -313,6 +314,17 @@ on the tablet*). Made by Steven Jin. Version 1.24.
   piano checks the signature, restarts on it, and rolls back by itself if it
   fails to start (see *Updating the piano's firmware*). Needs firmware 2.0.0 on
   the piano, flashed over USB once.
+- **The piano's Bluetooth lock** (firmware 2.1.0 and later): the piano plays and
+  takes settings only from devices it knows, up to four; anyone can still stop it.
+  The tablet claims the piano by itself the first time it connects after 2.1.0 and
+  proves its key each time after (notes and settings wait the moment that takes).
+  **Piano › Firmware and status** shows the lock ("Locked to this tablet", "Open: any
+  device can claim it", "Pairing open for 5 min", "Locked to another device") with
+  **Let another device pair (5 min)**, for one more tablet or phone, **Unlock the
+  piano**, which forgets every device's key after asking, and **Let anyone play for 1
+  hour**: others can play notes and the pedal, but not change settings or update; the
+  row shows the time left. A tablet the piano doesn't know can only read it (see
+  *When it won't connect*).
 - **Kiosk**: on the school tablet, with the app as device owner, the app becomes
   the home screen and nothing else can be reached; it wakes and restarts into
   the app, rests in display mode, and settings, disconnecting, imports and
@@ -461,7 +473,9 @@ One-time setup, with a computer and a USB cable:
    # Success: Device owner set to package dev.stevenjin.stevenpiano
    ```
 
-4. Import the music and connect the piano as usual. USB debugging can go off again.
+4. Import the music and connect the piano as usual. USB debugging can go off again,
+   and should: until it does, Piano › System shows **Debugging** in amber and the
+   System row says "USB debugging is on".
 
 What changes: updates install without Android's confirmation, and Android lists Steven
 Piano under the device admin apps. While it is the owner Android **will not uninstall
@@ -709,6 +723,15 @@ The Piano tab says what went wrong, with the fix under the message.
   and tap **Retry**.
 - **"Found Steven Piano but the connection failed (code N)."** Tap **Retry**; if
   it keeps failing, restart the piano (switch it off and on).
+- **"This piano is locked to another device…"** (firmware 2.1.0 and later) The
+  piano knows other devices but not this tablet, so the tablet can read the piano's
+  settings and nothing more. On the piano's screen press and hold a lighting
+  button, tap *Let a new tablet pair*, then tap **Retry** within five minutes: the
+  tablet claims the piano and plays as before.
+- **"The piano didn't accept this tablet…"** The piano no longer knows the key this
+  tablet kept (its keys were cleared, or it was unlocked from another device), or it
+  didn't answer in time. The same steps: *Let a new tablet pair* on the piano, then
+  **Retry**.
 - **"Bluetooth scanning isn't available right now (code N)."** Turn Bluetooth
   off and on in the tablet's quick settings, then tap **Retry**.
 - If Steven Piano never shows in the tablet's own Bluetooth settings among the
@@ -1539,6 +1562,16 @@ The full audit, every finding and what was done about it, is in
   the very bytes it downloaded, and the piano checks both again before it restarts on
   them; a firmware that fails its self-test is rolled back by the piano. Release
   builds trust that one key alone (see *Updating the piano's firmware*).
+- **The piano's Bluetooth lock** (firmware 2.1.0): a device must prove a key the piano
+  keeps before its notes play or its settings change; the tablet's key is agreed with
+  X25519 when it claims the piano, sealed in Android's keystore and never sent, and
+  proved over a fresh number at each connection. Stopping the piano never needs a
+  key. The details are in the audit's 1.25 notes.
+- **Debugging**: Piano › System shows **Debugging** in amber while USB or wireless
+  debugging is on. Wireless debugging keeps a port open on the network, and any
+  computer once paired with the tablet has full control through it, so turn both off
+  once the tablet is set up. The app never turns them off itself: adb is the way back
+  into a kiosk tablet.
 - **What a file may cost:** a MIDI file is read up to 8 MB and at most about two
   million events and a day of music; its text up to 256 bytes a name, and 4,096 time
   and 4,096 key signatures; titles and names

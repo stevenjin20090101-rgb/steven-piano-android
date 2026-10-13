@@ -8964,3 +8964,149 @@ Seen on the demo emulator (debug build installed over the 1.23-era build):
 - the app's only listening sockets are 8737 on the loopback (the debug panel) and on the emulator's Wi‑Fi address (guests
   only).
 Not seen live: the relay's transport binding (unit-tested), the school tablet.
+
+# v1.25 — M58: Android 16, the debugging warning, the piano's Bluetooth lock
+
+Read `DESIGN.md › v1.25 — M58` first. Brief from the app session (2026-10-13); built in a worktree (`android-wt-m58`, branch
+`m58-android16-lock`, from 1.24's `b733dfb`) beside M59's tablet restyle, which owns `ui/**` but for the Firmware and
+System pages, `PianoSettingRows.kt`, `PageRows.kt`, `SystemCopy.kt` and new `*Copy` files; E owns the web panel
+(`web/**`, `assets/web/**`), which gets the new facts later. The lock's contract is `firmware/docs/BLE_LOCK.md` (HEAD
+`cd7cbe6`) and its pinned Replies. No version bump, no signing, no release.
+
+## Android 16 (`app/build.gradle.kts`, `gradle/`)
+- `targetSdk` 34 → 36; `compileSdk` stays 36. Both carry an in-place `//noinspection` (OldTargetApi, GradleDependency):
+  37 is a later run's, with its own pass.
+- Gradle 9.1.0 → 9.8.1 (the wrapper's properties and pinned SHA-256 only), AGP 9.0.1 → 9.4.1, Kotlin 2.3.20 → 2.4.21
+  (KSP 2.3.12 builds with it), Compose BOM 2026.03.01 → 2026.06.01 (Compose UI 1.11), coroutines 1.11.0, and for the unit
+  tests org.json 20260814 and sqlite-jdbc 3.53.4.0. New: Tink 1.23.0 (`tink-android`, Apache-2.0) for the lock.
+- Held, each with `#noinspection` and its reason beside it in `libs.versions.toml`: core 1.18.0, lifecycle 2.10.0,
+  navigation 2.9.8 and the Compose BOM at 2026.06.01 (their next releases' AAR metadata asks for compileSdk 37:
+  `checkDebugAarMetadata` fails); Haze 1.7.2 (1.7.3 and 2.x need Compose UI 1.12); OkHttp 4.12.0 (5.5.0 needs
+  compileSdk 37, OkHttp 5 adds an androidx-startup provider to every process start, and the relay's client wants its
+  own review first).
+- Foreground services pass their type from Android 10 on only (`DATA_SYNC` / `MEDIA_PLAYBACK` companion values, 0
+  before Q: lint's InlinedApi); `PlaybackService.post` checks the SDK before `POST_NOTIFICATIONS`.
+- **`ImportService`** (the brief's dataSync item): `onStartCommand`'s `startForeground` and `start`'s
+  `startForegroundService` are guarded as `ArtworkService`'s are; refused (the app in the background, or Android 15+'s
+  six hours a day of dataSync spent), the import runs in `appScope` without the notification (`importInApp`, the same
+  `runImport` with the grants handed back). `onTimeout` already cancelled the imports and stopped at once.
+  **`Importer`**: a cancelled import now finishes its progress where it stopped (`cancelled(e, sink)`, in `import` and
+  `runOpened`), so the Library's bar and the panel stop showing it running (seen on API 36: before, "Imported 5,167 of
+  6,000" stayed).
+- Checked, not changed: edge-to-edge (on since v1.5), the two `BackHandler`s (predictive back is on by default at 36;
+  no `enableOnBackInvokedCallback`), and **no `intentMatchingFlags`** (the adb way back). `HoldOrientationWhileHeld`
+  asks `SCREEN_ORIENTATION_LOCKED`, which Android 16 still honours on large screens (`ignoreOrientationRequest` spares
+  LOCKED and NOSENSOR): the turn waits for the keys on the API 36 tablet too, so `KeysScreen.kt`'s comment stays true.
+
+## The debugging warning (`diag/`, `ui/SystemCopy.kt`, `SystemPage.kt`)
+- `DebugReading(usb, wireless, developer)` (each `Boolean?`, null when unreadable) joins `SystemReading.debug`, read in
+  `AndroidSystemProbe` through `guarded`: `Settings.Global.ADB_ENABLED`, `"adb_wifi_enabled"` (API 30+, a hidden key:
+  read as a string, non-zero is on) and `DEVELOPMENT_SETTINGS_ENABLED`. On the API 36 emulator a targetSdk 36 app reads
+  `adb_wifi_enabled` without an exception (`0`; the emulator turns it back off when set).
+- `Attention.Part.Debugging` (before the relay's item): `Attention.debugging(debug)` → "USB debugging is on", "Wireless
+  debugging is on", "USB and wireless debugging are on", or, only when wireless debugging can't be read, "Developer
+  options are on" while they are; else none.
+- The System page's Tablet card: `SystemCopy.DEBUGGING` ("Debugging") with `SystemCopy.debugging(reading)`: "USB",
+  "Wireless", "USB and wireless", "Developer options on", "Off"; amber with the attention item. Read with the probe (5 s on
+  System, a minute for the hub's row); no observer. `DISALLOW_DEBUGGING_FEATURES` is never set.
+
+## The piano's Bluetooth lock (firmware 2.1.0)
+- **Crypto** (`piano/LockCrypto.kt`): `newKeyPair()`, `x25519(scalar, u)` (Tink's pure-Java
+  `com.google.crypto.tink.subtle.X25519`: Conscrypt's XDH can't be relied on down to minSdk 26), `claimKey(app,
+  pianoPublic)`: null for a wrong size, Tink's refusal or an all-zero shared secret; `deriveKey` K = SHA-256(
+  "steven-piano-lock-v1" ‖ shared ‖ app_pub ‖ piano_pub), `authMac` HMAC-SHA256(K, "steven-piano-auth-v1" ‖ nonce);
+  `hex` (lowercase) and a strict ASCII `unhex(text, bytes)`.
+- **Keys** (`piano/LockKeys.kt`): `LockKeys { key, canKeep, keep, forget }` by the piano's Bluetooth address;
+  `StoredLockKeys` seals K with `KeystoreSealer("steven-piano-lock")` (imported from `web/relay/SealedSecret.kt`,
+  unchanged) into its own DataStore `piano_lock` (`key.<ADDRESS>`), not `Settings.kt`; `canKeep` seals and opens a
+  probe first. `NoLockKeys` keeps nothing (tests, and no claim without a keeper).
+- **The handshake** (`piano/PianoLock.kt`): `LockWord` (`!lock`), `LockPhase { Reading, None, Proving, Trusted,
+  LockedOut, NotAccepted }` (`writable` = None or Trusted, `readOnly` = LockedOut or NotAccepted), `PianoLock(phase,
+  piano, guestSeconds, guestReadAt, keyStored, said, busy)`, and `LockHandshake`, one per connection, driven by the
+  settings' session on its thread. At the dump's end (`begin`): no `!lockproto` → None (2.0.x, nothing else changes);
+  open → Trusted at once and claimed (an open piano holds no key, whatever the tablet kept); claimed or pairing with a
+  kept key → `auth <hmac>` over the dump's `!nonce`; pairing without → claim; claimed without → LockedOut. Rules: the
+  claim only when `canKeep`; `!claim=<64 hex>` then `  claimed` keeps K (a claim of an open piano whose K then can't be
+  kept is undone with `lock forget`); `wait 1 s` → the same line a second later; `bad key` / `could not save` → once
+  more with a fresh pair; `not open` / `already 4 devices` → LockedOut (an open piano stays Trusted and is claimed at
+  the next connection); proofs at most one a second (`ATTEMPT_GAP_MS`), `auth refused — wait 1 s` again after the wait
+  with the same nonce, `auth refused` → NotAccepted unless the pairing window is open (then the claim); `HOLD_MS` 3 s
+  without the piano's word → NotAccepted (a late `auth ok` still trusts). The lock's commands (`lock pairwindow`, `lock
+  forget`, `lock guest N`) go one at a time from a trusted connection (5 s timeout), `!lock`/`!guest` read again after
+  each; `lock forgotten` forgets the kept key; `refused — not authorised` → NotAccepted.
+- **The settings** (`PianoSettingsRepository`): `PianoState.Ready.lock`; `lock: StateFlow<PianoLock>`, `trust:
+  StateFlow<LinkTrust>`; `openPairing()`, `unlock()`, `guestPlay(minutes)`, `refreshLock()`; new constructor seams
+  `lockKeys` (default `NoLockKeys`), `elapsed`, `crypto`. Each session is keyed by `LinkState.Connected.connection` and
+  starts its lock afresh. `send`: `off` always; writable → what waited, then the line; read only → reads only (`dump`,
+  `get`, `status`, `help`), writes dropped and logged; otherwise a read goes at once unless a write waits ahead of it,
+  and the rest waits in order (the Full-power restore's `fullpower 1`, `get fullpower`, `save` among them). Trusted
+  sends what waited; refused drops its writes. `!nonce` is never published (`HIDDEN_FACTS`); the restore skips a
+  read-only piano.
+- **The gate** (`ble/LockGate.kt`), Steven Piano's link as the player and Keys see it (`AppGraph.stevenPlays`, in
+  `InstrumentSwitch`): `Trust { Open, Pending, Refused(reason) }` per connection (`LinkTrust`); until the settings say,
+  a piano whose Device Information says 2.1.0 or later (`mayLock`) is Pending, older Open. Pending shows Connecting,
+  Refused `LinkError.LockedOut` / `NotAccepted` (copy `LOCKED_OUT_COPY` / `NOT_ACCEPTED_COPY` in `PianoLink.kt`), so the
+  player starts nothing and pauses as on a drop, and the card shows why with Retry; `connect` while refused drops and
+  connects again. `send`/`sendLive` pass only what releases while not Open (`releasing`: Note Off, Note On at 0, CC 120,
+  121, 123, CC64 below 64); `emergencySilence`, the console, the version and OTA pass straight through.
+  `CrashSilencer` calls `link()?.emergencySilence` whatever the link's state says.
+- **The link** (`ble/PianoLink.kt`, `GattPianoLink.kt`): `LinkState.Connected.connection` (a count per process) and
+  `PianoLink.address` (the connected piano's), `LinkError.LockedOut`, `NotAccepted`.
+- **Updates** (`ble/Ota.kt`, `firmware/`): ERR 11 "not authorised", 12 "not newer"; `FirmwareFailures.NOT_AUTHORISED`
+  "The piano didn't accept this tablet (not authorised)." and `NOT_NEWER` "That firmware isn't newer than the piano's.",
+  both not retryable; `FirmwareUpdater` refuses to begin unless `Ready.lock.writable` (read only → NOT_AUTHORISED).
+- **The Firmware page** (`FirmwarePage.kt`, `ui/LockCopy.kt`, `PageRows.LOCK*`): `LockRows`, shown while the piano has
+  the lock, read again every 30 s while shown: the state row; **Let another device pair (5 min)** (enabled while
+  claimed and trusted); **Unlock the piano** behind `GlassAlertDialog`; the guest `SwitchRow` (`lock guest 60` / `0`)
+  with the time left. Read only, the page shows only the state and why; Check and Send need `lock.writable`.
+  `PianoSettingRows`: the status line reads "Reading the piano's settings…" while Proving, the read-only line tops each
+  piano page, and its controls, presets, tests and Save are disabled unless writable. Search finds the four rows.
+- **Emulated piano** (`src/debug`): `EmulatedLock` (keys, window, guest, nonce, the Replies), in `EmulatedConsole`
+  (lock lines first, facts in the dump, notes dropped untrusted and logged "(not played: …)"); `EmulatedPianoLink`
+  reads `debug.stevenpiano.lock` (`open` or unset, `claimed`, `pairing`, `none` for 2.0.x) at each connection, at the
+  documentation address `00:00:5E:00:53:01`. `OtaPiano`: `Script.authorised`, `runningVersion`, the `SJPV1:<ver>\0`
+  tag and ERR 11/12 (early on BEGIN too); `OtaExample.TAG_AT` 247,808 (§5: untagged ends `82 · E1 0C`, tagged
+  `82 · 83 DC 05`); `FakeOta` `err11`, `err12`.
+
+## Simplified, and why
+- **A gate in front of the player, not in it**: `LockGate` wraps the link the player, Keys and Live share, so every
+  path that plays is held by one rule, and the stop and the crash silence keep the transport's own path.
+- **Pending shows Connecting** rather than a new state, so the player, the Now playing bar and the card need nothing new;
+  a 2.1.0 piano whose dump has not come yet is held from the first byte.
+- **An open piano is trusted at once** and claimed in the background (BLE_LOCK.md: an open piano honours everyone), so
+  the first connection after 2.1.0 plays without waiting.
+- **Pair is offered only while the piano is claimed**: an open piano lets anyone claim it already.
+- **The key store refuses before the claim** (`canKeep`), and an open claim that can't be kept is undone: the tablet
+  never locks a piano to a key it lost.
+
+## Tests
+`LockCryptoTest` (7: RFC 7748 §5.2's two vectors, 1 and 1,000 iterations, §6.1 both ways; the firmware's vector, K
+`44ce429a…dab9`, auth `e25c89e2…2036` over `00…0f`; fresh pairs agree; the seven low-order points and a short key give no
+K; hex), `PianoLockTest` (15: 2.0.x unchanged; an open piano claimed; hold until `auth ok`, the Full-power restore in
+order after it; the stop and `off` untrusted; read only without a key; a refused key; a claim in the pairing window;
+each claim refusal; an open claim refused; a key that can't be kept; the 3 s deadline and a late `auth ok`; `wait 1 s`;
+trust per connection; the lock's commands; `not authorised`), `LockGateTest` (4), `OtaPianoTest` (+3), `FirmwareUpdaterTest`
+(+2: ERR 11 and 12 not retried; read only refused), `AttentionTest` (+1), `CrashSilencerTest` (+1: through the gate,
+refused), `ImporterTest` (+1: a cancelled import's progress finishes).
+1,652 → 1,686 unit tests (12 skipped), none failing, with `--rerun`; `lintDebug` "No issues found" (0 errors, 0
+warnings: 1.24's 21 were library versions, the target SDK and the services' types, all dealt with above). The
+compiler's new Kotlin 2.4 warnings are in `web/relay/` (`RelayClient.kt`, `RelayProtocol.kt`), E's files, left to E.
+
+## Seen on Android 16 (AVD `steven_piano_api36`, Pixel Tablet, `android-36;google_apis;arm64-v8a`)
+- Edge-to-edge: sheets above the keyboard (the kiosk PIN's two sheets over their number pad, the quiet times' section
+  editor over the full keyboard, scrolling to Cancel and Save); the resting screen full bleed.
+- Predictive back: a sheet follows a slow swipe, and stays when it turns back; a composer's group closes to the
+  composers; at the kiosk's root the app stays in front (lock task LOCKED). The resting screen: the swipe's touch-down
+  already leaves it, so when Android starts the gesture after the overlay has gone the back goes on to the screen
+  beneath (outside kiosk, at the Library's root, Home), as every back from it did before 36; when the overlay is still
+  there it only leaves it. A fix belongs to the display screen's `BackHandler` (M59's file): listed.
+- dataSync's timeout forced to 60 s during a 6,000-file import: "FGS (dataSync) timed out", the service stopped 1 ms
+  later, no ANR, the process kept; the override deleted.
+- A chord (C4 E4 G4) held on Keys with the rotation asked for: no turn while held (`mLastOrientation=14`), the three
+  note-offs on release and the turn 1 ms after.
+- Kiosk with device owner: lock task LOCKED; a silent update to a `-PversionCodeOverride=35` build from a local manifest
+  ("handed to the package installer (device owner)", "Updated to …; this is the new version", the app back in front);
+  `adb reboot` back into `KioskHome`, no crash.
+- The lock against the emulated piano: an open piano claimed, the key proved on the next connections, a piano locked to
+  another device read only with Retry, a claim in its pairing window, guest play with its time left, Unlock's question
+  and the piano open after it; the System page's amber Debugging row ("USB").
