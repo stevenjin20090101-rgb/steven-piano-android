@@ -54,9 +54,6 @@ object Motion {
     const val FastMs = QuickMs
     const val RollStartMs = EmphasisedMs
 
-    /** Every duration above (MotionTokensTest: none longer than [SlowMs]). */
-    val Durations: List<Int> = listOf(QuickMs, PopMs, StandardMs, EmphasisedMs, SlowMs)
-
     /** A pressed control's scale; what grows in (the art, a popover) starts from [GrowFrom]. */
     const val PressedScale = 0.97f
     const val GrowFrom = 0.92f

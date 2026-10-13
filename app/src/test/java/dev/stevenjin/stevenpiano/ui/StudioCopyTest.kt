@@ -23,22 +23,11 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Locale
 
-/** What Studio says (v1.7 — M23, M24): the hub's value, the models' lines, each job's line, the notification. */
+/** What Studio says (v1.7 — M23, M24): the models' lines, each job's line, the notification. */
 class StudioCopyTest {
     private val transcribing = StudioJob(1, JobKind.Transcribe, "Clair de lune.m4a", JobState.Running, JobStep.Transcribing, 0.42f)
     private val composing = StudioJob(3, JobKind.Compose, "Clair de lune", JobState.Running, JobStep.Composing, 0.42f)
     private val downloading = StudioJob(2, JobKind.Download, "Transcription model", JobState.Running, JobStep.Downloading, 0.34f, bytes = 42_300_000, total = 124_511_036)
-
-    @Test
-    fun `the hub reads the job running, else the models installed`() {
-        assertEquals("Transcribing 42%", StudioCopy.hub(1, listOf(transcribing)))
-        assertEquals("Downloading 34%", StudioCopy.hub(0, listOf(downloading)))
-        assertEquals("Transcribing", StudioCopy.hub(1, listOf(transcribing.copy(step = JobStep.Reading, progress = null))))
-        assertEquals("Waiting", StudioCopy.hub(1, listOf(transcribing.copy(state = JobState.Queued))))
-        assertEquals("No models", StudioCopy.hub(0, emptyList()))
-        assertEquals("1 model", StudioCopy.hub(1, listOf(transcribing.copy(state = JobState.Done))))
-        assertEquals("2 models", StudioCopy.hub(2, emptyList()))
-    }
 
     @Test
     fun `a model reads its size and licence`() {
@@ -87,22 +76,16 @@ class StudioCopyTest {
 
     @Test
     fun `a composition reads as composing in the manner of its seed, then as the piece it made`() {
-        assertEquals("Composing 42%", StudioCopy.hub(2, listOf(composing)))
-        assertEquals("Composing", StudioCopy.hub(2, listOf(composing.copy(step = JobStep.Waiting, progress = null))))
         assertEquals("Composing · 42%", StudioCopy.jobLine(composing))
         assertEquals("Adding it to the library…", StudioCopy.jobLine(composing.copy(step = JobStep.Saving, progress = null)))
         assertEquals("Composing in the manner of Clair de lune", StudioCopy.notificationTitle(composing))
         assertEquals("Composing in the manner of Clair de lune · 42%", StudioCopy.libraryLine(composing))
         assertEquals("Adding the composition to the library…", StudioCopy.libraryLine(composing.copy(step = JobStep.Saving)))
         assertEquals("In the manner of Clair de lune", StudioCopy.jobName(composing))
-        assertEquals("In the manner of Clair de lune", StudioCopy.jobTitle(composing))
-        assertEquals("Clair de lune.m4a", StudioCopy.jobTitle(transcribing))
         val made = composing.copy(state = JobState.Done, step = JobStep.Waiting, pieceId = 12, title = "Composition · Sep 28, 2026 2:05 PM")
-        assertEquals("Composition · Sep 28, 2026 2:05 PM", StudioCopy.jobTitle(made))
         assertEquals("Ready: listen, then keep it or discard it", StudioCopy.jobLine(made, undecided = setOf(12L)))
         assertEquals("Composition · Sep 28, 2026 2:05 PM is in the library", StudioCopy.ended(made))
         assertEquals("The composition didn't finish", StudioCopy.ended(composing.copy(state = JobState.Failed)))
-        assertEquals("Compose a piece…", StudioCopy.COMPOSE)
         assertEquals("Runs on this tablet. About a minute for a two-minute piece.", StudioCopy.COMPOSE_NOTE)
         assertEquals("Downloads the composing model (173 MB) first.", StudioCopy.downloadsFirst(ModelCatalogue.composer))
         assertEquals(StudioCopy.COMPOSE_NOTE, StudioCopy.withDownload(StudioCopy.COMPOSE_NOTE, ModelCatalogue.composer, setOf("composer")))

@@ -22,8 +22,6 @@ object Format {
         return if (hours > 0) "%d:%02d:%02d".format(Locale.ROOT, hours, minutes, secs) else "%d:%02d".format(Locale.ROOT, minutes, secs)
     }
 
-    fun clockMicros(micros: Long): String = clock(micros / 1_000_000L)
-
     fun clockMillis(millis: Long): String = clock(millis / 1_000L)
 
     /** "1,204", grouped the way the phone's language groups digits. */

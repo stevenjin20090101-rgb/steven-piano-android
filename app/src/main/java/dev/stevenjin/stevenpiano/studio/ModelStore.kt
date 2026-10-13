@@ -78,9 +78,6 @@ class ModelStore(
         refresh()
     }
 
-    /** The bytes the installed models take. */
-    fun sizeOnDisk(): Long = models.filter(::isInstalled).sumOf { it.sizeBytes }
-
     /**
      * At the app's start: downloads a stopped process left half-way (`*.part`), and files no model of
      * this build names (an older version's), are removed; then the folder is read. The files of

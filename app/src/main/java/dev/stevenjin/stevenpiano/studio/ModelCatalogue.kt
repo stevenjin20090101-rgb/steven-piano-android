@@ -85,8 +85,6 @@ object ModelCatalogue {
     /** In the Studio page's order. */
     val all: List<ModelEntry> = listOf(transcription, composer)
 
-    fun named(name: String): ModelEntry? = all.firstOrNull { it.name == name }
-
     /**
      * The tablet's piano sound (v1.8 — M25): FreePats' Upright Piano KW (2022-02-21), a Kawai upright
      * recorded by Gonzalo and Roberto, published under CC0 1.0; the SoundFont exactly as FreePats

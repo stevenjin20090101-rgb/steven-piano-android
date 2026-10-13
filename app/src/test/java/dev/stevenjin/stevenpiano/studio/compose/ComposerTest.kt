@@ -55,7 +55,7 @@ class ComposerTest {
         OrtComposerModel(file).use { model ->
             val seed = AmtTokenizer.decode(ComposerFixtures.inputTokens)
             val started = System.nanoTime()
-            val out = Sampler(model).generate(seed, SamplingSettings.Greedy, budget = 64)
+            val out = Sampler(model).generate(seed, SamplingSettings(0.0, 1.0), budget = 64)
             println("ComposerTest: 64 greedy tokens in %.0f ms (with the 214-token prefill)".format((System.nanoTime() - started) / 1e6))
             assertArrayEquals(ComposerFixtures.int8Continuation, out.tokens)
             assertEquals(0, out.slides)
@@ -65,7 +65,7 @@ class ComposerTest {
 
             // The prompt builder's seed of the Bach file is the same, and so is what follows it.
             val prompt = PromptBuilder.build(SeedPiece("Prelude in C major", "Johann Sebastian Bach", ComposerFixtures.bach), ComposeRequest())
-            val again = Sampler(model).generate(prompt.events, SamplingSettings.Greedy, budget = 64)
+            val again = Sampler(model).generate(prompt.events, SamplingSettings(0.0, 1.0), budget = 64)
             assertArrayEquals(ComposerFixtures.int8Continuation, again.tokens)
         }
     }

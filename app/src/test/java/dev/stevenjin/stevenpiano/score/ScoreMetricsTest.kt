@@ -14,6 +14,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** Treble, gap, bass: the grand staff a system draws (88 dp). */
+private val ScoreMetrics.grandStaffHeight: Float get() = 2 * staffHeight + staveGap
+
 class ScoreMetricsTest {
     private val density = 2.625f   // a phone's xxhdpi
 

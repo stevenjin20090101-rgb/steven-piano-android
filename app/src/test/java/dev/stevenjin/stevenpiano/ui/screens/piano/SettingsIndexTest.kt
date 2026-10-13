@@ -133,7 +133,12 @@ class SettingsIndexTest {
 
     @Test
     fun `the new notes are one plain line each, sentence case, under 60 characters`() {
-        for (note in SettingNotes.all) {
+        // Every note: the piano's table and each constant of SettingNotes (a const val is a static String field).
+        val constants = SettingNotes::class.java.declaredFields
+            .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+            .map { it.get(null) as String }
+        assertTrue("the notes are found", constants.size >= 20)
+        for (note in SettingNotes.piano.values + constants) {
             assertTrue(note, note.length < 60)
             assertTrue(note, note.first().isUpperCase())
             assertFalse(note, note.endsWith("."))

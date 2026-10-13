@@ -21,7 +21,6 @@ class FormatTest {
         assertEquals("4:31", Format.clock(271))
         assertEquals("1:02:03", Format.clock(3_723))
         assertEquals("0:00", Format.clock(-5))
-        assertEquals("4:08", Format.clockMicros(248_900_000L))
         assertEquals("1:16", Format.clockMillis(76_999L))
     }
 

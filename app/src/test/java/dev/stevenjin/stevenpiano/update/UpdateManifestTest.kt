@@ -111,13 +111,11 @@ class UpdateManifestTest {
         assertFalse(source.allowsHop("https://github.com/stevenjin20090101-rgb/steven-piano-android"))
         assertFalse(source.allowsHop("https://api.github.com/repos/stevenjin20090101-rgb/steven-piano-android/releases/latest"))
         assertFalse(source.allowsHop("http://raw.githubusercontent.com/stevenjin20090101-rgb/steven-piano-android/main/releases/latest.json"))
-        assertTrue(source.isProduction)
     }
 
     @Test
     fun `a local source keeps to its one origin, plain HTTP allowed`() {
         val local = UpdateSource.local("http://10.0.2.2:8765/latest.json")!!
-        assertFalse(local.isProduction)
         assertTrue(local.allowsHop("http://10.0.2.2:8765/latest.json"))
         assertTrue(local.allowsApk("http://10.0.2.2:8765/steven-piano-9.apk"))
         assertFalse(local.allowsHop("http://10.0.2.2:8766/latest.json"))

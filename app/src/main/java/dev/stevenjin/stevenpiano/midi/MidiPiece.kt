@@ -44,7 +44,6 @@ class MidiPiece(
      */
     val trackNames: List<String> = emptyList(),
 ) {
-    val sequenceName: String? get() = sequenceNames.firstOrNull()
     val noteCount: Int get() = notes.size
 
     /**
@@ -113,13 +112,6 @@ class EventList internal constructor(
 
     companion object {
         val Empty = EventList(LongArray(0), IntArray(0), 0)
-
-        /** [events] as an [EventList]: for tests, and for callers that already hold objects. */
-        fun of(events: List<TimedEvent>): EventList = EventList(
-            LongArray(events.size) { events[it].atMicros },
-            IntArray(events.size) { MidiBatch.pack(events[it].status, events[it].data1, events[it].data2) },
-            events.size,
-        )
     }
 }
 

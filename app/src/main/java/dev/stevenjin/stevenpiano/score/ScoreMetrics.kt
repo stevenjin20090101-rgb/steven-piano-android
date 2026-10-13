@@ -89,9 +89,6 @@ data class ScoreMetrics(
     /** One staff: four spaces. */
     val staffHeight: Float get() = 4 * space
 
-    /** Treble, gap, bass: 88 dp. */
-    val grandStaffHeight: Float get() = 2 * staffHeight + staveGap
-
     /** The y of the treble staff's top line of the system in [row] (0 at the top of a page). */
     fun staffTop(row: Int): Float = firstSystemTop + row * systemPitch + chordHeight + numberHeight
 

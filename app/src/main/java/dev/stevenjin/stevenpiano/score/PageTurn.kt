@@ -47,14 +47,6 @@ object PageTurn {
         return shown
     }
 
-    /** The systems each slot shows ([pagesShown] as ranges; empty for an empty slot). */
-    fun visibleSystems(cursorSystem: Int, systemCount: Int, systemsPerPage: Int, pages: Int): List<IntRange> {
-        val perPage = systemsPerPage.coerceAtLeast(1)
-        return pagesShown(cursorSystem, systemCount, perPage, pages).map { page ->
-            if (page < 0) IntRange.EMPTY else page * perPage until minOf(systemCount, (page + 1) * perPage)
-        }
-    }
-
     /**
      * The pages a reader looking around sees: [first] and, with two slots, the page after it, each
      * in its own slot (even pages left). [first] is held to the book: an even page with two slots.

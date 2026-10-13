@@ -56,9 +56,6 @@ object StandbyText {
     fun asksForOwnNotes(pieceRow: ArtworkEntity?, fetchAutomatically: Boolean): Boolean =
         fetchAutomatically && ArtworkPolicy.notesOf(pieceRow) == null
 
-    /** The description alone ([notes]'s text). */
-    fun description(piece: ArtworkEntity?, composer: ArtworkEntity?): String? = notes(piece, composer)?.text
-
     /** [text] as one paragraph: line breaks and runs of spaces become one space, so no line of the few is spent on a break. */
     fun oneParagraph(text: String): String = text.trim().replace(WHITESPACE, " ")
 

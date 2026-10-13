@@ -94,7 +94,7 @@ class ScoreLayoutBudgetTest {
         // What is written is whole: every rest on its system, in bar order, the notes all placed.
         for (k in 0 until score.rests.size) assertTrue(k in score.rests.inSystem(score.rests.system[k]))
         assertTrue((0 until score.noteCount).all { score.system[it] >= 0 })
-        assertEquals(score.noteCount, score.headCount)
+        assertEquals(score.noteCount, score.x.size)
     }
 
     @Test
@@ -110,7 +110,7 @@ class ScoreLayoutBudgetTest {
         val seconds = (System.nanoTime() - started) / 1e9
         assertTrue(score.quantized)
         assertTrue(score.rests.size <= ScoreLayoutEngine.restBudget(tiny.noteCount))
-        assertTrue(score.headCount - score.noteCount <= ScoreLayoutEngine.tiedBudget(tiny.noteCount))
+        assertTrue(score.x.size - score.noteCount <= ScoreLayoutEngine.tiedBudget(tiny.noteCount))
         assertTrue((0 until score.noteCount).all { score.system[it] >= 0 && score.x[it].isFinite() })
         assertTrue("laid out in %.2f s".format(seconds), seconds < 10.0)
     }
@@ -157,7 +157,7 @@ class ScoreLayoutBudgetTest {
         val grown = usedHeap() - before
         println("Budget: 300,000 held notes lay out as performed holding ${grown / mb} MB")
         assertFalse(score.quantized)
-        assertEquals(score.noteCount, score.headCount)
+        assertEquals(score.noteCount, score.x.size)
         assertEquals(0, score.ties.size)
         assertEquals(0, score.rests.size)
         assertEquals(0, score.beams.size)
@@ -184,7 +184,7 @@ class ScoreLayoutBudgetTest {
         assertEquals(ScoreLayoutEngine.MAX_TIED_HEADS, ScoreLayoutEngine.tiedBudget(held.notes.size))
         val score = held.layout()
         assertTrue(score.quantized)
-        assertEquals(ScoreLayoutEngine.MAX_TIED_HEADS, score.headCount - score.noteCount)
+        assertEquals(ScoreLayoutEngine.MAX_TIED_HEADS, score.x.size - score.noteCount)
         assertEquals(2, score.tiedHeadCount(0))
         assertEquals(0, score.tiedHeadCount(score.noteCount - 1))
         assertTrue((0 until score.noteCount).all { score.tiedHeadCount(it) <= 2 })
@@ -196,7 +196,7 @@ class ScoreLayoutBudgetTest {
         val long = piece { for (k in 0 until 10) note(0, 60 + k, 20 * 1_920L) }
         assertEquals(ScoreLayoutEngine.MIN_TIED_BUDGET, ScoreLayoutEngine.tiedBudget(10))
         val score = layout(long)
-        assertEquals(190, score.headCount - score.noteCount)
+        assertEquals(190, score.x.size - score.noteCount)
         assertTrue((0 until score.noteCount).all { score.tiedHeadCount(it) == 19 })
     }
 }

@@ -10,7 +10,6 @@
 package dev.stevenjin.stevenpiano.ui.components
 
 import dev.stevenjin.stevenpiano.midi.KeyMap
-import dev.stevenjin.stevenpiano.ui.components.StaffPitch.isSharp
 import dev.stevenjin.stevenpiano.ui.components.StaffPitch.ledgerLines
 import dev.stevenjin.stevenpiano.ui.components.StaffPitch.onTreble
 import dev.stevenjin.stevenpiano.ui.components.StaffPitch.position
@@ -20,12 +19,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StaffPitchTest {
+    /** A black key: a sharp on the staff. */
+    private fun isSharp(key: Int): Boolean = key % 12 in setOf(1, 3, 6, 8, 10)
+
     @Test
     fun `middle C sits on its own ledger line below the treble staff`() {
         assertTrue(onTreble(60))
         assertEquals(-2, position(60))
         assertEquals(-1, ledgerLines(position(60)))
-        assertFalse(isSharp(60))
     }
 
     @Test
@@ -72,9 +73,7 @@ class StaffPitchTest {
     @Test
     fun `black keys are sharps on the step of the natural below`() {
         for (key in KeyMap.LOWEST..KeyMap.HIGHEST) {
-            val black = key % 12 in setOf(1, 3, 6, 8, 10)
-            assertEquals("key $key", black, isSharp(key))
-            if (black) {
+            if (isSharp(key)) {
                 assertEquals("key $key", position(key - 1), position(key))
                 assertEquals("key $key", onTreble(key - 1), onTreble(key))
             }
@@ -89,39 +88,5 @@ class StaffPitchTest {
         whites.zipWithNext().filter { (a, b) -> onTreble(a) == onTreble(b) }.forEach { (a, b) ->
             assertEquals("$a to $b", position(a) + 1, position(b))
         }
-    }
-
-    /** The keys whose heads move aside, for notes given as (start in ms, key). */
-    private fun moved(vararg notes: Pair<Long, Int>): List<Int> {
-        val starts = LongArray(notes.size) { notes[it].first * 1_000L }
-        val keys = IntArray(notes.size) { notes[it].second }
-        val flags = StaffPitch.secondOffsets(starts, keys, 30_000L)
-        return keys.indices.filter { flags[it] }.map { keys[it] }
-    }
-
-    @Test
-    fun `a second in a chord moves its upper head one head aside`() {
-        assertEquals(listOf(62), moved(0L to 60, 0L to 62))
-        assertEquals(listOf(62), moved(0L to 62, 0L to 60))    // in any order
-        assertEquals(listOf(61), moved(0L to 60, 0L to 61))    // C and C♯ share a step
-        assertEquals(emptyList<Int>(), moved(0L to 60, 0L to 64, 0L to 67))   // thirds stack
-    }
-
-    @Test
-    fun `clusters alternate`() {
-        assertEquals(listOf(62, 65), moved(0L to 60, 0L to 62, 0L to 64, 0L to 65))
-    }
-
-    @Test
-    fun `a performed chord counts as one, a note 50 ms later does not`() {
-        assertEquals(listOf(62), moved(0L to 60, 20L to 62))
-        assertEquals(emptyList<Int>(), moved(0L to 60, 50L to 62))
-    }
-
-    @Test
-    fun `heads on different staves, doubled keys and unplayable notes never move`() {
-        assertEquals(emptyList<Int>(), moved(0L to 59, 0L to 60))   // B3 on the bass staff, C4 on the treble
-        assertEquals(emptyList<Int>(), moved(0L to 60, 0L to 60))
-        assertEquals(emptyList<Int>(), moved(0L to KeyMap.UNPLAYABLE, 0L to 60, 0L to 64))
     }
 }

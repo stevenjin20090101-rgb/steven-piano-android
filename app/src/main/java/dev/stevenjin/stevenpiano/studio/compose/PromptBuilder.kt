@@ -31,11 +31,6 @@ data class SamplingSettings(val temperature: Double, val topP: Double, val allow
     }
 
     val greedy: Boolean get() = temperature == 0.0
-
-    companion object {
-        /** The most likely token every time, as the spike's fixture was made. */
-        val Greedy = SamplingSettings(0.0, 1.0)
-    }
 }
 
 /**

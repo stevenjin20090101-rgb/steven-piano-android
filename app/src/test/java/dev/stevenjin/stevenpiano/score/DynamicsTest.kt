@@ -19,6 +19,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** The bands between pp and ff ([Dynamics.PP] 0 … [Dynamics.FF] 5). */
+private const val P = 1
+private const val MP = 2
+private const val MF = 3
+private const val F = 4
+
 class DynamicsTest {
     private fun marks(means: List<Double>, performed: Boolean = false): List<Int> {
         val out = IntArray(means.size)
@@ -30,24 +36,24 @@ class DynamicsTest {
     fun `mean velocities read in six bands`() {
         val bands = listOf(0.0, 31.9, 32.0, 47.9, 48.0, 63.9, 64.0, 79.9, 80.0, 95.9, 96.0, 127.0).map { Dynamics.band(it) }
         assertEquals(
-            listOf(Dynamics.PP, Dynamics.PP, Dynamics.P, Dynamics.P, Dynamics.MP, Dynamics.MP, Dynamics.MF, Dynamics.MF, Dynamics.F, Dynamics.F, Dynamics.FF, Dynamics.FF),
+            listOf(Dynamics.PP, Dynamics.PP, P, P, MP, MP, MF, MF, F, F, Dynamics.FF, Dynamics.FF),
             bands,
         )
         assertEquals(listOf("pp", "p", "mp", "mf", "f", "ff"), (Dynamics.PP..Dynamics.FF).map { Dynamics.name(it) })
         assertEquals("", Dynamics.glyphs(Dynamics.PP))
-        assertEquals("", Dynamics.glyphs(Dynamics.P))
-        assertEquals("", Dynamics.glyphs(Dynamics.MP))
-        assertEquals("", Dynamics.glyphs(Dynamics.MF))
-        assertEquals("", Dynamics.glyphs(Dynamics.F))
+        assertEquals("", Dynamics.glyphs(P))
+        assertEquals("", Dynamics.glyphs(MP))
+        assertEquals("", Dynamics.glyphs(MF))
+        assertEquals("", Dynamics.glyphs(F))
         assertEquals("", Dynamics.glyphs(Dynamics.FF))
     }
 
     @Test
     fun `the first bar with notes is marked, then only a change of band`() {
         val nan = Double.NaN
-        assertEquals(listOf(-1, Dynamics.MP, -1, Dynamics.MF, -1, -1, Dynamics.PP), marks(listOf(nan, 50.0, 52.0, 70.0, 75.0, nan, 20.0)))
+        assertEquals(listOf(-1, MP, -1, MF, -1, -1, Dynamics.PP), marks(listOf(nan, 50.0, 52.0, 70.0, 75.0, nan, 20.0)))
         // A silent bar neither marks nor resets: the band after it is compared with the last mark.
-        assertEquals(listOf(Dynamics.MF, -1, -1), marks(listOf(70.0, nan, 72.0)))
+        assertEquals(listOf(MF, -1, -1), marks(listOf(70.0, nan, 72.0)))
     }
 
     @Test
@@ -55,22 +61,22 @@ class DynamicsTest {
         // Clair de lune's first bars as piano-midi.de shapes them, around p's floor of 32.
         val opening = listOf(38.3, 31.0, 35.8, 29.8, 35.0, 31.8, 35.7, 28.6, 31.4, 28.9, 33.8, 29.6, 36.9)
         assertEquals(
-            listOf(Dynamics.P, -1, -1, -1, -1, -1, -1, Dynamics.PP, -1, -1, -1, -1, Dynamics.P),
+            listOf(P, -1, -1, -1, -1, -1, -1, Dynamics.PP, -1, -1, -1, -1, P),
             marks(opening),
         )
         // Three units past the edge marks the band beyond it; a jump over two edges marks the band it has cleared.
-        assertEquals(listOf(Dynamics.PP, -1, Dynamics.P), marks(listOf(30.0, 34.0, 35.0)))
-        assertEquals(listOf(Dynamics.MF, Dynamics.MP), marks(listOf(70.0, 46.0)))   // 46 is only 2 below mp's floor
-        assertEquals(listOf(Dynamics.FF, Dynamics.F, Dynamics.FF), marks(listOf(120.0, 92.0, 99.0)))
+        assertEquals(listOf(Dynamics.PP, -1, P), marks(listOf(30.0, 34.0, 35.0)))
+        assertEquals(listOf(MF, MP), marks(listOf(70.0, 46.0)))   // 46 is only 2 below mp's floor
+        assertEquals(listOf(Dynamics.FF, F, Dynamics.FF), marks(listOf(120.0, 92.0, 99.0)))
     }
 
     @Test
     fun `a performance is marked only when the band moves two or more`() {
         val means = listOf(50.0, 70.0, 85.0, 90.0, 70.0, 40.0)   // mp mf f f mf p
-        assertEquals(listOf(Dynamics.MP, -1, Dynamics.F, -1, -1, Dynamics.P), marks(means, performed = true))
-        assertEquals(listOf(Dynamics.MP, Dynamics.MF, Dynamics.F, -1, Dynamics.MF, Dynamics.P), marks(means))
+        assertEquals(listOf(MP, -1, F, -1, -1, P), marks(means, performed = true))
+        assertEquals(listOf(MP, MF, F, -1, MF, P), marks(means))
         // A slow drift up one band at a time is marked once it is two bands from the last mark.
-        assertEquals(listOf(Dynamics.P, -1, Dynamics.MF, -1), marks(listOf(40.0, 50.0, 70.0, 85.0 - 10.0), performed = true))
+        assertEquals(listOf(P, -1, MF, -1), marks(listOf(40.0, 50.0, 70.0, 85.0 - 10.0), performed = true))
     }
 
     @Test
@@ -105,7 +111,7 @@ class DynamicsTest {
         val high = layout(piece { note(0, 72, 1920) })         // C5 stays up: the mark keeps its place
         assertEquals(high.systems[0].trebleBottom + (1.5f + 1.096f) * SPACE, high.dynamics.single().y, 0.01f)
         assertEquals(2 * 1.46f, Dynamics.width(Dynamics.PP), 0.001f)
-        assertEquals(1.748f + 1.456f, Dynamics.width(Dynamics.MF), 0.001f)
+        assertEquals(1.748f + 1.456f, Dynamics.width(MF), 0.001f)
     }
 
     @Test

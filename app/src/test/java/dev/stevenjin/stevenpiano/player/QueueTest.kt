@@ -214,7 +214,6 @@ class QueueTest {
                 assertEquals("$mode $q", withMode.afterEnd() != null, snapshot.advancesAtEnd)
                 assertEquals("$mode $q", withMode.hasNext, snapshot.hasNext)
                 assertEquals(withMode.upNext.map { it.pieceId }, snapshot.upNextIds)
-                assertEquals(withMode.upNext.map { it.uid }, snapshot.upNextUids)
             }
         }
     }

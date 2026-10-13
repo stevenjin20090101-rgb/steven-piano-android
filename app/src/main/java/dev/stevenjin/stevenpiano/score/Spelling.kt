@@ -69,17 +69,6 @@ object Spelling {
         return Math.floorDiv(natural, 12) * 7 + letter(key, sharps)
     }
 
-    /** "B♭4", "C♯4", "B♮3": the written note, for tests and descriptions. */
-    fun name(key: Int, sharps: Int): String {
-        val step = step(key, sharps)
-        val sign = when (alteration(key, sharps)) {
-            1 -> "♯"
-            -1 -> "♭"
-            else -> if (keyAlteration(letter(key, sharps), sharps) != 0) "♮" else ""
-        }
-        return "${"CDEFGAB"[Math.floorMod(step, 7)]}$sign${Math.floorDiv(step, 7) - 1}"
-    }
-
     private fun entry(key: Int, sharps: Int): Int = TABLE[sharps.coerceIn(-7, 7) + 7][Math.floorMod(key, 12)]
 
     private fun spellings(sharps: Int): IntArray {

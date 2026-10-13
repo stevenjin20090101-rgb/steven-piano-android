@@ -26,7 +26,7 @@ import org.junit.Test
 class MotionTokensTest {
     @Test
     fun `no duration is longer than 480 ms, and the four steps are the brief's`() {
-        assertTrue(Motion.Durations.all { it in 1..Motion.SlowMs })
+        assertTrue(listOf(Motion.QuickMs, Motion.PopMs, Motion.StandardMs, Motion.EmphasisedMs, Motion.SlowMs).all { it in 1..Motion.SlowMs })
         assertEquals(480, Motion.SlowMs)
         assertEquals(listOf(120, 200, 320, 480), listOf(Motion.QuickMs, Motion.StandardMs, Motion.EmphasisedMs, Motion.SlowMs))
         // Asked for more, a timed transition is still held to the maximum.

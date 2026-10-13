@@ -94,12 +94,4 @@ object SettingNotes {
     const val CHECK_AUTOMATICALLY = "Looks for a newer version by itself"
     const val CHECK_FOR_APP_UPDATES = "Looks for a newer Steven Piano now"
     const val FETCH_EVERY_COMPOSER = "Looks up every composer on Wikipedia now"
-
-    /** Every note above, for the rules' test. */
-    val all: List<String> = piano.values + listOf(
-        TEST_LED, READ_STATUS, SAVE_TO_PIANO, ALL_KEYS_OFF, AUTO_CONNECT, DEFAULT_TEMPO, VELOCITY,
-        DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
-        WEB_PANEL, GUESTS_CAN_REQUEST, APPROVE_FIRST, RELAY_ADDRESS, ALBUM_BACKDROP, RESTING_BACKGROUND, RESTING_SHOWS,
-        CHECK_AUTOMATICALLY, CHECK_FOR_APP_UPDATES, FETCH_EVERY_COMPOSER,
-    )
 }

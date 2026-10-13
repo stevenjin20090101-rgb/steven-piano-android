@@ -25,9 +25,6 @@ object StudioCopy {
     const val TRANSCRIBE = "Transcribe a recording…"
     const val TRANSCRIBE_NOTE = "Any piano recording. About a minute per three minutes of audio."
 
-    /** Composing (v1.7 — M24): the page's button, the + sheet's entry, and what it takes. */
-    const val COMPOSE = "Compose a piece…"
-
     /** The Library's + sheet entry since v1.12 (M30): it opens the Studio tab. */
     const val COMPOSE_IN_STUDIO = "Compose in Studio…"
     const val COMPOSE_NOTE = "Runs on this tablet. About a minute for a two-minute piece."
@@ -45,32 +42,6 @@ object StudioCopy {
         StudioSupport.TooLittleMemory -> "This tablet doesn't have enough memory for Studio"
         else -> null
     }
-
-    /**
-     * The hub row's value: the job running ("Transcribing 42%", "Composing 42%", "Downloading 42%"),
-     * "Waiting" while one waits, else how many models are installed ("2 models", "1 model", "No models").
-     */
-    fun hub(installed: Int, jobs: List<StudioJob>): String {
-        val running = jobs.firstOrNull { it.state == JobState.Running }
-        if (running != null) {
-            val verb = when (running.kind) {
-                JobKind.Download -> "Downloading"
-                JobKind.Transcribe -> "Transcribing"
-                JobKind.Compose -> "Composing"
-            }
-            val pct = running.progress?.takeIf { running.step in MEASURED }
-            return if (pct == null) verb else "$verb ${Format.percent(percentOf(pct))}"
-        }
-        if (jobs.any { it.state == JobState.Queued }) return "Waiting"
-        return when (installed) {
-            0 -> "No models"
-            1 -> "1 model"
-            else -> "$installed models"
-        }
-    }
-
-    /** The steps that have a measure: their percentage shows. */
-    private val MEASURED = setOf(JobStep.Downloading, JobStep.Transcribing, JobStep.Composing)
 
     /** "125 MB · CC BY 4.0". */
     fun modelLine(model: ModelEntry): String = "${size(model.sizeBytes)} · ${model.licenceLabel}"
@@ -108,9 +79,6 @@ object StudioCopy {
 
     /** What a job is called while it waits or runs: a recording's name, a model's, or for a composition the piece it is in the manner of. */
     fun jobName(job: StudioJob): String = if (job.kind == JobKind.Compose) "In the manner of ${job.name}" else job.name
-
-    /** A job's name where it is listed: the piece it made once done, else [jobName]. */
-    fun jobTitle(job: StudioJob): String = if (job.state == JobState.Done && job.title != null) job.title else jobName(job)
 
     /** The notification's title for the job running. */
     fun notificationTitle(job: StudioJob): String = when (job.kind) {

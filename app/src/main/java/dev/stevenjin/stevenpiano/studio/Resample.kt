@@ -33,19 +33,6 @@ object Resample {
 
     /** The Kaiser window's β: about 90 dB down in the stop band. */
     const val KAISER_BETA = 9.0
-
-    /** [input] (mono, at [fromRate]) at 16 kHz. The same array when it is 16 kHz already. */
-    fun to16k(input: FloatArray, fromRate: Int): FloatArray = convert(input, fromRate, MODEL_RATE)
-
-    /** [input] (mono, at [fromRate]) at [toRate]. The same array when the rates are equal. */
-    fun convert(input: FloatArray, fromRate: Int, toRate: Int): FloatArray {
-        if (fromRate == toRate) return input
-        val resampler = Resampler(fromRate, toRate)
-        val out = FloatBuilder(resampler.outputLength(input.size.toLong()).toInt() + 1)
-        resampler.push(input, input.size, out)
-        resampler.finish(out)
-        return out.toArray()
-    }
 }
 
 /** Where a [Resampler] puts its output: a growing array, or the next stage. */

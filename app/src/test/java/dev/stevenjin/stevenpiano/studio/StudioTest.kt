@@ -414,7 +414,7 @@ class StudioTest {
     fun `a composition asked for without its model downloads it first, then writes only new music at its tempo, and waits for Keep or Discard`() = runBlocking {
         val studio = studio()
         val job = studio.compose(order(key = MusicKey(2, false), bpm = 96), name = "Prelude in C major")
-        assertEquals("In the manner of Prelude in C major", dev.stevenjin.stevenpiano.ui.StudioCopy.jobTitle(studio.jobs.get(job.id)!!))
+        assertEquals("In the manner of Prelude in C major", dev.stevenjin.stevenpiano.ui.StudioCopy.jobName(studio.jobs.get(job.id)!!))
         val done = studio.settled()
         assertEquals(listOf(JobKind.Download, JobKind.Compose), done.map { it.kind })
         assertEquals(listOf(JobState.Done, JobState.Done), done.map { it.state })
@@ -436,7 +436,7 @@ class StudioTest {
         // The file: at the chosen tempo (96 bpm), only what the model wrote (keys 90 and 91; the seed's keys are 60-84, moved up 2 for D major), from its start.
         val piece = SmfParser.parse(bytes)
         assertEquals(625_000, piece.tempoMap.tempoAt(0))
-        assertEquals(title, piece.sequenceName)
+        assertEquals(title, piece.sequenceNames.firstOrNull())
         assertTrue("only the new music: ${(0 until piece.noteCount).map { piece.notes.note(it) }.toSet()}", (0 until piece.noteCount).all { piece.notes.note(it) in 90..91 })
         assertTrue(piece.noteCount > 150)
         assertTrue("it starts on its first beat", piece.notes.startMicros[0] < 625_000)
@@ -501,7 +501,7 @@ class StudioTest {
         composerGate = CountDownLatch(1)
         val job = studio.compose(order(minutes = 1))
         withTimeout(5_000) { studio.jobs.jobs.first { list -> list.any { it.id == job.id && it.step == JobStep.Composing } } }
-        assertEquals("Composing 0%", dev.stevenjin.stevenpiano.ui.StudioCopy.hub(1, studio.jobs.jobs.value))
+        assertEquals("composing, at 0 %", 0, dev.stevenjin.stevenpiano.ui.StudioCopy.percentOf(studio.jobs.get(job.id)!!.progress ?: 0f))
         composerGate!!.countDown()
         val seen = mutableListOf<Float>()
         withTimeout(10_000) {

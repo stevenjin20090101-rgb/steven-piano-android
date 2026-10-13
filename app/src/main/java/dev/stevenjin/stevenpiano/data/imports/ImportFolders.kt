@@ -48,9 +48,6 @@ class ImportFolders(paths: Collection<String>) {
      * when it is none of this import's; names compare as [ComposerNames.artistKey] folds them.
      */
     fun artistNamed(name: String): String? = if (byName.isEmpty()) null else byName[ComposerNames.artistKey(name)]
-
-    /** Whether [name] is one of this import's artist folders ([artistNamed]). */
-    fun isArtist(name: String): Boolean = artistNamed(name) != null
 }
 
 /**

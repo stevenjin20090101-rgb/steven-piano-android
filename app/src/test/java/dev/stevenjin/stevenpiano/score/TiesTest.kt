@@ -33,17 +33,23 @@ class TiesTest {
         return (0 until count).map { ticks[it] to lengths[it] }
     }
 
+    /** [sixteenths] inside one long bar ([compound] or not) as [Ties.segments] writes it: tied values, largest first. */
     private fun split(sixteenths: Int, compound: Boolean = false): List<Int> {
-        val out = IntArray(16)
-        return out.take(Ties.split(sixteenths, out, compound))
+        val ticks = LongArray(16)
+        val lengths = IntArray(16)
+        val count = Ties.segments(0, sixteenths * 120L, longArrayOf(0), longArrayOf(1L shl 40), booleanArrayOf(compound), 0, 120.0, 16, ticks, lengths)
+        return lengths.take(count)
     }
+
+    /** Whether one written value lasts [sixteenths]: it is written without a tie. */
+    private fun representable(sixteenths: Int, compound: Boolean = false) = split(sixteenths, compound) == listOf(sixteenths)
 
     // --- The rules on their own -------------------------------------------------------------
 
     @Test
     fun `single values, plain or dotted, and the lengths only ties can write`() {
-        for (v in listOf(1, 2, 3, 4, 6, 8, 12, 16, 24)) assertTrue("$v", Ties.representable(v))
-        for (v in listOf(5, 7, 9, 10, 11, 13, 14, 15, 17, 20)) assertFalse("$v", Ties.representable(v))
+        for (v in listOf(1, 2, 3, 4, 6, 8, 12, 16, 24)) assertTrue("$v", representable(v))
+        for (v in listOf(5, 7, 9, 10, 11, 13, 14, 15, 17, 20)) assertFalse("$v", representable(v))
         assertEquals(listOf(4, 1), split(5))     // a quarter tied to a sixteenth
         assertEquals(listOf(6, 1), split(7))    // Bach's tenor in the C major prelude: a dotted quarter and a sixteenth
         assertEquals(listOf(8, 2), split(10))
@@ -55,10 +61,10 @@ class TiesTest {
 
     @Test
     fun `compound metres keep to their dotted values`() {
-        assertTrue(Ties.representable(8))
-        assertFalse(Ties.representable(8, compound = true))
-        assertFalse(Ties.representable(16, compound = true))
-        assertTrue(Ties.representable(12, compound = true))
+        assertTrue(representable(8))
+        assertFalse(representable(8, compound = true))
+        assertFalse(representable(16, compound = true))
+        assertTrue(representable(12, compound = true))
         assertEquals(listOf(12, 6), split(18, compound = true))   // a full bar of 9/8
         assertEquals(listOf(16, 2), split(18))                   // the same length in a simple metre
         assertEquals(listOf(6, 2), split(8, compound = true))
@@ -148,9 +154,9 @@ class TiesTest {
     fun `every note of a chord is tied, and the tied chord shares one stem`() {
         val chord = piece { for (key in listOf(72, 76, 79)) note(1440, key, 960) }   // C E G across the bar line
         val score = layout(chord)
-        assertEquals(3, score.headCount - score.noteCount)
+        assertEquals(3, score.x.size - score.noteCount)
         assertEquals(3, score.ties.size)
-        val tiedHeads = (score.noteCount until score.headCount).toList()
+        val tiedHeads = (score.noteCount until score.x.size).toList()
         assertEquals(1, tiedHeads.count { !score.stemX[it].isNaN() })
         assertTrue(tiedHeads.all { score.accidental[it].toInt() == Accidental.NONE })
         for (arc in 0 until score.ties.size) assertEquals(score.y[score.ties.from[arc]], score.y[score.ties.to[arc]], 0.01f)
@@ -227,7 +233,7 @@ class TiesTest {
         assertEquals(1, treble.count { !score.stemX[it].isNaN() })                                    // one stem
         // Each written alike from the chord's onset: 6 + 1 sixteenths to the bar line, then a dotted quarter.
         assertTrue(treble.all { score.tiedHeadCount(it) == 2 })
-        assertEquals(2 * treble.size, (score.noteCount until score.headCount).count { score.treble[it] })
+        assertEquals(2 * treble.size, (score.noteCount until score.x.size).count { score.treble[it] })
         // A run of 64ths (a quarter of a sixteenth apart) stays a run.
         val run = layout(piece { for (k in 0 until 4) note(30L * k, 72 + 2 * k, 30); for (k in 0 until 24) note(480L + 120 * k, 40, 120) })
         assertTrue(run.quantized)
@@ -246,7 +252,7 @@ class TiesTest {
         }
         val score = layout(played)
         assertFalse(score.quantized)
-        assertEquals(score.noteCount, score.headCount)
+        assertEquals(score.noteCount, score.x.size)
         assertEquals(0, score.ties.size)
     }
 }

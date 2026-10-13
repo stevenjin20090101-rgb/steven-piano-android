@@ -86,7 +86,7 @@ class PlayerTest {
             player.state.first { it.piece?.pieceId == 2L && it.status == PlaybackStatus.Stopped && link.messages.size >= 8 }
         }
         assertEquals(2, player.state.value.queueSize)
-        assertEquals(1, player.state.value.queueIndex)
+        assertEquals(1, player.state.value.queue.index)
         assertTrue(onMain { player.stopAndFlush(300) })
         assertEquals(
             listOf(
@@ -263,7 +263,7 @@ class PlayerTest {
         withTimeout(8_000) { while (noteOns().size < 3) delay(10) }
         assertTrue(onMain { player.stopAndFlush(300) })
         assertEquals(listOf("90 3C 50", "90 3E 50", "90 3C 50"), noteOns().take(3))
-        assertEquals(0, player.state.value.queueIndex)
+        assertEquals(0, player.state.value.queue.index)
     }
 
     @Test
@@ -278,7 +278,7 @@ class PlayerTest {
         assertEquals(listOf(1L, 3L, 2L), player.state.value.queue.ids)
         withTimeout(8_000) { while (noteOns().size < 3) delay(10) }
         assertEquals(listOf("90 3C 50", "90 40 50", "90 3E 50"), noteOns())
-        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Stopped && it.queueIndex == 2 } }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Stopped && it.queue.index == 2 } }
         assertTrue(onMain { player.stopAndFlush(300) })
         assertEquals(listOf(1L, 3L, 2L), source.loads.toList())
     }
