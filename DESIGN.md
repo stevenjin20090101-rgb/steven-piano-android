@@ -3183,3 +3183,22 @@ itself after five minutes), on the LAN and through the relay alike.
 
 - The same card: the **Listening from the panel** switch and **Test every key** (no live sound here; its progress and the same
   map and line). Search finds them by microphone, listen, stuck key, key test and sweep.
+
+# v1.24 — M57: a leaner app
+
+Steven asked to delete every redundant thing that serves no purpose and to clean up the code; he chose "everything
+unused", with Studio and every feature in use staying. Nothing a person does changes, except where noted here.
+
+- **Quiet times keep no alarm.** They already stopped the piano from inside the app (the gate re-checks at every block's
+  start and end and at least once a minute, and anything playing keeps the tablet awake), so the exact alarm, its
+  permissions, its boot receiver and the Quiet times page's **Allow exact alarms** row are gone. A clock or time zone set
+  by hand is now weighed at once: a jump into a block stops the piano (once), and the next edge is met on time.
+- **The timed plays' old rows are deleted** from the schedules table (they had not run since 1.20); every quiet time stays
+  exactly as it was.
+- **The piano's Firmware and status page draws the power boards as the System page does**, seven octaves, one drawing for
+  both, and its facts are the System page's rows.
+- **Sizes read one way**: whole megabytes ("42 of 125 MB"), and one decimal of gigabytes from a gigabyte on. The app
+  update's progress now reads "1 of 14 MB" where it read "1.2 of 13.7 MB".
+- **Behind the scenes**: about 2,300 lines of the app went (code nothing called, code only the tests called, the one-time
+  repairs for versions before 1.14, and copies of the same thing kept in several places), and about 1,300 lines of the
+  emulator's stand-ins moved into the debug build, so a release carries none of them.

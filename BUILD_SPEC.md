@@ -8798,3 +8798,60 @@ where Android allows (the device owner, or Android 12 and later when this app in
 Android asks on the tablet. The panel's Tools card gains Install the update, after a confirmation. 1,672 tests green,
 lint 0 errors. Seen once on the demo emulator: the panel's System page with Listen and test, and Listen refused with
 "Listening is off on the tablet." Not seen: the microphone on real hardware, the key test with a piano, a remote update.
+
+# v1.24 — M57: a leaner app
+
+Branch `m57-clean-out` from `9d00887` (1.23), one commit per section; behaviour unchanged except where said. Main
+source: −3,063 / +747 lines (about 1,300 of them moved to `src/debug`, not deleted); tests: −1,288 / +488.
+
+## What went
+- **Dead code** (−48): `LibraryRepository.modernPieces`/`PieceDao.modern`, `GenerationDao.forPieces`,
+  `rememberReducedTransparency`, `InstrumentCopy.GROUP`, `Sf2Reader.LOOP_NONE`, unused imports; `PageRows`' Tools rows take
+  `SystemCopy`'s words. Dependencies `ui-tooling`, `ui-tooling-preview`, the empty `room-ktx` and `lifecycle-runtime-ktx`;
+  `res/mipmap-anydpi-v26` is `res/mipmap-anydpi`. Web: eight unused sprite symbols in `index.html`; `roll.js`, `score.js`
+  and `wire.js` export only what other modules import.
+- **Timed plays and exact alarms** (−645 main): `AlarmScheduler`, `AndroidAlarmScheduler`, `SchedulePlanner`,
+  `ScheduleReceiver`, `Occurrences` (`dayBit`, the day masks and the minute constants live in `QuietTimes`), `Schedules`'
+  planner, `ScheduleKind.PLAYLIST/CHANNEL/PIECE`, the manifest's `USE_EXACT_ALARM`, `SCHEDULE_EXACT_ALARM`,
+  `RECEIVE_BOOT_COMPLETED` and receiver, the Quiet times page's exact-alarm row. New: `QuietGate.clockChanged()` (runs
+  `check()` and bumps a flow combined with the rows, so the wait is planned again), called by a runtime receiver for
+  `TIME_SET`/`TIMEZONE_CHANGED` (`RECEIVER_NOT_EXPORTED`) registered in `AppGraph.start`. Note: the boot and
+  package-replaced broadcasts also used to start the app's process in the background; it now starts when opened (the
+  school tablet's kiosk makes it the home screen, so it still comes up at boot).
+- **Room 5 → 6** (`MIGRATION_5_6`, `SchemaV6`, `schemas/…/6.json`): the schedules table is made again without `volumePct`
+  and `enabled` (a new table, the QUIET rows copied with their ids, the old one dropped, the new one renamed); the other
+  rows go. Migrations 1→5 stay.
+- **Main code only the tests used** (−234): see the commit; kept on purpose `AmtTokenizer.decode` (how the tests read the
+  model's tokens against the package's fixtures and what the sampler fed it), `RunningNow.KEYS` (M56's `WebApiTest`), and
+  the piano-safety hooks (`NoteRouter.isSounding`/`externalHeld`, the Sampler's limiter and held keys,
+  `PacedWriter.pendingLive`, `KeyCheck.check`).
+- **The emulator's stand-ins to `app/src/debug`** (1,318 lines): `EmulatedPianoLink` (was `LoggingPianoLink`),
+  `EmulatedConsole`, `EmulatedOta`, `OtaPiano`, `FakeOta`/`FakeFirmwareServer`, `OtaExample`, `EmulatedMidiPorts`/
+  `CombinedMidiPorts`, `MidiDebugHooks`, `LibraryOverride`, `UpdateOverride`, `ModelsOverride`, and `MainActivity`'s adb
+  hooks. Main asks one seam, `Emulator` (`on`, `pianoLink()`, `midiPorts()`, `firmware()` → `FirmwareStandIn`,
+  `updateSource()`, `modelsSource()`, `librarySource()`, `onIntent()`), with the same API in `src/debug` and a no-op in
+  `src/release`; after `minifyReleaseWithR8` none of those classes is in the mapping or the usage list. `ble.LoggingPianoLink`
+  stays in main as a two-line shim over `Emulator.on`, and `update.CloudOverride` stays too, because M56's `WebService` and
+  `WebPanel` name them.
+- **One-time repairs for versions before 1.14** (−381): `TextRepair`, `UploadRepair` (and the `m28_zip_paths.txt`
+  fixture), the cover drawing for recordings made before 1.14, and 1.12's one-off import of 1.11's waiting set
+  (`RoomReview`, `WaitingSet.imported`, `Generations.reopen`, `GenerationSql.REOPEN`). `Studio.drawMissingCovers` stays: it
+  also retries a new Studio piece whose cover failed.
+- **One copy of each**: `Format.timeOfDay` ("9:30" for quiet times everywhere; "09:30" where a place showed two-digit hours)
+  and `Format.megabytes`/`size` replace six clocks and two megabyte formatters; `ManifestJson` reads the four manifests'
+  fields; `KeyboardGeometry.name` is the one note name; `SystemProperty.read` replaces eleven `getprop` copies; the
+  `Motion` aliases `RollStartMs` and `EaseOut` go (`FastMs` stays for M56's `WebAssetsTest`); `PowerBoards` and `FactRow`
+  (`ui/components/PianoFacts.kt`) draw the boards and a fact on the System page and the piano's Firmware and status page.
+- **Lint**: UseKtx ×4, ExifInterface ×2 (androidx `exifinterface` 1.4.2), UsableSpace (suppressed with the web panel's
+  reason: a floor, not an allocation), DataExtractionRules (`fullBackupContent="false"`), ObsoleteSdkInt. 31 → 21
+  warnings, all library versions, the target SDK and foreground-service types (phase 2).
+- **Tests**: the literal-copy assertions of the eleven `*CopyTest` files go; plurals, counts, sizes, times and which line
+  shows when stay.
+
+## Tests
+`SchemaV6Test` (3: 6.json's table and nothing else changed; a 1.23 database keeps its quiet blocks, ids and all, loses the
+timed rows, leaves the other tables alone, and takes a new id after the kept ones; the migrated shape is the fresh one),
+`QuietTimesTest` (+1: a clock set into a block stops the player exactly once, and set back before the next block the wait
+is planned again so it stops on time). Removed with their code: `OccurrencesTest`, `SchedulePlannerTest`,
+`TextRepairTest`, `UploadRepairTest` and the tests of members only tests used. 1,672 → 1,639 unit tests (12 skipped), none
+failing, with `--rerun`; `lintDebug` 0 errors, 21 warnings.

@@ -14,7 +14,6 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -23,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import androidx.core.net.toUri
 
 /**
  * Hands a downloaded, verified release to Android, which checks its signature against the
@@ -67,7 +67,7 @@ class UpdateInstaller(context: Context, private val silence: suspend () -> Unit)
 
     /** The system page where the person allows this app to install updates. */
     fun installPermissionSettings(): Intent =
-        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${app.packageName}".toUri())
 
     /** Hands [file], already verified against [manifest], to Android; [launcher] opens the installer (an activity when there is one). */
     suspend fun install(file: File, manifest: UpdateManifest, launcher: Context = app): Outcome =

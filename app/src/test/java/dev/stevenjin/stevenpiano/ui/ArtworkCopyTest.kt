@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtworkProgress
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+/** How the artwork fetch counts (v1.24 — M57: the rules, not the copy). */
 class ArtworkCopyTest {
     @Test
     fun `the progress row counts the one being fetched`() {
@@ -23,15 +24,8 @@ class ArtworkCopyTest {
     }
 
     @Test
-    fun `the notification names the composer`() {
+    fun `the notification names the composer when there is one`() {
         assertEquals("Claude Debussy · 12 of 61", ArtworkCopy.notification(ArtworkProgress(11, 61, "Claude Debussy", idle = false)))
         assertEquals("1 of 3", ArtworkCopy.notification(ArtworkProgress(0, 3, null, idle = false)))
-        assertEquals("Looking up composers…", ArtworkCopy.notification(ArtworkProgress.Idle))
-    }
-
-    @Test
-    fun `the transparency and credit lines`() {
-        assertEquals("Uses Wikipedia. Nothing about you is sent.", ArtworkCopy.TRANSPARENCY)
-        assertEquals("Text from Wikipedia, CC BY-SA 4.0 · portraits from Wikimedia Commons", ArtworkCopy.ATTRIBUTION)
     }
 }

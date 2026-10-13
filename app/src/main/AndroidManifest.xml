@@ -77,11 +77,13 @@
         android:name="android.hardware.microphone"
         android:required="false" />
 
-    <!-- No backup, and (Android 12+) no device-to-device transfer: the library stays on this device. -->
+    <!-- No backup, and (Android 12+) no device-to-device transfer: the library stays on this device. Before Android 12
+         allowBackup and fullBackupContent say so; from 12, the data extraction rules. -->
     <application
         android:name=".App"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

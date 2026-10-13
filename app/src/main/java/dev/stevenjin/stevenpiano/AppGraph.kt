@@ -27,6 +27,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.room.withTransaction
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
@@ -444,7 +445,7 @@ class AppGraph(private val app: Application) {
             appScope,
             updating = { firmwareUpdater.state.value.busy },
             fullPowerChosenOff = { fullPowerChoice.getBoolean(FULL_POWER_CHOSEN_OFF, false) },
-            chooseFullPower = { on -> fullPowerChoice.edit().putBoolean(FULL_POWER_CHOSEN_OFF, !on).apply() },
+            chooseFullPower = { on -> fullPowerChoice.edit { putBoolean(FULL_POWER_CHOSEN_OFF, !on) } },
         )
     }
 

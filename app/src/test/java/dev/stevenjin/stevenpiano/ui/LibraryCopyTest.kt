@@ -18,7 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
 
-/** The words about Steven's library pack (DESIGN.md › v1.10 — M27), one line each, and when each shows. */
+/** Steven's library pack in words (DESIGN.md › v1.10 — M27): its counts and sizes, which line shows when, and its credits. */
 class LibraryCopyTest {
     private val offer = PackState.Offered(version = 1, pieces = 1_726, sizeBytes = 61_237_277, newPieces = 1_726)
 
@@ -27,9 +27,7 @@ class LibraryCopyTest {
         assertEquals("1,726 pieces · 61 MB · MAESTRO, piano-midi.de, Mutopia · for non-commercial use", LibraryCopy.facts(offer, Locale.ROOT))
         assertEquals("before the pack is known, its sources alone", "MAESTRO, piano-midi.de, Mutopia · for non-commercial use", LibraryCopy.facts(null))
         assertEquals("1,726 pieces · 61 MB · MAESTRO, piano-midi.de, Mutopia · for non-commercial use", LibraryCopy.line(offer, offer, Locale.ROOT))
-        assertEquals("Asking for the library…", LibraryCopy.line(PackState.Checking, offer))
         assertEquals("Loading · 23 of 61 MB", LibraryCopy.line(PackState.Downloading(23_000_000, 61_237_277), offer, Locale.ROOT))
-        assertEquals("Adding the pieces…", LibraryCopy.line(PackState.Importing, offer))
         assertEquals(LibraryFailures.OFFLINE, LibraryCopy.line(PackState.Failed(LibraryFailures.OFFLINE), offer))
         assertEquals(LibraryCopy.facts(offer, Locale.ROOT), LibraryCopy.line(PackState.Done(1_726), offer, Locale.ROOT))
     }
@@ -40,13 +38,11 @@ class LibraryCopyTest {
         assertEquals("Update the library · 1 new piece", LibraryCopy.updateLabel(1))
         assertEquals("Update the library", LibraryCopy.updateLabel(0))
         assertEquals("Update the library", LibraryCopy.updateLabel(null))
-        assertEquals("Load Steven's library", LibraryCopy.LOAD)
     }
 
     @Test
     fun `the Library's bar and the notification follow the load`() {
         assertEquals("Loading Steven's library · 23 of 61 MB", LibraryCopy.bar(PackState.Downloading(23_000_000, 61_237_277), Locale.ROOT))
-        assertEquals("Loading Steven's library…", LibraryCopy.bar(PackState.Checking))
         assertNull("the import shows its own line", LibraryCopy.bar(PackState.Importing))
         assertNull(LibraryCopy.bar(offer))
         assertEquals(0.5f, LibraryCopy.progress(PackState.Downloading(50, 100))!!, 1e-6f)
@@ -54,7 +50,6 @@ class LibraryCopyTest {
         assertEquals("23 of 61 MB", LibraryCopy.notificationText(PackState.Downloading(23_000_000, 61_237_277), ImportProgress.Idle, Locale.ROOT))
         val importing = ImportProgress(done = 204, total = 1_726, finished = false)
         assertEquals("Imported 204 of 1,726", LibraryCopy.notificationText(PackState.Importing, importing, Locale.ROOT))
-        assertEquals("Loading Steven's library", LibraryCopy.NOTIFICATION_TITLE)
     }
 
     @Test

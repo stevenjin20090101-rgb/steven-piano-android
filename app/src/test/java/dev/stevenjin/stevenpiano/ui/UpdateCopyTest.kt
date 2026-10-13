@@ -17,23 +17,19 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Locale
 
-/** What the updater says (DESIGN.md › v1.4 › Updates): the row's lines, the progress in megabytes, the line under Check now. */
+/** The updater in words (DESIGN.md › v1.4 › Updates): the progress, the restart, and which state has a line under Check now. */
 class UpdateCopyTest {
     @Test
-    fun `the row reads as the design writes it`() {
-        assertEquals("Steven Piano 1.4 is available", UpdateCopy.available("1.4"))
+    fun `the progress counts megabytes, and the restart is asked for only when needed`() {
         assertEquals("Downloading 1.4 · 1 of 14 MB", UpdateCopy.downloading("1.4", 1_200_000, 13_700_000, Locale.US))
         assertEquals("Updated to 1.4; restart to use it", UpdateCopy.installed("1.4"))
         assertEquals("Updated to 1.4", UpdateCopy.installed("1.4", restartNeeded = false))
-        assertEquals("Downloading Steven Piano 1.4", UpdateCopy.notificationTitle("1.4"))
     }
 
     @Test
     fun `the line under Check now says what the last check found`() {
         assertNull(UpdateCopy.checkLine(UpdateState.Idle))
-        assertEquals("Checking for updates…", UpdateCopy.checkLine(UpdateState.Checking))
-        assertEquals("Steven Piano is up to date.", UpdateCopy.checkLine(UpdateState.UpToDate))
-        assertEquals("Couldn't reach the update server.", UpdateCopy.checkLine(UpdateState.Failed(UpdateFailures.UNREACHABLE)))
+        assertEquals(UpdateFailures.UNREACHABLE, UpdateCopy.checkLine(UpdateState.Failed(UpdateFailures.UNREACHABLE)))
         assertEquals("Version 1.4 is available.", UpdateCopy.checkLine(UpdateState.Available(Manifests.manifest())))
         assertEquals("Version 1.4 is available.", UpdateCopy.checkLine(UpdateState.Failed(UpdateFailures.MISMATCH, Manifests.manifest())))
         assertNull(UpdateCopy.checkLine(UpdateState.Installed("1.4")))
