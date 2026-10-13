@@ -126,10 +126,6 @@ fun rememberGlassAccessibility(): GlassAccessibility {
     return GlassAccessibility(reducedTransparency = highContrastText || DebugNoBlur.on, increasedContrast = highContrastText)
 }
 
-/** Whether the glass draws as today's solid surface ([rememberGlassAccessibility]). */
-@Composable
-fun rememberReducedTransparency(): Boolean = rememberGlassAccessibility().reducedTransparency
-
 /** Whether this device can blur what lies under the glass (RenderEffect, API 31 and up). */
 val GlassCanBlur: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 

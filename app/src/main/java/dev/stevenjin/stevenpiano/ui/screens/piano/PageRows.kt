@@ -14,6 +14,7 @@ import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
+import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.TabletSoundCopy
 
 /**
@@ -86,9 +87,8 @@ object PageRows {
     val POSTER = AppRow("guests.poster", "Print the request poster", SettingsPage.Guests, null, listOf("QR code", "print", "sign"))
 
     // ---- THIS TABLET › System (v1.18 — M50: drawn by the page, on its Tools card) ---------------------
-    const val TOOLS = "Tools"
-    val FIND_COVERS = AppRow("system.covers", "Find missing covers", SettingsPage.System, TOOLS, listOf("album covers", "artwork", "look again"))
-    val RECONNECT = AppRow("system.reconnect", "Reconnect the piano", SettingsPage.System, TOOLS, listOf("bluetooth", "link", "connect again"))
+    val FIND_COVERS = AppRow("system.covers", SystemCopy.FIND_COVERS, SettingsPage.System, SystemCopy.TOOLS, listOf("album covers", "artwork", "look again"))
+    val RECONNECT = AppRow("system.reconnect", SystemCopy.RECONNECT, SettingsPage.System, SystemCopy.TOOLS, listOf("bluetooth", "link", "connect again"))
 
     // ---- THIS TABLET › System › Listen and test (v1.23 — M55) ------------------------------------------------------------
     val LISTEN_FROM_PANEL = AppRow("system.listen", ListenCopy.SWITCH, SettingsPage.System, ListenCopy.TITLE, listOf("microphone", "mic", "listen", "hear the room", "privacy"))

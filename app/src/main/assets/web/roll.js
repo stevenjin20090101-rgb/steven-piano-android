@@ -44,7 +44,7 @@ const NO_KEY = 255;
 const LEFT = 1;
 
 /** Where each of the 84 keys sits across [width]: 49 whites side by side, blacks 0.6 as wide on the joins. */
-export function keyLayout(width) {
+function keyLayout(width) {
   const left = new Float32Array(ROLL.KEY_COUNT);
   const right = new Float32Array(ROLL.KEY_COUNT);
   const black = new Uint8Array(ROLL.KEY_COUNT);
@@ -99,7 +99,7 @@ export const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) 
 export const css = (c) => `rgb(${Math.round(c[0])} ${Math.round(c[1])} ${Math.round(c[2])})`;
 
 /** The first note starting at or after [ms] (n when none). */
-export function firstAtOrAfter(starts, n, ms) {
+function firstAtOrAfter(starts, n, ms) {
   let lo = 0;
   let hi = n;
   while (lo < hi) {

@@ -17,7 +17,6 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.ble.OtaPiano
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
 import dev.stevenjin.stevenpiano.update.FakeUpdateServer
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -26,9 +26,6 @@ import dev.stevenjin.stevenpiano.instruments.MidiTransport
  * it was chosen); everything around it is the app's.
  */
 object InstrumentCopy {
-    /** The Piano tab's group. */
-    const val GROUP = "Instruments"
-
     const val NONE = "None"
 
     /** The Keyboard row's value: "None", "Roland FP-30X", or "Roland FP-30X · not connected". */

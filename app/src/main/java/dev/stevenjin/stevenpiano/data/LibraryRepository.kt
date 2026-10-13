@@ -157,9 +157,6 @@ class LibraryRepository(
         pieces.setComposerGenre(composerKey, genre)
     }
 
-    /** The first [limit] Modern pieces by title (v1.14 — M37): the guests' Modern list. */
-    suspend fun modernPieces(limit: Int): List<PieceEntity> = pieces.modern(limit)
-
     /**
      * New title and composer; the composer is read as a file name's is on import ([ComposerNames.resolve]:
      * an artist the library already has by their whole name keeps that one key, v1.10.1 — M28). A blank

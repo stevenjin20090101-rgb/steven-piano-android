@@ -109,7 +109,6 @@ class Region(
             releaseTc == other.releaseTc && keyToHold == other.keyToHold && keyToDecay == other.keyToDecay
 
     companion object {
-        const val LOOP_NONE = 0
         const val LOOP_CONTINUOUS = 1
         const val LOOP_UNTIL_RELEASE = 3
 

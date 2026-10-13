@@ -74,10 +74,6 @@ interface PieceDao {
     @Query("UPDATE pieces SET genre = :genre WHERE composerKey = :composerKey AND genre != 0")
     suspend fun setComposerGenre(composerKey: String, genre: Int)
 
-    /** The first [limit] Modern pieces by title: the guests' list. */
-    @Query("SELECT * FROM pieces WHERE genre = 2 ORDER BY titleKey LIMIT :limit")
-    suspend fun modern(limit: Int): List<PieceEntity>
-
     /**
      * Studio's default seed (v1.7 — M24): the piece played last whose composer isn't [except] (Studio's
      * own pieces), else the first such by title; null when there is none.
