@@ -9,7 +9,7 @@
 
 package dev.stevenjin.stevenpiano.library
 
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
+import dev.stevenjin.stevenpiano.Emulator
 import dev.stevenjin.stevenpiano.update.UpdateSource
 
 /**
@@ -25,7 +25,7 @@ object LibraryOverride {
 
     /** The local source the property names, or null (unset, not an emulator, or a release build). */
     fun source(): UpdateSource? {
-        if (!LoggingPianoLink.isWanted()) return null
+        if (!Emulator.on) return null
         val value = runCatching {
             ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
         }.getOrDefault("")

@@ -102,7 +102,7 @@ object MidiNames {
  * The seam over Android's MIDI service (`android.media.midi`), as [dev.stevenjin.stevenpiano.ble.BleRadio]
  * is over GATT, so the keyboard's and the instrument's state machines test on the JVM. Steven Piano never
  * goes through here: it keeps its own Bluetooth link. [AndroidMidiPorts] is the real one,
- * [EmulatedMidiPorts] the emulator's (debug builds). Callbacks other than [OpenMidiDevice.receive]'s come
+ * `EmulatedMidiPorts` the emulator's (debug builds, `src/debug`). Callbacks other than [OpenMidiDevice.receive]'s come
  * on the thread the implementation was given; [OpenMidiDevice.receive]'s on the port's own.
  */
 interface MidiPorts {

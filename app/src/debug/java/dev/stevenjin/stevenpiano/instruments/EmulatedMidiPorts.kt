@@ -11,12 +11,11 @@ package dev.stevenjin.stevenpiano.instruments
 
 import android.os.Handler
 import android.util.Log
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import java.io.Closeable
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * The emulator has no MIDI keyboard and no MIDI piano: in debug builds there (as [LoggingPianoLink]) these
+ * The emulator has no MIDI keyboard and no MIDI piano: in debug builds there (`Emulator.midiPorts`) these
  * stand in, beside whatever Android's MIDI service lists (v1.11 — M29). "Emulated keyboard" (USB, one
  * output port) plays the bytes [feed] is given, as a keyboard sends them: `adb shell am start -n
  * dev.stevenjin.stevenpiano/.MainActivity --es dev.stevenjin.stevenpiano.EMULATOR_MIDI "90 3C 64 80 3C 00"`
@@ -101,9 +100,6 @@ class EmulatedMidiPorts(private val handler: Handler) : MidiPorts {
 
         val KEYBOARD = MidiDeviceRef(MidiNames.usbKey("Steven Piano", "Emulated keyboard", "0001"), "Emulated keyboard", MidiTransport.USB, inputs = 0, outputs = 1)
         val PIANO = MidiDeviceRef(MidiNames.usbKey("Steven Piano", "Emulated MIDI piano", "0002"), "Emulated MIDI piano", MidiTransport.USB, inputs = 1, outputs = 0)
-
-        /** Debug builds on an emulator, as [LoggingPianoLink]. */
-        fun isWanted(): Boolean = LoggingPianoLink.isWanted()
 
         /** "90 3C 64", "903C64" or "90,3C,64": hex pairs, anything else between them ignored; at most [MAX_FED] bytes. */
         fun hex(text: String): ByteArray {

@@ -42,7 +42,6 @@ import dev.stevenjin.stevenpiano.ble.BlePermissions
 import dev.stevenjin.stevenpiano.ble.GattPianoLink
 import dev.stevenjin.stevenpiano.ble.HandlerLinkExecutor
 import dev.stevenjin.stevenpiano.ble.LinkState
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.ble.ScanThrottle
 import dev.stevenjin.stevenpiano.channels.Channel
@@ -77,16 +76,12 @@ import dev.stevenjin.stevenpiano.diag.QuietSince
 import dev.stevenjin.stevenpiano.diag.RunningNow
 import dev.stevenjin.stevenpiano.diag.SystemHistory
 import dev.stevenjin.stevenpiano.diag.SystemProbe
-import dev.stevenjin.stevenpiano.firmware.FakeFirmwareServer
-import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
 import dev.stevenjin.stevenpiano.firmware.FirmwarePlayer
 import dev.stevenjin.stevenpiano.firmware.FirmwareUpdater
 import dev.stevenjin.stevenpiano.firmware.batteryState
 import dev.stevenjin.stevenpiano.instruments.AndroidMidiBluetooth
 import dev.stevenjin.stevenpiano.instruments.AndroidMidiPorts
-import dev.stevenjin.stevenpiano.instruments.CombinedMidiPorts
-import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.InstrumentSwitch
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
@@ -98,7 +93,6 @@ import dev.stevenjin.stevenpiano.instruments.LiveThru
 import dev.stevenjin.stevenpiano.instruments.LiveTimingHold
 import dev.stevenjin.stevenpiano.instruments.MidiDevices
 import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
-import dev.stevenjin.stevenpiano.library.LibraryOverride
 import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.midi.NoteList
 import dev.stevenjin.stevenpiano.library.LibraryPack
@@ -147,11 +141,9 @@ import dev.stevenjin.stevenpiano.studio.StudioAvailability
 import dev.stevenjin.stevenpiano.studio.StudioPieces
 import dev.stevenjin.stevenpiano.studio.StudioReview
 import dev.stevenjin.stevenpiano.update.HttpUpdateServer
-import dev.stevenjin.stevenpiano.update.ModelsOverride
 import dev.stevenjin.stevenpiano.update.UpdateChecker
 import dev.stevenjin.stevenpiano.update.UpdateDownloader
 import dev.stevenjin.stevenpiano.update.UpdateInstaller
-import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
@@ -296,40 +288,30 @@ class AppGraph(private val app: Application) {
      */
     val scanThrottle = ScanThrottle()
 
+    /** The piano's link: Bluetooth LE MIDI to the piano; on the emulator in debug builds, its stand-in ([Emulator]). */
     private val steven = lazy {
-        if (LoggingPianoLink.isWanted()) {
-            LoggingPianoLink()
-        } else {
-            GattPianoLink.create(
-                app,
-                onConnected = { address, name -> appScope.launch { settingsRepository.rememberDevice(address, name) } },
-                shouldReconnect = { settings.value.autoConnect },
-                isForeign = { address -> midiDevices.isForeign(address) },
-                throttle = scanThrottle,
-            )
-        }
+        Emulator.pianoLink() ?: GattPianoLink.create(
+            app,
+            onConnected = { address, name -> appScope.launch { settingsRepository.rememberDevice(address, name) } },
+            shouldReconnect = { settings.value.autoConnect },
+            isForeign = { address -> midiDevices.isForeign(address) },
+            throttle = scanThrottle,
+        )
     }
 
     /** The MIDI devices' own thread (v1.11 — M29): Android's MIDI callbacks, the keyboard's and the instrument's state and timers. */
     private val midiThread: HandlerThread by lazy { HandlerThread("steven-piano-midi").apply { start() } }
 
     /**
-     * The emulator's MIDI keyboard and MIDI piano (debug builds on an emulator only, as [LoggingPianoLink]; v1.11 — M29):
-     * the activity feeds the keyboard the bytes adb gives it.
-     */
-    val emulatedMidi: EmulatedMidiPorts? by lazy { if (EmulatedMidiPorts.isWanted()) EmulatedMidiPorts(Handler(midiThread.looper)) else null }
-
-    /**
      * Every MIDI device but Steven Piano (v1.11 — M29): Android's MIDI service (another app's ports only in debug builds,
-     * for the emulator's test device), the picker's Bluetooth search on the shared scan budget, and the addresses the
-     * piano's link must never take.
+     * for the emulator's test device; on the emulator, its keyboard and MIDI piano beside them, [Emulator]), the picker's
+     * Bluetooth search on the shared scan budget, and the addresses the piano's link must never take.
      */
     val midiDevices: MidiDevices by lazy {
         val handler = Handler(midiThread.looper)
         val android = AndroidMidiPorts(app, handler, allowVirtual = BuildConfig.DEBUG)
-        val emulated = emulatedMidi
         MidiDevices(
-            ports = if (emulated != null) CombinedMidiPorts(android, emulated) else android,
+            ports = Emulator.midiPorts(android, handler),
             bluetooth = midiBluetooth,
             executor = HandlerLinkExecutor(midiThread.looper),
             throttle = scanThrottle,
@@ -428,7 +410,7 @@ class AppGraph(private val app: Application) {
      * that plays it at the device's own output rate, and when it sounds (Piano › Tablet sound).
      */
     val tabletSound: TabletSound by lazy {
-        val source = ModelsOverride.source() ?: UpdateSource.models
+        val source = Emulator.modelsSource() ?: UpdateSource.models
         val server = HttpUpdateServer(source, log = debugLog(SOUND_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         val store = ModelStore(File(app.filesDir, MODELS_DIR), listOf(ModelCatalogue.pianoSound))
         TabletSound(
@@ -455,12 +437,12 @@ class AppGraph(private val app: Application) {
 
     /**
      * Steven's library from GitHub (v1.10 — M27): the pack's manifest and zip from this repository's release
-     * `library` (on the emulator in debug builds, the server [LibraryOverride] names), its pieces through the
+     * `library` (on the emulator in debug builds, a server on the Mac: [Emulator.librarySource]), its pieces through the
      * importer, the version loaded kept in the settings. The Library's buttons and the console's
      * `library.load` call [LibraryPack.load]; [LibraryService] holds the foreground while it runs.
      */
     val libraryPack: LibraryPack by lazy {
-        val source = LibraryOverride.source() ?: UpdateSource.library
+        val source = Emulator.librarySource() ?: UpdateSource.library
         val server = HttpUpdateServer(source, log = debugLog(LIBRARY_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         LibraryPack(
             source = source,
@@ -538,8 +520,8 @@ class AppGraph(private val app: Application) {
         }
     }
 
-    /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, the test server [UpdateOverride] names. */
-    private val updateSource: UpdateSource by lazy { UpdateOverride.source() ?: UpdateSource.production }
+    /** Where updates come from: the app's GitHub repository; on the emulator in debug builds, a test server ([Emulator.updateSource]). */
+    private val updateSource: UpdateSource by lazy { Emulator.updateSource() ?: UpdateSource.production }
     private val updateServer by lazy { HttpUpdateServer(updateSource, log = debugLog(UPDATES_TAG)) }
 
     /** Whether a newer release exists, and the updater's state, which the Piano tab shows. */
@@ -578,18 +560,12 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * Debug builds on an emulator only: the fake firmware update `debug.stevenpiano.fakeota` names
-     * (its release, its image, RFC 8032's test key); null everywhere else.
-     */
-    private val fakeOta: FakeOta? by lazy { FakeOta.fromProperty() }
-
-    /**
      * The piano's firmware updates over the Bluetooth link (v1.6 — M21): its signed releases from
      * the firmware repository, checked against the author's key; on the emulator with a fake
-     * scenario, the scenario's release and the test key.
+     * scenario, the scenario's release and the test key ([Emulator.firmware]).
      */
     val firmwareUpdater: FirmwareUpdater by lazy {
-        val fake = fakeOta
+        val fake = Emulator.firmware()
         FirmwareUpdater(
             link = stevenLink,
             pianoState = pianoSettings.state,
@@ -601,8 +577,8 @@ class AppGraph(private val app: Application) {
 
                 override suspend fun stopForUpdate(timeoutMs: Long): Boolean = player.stopQuietly(timeoutMs)
             },
-            server = if (fake != null) FakeFirmwareServer(FakeOta::fromProperty) else HttpUpdateServer(UpdateSource.firmware, log = debugLog(FIRMWARE_TAG)),
-            publicKey = if (fake != null) FirmwareKeys.rfc8032Test else FirmwareKeys.author,
+            server = fake?.server ?: HttpUpdateServer(UpdateSource.firmware, log = debugLog(FIRMWARE_TAG)),
+            publicKey = fake?.publicKey ?: FirmwareKeys.author,
             appVersionCode = BuildConfig.VERSION_CODE,
             platformEd25519 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,   // asked first where it has Ed25519; Android 14 has none
             online = network.online,
@@ -650,12 +626,12 @@ class AppGraph(private val app: Application) {
 
     /**
      * Studio (its own tab since v1.12 — M30; a Piano page from v1.7 — M23): the models (downloaded on demand from the release tagged
-     * `models`, pinned by hash; on the emulator in debug builds, the server [ModelsOverride] names), the
+     * `models`, pinned by hash; on the emulator in debug builds, a server on the Mac: [Emulator.modelsSource]), the
      * jobs (one at a time on [studioThread], a partial wake lock around each, the foreground service
      * following them), and what a transcription leaves: a piece that waits for Keep or Discard.
      */
     val studio: Studio by lazy {
-        val source = ModelsOverride.source() ?: UpdateSource.models
+        val source = Emulator.modelsSource() ?: UpdateSource.models
         val server = HttpUpdateServer(source, log = debugLog(STUDIO_TAG), fileAccept = HttpUpdateServer.BINARY_ACCEPT)
         val models = ModelStore(File(app.filesDir, MODELS_DIR))
         val library = studioLibrary

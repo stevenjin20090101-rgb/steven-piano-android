@@ -9,7 +9,8 @@
 
 package dev.stevenjin.stevenpiano.firmware
 
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
+import dev.stevenjin.stevenpiano.Emulator
+import dev.stevenjin.stevenpiano.ble.EmulatedPianoLink
 import dev.stevenjin.stevenpiano.ble.OtaPiano
 import dev.stevenjin.stevenpiano.update.UpdateServer
 import kotlinx.coroutines.delay
@@ -18,7 +19,7 @@ import java.io.IOException
 /**
  * The emulator's firmware update (debug builds on an emulator only, as the other emulator hooks):
  * `adb shell setprop debug.stevenpiano.fakeota <scenario>`, then start the app. The emulated piano
- * ([LoggingPianoLink]) reports firmware 2.0.0 with the update service, the updater reads BLE_OTA.md
+ * ([EmulatedPianoLink]) reports firmware 2.0.0 with the update service, the updater reads BLE_OTA.md
  * › 10's example release from [FakeFirmwareServer] instead of GitHub (§ 5's worked example image,
  * signed with RFC 8032's test key, which is then the key it trusts), and the piano's side answers
  * through [OtaPiano] as [script] says. Inert on a phone or tablet and in every release build, where
@@ -104,7 +105,7 @@ enum class FakeOta(val key: String) {
 
         /** The scenario [PROPERTY] names, in a debug build on an emulator; null everywhere else. */
         fun fromProperty(): FakeOta? {
-            if (!LoggingPianoLink.isWanted()) return null
+            if (!Emulator.on) return null
             val value = runCatching {
                 ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
             }.getOrDefault("")
