@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.unit.LayoutDirection
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeStyle
@@ -116,10 +115,7 @@ enum class GlassEdge {
     /** A header at the top of a pane: its bottom edge. */
     Bottom,
 
-    /** The rail: its end edge. */
-    End,
-
-    /** A floating shape (a pill, a sheet, a menu, a dialog): all the way round, the specular line along its top. */
+    /** A floating shape (the rail's card, a pill, a sheet, a menu, a dialog): all the way round, the specular line along its top. */
     Outline,
 }
 
@@ -337,7 +333,6 @@ private fun Modifier.glassEdge(shape: Shape, edge: GlassEdge, hairline: Color, s
     val outline = if (edge == GlassEdge.Outline) shape.createOutline(size, layoutDirection, this) else null
     val reach = min(GlassTokens.SpecularReach.toPx(), size.height / 2f)
     val sheen = specular?.let { Brush.verticalGradient(0f to it, 1f to it.copy(alpha = 0f), startY = 0f, endY = reach) }
-    val endOnRight = layoutDirection == LayoutDirection.Ltr
     onDrawWithContent {
         drawContent()
         val alpha = shown().coerceIn(0f, 1f)
@@ -350,11 +345,6 @@ private fun Modifier.glassEdge(shape: Shape, edge: GlassEdge, hairline: Color, s
             GlassEdge.Bottom -> {
                 drawRect(hairline, Offset(0f, size.height - line), Size(size.width, line), alpha = alpha)
                 if (specular != null) drawRect(specular, Offset(0f, size.height - line * 2), Size(size.width, line), alpha = alpha)
-            }
-            GlassEdge.End -> {
-                val x = if (endOnRight) size.width - line else 0f
-                drawRect(hairline, Offset(x, 0f), Size(line, size.height), alpha = alpha)
-                if (specular != null) drawRect(specular, Offset(if (endOnRight) x - line else line, 0f), Size(line, size.height), alpha = alpha)
             }
             GlassEdge.Outline -> if (outline != null) {
                 if (sheen != null) drawOutline(outline, sheen, alpha = alpha, style = Stroke(width = line * 4))

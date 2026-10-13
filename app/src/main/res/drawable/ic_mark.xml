@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================================
+     Steven Piano - Android player for the self-playing acoustic piano
+     Copyright (c) 2026 Steven Jin <stevenjin20090101@gmail.com>
+     Original author & creator: Steven Jin.
+     Licensed under the MIT License (see LICENSE). This copyright and attribution
+     notice MUST be preserved in all copies or substantial portions of the work.
+     Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
+     ============================================================================ -->
+<!-- The app's mark on the rail (v1.25 — M59): the launcher icon's camera-body tile, its corners a quarter of its
+     side, and its three bars, as the adaptive icon's safe zone shows them. Drawn in its own colours, never tinted. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <path
+        android:fillColor="#FF0E0E0E"
+        android:pathData="M18,0 H54 A18,18 0 0,1 72,18 V54 A18,18 0 0,1 54,72 H18 A18,18 0 0,1 0,54 V18 A18,18 0 0,1 18,0 Z" />
+    <group
+        android:translateX="-18"
+        android:translateY="-18">
+        <path
+            android:fillColor="#FFF2F2F2"
+            android:pathData="M 37,42 A 4,4,0,0,1,41,38 A 4,4,0,0,1,45,42 L 45,66 A 4,4,0,0,1,41,70 A 4,4,0,0,1,37,66 Z M 50,34 A 4,4,0,0,1,54,30 A 4,4,0,0,1,58,34 L 58,54 A 4,4,0,0,1,54,58 A 4,4,0,0,1,50,54 Z M 63,50 A 4,4,0,0,1,67,46 A 4,4,0,0,1,71,50 L 71,74 A 4,4,0,0,1,67,78 A 4,4,0,0,1,63,74 Z" />
+    </group>
+</vector>

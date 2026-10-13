@@ -70,7 +70,11 @@ object GlassTokens {
      */
     val EdgeBand = 24.dp
 
-    /** Beside the rail the band is the content's own 16 dp margin, so no row's text is ever washed. */
+    /**
+     * The band beside a rail that content meets, the content's own 16 dp margin, so no row's text is ever washed: the web
+     * panel's `--glass-rail-band` (WebAssetsTest). The tablet's rail floats clear of every screen since v1.25 (M59) and
+     * draws none.
+     */
     val RailBand = 16.dp
 
     /** At the bar's edge the content is under the surface at this opacity (a sheet's), and clear 24 dp away. */

@@ -15,13 +15,16 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -35,17 +38,26 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,13 +69,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
@@ -72,6 +92,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -83,8 +104,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import dev.stevenjin.stevenpiano.R
+import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.studio.JobState
+import dev.stevenjin.stevenpiano.ui.components.AuraDot
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlayLayer
 import dev.stevenjin.stevenpiano.ui.components.FloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.GlassEdge
@@ -93,6 +119,8 @@ import dev.stevenjin.stevenpiano.ui.components.GlassShown
 import dev.stevenjin.stevenpiano.ui.components.GlassSurface
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.HazeState
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
+import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.LocalArtworkMonochrome
 import dev.stevenjin.stevenpiano.ui.components.LocalFloatingPlaySlot
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
@@ -116,21 +144,16 @@ import dev.stevenjin.stevenpiano.ui.screens.quiet.LocalPlayAnyway
 import dev.stevenjin.stevenpiano.ui.screens.quiet.LocalQuietAsk
 import dev.stevenjin.stevenpiano.ui.screens.quiet.QuietChoiceDialog
 import dev.stevenjin.stevenpiano.ui.screens.studio.StudioScreen
-import dev.stevenjin.stevenpiano.studio.JobState
-import dev.stevenjin.stevenpiano.ui.components.AuraDot
-import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import dev.stevenjin.stevenpiano.ui.theme.GlassTokens
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalHandColours
 import dev.stevenjin.stevenpiano.ui.theme.Motion
-import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
+import dev.stevenjin.stevenpiano.ui.theme.SelectedAlpha
 import dev.stevenjin.stevenpiano.ui.theme.rememberGlassAccessibility
+import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
+import kotlin.math.min
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlin.math.min
 
 /**
  * The app's frame: five destinations (Library, Now playing, Keys, Studio, Piano; Studio since v1.12 — M30) in a bottom navigation
@@ -481,50 +504,148 @@ private fun TabBar(current: Route, onSelect: (Route) -> Unit) {
 }
 
 /**
- * Medium and expanded widths: the same five glyphs and labels in a rail on the left, labels
- * always shown, on glass whose end edge (a hairline and the specular line) sets it off from the
- * content beside it. Every screen keeps clear of the rail, so it has the glass's look without
- * blurring (see [GlassSurface]). Labels scale up to 1.5x. While Now playing shows the album's colours ([albumBackdrop])
- * they reach under the rail too (v1.18 — M49), and the rail is the surface at the bar's fill, as the header and the tab
- * bar are over them (v1.15 — M41), so they show through it without a blur on every frame.
+ * Medium and expanded widths (v1.25 — M59, the web panel's rail as thin as the one before it): a floating card of regular
+ * glass, [RailWidth] wide and 8 dp in from the start, the top (under the status bar) and the bottom, in 20 dp corners,
+ * its hairline and specular line all the way round ([GlassEdge.Outline]). At its top the app's mark with the piano
+ * link's dot on its corner and "Steven Piano" under it ([RailIdentity]); then the five places, each its glyph over its
+ * label ([RailItem]). Every screen keeps clear of the card and its two gaps (the floating padding's start, 96 dp), so it
+ * has the glass's look without blurring (see [GlassSurface]). While Now playing shows the album's colours
+ * ([albumBackdrop]) they reach under the card and round it (v1.18 — M49), and the card is the surface at the bar's fill
+ * over them (v1.15 — M41), as the header is. Labels scale with the system font up to 1.5x, as far as "Now playing" still
+ * fits its 74 dp on one line, and shrink rather than wrap; a window too short for the card lets it scroll.
  */
 @Composable
 private fun TabRail(current: Route, onSelect: (Route) -> Unit, albumBackdrop: Boolean) {
-    val state by LocalContext.current.graph.player.state.collectAsStateWithLifecycle()
+    val graph = LocalContext.current.graph
+    val state by graph.player.state.collectAsStateWithLifecycle()
+    val link by graph.pianoLink.state.collectAsStateWithLifecycle()
     val playing = state.piece?.takeIf { current == Route.NowPlaying }
     val backdrop = rememberBackdrop(playing?.pieceId, playing?.composerKey, albumBackdrop) != null
-    // Every screen keeps clear of the rail (the floating padding's start): only Now playing's colours pass beneath it.
-    GlassSurface(Modifier.fillMaxHeight(), edge = GlassEdge.End, blur = false, translucent = backdrop) {
-        val tones = tabTones()
-        val colors = NavigationRailItemDefaults.colors(
-            selectedIconColor = tones.selected,
-            selectedTextColor = tones.selected,
-            indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
-            unselectedIconColor = tones.unselectedIcon,
-            unselectedTextColor = tones.unselectedText,
-        )
-        val density = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(density.density, min(density.fontScale, MAX_LABEL_SCALE))) {
-            NavigationRail(
-                containerColor = Color.Transparent,
-                windowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Vertical + WindowInsetsSides.Start),
+    // The piano link, as the "Sent to piano" capsule reads it: red only while a piece's notes go to the piano.
+    val dot = LinkDot.of(link is LinkState.Connected, sending = state.status == PlaybackStatus.Playing)
+    val label = railLabel()
+    val density = LocalDensity.current
+    val cap = labelScaleThatFits(RailWidth - RailSide * 2, label)
+    CompositionLocalProvider(LocalDensity provides Density(density.density, if (cap < 1f) cap else min(density.fontScale, cap))) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Vertical + WindowInsetsSides.Start))
+                .padding(RailInset),
+        ) {
+            GlassSurface(
+                Modifier
+                    .width(RailWidth)
+                    .fillMaxHeight(),
+                shape = RoundedCornerShape(RailCorner),
+                edge = GlassEdge.Outline,
+                blur = false,
+                translucent = backdrop,
             ) {
-                Route.entries.forEach { route ->
-                    NavigationRailItem(
-                        selected = route == current,
-                        onClick = { onSelect(route) },
-                        icon = { TabIcon(route) },
-                        label = { Text(route.label, maxLines = 1, textAlign = TextAlign.Center) },
-                        alwaysShowLabel = true,
-                        colors = colors,
-                    )
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = RailSide, end = RailSide, top = 16.dp, bottom = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    RailIdentity(dot)
+                    Route.entries.forEach { route -> RailItem(route, route == current, label) { onSelect(route) } }
                 }
             }
         }
     }
 }
 
-/** The bar's and the rail's colours: the chosen tab in the content colour on its pill, the others secondary. */
+/**
+ * The top of the rail's card: the app's mark (the launcher icon's tile and bars, 28 dp) with the piano link's dot on its
+ * top corner, 8 dp and ringed 2 dp in the surface colour ([LinkDot]: a ring while not connected, the content colour
+ * while connected and silent, the live red while notes go to the piano), and under it "Steven Piano" on two centred
+ * lines, as Steven asked rather than a word for the dot. The dot's state is the mark's description for TalkBack.
+ */
+@Composable
+private fun RailIdentity(dot: LinkDot) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    val surface = MaterialTheme.colorScheme.surface
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, bottom = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.semantics { contentDescription = railDotWord(dot) }) {
+            Image(painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(MarkSize))
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = MarkDotRing + 5.dp, y = -(MarkDotRing + 3.dp))
+                    .background(surface, CircleShape)
+                    .padding(MarkDotRing),
+            ) {
+                LiveDot(dot, size = MarkDotSize)
+            }
+        }
+        Text(
+            "Steven\nPiano",
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .clearAndSetSemantics { contentDescription = "Steven Piano" },
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.3.sp),
+            color = ink,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** What TalkBack hears of the rail's dot. */
+private fun railDotWord(dot: LinkDot): String = when (dot) {
+    LinkDot.NotConnected -> "Not connected"
+    LinkDot.Connected -> "Connected"
+    LinkDot.Sending -> "Sending notes to the piano"
+}
+
+/**
+ * A place on the rail: its glyph (24 dp) over its label ([label]: 12 sp medium, one line, centred), 4 dp apart, at
+ * least 64 dp tall in 14 dp corners. The chosen place sits on the content colour at [SelectedAlpha] with its glyph in
+ * the content colour; the others' glyphs are the secondary grey, and every label is the content colour (text on a
+ * bar's glass is). The fill eases in and out over 200 ms, a cut when motion is reduced; a press ripples.
+ */
+@Composable
+private fun RailItem(route: Route, selected: Boolean, label: TextStyle, onClick: () -> Unit) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    val reduced = rememberReducedMotion()
+    val fill by animateColorAsState(ink.copy(alpha = if (selected) SelectedAlpha else 0f), Motion.timed(Motion.StandardMs, reduced), label = "rail place")
+    val glyph by animateColorAsState(if (selected) ink else MaterialTheme.colorScheme.onSurfaceVariant, Motion.timed(Motion.StandardMs, reduced), label = "rail glyph")
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = RailItemHeight)
+            .clip(RoundedCornerShape(RailItemCorner))
+            .background(fill)
+            .selectable(selected, role = Role.Tab, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        TabIcon(route, tint = glyph)
+        Text(
+            route.label,
+            modifier = Modifier.padding(top = 4.dp),
+            style = label,
+            color = ink,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** The rail's labels: the eyebrow's 12 sp medium without its tracking, as the panel's rail sets them. */
+@Composable
+private fun railLabel(): TextStyle = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
+
+/** The bar's colours: the chosen tab in the content colour on its pill, the others secondary (the rail's are [RailItem]'s). */
 private class TabTones(val selected: Color, val unselectedIcon: Color, val unselectedText: Color)
 
 /**
@@ -540,31 +661,31 @@ private fun tabTones(): TabTones {
 }
 
 /**
- * A destination's glyph; Studio's carries a 6 dp dot of the aura while a job runs (v1.12 — M30), never the live red,
- * and TalkBack hears it in the tab's name ("Studio, composing").
+ * A destination's glyph (the web panel's stroke glyph, v1.25 — M59) in [tint]; Studio's carries a 6 dp dot of the aura
+ * while a job runs (v1.12 — M30), never the live red, and TalkBack hears it in the tab's name ("Studio, composing").
  */
 @Composable
-private fun TabIcon(route: Route) {
+private fun TabIcon(route: Route, tint: Color = LocalContentColor.current) {
     if (route != Route.Studio) {
-        Icon(painterResource(route.icon), contentDescription = null)
+        Icon(painterResource(route.icon), contentDescription = null, tint = tint)
         return
     }
     val jobs by LocalContext.current.graph.studio.jobs.jobs.collectAsStateWithLifecycle()
     val busy = jobs.any { it.state == JobState.Running || it.state == JobState.Queued }
     Box(if (busy) Modifier.semantics { stateDescription = "working" } else Modifier) {
-        Icon(painterResource(route.icon), contentDescription = null)
+        Icon(painterResource(route.icon), contentDescription = null, tint = tint)
         if (busy) AuraDot(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
     }
 }
 
 /**
- * The font scale, between [MIN_LABEL_SCALE] and [MAX_LABEL_SCALE], at which the widest destination label fills
- * [itemWidth]: five labels on a compact bar may scale down to 0.85 (v1.12 — M30); none is ever shortened.
+ * The font scale, between [MIN_LABEL_SCALE] and [MAX_LABEL_SCALE], at which the widest destination label in [style]
+ * fills [itemWidth]: five labels on a compact bar may scale down to 0.85 (v1.12 — M30), and so may the rail's in its
+ * thin card (v1.25 — M59); none is ever shortened.
  */
 @Composable
-private fun labelScaleThatFits(itemWidth: Dp): Float {
+private fun labelScaleThatFits(itemWidth: Dp, style: TextStyle = MaterialTheme.typography.labelMedium): Float {
     val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.labelMedium
     val density = LocalDensity.current.density
     return remember(itemWidth, style, density) {
         val unscaled = Density(density, 1f)
@@ -585,6 +706,21 @@ private const val LABEL_FILL = 0.92f
 
 /** Material's gap between bar items. */
 private val BAR_ITEM_GAP = 8.dp
+
+/** The rail's card (v1.25 — M59): its width, its gap to the window's edges and the content, its corners, its sides' room. */
+private val RailWidth = 80.dp
+private val RailInset = 8.dp
+private val RailCorner = 20.dp
+private val RailSide = 3.dp
+
+/** A place on the rail: at least this tall, in these corners. */
+private val RailItemHeight = 64.dp
+private val RailItemCorner = 14.dp
+
+/** The mark at the rail's top, and the dot on its corner with the surface's ring round it. */
+private val MarkSize = 28.dp
+private val MarkDotSize = 8.dp
+private val MarkDotRing = 2.dp
 
 private fun NavController.showTab(route: Route) = navigate(route.path) {
     popUpTo(graph.findStartDestination().id) { saveState = true }
