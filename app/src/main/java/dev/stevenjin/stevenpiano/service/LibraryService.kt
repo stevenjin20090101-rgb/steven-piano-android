@@ -66,7 +66,7 @@ class LibraryService : Service() {
         val pack = graph.libraryPack
         val everything = intent?.getBooleanExtra(EXTRA_EVERYTHING, false) == true
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(pack.state.value, graph.importProgress.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ServiceCompat.startForeground(this, ID, notificationFor(pack.state.value, graph.importProgress.value), DATA_SYNC)
         } catch (e: RuntimeException) {   // refused (the app went to the background meanwhile): the load goes on without the notification
             Log.w(TAG, "Loading the library without the foreground service: ${e.javaClass.simpleName}")
             if (job?.isActive != true) graph.appScope.launch { pack.run(everything) }
@@ -159,6 +159,9 @@ class LibraryService : Service() {
     )
 
     companion object {
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+
         private const val TAG = "Library"
         private const val ID = 9
         private const val OPEN_REQUEST = 11

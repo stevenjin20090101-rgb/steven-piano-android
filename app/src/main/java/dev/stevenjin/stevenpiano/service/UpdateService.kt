@@ -62,7 +62,7 @@ class UpdateService : Service() {
         val updater = graph.updater
         val manifest = updater.state.value.manifest
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(manifest, 0L), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ServiceCompat.startForeground(this, ID, notificationFor(manifest, 0L), DATA_SYNC)
         } catch (e: RuntimeException) {   // refused (the app went to the background meanwhile): download without the notification
             Log.w(TAG, "Downloading without the foreground service: ${e.javaClass.simpleName}")
             if (manifest != null && job?.isActive != true) graph.appScope.launch { updater.downloadAndInstall(manifest, applicationContext) }
@@ -152,6 +152,9 @@ class UpdateService : Service() {
     )
 
     companion object {
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+
         const val CHANNEL_ID = "updates"
         private const val ID = 4
         private const val TAG = "Updates"

@@ -8,28 +8,36 @@
 # ============================================================================
 
 [versions]
-androidGradlePlugin = "9.0.1"
-kotlin = "2.3.20"
+androidGradlePlugin = "9.4.1"
+kotlin = "2.4.21"
 ksp = "2.3.12"
+# v1.25 — M58: the AndroidX lines below are the newest that build on compileSdk 36. Core 1.19, Lifecycle 2.11, Navigation
+# 2.10 and the Compose BOMs from 2026.08 (Compose UI 1.12) need compileSdk 37 (their AAR metadata): a later run moves
+# compileSdk, and these with it. Until then lint's notices for them are kept quiet here, each with that reason.
+#noinspection GradleDependency
 androidxCore = "1.18.0"
+#noinspection GradleDependency
 androidxLifecycle = "2.10.0"
 androidxActivity = "1.13.0"
-androidxComposeBom = "2026.03.01"
+#noinspection GradleDependency
+androidxComposeBom = "2026.06.01"
+#noinspection GradleDependency
 navigationCompose = "2.9.8"
 room = "2.8.5"
 datastore = "1.2.1"
 media = "1.8.0"
 # A picked photo's EXIF orientation (v1.24 — M57: lint's ExifInterface; the platform's has known bugs on older Androids).
 exifinterface = "1.4.2"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 junit = "4.13.2"
-orgJson = "20250517"
+orgJson = "20260814"
 # Unit tests only: a real SQLite on the JVM, so the schema migrations run on a real database.
-sqliteJdbc = "3.41.2.2"
+sqliteJdbc = "3.53.4.0"
 # Unit tests only: a QR reader, so PosterTest proves the poster's code scans back to its address.
 zxing = "3.5.4"
-# Haze 1.7.2, the newest release built on this app's Compose (UI 1.10) and Kotlin (2.3): 2.0.0 and
-# 1.7.3 need Compose UI 1.12, which requires compileSdk 37 and AGP 9.1 (BUILD_SPEC › v1.5 — M16).
+# Haze 1.7.2, the newest release built on this app's Compose (UI 1.11 since v1.25) and compileSdk 36: 2.0 and 1.7.3 need
+# Compose UI 1.12, which requires compileSdk 37 (BUILD_SPEC › v1.5 — M16, v1.25 — M58); 2.0 also splits out haze-blur.
+#noinspection NewerVersionAvailable
 haze = "1.7.2"
 # The web panel (v1.5.1 — M18): NanoHTTPD and its WebSocket half (BSD-3-Clause), the QR code (MIT).
 nanohttpd = "2.3.1"
@@ -45,8 +53,14 @@ eddsa = "0.3.0"
 onnxruntime = "1.28.0"
 # Steven Piano Cloud (v1.10 — M26): OkHttp's WebSocket client (Apache-2.0, with Okio) carries the tablet's one
 # outbound connection to the relay: hostname verification by default, pings. Only web/relay/ names it; the
-# updater and Wikipedia keep HttpURLConnection.
+# updater and Wikipedia keep HttpURLConnection. Kept on 4.12.0 (v1.25 — M58): OkHttp 5 on Android adds an androidx-startup
+# provider that runs at every process start, 5.5.0 needs compileSdk 37, and the relay's client wants its own review first.
+#noinspection NewerVersionAvailable
 okhttp = "4.12.0"
+# The piano's Bluetooth lock (v1.25 — M58, firmware/docs/BLE_LOCK.md): Tink's pure-Java X25519 (Apache-2.0) for the
+# claim's key agreement: Android's own "XDH" (Conscrypt) can't be relied on down to minSdk 26.
+# Only piano/LockCrypto.kt names it; R8 keeps just what that file uses.
+tink = "1.23.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -78,6 +92,8 @@ qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrco
 eddsa = { module = "net.i2p.crypto:eddsa", version.ref = "eddsa" }
 # The relay's WebSocket client (Apache-2.0); only web/relay/ names it (v1.10 — M26).
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+# X25519 for the piano's Bluetooth lock (Apache-2.0); only piano/LockCrypto.kt names it (v1.25 — M58).
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
 # Studio's runtime (MIT): arm64-v8a's native library only (app/build.gradle.kts); only studio/ names it.
 onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
 # Unit tests only: the same runtime for the JVM (macOS and Linux), so TranscriberTest runs the real model where it is on disk.

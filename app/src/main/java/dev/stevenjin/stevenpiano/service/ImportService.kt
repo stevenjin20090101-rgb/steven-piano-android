@@ -51,7 +51,10 @@ import kotlinx.coroutines.launch
  * import that brought pieces in starts the artwork service before this one stops, when the person
  * lets artwork arrive by itself. When Android's time for data sync runs out ([onTimeout]) the
  * imports stop where they are (what was saved stays) and the service ends at once. An import that
- * brought pieces in refreshes the built-in playlists before the artwork service starts.
+ * brought pieces in refreshes the built-in playlists before the artwork service starts. When Android
+ * refuses the foreground (the app went to the background, or its daily time for data sync is spent:
+ * Android 15 and later), the import runs in the app's own scope without the notification, as the
+ * artwork does (v1.25 — M58).
  */
 class ImportService : Service() {
     private val scope = MainScope()
@@ -63,8 +66,15 @@ class ImportService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ServiceCompat.startForeground(this, ID, notificationFor(graph.importProgress.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val request = intent?.let(::requestOf)
+        try {
+            ServiceCompat.startForeground(this, ID, notificationFor(graph.importProgress.value), DATA_SYNC)
+        } catch (e: RuntimeException) {   // refused (in the background, or the day's time for data sync spent): the import goes on without the notification
+            Log.w(TAG, "Importing without the foreground service: ${e.javaClass.simpleName}")
+            request?.let { importInApp(applicationContext, it) }
+            stopIfIdle()
+            return START_NOT_STICKY
+        }
         if (request == null) {
             stopIfIdle()
             return START_NOT_STICKY
@@ -73,26 +83,8 @@ class ImportService : Service() {
         if (progressJob == null) progressJob = scope.launch { graph.importProgress.collect(::post) }
         imports += scope.launch {
             try {
-                val result = try {
-                    graph.importer.import(this@ImportService, request.source)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {   // the importer counts every file's own failure; this is anything else
-                    stopped(e)
-                    null
-                } catch (e: OutOfMemoryError) {
-                    stopped(e)
-                    null
-                }
-                if (result != null && result.piecesChanged) {
-                    // The built-in playlists take in what arrived (while the foreground holds the process).
-                    graph.refreshBuiltIns()
-                    // Started now, while this service still holds the foreground: Android 12+ refuses
-                    // a foreground service started from the background.
-                    if (graph.settingsRepository.settings.first().fetchArtworkAutomatically) ArtworkService.start(this@ImportService, force = false)
-                }
+                runImport(this@ImportService, request)
             } finally {
-                if (request.persisted) request.uris.forEach { uri -> runCatching { contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
                 running--
                 stopIfIdle()
             }
@@ -116,11 +108,6 @@ class ImportService : Service() {
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
-    }
-
-    /** An import that failed as a whole: logged (in debug builds with its message, which may name a file), never a crash. */
-    private fun stopped(e: Throwable) {
-        if (BuildConfig.DEBUG) Log.w(TAG, "An import stopped", e) else Log.w(TAG, "An import stopped with an error")
     }
 
     private fun stopIfIdle() {
@@ -178,6 +165,9 @@ class ImportService : Service() {
     }
 
     companion object {
+        /** The service's type from Android 10, where types began; before it, none is passed. */
+        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+
         private const val TAG = "ImportService"
         const val CHANNEL_ID = "imports"
         private const val ID = 2
@@ -219,7 +209,54 @@ class ImportService : Service() {
                 .putExtra(EXTRA_PERSISTED, fromPicker)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             intent.clipData = ClipData.newRawUri(null, uris.first()).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: IllegalStateException) {   // ForegroundServiceStartNotAllowedException on Android 12+
+                Log.w(TAG, "Importing without the foreground service: ${e.javaClass.simpleName}")
+                importInApp(context.applicationContext, Request(source, uris, fromPicker))
+            }
+        }
+
+        /** An import Android won't hold in the foreground: in the app's own scope, without the notification. */
+        private fun importInApp(context: Context, request: Request) {
+            context.graph.appScope.launch { runImport(context, request) }
+        }
+
+        /**
+         * One import, then (when it brought pieces in) the built-in playlists and the artwork; the picker's grants go
+         * back at the end, whatever happened. A failure as a whole is logged, never a crash.
+         */
+        private suspend fun runImport(context: Context, request: Request) {
+            val graph = context.graph
+            try {
+                val result = try {
+                    graph.importer.import(context, request.source)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {   // the importer counts every file's own failure; this is anything else
+                    stopped(e)
+                    null
+                } catch (e: OutOfMemoryError) {
+                    stopped(e)
+                    null
+                }
+                if (result != null && result.piecesChanged) {
+                    // The built-in playlists take in what arrived (while the foreground holds the process).
+                    graph.refreshBuiltIns()
+                    // Started now, while the import service still holds the foreground: Android 12+ refuses
+                    // a foreground service started from the background (ArtworkService falls back by itself).
+                    if (graph.settingsRepository.settings.first().fetchArtworkAutomatically) ArtworkService.start(context, force = false)
+                }
+            } finally {
+                if (request.persisted) {
+                    request.uris.forEach { uri -> runCatching { context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+                }
+            }
+        }
+
+        /** An import that failed as a whole: logged (in debug builds with its message, which may name a file), never a crash. */
+        private fun stopped(e: Throwable) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "An import stopped", e) else Log.w(TAG, "An import stopped with an error")
         }
     }
 }

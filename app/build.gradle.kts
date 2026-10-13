@@ -31,12 +31,16 @@ val releaseSigning: Properties? = releaseSigningFile.takeIf { it.isFile }
 
 android {
     namespace = "dev.stevenjin.stevenpiano"
+    // Android 16's platform (v1.25 — M58). 37 is a later run's: AndroidX's newest (core 1.19, Compose UI 1.12…) need it.
+    //noinspection GradleDependency
     compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.stevenjin.stevenpiano"
         minSdk = 26
-        targetSdk = 34
+        // Android 16 (v1.25 — M58: its behaviour changes checked on an API 36 tablet, BUILD_SPEC.md); 37 comes with its own pass.
+        //noinspection OldTargetApi
+        targetSdk = 36
         // -PversionCodeOverride=35 builds a copy that reads as newer than the one installed, for the
         // updater's emulator test (README > Updates); every real build takes the number below.
         versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 34
@@ -256,6 +260,7 @@ dependencies {
     implementation(libs.eddsa)
     implementation(libs.onnxruntime.android)
     implementation(libs.okhttp)
+    implementation(libs.tink.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
