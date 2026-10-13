@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.admin
 import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.util.Log
+import dev.stevenjin.stevenpiano.SystemProperty
 
 /**
  * The way back from the school tablet's setup. Android will not uninstall a device owner, and
@@ -49,9 +50,7 @@ object DeviceOwnerRelease {
             false
         }
         if (!owner) return false
-        val value = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim().lowercase() }
-        }.getOrDefault("")
+        val value = SystemProperty.read(PROPERTY).lowercase()
         return value in ASKED
     }
 

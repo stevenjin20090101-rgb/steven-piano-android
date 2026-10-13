@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.SystemProperty
 import kotlinx.coroutines.delay
 
 /**
@@ -125,9 +126,7 @@ object DisplayModeTimeout {
 
     val ms: Long by lazy {
         if (!BuildConfig.DEBUG) return@lazy DEFAULT_MS
-        val seconds = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-        }.getOrDefault("").toLongOrNull()
+        val seconds = SystemProperty.read(PROPERTY).toLongOrNull()
         if (seconds != null && seconds > 0) seconds * 1_000L else DEFAULT_MS
     }
 }

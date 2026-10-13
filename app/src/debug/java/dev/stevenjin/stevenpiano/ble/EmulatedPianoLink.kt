@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.ble
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import dev.stevenjin.stevenpiano.SystemProperty
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.midi.MidiBatch
@@ -212,9 +213,7 @@ class EmulatedPianoLink(
         private const val SCAN_TIMEOUT_MS = 12_000L
 
         /** `debug.stevenpiano.piano away`: no piano to find (on the emulator). Read with getprop each time. */
-        private fun pianoAway(): Boolean = runCatching {
-            ProcessBuilder("getprop", PIANO_PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() } == "away"
-        }.getOrDefault(false)
+        private fun pianoAway(): Boolean = SystemProperty.read(PIANO_PROPERTY) == "away"
 
         /** How long the emulated piano is away while it restarts after an update. */
         private const val BOOT_MS = 4_000L
@@ -227,9 +226,7 @@ class EmulatedPianoLink(
 
         /** `debug.stevenpiano.console`: "none", "mute", or unset for the full console. Read with getprop (debug builds only). */
         private fun consoleModeFromProperty(): ConsoleMode {
-            val value = runCatching {
-                ProcessBuilder("getprop", CONSOLE_PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-            }.getOrDefault("")
+            val value = SystemProperty.read(CONSOLE_PROPERTY)
             return when (value) {
                 "none" -> ConsoleMode.None
                 "mute" -> ConsoleMode.Mute

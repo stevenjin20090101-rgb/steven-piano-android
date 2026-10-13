@@ -14,6 +14,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import dev.stevenjin.stevenpiano.Emulator
+import dev.stevenjin.stevenpiano.SystemProperty
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -185,9 +186,7 @@ class StudioAvailability(
             val value = if (!Emulator.on) {
                 null
             } else {
-                runCatching {
-                    ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-                }.getOrNull()?.ifEmpty { null }
+                SystemProperty.read(PROPERTY).ifEmpty { null }
             }
             cachedOverride = value
             overrideRead = true

@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.UpdateCopy
 import dev.stevenjin.stevenpiano.update.UpdateManifest
@@ -121,7 +122,7 @@ class UpdateService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_piano)
             .setContentTitle(UpdateCopy.notificationTitle(manifest?.versionName))
-            .setContentText(if (manifest == null) null else UpdateCopy.megabytes(bytes, total))
+            .setContentText(if (manifest == null) null else Format.megabytes(bytes, total))
             .setProgress(PROGRESS_MAX, if (total > 0) (bytes * PROGRESS_MAX / total).toInt() else 0, total == 0L)
             .setContentIntent(openPiano())
             .addAction(0, "Cancel", cancel())

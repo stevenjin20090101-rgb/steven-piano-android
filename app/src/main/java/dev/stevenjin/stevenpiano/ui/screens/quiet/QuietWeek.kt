@@ -25,10 +25,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.schedule.QuietSection
 import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import java.time.DayOfWeek
@@ -82,7 +82,7 @@ fun QuietWeek(sections: List<QuietSection>, modifier: Modifier = Modifier) {
     val ink = MaterialTheme.colorScheme.onSurface
     val style = MaterialTheme.typography.labelSmall.copy(color = tertiary)
     val days = remember(measurer, style) { DayOfWeek.entries.map { measurer.measure(ScheduleCopy.short(it), style) } }
-    val hours = remember(measurer, style) { RULED.map { measurer.measure(QuietCopy.clock(it * QuietTimes.MINUTES_PER_HOUR), style) } }
+    val hours = remember(measurer, style) { RULED.map { measurer.measure(Format.timeOfDay(it * QuietTimes.MINUTES_PER_HOUR), style) } }
     val pieces = remember(sections) { weekPieces(sections) }
     Canvas(
         modifier

@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.update
 
 import dev.stevenjin.stevenpiano.Emulator
+import dev.stevenjin.stevenpiano.SystemProperty
 
 /**
  * The emulator only, as the other emulator hooks (v1.10 — M26): `adb shell setprop debug.stevenpiano.cloudurl
@@ -27,9 +28,7 @@ object CloudOverride {
     /** The stand-in origin the property names (`scheme://host:port`, nothing after it), or null (unset, not an emulator, or a release build). */
     fun origin(): String? {
         if (!Emulator.on) return null
-        val value = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-        }.getOrDefault("")
+        val value = SystemProperty.read(PROPERTY)
         return value.lowercase().trimEnd('/').takeIf { ORIGIN.matches(it) }
     }
 }

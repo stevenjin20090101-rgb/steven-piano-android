@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.update
 
 import dev.stevenjin.stevenpiano.Emulator
+import dev.stevenjin.stevenpiano.SystemProperty
 
 /**
  * The emulator only (debug builds on an emulator, as the other emulator hooks): `adb shell setprop
@@ -25,9 +26,7 @@ object UpdateOverride {
     /** The local source the property names, or null (unset, not an emulator, or a release build). */
     fun source(): UpdateSource? {
         if (!Emulator.on) return null
-        val value = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-        }.getOrDefault("")
+        val value = SystemProperty.read(PROPERTY)
         return if (value.isEmpty()) null else UpdateSource.local(value)
     }
 }
@@ -45,9 +44,7 @@ object ModelsOverride {
     /** The local source the property names, or null (unset, not an emulator, or a release build). */
     fun source(): UpdateSource? {
         if (!Emulator.on) return null
-        val value = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-        }.getOrDefault("")
+        val value = SystemProperty.read(PROPERTY)
         return if (value.isEmpty()) null else UpdateSource.localModels(value)
     }
 }

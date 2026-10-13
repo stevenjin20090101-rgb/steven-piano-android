@@ -34,7 +34,7 @@ object LibraryCopy {
         if (offer == null) {
             "$SOURCES · $NON_COMMERCIAL"
         } else {
-            "${Format.count(offer.pieces, "piece", "pieces", locale)} · ${StudioCopy.size(offer.sizeBytes)} · $SOURCES · $NON_COMMERCIAL"
+            "${Format.count(offer.pieces, "piece", "pieces", locale)} · ${Format.size(offer.sizeBytes)} · $SOURCES · $NON_COMMERCIAL"
         }
 
     /**
@@ -44,7 +44,7 @@ object LibraryCopy {
      */
     fun line(state: PackState, offer: PackState.Offered?, locale: Locale = Locale.getDefault()): String = when (state) {
         PackState.Checking -> "Asking for the library…"
-        is PackState.Downloading -> "Loading · ${StudioCopy.megabytes(state.done, state.total, locale)}"
+        is PackState.Downloading -> "Loading · ${Format.megabytes(state.done, state.total, locale)}"
         PackState.Importing -> "Adding the pieces…"
         is PackState.Failed -> state.line
         else -> facts(offer, locale)
@@ -53,7 +53,7 @@ object LibraryCopy {
     /** The Library's progress line while a load runs: "Loading Steven's library · 23 of 61 MB"; null otherwise (the import shows its own). */
     fun bar(state: PackState, locale: Locale = Locale.getDefault()): String? = when (state) {
         PackState.Checking -> "Loading Steven's library…"
-        is PackState.Downloading -> "Loading Steven's library · ${StudioCopy.megabytes(state.done, state.total, locale)}"
+        is PackState.Downloading -> "Loading Steven's library · ${Format.megabytes(state.done, state.total, locale)}"
         else -> null
     }
 
@@ -64,7 +64,7 @@ object LibraryCopy {
     /** The notification's line: the megabytes, then the import's own count. */
     fun notificationText(state: PackState, import: ImportProgress, locale: Locale = Locale.getDefault()): String? = when (state) {
         PackState.Checking -> "Asking for the library…"
-        is PackState.Downloading -> StudioCopy.megabytes(state.done, state.total, locale)
+        is PackState.Downloading -> Format.megabytes(state.done, state.total, locale)
         PackState.Importing -> if (import.finished) "Adding the pieces…" else ImportCopy.running(import)
         else -> null
     }
@@ -80,7 +80,7 @@ object LibraryCopy {
             "Piano pieces from three open collections, downloaded from Steven Piano's releases on GitHub."
         } else {
             "${Format.count(offer.pieces, "piano piece", "piano pieces", locale)} from three open collections, a " +
-                "${StudioCopy.size(offer.sizeBytes)} download from Steven Piano's releases on GitHub."
+                "${Format.size(offer.sizeBytes)} download from Steven Piano's releases on GitHub."
         }
 
     /** One collection's credit: its name in Body, then who made it and its licence. */
@@ -101,7 +101,7 @@ object LibraryCopy {
         "The credits stay with the pieces, in the pack's README."
 
     /** The sheet's button: "Load · 61 MB". */
-    fun loadButton(offer: PackState.Offered?): String = if (offer == null) "Load" else "Load · ${StudioCopy.size(offer.sizeBytes)}"
+    fun loadButton(offer: PackState.Offered?): String = if (offer == null) "Load" else "Load · ${Format.size(offer.sizeBytes)}"
 
     const val NOT_NOW = "Not now"
 }

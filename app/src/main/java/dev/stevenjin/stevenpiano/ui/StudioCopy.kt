@@ -18,7 +18,6 @@ import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.studio.StudioPieces
 import dev.stevenjin.stevenpiano.studio.StudioSupport
 import java.util.Locale
-import kotlin.math.roundToInt
 
 /** What Studio says (DESIGN.md › v1.7 — M23 and M24): its page, the hub's row, the Library's + sheet, the notification, the panel. */
 object StudioCopy {
@@ -30,7 +29,7 @@ object StudioCopy {
     const val COMPOSE_NOTE = "Runs on this tablet. About a minute for a two-minute piece."
 
     /** Under the + sheet's entry and the page's button while the model isn't here yet: "Downloads the transcription model (125 MB) first." */
-    fun downloadsFirst(model: ModelEntry): String = "Downloads the ${model.title.lowercase(Locale.ROOT)} model (${size(model.sizeBytes)}) first."
+    fun downloadsFirst(model: ModelEntry): String = "Downloads the ${model.title.lowercase(Locale.ROOT)} model (${Format.size(model.sizeBytes)}) first."
 
     /** [note], and that the model downloads first when it isn't [installed]. */
     fun withDownload(note: String, model: ModelEntry, installed: Set<String>): String =
@@ -44,10 +43,7 @@ object StudioCopy {
     }
 
     /** "125 MB · CC BY 4.0". */
-    fun modelLine(model: ModelEntry): String = "${size(model.sizeBytes)} · ${model.licenceLabel}"
-
-    /** Whole decimal megabytes, as Android counts them: "125 MB". */
-    fun size(bytes: Long): String = "${(bytes / 1_000_000.0).roundToInt()} MB"
+    fun modelLine(model: ModelEntry): String = "${Format.size(model.sizeBytes)} · ${model.licenceLabel}"
 
     /**
      * A job's line: what it is doing ("Downloading · 42 of 125 MB", "Reading the recording…",
@@ -61,7 +57,7 @@ object StudioCopy {
             JobState.Cancelled -> "Cancelled"
             JobState.Failed -> job.error ?: "It didn't finish."
             JobState.Running -> when (job.step) {
-                JobStep.Downloading -> "Downloading · ${megabytes(job.bytes, job.total, locale)}"
+                JobStep.Downloading -> "Downloading · ${Format.megabytes(job.bytes, job.total, locale)}"
                 JobStep.Reading -> if (job.kind == JobKind.Compose) "Reading the piece…" else "Reading the recording…"
                 JobStep.Transcribing -> "Transcribing · ${Format.percent(percentOf(job.progress ?: 0f))}"
                 JobStep.Composing -> composingLine(job, locale)
@@ -93,7 +89,7 @@ object StudioCopy {
      * Clair de lune · 42%", "Downloading the transcription model · 42 of 125 MB", or what the step is doing.
      */
     fun libraryLine(job: StudioJob, locale: Locale = Locale.getDefault()): String = when {
-        job.kind == JobKind.Download && job.step == JobStep.Downloading -> "${notificationTitle(job)} · ${megabytes(job.bytes, job.total, locale)}"
+        job.kind == JobKind.Download && job.step == JobStep.Downloading -> "${notificationTitle(job)} · ${Format.megabytes(job.bytes, job.total, locale)}"
         job.kind == JobKind.Download -> notificationTitle(job)
         job.step == JobStep.Transcribing || job.step == JobStep.Composing -> "${notificationTitle(job)} · ${Format.percent(percentOf(job.progress ?: 0f))}"
         job.step == JobStep.Reading -> "Reading ${job.name}…"
@@ -147,15 +143,9 @@ object StudioCopy {
     /** "42% · 0:50 of 2:00 · about 40 s left": how far along, the music written of what was asked, the time left. */
     fun figures(job: StudioJob, locale: Locale = Locale.getDefault()): String = buildList {
         add(Format.percent(percentOf(job.progress ?: 0f)))
-        if (job.targetMs > 0) add("${clock(job.musicMs)} of ${clock(job.targetMs)}")
+        if (job.targetMs > 0) add("${Format.clockMillis(job.musicMs)} of ${Format.clockMillis(job.targetMs)}")
         job.etaMs?.let { add(left(it)) }
     }.joinToString(" · ")
-
-    /** "1:05": minutes and seconds. */
-    fun clock(ms: Long): String {
-        val seconds = (ms.coerceAtLeast(0) / 1000).toInt()
-        return String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60)
-    }
 
     /**
      * Time left in coarse steps, so the words do not flicker: "a few seconds left", "about 40 s left" (tens of
@@ -192,7 +182,7 @@ object StudioCopy {
     private fun stepWord(job: StudioJob): String = if (job.state == JobState.Queued) "Waiting" else stepWord(job.step, job.kind)
 
     /** A piece that ended at the token budget, said plainly: "3:41 written of 5:00: the music was dense, so it ends here". */
-    fun budgetStop(musicMs: Long, targetMs: Long): String = "${clock(musicMs)} written of ${clock(targetMs)}: the music was dense, so it ends here"
+    fun budgetStop(musicMs: Long, targetMs: Long): String = "${Format.clockMillis(musicMs)} written of ${Format.clockMillis(targetMs)}: the music was dense, so it ends here"
 
     /**
      * The card's credits, an eyebrow: "MADE ON THIS TABLET BY THE ANTICIPATORY MUSIC TRANSFORMER (APACHE-2.0), FROM CLAIR
@@ -221,8 +211,4 @@ object StudioCopy {
 
     /** A share as a whole percentage, rounded down (100% only when it is done), a float's last bit forgiven. */
     fun percentOf(fraction: Float): Int = (fraction * 100 + 0.001f).toInt().coerceIn(0, 100)
-
-    /** "42 of 125 MB", whole decimal megabytes. */
-    fun megabytes(bytes: Long, total: Long, locale: Locale = Locale.getDefault()): String =
-        String.format(locale, "%d of %d MB", (bytes.coerceAtLeast(0) / 1_000_000.0).roundToInt(), (total.coerceAtLeast(0) / 1_000_000.0).roundToInt())
 }

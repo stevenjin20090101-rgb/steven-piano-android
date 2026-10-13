@@ -403,7 +403,7 @@ private fun ScoreView(
                 .graphicsLayer()
                 .drawWithCache {
                     val ramp = colorRamp(colors.upcoming, colors.sounding)
-                    val flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L
+                    val flipMicros = if (reduced) 0L else Motion.QuickMs * 1_000L
                     onDrawBehind {
                         val now = clock.positionAt(frameNanos.longValue)
                         with(painter) { overlay(layout, notes, now, shownNow.value, slotLeft, ramp, flipMicros, colors.cursor) }

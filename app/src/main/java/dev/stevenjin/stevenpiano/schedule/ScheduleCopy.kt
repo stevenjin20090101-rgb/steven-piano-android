@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.schedule
 
+import dev.stevenjin.stevenpiano.ui.Format
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -31,8 +32,8 @@ object ScheduleCopy {
         return if (chosen.size == 1) full(chosen.single()) + "s" else chosen.joinToString(", ") { short(it) }
     }
 
-    /** "07:45", "12:30", "23:05": the web panel's quiet times on the wire. */
-    fun clock(minute: Int): String = "%02d:%02d".format(Locale.ROOT, minute / QuietTimes.MINUTES_PER_HOUR, minute % QuietTimes.MINUTES_PER_HOUR)
+    /** "07:45", "12:30", "23:05": the web panel's quiet times on the wire ([Format.timeOfDay], two-digit hours). */
+    fun clock(minute: Int): String = Format.timeOfDay(minute, twoDigitHour = true)
 
     /** "Wednesday". */
     fun full(day: DayOfWeek): String = day.getDisplayName(TextStyle.FULL, Locale.ENGLISH)

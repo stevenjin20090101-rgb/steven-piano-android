@@ -11,7 +11,6 @@ package dev.stevenjin.stevenpiano.ui.screens.piano.pages
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -78,9 +76,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -100,6 +96,7 @@ import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.ui.DisplayRule
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
@@ -107,14 +104,17 @@ import dev.stevenjin.stevenpiano.ui.LocalIdleState
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
+import dev.stevenjin.stevenpiano.ui.components.Apart
 import dev.stevenjin.stevenpiano.ui.components.DIAGNOSTICS_FAILED
 import dev.stevenjin.stevenpiano.ui.components.Dial
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
+import dev.stevenjin.stevenpiano.ui.components.FactRow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
-import dev.stevenjin.stevenpiano.ui.components.Hairline
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
+import dev.stevenjin.stevenpiano.ui.components.PowerBoards
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.SmallFigures
 import dev.stevenjin.stevenpiano.ui.components.mirrored
 import dev.stevenjin.stevenpiano.ui.components.rememberDiagnosticsSharer
 import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
@@ -128,6 +128,7 @@ import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
+import java.time.ZoneId
 
 /**
  * What the System page and the hub's System row show of the tablet: its [reading], what [running] lists and whether the
@@ -322,9 +323,9 @@ private fun TabletCard(reading: SystemReading?, parts: Set<Attention.Part>) {
         }
         LevelRow("Memory", SystemCopy.memory(reading), Attention.Part.Memory in parts)
         LevelRow("Storage", SystemCopy.storage(reading, storageFull), storageFull)
-        FactRow(SystemCopy.Fact(SystemCopy.networkLabel(reading), SystemCopy.network(reading)))
-        FactRow(SystemCopy.Fact("Running for", reading?.uptimeMs?.let { SystemCopy.duration(it / MS_PER_S) }))
-        FactRow(SystemCopy.Fact("Screen", SystemCopy.screen(reading)))
+        CardFact(SystemCopy.Fact(SystemCopy.networkLabel(reading), SystemCopy.network(reading)))
+        CardFact(SystemCopy.Fact("Running for", reading?.uptimeMs?.let { SystemCopy.duration(it / MS_PER_S) }))
+        CardFact(SystemCopy.Fact("Screen", SystemCopy.screen(reading)))
     }
 }
 
@@ -336,7 +337,7 @@ private fun ControllerCard(mode: SystemCopy.Mode, diag: PianoDiag?, instrument: 
             Dial("Chip temperature", SystemCopy.chip(mode, diag, Attention.Part.Chip in parts), "0", "80")
             Dial("Memory", memory, "0", size)
         }
-        for (fact in SystemCopy.controllerFacts(mode, diag)) FactRow(fact)
+        for (fact in SystemCopy.controllerFacts(mode, diag)) CardFact(fact)
     }
 }
 
@@ -355,8 +356,8 @@ private fun PianoCard(
     val piano by vm.piano.collectAsStateWithLifecycle()
     val boards = diag?.boards?.takeIf { mode == SystemCopy.Mode.Ready }
     SystemCard(SystemCopy.PIANO, SystemCopy.pianoLine(mode, boards, instrument)) {
-        Boards(boards)
-        for (fact in SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts, Attention.Part.Held in parts)) FactRow(fact)
+        PowerBoards(boards)
+        for (fact in SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts, Attention.Part.Held in parts)) CardFact(fact)
         FootRow(
             SettingsPage.Firmware.title,
             GroupSummaries.firmware(piano, firmware, (firmwarePiano as? FirmwarePiano.Connected)?.text),
@@ -519,59 +520,11 @@ private fun Dials(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/**
- * A row of a card ([SystemCopy.Fact]): its name, and its value at the end ("—" when not known, the small "Needs newer
- * firmware" tag, the amber with its words when it needs attention, the live dot before the Bluetooth row's); a value too
- * long to sit beside the name goes under it. TalkBack reads "name, value".
- */
-@OptIn(ExperimentalLayoutApi::class)
+/** A card's fact: a hairline above it, then the row ([FactRow], the one the piano's Firmware and status page draws too). */
 @Composable
-private fun FactRow(fact: SystemCopy.Fact) {
-    val spoken = when {
-        fact.needs -> SystemCopy.NEEDS_FIRMWARE.lowercase()
-        fact.value == null -> "not known"
-        else -> fact.value
-    }
+private fun CardFact(fact: SystemCopy.Fact) {
     HairlineDivider(startInset = 16.dp)
-    FlowRow(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clearAndSetSemantics { contentDescription = "${fact.label}, $spoken" }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Apart,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(fact.label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-        when {
-            fact.needs -> NeedsTag()
-            else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                if (fact.live != null) {
-                    LiveDot(live = fact.live, breathing = false)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    fact.value ?: NONE,
-                    style = MaterialTheme.typography.bodyLarge.merge(Tabular).copy(fontWeight = if (fact.attention) FontWeight.SemiBold else FontWeight.Normal),
-                    color = if (fact.attention) LocalAttention.current else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.End,
-                )
-            }
-        }
-    }
-}
-
-/** What waits for newer piano firmware: the words, small and engraved, in a hairline frame. */
-@Composable
-private fun NeedsTag() {
-    Box(
-        Modifier
-            .border(Hairline, LocalHairline.current, MaterialTheme.shapes.extraSmall)
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Eyebrow(SystemCopy.NEEDS_FIRMWARE)
-    }
+    FactRow(fact)
 }
 
 /** Memory or storage: its name and what is in use ("2.4 of 4 GB in use"), and a meter of it; amber when it needs attention. */
@@ -616,79 +569,6 @@ internal fun Meter(share: Float?, color: Color, thickness: Dp, modifier: Modifie
         val radius = CornerRadius(size.height / 2, size.height / 2)
         drawRoundRect(track, cornerRadius = radius)
         if (share != null && eased > 0f) drawRoundRect(color, size = Size(size.width * eased, size.height), cornerRadius = radius)
-    }
-}
-
-/**
- * The seven power boards as seven octaves of keys, C1 to C7 (the panel's drawing): an answering board's keys in the
- * content colour, a missing one hollow and amber with "Missing" under it, an unknown one faint. TalkBack reads them in a line.
- */
-@Composable
-private fun Boards(boards: List<String>?) {
-    val content = MaterialTheme.colorScheme.onSurface
-    val card = MaterialTheme.colorScheme.surfaceVariant
-    val hairline = LocalHairline.current
-    val amber = LocalAttention.current
-    val tertiary = LocalTertiary.current
-    val spoken = boards?.mapIndexed { i, board -> "C${i + 1} ${if (board == PianoDiag.OK) "OK" else if (board == PianoDiag.MISSING) "missing" else "not known"}" }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clearAndSetSemantics { contentDescription = "Power boards: " + (spoken?.joinToString(", ") ?: "not known") }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(OCTAVES_WIDTH / OCTAVES_HEIGHT),
-        ) {
-            val u = size.width / OCTAVES_WIDTH
-            val line = Stroke(width = 1.dp.toPx())
-            for (o in 0 until BOARDS) {
-                val state = boards?.getOrNull(o)
-                val x = o * OCTAVE_STEP
-                val missing = state == PianoDiag.MISSING
-                val known = state == PianoDiag.OK
-                drawRoundRect(if (missing) amber else hairline, Offset((x + 2) * u, 2 * u), Size(56 * u, 44 * u), CornerRadius(6 * u), style = line)
-                for (k in 0 until NATURALS) {
-                    val at = Offset((x + 4 + k * KEY_STEP) * u, 5 * u)
-                    val key = Size(6.3f * u, 38 * u)
-                    when {
-                        missing -> drawRoundRect(amber, at, key, CornerRadius(1.5f * u), style = line)
-                        known -> drawRoundRect(content.copy(alpha = KEY_ALPHA), at, key, CornerRadius(1.5f * u))
-                        else -> drawRoundRect(content.copy(alpha = FAINT_ALPHA), at, key, CornerRadius(1.5f * u))
-                    }
-                }
-                for (k in SHARPS) {
-                    val at = Offset((x + 4 + k * KEY_STEP + 4.6f) * u, 5 * u)
-                    val key = Size(4.4f * u, 23 * u)
-                    drawRoundRect(card, at, key, CornerRadius(1.2f * u))
-                    if (missing) drawRoundRect(amber, at, key, CornerRadius(1.2f * u), style = line)
-                }
-                val railAt = Offset((x + 2) * u, 54 * u)
-                val rail = Size(56 * u, 6 * u)
-                when {
-                    missing -> drawRoundRect(amber, railAt, rail, CornerRadius(3 * u), style = Stroke(width = 1.5.dp.toPx()))
-                    known -> drawRoundRect(content, railAt, rail, CornerRadius(3 * u))
-                    else -> drawRoundRect(content.copy(alpha = FAINT_ALPHA), railAt, rail, CornerRadius(3 * u))
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-            for (o in 0 until BOARDS) {
-                val state = boards?.getOrNull(o)
-                val missing = state == PianoDiag.MISSING
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        if (state == PianoDiag.OK) "C${o + 1} · OK" else "C${o + 1}",
-                        style = SmallFigures,
-                        color = if (missing) amber else tertiary,
-                        textAlign = TextAlign.Center,
-                    )
-                    if (missing) Text("Missing", style = SmallFigures.copy(fontWeight = FontWeight.SemiBold), color = amber, textAlign = TextAlign.Center)
-                }
-            }
-        }
     }
 }
 
@@ -880,7 +760,7 @@ private fun DayChart(samples: List<SystemSample>, now: Long) {
         }
         for (i in 0..TIME_STEPS) {
             val t = model.start + (model.end - model.start) * i / TIME_STEPS
-            val text = if (i == TIME_STEPS) "Now" else SystemCopy.clock(t)
+            val text = if (i == TIME_STEPS) "Now" else Format.timeOfDay(t, ZoneId.systemDefault(), twoDigitHour = true)
             val anchor = when (i) {
                 0 -> Anchor.Start
                 TIME_STEPS -> Anchor.End
@@ -956,19 +836,6 @@ private fun DrawScope.dots(): PathEffect = PathEffect.dashPathEffect(floatArrayO
 
 // ---- Measures --------------------------------------------------------------------------------------------------
 
-/** Items at the two ends of their line (one alone sits at the start), at least 16 dp apart when they share it. */
-private object Apart : Arrangement.Horizontal {
-    override val spacing: Dp = 16.dp
-
-    override fun Density.arrange(totalSize: Int, sizes: IntArray, layoutDirection: LayoutDirection, outPositions: IntArray) {
-        with(Arrangement.SpaceBetween) { arrange(totalSize, sizes, layoutDirection, outPositions) }
-    }
-}
-
-/** The small figures under the boards and on the chart: the eyebrow's size without its tracking. */
-internal val SmallFigures: TextStyle
-    @Composable get() = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
-
 private val SystemPageWidth = 1120.dp
 /** Room for two cards of 360 dp, the gap between them and the page's margins. */
 private val TwoColumns = 760.dp
@@ -991,13 +858,4 @@ private const val HEAT_HIGH = 50.0
 private const val TIME_STEPS = 4
 private const val TRACK_ALPHA = 0.12f
 private const val AREA_ALPHA = 0.09f
-private const val KEY_ALPHA = 0.88f
-private const val FAINT_ALPHA = 0.16f
-private const val BOARDS = 7
-private const val NATURALS = 7
-private val SHARPS = listOf(0, 1, 3, 4, 5)
-private const val OCTAVE_STEP = 60f
-private const val KEY_STEP = 7.5f
-private const val OCTAVES_WIDTH = 420f
-private const val OCTAVES_HEIGHT = 62f
 private const val NONE = "—"

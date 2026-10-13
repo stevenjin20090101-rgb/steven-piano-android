@@ -22,11 +22,9 @@ class UpdateCopyTest {
     @Test
     fun `the row reads as the design writes it`() {
         assertEquals("Steven Piano 1.4 is available", UpdateCopy.available("1.4"))
-        assertEquals("Downloading 1.4 · 1.2 of 2.3 MB", UpdateCopy.downloading("1.4", 1_200_000, 2_300_000, Locale.US))
+        assertEquals("Downloading 1.4 · 1 of 14 MB", UpdateCopy.downloading("1.4", 1_200_000, 13_700_000, Locale.US))
         assertEquals("Updated to 1.4; restart to use it", UpdateCopy.installed("1.4"))
         assertEquals("Updated to 1.4", UpdateCopy.installed("1.4", restartNeeded = false))
-        assertEquals("0.0 of 2.4 MB", UpdateCopy.megabytes(0, 2_400_301, Locale.US))
-        assertEquals("1,2 of 2,4 MB", UpdateCopy.megabytes(1_240_000, 2_400_301, Locale.GERMANY))
         assertEquals("Downloading Steven Piano 1.4", UpdateCopy.notificationTitle("1.4"))
     }
 

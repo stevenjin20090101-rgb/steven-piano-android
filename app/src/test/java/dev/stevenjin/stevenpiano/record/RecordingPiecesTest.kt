@@ -258,12 +258,4 @@ class RecordingSessionTest {
         assertEquals(TakeEnd.Silence, saved!!.ended)
         assertFalse(session.recording)
     }
-
-    @Test
-    fun `the take's time reads as a clock`() {
-        assertEquals("0:00", RecordingSession.clock(0))
-        assertEquals("0:42", RecordingSession.clock(42_900_000_000L))
-        assertEquals("12:05", RecordingSession.clock(725_000_000_000L))
-        assertEquals("1:00:00", RecordingSession.clock(3_600_000_000_000L))
-    }
 }

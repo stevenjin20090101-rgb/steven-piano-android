@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.studio
 
+import dev.stevenjin.stevenpiano.update.ManifestJson
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import org.json.JSONArray
 import org.json.JSONException
@@ -57,6 +58,9 @@ class ModelManifest private constructor(val entries: List<Entry>) {
     fun entryFor(model: ModelEntry): Entry? = entries.firstOrNull { it.name == model.name && it.version == model.version && it.kind == model.kind }
 
     companion object {
+        /** Its fields, read as every manifest's are ([ManifestJson]). */
+        private val fields = ManifestJson(::InvalidModelManifest)
+
         /** The list is about 14 KB (the models' input and output shapes); anything past this is not one. */
         const val MAX_BYTES = 64 * 1024
         const val MAX_MODELS = 32
@@ -98,35 +102,21 @@ class ModelManifest private constructor(val entries: List<Entry>) {
         }
 
         private fun entry(json: JSONObject, source: UpdateSource, kind: ModelKind): Entry {
-            val name = string(json, "name")
+            val name = fields.string(json, "name")
             if (!NAME.matches(name)) throw InvalidModelManifest("name")
-            val version = integer(json, "version", 1L..MAX_VERSION).toInt()
-            val file = string(json, "file")
+            val version = fields.integer(json, "version", 1L..MAX_VERSION).toInt()
+            val file = fields.string(json, "file")
             if (file != "$name-v$version${kind.extension}") throw InvalidModelManifest("file")
-            val url = string(json, "url")
+            val url = fields.string(json, "url")
             if (!source.allowsModel(url, kind.extension) || url.substringAfterLast('/') != file) throw InvalidModelManifest("url")
-            val sizeBytes = integer(json, "sizeBytes", 1L..kind.maxBytes)
-            val sha256 = string(json, "sha256")
+            val sizeBytes = fields.integer(json, "sizeBytes", 1L..kind.maxBytes)
+            val sha256 = fields.string(json, "sha256")
             if (!SHA256.matches(sha256)) throw InvalidModelManifest("sha256")
-            val licence = string(json, "licence")
+            val licence = fields.string(json, "licence")
             if (!LICENCE.matches(licence)) throw InvalidModelManifest("licence")
-            val attribution = string(json, "attribution").filter { !it.isISOControl() }.trim()
+            val attribution = fields.string(json, "attribution").filter { !it.isISOControl() }.trim()
             if (attribution.isEmpty() || attribution.length > MAX_ATTRIBUTION) throw InvalidModelManifest("attribution")
             return Entry(name, version, file, url, sizeBytes, sha256.lowercase(Locale.ROOT), licence, attribution, kind)
-        }
-
-        /** A whole number in [range]; a JSON number only (a string of digits is refused). */
-        private fun integer(json: JSONObject, name: String, range: LongRange): Long {
-            val value = json.opt(name) as? Number ?: throw InvalidModelManifest(name)
-            val whole = value.toLong()
-            if (whole.toDouble() != value.toDouble() || whole !in range) throw InvalidModelManifest(name)
-            return whole
-        }
-
-        private fun string(json: JSONObject, name: String): String {
-            val value = json.opt(name) as? String ?: throw InvalidModelManifest(name)
-            if (value.isBlank()) throw InvalidModelManifest(name)
-            return value
         }
     }
 }

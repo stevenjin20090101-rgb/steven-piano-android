@@ -210,7 +210,7 @@ fun NoteCanvas(
                     pxPerMicro = dpPerSecond.dp.toPx() / 1_000_000f,
                     inset = 1.dp.toPx(),
                     minHeight = 2.dp.toPx(),
-                    flipMicros = if (reduced) 0L else Motion.FastMs * 1_000L,
+                    flipMicros = if (reduced) 0L else Motion.QuickMs * 1_000L,
                     ramp = handTones?.let { colorRamp(it.right, lerp(it.right, sounding, HAND_SOUNDING_MIX)) } ?: colorRamp(upcoming, sounding),
                     leftRamp = handTones?.let { colorRamp(it.left, lerp(it.left, sounding, HAND_SOUNDING_MIX)) },
                     hands = hands?.takeIf { it.size == notes.size },

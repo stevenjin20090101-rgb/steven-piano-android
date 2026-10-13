@@ -47,7 +47,9 @@ import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
+import dev.stevenjin.stevenpiano.ui.components.SmallFigures
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
+import dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry
 import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
 import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
@@ -209,7 +211,7 @@ private fun KeyMap(test: KeyTestState) {
                 val first = KeyTest.KEYS.first + o * SEMITONES
                 val missing = heard != null && (first until first + SEMITONES).any { heard[it] == false }
                 Text(
-                    ListenCopy.keyName(first),
+                    KeyboardGeometry.name(first),
                     Modifier.weight(1f),
                     style = SmallFigures,
                     color = if (missing) amber else tertiary,

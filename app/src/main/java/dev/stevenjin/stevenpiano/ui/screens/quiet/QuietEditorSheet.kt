@@ -62,6 +62,7 @@ import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.schedule.QuietSection
 import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
@@ -275,8 +276,8 @@ private fun DayChips(days: Int, onChange: (Int) -> Unit) {
 /** A block: from and to on the app's outlined buttons (each opens the picker), "The next day" under it when it crosses midnight, and its remove glyph. */
 @Composable
 private fun BlockRow(block: QuietBlock, onStart: () -> Unit, onEnd: () -> Unit, onRemove: () -> Unit) {
-    val from = QuietCopy.clock(block.start)
-    val to = QuietCopy.clock(block.end)
+    val from = Format.timeOfDay(block.start)
+    val to = Format.timeOfDay(block.end)
     Row(
         Modifier
             .fillMaxWidth()

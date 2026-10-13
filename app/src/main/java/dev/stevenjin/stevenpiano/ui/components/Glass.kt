@@ -234,7 +234,7 @@ internal fun rememberGlassLook(
         when {
             paused -> veil.snapTo(1f)
             reduced -> veil.snapTo(0f)
-            veil.value > 0f -> veil.animateTo(0f, tween(Motion.FastMs))
+            veil.value > 0f -> veil.animateTo(0f, tween(Motion.QuickMs))
         }
     }
     val veiled by remember { derivedStateOf { veil.value >= 1f } }

@@ -93,7 +93,7 @@ fun Anchored(anchor: String?, modifier: Modifier = Modifier, content: @Composabl
     val reduced = rememberReducedMotion()
     val alpha by animateFloatAsState(
         targetValue = if (lit) 1f else 0f,
-        animationSpec = if (reduced) snap() else tween(if (lit) Motion.FastMs else HIGHLIGHT_FADE_MS),
+        animationSpec = if (reduced) snap() else tween(if (lit) Motion.QuickMs else HIGHLIGHT_FADE_MS),
         label = "search highlight",
     )
     val fill = MaterialTheme.colorScheme.surfaceVariant

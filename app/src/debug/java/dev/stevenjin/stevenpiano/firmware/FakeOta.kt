@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.firmware
 
 import dev.stevenjin.stevenpiano.Emulator
+import dev.stevenjin.stevenpiano.SystemProperty
 import dev.stevenjin.stevenpiano.ble.EmulatedPianoLink
 import dev.stevenjin.stevenpiano.ble.OtaPiano
 import dev.stevenjin.stevenpiano.update.UpdateServer
@@ -106,9 +107,7 @@ enum class FakeOta(val key: String) {
         /** The scenario [PROPERTY] names, in a debug build on an emulator; null everywhere else. */
         fun fromProperty(): FakeOta? {
             if (!Emulator.on) return null
-            val value = runCatching {
-                ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim() }
-            }.getOrDefault("")
+            val value = SystemProperty.read(PROPERTY)
             return named(value)
         }
     }

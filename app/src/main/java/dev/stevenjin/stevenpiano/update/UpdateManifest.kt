@@ -41,6 +41,9 @@ data class UpdateManifest(
     val minSdk: Int,
 ) {
     companion object {
+        /** Its fields, read as every manifest's are ([ManifestJson]). */
+        private val fields = ManifestJson(::InvalidManifest)
+
         /** A manifest is a few hundred bytes; anything past this is not one. */
         const val MAX_MANIFEST_BYTES = 64 * 1024
 
@@ -68,39 +71,17 @@ data class UpdateManifest(
             } catch (e: StackOverflowError) {
                 throw InvalidManifest("nested too deeply")
             }
-            val versionCode = integer(json, "versionCode", 1L..MAX_VERSION_CODE).toInt()
-            val versionName = string(json, "versionName")
+            val versionCode = fields.integer(json, "versionCode", 1L..MAX_VERSION_CODE).toInt()
+            val versionName = fields.string(json, "versionName")
             if (versionName.length > MAX_VERSION_NAME || !VERSION_NAME.matches(versionName)) throw InvalidManifest("versionName")
-            val notes = if (json.has("notes")) string(json, "notes", allowEmpty = true) else ""
-            val apkUrl = string(json, "apkUrl")
+            val notes = if (json.has("notes")) fields.string(json, "notes", allowEmpty = true) else ""
+            val apkUrl = fields.string(json, "apkUrl")
             if (!source.allowsApk(apkUrl)) throw InvalidManifest("apkUrl")
-            val sha256 = string(json, "sha256")
+            val sha256 = fields.string(json, "sha256")
             if (!SHA256.matches(sha256)) throw InvalidManifest("sha256")
-            val sizeBytes = integer(json, "sizeBytes", 1L..MAX_APK_BYTES)
-            val minSdk = if (json.has("minSdk")) integer(json, "minSdk", 1L..MAX_SDK.toLong()).toInt() else 0
-            return UpdateManifest(versionCode, versionName, cleanNotes(notes), apkUrl, sha256.lowercase(Locale.ROOT), sizeBytes, minSdk)
-        }
-
-        /** A whole number in [range]; a JSON number only (a string of digits is refused). */
-        private fun integer(json: JSONObject, name: String, range: LongRange): Long {
-            val value = json.opt(name) as? Number ?: throw InvalidManifest(name)
-            val whole = value.toLong()
-            if (whole.toDouble() != value.toDouble() || whole !in range) throw InvalidManifest(name)
-            return whole
-        }
-
-        private fun string(json: JSONObject, name: String, allowEmpty: Boolean = false): String {
-            val value = json.opt(name) as? String ?: throw InvalidManifest(name)
-            if (!allowEmpty && value.isBlank()) throw InvalidManifest(name)
-            return value
-        }
-
-        /** Notes as plain text: line breaks kept, other control characters dropped, cut to [MAX_NOTES] on a code point. */
-        private fun cleanNotes(notes: String): String {
-            val kept = notes.filter { it == '\n' || !it.isISOControl() }.trim()
-            if (kept.length <= MAX_NOTES) return kept
-            val end = if (Character.isHighSurrogate(kept[MAX_NOTES - 1])) MAX_NOTES - 1 else MAX_NOTES
-            return kept.substring(0, end)
+            val sizeBytes = fields.integer(json, "sizeBytes", 1L..MAX_APK_BYTES)
+            val minSdk = if (json.has("minSdk")) fields.integer(json, "minSdk", 1L..MAX_SDK.toLong()).toInt() else 0
+            return UpdateManifest(versionCode, versionName, ManifestJson.plain(notes, MAX_NOTES), apkUrl, sha256.lowercase(Locale.ROOT), sizeBytes, minSdk)
         }
     }
 }

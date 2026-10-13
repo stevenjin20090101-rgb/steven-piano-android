@@ -739,8 +739,8 @@ internal fun StartingLine(starting: Boolean, modifier: Modifier = Modifier) {
         Eyebrow(STARTING, Modifier.alpha(0f).clearAndSetSemantics { }, maxLines = 1)
         AnimatedVisibility(
             visible = starting,
-            enter = if (reduced) EnterTransition.None else fadeIn(tween(Motion.FastMs)),
-            exit = if (reduced) ExitTransition.None else fadeOut(tween(Motion.FastMs)),
+            enter = if (reduced) EnterTransition.None else fadeIn(tween(Motion.QuickMs)),
+            exit = if (reduced) ExitTransition.None else fadeOut(tween(Motion.QuickMs)),
         ) {
             Eyebrow(STARTING, maxLines = 1)
         }

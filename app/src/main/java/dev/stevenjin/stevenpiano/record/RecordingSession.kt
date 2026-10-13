@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.ZonedDateTime
-import java.util.Locale
 
 /** Recording as the Keys tab shows it (v1.11 — M29). */
 sealed interface RecordingState {
@@ -155,14 +154,5 @@ class RecordingSession(
 
         /** How long "Kept in Recordings." shows. */
         const val KEPT_SHOWN_MS = 4_000L
-
-        /** "0:42", "12:05", "1:00:00": a take's length in whole seconds, tabular. */
-        fun clock(nanos: Long): String {
-            val seconds = (nanos.coerceAtLeast(0L) / 1_000_000_000L)
-            val h = seconds / 3600
-            val m = seconds / 60 % 60
-            val s = seconds % 60
-            return if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s) else String.format(Locale.ROOT, "%d:%02d", m, s)
-        }
     }
 }

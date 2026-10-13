@@ -58,7 +58,7 @@ fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
     val shown = remember { Animatable(if (live) 1f else 0f) }
     LaunchedEffect(live, reduced) {
         val target = if (live) 1f else 0f
-        if (reduced) shown.snapTo(target) else shown.animateTo(target, tween(Motion.RollStartMs, easing = Motion.EaseOut))
+        if (reduced) shown.snapTo(target) else shown.animateTo(target, tween(Motion.EmphasisedMs, easing = Motion.Enter))
     }
     val breath = if (live && breathing && !reduced) {
         rememberInfiniteTransition(label = "live")

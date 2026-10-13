@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.SystemProperty
 
 // Liquid Glass across the functional layer (DESIGN.md › v1.9, after v1.5 — M16): two layers only. The
 // content (rows, cards, tiles, the roll, the score, the art, the resting screen) is never glass; the
@@ -140,9 +141,7 @@ private object DebugNoBlur {
 
     val on: Boolean by lazy {
         if (!BuildConfig.DEBUG) return@lazy false
-        val value = runCatching {
-            ProcessBuilder("getprop", PROPERTY).start().inputStream.bufferedReader().use { it.readText().trim().lowercase() }
-        }.getOrDefault("")
+        val value = SystemProperty.read(PROPERTY).lowercase()
         value.isNotEmpty() && value != "0" && value != "false" && value != "no"
     }
 }

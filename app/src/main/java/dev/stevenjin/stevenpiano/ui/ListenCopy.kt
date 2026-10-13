@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.audio.KeyResult
+import dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry
 import java.util.Locale
 
 /**
@@ -58,12 +59,6 @@ object ListenCopy {
     const val STOPPED_UPDATING = "Stopped: the piano's firmware is being updated."
     const val STOPPED_MICROPHONE = "Stopped: the tablet's microphone stopped."
 
-    /** The note names, C to B, sharps with ♯. */
-    private val NAMES = listOf("C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B")
-
-    /** "C2", "F♯4": MIDI [key] (60 is C4). */
-    fun keyName(key: Int): String = NAMES[Math.floorMod(key, NAMES.size)] + (Math.floorDiv(key, NAMES.size) - 1)
-
     /** "Key 37 of 84". */
     fun progress(done: Int, total: Int): String = "Key $done of $total"
 
@@ -71,7 +66,7 @@ object ListenCopy {
     fun result(results: List<KeyResult>): String {
         val missing = results.filterNot { it.heard }.sortedBy { it.key }
         if (missing.isEmpty()) return "All ${results.size} keys sounded"
-        val names = missing.joinToString(", ") { keyName(it.key) }
+        val names = missing.joinToString(", ") { KeyboardGeometry.name(it.key) }
         return if (missing.size == 1) "1 key didn't sound: $names" else "${missing.size} keys didn't sound: $names"
     }
 

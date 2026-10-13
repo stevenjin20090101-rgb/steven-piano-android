@@ -21,7 +21,10 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import dev.stevenjin.stevenpiano.diag.PianoDiag
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
+import dev.stevenjin.stevenpiano.ui.SystemCopy
+import dev.stevenjin.stevenpiano.ui.components.FactRow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,10 +56,10 @@ import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.SettingNotes
 import dev.stevenjin.stevenpiano.ui.components.ChoiceRow
 import dev.stevenjin.stevenpiano.ui.components.DisclosureRow
-import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
+import dev.stevenjin.stevenpiano.ui.components.PowerBoards
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
@@ -69,7 +72,6 @@ import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
-import dev.stevenjin.stevenpiano.ui.theme.Tabular
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 import kotlin.math.roundToInt
 
@@ -182,7 +184,7 @@ private fun PianoSettingsSection(
         Anchored(SettingsIndex.anchorOf(row)) {
             when (row) {
                 is PianoRow.Control -> SettingRow(row.setting, ready, actions)
-                is PianoRow.Reading -> FactRow(row.fact.name, row.fact.label, ready)
+                is PianoRow.Reading -> PianoFact(row.fact.name, row.fact.label, ready)
                 PianoRow.Presets -> PresetsRow(ready != null, actions)
                 PianoRow.StrikeTest -> StrikeTestRow(ready != null, actions)
                 PianoRow.TestLed -> TestLedRow(ready != null, actions)
@@ -383,11 +385,19 @@ private fun TestKeyRow(title: String, key: Int, onKey: (Int) -> Unit, enabled: B
     }
 }
 
-/** A fact the piano reports: the power boards as seven words, the others in a read-only row. */
+/**
+ * A fact the piano reports, a hairline under it: the power boards drawn as the System page draws them ([PowerBoards]),
+ * the others in the System page's [FactRow] (one of each since v1.24 — M57).
+ */
 @Composable
-private fun FactRow(name: String, label: String, ready: PianoState.Ready?) {
+private fun PianoFact(name: String, label: String, ready: PianoState.Ready?) {
     val value = ready?.facts?.get(name)
-    if (name == "boards") Boards(value) else ReadingRow(label, factText(name, value))
+    if (name == "boards") {
+        PowerBoards(PianoDiag(if (value == null) emptyMap() else mapOf(name to value)).boards, title = label)
+    } else {
+        FactRow(SystemCopy.Fact(label, factText(name, value)))
+    }
+    HairlineDivider(startInset = 16.dp)
 }
 
 /**
@@ -443,36 +453,6 @@ private fun SaveNowRow(ready: PianoState.Ready?, actions: PianoSettingsActions) 
     }
 }
 
-/** The seven power boards, one per octave (C1 … C7), each OK or MISSING in words. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Boards(value: String?) {
-    val words = value?.split(',')?.map { it.trim() }?.takeIf { it.size == BOARDS } ?: List(BOARDS) { "—" }
-    val spoken = words.mapIndexed { i, word -> "C${i + 1} octave ${if (word == "—") "not known" else word.lowercase()}" }.joinToString(", ")
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) { contentDescription = "Power boards, $spoken" }
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
-    ) {
-        Text(
-            "Power boards",
-            Modifier.padding(vertical = 8.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            words.forEachIndexed { i, word ->
-                Column {
-                    Eyebrow("C${i + 1}")
-                    Text(word, style = MaterialTheme.typography.bodyLarge.merge(Tabular), color = MaterialTheme.colorScheme.onSurface)
-                }
-            }
-        }
-    }
-    HairlineDivider(startInset = 16.dp)
-}
-
 /** A value beside its control; blank while not known, since a dash between − and + would read as one more minus. */
 private fun shownBeside(setting: PianoSetting, wire: String?): String = if (wire == null) "" else setting.display(wire)
 
@@ -499,8 +479,6 @@ private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
         TextButton(onClick = onDismiss) { Text("Dismiss") }
     }
 }
-
-private const val BOARDS = 7
 
 /** The piano's Full power switch, which asks before it goes off (v1.22). */
 private const val FULL_POWER_SETTING = "fullpower"

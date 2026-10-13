@@ -50,9 +50,8 @@ object Motion {
     /** Slow, and the longest any transition may take. */
     const val SlowMs = 480
 
-    /** The names the app used before v1.14, kept for the files that read them. */
+    /** [QuickMs] by its name before v1.14, which only the web panel's asset test (M56's) still reads; it goes with that. */
     const val FastMs = QuickMs
-    const val RollStartMs = EmphasisedMs
 
     /** A pressed control's scale; what grows in (the art, a popover) starts from [GrowFrom]. */
     const val PressedScale = 0.97f
@@ -61,7 +60,6 @@ object Motion {
     /** Entering decelerates; leaving accelerates; [Standard] for what moves within the screen. */
     val Enter: Easing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
     val Leave: Easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
-    val EaseOut: Easing = Enter
     val Standard: Easing = FastOutSlowInEasing
 
     /** The press spring, a control under a finger: firm, barely overshooting (it settles in about a tenth of a second). */

@@ -43,7 +43,7 @@ object TabletSoundCopy {
     fun title(model: ModelEntry = ModelCatalogue.pianoSound): String = model.title
 
     /** "57 MB · CC0 · FreePats". */
-    fun facts(model: ModelEntry = ModelCatalogue.pianoSound): String = "${StudioCopy.size(model.sizeBytes)} · ${model.licenceLabel} · FreePats"
+    fun facts(model: ModelEntry = ModelCatalogue.pianoSound): String = "${Format.size(model.sizeBytes)} · ${model.licenceLabel} · FreePats"
 
     /**
      * The SoundFont row's line: its size and licence with what it is; "Downloading · 12 of 57 MB";
@@ -51,9 +51,9 @@ object TabletSoundCopy {
      */
     fun line(state: TabletSoundState, model: ModelEntry = ModelCatalogue.pianoSound, locale: Locale = Locale.getDefault()): String =
         when (val d = state.download) {
-            is SoundDownload.Running -> "Downloading · ${StudioCopy.megabytes(d.bytes, d.total, locale)}"
+            is SoundDownload.Running -> "Downloading · ${Format.megabytes(d.bytes, d.total, locale)}"
             is SoundDownload.Failed -> d.line
-            null -> if (state.installed) "Installed · ${StudioCopy.size(model.sizeBytes)} · ${model.licenceLabel}" else "${facts(model)} · ${model.use}"
+            null -> if (state.installed) "Installed · ${Format.size(model.sizeBytes)} · ${model.licenceLabel}" else "${facts(model)} · ${model.use}"
         }
 
     /** The download's progress, 0–1, while it runs; null otherwise. */
@@ -76,9 +76,9 @@ object TabletSoundCopy {
     fun nowPlayingNote(state: TabletSoundState, model: ModelEntry = ModelCatalogue.pianoSound, locale: Locale = Locale.getDefault()): String? {
         if (!state.needsDownload) return null
         return when (val d = state.download) {
-            is SoundDownload.Running -> "Downloading the piano sound · ${StudioCopy.megabytes(d.bytes, d.total, locale)}"
+            is SoundDownload.Running -> "Downloading the piano sound · ${Format.megabytes(d.bytes, d.total, locale)}"
             is SoundDownload.Failed -> d.line
-            null -> "Hear it on this tablet: the piano sound is a ${StudioCopy.size(model.sizeBytes)} download."
+            null -> "Hear it on this tablet: the piano sound is a ${Format.size(model.sizeBytes)} download."
         }
     }
 
@@ -87,7 +87,7 @@ object TabletSoundCopy {
         if (state.active) "Tablet sound, volume ${Format.percent(state.volume)}" else "Tablet sound, off here, volume ${Format.percent(state.volume)}"
 
     /** The button's description when the download is offered. */
-    fun downloadDescription(model: ModelEntry = ModelCatalogue.pianoSound): String = "Download the piano sound, ${StudioCopy.size(model.sizeBytes)}"
+    fun downloadDescription(model: ModelEntry = ModelCatalogue.pianoSound): String = "Download the piano sound, ${Format.size(model.sizeBytes)}"
 
     /** About's credit. */
     const val CREDIT = "Piano sound: Upright Piano KW, FreePats (CC0)"

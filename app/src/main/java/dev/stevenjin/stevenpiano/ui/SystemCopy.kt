@@ -20,7 +20,6 @@ import dev.stevenjin.stevenpiano.diag.SystemSample
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.ui.components.DialValue
-import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -337,7 +336,7 @@ object SystemCopy {
     /** "Last 24 hours", or "Since 14:05" when the app has run for less than a day. */
     fun dayLine(samples: List<SystemSample>, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
         val first = samples.firstOrNull()?.at ?: return LAST_DAY
-        return if (now - first < DAY_MS - HALF_HOUR_MS) "Since ${clock(first, zone)}" else LAST_DAY
+        return if (now - first < DAY_MS - HALF_HOUR_MS) "Since ${Format.timeOfDay(first, zone, twoDigitHour = true)}" else LAST_DAY
     }
 
     /** The day in one sentence, for everyone and for TalkBack: "Battery between 60 and 100 %, tablet between 27 and 35 °C". */
@@ -389,12 +388,6 @@ object SystemCopy {
 
     /** A whole number with a true minus sign: "−61". */
     fun signed(n: Long): String = if (n < 0) "−${-n}" else "$n"
-
-    /** "14:05" in [zone]. */
-    fun clock(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): String {
-        val at = Instant.ofEpochMilli(epochMs).atZone(zone)
-        return "%02d:%02d".format(Locale.ROOT, at.hour, at.minute)
-    }
 
     private fun count(n: Long): String = "%,d".format(Locale.getDefault(), n)
 
