@@ -74,7 +74,6 @@ object PageRows {
     val WEB_PANEL = AppRow("web.switch", "Web panel", SettingsPage.Remote, PANEL, listOf("remote control", "web control", "browser", "phone"))
     val WEB_ADDRESS = AppRow("web.address", "Panel address", SettingsPage.Remote, PANEL, listOf("QR code", "link", "URL", "Tailscale"))
     val WEB_PIN = AppRow("web.pin", "Web panel PIN", SettingsPage.Remote, PANEL, listOf("set a PIN", "change PIN", "password"))
-    val ALSO_ON_WIFI = AppRow("web.wifi", "Also on Wi-Fi", SettingsPage.Remote, PANEL, listOf("local network", "LAN", "panel on Wi-Fi too"))
     val OVER_INTERNET = AppRow("web.internet", "Web panel over the internet", SettingsPage.Remote, OVER_THE_INTERNET, listOf("cloud", "remote access", "relay", "anywhere"))
     val RELAY_ADDRESS = AppRow("web.relay", "Relay address", SettingsPage.Remote, OVER_THE_INTERNET, listOf("cloud address", "host"))
     val ENROL = AppRow("web.enrol", "Enrol with code", SettingsPage.Remote, OVER_THE_INTERNET, listOf("enroll", "console", "cloud"))
@@ -130,7 +129,7 @@ object PageRows {
         PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
         PLAY_ANYWAY, ADD_SECTION,
-        WEB_PANEL, WEB_ADDRESS, WEB_PIN, ALSO_ON_WIFI, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
+        WEB_PANEL, WEB_ADDRESS, WEB_PIN, OVER_INTERNET, RELAY_ADDRESS, ENROL, FORGET_CLOUD,
         GUESTS_CAN_REQUEST, APPROVE_FIRST, POSTER,
         FIND_COVERS, RECONNECT, LISTEN_FROM_PANEL, TEST_EVERY_KEY,
         APPEARANCE, MONOCHROME, ALBUM_BACKDROP, RESTING, RESTING_BACKGROUND, RESTING_SHOWS,
