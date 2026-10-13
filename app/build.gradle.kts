@@ -41,10 +41,10 @@ android {
         // Android 16 (v1.25 — M58: its behaviour changes checked on an API 36 tablet, BUILD_SPEC.md); 37 comes with its own pass.
         //noinspection OldTargetApi
         targetSdk = 36
-        // -PversionCodeOverride=35 builds a copy that reads as newer than the one installed, for the
+        // -PversionCodeOverride=36 builds a copy that reads as newer than the one installed, for the
         // updater's emulator test (README > Updates); every real build takes the number below.
-        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 34
-        versionName = "1.24"
+        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 35
+        versionName = "1.25"
     }
 
     signingConfigs {

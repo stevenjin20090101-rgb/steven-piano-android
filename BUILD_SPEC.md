@@ -9204,3 +9204,19 @@ compiler's new Kotlin 2.4 warnings are in `web/relay/` (`RelayClient.kt`, `Relay
 - The lock against the emulated piano: an open piano claimed, the key proved on the next connections, a piano locked to
   another device read only with Retry, a claim in its pairing window, guest play with its time left, Unlock's question
   and the piano open after it; the System page's amber Debugging row ("USB").
+
+## The release: 1.25 (versionCode 35)
+
+M59 (merged as `9398b80`) and M58 (merged as `f9be4d9`; the DESIGN.md and BUILD_SPEC.md tails kept both). Full suite on
+the merged tree with M58's toolchain (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.21, target SDK 36): 1,688 tests green (12
+skipped); lint "No issues found".
+Smoke pass on the demo emulator (`steven_piano_tablet`, cold-booted with `-no-snapshot-load -no-audio` because its
+snapshot no longer loads; debug build installed over the 1.24-era build):
+- target SDK 36;
+- the thin rail with "Steven Piano" under the mark (TalkBack word "Connected");
+- Clair de lune played through `LockGate`: the emulated piano has no lock, so the trust is Open; the rail word became
+  "Sending notes to the piano" and the Sent to piano capsule showed;
+- Pause turned the dot dark.
+M58's own pass on the API 36 tablet AVD is listed in its section (lock flow, debugging warning, sheets, predictive back,
+dataSync timeout, chord rotation, kiosk with a silent update, reboot).
+Not seen: the lock against real firmware 2.1.0 (published only once 1.25 is on the school tablet), the school tablet.

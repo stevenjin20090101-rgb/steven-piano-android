@@ -295,5 +295,14 @@
     "minSdk": 26,
     "tag": "v1.24",
     "publishedAt": "2026-10-13"
+  },
+  {
+    "versionCode": 35,
+    "versionName": "1.25",
+    "notes": "A new look, Android 16, and the piano's Bluetooth lock. The tablet borrows the web panel's look: a thin glass rail with the Steven Piano mark, line icons on every Piano row, cards with a thin edge, and Quiet times as a week calendar with today and the time now (tap a block to edit it). The dot by the mark is dark when the piano is connected and turns red only while notes go to the piano. The app now targets Android 16, and System warns in amber when USB or wireless debugging is on. Ready for the piano's Bluetooth lock (firmware 2.1.0, next): the tablet claims the piano and proves itself on every connection, so other phones can't play it or change its settings. Firmware and status gains Let another device pair, Unlock the piano, and Let anyone play for 1 hour (for the iPad).",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.25/steven-piano-1.25.apk",
+    "minSdk": 26,
+    "tag": "v1.25",
+    "draft": true
   }
 ]
