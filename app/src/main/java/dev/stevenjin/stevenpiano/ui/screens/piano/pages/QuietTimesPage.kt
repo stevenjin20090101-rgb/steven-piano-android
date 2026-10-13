@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
@@ -45,9 +46,9 @@ import dev.stevenjin.stevenpiano.schedule.QuietTimes
 import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
+import dev.stevenjin.stevenpiano.ui.components.Card
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.Hairline
-import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.SectionEyebrow
 import dev.stevenjin.stevenpiano.ui.components.SectionRule
@@ -65,11 +66,16 @@ import java.time.ZonedDateTime
 /** With no section yet. */
 const val NO_SECTIONS = "No quiet times yet: the piano plays whenever someone asks it to."
 
+/** Before the sections have been read (v1.25 — M59). */
+const val READING_SECTIONS = "Reading the quiet times…"
+
 /**
- * Quiet times (DESIGN.md › v1.20 — M54), in the PLAYING group where Schedule was: at the top the quiet now, "Quiet now ·
- * until 9:30" with Play anyway, or "Next quiet time 9:40"; the week at a glance ([QuietWeek]); a card a section (its
- * name, its days, its blocks as chips, Edit); Add section, with what quiet times do. The editor is [QuietEditorSheet].
- * Behind the kiosk PIN as the other pages are (the page shows locked until it is given).
+ * Quiet times (DESIGN.md › v1.20 — M54, v1.25 — M59), in the PLAYING group where Schedule was, as wide as the page: at
+ * the top the quiet now beside the moon, "Quiet now · until 9:30" with Play anyway, or "Next quiet time 9:40"; the week
+ * as a calendar ([QuietWeek]), whose blocks open their section's editor; under SECTIONS a card a section (its name over
+ * its days, Edit, its blocks as chips), "Reading the quiet times…" until they are read; Add section, with what quiet
+ * times do. The editor is [QuietEditorSheet]. Behind the kiosk PIN as the other pages are (the page shows locked until
+ * it is given).
  */
 @Composable
 fun QuietTimesPage() {
@@ -90,7 +96,7 @@ fun QuietTimesPage() {
                 .padding(start = 16.dp, end = 16.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(painterResource(R.drawable.ic_moon), contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalTertiary.current)
+            Icon(painterResource(R.drawable.ic_g_moon), contentDescription = null, modifier = Modifier.size(24.dp), tint = LocalTertiary.current)
             Spacer(Modifier.width(12.dp))
             Text(
                 QuietCopy.status(quiet, ZonedDateTime.now()),
@@ -101,13 +107,20 @@ fun QuietTimesPage() {
             if (quiet.holds) ActionButton(PageRows.PLAY_ANYWAY.label, onClick = playAnyway)
         }
     }
-    QuietWeek(sections, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-    if (sections.isEmpty()) {
-        SectionRule()
-        if (rows != null) NoteLine(NO_SECTIONS)
-    } else {
-        SectionEyebrow("Sections")
-        sections.forEachIndexed { i, section -> SectionCard(section, onEdit = { editing = i }) }
+    QuietWeek(sections, onEdit = { editing = it }, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+    when {
+        rows == null -> {
+            SectionRule()
+            NoteLine(READING_SECTIONS)
+        }
+        sections.isEmpty() -> {
+            SectionRule()
+            NoteLine(NO_SECTIONS)
+        }
+        else -> {
+            SectionEyebrow("Sections", rule = false)
+            sections.forEachIndexed { i, section -> SectionCard(section, onEdit = { editing = i }) }
+        }
     }
     Anchored(PageRows.ADD_SECTION.anchor) {
         ActionRow(note = QuietCopy.NOTE) {
@@ -121,25 +134,28 @@ fun QuietTimesPage() {
     }
 }
 
-/** A section: its name over its days, Edit at the end, and its blocks as chips ("8:40–9:30") under them. */
+/**
+ * A section on its [Card] (v1.25 — M59), 12 dp from the next: its name (medium) over its days, Edit at the end, and its
+ * blocks as chips ("8:40–9:30") 6 dp under them.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SectionCard(section: QuietSection, onEdit: () -> Unit) {
-    Column(
+    Card(
         Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            .fillMaxWidth(),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(section.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-                Eyebrow(ScheduleCopy.days(section.days), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
+                Text(section.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface)
+                Eyebrow(ScheduleCopy.days(section.days), Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
             }
             Spacer(Modifier.width(16.dp))
             ActionButton("Edit", onClick = onEdit, description = "Edit ${section.name}")
         }
         FlowRow(
-            Modifier.padding(top = 10.dp),
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -155,7 +171,6 @@ private fun SectionCard(section: QuietSection, onEdit: () -> Unit) {
             }
         }
     }
-    HairlineDivider(startInset = 16.dp)
 }
 
 private const val NONE = -1
