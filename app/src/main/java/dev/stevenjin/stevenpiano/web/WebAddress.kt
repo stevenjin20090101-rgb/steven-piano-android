@@ -20,8 +20,9 @@ data class NetInterface(val name: String, val addresses: List<InetAddress>, val 
 /**
  * Where the web service listens (BUILD_SPEC.md › v1.5.1 — M18 › Binding): [tailnet], the tablet's
  * Tailscale address, serves the whole panel; [wifi], its address on the Wi-Fi, serves guests only
- * (the request page, the poster, the public API) unless Panel on Wi-Fi too is on. Either may be
- * missing. Never the any-address, never IPv6, never loopback.
+ * (the request page, the poster, the public API), always since 1.24 (M56: Panel on Wi-Fi too, which
+ * sent the PIN and the session over plain HTTP, is gone). Either may be missing. Never the
+ * any-address, never IPv6, never loopback.
  */
 data class WebChoice(val tailnet: Inet4Address?, val wifi: Inet4Address?) {
     val isEmpty: Boolean get() = tailnet == null && wifi == null
@@ -38,13 +39,13 @@ object WebAddress {
     const val LOOPBACK = "127.0.0.1"
 
     /**
-     * The listeners for [choice]: the tailnet address with the whole panel; the Wi-Fi address with
-     * guests only unless [panelOnWifi]; and with [loopback] (a debug build on an emulator) the
-     * loopback address, answering to "localhost" too. Never the any-address.
+     * The listeners for [choice] (v1.24 — M56): the tailnet address with the whole panel; the Wi-Fi
+     * address with guests only, always; and with [loopback] (a debug build on an emulator) the
+     * loopback address with the whole panel, answering to "localhost" too. Never the any-address.
      */
-    fun plan(choice: WebChoice, panelOnWifi: Boolean, loopback: Boolean): List<ListenerPlan> = listOfNotNull(
+    fun plan(choice: WebChoice, loopback: Boolean): List<ListenerPlan> = listOfNotNull(
         choice.tailnet?.let { ListenerPlan(it.hostAddress!!, guestOnly = false) },
-        choice.wifi?.let { ListenerPlan(it.hostAddress!!, guestOnly = !panelOnWifi) },
+        choice.wifi?.let { ListenerPlan(it.hostAddress!!, guestOnly = true) },
         if (loopback) ListenerPlan(LOOPBACK, guestOnly = false, names = listOf("localhost")) else null,
     )
 
@@ -85,9 +86,6 @@ object WebAddress {
         val b1 = address.address[1].toInt() and 0xFF
         return b0 == 10 || (b0 == 172 && b1 in 16..31) || (b0 == 192 && b1 == 168)
     }
-
-    /** `http://100.101.2.3:8737` and [path] after it. */
-    fun url(address: InetAddress, path: String = ""): String = "http://${address.hostAddress}:$PORT$path"
 
     /** The device's interfaces now; none when Android will not say. */
     fun list(): List<NetInterface> = try {

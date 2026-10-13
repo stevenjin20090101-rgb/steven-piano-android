@@ -218,7 +218,6 @@ object DiagnosticsText {
         line("webEnabled", s.webEnabled)
         line("webGuests", s.webGuests)
         line("webApproveFirst", s.webApproveFirst)
-        line("webOnWifi", s.webOnWifi)
         line("webHostName", s.webHostName)
         line("webPinSet", s.webPinSet)
         line("kioskEnabled", s.kioskEnabled)

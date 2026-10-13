@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.web.relay
 
+import dev.stevenjin.stevenpiano.web.Sessions
 import dev.stevenjin.stevenpiano.web.WebCookies
 import dev.stevenjin.stevenpiano.web.WebServer
 import dev.stevenjin.stevenpiano.web.WebSocketHub
@@ -102,9 +103,9 @@ interface StatusSource {
  *   [WebServer.serveRelayed] on a pool of [THREADS] threads, their bodies through a [BodyPipe] under
  *   the hello's credit window; the answer goes back as `res`, its chunks and its end. At most
  *   [MAX_IN_FLIGHT] at once (the relay's own cap): past it, 503 busy at once.
- * - **Browser sockets** are admitted as the listeners' are ([WebServer.admitSocket]: a session, the
- *   panel's own origin, the relay's host) and attached to the [hub] (at most four); what the hub
- *   sends goes out as `ws.text`.
+ * - **Browser sockets** are admitted as the listeners' are ([WebServer.admitSocket]: a session opened
+ *   through the relay, the panel's own origin, the relay's host) and attached to the [hub] (at most
+ *   four); what the hub sends goes out as `ws.text`.
  * - **Console commands** go to [commands]; **a new secret** to [secrets], acknowledged once kept.
  * - **Status**: [status]'s report on hello, every [STATUS_EVERY_MS] and at most [statusSettleMs]
  *   after a change.
@@ -457,7 +458,7 @@ class RelayClient(
             val verdict = if (open.headers["host"]?.lowercase() != hello.host) {
                 403
             } else {
-                server.admitSocket(cookies, open.headers["origin"], "${cfg.scheme}://${hello.host}")
+                server.admitSocket(cookies, open.headers["origin"], "${cfg.scheme}://${hello.host}", Sessions.Transport.RELAY)   // the relay's sessions alone (v1.24 — M56)
             }
             if (verdict != WebServer.SOCKET_ADMITTED) {
                 send(RelayMessage.WsRefuse(open.id, verdict))

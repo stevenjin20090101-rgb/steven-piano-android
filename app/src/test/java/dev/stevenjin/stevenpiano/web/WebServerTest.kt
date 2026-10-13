@@ -113,12 +113,13 @@ class WebServerTest {
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
         assertEquals(
-            "the table's thirty-six routes that change something (the schedules' three from 1.6.2, gone since 1.20 but still behind the checks, " +
-                "Studio's three from 1.7, the System page's two and the cover picker's three from 1.18, the quiet times' two from 1.20, " +
-                "listening's and the key test's four from 1.23)",
-            36,
+            "the table's thirty-four routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
+                "three from 1.18, the quiet times' two from 1.20, listening's and the key test's four from 1.23, Confirm it's you from 1.24; " +
+                "the schedules' three, gone since 1.20, left the table in 1.24)",
+            34,
             writes.size,
         )
+        assertTrue(writes.any { it.sample == "/api/confirm" } && server.routes.none { it.sample.startsWith("/api/schedules") })
         for (route in writes) {
             val (path, body) = sample(route)
             val method = route.method.name
@@ -146,8 +147,8 @@ class WebServerTest {
         }
         val token = login(http)
         assertEquals(200, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
-        now += Sessions.IDLE_MS
-        assertEquals("a year without a request", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
+        now += Sessions.VALID_MS
+        assertEquals("ninety days after the sign-in", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
     }
 
     @Test
@@ -184,7 +185,7 @@ class WebServerTest {
         assertEquals(204, out.status)
         assertTrue(out.all("set-cookie").single().contains("Max-Age=0"))
         assertEquals("logged out", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
-        assertEquals("and forgotten", emptyMap<String, Long>(), store.saved)
+        assertEquals("and forgotten", emptyMap<String, SessionRecord>(), store.saved)
     }
 
     @Test
@@ -638,7 +639,8 @@ class WebServerTest {
             assertEquals(path, 404, http.get(path).status)
         }
         assertEquals("a file's route is GET only", 405, http.send("POST", "/app.js", "x".toByteArray()).status)
-        assertTrue("only names on the list were ever read: $asked", WebAssets.NAMES.containsAll(asked.toSet()))
+        val listed = (WebAssets.PANEL.values + WebAssets.PUBLIC.values + WebAssets.POSTER + WebAssets.FONT).map { it.name }
+        assertTrue("only names on the list were ever read: $asked", listed.containsAll(asked.toSet()))
     }
 
     @Test
@@ -756,7 +758,7 @@ class WebServerTest {
     }
 
     @Test
-    fun `a Wi-Fi listener without Panel on Wi-Fi too serves guests only`() {
+    fun `a Wi-Fi listener serves guests only (always, since Panel on Wi-Fi too went in 1_24)`() {
         val (server, http) = start(guestOnly = true)
         backend.pin = PIN
         for (path in listOf("/", "/app.js", "/api/state", "/api/library", "/api/piano", "/views.js", "/api/now/notes", "/api/font/bravura.otf")) assertEquals(path, 404, http.get(path).status)
@@ -989,25 +991,16 @@ class WebServerTest {
     }
 
     @Test
-    fun `timed plays are gone (v1_20 M54), the schedules' writes answer 410 and reach nothing, and their read lists none`() {
+    fun `timed plays' routes are gone (v1_24 M56, removed in 1_20), and reach nothing`() {
         val (_, http) = start()
         val token = login(http)
         backend.calls.clear()
-        val listed = http.get("/api/schedules", mapOf("Cookie" to "sp_session=$token"))
-        assertEquals(200, listed.status)
-        val none = listed.json()
-        assertEquals(0, none.getJSONArray("schedules").length())
-        assertTrue(none.isNull("next") && none.isNull("last") && none.getBoolean("exactAlarms"))
+        assertEquals(404, http.get("/api/schedules", mapOf("Cookie" to "sp_session=$token")).status)
         val calm = """{"days":31,"startMinute":750,"kind":"channel","target":"calm","endMinute":795,"volumePct":70}"""
         for ((method, path) in listOf("POST" to "/api/schedules", "PUT" to "/api/schedules/1", "DELETE" to "/api/schedules/1")) {
-            val gone = http.api(method, path, if (method == "DELETE") null else calm, session = token)
-            assertEquals("$method $path", 410, gone.status)
-            assertEquals("gone", gone.json().getString("error"))
-            assertEquals("Timed plays were removed in 1.20.", gone.json().getString("message"))
+            assertEquals("$method $path", 404, http.api(method, path, if (method == "DELETE") null else calm, session = token).status)
         }
         assertEquals("nothing reached the app", emptyList<String>(), backend.calls.toList())
-        val state = http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).json()
-        assertTrue("the state's schedule stays for older pages, never with a next start", state.getJSONObject("schedule").isNull("next"))
     }
 
     @Test
@@ -1028,7 +1021,7 @@ class WebServerTest {
         assertEquals(204, http.api("POST", "/api/listen/start", session = token).status)
         assertEquals(204, http.api("POST", "/api/keytest/start", session = token).status)
         assertEquals("the microphone's frames go to the session that asked", listOf(token, token), backend.askedBy.toList())
-        val other = sessions.open()
+        val other = sessions.open(Sessions.Transport.TAILNET)
         assertEquals("any signed-in session may stop it", 204, http.api("POST", "/api/listen/stop", session = other).status)
         assertEquals(204, http.api("POST", "/api/keytest/stop", session = other).status)
         assertEquals(listOf("listen start", "keytest start", "listen stop", "keytest stop"), backend.calls.toList())
@@ -1072,6 +1065,146 @@ class WebServerTest {
         assertEquals(84, test.getInt("total"))
         assertFalse(test.getJSONArray("results").getJSONObject(1).getBoolean("heard"))
         assertTrue(test.isNull("key") && test.isNull("stopped"))
+    }
+
+    // ---- A safer sign-in (v1.24 — M56) ----------------------------------------------------------------------------------
+
+    @Test
+    fun `a session ends ninety days after its sign-in despite daily use, and its browser then signs in as a known device (M56)`() {
+        val (_, http) = start()
+        val token = login(http)
+        val cookie = mapOf("Cookie" to "sp_session=$token")
+        val day = 24 * 60 * 60 * 1000L
+        repeat(89) {
+            now += day
+            assertEquals("day ${it + 1}, used daily", 200, http.get("/api/state", cookie).status)
+        }
+        now += day
+        assertEquals("ninety days after the sign-in", 401, http.get("/api/state", cookie).status)
+        assertEquals(401, http.api("POST", "/api/play", """{"pieceId":1}""", session = token).status)
+        // Everyone's gate shut (wrong PINs from many addresses): a browser without the cookie waits, the known device does not.
+        repeat(LoginGuard.GLOBAL_THRESHOLD) { guard.failed("10.7.${it / 4}.${it % 4}") }
+        assertEquals("without the cookie", 429, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
+        val known = http.api("POST", "/api/login", """{"pin":"482913"}""", session = token)
+        assertEquals(204, known.status)
+        val fresh = known.cookie("sp_session")!!
+        assertFalse(fresh == token)
+        assertEquals("one Set-Cookie", 1, known.all("set-cookie").size)
+        assertEquals(200, http.get("/api/state", mapOf("Cookie" to "sp_session=$fresh")).status)
+        assertFalse("its new session took the old one's place", sessions.knownDevice(token, Sessions.Transport.TAILNET))
+    }
+
+    @Test
+    fun `a known device is forgotten after five wrong PINs in a row, and a right PIN no longer reopens everyone's gate, a quiet hour does (M56)`() {
+        val (_, http) = start()
+        val token = login(http)
+        now += Sessions.VALID_MS   // its session over, its browser a known device
+        repeat(LoginGuard.GLOBAL_THRESHOLD) { guard.failed("10.7.${it / 4}.${it % 4}") }
+        repeat(LoginGuard.THRESHOLD - 1) {
+            val wrong = http.api("POST", "/api/login", """{"pin":"000000"}""", session = token)
+            assertEquals("weighed outside everyone's shut gate", 401, wrong.status)
+            assertEquals(0, wrong.json().getInt("retryAfter"))
+        }
+        assertTrue(sessions.knownDevice(token, Sessions.Transport.TAILNET))
+        assertEquals(401, http.api("POST", "/api/login", """{"pin":"000000"}""", session = token).status)
+        assertFalse("the fifth in a row forgets it", sessions.knownDevice(token, Sessions.Transport.TAILNET))
+        assertEquals("from now on it meets everyone's gate", 429, http.api("POST", "/api/login", """{"pin":"482913"}""", session = token).status)
+
+        // Once the gate's wait is over, the owner signs in; everyone's count stands, so the next wrong PIN shuts it again.
+        now += guard.waitMs("10.9.9.9")
+        assertEquals(204, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
+        assertTrue("one more wrong PIN shuts it again", guard.failed("10.8.0.1") > 0)
+        assertEquals(429, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
+        // An hour without a wrong PIN forgets everyone's count.
+        now += LoginGuard.GLOBAL_QUIET_MS
+        assertEquals(0L, guard.failed("10.8.0.2"))
+        assertEquals(204, http.api("POST", "/api/login", """{"pin":"482913"}""").status)
+    }
+
+    @Test
+    fun `a session opened through the relay gets 401 on a listener, over HTTP and the socket (M56)`() {
+        val (server, http) = start()
+        backend.pin = PIN
+        val relayed = sessions.open(Sessions.Transport.RELAY)
+        val tailnet = sessions.open(Sessions.Transport.TAILNET)
+        assertEquals(401, http.get("/api/state", mapOf("Cookie" to "sp_session=$relayed")).status)
+        assertEquals(401, http.api("POST", "/api/play", """{"pieceId":1}""", session = relayed).status)
+        assertEquals(401, http.api("POST", "/api/confirm", """{"pin":"482913"}""", session = relayed).status)
+        assertEquals("the socket", 401, handshake(http, server.listeningPort, cookie = relayed).status)
+        assertEquals(200, http.get("/api/state", mapOf("Cookie" to "sp_session=$tailnet")).status)
+        assertEquals("admitted (then no room in these tests)", 503, handshake(http, server.listeningPort, cookie = tailnet).status)
+        assertEquals("nothing reached the app", emptyList<String>(), backend.calls.toList())
+    }
+
+    @Test
+    fun `listen, the key test and Install the update ask the session to confirm it's you, five minutes at a time, and covers and reconnect never do (M56)`() {
+        val (_, http) = start()
+        val token = login(http)
+        backend.calls.clear()
+        assertEquals("a fresh sign-in counts as a confirm", 204, http.api("POST", "/api/listen/start", session = token).status)
+        now += Sessions.CONFIRM_MS
+        val asking = listOf("/api/listen/start" to "{}", "/api/keytest/start" to "{}", "/api/system/tool" to """{"name":"update"}""")
+        for ((path, body) in asking) {
+            val answer = http.api("POST", path, body, session = token)
+            assertEquals(path, 403, answer.status)
+            assertEquals(path, "confirm", answer.json().getString("error"))
+        }
+        assertEquals(204, http.api("POST", "/api/system/tool", """{"name":"covers"}""", session = token).status)
+        assertEquals(204, http.api("POST", "/api/system/tool", """{"name":"reconnect"}""", session = token).status)
+        assertEquals("a stop never asks", 204, http.api("POST", "/api/listen/stop", session = token).status)
+        assertEquals(204, http.api("POST", "/api/keytest/stop", session = token).status)
+        assertEquals(
+            "what asked reached nothing",
+            listOf("listen start", "system tool covers", "system tool reconnect", "listen stop", "keytest stop"),
+            backend.calls.toList(),
+        )
+        assertEquals(204, http.api("POST", "/api/confirm", """{"pin":"482913"}""", session = token).status)
+        backend.calls.clear()
+        for ((path, body) in asking) assertEquals(path, 204, http.api("POST", path, body, session = token).status)
+        assertEquals(listOf("listen start", "keytest start", "system tool update"), backend.calls.toList())
+        now += Sessions.CONFIRM_MS
+        for ((path, body) in asking) assertEquals("$path, five minutes on", 403, http.api("POST", path, body, session = token).status)
+        // Another session's confirm is its own.
+        val other = sessions.open(Sessions.Transport.TAILNET)
+        assertEquals(204, http.api("POST", "/api/listen/start", session = other).status)
+        assertEquals(403, http.api("POST", "/api/listen/start", session = token).status)
+    }
+
+    @Test
+    fun `confirming needs the session, the header and the panel's origin, a wrong PIN is 403, and the third in a row ends the session (M56)`() {
+        val (server, http) = start()
+        val token = login(http)
+        val pin = """{"pin":"482913"}"""
+        assertEquals("without a session", 401, http.api("POST", "/api/confirm", pin).status)
+        assertEquals("without the header", 403, http.api("POST", "/api/confirm", pin, session = token, panel = false).status)
+        assertEquals("from another site", 403, http.api("POST", "/api/confirm", pin, session = token, extra = mapOf("Origin" to "http://evil.example")).status)
+        assertEquals("a foreign Host", 403, http.api("POST", "/api/confirm", pin, session = token, extra = mapOf("Host" to "evil.example:${server.listeningPort}")).status)
+        assertEquals("from the panel's page", 204, http.api("POST", "/api/confirm", pin, session = token, extra = mapOf("Origin" to "http://127.0.0.1:${server.listeningPort}")).status)
+        assertEquals("POST only", 405, http.get("/api/confirm", mapOf("Cookie" to "sp_session=$token")).status)
+        for (bad in listOf("{}", """{"pin":482913}""", """{"pin":"482913","for":"listen"}""")) assertEquals(bad, 400, http.api("POST", "/api/confirm", bad, session = token).status)
+        // Wrong: 403, never 401 (which sends the panel to its sign-in), its wait with it; the third in a row ends the session.
+        repeat(Sessions.CONFIRM_TRIES - 1) {
+            val wrong = http.api("POST", "/api/confirm", """{"pin":"000000"}""", session = token)
+            assertEquals(403, wrong.status)
+            assertEquals("wrong", wrong.json().getString("error"))
+            assertEquals(0, wrong.json().getInt("retryAfter"))
+            assertTrue("no cookie touched", wrong.all("set-cookie").isEmpty())
+        }
+        assertEquals("still signed in", 200, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
+        val third = http.api("POST", "/api/confirm", """{"pin":"000000"}""", session = token)
+        assertEquals(401, third.status)
+        assertEquals("session", third.json().getString("error"))
+        assertTrue("its cookie cleared, the answer's one Set-Cookie", third.all("set-cookie").single().contains("sp_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"))
+        assertEquals("the session has ended", 401, http.get("/api/state", mapOf("Cookie" to "sp_session=$token")).status)
+        assertFalse("nor a known device", sessions.knownDevice(token, Sessions.Transport.TAILNET))
+        assertEquals("outside everyone's gate: nobody else waits", 0L, guard.waitMs("10.9.9.9"))
+        // A right PIN between wrong ones starts the count again.
+        val other = login(http)
+        repeat(Sessions.CONFIRM_TRIES - 1) { assertEquals(403, http.api("POST", "/api/confirm", """{"pin":"000000"}""", session = other).status) }
+        assertEquals(204, http.api("POST", "/api/confirm", pin, session = other).status)
+        repeat(Sessions.CONFIRM_TRIES - 1) { assertEquals(403, http.api("POST", "/api/confirm", """{"pin":"000000"}""", session = other).status) }
+        assertEquals(200, http.get("/api/state", mapOf("Cookie" to "sp_session=$other")).status)
+        assertEquals("nothing reached the app", emptyList<String>(), backend.calls.toList())
     }
 
     @Test
@@ -1268,13 +1401,13 @@ class WebServerTest {
         }
         socket.use {
             assertTrue(runCatching { it.accept() }.exceptionOrNull() is java.io.IOException)
-            assertEquals(1, it.failuresInARow)
+            assertEquals("the first failure in a row pauses 20 ms", listOf(20L), pauses.toList())
             failing = false
             it.accept().close()
-            assertEquals("a success starts the count again", 0, it.failuresInARow)
             failing = true
             repeat(SteadyServerSocket.MAX_ACCEPT_FAILURES) { _ -> assertTrue(runCatching { it.accept() }.isFailure) }
             assertTrue("closed after twenty in a row, which ends NanoHTTPD's loop", it.isClosed)
+            // A success starts the count again: the twenty after it pause from 20 ms again (the twentieth closes instead).
             val expected = listOf(20L) + (1 until SteadyServerSocket.MAX_ACCEPT_FAILURES).map { n -> minOf(n * 20L, 500L) }
             assertEquals(expected, pauses)
             assertTrue("never more than half a second at a time", pauses.all { ms -> ms <= SteadyServerSocket.MAX_ACCEPT_PAUSE_MS })

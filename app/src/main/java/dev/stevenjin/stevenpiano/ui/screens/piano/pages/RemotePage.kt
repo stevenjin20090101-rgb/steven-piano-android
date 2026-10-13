@@ -50,19 +50,17 @@ import dev.stevenjin.stevenpiano.web.WebStatus
 /** Under the Web panel switch until a PIN exists. */
 const val SET_A_PIN_FIRST = "Set a PIN first"
 
-/** Under Also on Wi-Fi: what it costs. */
-const val WIFI_NOTE = "Over Wi-Fi the PIN travels unencrypted"
-
 /** Under the address: what the QR does. */
 private const val SCAN_NOTE = "Scan it with your phone, or tap it to show it large"
 
 /**
  * Web panel (Remote control until v1.13 — M31b; DESIGN.md › v1.5.1 — M18). PANEL: the Web panel switch
  * (disabled with "Set a PIN first" until a PIN exists); while it is on, the panel's address in Body with
- * its QR code beside it at 96 dp (a tap shows it large); Set a PIN / Change PIN (six digits, twice); Also on
- * Wi-Fi with what it costs. OVER THE INTERNET (CLOUD until v1.13; v1.10 — M26): Steven Piano Cloud
- * ([CloudSection]), which adds "· Internet" to the row. The guests' switches and the poster have their own
- * page since v1.13 ([GuestsPage]). The hub's row reads "On · 100.101.2.3" or "Off".
+ * its QR code beside it at 96 dp (a tap shows it large); Set a PIN / Change PIN (six digits, twice). Also on
+ * Wi-Fi is gone since 1.24 (M56): the panel needs Tailscale or the internet link. OVER THE INTERNET (CLOUD
+ * until v1.13; v1.10 — M26): Steven Piano Cloud ([CloudSection]), which adds "· Internet" to the row. The
+ * guests' switches and the poster have their own page since v1.13 ([GuestsPage]). The hub's row reads
+ * "On · 100.101.2.3" or "Off".
  */
 @Composable
 fun RemotePage(settings: PianoSettings, web: WebStatus, vm: PianoViewModel) {
@@ -85,7 +83,6 @@ fun RemotePage(settings: PianoSettings, web: WebStatus, vm: PianoViewModel) {
             ActionButton(if (settings.webPinSet) "Change PIN" else "Set a PIN", onClick = { pinSheet = true })
         }
     }
-    Anchored(PageRows.ALSO_ON_WIFI.anchor) { SwitchRow(PageRows.ALSO_ON_WIFI.label, settings.webOnWifi, vm::setWebOnWifi, note = WIFI_NOTE) }
 
     CloudSection(settings, vm)
 
@@ -117,7 +114,7 @@ private fun AddressRow(web: WebStatus, onShowLarge: () -> Unit) {
             when {
                 web.problem != null -> web.problem
                 !web.running -> "Starting…"
-                web.wifi != null -> "No Tailscale address yet: the panel waits for one (or for Also on Wi-Fi). Guests can use ${web.guestUrl}"
+                web.wifi != null -> "No Tailscale address yet: the panel needs Tailscale. Guests can use ${web.guestUrl}"
                 else -> "Waiting for a network"
             },
         )

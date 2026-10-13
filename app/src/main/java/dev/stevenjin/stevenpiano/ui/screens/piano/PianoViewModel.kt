@@ -321,8 +321,6 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     fun setWebApproveFirst(on: Boolean) = edit { setWebApproveFirst(on) }
 
-    fun setWebOnWifi(on: Boolean) = edit { setWebOnWifi(on) }
-
     /** A new panel PIN: hashed and kept in the app's scope, and every session of the panel ends. */
     fun setWebPin(pin: String) {
         graph.appScope.launch { graph.web.setPin(pin) }

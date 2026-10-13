@@ -597,7 +597,7 @@ data class WebScheduleState(val next: String? = null, val revision: Int = 0)
 /**
  * The preferences the panel may change (`PUT /api/settings`); null leaves one as it is. The
  * playback preferences are clamped as the app's own setters clamp them; [webHostName] "" forgets
- * the name. The PIN, the Web control switch and Panel on Wi-Fi too are the tablet's alone.
+ * the name. The PIN and the Web control switch are the tablet's alone.
  */
 data class SettingsChange(
     val preRollMs: Int? = null,

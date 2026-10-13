@@ -45,9 +45,9 @@ class AndroidAssets(private val context: Context) : AssetSource {
 /**
  * The panel's static files, served from an allow-list by exact request path, never by resolving the
  * path itself: there is no directory listing, no `..`, and no file the list does not name. [PANEL]
- * is the panel's page and script (the Tailscale listener, or Wi-Fi with Panel on Wi-Fi too);
- * [PUBLIC] is what guests need, on every listener. Both need no session: the page shows the PIN gate,
- * and neither file holds anything secret.
+ * is the panel's page and script (the Tailscale listener and the relay; never the Wi-Fi's, since
+ * 1.24); [PUBLIC] is what guests need, on every listener. Both need no session: the page shows the
+ * PIN gate, and neither file holds anything secret.
  */
 object WebAssets {
     /** A file of `assets/web/` and the type it is sent as. */
@@ -103,7 +103,4 @@ object WebAssets {
 
     /** The first eight hex digits of the font's SHA-256: its address's version (the panel's `score.js` names the same). */
     const val FONT_VERSION = "cdf0f893"
-
-    /** Every file the server may ever read. */
-    val NAMES: Set<String> = (PANEL.values + PUBLIC.values + POSTER + FONT).map { it.name }.toSet()
 }

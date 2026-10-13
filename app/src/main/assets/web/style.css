@@ -877,6 +877,14 @@ button, input, select { font: inherit; color: inherit; }
 
 .confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 
+/* "Confirm it's you" (v1.24 — M56): the gate's six-digit field across the dialog, and the line under it for a wrong PIN and
+   its countdown, its height kept so the buttons don't jump. */
+.confirm .pin-field { justify-self: stretch; width: auto; height: 52px; margin-top: 8px; font-size: 24px; letter-spacing: 10px; }
+
+.confirm .pin-field:disabled { color: var(--secondary); }
+
+.confirm #confirm-note { min-height: 22px; }
+
 /* The panel's own sheets: a head (the name, Close) over a body that scrolls; a card in the window's middle, and on a
    phone a sheet at its foot. */
 .panel-sheet { width: min(520px, calc(100vw - 32px)); max-width: none; max-height: min(84vh, 760px); border-radius: 24px; overflow: hidden; }

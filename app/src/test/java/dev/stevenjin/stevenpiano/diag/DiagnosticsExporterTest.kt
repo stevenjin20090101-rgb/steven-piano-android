@@ -84,7 +84,7 @@ class DiagnosticsExporterTest {
         assertTrue("preRollMs = 2000\n" in prefs)
         assertTrue("channelVolumes = {}\n" in prefs)
         assertTrue("appearance = SYSTEM\ndisplayModeAfterMinute = false\nstandbyCanvas = BLACK\nstandbyShows = ART_AND_NOTES\nalbumBackdrop = true\n" in prefs)
-        assertTrue("webEnabled = true\nwebGuests = false\nwebApproveFirst = true\nwebOnWifi = false\nwebHostName = (none)\nwebPinSet = true\n" in prefs)
+        assertTrue("webEnabled = true\nwebGuests = false\nwebApproveFirst = true\nwebHostName = (none)\nwebPinSet = true\n" in prefs)
         assertTrue("kioskEnabled = false\nkioskPinSet = false\n" in prefs)
         assertFalse("the PINs' hashes and salts never travel", "Pin" in prefs.replace("webPinSet", "").replace("kioskPinSet", ""))
         assertTrue("tabletSound = WHEN_NOT_CONNECTED\ntabletVolume = 60\n" in prefs)
@@ -93,8 +93,8 @@ class DiagnosticsExporterTest {
         assertFalse("nor anything of its secret", "cloudSecret" in prefs)
         assertTrue("the library pack loaded (v1.10 — M27)", "cloudEnrolled = true\nlibraryPackVersion = 1\n" in prefs)
         assertEquals(
-            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a), the Library's genre (v1.14 — M37), Album covers (v1.15 — M40), Album colours (M41), how a piece is played's four (v1.16 — M44), Listening from the panel (v1.23 — M55)",
-            55,
+            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a), the Library's genre (v1.14 — M37), Album covers (v1.15 — M40), Album colours (M41), how a piece is played's four (v1.16 — M44), Listening from the panel (v1.23 — M55), less Panel on Wi-Fi too (v1.24 — M56)",
+            54,
             prefs.lines().count { it.isNotEmpty() },
         )
         assertTrue("skipDrumChannel = true\ndynamicRange = NATURAL\nvelocityFloor = 20\nexpression = LIGHT\nrestrikeMs = 0\n" in prefs)

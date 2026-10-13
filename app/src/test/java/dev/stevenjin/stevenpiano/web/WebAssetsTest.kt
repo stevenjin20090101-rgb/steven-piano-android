@@ -74,6 +74,9 @@ class WebAssetsTest {
 
     private fun hex(color: Color) = "#%06X".format(color.toArgb() and 0xFFFFFF)
 
+    /** Every file the server may ever read: the panel's, the guests', the poster's template and the score's font. */
+    private val served: Set<String> = (WebAssets.PANEL.values + WebAssets.PUBLIC.values + WebAssets.POSTER + WebAssets.FONT).map { it.name }.toSet()
+
     @Test
     fun `the stylesheet's two palettes are the app's tokens, value for value`() {
         val css = text("style.css")
@@ -131,7 +134,7 @@ class WebAssetsTest {
     @Test
     fun `every file the server may send exists, carries the banner, and has no inline script, style or handler`() {
         // The font is the one exception: a binary file, carried unmodified (its licence reserves its name), checked below.
-        for (name in WebAssets.NAMES - WebAssets.FONT.name) {
+        for (name in served - WebAssets.FONT.name) {
             val file = File(folder, name)
             assertTrue(name, file.isFile)
             val body = file.readText()
@@ -191,7 +194,7 @@ class WebAssetsTest {
         assertEquals(sha.take(8), WebAssets.FONT_VERSION)
         assertTrue("the panel asks for the same version", text("app.js").contains("const FONT_VERSION = '${WebAssets.FONT_VERSION}';"))
         assertEquals("font/otf", WebAssets.FONT.contentType)
-        assertTrue(WebAssets.FONT.name in WebAssets.NAMES && WebAssets.FONT !in WebAssets.PANEL.values && WebAssets.FONT !in WebAssets.PUBLIC.values)
+        assertTrue(WebAssets.FONT.name in served && WebAssets.FONT !in WebAssets.PANEL.values && WebAssets.FONT !in WebAssets.PUBLIC.values)
         assertTrue(File("../AUTHORS").readText().contains("Bravura music font (app/src/main/res/font/bravura.otf"))
         assertTrue(File("../third_party/bravura/OFL.txt").readText().contains("with Reserved Font Name \"Bravura\""))
         assertTrue("the font face keeps its name", text("score.js").contains("new FontFace('Bravura'"))
@@ -337,7 +340,7 @@ class WebAssetsTest {
         assertFalse("nothing new loops", motion.contains("infinite"))
         assertTrue(app.contains("const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');"))
         // No pure black or white anywhere in the pages' own files (the mark's colours are the icon's own, near-black and near-white).
-        for (name in WebAssets.NAMES - WebAssets.FONT.name) {
+        for (name in served - WebAssets.FONT.name) {
             val body = File(folder, name).readText()
             assertFalse("$name names pure black or white", Regex("#(?:000|fff)(?:000|fff)?\\b", RegexOption.IGNORE_CASE).containsMatchIn(body))
         }
@@ -429,6 +432,24 @@ class WebAssetsTest {
         assertTrue(js.contains("const magnitude = (((mantissa << 3) + 0x84) << exponent) - 0x84;"))
         assertEquals(32_124, Mulaw.decode(0x80.toByte()))
         assertTrue("the mic's glyph in the sprite", text("index.html").contains("<symbol id=\"g-mic\""))
+    }
+
+    // ---- A safer sign-in (v1.24 — M56) -------------------------------------------------------------------------------
+
+    @Test
+    fun `the panel asks for the PIN when the tablet says confirm, sends it from ROOT, and signs out from Settings › Panel (v1_24 M56)`() {
+        val app = text("app.js")
+        assertTrue("call() asks once, then sends again", app.contains("data.error === 'confirm' && !confirmed") && app.contains("return call(method, path, body, true);"))
+        assertTrue(app.contains("call('POST', ROOT + '/api/confirm', { pin }, true)"))
+        for (words in listOf("\"Confirm it's you\"", "`Enter the tablet's PIN to \${confirmFor(path)}.`", "'listen to the room'", "'test every key'", "'install the update'", "action: 'Confirm'")) {
+            assertTrue(words, app.contains(words))
+        }
+        assertTrue("a wrong PIN in the dialog, with the gate's countdown", app.contains("status === 403 && error === 'wrong'") && app.contains("Try again in \${left} s."))
+        assertTrue("the gate's six-digit field", app.contains("class: 'pin-field', type: 'password', inputmode: 'numeric'"))
+        assertTrue(text("style.css").contains(".confirm .pin-field {"))
+        val settings = text("settings.js")
+        assertTrue(settings.contains("await host.post(host.ROOT + '/api/logout');") && settings.contains("text: 'Sign out'"))
+        assertTrue(settings.contains("'This browser only. Other signed-in devices stay signed in.'"))
     }
 
     // ---- Quiet times (v1.20 — M54) ------------------------------------------------------------------------------------

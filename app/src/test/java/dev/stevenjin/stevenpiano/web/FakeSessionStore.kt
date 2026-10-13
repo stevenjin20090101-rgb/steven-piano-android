@@ -9,15 +9,15 @@
 
 package dev.stevenjin.stevenpiano.web
 
-/** The sessions' store in the tests (v1.15 — M42), in memory: the table as last saved. */
+/** The sessions' store in the tests (v1.15 — M42; rows with their transport since v1.24 — M56), in memory: the table as last saved. */
 class FakeSessionStore : SessionStore {
     @Volatile
-    var saved: Map<String, Long> = emptyMap()
+    var saved: Map<String, SessionRecord> = emptyMap()
         private set
 
-    override fun load(): Map<String, Long> = saved
+    override fun load(now: Long): SessionStore.Loaded = SessionStore.Loaded(saved)
 
-    override fun save(sessions: Map<String, Long>) {
+    override fun save(sessions: Map<String, SessionRecord>) {
         saved = LinkedHashMap(sessions)
     }
 }
