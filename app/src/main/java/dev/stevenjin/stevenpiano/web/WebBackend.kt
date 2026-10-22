@@ -15,7 +15,9 @@ import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.piano.LockPhase
 import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.piano.PianoLock
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -27,6 +29,7 @@ import dev.stevenjin.stevenpiano.safety.SafetyLock
 import dev.stevenjin.stevenpiano.safety.SafetyState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import java.io.File
 import java.util.Locale
@@ -494,14 +497,54 @@ data class WebDisplay(
 /** The piano link: its state's name ("connected", "scanning"…) and the piano's name while connected. */
 data class WebLink(val state: String, val name: String? = null)
 
-/** What the piano reported: "unknown", "unsupported" or "ready", its values and facts, and its last refusal. */
+/**
+ * What the piano reported: "unknown", "unsupported" or "ready", its values and facts, and its last refusal; and (v1.27 —
+ * M63) its Bluetooth [lock] as this tablet stands with it ([WebLock], none until the piano has been read).
+ */
 data class WebPianoState(
     val state: String,
     val values: Map<String, String> = emptyMap(),
     val facts: Map<String, String> = emptyMap(),
     val lastError: String? = null,
     val errorAbout: String? = null,
+    val lock: WebLock = WebLock(),
 )
+
+/**
+ * The piano's Bluetooth lock on the panel (v1.27 — M63; the tablet's v1.25 — M58, `firmware/docs/BLE_LOCK.md`), read
+ * only: where this tablet stands ([state]: "none", "reading", "proving", "trusted", "lockedOut" or "notAccepted"), the
+ * piano's own word ([piano]: "open", "claimed" or "pairing"; null before it said, or without the lock), guest play's whole
+ * seconds left, whether this tablet keeps a key for it ([keyStored]), whether its settings may be written now
+ * ([writable]), and why not in the tablet's words ([message], [LockCopy.readOnly]). Never the key, the nonce or the
+ * piano's address.
+ */
+data class WebLock(
+    val state: String = "none",
+    val piano: String? = null,
+    val guestSecondsLeft: Long = 0,
+    val keyStored: Boolean = false,
+    val writable: Boolean = true,
+    val message: String? = null,
+) {
+    companion object {
+        /** [lock] as the panel reads it, guest play's time left counted to [nowMs] (elapsed ms, the lock's own clock). */
+        fun of(lock: PianoLock, nowMs: Long): WebLock = WebLock(
+            state = when (lock.phase) {
+                LockPhase.None -> "none"
+                LockPhase.Reading -> "reading"
+                LockPhase.Proving -> "proving"
+                LockPhase.Trusted -> "trusted"
+                LockPhase.LockedOut -> "lockedOut"
+                LockPhase.NotAccepted -> "notAccepted"
+            },
+            piano = lock.piano?.wire,
+            guestSecondsLeft = lock.guestLeft(nowMs),
+            keyStored = lock.keyStored,
+            writable = lock.writable,
+            message = LockCopy.readOnly(lock),
+        )
+    }
+}
 
 /** `/api/piano`: the state, and the Read status report (null before one; "" when the piano didn't answer). */
 data class WebPiano(val state: WebPianoState, val statusText: String?, val statusReading: Boolean)

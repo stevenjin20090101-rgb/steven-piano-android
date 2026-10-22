@@ -572,6 +572,19 @@ object WebApi {
         .put("facts", JSONObject(p.facts as Map<*, *>))
         .put("lastError", p.lastError ?: JSONObject.NULL)
         .put("errorAbout", p.errorAbout ?: JSONObject.NULL)
+        .put("lock", lock(p.lock))   // v1.27 — M63
+
+    /**
+     * The piano's Bluetooth lock (v1.27 — M63; [WebLock]): `{state, piano, guestSecondsLeft, keyStored, writable, message}`,
+     * read only, on the signed-in routes alone (the state, `/api/piano`). The key, the nonce and the address never travel.
+     */
+    fun lock(l: WebLock): JSONObject = JSONObject()
+        .put("state", l.state)
+        .put("piano", l.piano ?: JSONObject.NULL)
+        .put("guestSecondsLeft", l.guestSecondsLeft)
+        .put("keyStored", l.keyStored)
+        .put("writable", l.writable)
+        .put("message", l.message ?: JSONObject.NULL)
 
     /** `/api/piano`: the state and report, the presets, and the table the page draws its controls from (Sound and touch · Lights and screen · Pedal). */
     fun piano(p: WebPiano): JSONObject = pianoState(p.state)
@@ -652,11 +665,11 @@ object WebApi {
     // ---- The System page (v1.18 — M46) -------------------------------------------------
 
     /**
-     * `GET /api/system`: `{at, app{…}, tablet{…, battery{…}, thermal{…}, memory{…}, storage{…}, cpu{…}, network{…}},
-     * piano{link{state, name, mtu}, state, facts, factsAt, diag{…}}, running[{key, title, state, detail, progress}],
-     * web{sessions, sockets, guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting,
-     * blockedUntil}, power{…}}` (BUILD_SPEC.md › v1.18 — M46; `power`, the 24 V plug, v1.26 — M62: [railFact]). Every
-     * key is always there: what is not known is null.
+     * `GET /api/system`: `{at, app{…}, tablet{…, battery{…}, thermal{…}, memory{…}, storage{…}, cpu{…}, network{…},
+     * debugging{…}}, piano{link{state, name, mtu}, state, facts, factsAt, diag{…}}, running[{key, title, state, detail,
+     * progress}], web{sessions, sockets, guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting,
+     * blockedUntil}, power{…}}` (BUILD_SPEC.md › v1.18 — M46; `power`, the 24 V plug, v1.26 — M62: [railFact];
+     * `debugging {usb, wireless, developer}`, v1.27 — M63). Every key is always there: what is not known is null.
      */
     fun system(s: WebSystem): JSONObject {
         val r = s.reading
@@ -694,7 +707,9 @@ object WebApi {
                         "network",
                         JSONObject().put("online", r.network.online.orNull()).put("transport", r.network.transport.orNull())
                             .put("signalDbm", r.network.signalDbm.orNull()).put("downKbps", r.network.downKbps.orNull()),
-                    ),
+                    )
+                    // v1.27 — M63: USB and wireless debugging, and developer options (the tablet's M58 warning).
+                    .put("debugging", JSONObject().put("usb", r.debug.usb.orNull()).put("wireless", r.debug.wireless.orNull()).put("developer", r.debug.developer.orNull())),
             )
             .put(
                 "piano",

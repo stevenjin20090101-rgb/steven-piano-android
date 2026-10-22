@@ -781,11 +781,11 @@ class AppWebBackend(
             is LinkState.Error -> WebLink("error")
         }
 
-        /** What the piano reported, as the panel reads it. */
-        fun pianoOf(state: PianoState): WebPianoState = when (state) {
+        /** What the piano reported, as the panel reads it; its lock (v1.27 — M63) with guest play's time counted to [nowMs]. */
+        fun pianoOf(state: PianoState, nowMs: Long = android.os.SystemClock.elapsedRealtime()): WebPianoState = when (state) {
             PianoState.Unknown -> WebPianoState("unknown")
             PianoState.Unsupported -> WebPianoState("unsupported")
-            is PianoState.Ready -> WebPianoState("ready", state.values, state.facts, state.lastError, state.errorAbout)
+            is PianoState.Ready -> WebPianoState("ready", state.values, state.facts, state.lastError, state.errorAbout, WebLock.of(state.lock, nowMs))
         }
 
     }

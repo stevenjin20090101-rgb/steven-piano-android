@@ -2285,6 +2285,10 @@ debugging is on", while either is on (`Settings.Global.ADB_ENABLED`; `adb_wifi_e
 app still reads; "Developer options are on" stands in where it can't be read). Read with the System page's probe; the app
 never sets `DISALLOW_DEBUGGING_FEATURES`, as adb is the documented way back into a kiosk tablet (`AttentionTest`).
 
+**On the web panel (v1.27 — M63)** the state's `piano.lock` and `/api/system`'s `tablet.debugging` go out only on the
+signed-in routes (through the relay too), read only: the lock's phase, the piano's word, guest play's time, whether a key is
+kept and the tablet's words; never the key, the nonce or the piano's address (`WebApiTest`).
+
 ### Residuals (stated honestly)
 
 - **The first claim is trust on first use.** Whoever claims an open piano first holds it: just after 2.1.0's first start,

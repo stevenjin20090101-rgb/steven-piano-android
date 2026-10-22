@@ -147,6 +147,11 @@ export function create(host, body, tools) {
   const piano = () => (st && st.piano) || { state: 'unknown', values: {}, facts: {} };
   const connected = () => link().state === 'connected';
   const pianoReady = () => connected() && piano().state === 'ready';
+  /**
+   * The piano's Bluetooth lock lets this tablet write its settings (v1.27 — M63; the tablet's v1.25 — M58): not while it
+   * proves its key or the piano keeps it out, when the piano's pages read only (the app drops such writes anyway).
+   */
+  const pianoWritable = () => pianoReady() && !(piano().lock && piano().lock.writable === false);
   const values = () => piano().values || {};
   const facts = () => piano().facts || {};
 
@@ -156,11 +161,15 @@ export function create(host, body, tools) {
     return instrument && instrument.kind === 'midi' ? instrument.name || 'another piano' : null;
   }
 
-  /** Why the piano's controls can't be used now, as today's page says it; null when they can. */
+  /**
+   * Why the piano's controls can't be used now, as today's page says it; null when they can. The lock's own words when it
+   * keeps this tablet out (v1.27 — M63), and while the tablet proves its key the reading line, as the tablet says it.
+   */
   function pianoStatus() {
     if (!connected()) return 'Connect to the piano to adjust its settings.';
     if (piano().state === 'unsupported') return "This piano's firmware doesn't offer settings over Bluetooth yet.";
     if (piano().state !== 'ready') return "Reading the piano's settings…";
+    if (!pianoWritable()) return piano().lock.message || "Reading the piano's settings…";
     return null;
   }
 
@@ -478,7 +487,7 @@ export function create(host, body, tools) {
       setting.unit && setting.unit !== '%' ? h('span', { class: 'eyebrow unit', text: setting.unit }) : null,
       setting.note ? h('span', { class: 'meta', text: setting.note }) : null,
     ];
-    const enabled = () => pianoReady() && pianoValue(name) !== undefined;
+    const enabled = () => pianoWritable() && pianoValue(name) !== undefined;
     const number = () => {
       const v = pianoValue(name);
       const n = v === undefined ? NaN : Number(v);
@@ -559,7 +568,7 @@ export function create(host, body, tools) {
     });
     controls.push({
       update() {
-        for (const b of buttons) b.disabled = !pianoReady();
+        for (const b of buttons) b.disabled = !pianoWritable();
       },
     });
     return h('section', { class: 'card', 'aria-label': 'Feel' },
@@ -989,7 +998,7 @@ export function create(host, body, tools) {
     // Save to the piano: on the piano's pages only, while one shows.
     const onPianoPage = page.piano && (opened || window.matchMedia(WIDE).matches) && !otherInstrument();
     save.hidden = !onPianoPage;
-    save.disabled = !pianoReady();
+    save.disabled = !pianoWritable();
   }
 
   function update() {

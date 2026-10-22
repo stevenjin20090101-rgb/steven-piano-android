@@ -25,6 +25,10 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
+import dev.stevenjin.stevenpiano.ble.LOCKED_OUT_COPY
+import dev.stevenjin.stevenpiano.piano.LockPhase
+import dev.stevenjin.stevenpiano.piano.LockWord
+import dev.stevenjin.stevenpiano.piano.PianoLock
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
@@ -284,6 +288,17 @@ class WebApiTest {
         assertEquals("MIDI", finished.getJSONObject("playlist").getString("name"))
         assertTrue("a run under way shows none yet", WebApi.import(ImportProgress(done = 3, total = 9, finished = false, playlist = ImportedPlaylist(14, "MIDI"))).isNull("playlist"))
         assertEquals("1.4.0", json.getJSONObject("piano").getJSONObject("facts").getString("fw"))
+        // The piano's Bluetooth lock (v1.27 — M63), read only: never the key, the nonce or the piano's address.
+        val lock = json.getJSONObject("piano").getJSONObject("lock")
+        assertEquals(setOf("state", "piano", "guestSecondsLeft", "keyStored", "writable", "message"), lock.keys().asSequence().toSet())
+        assertTrue("none until the piano is read", lock.getString("state") == "none" && lock.getBoolean("writable") && lock.isNull("piano") && lock.isNull("message"))
+        val out = WebLock.of(PianoLock(LockPhase.LockedOut, LockWord.Claimed), nowMs = 0)
+        assertEquals(WebLock("lockedOut", "claimed", writable = false, message = LOCKED_OUT_COPY), out)
+        assertEquals(
+            "guest play counted to now",
+            WebLock("trusted", "claimed", guestSecondsLeft = 3_540, keyStored = true),
+            WebLock.of(PianoLock(LockPhase.Trusted, LockWord.Claimed, guestSeconds = 3_600, guestReadAt = 1_000, keyStored = true), nowMs = 61_000),
+        )
         assertEquals("state", WebApi.state(state, 0, type = "state").getString("type"))
         assertTrue("no piece: null, not missing", WebApi.state(WebState(), 0).getJSONObject("player").isNull("piece"))
         assertFalse(WebApi.progress(1, 2).has("player"))
@@ -407,7 +422,7 @@ class WebApiTest {
         val app = bare.getJSONObject("app")
         assertEquals(setOf("version", "build", "pid", "threads", "uptimeMs", "heapUsed", "heapMax", "nativeHeap", "cpuPct", "deviceOwner", "kiosk"), keys(app))
         val tablet = bare.getJSONObject("tablet")
-        assertEquals(setOf("model", "android", "uptimeMs", "screenOn", "battery", "thermal", "memory", "storage", "cpu", "network"), keys(tablet))
+        assertEquals(setOf("model", "android", "uptimeMs", "screenOn", "battery", "thermal", "memory", "storage", "cpu", "network", "debugging"), keys(tablet))
         val parts = mapOf(
             "battery" to setOf("percent", "charging", "plug", "tempC", "voltageMv", "health"),
             "thermal" to setOf("status", "headroom", "cpuC", "skinC"),
@@ -415,6 +430,7 @@ class WebApiTest {
             "storage" to setOf("total", "free"),
             "cpu" to setOf("cores", "loadPct"),
             "network" to setOf("online", "transport", "signalDbm", "downKbps"),
+            "debugging" to setOf("usb", "wireless", "developer"),   // v1.27 — M63
         )
         val unknowns = mutableListOf(app)
         for ((name, expected) in parts) unknowns += tablet.getJSONObject(name).also { assertEquals(name, expected, keys(it)) }
