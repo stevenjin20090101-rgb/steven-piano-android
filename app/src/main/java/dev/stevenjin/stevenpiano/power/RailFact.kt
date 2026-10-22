@@ -10,8 +10,8 @@
 package dev.stevenjin.stevenpiano.power
 
 /**
- * The 24 V plug and its rail in one fact (v1.26 — M60), for the web panel's System page and its Play capsule, which the
- * integrator adds after the merge (`AppGraph.railFact`; the JSON it needs is in BUILD_SPEC.md › v1.26 — M60):
+ * The 24 V plug and its rail in one fact (v1.26 — M60), for the web panel's System page and its Play capsule
+ * (`graph.remote.railFact`, in RemoteActions.kt since v1.27 — M63; the JSON is in BUILD_SPEC.md › v1.26 — M60):
  *
  * - [paired] a plug is paired; [on] its switch (the plug switches the rail);
  * - [rail] where the rail stands: "off", "waking", "on" (kept by the CHECK), "kept" (the update or guest play),
