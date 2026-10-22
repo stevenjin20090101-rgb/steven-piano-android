@@ -89,19 +89,37 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun `shuffle and repeat are remembered, and start off`() = runBlocking {
+    fun `repeat is remembered, and starts off`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "modes.preferences_pb") }
         val repository = SettingsRepository(store)
-        assertEquals(false, repository.settings.first().shuffle)
         assertEquals(RepeatMode.OFF, repository.settings.first().repeat)
-        repository.setShuffle(true)
         repository.setRepeat(RepeatMode.ONE)
-        assertEquals(true, repository.settings.first().shuffle)
         assertEquals(RepeatMode.ONE, repository.settings.first().repeat)
         repository.setRepeat(RepeatMode.ALL)
-        repository.setShuffle(false)
         assertEquals(PianoSettings(repeat = RepeatMode.ALL), repository.settings.first())
+        scope.cancel()
+    }
+
+    @Test
+    fun `shuffle's stored value from before 1_26 is removed once, and the rest is kept (v1_26 M61)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val file = File(tmp.root, "old.preferences_pb")
+        val store = PreferenceDataStoreFactory.create(scope = scope) { file }
+        val shuffle = androidx.datastore.preferences.core.booleanPreferencesKey("shuffle")
+        store.edit {
+            it[shuffle] = true   // as 1.25 kept it
+            it[stringPreferencesKey("repeat")] = "ALL"
+        }
+        val repository = SettingsRepository(store)
+        repository.forgetShuffle()
+        val after = store.data.first()
+        assertEquals("gone", null, after[shuffle])
+        assertEquals("the rest kept", RepeatMode.ALL, repository.settings.first().repeat)
+        val written = file.lastModified()
+        Thread.sleep(20)
+        repository.forgetShuffle()   // the next start: nothing left to remove, nothing written
+        assertEquals(written, file.lastModified())
         scope.cancel()
     }
 

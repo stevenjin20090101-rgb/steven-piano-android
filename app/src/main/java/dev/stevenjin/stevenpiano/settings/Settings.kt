@@ -89,8 +89,9 @@ enum class StandbyShows { ART_AND_NOTES, PAPER_ROLL }
 
 /**
  * The Piano tab's preferences, plus the last piano connected, where the Keys screen was, the
- * queue's two modes, how artwork looks and arrives, what the waterfall and the score show
- * beside the notes (fingering, chord names, the hands in colour), whether the app looks for
+ * queue's repeat mode (its one mode since shuffle went, v1.26 — M61), how artwork looks and
+ * arrives, what the waterfall and the score show beside the notes (fingering, chord names, the
+ * hands in colour), whether the app looks for
  * its own updates, the pause before each piece, the channels' volumes, the app's appearance and
  * display mode, the web panel (Piano › Web panel) and kiosk mode (Piano › Kiosk). Of the
  * panel's PIN only [webPinSet] is here, and of the kiosk's only [kioskPinSet]: their salts and
@@ -128,8 +129,6 @@ data class PianoSettings(
     val notesArtOnly: Boolean = false,
     /** The leftmost key the Keys screen shows when it scrolls (C3 by default). */
     val keysViewportStart: Int = DEFAULT_KEYS_VIEWPORT_START,
-    /** The transport's Shuffle, remembered across launches. */
-    val shuffle: Boolean = false,
     /** The transport's Repeat, remembered across launches. */
     val repeat: RepeatMode = RepeatMode.OFF,
     /** Portraits drawn in black and white (the rest of the interface is monochrome either way). */
@@ -218,6 +217,12 @@ data class PianoSettings(
      * microphone, live, and test every key by ear; off at first (a school), and only with Android's permission besides.
      */
     val listenFromPanel: Boolean = false,
+    /**
+     * Automatic safety check (uses the microphone) (Piano › System, v1.26 — M61): every 6 pieces the check strikes each key
+     * while the tablet listens; on by default, and listening only with Android's permission besides. Off, the check
+     * still releases the keys and reads the coils and the boards, and no key can lock Play.
+     */
+    val safetyCheckListens: Boolean = true,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -298,9 +303,16 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setKeysViewportStart(key: Int) = edit { it[KEYS_VIEWPORT_START] = key.coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST) }
 
-    suspend fun setShuffle(on: Boolean) = edit { it[SHUFFLE] = on }
-
     suspend fun setRepeat(mode: RepeatMode) = edit { it[REPEAT] = mode.name }
+
+    /**
+     * Shuffle's key goes (v1.26 — M61: shuffle was removed everywhere): asked at every start, it removes the value a
+     * version before 1.26 kept, once; after that there is nothing to remove and nothing is written. Housekeeping.
+     */
+    suspend fun forgetShuffle() {
+        if (current()[LEGACY_SHUFFLE] == null) return
+        edit { it.remove(LEGACY_SHUFFLE) }
+    }
 
     suspend fun setArtworkMonochrome(on: Boolean) = edit { it[ARTWORK_MONOCHROME] = on }
 
@@ -477,6 +489,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** Listening from the panel on or off (v1.23 — M55); turning it on asks Android for the microphone first (the System page). */
     suspend fun setListenFromPanel(on: Boolean) = edit { it[LISTEN_FROM_PANEL] = on }
 
+    /** The safety check's listening on or off (v1.26 — M61); turning it on asks Android for the microphone first (the System page). */
+    suspend fun setSafetyCheckListens(on: Boolean) = edit { it[SAFETY_CHECK_LISTENS] = on }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -532,7 +547,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             notesSplitSide = this[NOTES_SPLIT_SIDE].asShare(),
             notesArtOnly = this[NOTES_ART_ONLY] ?: defaults.notesArtOnly,
             keysViewportStart = (this[KEYS_VIEWPORT_START] ?: defaults.keysViewportStart).coerceIn(KeyMap.LOWEST, KeyMap.HIGHEST),
-            shuffle = this[SHUFFLE] ?: defaults.shuffle,
             repeat = RepeatMode.entries.firstOrNull { it.name == this[REPEAT] } ?: defaults.repeat,
             artworkMonochrome = this[ARTWORK_MONOCHROME] ?: defaults.artworkMonochrome,
             fetchArtworkAutomatically = this[FETCH_ARTWORK_AUTOMATICALLY] ?: defaults.fetchArtworkAutomatically,
@@ -572,6 +586,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             midiOutId = this[MIDI_OUT_ID],
             midiOutName = this[MIDI_OUT_ID]?.let { this[MIDI_OUT_NAME] },
             listenFromPanel = this[LISTEN_FROM_PANEL] ?: defaults.listenFromPanel,
+            safetyCheckListens = this[SAFETY_CHECK_LISTENS] ?: defaults.safetyCheckListens,
         )
     }
 
@@ -596,7 +611,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         /** A stored split as read: held to 0-1; not a number reads as the default. */
         fun Float?.asShare(): Float? = this?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
         val KEYS_VIEWPORT_START = intPreferencesKey("keysViewportStart")
-        val SHUFFLE = booleanPreferencesKey("shuffle")
+
+        /** The transport's Shuffle before 1.26 (v1.26 — M61 removed it): only [forgetShuffle] reads it, to remove it. */
+        val LEGACY_SHUFFLE = booleanPreferencesKey("shuffle")
         val REPEAT = stringPreferencesKey("repeat")
         val ARTWORK_MONOCHROME = booleanPreferencesKey("artworkMonochrome")
         val FETCH_ARTWORK_AUTOMATICALLY = booleanPreferencesKey("fetchArtworkAutomatically")
@@ -646,6 +663,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val MIDI_OUT_ID = stringPreferencesKey("midiOutId")
         val MIDI_OUT_NAME = stringPreferencesKey("midiOutName")
         val LISTEN_FROM_PANEL = booleanPreferencesKey("listenFromPanel")
+        val SAFETY_CHECK_LISTENS = booleanPreferencesKey("safetyCheckListens")
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256

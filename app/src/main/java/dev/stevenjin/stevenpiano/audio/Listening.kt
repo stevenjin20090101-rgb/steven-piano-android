@@ -56,8 +56,12 @@ sealed interface ListenAnswer {
 
 /** The microphone as the key test uses it ([Listening]; a stand-in in the tests). Main thread. */
 interface Ears {
-    /** Listening from the panel is on and Android allows the microphone. */
-    fun allowed(): Boolean
+    /**
+     * Whether a hearing asked by the session [token] may start: a panel's needs Listening from the panel on and Android's
+     * permission; the tablet's own ([token] null: its Test every key, the safety check) Android's permission alone
+     * (v1.26 — M61: the switch governs what the panel hears, not what the tablet hears for itself).
+     */
+    fun allowed(token: String?): Boolean
 
     /**
      * The key test hears: [frames] gets every frame (on the microphone's thread) and the panel of the session [token], if
@@ -74,10 +78,12 @@ interface Ears {
  * hear through it: a panel's live listening ([startLive], one at a time, by the session [token] that asked, for
  * [LIVE_MS] at most) and the key test ([tap]); the microphone hears while either does, and stops when neither does.
  *
- * - **Safeguards.** Nothing hears unless Listening from the panel is on and Android allows the microphone ([allowedNow]),
- *   and only while the app is in the foreground ([foreground]: Android forbids starting the microphone from the background);
- *   otherwise a start is refused in words. Turning the switch off, the app leaving the screen and the banner's Stop end
- *   every hearing ([stopAll]).
+ * - **Safeguards.** Nothing hears for a panel unless Listening from the panel is on and Android allows the microphone
+ *   ([allowedNow]); the tablet hears for itself (its own key test, the safety check: v1.26 — M61) with Android's
+ *   permission alone ([localAllowedNow]); and only while the app is in the foreground ([foreground]: Android forbids
+ *   starting the microphone from the background); otherwise a start is refused in words. Turning the switch off ends the
+ *   panel's hearings; the permission taken away, the app leaving the screen and the banner's Stop end every hearing
+ *   ([stopAll]).
  * - **Where the sound goes.** Each 100 ms frame becomes one socket message ([ListenWire]) sent ([send]) only to the
  *   sockets of the sessions that hear: the live listener's and the key test's starter's, never anyone else's and never the
  *   guests'. Nothing is recorded or kept: a frame goes out and is gone. Sending happens on a thread of its own
@@ -98,9 +104,16 @@ class Listening(
     private val sender: Executor = quietSender(),
     /** Where the sessions are looked up each tick (a look may write the sessions' file): off the main thread. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Whether the tablet may hear for itself (v1.26 — M61): Android's permission, whatever the panel's switch says. */
+    private val localAllowedNow: () -> Boolean = allowedNow,
 ) : Ears {
     private val _state = MutableStateFlow(ListenState())
     val state: StateFlow<ListenState> = _state.asStateFlow()
+
+    private val _inFront = MutableStateFlow(false)
+
+    /** Whether the app is in the foreground, as [foreground] was last told (v1.26 — M61: the safety check runs only then). */
+    val inFront: StateFlow<Boolean> = _inFront.asStateFlow()
 
     /** A panel's live listening: its session, when it stops by itself, when a socket of it was last reached. */
     private class Live(val token: String, val until: Long, reached: Long) {
@@ -122,17 +135,25 @@ class Listening(
     private var ticker: Job? = null
     private val seq = AtomicLong()
 
-    override fun allowed(): Boolean = allowedNow()
+    override fun allowed(token: String?): Boolean = if (token == null) localAllowedNow() else allowedNow()
 
     /** The app came to the foreground ([on]) or left it: leaving it ends every hearing. */
     fun foreground(on: Boolean) {
         foregroundNow = on
+        _inFront.value = on
         if (on) publish() else stopAll()
     }
 
-    /** The switch or Android's permission may have changed: off, every hearing ends. */
+    /**
+     * The switch or Android's permission may have changed: without the permission every hearing ends; with the switch off,
+     * the panels' (live listening, and a key test a panel started); the tablet's own goes on.
+     */
     fun refresh() {
-        if (!allowedNow()) stopAll() else publish()
+        when {
+            !localAllowedNow() -> stopAll()
+            !allowedNow() -> stopPanels()
+            else -> publish()
+        }
     }
 
     /**
@@ -141,7 +162,7 @@ class Listening(
      * start.
      */
     fun startLive(token: String): ListenAnswer {
-        refusal()?.let { return it }
+        refusal(token)?.let { return it }
         val current = live
         if (current != null && current.token != token && sessionValid(current.token)) return ListenAnswer.Refused(ListenAnswer.BUSY, ListenCopy.BUSY)
         if (!hear()) return ListenAnswer.Refused(ListenAnswer.MICROPHONE, ListenCopy.MICROPHONE)
@@ -158,7 +179,7 @@ class Listening(
     }
 
     override fun tap(token: String?, frames: (MicFrame) -> Unit, ended: () -> Unit): ListenAnswer {
-        refusal()?.let { return it }
+        refusal(token)?.let { return it }
         if (!hear()) return ListenAnswer.Refused(ListenAnswer.MICROPHONE, ListenCopy.MICROPHONE)
         test = Tap(token, frames, ended)
         publish()
@@ -170,7 +191,7 @@ class Listening(
         settle()
     }
 
-    /** Everything that hears stops: the banner's Stop, the switch turned off, the app leaving the screen. */
+    /** Everything that hears stops: the banner's Stop, the permission taken away, the app leaving the screen. */
     fun stopAll() {
         val tap = test
         live = null
@@ -179,8 +200,17 @@ class Listening(
         tap?.ended?.invoke()
     }
 
-    private fun refusal(): ListenAnswer.Refused? = when {
-        !allowedNow() -> ListenAnswer.Refused(ListenAnswer.OFF, ListenCopy.OFF)
+    /** What a panel hears stops (its switch turned off): live listening, and a key test a panel started; the tablet's own hears on. */
+    private fun stopPanels() {
+        val tap = test?.takeIf { it.token != null }
+        live = null
+        if (tap != null) test = null
+        settle()
+        tap?.ended?.invoke()
+    }
+
+    private fun refusal(token: String?): ListenAnswer.Refused? = when {
+        !allowed(token) -> ListenAnswer.Refused(ListenAnswer.OFF, if (token == null) ListenCopy.NO_PERMISSION else ListenCopy.OFF)
         !foregroundNow -> ListenAnswer.Refused(ListenAnswer.AWAY, ListenCopy.AWAY)
         else -> null
     }
@@ -250,10 +280,11 @@ class Listening(
 
     /** The tick's look, with whether each session that hears is still open ([valid]). */
     private fun check(valid: Map<String, Boolean>) {
-        if (!allowedNow()) {
+        if (!localAllowedNow()) {
             stopAll()
             return
         }
+        if (!allowedNow()) stopPanels()
         val now = clock()
         val listener = live
         if (listener != null && (now >= listener.until || valid[listener.token] == false || now - listener.reachedAt > UNHEARD_MS)) {

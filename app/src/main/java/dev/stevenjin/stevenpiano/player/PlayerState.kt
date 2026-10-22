@@ -79,14 +79,13 @@ data class NowPlaying(
 
 /**
  * The queue as the UI, the playback service and the media session see it: piece [ids] in playing
- * order with their entries' [uids], the [index] playing (-1 before anything has), and the two
- * modes. See [Queue].
+ * order with their entries' [uids], the [index] playing (-1 before anything has), and the repeat
+ * mode (the only one since shuffle went, v1.26 — M61). See [Queue].
  */
 data class QueueSnapshot(
     val ids: List<Long> = emptyList(),
     val uids: List<Long> = emptyList(),
     val index: Int = -1,
-    val shuffle: Boolean = false,
     val repeat: RepeatMode = RepeatMode.OFF,
 ) {
     val currentUid: Long? get() = uids.getOrNull(index)

@@ -27,7 +27,6 @@
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7,5h3.5v14H7z M13.5,5H17v14h-3.5z"/></symbol>
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M6,6l8.5,6L6,18z M16,6h2v12h-2z"/></symbol>
   <symbol id="i-previous" viewBox="0 0 24 24"><path d="M6,6h2v12H6z M18,6v12l-8.5,-6z"/></symbol>
-  <symbol id="i-shuffle" viewBox="0 0 24 24"><path class="glyph-stroke" d="M3,17h4.5l9,-10H18 M3,7h4.5l3,3.33 M13.5,13.67l3,3.33H18"/><path d="M17,3.5L21.5,7L17,10.5z M17,13.5L21.5,17L17,20.5z"/></symbol>
   <symbol id="i-repeat" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4,12.5V9a2,2 0,0 1,2 -2h11 M20,11.5V15a2,2 0,0 1,-2 2H7"/><path d="M16,3.5L20.5,7L16,10.5z M8,13.5L3.5,17L8,20.5z"/></symbol>
   <symbol id="i-repeat-one" viewBox="0 0 24 24"><path class="glyph-stroke" d="M4,12.5V9a2,2 0,0 1,2 -2h11 M20,11.5V15a2,2 0,0 1,-2 2H7"/><path d="M16,3.5L20.5,7L16,10.5z M8,13.5L3.5,17L8,20.5z M11.2,10.1L13.2,9.2h0.9v5.6h-1.6v-3.5l-1.3,0.5z"/></symbol>
   <symbol id="i-add" viewBox="0 0 24 24"><path d="M11,5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
@@ -142,6 +141,7 @@
         <div class="head-tools">
           <p class="capsule glass quiet-capsule" id="quiet-capsule" hidden><svg class="glyph" aria-hidden="true"><use href="#g-moon"/></svg><span id="quiet-text">Quiet now</span></p>
           <button class="capsule glass button" id="quiet-override" type="button" hidden><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg><span>Play anyway</span></button>
+          <p class="capsule glass safety-capsule" id="safety-capsule" aria-live="polite" hidden><span class="dot on" id="safety-dot"></span><span id="safety-text">Safety check</span></p>
           <button class="capsule glass button up-next-button" id="queue-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="queue-sheet"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg><span>Up next</span><span class="count" data-count="requests" hidden>0</span></button>
           <p class="capsule glass link-capsule"><span class="dot" id="link-dot"></span><span>Piano</span><span class="visually-hidden" id="link-state">, not connected</span></p>
         </div>
@@ -161,7 +161,7 @@
               </div>
             </div>
             <div class="transport">
-              <button class="icon-button mode" id="now-shuffle" type="button" aria-pressed="false" aria-label="Shuffle"><svg class="glyph"><use href="#i-shuffle"/></svg></button>
+              <span class="transport-room" aria-hidden="true"></span>
               <button class="icon-button" id="now-previous" type="button" aria-label="Previous"><svg class="glyph"><use href="#i-previous"/></svg></button>
               <button class="play-circle" id="now-play" type="button" aria-label="Play"><svg class="glyph play-glyph" aria-hidden="true"><use href="#i-play"/></svg><svg class="glyph pause-glyph" aria-hidden="true"><use href="#i-pause"/></svg></button>
               <button class="icon-button" id="now-next" type="button" aria-label="Next"><svg class="glyph"><use href="#i-next"/></svg></button>

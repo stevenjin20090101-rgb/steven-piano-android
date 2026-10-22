@@ -31,7 +31,7 @@ import dev.stevenjin.stevenpiano.schedule.QuietGate
 import dev.stevenjin.stevenpiano.service.PlaybackService
 
 /**
- * Playback started by a tap in the app: a library row, a playlist's Play or Shuffle, a channel's
+ * Playback started by a tap in the app: a library row, a playlist's Play, a channel's
  * card, a row menu's Play next or Add to queue, or the transport. Anything that may start
  * the piano also starts the playback service, which must be started from the foreground; the
  * first time, the notification permission is asked for (API 33+), in context. During a quiet time
@@ -58,17 +58,17 @@ class PlaybackStarter(
         started()
     }
 
-    /** A playlist's (or a composer's) Play, in order, or Shuffle. */
-    fun playAll(pieceIds: List<Long>, shuffle: Boolean) {
+    /** A playlist's (or a composer's) Play, from the top in its order. */
+    fun playAll(pieceIds: List<Long>) {
         if (pieceIds.isEmpty()) return
         unlessQuiet {
-            player.playAll(pieceIds, shuffle)
+            player.playAll(pieceIds)
             started()
         }
     }
 
     /**
-     * Channel [key], endlessly, from a fresh shuffle of its pool (a card's tap). False when its pool is too small to play;
+     * Channel [key], endlessly, from the top of its pool (a card's tap). False when its pool is too small to play;
      * true too while it waits for the quiet time's choice.
      */
     fun playChannel(key: String): Boolean {

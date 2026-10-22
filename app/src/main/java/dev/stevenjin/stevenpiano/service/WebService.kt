@@ -420,6 +420,8 @@ class WebService : Service() {
             // Listening and the key test (v1.23 — M55): the microphone on or off, its time, the key struck, the results.
             graph.listening.state.map { },
             graph.keyTest.state.map { },
+            // The safety check (v1.26 — M61): its steps as they go, Play locked or free again.
+            graph.safety.state.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created

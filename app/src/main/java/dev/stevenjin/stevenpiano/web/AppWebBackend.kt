@@ -219,6 +219,7 @@ class AppWebBackend(
             quiet = graph.quiet.now(),
             listen = graph.listening.state.value,   // v1.23 — M55
             keytest = graph.keyTest.state.value,
+            safety = WebSafety.of(graph.safety.state.value),   // v1.26 — M61
         )
     }
 
@@ -318,23 +319,23 @@ class AppWebBackend(
         return true
     }
 
-    override suspend fun playAll(ids: List<Long>, shuffle: Boolean): Boolean {
+    override suspend fun playAll(ids: List<Long>): Boolean {
         val held = library { graph.library.summaries(ids) }.orEmpty()
         val kept = ids.filter { it in held }
         if (kept.isEmpty()) return false
         onMain {
-            graph.player.playAll(kept, shuffle)
+            graph.player.playAll(kept)
             startPlayback()
         }
         return true
     }
 
-    override suspend fun playPlaylist(id: Long, shuffle: Boolean): Boolean {
+    override suspend fun playPlaylist(id: Long): Boolean {
         if (playlists().none { it.id == id }) return false
         val ids = library { graph.library.inPlaylist(id).first() }.orEmpty().map { it.id }
         if (ids.isEmpty()) return false
         onMain {
-            graph.player.playAll(ids, shuffle)
+            graph.player.playAll(ids)
             startPlayback()
         }
         return true
@@ -364,8 +365,6 @@ class AppWebBackend(
     }
 
     override suspend fun setTempo(pct: Int) = onMain { graph.player.setTempo(pct) }
-
-    override suspend fun setShuffle(on: Boolean) = onMain { graph.player.setShuffle(on) }
 
     override suspend fun setRepeat(mode: RepeatMode) = onMain { graph.player.setRepeat(mode) }
 
@@ -884,6 +883,8 @@ class AppWebBackend(
     // ---- Quiet times (v1.20 — M54) ----------------------------------------------------------------------------------------
 
     override suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow = graph.quiet.now()
+
+    override suspend fun safetyRefusal(): String? = onMain { graph.safety.refusal() }
 
     override suspend fun quiet(): WebQuiet = WebQuiet(graph.schedules.sections(), graph.quiet.now())
 

@@ -26,6 +26,9 @@ object ListenCopy {
     const val SWITCH_NOTE = "The web panel may hear this room live through the tablet's microphone. Off by default; nothing is recorded."
     const val NOT_ALLOWED = "Android didn't allow the microphone. Allow it for Steven Piano in Android's settings, then turn this on."
 
+    /** The tablet's own key test without Android's permission (v1.26 — M61: it no longer needs the panel's switch). */
+    const val NO_PERMISSION = "Android hasn't allowed the microphone for Steven Piano."
+
     // ---- The banner, on every screen while the microphone is on --------------------------------------------------------
     const val BANNER_PANEL = "Microphone on · listening from the web panel"
     const val BANNER_TEST = "Microphone on · testing every key"
@@ -58,6 +61,9 @@ object ListenCopy {
     const val STOPPED_QUIET = "Stopped: a quiet time began."
     const val STOPPED_UPDATING = "Stopped: the piano's firmware is being updated."
     const val STOPPED_MICROPHONE = "Stopped: the tablet's microphone stopped."
+
+    /** The 24 V (the power plug, v1.26 — M61) didn't come up before the first key: none was struck. */
+    const val STOPPED_RAIL = "Stopped: the 24 V didn't come up."
 
     /** "Key 37 of 84". */
     fun progress(done: Int, total: Int): String = "Key $done of $total"

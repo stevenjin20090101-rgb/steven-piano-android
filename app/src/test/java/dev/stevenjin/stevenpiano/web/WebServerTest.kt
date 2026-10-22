@@ -113,10 +113,10 @@ class WebServerTest {
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
         assertEquals(
-            "the table's thirty-four routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
+            "the table's thirty-three routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
                 "three from 1.18, the quiet times' two from 1.20, listening's and the key test's four from 1.23, Confirm it's you from 1.24; " +
-                "the schedules' three, gone since 1.20, left the table in 1.24)",
-            34,
+                "the schedules' three, gone since 1.20, left the table in 1.24; Shuffle's, gone in 1.26)",
+            33,
             writes.size,
         )
         assertTrue(writes.any { it.sample == "/api/confirm" } && server.routes.none { it.sample.startsWith("/api/schedules") })
@@ -969,12 +969,14 @@ class WebServerTest {
         assertEquals(400, post("/api/seek", """{"ms":-1}"""))
         assertEquals(204, post("/api/tempo", """{"pct":80}"""))
         assertEquals(400, post("/api/tempo", """{"pct":300}"""))
-        assertEquals(204, post("/api/shuffle", """{"on":true}"""))
+        assertEquals("shuffle is gone (v1.26 — M61)", 404, post("/api/shuffle", """{"on":true}"""))
         assertEquals(204, post("/api/repeat", """{"mode":"one"}"""))
         assertEquals(400, post("/api/repeat", """{"mode":"twice"}"""))
         assertEquals(204, post("/api/queue", """{"action":"move","uid":8,"toIndex":0}"""))
         assertEquals("a stale entry", 404, post("/api/queue", """{"action":"remove","uid":99}"""))
-        assertEquals(204, post("/api/play-all", """{"playlistId":10,"shuffle":true}"""))
+        assertEquals("no shuffle to ask for (v1.26 — M61)", 400, post("/api/play-all", """{"playlistId":10,"shuffle":true}"""))
+        assertEquals(400, post("/api/play-all", """{"playlistId":10,"shuffle":false}"""))
+        assertEquals(204, post("/api/play-all", """{"playlistId":10}"""))
         assertEquals(400, post("/api/play-all", """{"playlistId":10,"ids":[1]}"""))
         assertEquals(204, post("/api/channels/calm/play", "{}"))
         assertEquals(409, post("/api/channels/tiny/play", "{}"))
@@ -983,8 +985,8 @@ class WebServerTest {
         assertEquals(400, http.api("PUT", "/api/channels/calm/volume", """{"pct":140}""", session = token).status)
         assertEquals(
             listOf(
-                "transport next", "seek 90000", "tempo 80", "shuffle true", "repeat one", "queue Move(uid=8, toIndex=0)", "queue Remove(uid=99)",
-                "play-playlist 10 shuffle=true", "channel play calm", "channel volume calm 40",
+                "transport next", "seek 90000", "tempo 80", "repeat one", "queue Move(uid=8, toIndex=0)", "queue Remove(uid=99)",
+                "play-playlist 10", "channel play calm", "channel volume calm 40",
             ),
             backend.calls.toList(),
         )
@@ -1268,6 +1270,45 @@ class WebServerTest {
         backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L, next = null)
         assertEquals(204, http.api("POST", "/api/quiet/override", session = token).status)
         assertTrue(backend.quietHeld.overridden)
+    }
+
+    @Test
+    fun `while the safety check locks Play, every route that would play answers 409 safety with its words and reaches nothing (v1_26 M61)`() {
+        val (server, http) = start()
+        val token = login(http)
+        backend.state = WebState(player = WebPlayer(queue = dev.stevenjin.stevenpiano.player.QueueSnapshot(listOf(1, 2), listOf(8, 9), 0)))
+        backend.safety = "Safety check failed: C2, F♯4"
+        backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L, next = null)   // the lock speaks first
+        backend.calls.clear()
+        fun post(path: String, body: String) = http.api("POST", path, body, session = token)
+        val plays = listOf(
+            "/api/play" to """{"pieceId":1}""",
+            "/api/play-all" to """{"ids":[1,2]}""",
+            "/api/play-all" to """{"playlistId":10}""",
+            "/api/transport" to """{"action":"toggle"}""",
+            "/api/transport" to """{"action":"resume"}""",
+            "/api/transport" to """{"action":"next"}""",
+            "/api/transport" to """{"action":"previous"}""",
+            "/api/queue" to """{"action":"skip","uid":9}""",
+            "/api/channels/calm/play" to "{}",
+        )
+        for ((path, body) in plays) {
+            val refused = post(path, body)
+            assertEquals("$path $body", 409, refused.status)
+            assertEquals("safety", refused.json().getString("error"))
+            assertEquals("Safety check failed: C2, F♯4", refused.json().getString("message"))
+        }
+        assertEquals("nothing that would play reached the app", emptyList<String>(), backend.calls.toList())
+        // Pause and stop still go; the panel has no way to start a check.
+        assertEquals(204, post("/api/transport", """{"action":"pause"}""").status)
+        assertEquals(204, post("/api/transport", """{"action":"stop"}""").status)
+        assertTrue(server.routes.none { it.sample.contains("safety") })
+        // Unlocked (a check passed at the tablet): Play reaches the app again.
+        backend.safety = null
+        backend.quietHeld = QuietNow()
+        backend.calls.clear()
+        assertEquals(204, post("/api/play", """{"pieceId":1}""").status)
+        assertEquals(listOf("play 1 queue=null"), backend.calls.toList())
     }
 
     @Test

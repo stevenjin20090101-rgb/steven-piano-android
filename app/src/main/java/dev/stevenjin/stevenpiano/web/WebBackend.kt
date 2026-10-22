@@ -21,8 +21,12 @@ import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.safety.Mark
+import dev.stevenjin.stevenpiano.safety.SafetyLock
+import dev.stevenjin.stevenpiano.safety.SafetyState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import java.io.File
 import java.util.Locale
 
@@ -71,11 +75,11 @@ interface WebBackend {
     /** Plays piece [pieceId], then [queue] around it (just the piece when null). False when the library has no such piece. */
     suspend fun play(pieceId: Long, queue: List<Long>?): Boolean
 
-    /** Plays [ids] from the top (in random order when [shuffle]); the ones the library does not hold are left out. False when none is left. */
-    suspend fun playAll(ids: List<Long>, shuffle: Boolean): Boolean
+    /** Plays [ids] from the top, in their order; the ones the library does not hold are left out. False when none is left. */
+    suspend fun playAll(ids: List<Long>): Boolean
 
-    /** Plays playlist [id] from the top, or shuffled. False when it does not exist or is empty. */
-    suspend fun playPlaylist(id: Long, shuffle: Boolean): Boolean
+    /** Plays playlist [id] from the top, in its order. False when it does not exist or is empty. */
+    suspend fun playPlaylist(id: Long): Boolean
 
     suspend fun transport(action: Transport)
 
@@ -84,8 +88,6 @@ interface WebBackend {
 
     /** The live tempo, already checked to be in range. */
     suspend fun setTempo(pct: Int)
-
-    suspend fun setShuffle(on: Boolean)
 
     suspend fun setRepeat(mode: RepeatMode)
 
@@ -218,6 +220,14 @@ interface WebBackend {
 
     /** The quiet now: the state's, and what weighs every route that would play. */
     suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow
+
+    // ---- The safety check (v1.26 — M61) -------------------------------------------------------------------------------
+
+    /**
+     * Why Play is refused now (409 `safety` on every route that would start a piece): Play locked by the safety check
+     * ("Safety check failed: C2, F♯4"), or a check due while the app is not in front on the tablet; null when Play may go.
+     */
+    suspend fun safetyRefusal(): String?
 
     /** Piano › Quiet times as the panel shows it: the sections, and the quiet now. */
     suspend fun quiet(): WebQuiet
@@ -540,7 +550,47 @@ data class WebState(
     val listen: dev.stevenjin.stevenpiano.audio.ListenState = dev.stevenjin.stevenpiano.audio.ListenState(),
     /** The key test (v1.23 — M55): `{running, key, done, total, results, stopped}`. */
     val keytest: dev.stevenjin.stevenpiano.audio.KeyTestState = dev.stevenjin.stevenpiano.audio.KeyTestState(),
+    /** The safety check (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, text}`. */
+    val safety: WebSafety = WebSafety(),
 )
+
+/**
+ * The safety check (v1.26 — M61) as the panel's capsule reads it: a check [running], at [step] of the [of] steps it means
+ * to take; Play [locked] (the keys that didn't sound, [failedKeys], MIDI; [coil]: a key was still on); and the tablet's
+ * own words for it ([text]: "Safety check · Testing each key (37 of 84)", "Safety check failed: C2, F♯4"), null while
+ * there is nothing to show. The panel can't start a check: the microphone needs the tablet in front.
+ */
+data class WebSafety(
+    val running: Boolean = false,
+    val step: Int = 0,
+    val of: Int = 0,
+    val locked: Boolean = false,
+    val failedKeys: List<Int> = emptyList(),
+    val coil: Boolean = false,
+    val text: String? = null,
+) {
+    companion object {
+        fun of(state: SafetyState): WebSafety {
+            val lock = state.lock
+            val steps = if (state.running) state.check?.steps().orEmpty() else emptyList()
+            val now = steps.indexOfFirst { it.mark == Mark.RUNNING }
+            val text = when {
+                state.running -> steps.getOrNull(now)?.let { "${SafetyCopy.TITLE} · ${SafetyCopy.line(it)}" } ?: SafetyCopy.TITLE
+                lock != null -> SafetyCopy.locked(lock)
+                else -> null
+            }
+            return WebSafety(
+                running = state.running,
+                step = now + 1,
+                of = steps.size,
+                locked = lock != null,
+                failedKeys = (lock as? SafetyLock.KeysSilent)?.keys.orEmpty(),
+                coil = lock == SafetyLock.CoilOn,
+                text = text,
+            )
+        }
+    }
+}
 
 /**
  * What plays and what is played from (v1.11 — M29), read-only on the panel: the [instrument], the [keyboard]

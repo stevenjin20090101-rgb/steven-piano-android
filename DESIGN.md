@@ -434,7 +434,8 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
 - A playlist is a page: cover art (96 dp, `shapes.medium`), name in Title, an Eyebrow
   "12 pieces · 41:20", then a filled 56 dp **Play** circle and an outlined **Shuffle**
   button side by side, then the rows. *(v1.5 — M16: Play floats as a glass circle at the
-  list's bottom end; Shuffle stays in the head.)*
+  list's bottom end; Shuffle stays in the head. v1.26 — M61: Shuffle is gone; an outlined
+  Play takes its place in the head.)*
 - Rows inside a playlist carry a trailing **drag handle** (48 dp) for reordering; the row
   menu also offers *Move up* and *Move down* so reordering works without dragging.
 - Row menu everywhere, in three groups with hairline separators (context menus scan best
@@ -442,7 +443,7 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
   **Add to playlist · Favorite · Rename** (+ *Move up · Move down* inside a playlist) |
   **Remove from playlist** (inside a playlist) · **Delete**. Playlist menu, also on
   long-press of a playlist tile: *Rename · Change photo · Delete*. Composer tiles
-  long-press to *Play all · Shuffle*. Menus appear wherever items appear, so people
+  long-press to *Play all · Shuffle* (v1.26 — M61: *Play all* alone). Menus appear wherever items appear, so people
   learn where to find them once.
 - The dragged row lifts onto `surfaceElevated` and the others slide out of its way; the
   drag handle is described as "Reorder" to screen readers.
@@ -451,6 +452,9 @@ app; the owner chose this line knowingly, and the design keeps its cost to one 1
   8 dp gutters, inside the 720 dp reading column.
 
 ## Up next, shuffle and repeat
+
+*(v1.26 — M61: shuffle was removed everywhere: the queue keeps the order it was given, and Repeat is the one mode. See
+v1.26 — M61 below.)*
 
 - A queue glyph in the Now playing header opens the **Up next** sheet: a Material bottom
   sheet with its drag handle, swipe-away, the current piece first, then the coming pieces
@@ -943,7 +947,8 @@ section says otherwise. This is release 1.5, with M15 and M16.
   **Everything** (the whole library). A channel's pool is worked out from the library whenever it
   changes and never stored. From Steven's `midi` folder: 30, 49, 197, 912, 120, 23, 186 and 1,727
   pieces.
-- **Playing.** A tap plays the channel without end: 25 of its pieces, shuffled, become Up next;
+- **Playing.** *(v1.26 — M61: dealt in the library's order, from the top again at the pool's end, one piece per Play.)*
+  A tap plays the channel without end: 25 of its pieces, shuffled, become Up next;
   whenever fewer than five are left, ten more join; nothing comes twice until the whole pool has
   played, and the next round leaves out the last 20 heard (at most half the pool, so a small one
   still shuffles). Up next, Next, Previous, Add to queue and Play next work as ever and keep the
@@ -3478,3 +3483,86 @@ A new row in THE PIANO, after Firmware and status, with a bolt drawn in the pane
 - **Switching the plug off or forgetting it** first stops what plays, sends the stop sequence and cuts, so the rail never
   stays up unkept; the page says the plug then stays off.
 - **The emulator's plug** completes its setup 2 minutes after it was confirmed (the real one about 5).
+
+# v1.26 — M61: one piece per Play, no shuffle, a safety check every 6 pieces
+
+A key was found held down with its coil hot while the piano sat idle at the school. Steven's choices on 2026-10-21, by
+multiple choice: **one piece per Play** ("the songs get annoying"), **no shuffle anywhere**, and **a safety check after
+every 6th piece**, shown as a full-screen card. Built beside M60 (the 24 V on a smart plug); the plug's repower and cut
+are connected to the check after both merge.
+
+## One piece per Play
+- Play plays one piece. When it ends, what follows (the next in Up next, the top again with Repeat all, the same piece
+  with Repeat one) loads and waits at its start; the next Play plays it at once, as Play always has after a wait. A
+  channel plays one of its pieces per Play too. Before 1.26 four played in a row.
+- A piece started that way counts as played (the Library's Recent), as one started by a tap does.
+
+## No shuffle
+- Gone from the transport (its room at the start stays empty, so Play stays in the middle), a playlist's page (an
+  outlined **Play** takes its place beside the floating one), a composer tile's long-press (*Play all* alone), the
+  system media controls, and the web panel (its button, a playlist's and a composer's Shuffle).
+- Channels deal their pools in the library's order (by title; a built-in list's channel in the list's order) and start
+  again from the top. The stored setting is removed once.
+
+## The safety check
+**When.** The tablet counts the pieces it plays on Steven Piano, to their end or stopped after they began. Right after
+the 6th since the last check that passed, the check runs. Pieces played by guests or from an iPad, and the Keys tab,
+don't count. If it can't run then (a quiet time, the app not in front, the piano not connected or its lock not
+trusting the tablet, a firmware update, guest play), it is **due**: it runs before the next Play, and that Play waits
+for it and goes once it passes. The count and a lock survive a restart of the app.
+
+**The steps**, each ticking on the card as it finishes:
+1. **Keys released**: the player's stop sequence (CC64 = 0, CC123), then a second.
+2. **No coil on** (`!active`): above 0 is a fire risk. The check ends at once: the 24 V is cut (the power plug), every
+   sound stops, the piano's own `off`, and Play is locked. **Boards answering (5 of 7)** (`!boards`): any board missing
+   calls for the restart and the power off and on before the keys are tested.
+3. **Testing each key (37 of 84)**: Test every key's sweep (all 84, 450 ms apart, at velocity 100, the tablet's own
+   piano sound held silent) while the microphone listens; the banner reads **Microphone on · safety check**. A key
+   with no power can't sound, so the sweep waits for the 24 V (the power plug's rail, wanted from the check's start)
+   before its first key, 10 s at most. If it doesn't come up, no key is judged: the line reads **Testing each key · the
+   24 V didn't come up**, the power goes off and on (no restart: the restart is for keys that didn't sound), then the
+   coils, the boards and the keys again. Still not up: the check can't finish and runs again before the next Play; it
+   never locks Play for keys it couldn't test.
+4. **A key not heard**: **Restarting the piano** where the firmware offers it (2.1.1's `restart`; never while a new
+   firmware hasn't confirmed itself; a refusal goes straight on), the wait for the piano and its boards (a minute at
+   most), **Power off and on** (the plug's repower), then the coils and the boards read again and every key again.
+5. **Still not heard**: Play is locked.
+6. **Pass**: the count starts again, the card says so and closes, and the piano rests.
+
+Facts the firmware doesn't report are left out ("not reported by this piano"); a piano that doesn't answer is restarted
+and repowered, and if it still doesn't the check runs again before the next Play. The restart and the power off and on
+happen at most once in a check: after a power off and on for the 24 V, keys that then don't sound lock Play (a judgement
+call in the build, for the designer to confirm; the restart isn't tried as well).
+
+**Play locked** is refused everywhere: the tablet, the web panel (409, "Safety check failed: C2, F♯4") and the media
+controls. Only a check that passes, run at the tablet, unlocks it.
+
+**The card** (Steven picked the look): a calm full-screen glass card over every screen, the resting screen too.
+- Running: **Safety check**, "After every 6 pieces the piano checks its keys.", "Next: Clair de lune", the steps (a tick
+  when done, a dot while running, a faint ring to come, a dash when left out with why, a cross when failed), and a slim
+  progress line weighed by how long each step takes. The screen stays on.
+- Passed: **Safety check passed**, for three seconds. Stopped (the banner's Stop, the app leaving the screen, the piano
+  gone): **Safety check stopped**, why, and "It runs again before the next piece.", for eight seconds or until OK.
+- Locked: **Safety check failed**, "C2, F♯4 didn't sound" in the attention amber over the keyboard map, "Ask whoever looks
+  after the piano to check these keys.", **Run the safety check** (filled) and **Not now**, both behind the kiosk PIN
+  while the kiosk locks the settings. A coil on is the one red thing ("A key is still on", with the live dot): a key
+  driven is what red means. Not now puts the card aside: a capsule "Play is locked · safety check failed" with **Show**
+  stays at the top of every screen, and a refused Play brings the card back. (A judgement call in the build, for the
+  designer to confirm: without it nothing under the card, the microphone switch included, could be reached until a
+  check passed.)
+- It fades in and out (a cut under reduced motion), the marks cross-fade, nothing loops; every control is 48 dp or more;
+  it holds every touch and Back while it shows.
+
+**Piano › System › Listen and test**: **Automatic safety check (uses the microphone)**, on by default, "Every 6 pieces
+the piano strikes each key once while the tablet listens. Nothing is recorded or sent." Turning it on asks Android for
+the microphone; without it the check runs without listening, and the card's line says so. Off: steps 1, 2 and 6, no
+sweep, so no key can lock Play. Under it: "Last safety check: today 14:20 · all 84 keys" (or the keys that didn't sound,
+"a key was still on", "keys not tested (microphone off)", "after a restart"), and "A safety check runs before the next
+piece." while one is due. Test every key on this card no longer needs Listening from the panel: the tablet hearing for
+itself needs Android's permission alone; that switch governs what the panel hears. Test every key (here, from the web
+panel, or in the check) waits for the 24 V before its first key, and stops with "Stopped: the 24 V didn't come up."
+when it doesn't come up.
+
+**The web panel**: a capsule in Now playing's head while a check runs ("Safety check · Testing each key (37 of 84)",
+the dot on) or Play is locked ("Safety check failed: C2, F♯4", the dot amber; red for a key still on). Its Play answers
+with the tablet's words while locked, or while a check is due and the app isn't in front. It can't start a check.

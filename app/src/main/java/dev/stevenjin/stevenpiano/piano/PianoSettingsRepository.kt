@@ -22,8 +22,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -247,27 +245,44 @@ class PianoSettingsRepository(
         session?.refreshLock()
     }
 
-    // ---- v1.26 — M60: one fact, asked and awaited (the smart plug's CHECK; M61's safety check asks the same) ----------
+    // ---- One fact asked, and the piano's restart (v1.26 — M61, the safety check) -----------------------------------
 
-    /** One [ask] at a time on the console. */
+    /** One question to the piano at a time ([ask], [restart]). */
     private val asking = Mutex()
 
     /**
-     * Sends `get <fact>` and returns the value of the first `!<fact>=…` line that comes back, or null when none comes within
-     * [timeoutMs] (or the piano has no console now). One request at a time; the read goes whatever the Bluetooth lock says
-     * (the piano answers it untrusted), and its answer reaches the settings' facts as any other.
+     * Asks the piano for fact [fact] now and waits for the answer (v1.26 — M61, the safety check; M60's power-plug CHECK
+     * asks the same way): sends `get !<fact>` (the firmware answers `get <fact>` and `get !<fact>` alike, BLE_SETTINGS.md
+     * › 4, and the app always names a fact with its "!") and returns the value of the first `!<fact>=…` line that comes
+     * back, or null after [timeoutMs], or with no piano connected that offers its console. One request at a time; a read
+     * goes whatever the piano's Bluetooth lock says. Main thread.
      */
     suspend fun ask(fact: String, timeoutMs: Long = 2_000): String? = asking.withLock {
         val name = fact.removePrefix("!")
-        if (!FACT_NAME.matches(name)) return@withLock null
-        val console = link.console ?: return@withLock null
-        val prefix = "!$name="
-        withTimeoutOrNull(timeoutMs) {
-            coroutineScope {
-                val answer = async(start = CoroutineStart.UNDISPATCHED) { console.lines.first { it.startsWith(prefix) } }
-                console.sendLine("get $name")
-                answer.await().removePrefix(prefix)
-            }
+        val here = session ?: return@withLock null
+        val answer = here.ask(name) ?: return@withLock null
+        try {
+            withTimeoutOrNull(timeoutMs) { answer.await() }
+        } finally {
+            here.forget(name, answer)
+        }
+    }
+
+    /**
+     * The piano's `restart` (firmware 2.1.1, v1.26 — M61; SMART_PLUG.md): it lets go of every coil the way an update does
+     * and resets about 200 ms after its reply, closing the link itself. Sent only from a trusted connection, and never
+     * right after a setting write (`restart` saves nothing: a write still on its way would be lost); the caller asks it
+     * only where the dump says `!restartproto=1`, and calls the link's `expectRestart` first. Returns the piano's reply,
+     * trimmed: `restarting`, or a refusal (`refused — updating firmware`, `refused — this firmware has not confirmed
+     * itself yet`, `refused — not authorised (send auth first)`); null when it wasn't sent or nothing came in [timeoutMs].
+     */
+    suspend fun restart(timeoutMs: Long = 2_000): String? = asking.withLock {
+        val here = session ?: return@withLock null
+        val reply = here.restart() ?: return@withLock null
+        try {
+            withTimeoutOrNull(timeoutMs) { reply.await() }
+        } finally {
+            here.restartAnswered()
         }
     }
 
@@ -313,6 +328,12 @@ class PianoSettingsRepository(
 
         /** Lines that wait for the piano to accept this tablet (v1.25 — M58), in order. */
         private val queued = ArrayList<String>()
+
+        /** [ask]s waiting for their fact's answer, by the fact's name (v1.26 — M61). */
+        private val asked = HashMap<String, MutableList<CompletableDeferred<String>>>()
+
+        /** A `restart` sent and its reply awaited (v1.26 — M61). */
+        private var restartReply: CompletableDeferred<String>? = null
 
         /** The lock's claim or proof on this connection. */
         private val handshake = LockHandshake(
@@ -372,6 +393,53 @@ class PianoSettingsRepository(
             if (!FACT_NAME.matches(name)) return
             awaiting += Awaited("!$name", null)
             console.sendLine("get !$name")
+        }
+
+        /** `get !name` now, its answer awaited ([PianoSettingsRepository.ask]); null for a name that is not a fact's. */
+        fun ask(name: String): CompletableDeferred<String>? {
+            if (!FACT_NAME.matches(name)) return null
+            val answer = CompletableDeferred<String>()
+            asked.getOrPut(name) { ArrayList() } += answer
+            awaiting += Awaited("!$name", null)
+            send("get !$name")
+            return answer
+        }
+
+        /** An ask is over (answered or not): it waits no more. */
+        fun forget(name: String, answer: CompletableDeferred<String>) {
+            val waiting = asked[name] ?: return
+            waiting.remove(answer)
+            if (waiting.isEmpty()) asked.remove(name)
+        }
+
+        /**
+         * `restart` sent, its reply awaited; null (not sent) before the dump, from a connection the piano doesn't trust, or
+         * while a setting's write is on its way (waiting out its 150 ms, being read back, or held for the lock).
+         */
+        fun restart(): CompletableDeferred<String>? {
+            if (!ready || !handshake.lock.phase.writable) return null
+            if (debounce.isNotEmpty() || queued.isNotEmpty() || awaiting.any { it.write != null }) {
+                log("Not sent: restart (a setting is still being written)")
+                return null
+            }
+            val reply = CompletableDeferred<String>()
+            restartReply = reply
+            send(RESTART)
+            return reply
+        }
+
+        fun restartAnswered() {
+            restartReply = null
+        }
+
+        /** The reply to a `restart` awaited (`restarting`, or a refusal), taken as its own: never a setting's error. */
+        private fun restartReplied(line: String): Boolean {
+            val waiting = restartReply ?: return false
+            val text = line.trim()
+            if (!text.startsWith(RESTARTING) && !text.contains(REFUSED) && !text.contains(UNKNOWN_COMMAND)) return false
+            restartReply = null
+            waiting.complete(text)
+            return true
         }
 
         /** The piano accepts this tablet (or has no lock): what waited goes, in order. */
@@ -604,6 +672,7 @@ class PianoSettingsRepository(
 
         private fun onLine(line: String) {
             if (handshake.onLine(line)) return   // the lock's own replies are not the settings'
+            if (restartReplied(line)) return   // v1.26 — M61: the safety check's restart
             statusLines?.let { collecting ->
                 if (!VALUE_LINE.matches(line)) collecting += line
                 statusEnd?.cancel()
@@ -629,6 +698,7 @@ class PianoSettingsRepository(
                 facts[name] = text
                 _factsAt.value = clock()
                 handshake.onFact(name, text)
+                asked.remove(name)?.forEach { it.complete(text) }   // v1.26 — M61: the asks waiting for it
             } else {
                 // A newer value the person is still choosing, or already sent, keeps showing until its own answer.
                 val newer = wireName in debounce || awaiting.any { it.name == wireName }
@@ -694,6 +764,11 @@ class PianoSettingsRepository(
         const val STATUS_FIRST_LINE_MS = 2_000L
         const val END = "end"
         const val UNKNOWN_COMMAND = "unknown command"
+
+        /** The piano's restart (firmware 2.1.1), its reply, and the word every refusal carries (v1.26 — M61). */
+        const val RESTART = "restart"
+        const val RESTARTING = "restarting"
+        const val REFUSED = "refused"
 
         /** `name=value` and `!name=value`, as `dump` and `get` print them; status lines are indented and never match. */
         val VALUE_LINE = Regex("""^(!?[a-z][a-z0-9_]*)=(.*)$""")

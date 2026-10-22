@@ -48,16 +48,17 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 /**
  * A playlist's page head: back and the playlist menu (Rename, Change photo, Delete; for a built-in
  * playlist Change photo only), the [cover] at 96 dp, the name in Title over "12 pieces · 41:20"
- * ("Built in · 12 pieces · 41:20" for a built-in one), then the outlined Shuffle button (not shown
- * for an empty playlist). Play is not here: it floats as a glass circle at the list's bottom end
- * (DESIGN.md › v1.5 — M16), where a thumb finds it wherever the list is scrolled.
+ * ("Built in · 12 pieces · 41:20" for a built-in one), then the outlined Play button (not shown
+ * for an empty playlist), which plays the playlist from its top, one piece per Play (v1.26 — M61: it took
+ * Shuffle's place). Play also floats as a glass circle at the list's bottom end (DESIGN.md › v1.5 — M16), where a thumb
+ * finds it wherever the list is scrolled.
  */
 @Composable
 fun PlaylistHeader(
     summary: PlaylistSummary,
     cover: @Composable (Modifier) -> Unit,
     onBack: () -> Unit,
-    onShuffle: () -> Unit,
+    onPlay: () -> Unit,
     onRename: () -> Unit,
     onChangePhoto: () -> Unit,
     onDelete: () -> Unit,
@@ -101,10 +102,10 @@ fun PlaylistHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedButton(onClick = onShuffle, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
-                    Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
+                OutlinedButton(onClick = onPlay, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {
+                    Icon(painterResource(R.drawable.ic_play), contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Shuffle")
+                    Text("Play")
                 }
             }
         } else {

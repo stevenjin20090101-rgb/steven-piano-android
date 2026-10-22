@@ -187,7 +187,7 @@ button, input, select { font: inherit; color: inherit; }
 
 .glyph { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
-/* The stroke glyphs (the panel's sections and pages, v1.18 — M47; shuffle's and repeat's lines). */
+/* The stroke glyphs (the panel's sections and pages, v1.18 — M47; repeat's lines). */
 .glyph-stroke { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 .stack { display: grid; gap: 16px; }
@@ -276,7 +276,7 @@ button, input, select { font: inherit; color: inherit; }
 
 .icon-button.small .glyph { width: 22px; height: 22px; }
 
-/* Shuffle and Repeat: tertiary when off, primary with a 4 px dot beneath when on. */
+/* Repeat: tertiary when off, primary with a 4 px dot beneath when on. */
 .mode { position: relative; color: var(--tertiary); }
 
 .mode[aria-pressed="true"] { color: var(--primary); }
@@ -1251,8 +1251,9 @@ button, input, select { font: inherit; color: inherit; }
 
 .transport { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
 
-/* The icon buttons give way (to 40 px) on the narrowest block; the play circle never does. */
-.transport .icon-button { flex: 0 1 52px; min-width: 40px; width: 52px; height: 52px; }
+/* The icon buttons give way (to 40 px) on the narrowest block; the play circle never does. Shuffle's room (v1.26 — M61:
+   shuffle is gone) stays, empty, so the play circle keeps the middle. */
+.transport .icon-button, .transport .transport-room { flex: 0 1 52px; min-width: 40px; width: 52px; height: 52px; }
 
 .transport .icon-button .glyph { width: 28px; height: 28px; }
 
@@ -1346,7 +1347,7 @@ button, input, select { font: inherit; color: inherit; }
 
 .now.views-on .transport { flex: none; margin: 0 0 0 auto; gap: 4px; }
 
-.now.views-on .transport .icon-button { flex: 0 1 44px; width: 44px; height: 44px; }
+.now.views-on .transport .icon-button, .now.views-on .transport .transport-room { flex: 0 1 44px; width: 44px; height: 44px; }
 
 .now.views-on .transport .icon-button .glyph { width: 24px; height: 24px; }
 

@@ -21,6 +21,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -78,15 +79,21 @@ class PlayerTest {
     private suspend fun <T> onMain(block: () -> T): T = withContext(main) { block() }
 
     @Test
-    fun `a queue plays through, advances by itself, and stop silences last`() = runBlocking {
+    fun `one piece per Play - the next one loads, waits at its start, and the next Play plays it, then stop silences last (v1_26 M61)`() = runBlocking {
+        assertEquals(1, Player.MAX_IN_A_ROW)
         source.pieces[1] = piece(60, 30)
         source.pieces[2] = piece(62, 30)
         onMain { player.play(1, listOf(1, 2)) }
-        withTimeout(5_000) {
-            player.state.first { it.piece?.pieceId == 2L && it.status == PlaybackStatus.Stopped && link.messages.size >= 8 }
-        }
-        assertEquals(2, player.state.value.queueSize)
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 2L && !it.loading && it.status == PlaybackStatus.Stopped } }
+        delay(300)
+        assertEquals("the second piece waits, loaded, never started", listOf("90 3C 50", "80 3C 00", "B0 40 00", "B0 7B 00"), link.messages)
+        assertEquals(PlaybackStatus.Stopped, player.state.value.status)
         assertEquals(1, player.state.value.queue.index)
+        assertEquals(listOf(1L), source.played.toList())
+        onMain { player.resume() }   // a person's Play
+        withTimeout(5_000) { while (link.messages.size < 8) delay(10) }
+        delay(300)
+        assertEquals("and it alone plays: the queue is over", 8, link.messages.size)
         assertTrue(onMain { player.stopAndFlush(300) })
         assertEquals(
             listOf(
@@ -238,12 +245,17 @@ class PlayerTest {
     }
 
     @Test
-    fun `repeat one plays the piece again from the top without reading it again`() = runBlocking {
+    fun `repeat one leaves the piece waiting at its start, and Play plays it again without reading it again`() = runBlocking {
         source.pieces[1] = piece(60, 30)
         onMain {
             player.setRepeat(RepeatMode.ONE)
             player.play(1)
         }
+        withTimeout(6_000) { while ("B0 7B 00" !in link.messages) delay(10) }
+        delay(2_000)   // past the 1.5 s gap: one piece per Play (v1.26 — M61), so it waits
+        assertEquals("once", 1, link.messages.count { it == "90 3C 50" })
+        assertEquals(PlaybackStatus.Paused, player.state.value.status)   // back at its start, ready
+        onMain { player.resume() }
         withTimeout(6_000) { while (link.messages.count { it == "90 3C 50" } < 2) delay(10) }
         assertTrue(onMain { player.stopAndFlush(300) })
         assertEquals(listOf(1L), source.loads.toList())
@@ -253,12 +265,17 @@ class PlayerTest {
     }
 
     @Test
-    fun `repeat all wraps from the last piece to the first`() = runBlocking {
+    fun `repeat all wraps from the last piece to the first, one piece per Play`() = runBlocking {
         source.pieces[1] = piece(60, 30)
         source.pieces[2] = piece(62, 30)
         onMain {
             player.setRepeat(RepeatMode.ALL)
             player.play(1, listOf(1, 2))
+        }
+        for (expected in listOf(2L, 1L)) {
+            withTimeout(8_000) { player.state.first { it.piece?.pieceId == expected && !it.loading && it.status != PlaybackStatus.Playing } }
+            onMain { player.resume() }
+            withTimeout(8_000) { player.state.first { it.piece?.pieceId == expected && it.status == PlaybackStatus.Playing } }
         }
         withTimeout(8_000) { while (noteOns().size < 3) delay(10) }
         assertTrue(onMain { player.stopAndFlush(300) })
@@ -276,6 +293,11 @@ class PlayerTest {
             player.playNext(listOf(3))
         }
         assertEquals(listOf(1L, 3L, 2L), player.state.value.queue.ids)
+        for (expected in listOf(3L, 2L)) {   // one piece per Play (v1.26 — M61): each waits, loaded, for it
+            withTimeout(8_000) { player.state.first { it.piece?.pieceId == expected && !it.loading && it.status != PlaybackStatus.Playing } }
+            onMain { player.resume() }
+            withTimeout(8_000) { player.state.first { it.piece?.pieceId == expected && it.status == PlaybackStatus.Playing } }
+        }
         withTimeout(8_000) { while (noteOns().size < 3) delay(10) }
         assertEquals(listOf("90 3C 50", "90 40 50", "90 3E 50"), noteOns())
         withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Stopped && it.queue.index == 2 } }
@@ -297,7 +319,7 @@ class PlayerTest {
     private fun noteOns(): List<String> = link.messages.filter { it.startsWith("90 ") && !it.endsWith(" 00") }
 
     @Test
-    fun `each piece begins after the pause before it, and the gap between two is the longer of the pause and 1_5 s`() = runBlocking {
+    fun `a piece begins after the pause before it, and the next one, waiting at its start, begins at once at its Play`() = runBlocking {
         source.pieces[1] = piece(60, 30)
         source.pieces[2] = piece(62, 30)
         val pressed = System.nanoTime()
@@ -305,14 +327,15 @@ class PlayerTest {
             player.setPreRoll(200)
             player.play(1, listOf(1, 2))
         }
+        withTimeout(8_000) { player.state.first { it.piece?.pieceId == 2L && !it.loading && it.status != PlaybackStatus.Playing } }
+        val again = System.nanoTime()
+        onMain { player.resume() }   // the next piece, loaded and waiting at its start: Play begins it at once, as Play always has
         withTimeout(8_000) { while (link.messages.count { it == "90 3E 50" } < 1) delay(10) }
         val sent = link.sent
         val first = sent.first { it.message == "90 3C 50" }
-        val firstStop = sent.first { it.message == "B0 7B 00" }   // the end of the first piece: its stop sequence
         val second = sent.first { it.message == "90 3E 50" }
         assertTrue("the first piece waited ${(first.atNanos - pressed) / 1_000_000} ms", first.atNanos - pressed >= 200_000_000L)
-        val gapMs = (second.atNanos - firstStop.atNanos) / 1_000_000
-        assertTrue("the gap was $gapMs ms", gapMs >= 1_500)
+        assertTrue("the second piece came ${(second.atNanos - again) / 1_000_000} ms after Play", second.atNanos - again < 1_000_000_000L)
         assertTrue(onMain { player.stopAndFlush(300) })
     }
 
@@ -393,7 +416,7 @@ class PlayerTest {
         fun channel() = player.state.value.channel
         fun uidOf(pieceId: Long): Long = player.state.value.queue.let { q -> q.uids[q.ids.indexOf(pieceId)] }
 
-        onMain { player.playAll(listOf(1, 2, 3), shuffle = false, channel = "calm") }
+        onMain { player.playAll(listOf(1, 2, 3), channel = "calm") }
         assertEquals("calm", channel())
         onMain {
             player.next()
@@ -407,7 +430,7 @@ class PlayerTest {
         assertNull(channel())
 
         onMain {
-            player.playAll(listOf(1, 2), shuffle = false, channel = "epic")
+            player.playAll(listOf(1, 2), channel = "epic")
             player.addToQueue(listOf(6), channel = "epic")   // the channel's own top-up
             player.skipToQueueEntry(uidOf(6))
         }
@@ -415,13 +438,13 @@ class PlayerTest {
         onMain { player.play(3) }
         assertNull(channel())
 
-        for (end in listOf<(Player) -> Unit>({ it.playAll(listOf(1, 2), shuffle = false) }, { it.stop() }, { it.leaveChannel() })) {
-            onMain { player.playAll(listOf(1, 2), shuffle = false, channel = "epic") }
+        for (end in listOf<(Player) -> Unit>({ it.playAll(listOf(1, 2)) }, { it.stop() }, { it.leaveChannel() })) {
+            onMain { player.playAll(listOf(1, 2), channel = "epic") }
             assertEquals("epic", channel())
             onMain { end(player) }
             assertNull(channel())
         }
-        onMain { player.playAll(listOf(1, 2), shuffle = false, channel = "epic") }
+        onMain { player.playAll(listOf(1, 2), channel = "epic") }
         assertTrue(onMain { player.stopAndFlush(300) })
         assertNull(channel())
     }
@@ -447,7 +470,7 @@ class PlayerTest {
             player.previous()
             player.seek(1_000_000)
             player.play(2)
-            player.playAll(listOf(1, 2), shuffle = false, channel = "calm")
+            player.playAll(listOf(1, 2), channel = "calm")
             player.addToQueue(listOf(2))
             player.liveNoteOn(60, 100)
             player.liveSustain(true)
@@ -491,8 +514,8 @@ class PlayerTest {
         hush = true
         onMain {
             player.play(1, listOf(1, 2))
-            player.playAll(listOf(1, 2), shuffle = false)
-            player.playAll(listOf(1, 2), shuffle = false, channel = "calm")
+            player.playAll(listOf(1, 2))
+            player.playAll(listOf(1, 2), channel = "calm")
             player.resume()
             player.togglePlayPause()
             player.next()
@@ -530,6 +553,104 @@ class PlayerTest {
         assertEquals(PlaybackStatus.Stopped, player.state.value.status)
         assertFalse("the next piece never sounded", "90 3C 50" in link.messages)
         assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `each piece that sounded is told once - to its end, replaced, or stopped, and a pause is no end (v1_26 M61)`() = runBlocking {
+        val heard = CopyOnWriteArrayList<Played>()
+        val listening = scope.launch { player.played.collect { heard += it } }
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 5_000)
+        source.pieces[3] = piece(64, 5_000)
+        onMain { player.play(1, listOf(1, 2, 3)) }
+        withTimeout(5_000) { while (heard.isEmpty()) delay(10) }
+        assertEquals(listOf(Played(1, ended = true)), heard.toList())
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 2L && !it.loading } }
+        delay(200)
+        assertEquals("loaded and waiting is not sounding", 1, heard.size)
+        onMain { player.resume() }
+        withTimeout(5_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        onMain { player.pause() }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Paused } }
+        delay(200)
+        assertEquals("a pause is no end", 1, heard.size)
+        onMain { player.next() }
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 3L && it.status == PlaybackStatus.Playing } }
+        withTimeout(2_000) { while (heard.size < 2) delay(10) }
+        assertEquals(Played(2, ended = false), heard[1])
+        onMain { player.stop() }
+        withTimeout(2_000) { while (heard.size < 3) delay(10) }
+        assertEquals(Played(3, ended = false), heard[2])
+        delay(200)
+        assertEquals("each once", 3, heard.size)
+        listening.cancel()
+    }
+
+    /** The safety check's say, as a test sets it: every start [open]s, is refused, or is kept for later ([kept]). */
+    private class TestGate : StartGate {
+        var mode = Mode.REFUSE
+        val asked = CopyOnWriteArrayList<Long?>()
+
+        @Volatile
+        var kept: (() -> Unit)? = null
+
+        enum class Mode { OPEN, REFUSE, KEEP }
+
+        override val open: Boolean get() = mode == Mode.OPEN
+
+        override fun admit(pieceId: Long?, start: () -> Unit): Boolean {
+            asked += pieceId
+            return when (mode) {
+                Mode.OPEN -> true
+                Mode.REFUSE -> false
+                Mode.KEEP -> {
+                    kept = start
+                    false
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the safety check is asked at every start - refused, nothing starts, kept, it starts once let go (v1_26 M61)`() = runBlocking {
+        val gate = TestGate()
+        val gated = Player(link, source, scope, prepareThread = {}, gate = gate)
+        source.pieces[1] = piece(60, 5_000)
+        source.pieces[2] = piece(62, 5_000)
+        delay(200)   // the new player's own stop sequence, as it sees the link
+        link.clear()
+        onMain {
+            gated.setPerformance(PerformanceSettings(expression = ExpressionLevel.OFF, velocityFloor = 1))
+            gated.play(1, listOf(1, 2))
+            gated.playAll(listOf(2, 1))
+            gated.playAll(listOf(1), channel = "calm")
+        }
+        assertEquals(listOf<Long?>(1L, 2L, 1L), gate.asked.toList())
+        assertTrue("nothing queued", gated.state.value.queue.ids.isEmpty())
+        // What joins an empty queue waits, loaded, for a Play the gate lets go; Play, Next, an entry: refused.
+        assertFalse(onMain { gated.addToQueue(listOf(1, 2)) })
+        withTimeout(2_000) { gated.state.first { it.piece?.pieceId == 1L && !it.loading } }
+        onMain {
+            gated.resume()
+            gated.togglePlayPause()
+            gated.next()
+            gated.skipToQueueEntry(gated.state.value.queue.uids[1])
+            gated.previous()
+        }
+        delay(300)
+        assertTrue("nothing reached the piano: ${link.messages}", noteOns().isEmpty())
+        assertEquals(PlaybackStatus.Stopped, gated.state.value.status)
+        assertEquals(listOf<Long?>(1L, 2L, 1L, 1L, 1L, 2L, 2L, 1L), gate.asked.toList())
+
+        // Kept: nothing now; let go (the check passed), the same start goes.
+        gate.mode = TestGate.Mode.KEEP
+        onMain { gated.resume() }
+        delay(200)
+        assertTrue(noteOns().isEmpty())
+        gate.mode = TestGate.Mode.OPEN
+        onMain { gate.kept!!.invoke() }
+        withTimeout(2_000) { while ("90 3C 50" !in link.messages) delay(5) }
+        assertTrue(onMain { gated.stopAndFlush(300) })
     }
 
     private class FakeSource : PieceSource {

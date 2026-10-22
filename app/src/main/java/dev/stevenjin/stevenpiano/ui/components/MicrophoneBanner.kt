@@ -45,19 +45,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ListenCopy
+import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
 /**
  * While the tablet's microphone is on (v1.23 — M55; DESIGN.md › v1.23 — M55), on every screen, the resting screen too: a
  * glass capsule at the top, the microphone and "Microphone on · listening from the web panel" (or, for the tablet's own key
- * test, "Microphone on · testing every key"), with **Stop**, which ends every hearing and the key test (no PIN: anyone at
- * the tablet may stop it). It slides in and out (a cut under reduced motion); nothing about it loops.
+ * test, "Microphone on · testing every key"; for the safety check's sweep, "Microphone on · safety check": v1.26 — M61),
+ * with **Stop**, which ends every hearing and the key test (no PIN: anyone at the tablet may stop it; a safety check
+ * stopped so runs again before the next piece). It slides in and out (a cut under reduced motion); nothing about it loops.
  */
 @Composable
 fun MicrophoneBanner(modifier: Modifier = Modifier) {
     val graph = LocalContext.current.graph
     val listen by graph.listening.state.collectAsStateWithLifecycle()
+    val safety by graph.safety.state.collectAsStateWithLifecycle()
     val reduced = rememberReducedMotion()
     AnimatedVisibility(
         visible = listen.on,
@@ -85,7 +88,11 @@ fun MicrophoneBanner(modifier: Modifier = Modifier) {
                 Icon(painterResource(R.drawable.ic_mic), contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (listen.panel) ListenCopy.BANNER_PANEL else ListenCopy.BANNER_TEST,
+                    when {
+                        listen.panel -> ListenCopy.BANNER_PANEL
+                        safety.running -> SafetyCopy.BANNER
+                        else -> ListenCopy.BANNER_TEST
+                    },
                     Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,

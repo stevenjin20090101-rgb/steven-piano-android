@@ -22,7 +22,8 @@ firmware's (see *Updating the piano's firmware*) and for Studio's models and the
 piano sound when you download them (see *Studio*, *Piano sound on the tablet*). With
 **Web panel** on, it also
 serves its own control panel to your phone or laptop over Tailscale, and a request
-page to guests on the tablet's Wi-Fi (see *Web panel*). It never starts a piece by itself, and
+page to guests on the tablet's Wi-Fi (see *Web panel*). It never starts a piece by itself, plays one piece per
+Play, checks the piano's keys after every 6 pieces (see *Safety check*), and
 keeps silent at the hours you set (see *Quiet times*), on the school tablet it can be locked to the app as a kiosk
 (see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
 piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
@@ -46,7 +47,8 @@ on the tablet*). Made by Steven Jin. Version 1.25.
   to Classical*), and a composer's or artist's tile moves every piece by them. In
   kiosk mode the switch is free and a move asks for the PIN.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
-  composer's portrait), **Shuffle**, and its pieces in the order you give them:
+  composer's portrait), **Play** (from its top, in its order: there is no shuffle
+  since 1.26), and its pieces in the order you give them:
   drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**
   floats as a filled circle at the bottom of the list, wherever it is scrolled.
   Rename, change the photo or delete it from its menu. The playlists are listed
@@ -65,21 +67,23 @@ on the tablet*). Made by Steven Jin. Version 1.25.
   all as a grid): **Classical** and **Modern** (every piece of that genre; from 1.14), Calm, Epic,
   Recognisable, Popular, Baroque, Romantic, Impressionist, Nocturnes, Études and Everything, each
   faced with its four most frequent composers. A tap
-  plays the channel without end: 25 of its pieces shuffled into Up next, ten
-  more whenever fewer than five are left, and nothing again until the whole pool
-  has played (the next round leaves out the last 20). Now playing and the panel read
+  plays the channel without end: 25 of its pieces into Up next in the library's
+  order, ten more whenever fewer than five are left, and nothing again until the
+  whole pool has played (then it starts from the top). Each Play plays one of them
+  (since 1.26). Now playing and the panel read
   "CLAUDE DEBUSSY · CALM · CHANNEL", and the card "● PLAYING". A long press sets
   the channel's **volume** (70 % at first): the piano's own volume while the
   channel plays, when its firmware offers it (else the app's velocity), put back
   as it was when the channel ends. Playing
   anything else, or Stop, ends the channel. A channel of fewer than three pieces
   reads "Add more pieces" and does not play.
-- **Up next, shuffle and repeat**: the queue glyph on Now playing opens *Up
-  next*, to reorder, remove, clear, or skip to a piece. **Shuffle** and
-  **Repeat** (off, all, one) sit at the two ends of the transport and are
-  remembered; shuffle keeps the current piece playing, and turning it off brings
-  the order back. The lock screen and the system media controls show the queue
-  and both modes.
+- **Up next and repeat**: the queue glyph on Now playing opens *Up next*, to
+  reorder, remove, clear, or skip to a piece. **Repeat** (off, all, one) sits at
+  the end of the transport and is remembered. Pieces always play in the order
+  they are given: Shuffle was removed in 1.26, from the tablet, the web panel and
+  the system media controls (which show the queue and Repeat).
+- **One piece per Play** (from 1.26): a Play plays one piece. When it ends, the
+  next one in Up next loads and waits at its start; press Play for it.
 - **Artwork and notes**: composers' portraits and two-sentence blurbs, and each
   piece's notes (tap the title on Now playing), from Wikipedia (`en.wikipedia.org`,
   `upload.wikimedia.org`); each piece's album cover from Apple's catalogue
@@ -1164,8 +1168,8 @@ the PIN (and while it runs, its row opens without it).
 
 ## Quiet times
 
-Since 1.20 the piano never starts a piece by itself: someone presses Play, on the tablet or the web panel, and then Up
-next follows on, four pieces in a row at most. A guest's request joins Up next and waits for someone's Play. The timed
+Since 1.20 the piano never starts a piece by itself: someone presses Play, on the tablet or the web panel, and it plays
+one piece (since 1.26; four in a row before); the next one in Up next waits, ready, for the next Play. A guest's request joins Up next and waits for someone's Play. The timed
 plays of earlier versions (Schedules) were removed; any you saved stay on the tablet, unshown, and never run.
 
 **Quiet times** keep the piano silent at set hours, for lessons or the night. **Piano › Quiet times** (the hub's row
@@ -1198,6 +1202,62 @@ time, and a change of the clock or the time zone is taken at once. (Since 1.24 n
 - [ ] The piano switched off: 20 seconds after the minute the page reads "Missed: … (piano not
       connected)".
 - [ ] Restart the tablet with a schedule ahead and don't open the app: it still plays.
+
+## Safety check
+
+After every 6th piece the tablet plays on the piano, the piano checks itself (from 1.26). A full-screen **Safety
+check** card shows, over whatever was on the tablet, the resting screen too, with each step ticking as it finishes:
+
+1. **Keys released**: every key let go and the pedal up.
+2. **No coil on**: the piano says no key is still powered. If one is, the check stops at once: the power to the keys is
+   cut (with the power plug), everything stops, and Play is locked ("Safety check failed: a key is still on", in red).
+3. **Boards answering (7 of 7)**: every power board answers. A missing one calls for the restart and the power off and
+   on below, before the keys are tested.
+4. **Testing each key (37 of 84)**: the piano strikes each key once, low to high (about 40 s), while the tablet's
+   microphone listens; the banner says "Microphone on · safety check". Nothing is recorded or sent. The keys are
+   struck only once the power to them is up (with the power plug, a second or so after it is wanted). If it doesn't
+   come up within 10 seconds no key is judged ("Testing each key · the 24 V didn't come up"): the power goes off and
+   on, then the keys are tested; if it still doesn't come up, the check runs again before the next piece, and Play
+   isn't locked by keys that weren't tested.
+5. A key not heard: **Restarting the piano** (on firmware that has the restart, 2.1.1 and later; never while a new
+   firmware is still confirming itself) and **Power off and on** (with the power plug), then every key again.
+6. **Still not heard**: Play is locked. The card says "Safety check failed", shows the keys that didn't sound
+   ("C2, F♯4") on the keyboard, and "Ask whoever looks after the piano to check these keys". Play is refused
+   everywhere meanwhile: on the tablet, the web panel ("Safety check failed: C2, F♯4") and the media controls. The lock
+   stays through a restart of the app.
+
+When every key sounds, the card says **Safety check passed** and closes; the next piece waits for Play as always. The
+card's **Run the safety check** (behind the kiosk PIN in kiosk mode) runs it again: only a check that passes unlocks
+Play. **Not now** (the same PIN) puts the card aside as a capsule at the top of every screen, "Play is locked · safety
+check failed", with **Show**; Play stays locked. The web panel shows the check's step, or the lock, as a capsule on Now
+playing, and can't start a check (the microphone needs the tablet in front).
+
+**When it can't run** right after the 6th piece (a quiet time, Steven Piano not in front on the tablet, the piano not
+connected, a firmware update, guest play), it runs before the next Play, and that Play waits for it. A Play from the web
+panel while the app isn't in front on the tablet says "A safety check runs before the next piece. Open Steven Piano on
+the tablet." A check stopped on the way (Stop on the banner, the app leaving the screen) runs again before the next
+piece. Pieces played by guests, from an iPad, or on the Keys tab don't count.
+
+**Piano › System › Listen and test**: **Automatic safety check (uses the microphone)** is on by default ("Every 6 pieces
+the piano strikes each key once while the tablet listens. Nothing is recorded or sent."). Turning it on asks Android for
+the microphone; without it, the check runs without listening, and says so. Off, the check still releases the keys and
+reads the coils and the boards, and no key can lock Play. Under it: "Last safety check: today 14:20 · all 84 keys".
+**Test every key** waits for the power to the keys too, and stops with "Stopped: the 24 V didn't come up." when it
+doesn't come up.
+After a restart of the piano its System page reads the last reset as "Restarted": expected, not a fault.
+
+**On the emulator** (debug builds): the tablet's microphone is a stand-in that hears the keys the check strikes.
+`adb shell setprop debug.stevenpiano.silentkeys 36,61` leaves those keys silent, so the failure and the lock can be
+seen; `adb shell "setprop debug.stevenpiano.silentkeys ''"` hears them all again. Grant the microphone first:
+`adb shell pm grant dev.stevenjin.stevenpiano android.permission.RECORD_AUDIO`.
+
+**On the piano:**
+
+- [ ] Six pieces with the piano connected: right after the sixth the card shows; every key sounds once, low to high;
+      the card says passed and closes; the seventh piece waits for Play.
+- [ ] Cover the tablet's microphone during the keys: they aren't heard, the piano restarts (2.1.1), the keys sound
+      again, and Play locks with the keys named. Run the safety check uncovered: Play is free again.
+- [ ] A quiet time over the sixth piece's end: no check; the first Play after it runs the check, then plays.
 
 ## Studio
 
@@ -1491,9 +1551,9 @@ file to the release `models`.
       over the roll upright and beside it on its side, in step with each other;
       dragging the divider, hiding a view and bringing it back, and View › Score
       only and Notes only work while playing.
-- [ ] Shuffle a playlist and skip around while connected: every piece starts
-      cleanly, no key is left down between pieces, Previous and Next follow the
-      shuffled order, and turning Shuffle off keeps the current piece playing.
+- [ ] Play a playlist while connected: the first piece plays, then the next
+      waits at its start with no key left down; Play plays it, and Previous and
+      Next follow the playlist's order.
 - [ ] Keys: hold a chord and turn the phone (or the tablet): the chord keeps
       sounding, and the screen turns once the fingers lift.
 - [ ] Clair de lune with the score showing, at 100 % and at 50 % tempo: the

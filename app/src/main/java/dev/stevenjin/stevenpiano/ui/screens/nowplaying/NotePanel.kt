@@ -120,8 +120,7 @@ internal val PANEL_GAP = 8.dp
 
 /**
  * The scrubber over the transport, as Now playing and the now-playing panel show them, on glass or
- * solid: through [playback] (which keeps the playback service running), Shuffle and Repeat on the
- * player. [onSeek] is the scrubber's seek; [onMoved] follows anything else that moves a paused
+ * solid: through [playback] (which keeps the playback service running), Repeat on the player. [onSeek] is the scrubber's seek; [onMoved] follows anything else that moves a paused
  * piece (Previous), so the picture catches up. Without [scrubber] the transport alone (the score's
  * strip, v1.18 — M49); [inset] is the scrubber's room at its sides.
  */
@@ -150,9 +149,7 @@ internal fun ColumnScope.TransportControls(
     TransportBar(
         playing = state.status == PlaybackStatus.Playing,
         hasNext = state.queue.hasNext,
-        shuffle = state.queue.shuffle,
         repeat = state.queue.repeat,
-        onShuffle = { player.setShuffle(!state.queue.shuffle) },
         onRepeat = { player.setRepeat(state.queue.repeat.cycled()) },
         onPrevious = {
             playback.previous()

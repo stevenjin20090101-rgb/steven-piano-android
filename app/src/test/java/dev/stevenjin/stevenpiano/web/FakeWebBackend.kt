@@ -107,16 +107,16 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
         return true
     }
 
-    override suspend fun playAll(ids: List<Long>, shuffle: Boolean): Boolean {
+    override suspend fun playAll(ids: List<Long>): Boolean {
         val kept = ids.filter { id -> pieces.any { it.id == id } }
         if (kept.isEmpty()) return false
-        record("play-all $kept shuffle=$shuffle")
+        record("play-all $kept")
         return true
     }
 
-    override suspend fun playPlaylist(id: Long, shuffle: Boolean): Boolean {
+    override suspend fun playPlaylist(id: Long): Boolean {
         if (playlistPieces[id].isNullOrEmpty()) return false
-        record("play-playlist $id shuffle=$shuffle")
+        record("play-playlist $id")
         return true
     }
 
@@ -125,8 +125,6 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     override suspend fun seek(ms: Long) = record("seek $ms")
 
     override suspend fun setTempo(pct: Int) = record("tempo $pct")
-
-    override suspend fun setShuffle(on: Boolean) = record("shuffle $on")
 
     override suspend fun setRepeat(mode: RepeatMode) = record("repeat ${mode.name.lowercase()}")
 
@@ -307,6 +305,12 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     val sectionsHeld: MutableList<QuietSection> = Collections.synchronizedList(mutableListOf())
 
     override suspend fun quietNow(): QuietNow = quietHeld
+
+    /** Why Play is refused by the safety check (v1.26 — M61), as the test sets it; null: Play may go. */
+    @Volatile
+    var safety: String? = null
+
+    override suspend fun safetyRefusal(): String? = safety
 
     override suspend fun quiet(): WebQuiet = WebQuiet(sectionsHeld.toList(), quietHeld)
 

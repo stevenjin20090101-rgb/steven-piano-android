@@ -200,7 +200,6 @@ object DiagnosticsText {
         line("expression", s.expression)
         line("restrikeMs", s.restrikeMs)
         line("keysViewportStart", s.keysViewportStart)
-        line("shuffle", s.shuffle)
         line("repeat", s.repeat)
         line("artworkMonochrome", s.artworkMonochrome)
         line("fetchArtworkAutomatically", s.fetchArtworkAutomatically)
@@ -242,6 +241,8 @@ object DiagnosticsText {
         line("midiOutName", s.midiOutName)
         // Listening from the panel (v1.23 — M55): whether the panel may hear the room through the microphone.
         line("listenFromPanel", s.listenFromPanel)
+        // The safety check's listening (v1.26 — M61): whether its sweep strikes each key with the microphone listening.
+        line("safetyCheckListens", s.safetyCheckListens)
     }
 
     fun updateLine(state: UpdateState): String = when (state) {

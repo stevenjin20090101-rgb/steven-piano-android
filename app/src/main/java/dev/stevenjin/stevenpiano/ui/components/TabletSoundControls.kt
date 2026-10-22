@@ -53,7 +53,7 @@ import kotlin.math.roundToInt
 
 /**
  * The speaker: the content colour while the tablet sounds, the tertiary grey while it doesn't (off, the
- * piano connected, or no SoundFont yet), as Shuffle and Repeat show off and on. A tap opens the popover:
+ * piano connected, or no SoundFont yet), as Repeat shows off and on. A tap opens the popover:
  * the TABLET SOUND eyebrow, what the sound is doing, the Volume slider with its value, and the download
  * when the sound waits for it, on the menus' glass ([GlassPopover], DESIGN.md › v1.9): below the speaker, ends
  * aligned, above it where there is no room; [popoverAlignment] [Alignment.Start] aligns the starts instead,

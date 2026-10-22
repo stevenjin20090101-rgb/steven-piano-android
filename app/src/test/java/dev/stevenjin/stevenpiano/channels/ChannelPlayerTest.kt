@@ -34,11 +34,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.Executors
-import kotlin.random.Random
 
 /**
  * Endless play from a channel's pool: the first 25, a top-up of 10 whenever fewer than 5 are up
- * next, no repeats until the pool is exhausted, a fresh shuffle without the last ones dealt, the
+ * next, dealt in the pool's own order and from its top again at its end (v1.26 — M61: no shuffle anywhere), the
  * channel ending when the player's channel stops being it (stop, a piece played from a list), and
  * the channel's volume on the piano or as the app's velocity, put back when it ends.
  */
@@ -48,46 +47,41 @@ class ChannelPlayerTest {
     private val piano = FakePiano()
     private val pools = HashMap<String, List<Long>>()
     private val volumes = HashMap<String, Int>()
-    private val channels = ChannelPlayer(deck, pools::get, { volumes[it] ?: ChannelPlayer.DEFAULT_VOLUME }, piano, scope, Random(17)).also { it.start() }
+    private val channels = ChannelPlayer(deck, pools::get, { volumes[it] ?: ChannelPlayer.DEFAULT_VOLUME }, piano, scope).also { it.start() }
 
     @After
     fun tearDown() = scope.cancel()
 
     @Test
-    fun `a channel starts with 25 of its pool, shuffled, and tops up 10 when fewer than 5 are up next`() {
+    fun `a channel starts with the first 25 of its pool in its order, and tops up 10 when fewer than 5 are up next (v1_26 M61)`() {
         pools["everything"] = (1L..100L).toList()
         assertTrue(channels.play("everything"))
         val first = deck.queue
-        assertEquals(25, first.size)
+        assertEquals("in the pool's order, never shuffled", (1L..25L).toList(), first)
         assertEquals("everything", deck.state.value.channel)
-        assertTrue(first != (1L..25L).toList())   // shuffled
         repeat(20) { deck.advance() }   // 4 up next now: under 5
-        assertEquals(35, deck.queue.size)
-        assertEquals(first, deck.queue.take(25))
+        assertEquals((1L..35L).toList(), deck.queue)
         assertEquals(listOf("everything"), deck.topUps.distinct())
     }
 
     @Test
-    fun `nothing repeats until the pool is exhausted, and a fresh deck leaves out the last 20 dealt`() {
+    fun `nothing repeats until the pool is exhausted, then it starts again from its top, in order`() {
         pools["romantic"] = (1L..60L).toList()
         channels.play("romantic")
-        while (deck.queue.size < 60) deck.advance()
-        val firstPass = deck.queue.take(60)
-        assertEquals((1L..60L).toSet(), firstPass.toSet())   // every piece once
         while (deck.queue.size < 100) deck.advance()
-        val secondPass = deck.queue.subList(60, 100)
-        assertTrue(secondPass.take(40).none { it in firstPass.takeLast(20) })
-        assertEquals(40, secondPass.take(40).toSet().size)
+        assertEquals((1L..60L).toList() + (1L..40L).toList(), deck.queue.take(100))
     }
 
     @Test
-    fun `a small pool still shuffles, leaving out at most half of it`() {
-        pools["calm"] = listOf(7L, 8L, 9L)
+    fun `a small pool goes round in its order, and played again starts from its top`() {
+        pools["calm"] = listOf(7L, 9L, 8L)
         channels.play("calm")
         val dealt = deck.queue
         assertEquals(25, dealt.size)
-        assertEquals(setOf(7L, 8L, 9L), dealt.take(3).toSet())
-        dealt.zipWithNext().forEach { (a, b) -> assertTrue("$dealt", a != b) }   // never the same piece twice running
+        assertEquals(List(25) { listOf(7L, 9L, 8L)[it % 3] }, dealt)
+        channels.stop()
+        channels.play("calm")
+        assertEquals(listOf(7L, 9L, 8L), deck.queue.take(3))
     }
 
     @Test
@@ -196,7 +190,7 @@ class ChannelPlayerTest {
         val player = Player(FakePianoLink(), ShortPieces, playerScope, prepareThread = {})
         val piano = FakePiano().apply { volume = 100 }
         val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-        val channels = ChannelPlayer(player, { (1L..40L).toList() }, { 70 }, piano, watcher, Random(3))
+        val channels = ChannelPlayer(player, { (1L..40L).toList() }, { 70 }, piano, watcher)
         try {
             withContext(main) {
                 channels.start()
@@ -235,7 +229,7 @@ class ChannelPlayerTest {
         val topUps = ArrayList<String?>()
         val queue: List<Long> get() = flow.value.queue.ids
 
-        override fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String?) {
+        override fun playAll(pieceIds: List<Long>, channel: String?) {
             flow.update { it.copy(queue = snapshot(pieceIds, 0), channel = channel) }
         }
 

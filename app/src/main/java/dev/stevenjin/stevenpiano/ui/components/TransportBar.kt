@@ -26,11 +26,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +52,7 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
-/** Shuffle 48 + previous 56 + play 72 + next 56 + repeat 48. */
+/** The room Shuffle had 48 (kept, so Play stays centred) + previous 56 + play 72 + next 56 + repeat 48. */
 private val CONTROLS_WIDTH = 280.dp
 private val MIN_GAP = 8.dp
 private val MAX_GAP = 32.dp
@@ -62,22 +62,20 @@ private val SIDE_ROOM = 16.dp
 internal val TransportMinWidth = CONTROLS_WIDTH + MIN_GAP * 4 + SIDE_ROOM * 2
 
 /**
- * shuffle · previous · play/pause · next · repeat. Play/pause is the 72 dp circle in the content
+ * previous · play/pause · next · repeat, with the room Shuffle had at the start left empty (v1.26 — M61: shuffle is
+ * gone), so Play stays in the middle. Play/pause is the 72 dp circle in the content
  * colour with a surface glyph; its glyph cross-fades with a small scale over 200 ms (v1.14; a cut when motion is reduced) and
- * it gives the app's one haptic, a light tick, on play and on pause. Shuffle and Repeat sit at the
- * two ends: the tertiary grey when off, the content colour with a 4 dp dot beneath when on; Repeat
- * cycles off, all, one (a small "1" in its glyph). The gaps shrink to fit a narrow phone. On glass
- * ([LocalOnGlass], DESIGN.md › v1.5 — M16) Shuffle and Repeat when off take the secondary grey
- * (nothing tertiary sits on glass); play/pause stays the filled circle, the primary action sitting on
+ * it gives the app's one haptic, a light tick, on play and on pause. Repeat sits at the end: the tertiary grey when
+ * off, the content colour with a 4 dp dot beneath when on; it cycles off, all, one (a small "1" in its glyph). The gaps
+ * shrink to fit a narrow phone. On glass ([LocalOnGlass], DESIGN.md › v1.5 — M16) Repeat when off takes the secondary
+ * grey (nothing tertiary sits on glass); play/pause stays the filled circle, the primary action sitting on
  * the glass band, never glass on glass (DESIGN.md › v1.9).
  */
 @Composable
 fun TransportBar(
     playing: Boolean,
     hasNext: Boolean,
-    shuffle: Boolean,
     repeat: RepeatMode,
-    onShuffle: () -> Unit,
     onRepeat: () -> Unit,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
@@ -91,7 +89,7 @@ fun TransportBar(
             horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ModeToggle(R.drawable.ic_shuffle, on = shuffle, description = if (shuffle) "Shuffle on" else "Shuffle off", switch = true, onClick = onShuffle)
+            Spacer(Modifier.size(48.dp))   // where Shuffle was: Play stays centred
             GlyphButton(R.drawable.ic_skip_previous, "Previous", Modifier.size(56.dp), glyphSize = 32.dp, onClick = onPrevious)
             PlayPauseButton(playing, onPlayPause)
             GlyphButton(R.drawable.ic_skip_next, "Next", Modifier.size(56.dp), enabled = hasNext, glyphSize = 32.dp, onClick = onNext)
@@ -103,7 +101,6 @@ fun TransportBar(
                     RepeatMode.ALL -> "Repeat all"
                     RepeatMode.ONE -> "Repeat one"
                 },
-                switch = false,
                 onClick = onRepeat,
             )
         }
@@ -111,27 +108,20 @@ fun TransportBar(
 }
 
 /**
- * Shuffle or Repeat: a 48 dp target, its glyph tertiary when off and in the content colour with a
- * 4 dp dot beneath when on. The description carries the state ("Shuffle on"); Shuffle is a switch
- * to accessibility services, Repeat a button that cycles.
+ * Repeat: a 48 dp target, its glyph tertiary when off and in the content colour with a 4 dp dot beneath when on. The
+ * description carries the state ("Repeat all"); to accessibility services it is a button that cycles.
  */
 @Composable
-private fun ModeToggle(@DrawableRes glyph: Int, on: Boolean, description: String, switch: Boolean, onClick: () -> Unit) {
+private fun ModeToggle(@DrawableRes glyph: Int, on: Boolean, description: String, onClick: () -> Unit) {
     val ink = MaterialTheme.colorScheme.onSurface
     val off = if (LocalOnGlass.current) MaterialTheme.colorScheme.onSurfaceVariant else LocalTertiary.current
     val press = remember { MutableInteractionSource() }
-    val ripple = LocalIndication.current
-    val action = if (switch) {
-        Modifier.toggleable(value = on, interactionSource = press, indication = ripple, role = Role.Switch, onValueChange = { onClick() })
-    } else {
-        Modifier.clickable(interactionSource = press, indication = ripple, role = Role.Button, onClick = onClick)
-    }
     Box(
         Modifier
             .size(48.dp)
             .pressScale(press)
             .clip(CircleShape)
-            .then(action)
+            .clickable(interactionSource = press, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {

@@ -127,7 +127,7 @@ const val BUILT_IN = "Built in"
 
 /**
  * A composer's tile, by full name: their portrait, else the mosaic of their pieces' roll cards.
- * Tap opens their pieces; long-press plays them all or shuffled (those of the genre shown, [scope]),
+ * Tap opens their pieces; long-press plays them all, from the top (those of the genre shown, [scope]),
  * then moves every piece by the name to the other genre than [genre], the one most of their pieces
  * have (v1.14 — M37: Move to Modern or Move to Classical; not offered without one).
  */
@@ -137,7 +137,7 @@ fun ComposerTile(
     scope: LibraryScope,
     genre: Int?,
     onOpen: () -> Unit,
-    onPlayAll: (shuffle: Boolean) -> Unit,
+    onPlayAll: () -> Unit,
     onMove: (genre: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -151,8 +151,7 @@ fun ComposerTile(
         modifier = modifier,
     ) {
         GlassDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            MenuItem("Play all", { menu = false }) { onPlayAll(false) }
-            MenuItem("Shuffle", { menu = false }) { onPlayAll(true) }
+            MenuItem("Play all", { menu = false }) { onPlayAll() }
             moveTarget(genre)?.let { target ->
                 HairlineDivider()
                 MenuItem(moveLabel(target), { menu = false }) { onMove(target) }

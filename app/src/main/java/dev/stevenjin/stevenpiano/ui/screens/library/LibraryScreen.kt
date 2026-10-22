@@ -153,7 +153,7 @@ import kotlinx.coroutines.launch
 /**
  * The Library tab: search, the category chips, then text rows, or grids of tiles for Playlists
  * and Composers. Tapping a piece plays it (with the list it was in as the queue) and [onPlaying]
- * shows Now playing. A playlist opens as a page (its cover, Play and Shuffle) whose rows reorder
+ * shows Now playing. A playlist opens as a page (its cover and Play) whose rows reorder
  * by their drag handles while no search narrows them. Row and tile menus act through [playback]
  * and the view model; "About this piece" opens the piece sheet and "Change photo" the photo
  * picker. A composer opens with their portrait and blurb. [onImport] brings files in; artwork
@@ -467,9 +467,9 @@ private class LibraryPlay(private val playback: PlaybackStarter, private val onP
         started()
     }
 
-    fun all(pieceIds: List<Long>, shuffle: Boolean) {
+    fun all(pieceIds: List<Long>) {
         if (pieceIds.isEmpty()) return
-        playback.playAll(pieceIds, shuffle)
+        playback.playAll(pieceIds)
         started()
     }
 
@@ -569,7 +569,7 @@ private fun LibraryItems(
 
     // An open playlist's Play floats at the list's bottom end; its last row can rise clear of it.
     val floatingPlay = playlistId != null && shown.isNotEmpty()
-    FloatingPlayRequest(floatingPlay, playAnchor) { play.all(shown.map { it.id }, shuffle = false) }
+    FloatingPlayRequest(floatingPlay, playAnchor) { play.all(shown.map { it.id }) }
     val direction = LocalLayoutDirection.current
     val listPadding = if (!floatingPlay) {
         padding
@@ -596,7 +596,7 @@ private fun LibraryItems(
                         summary,
                         cover = { PlaylistCover(summary.id, summary.name, ArtSize.Tile, it) },
                         onBack = vm::closeGroup,
-                        onShuffle = { play.all(shown.map { it.id }, shuffle = true) },
+                        onPlay = { play.all(shown.map { it.id }) },
                         onRename = { onDialog(LibraryDialog.RenamePlaylist(summary)) },
                         onChangePhoto = { onChangePhoto(summary.id) },
                         onDelete = { onDialog(LibraryDialog.DeletePlaylist(summary)) },
@@ -696,7 +696,7 @@ private fun LibraryItems(
                                 scope = state.scope,
                                 genre = listing.genreByKey[composer.composerKey],
                                 onOpen = { vm.openGroup(Group.Composer(composer.composerKey, composerName(composer, state.scope))) },
-                                onPlayAll = { shuffle -> vm.composerPieces(composer.composerKey) { play.all(it, shuffle) } },
+                                onPlayAll = { vm.composerPieces(composer.composerKey) { play.all(it) } },
                                 // Every piece by the name moves; in kiosk mode after the PIN, as a piece's Move.
                                 onMove = { genre ->
                                     gate.run {

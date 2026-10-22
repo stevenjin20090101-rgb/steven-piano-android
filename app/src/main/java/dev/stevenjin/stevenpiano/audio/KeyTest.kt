@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.audio
 
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.ui.ListenCopy
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -42,15 +43,20 @@ data class KeyTestState(
  * tablet's own piano sound is held silent meanwhile: it would fake a result. About 39 s.
  *
  * Refused, with its reason: the piano not connected; a piece playing ("Stop the music first."); a quiet time not lifted;
- * a firmware update running; listening off; another test running; and the microphone's own refusals (the app not in the
- * foreground). [stop] ends it at once with the player's stop sequence; it ends by itself, saying why, when the piano
- * disconnects, a piece starts, a quiet time begins, an update starts or the microphone stops. Main thread ([scope]'s).
+ * a firmware update running; the microphone not allowed (for a panel's test, Listening from the panel off; the tablet's
+ * own, and the safety check's, need Android's permission alone: v1.26 — M61); another test running; and the
+ * microphone's own refusals (the app not in the foreground). [stop] ends it at once with the player's stop sequence; it
+ * ends by itself, saying why, when the piano disconnects, a piece starts, a quiet time begins, an update starts or the
+ * microphone stops. [before] (v1.26 — M61: the 24 V rail with the power plug, connected by the integrator) is awaited
+ * before the first strike, whoever started the test; false (the rail not up within its time) ends it before any key is
+ * struck, as no key could sound. Main thread ([scope]'s).
  */
 class KeyTest(
     private val scope: CoroutineScope,
     private val piano: Piano,
     private val ears: Ears,
     private val nanos: () -> Long = System::nanoTime,
+    private val before: suspend () -> Boolean = { true },
 ) {
     /** The piano as the test strikes it, through the player (AppGraph's; a stand-in in the tests). Main thread. */
     interface Piano {
@@ -95,7 +101,7 @@ class KeyTest(
      */
     fun start(token: String?): ListenAnswer {
         refusal()?.let { return it }
-        if (!ears.allowed()) return ListenAnswer.Refused(ListenAnswer.OFF, ListenCopy.OFF)
+        if (!ears.allowed(token)) return ListenAnswer.Refused(ListenAnswer.OFF, if (token == null) ListenCopy.NO_PERMISSION else ListenCopy.OFF)
         if (running) return ListenAnswer.Refused(ListenAnswer.TESTING, ListenCopy.TESTING)
         val take = KeyTake()
         val heard = ears.tap(token, take::add) { end(ListenCopy.STOPPED_MICROPHONE, sequence = true) }
@@ -120,6 +126,17 @@ class KeyTest(
     }
 
     private suspend fun sweep(take: KeyTake) {
+        val ready = try {
+            before()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+        if (!ready) {
+            end(ListenCopy.STOPPED_RAIL, sequence = true)
+            return
+        }
         delay(LEAD_MS)   // the room before the first key, for its baseline
         for ((i, key) in KEYS.withIndex()) {
             interruption()?.let { (why, sequence) ->
