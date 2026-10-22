@@ -29,11 +29,14 @@ export function create(host) {
     return h('p', { class: 'empty' }, glyph(id), h('span', { text }));
   }
 
+  /** Up next's command (the Library's Play next and Add to queue too): true once the tablet took it; refused, said, and false. */
   async function queueCommand(body) {
     try {
       await post(host.ROOT + '/api/queue', body);
+      return true;
     } catch (e) {
       failed(e);
+      return false;
     }
   }
 

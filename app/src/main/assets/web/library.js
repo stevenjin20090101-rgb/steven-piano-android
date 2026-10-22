@@ -299,8 +299,9 @@ export function create(host) {
   function openMenu(anchor, piece, queue) {
     showMenu(anchor, piece.title, [
       ['Play', () => play(piece.id, queue)],
-      ['Play next', () => queueCommand({ action: 'playNext', ids: [piece.id] }).then(() => toast('It plays next.'))],
-      ['Add to queue', () => queueCommand({ action: 'add', ids: [piece.id] }).then(() => toast('Added to Up next.'))],
+      // v1.27 — M64: the toast only once the tablet took it; a refusal says itself (queueCommand) and nothing follows it.
+      ['Play next', () => queueCommand({ action: 'playNext', ids: [piece.id] }).then((done) => { if (done) toast('It plays next.'); })],
+      ['Add to queue', () => queueCommand({ action: 'add', ids: [piece.id] }).then((done) => { if (done) toast('Added to Up next.'); })],
       // The cover picker (v1.18 — M48), for a piece from the library: one made here (Studio's, a recording) has no genre.
       ...(piece.genre === 'classical' || piece.genre === 'modern' ? [['Find a cover…', () => findCover(piece, anchor)]] : []),
     ]);
