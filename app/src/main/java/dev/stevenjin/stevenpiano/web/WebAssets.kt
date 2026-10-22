@@ -63,6 +63,8 @@ object WebAssets {
     val PANEL: Map<String, Asset> = mapOf(
         "/" to Asset("index.html", HTML),
         "/app.js" to Asset("app.js", JS),
+        // The helpers the panel's modules share (v1.27 — M63), imported by app.js and the modules that use them.
+        "/ui.js" to Asset("ui.js", JS),
         // The mark (v1.20 — M53): the app's icon in the browser's tab and beside the rail's name; the guests' list has it too.
         "/favicon.svg" to Asset("favicon.svg", SVG),
         // The Settings and System pages (v1.18 — M47b): modules the page imports the first time each shows.

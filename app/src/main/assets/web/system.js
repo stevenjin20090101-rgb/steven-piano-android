@@ -16,6 +16,8 @@
 // once with DOM calls and brought up to date in place: a dial's arc eases to its new value (480 ms, none under reduced
 // motion) and nothing loops. Amber, `--attention`, only where attention() says something needs it, and never alone.
 
+import { guarded, whole } from './ui.js';
+
 const NEEDS_FIRMWARE = 'Needs newer firmware';
 
 /** A key held on (v1.23 — M55; the tablet's Attention.KEY_HELD). */
@@ -1694,22 +1696,7 @@ const n2 = (v) => Math.round(v * 100) / 100;
 const capital = (word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A whole number from the piano's text ("348160"), or null. */
-function whole(text) {
-  if (typeof text !== 'string' && typeof text !== 'number') return null;
-  const n = Number(String(text).trim());
-  return Number.isFinite(n) ? Math.round(n) : null;
-}
-
 function setText(node, text) {
   const value = text === null || text === undefined ? '' : String(text);
   if (node.textContent !== value) node.textContent = value;
-}
-
-function guarded(fn) {
-  try {
-    fn();
-  } catch (e) {
-    if (window.console) console.error(e);
-  }
 }

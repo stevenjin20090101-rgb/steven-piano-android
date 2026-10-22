@@ -10,9 +10,10 @@
 // The web panel (DESIGN.md › v1.5.1 — M18). No framework and no build step: the page talks to the
 // tablet's API with fetch, hears its changes over the socket, and builds every element with DOM
 // calls; text from the library (titles come from MIDI files) only ever goes in as text, never as
-// markup. The content security policy allows this file and nothing inline.
+// markup. The content security policy allows this file and nothing inline. An ES module since
+// v1.27 (M63): the helpers the modules share are ui.js's.
 
-'use strict';
+import { guarded, holdToRepeat } from './ui.js';
 
 (function () {
   // ---- Small helpers --------------------------------------------------------------------------
@@ -2758,31 +2759,6 @@
       h('div', { class: 'stepper' }, down, value, up));
   }
 
-  /** A button that acts once when pressed and, held, again every 70 ms after 400 ms; Enter and Space act once. */
-  function holdToRepeat(button, act) {
-    let delay = null;
-    let every = null;
-    const stop = () => {
-      clearTimeout(delay);
-      clearInterval(every);
-      delay = null;
-      every = null;
-    };
-    button.addEventListener('pointerdown', (event) => {
-      if (button.disabled || event.button !== 0) return;
-      event.preventDefault();
-      act();
-      delay = setTimeout(() => { every = setInterval(() => { if (button.disabled) stop(); else act(); }, 70); }, 400);
-    });
-    for (const type of ['pointerup', 'pointerleave', 'pointercancel', 'blur']) button.addEventListener(type, stop);
-    button.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        act();
-      }
-    });
-  }
-
   /** The seed: its title, then its composer, key and tempo, and Change; or the search over the library. */
   function seedPart(c) {
     if (c.reading && !c.seed) return h('ul', { class: 'rows' }, h('li', { class: 'row' }, h('p', { class: 'meta', text: 'Reading the piece…' })));
@@ -2919,16 +2895,6 @@
   function loadSystem() {
     if (!systemLoading) systemLoading = import('./system.js').then((module) => module || null, () => null);
     return systemLoading;
-  }
-
-  /** Runs [fn] for a module; what it throws is kept from the panel. */
-  function guarded(fn) {
-    try {
-      return fn();
-    } catch (e) {
-      if (window.console) console.error(e);
-      return undefined;
-    }
   }
 
   /** The module's page, made the first time it shows, in its section's body and head tools; null when it fails. */

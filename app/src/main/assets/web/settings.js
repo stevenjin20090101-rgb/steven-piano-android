@@ -14,6 +14,8 @@
 // 900 px; below that the list, and a page over it with a back row (system.css › Settings). Every element is built with
 // DOM calls, what the tablet says goes in as text, sizes go through the CSSOM, and every request is built from host.ROOT.
 
+import { guarded, holdToRepeat, whole } from './ui.js';
+
 /** The app's own words (ui/SettingNotes.kt, ui/PlaybackCopy.kt), so the panel says what the tablet says. */
 const NOTES = {
   defaultTempoPct: 'How fast pieces start; Now playing can change it',
@@ -1044,56 +1046,11 @@ export function create(host, body, tools) {
 
 // ---- Small helpers ------------------------------------------------------------------------------------------------
 
-/** A whole number from the piano's wire text ("70", " 110 "), or null. */
-function whole(text) {
-  if (typeof text !== 'string' && typeof text !== 'number') return null;
-  const n = Number(String(text).trim());
-  return Number.isFinite(n) ? Math.round(n) : null;
-}
-
-/**
- * A button that acts once when pressed and, held, again every 70 ms after 400 ms. A click no pointer made (Enter or
- * Space, a screen reader's activation: its `detail` is 0) acts once; a pointer's own click was its press.
- */
-function holdToRepeat(button, act) {
-  let delay = 0;
-  let every = 0;
-  const stop = () => {
-    clearTimeout(delay);
-    clearInterval(every);
-    delay = 0;
-    every = 0;
-  };
-  button.addEventListener('pointerdown', (event) => {
-    if (button.disabled || event.button !== 0) return;
-    stop();
-    act();
-    delay = setTimeout(() => {
-      every = setInterval(() => (button.disabled ? stop() : act()), 70);
-    }, 400);
-  });
-  for (const type of ['pointerup', 'pointerleave', 'pointercancel', 'blur']) button.addEventListener(type, stop);
-  button.addEventListener('click', (event) => {
-    if (event.detail === 0) act();
-  });
-  button.addEventListener('contextmenu', (event) => event.preventDefault());
-}
-
 function stored() {
   try {
     return localStorage.getItem(STORED_PAGE);
   } catch (e) {
     return null;
-  }
-}
-
-/** Runs [fn] for System's page; what it throws is kept from Settings. */
-function guarded(fn) {
-  try {
-    return fn();
-  } catch (e) {
-    if (window.console) console.error(e);
-    return undefined;
   }
 }
 

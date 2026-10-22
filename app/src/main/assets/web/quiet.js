@@ -15,6 +15,8 @@
 // the CSSOM, every request is built from host.ROOT, and the tablet checks every save again by the same rules. The page's
 // own styles are quiet.css, which the module links once.
 
+import { same } from './ui.js';
+
 /** The days as the tablet numbers them on the wire (Monday 1 … Sunday 7), short and in full. */
 const DAYS = [
   [1, 'Mon', 'Monday'],
@@ -565,7 +567,6 @@ const inMinutes = (s) => ({ name: s.name, days: s.days.slice(), blocks: s.blocks
 const toWire = (s) => ({ name: s.name, days: s.days, blocks: s.blocks.map((b) => ({ start: wire(b.start), end: wire(b.end) })) });
 
 const sortedDays = (days) => [...days].sort((a, b) => a - b);
-const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** The days as the tablet says them: "Every day", "Weekdays", "Weekends", "Mondays", "Mon, Wed, Fri". */
 function daysText(days) {
