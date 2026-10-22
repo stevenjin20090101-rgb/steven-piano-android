@@ -494,8 +494,11 @@ data class WebDisplay(
     val handColours: Boolean = false,
 )
 
-/** The piano link: its state's name ("connected", "scanning"…) and the piano's name while connected. */
-data class WebLink(val state: String, val name: String? = null)
+/**
+ * The piano link: its state's name ("connected", "scanning"…) and the piano's name while connected; and (v1.27 — M63, the
+ * state's link alone) whether notes reach the piano now ([sending]), as the tablet's rail dot says it, for the panel's dots.
+ */
+data class WebLink(val state: String, val name: String? = null, val sending: Boolean = false)
 
 /**
  * What the piano reported: "unknown", "unsupported" or "ready", its values and facts, and its last refusal; and (v1.27 —

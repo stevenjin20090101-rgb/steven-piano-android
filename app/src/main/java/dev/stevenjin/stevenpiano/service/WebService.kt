@@ -426,6 +426,8 @@ class WebService : Service() {
             // The 24 V power plug (v1.26 — M62): the state's little part only (waking, the rail, the words), not the
             // plug's readings, which change every few seconds and stay on /api/system.
             graph.railFact.map(WebPower::of).distinctUntilChanged().map { },
+            // The link's dot (v1.27 — M63): red only once the 24 V lets the notes through.
+            graph.railHoldsNotes.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created

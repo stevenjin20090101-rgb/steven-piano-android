@@ -52,8 +52,8 @@ const PRESET_LINES = {
   snappy: 'Fast repeats',
 };
 
-/** The piano's pages' glyphs, by the table's keys. */
-const PIANO_GLYPHS = { feel: 'g-keys', lighting: 'g-studio', pedal: 'g-piano' };
+/** The piano's pages' glyphs, by the table's keys: the tablet's own line icons (v1.27 — M63; its M59 `ic_g_*`). */
+const PIANO_GLYPHS = { feel: 'g-hammer', lighting: 'g-bulb', pedal: 'g-pedal' };
 
 /** The piano's pages until /api/piano names them (PianoPage's titles). */
 const PIANO_PAGES = [
@@ -856,7 +856,7 @@ export function create(host, body, tools) {
       : PIANO_PAGES;
     return [
       ...(system.state === 'failed' ? [] : [{ key: 'system', title: 'System', glyph: 'g-system' }]),
-      { key: 'playback', title: 'Playback', glyph: 'g-now' },
+      { key: 'playback', title: 'Playback', glyph: 'g-play' },
       ...piano.map((p) => ({ key: p.key, title: p.title, glyph: PIANO_GLYPHS[p.key] || 'g-piano', piano: true })),
       { key: 'guests', title: 'Guests', glyph: 'g-guests' },
       { key: 'panel', title: 'Panel', glyph: 'g-grid' },
@@ -898,7 +898,8 @@ export function create(host, body, tools) {
       return [`Full power ${on('fullpower') ? 'on' : 'off'}`, volume !== null ? `Volume ${volume}` : null].filter(Boolean).join(' · ');
     }
     if (page.key === 'lighting') {
-      if (typeof v.leds === 'string' && !on('leds')) return 'Strip off';
+      // The strip, or its mode, off: "Strip off", as the tablet's hub says it (GroupSummaries.lighting; v1.27 — M63).
+      if ((typeof v.leds === 'string' && !on('leds')) || read('ledmode') === 'Off') return 'Strip off';
       return [read('ledmode'), read('ledbright')].filter(Boolean).join(' · ');
     }
     if (page.key === 'pedal') {

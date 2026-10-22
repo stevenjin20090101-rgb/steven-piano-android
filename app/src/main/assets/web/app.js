@@ -508,14 +508,18 @@
   const connection = { socket: null, offline: false };
 
   /**
-   * The dot is live while the socket is open. The pill under the name says what is wrong, and only then: the socket
-   * dropped or the piano offline ("Reconnecting…"), else the piano's link down ("Piano not connected"); all well, nothing.
+   * The dot is the piano's link (v1.27 — M63, [linkDot]), as is Now playing's "Piano" capsule's, painted here with it. The
+   * pill under the name says what is wrong, and only then: the socket dropped or the piano offline ("Reconnecting…"), else
+   * the piano's link down ("Piano not connected"); all well, nothing.
    */
   function renderStatus() {
     const up = connection.socket === true && !connection.offline;
     const dot = $('conn-dot');
-    dot.classList.toggle('live', up);
-    dot.setAttribute('aria-label', up ? 'Connected to the tablet' : connection.socket === null ? 'Connecting' : 'Reconnecting');
+    const shown = linkDot();
+    paintDot(dot, shown);
+    dot.setAttribute('aria-label', LINK_WORDS[shown]);
+    paintDot($('link-dot'), shown);
+    $('link-state').textContent = `, ${LINK_WORDS[shown].toLowerCase()}`;
     let text = '';
     if (connection.socket === false || connection.offline) text = 'Reconnecting…';
     else if (up && state && state.link && state.link.state !== 'connected') text = 'Piano not connected';
@@ -524,6 +528,27 @@
     if (pill.textContent !== text) pill.textContent = text;
     pill.classList.toggle('ok', text === 'Connected');
     pill.hidden = !text;
+  }
+
+  /**
+   * The piano's link as a dot, as the tablet's rail draws it (v1.27 — M63, LinkDot): 'off', a ring, while it isn't
+   * connected (or the tablet can't be reached, which the pill says); 'on', filled in the content colour, while it is and
+   * silent; 'live', the red, breathing, only while notes reach the piano (the state's link.sending, worked out on the
+   * tablet as its own dot is: a piece playing, its 24 V up).
+   */
+  function linkDot() {
+    const fresh = connection.socket !== false && !connection.offline;
+    if (!fresh || !state || !state.link || state.link.state !== 'connected') return 'off';
+    return state.link.sending === true ? 'live' : 'on';
+  }
+
+  /** The dot's words (the tablet's rail reads its mark so). */
+  const LINK_WORDS = { off: 'Not connected', on: 'Connected', live: 'Sending notes to the piano' };
+
+  function paintDot(node, shown) {
+    node.classList.toggle('on', shown === 'on');
+    node.classList.toggle('live', shown === 'live');
+    node.classList.toggle('breathing', shown === 'live');
   }
 
   // ---- Sections ---------------------------------------------------------------------------------
@@ -1118,11 +1143,7 @@
       $('tablet-volume-value').textContent = `${tablet.volume}%`;
     }
     if (popoverOpen && popoverOpen.button.hidden) closePopover();
-    // "Piano", a capsule in the page's head: the dot live while the piano is connected, breathing while it plays.
-    const connected = state.link.state === 'connected';
-    $('link-dot').classList.toggle('live', connected);
-    $('link-dot').classList.toggle('breathing', connected && playing);
-    $('link-state').textContent = connected ? ', connected' : ', not connected';
+    // "Piano", a capsule in the page's head: the link's dot, painted with the rail's (renderStatus, v1.27 — M63).
     renderQuiet();
     renderSafety();
     renderPower();
@@ -1223,7 +1244,7 @@
     const until = state && state.quiet ? Number(state.quiet.until) : 0;
     try {
       await post(ROOT + '/api/quiet/override');
-      toast(until > 0 ? `Quiet lifted until ${timeOfDay(until)}.` : 'Quiet lifted.');
+      toast(until > 0 ? `Lifted until ${timeOfDay(until)}.` : 'Lifted.');   // the tablet's words (v1.27 — M63)
     } catch (e) {
       failed(e);
     }

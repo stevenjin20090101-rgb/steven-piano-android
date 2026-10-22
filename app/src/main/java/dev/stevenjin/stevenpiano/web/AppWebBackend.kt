@@ -44,6 +44,7 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.service.PlaybackService
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -135,6 +136,7 @@ class AppWebBackend(
 
     override suspend fun state(): WebState {
         val player = graph.player.state.value
+        val link = graph.pianoLink.state.value
         val settings = graph.settings.value
         val portraits = portraits()
         val covers = covers()
@@ -169,6 +171,9 @@ class AppWebBackend(
                 score = it.notes.size <= NowViews.MAX_SCORE_NOTES && it.bars.size <= NowViews.MAX_SCORE_BARS,
             )
         }
+        // The link's dot (v1.27 — M63), as the tablet's rail draws it (NavHost's TabRail): red only while notes reach the piano.
+        val playing = player.status == PlaybackStatus.Playing
+        val sending = LinkDot.of(link is LinkState.Connected, sending = playing && !graph.railHoldsNotes.value) == LinkDot.Sending
         // The position and the moment it was taken, on the tablet's monotonic clock, together (v1.13 — M32).
         val nanos = System.nanoTime()
         return WebState(
@@ -191,7 +196,7 @@ class AppWebBackend(
                 fold = player.fold,
                 views = views,
             ),
-            link = linkOf(graph.pianoLink.state.value),
+            link = linkOf(link).copy(sending = sending),
             piano = pianoOf(graph.pianoSettings.state.value),
             import = graph.importProgress.value,
             artwork = WebArtwork(running = !artwork.idle, done = artwork.done, total = artwork.total),
@@ -204,7 +209,7 @@ class AppWebBackend(
             instruments = WebInstruments.of(
                 graph.pianoLink.kind.value,
                 settings.midiOutName,
-                linkOf(graph.pianoLink.state.value).state,
+                linkOf(link).state,
                 graph.keyboard.state.value,
                 live = graph.liveThru.state.value.open,
                 recording = graph.recording.state.value is RecordingState.Recording,

@@ -188,6 +188,9 @@ class WebApiTest {
             display = WebDisplay(noteDisplay = "score", rollStyle = "paperRoll", fingering = true, chordNames = false, handColours = true),
         )
         val json = WebApi.state(state, pending = 2)
+        // The link's dot (v1.27 — M63): whether notes reach the piano now, worked out on the tablet as its rail's dot.
+        assertEquals(setOf("state", "name", "sending"), json.getJSONObject("link").keys().asSequence().toSet())
+        assertFalse(json.getJSONObject("link").getBoolean("sending"))
         val player = json.getJSONObject("player")
         assertEquals(setOf("status", "loading", "piece", "positionMs", "at", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem", "fold", "views"), player.keys().asSequence().toSet())
         // The views (v1.13 — M32): when the position was taken, folding, and what the views of the piece show.

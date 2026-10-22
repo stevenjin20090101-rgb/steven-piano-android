@@ -413,7 +413,7 @@ object WebApi {
                     .put("fold", p.fold)
                     .put("views", p.views?.let(::views) ?: JSONObject.NULL),
             )
-            .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL))
+            .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL).put("sending", s.link.sending))   // sending: v1.27 — M63
             .put("instruments", instruments(s.instruments))
             .put("piano", pianoState(s.piano))
             .put("import", import(s.import))
