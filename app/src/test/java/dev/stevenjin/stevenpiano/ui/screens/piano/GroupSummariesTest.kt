@@ -121,7 +121,7 @@ class GroupSummariesTest {
         )
         assertEquals(
             listOf(
-                "Steven Piano · Connected", "None", "Full power off · Volume 70%", "Strip off", "On", "emulator", "Tempo 90% · Expression Light",
+                "Steven Piano · Connected", "None", "Full power off · Volume 70%", "Strip off", "On", "emulator", "Not paired", "Tempo 90% · Expression Light",
                 "Always · 70%", "None", "On · 100.101.2.3", "Off", "—", "Follows the system", "Off", "Automatic", "Automatic", "Version 1.13",
             ),
             SettingsPage.entries.map { rows.of(it) },

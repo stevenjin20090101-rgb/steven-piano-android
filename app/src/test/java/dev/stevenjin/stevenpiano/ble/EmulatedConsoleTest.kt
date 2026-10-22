@@ -90,4 +90,25 @@ class EmulatedConsoleTest {
         assertNull(PianoConsole.encode("ledbright 40\nsave"))
         assertEquals("get ledbright\n", String(PianoConsole.encode("get ledbright")!!))
     }
+
+    @Test
+    fun `a fact is got with or without its mark, and answered with it (v1_26 M60, as the firmware's get)`() {
+        assertEquals(listOf("!boards=OK,OK,OK,OK,OK,OK,OK"), console.handle("get boards"))
+        assertEquals(listOf("!boards=OK,OK,OK,OK,OK,OK,OK"), console.handle("get !boards"))
+        assertEquals(listOf("!fw=emulator"), console.handle("get fw"))
+        assertEquals("a setting stays a setting", listOf("ledbright=160"), console.handle("get ledbright"))
+    }
+
+    @Test
+    fun `with the emulator's power plug the boards follow its relay (v1_26 M60)`() {
+        var rail: String? = "MISSING,MISSING,MISSING,MISSING,MISSING,MISSING,MISSING"
+        console.railBoards = { rail }
+        assertEquals(listOf("!boards=$rail"), console.handle("get boards"))
+        assertTrue(console.handle("dump").contains("!boards=$rail"))
+        assertTrue(console.handle("status").any { it.contains("[0] (MIDI 24-35): MISSING") })
+        rail = "OK,OK,OK,OK,MISSING,OK,OK"
+        assertEquals(listOf("!boards=OK,OK,OK,OK,MISSING,OK,OK"), console.handle("get !boards"))
+        rail = null   // no fake plug: the piano's own fact
+        assertEquals(listOf("!boards=OK,OK,OK,OK,OK,OK,OK"), console.handle("get boards"))
+    }
 }

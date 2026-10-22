@@ -26,6 +26,12 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
     private val facts = LinkedHashMap(facts)
     private val values = LinkedHashMap<String, String>().apply { TUNABLES.forEach { put(it.name, it.default) } }
 
+    /**
+     * The boards as the emulator's power plug leaves them (v1.26 — M60): MISSING while the 24 V supply is off, OK once it
+     * is up; null, the default, while no fake plug feeds it, and `!boards` is the facts' own, as before.
+     */
+    var railBoards: () -> String? = { null }
+
     /** A new connection (the lock's trust and nonce are each connection's own). */
     fun connected() {
         lock?.connected()
@@ -74,14 +80,21 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
     fun valueOf(name: String): String? {
         if (!name.startsWith("!")) return values[name]
         val fact = name.removePrefix("!")
+        if (fact == BOARDS) railBoards()?.let { return it }
         return facts[fact] ?: lock?.fact(fact)
     }
 
     private fun dump(): List<String> =
-        facts.map { (name, value) -> "!$name=$value" } + lock?.facts().orEmpty().map { (name, value) -> "!$name=$value" } +
+        facts.map { (name, value) -> "!$name=" + (if (name == BOARDS) railBoards() ?: value else value) } +
+            lock?.facts().orEmpty().map { (name, value) -> "!$name=$value" } +
             values.map { (name, value) -> "$name=$value" } + "end"
 
-    private fun read(name: String): String? = valueOf(name)?.let { "$name=$it" }
+    /** `get`'s line: a setting as `name=value`; a fact as `!name=value`, named with its "!" or without (v1.26 — M60: as the firmware). */
+    private fun read(name: String): String? {
+        valueOf(name)?.let { return "$name=$it" }
+        if (!name.startsWith("!")) valueOf("!$name")?.let { return "!$name=$it" }
+        return null
+    }
 
     private fun set(name: String, argument: String): List<String> {
         val tunable = TUNABLES.first { it.name == name }
@@ -168,7 +181,7 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
             "  pedal servo: ${if (v("pedalon") == "1") "ENABLED" else "disabled"}  board=${facts["pedalboard"]}",
             "  i2cFails=${facts["i2cfails"]} (rises during PWM-EMI storms; steady 0 is healthy)",
             "  boards:",
-        ) + (facts["boards"] ?: "").split(',').mapIndexed { i, state -> "    [$i] (MIDI ${24 + 12 * i}-${35 + 12 * i}): $state" }
+        ) + (valueOf("!$BOARDS") ?: "").split(',').mapIndexed { i, state -> "    [$i] (MIDI ${24 + 12 * i}-${35 + 12 * i}): $state" }
     }
 
     private sealed interface Range {
@@ -185,6 +198,7 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
 
     companion object {
         private const val SAVED = "[settings] saved to NVS"
+        private const val BOARDS = "boards"
 
         /** The read-only facts in `dump` order, as the emulator reports them. */
         val DEFAULT_FACTS: Map<String, String> = linkedMapOf(

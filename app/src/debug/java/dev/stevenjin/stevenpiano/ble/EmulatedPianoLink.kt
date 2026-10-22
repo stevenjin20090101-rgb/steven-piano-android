@@ -16,6 +16,7 @@ import dev.stevenjin.stevenpiano.SystemProperty
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.midi.MidiBatch
+import dev.stevenjin.stevenpiano.power.EmulatedPlug
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -48,6 +49,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * another, its window open: the app claims it), `open`, or `none` (firmware 2.0.x, no lock). Each connection
  * has its own number and starts untrusted; a Note On or the pedal down from a connection the piano doesn't
  * trust is logged as not played. Its address is [ADDRESS], from the documentation range.
+ * The 24 V smart plug (v1.26 — M60): with a fake plug ([EmulatedPlug], `debug.stevenpiano.plug`) the emulated piano's boards
+ * follow its relay, MISSING while the supply is off; without one they always answer, as before.
  */
 class EmulatedPianoLink(
     private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty,
@@ -60,7 +63,7 @@ class EmulatedPianoLink(
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
     private val main = Handler(Looper.getMainLooper())
-    private val emulated = EmulatedConsole()
+    private val emulated = EmulatedConsole().apply { railBoards = { EmulatedPlug.boards() } }   // v1.26 — M60: the 24 V on the fake plug
     private val replies = MutableSharedFlow<String>(extraBufferCapacity = REPLY_BUFFER_LINES)
 
     @Volatile

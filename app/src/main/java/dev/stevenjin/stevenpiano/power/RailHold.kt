@@ -92,7 +92,11 @@ class RailHold(
     private fun watch(piece: Long?) {
         if (watch?.isActive == true) return
         watch = scope.launch {
-            while (positionMicros() < -MARGIN_US) delay(POLL_MS)
+            while (positionMicros() < -MARGIN_US) {
+                if (!held.value) return@launch   // up in time: nothing to hold
+                delay(POLL_MS)
+            }
+            if (!held.value) return@launch
             holding = true
             heldPiece = piece
             pause()

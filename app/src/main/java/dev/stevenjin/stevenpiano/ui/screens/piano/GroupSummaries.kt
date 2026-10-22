@@ -24,6 +24,7 @@ import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.label
 import dev.stevenjin.stevenpiano.update.UpdateState
@@ -61,6 +62,8 @@ data class GroupSummaries(
     val help: String = "",
     /** System (v1.18 — M50): the battery and the temperature with "everything running", or what needs attention first. */
     val system: String = UNKNOWN,
+    /** Power plug (v1.26 — M60): "Not paired", "Off", or where the 24 V stands ([PowerCopy.hub]). */
+    val power: String = PowerCopy.NOT_PAIRED,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -70,6 +73,7 @@ data class GroupSummaries(
         SettingsPage.Lighting -> lighting
         SettingsPage.Pedal -> pedal
         SettingsPage.Firmware -> firmware
+        SettingsPage.Power -> power
         SettingsPage.Playback -> playback
         SettingsPage.TabletSound -> tabletSound
         SettingsPage.Quiet -> quiet
@@ -108,6 +112,7 @@ data class GroupSummaries(
             version: String = "",
             systemReading: SystemReading? = null,
             attention: List<Attention.Item> = emptyList(),
+            power: String = PowerCopy.NOT_PAIRED,
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -126,6 +131,7 @@ data class GroupSummaries(
             artwork = artwork(settings),
             help = help(version),
             system = system(systemReading, attention),
+            power = power,
         )
 
         /** The Instrument row (v1.13): the instrument's name and its state, "Steven Piano · Connected". */

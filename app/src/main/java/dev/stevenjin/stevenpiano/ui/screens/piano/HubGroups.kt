@@ -25,7 +25,7 @@ data class HubGroup(val title: String, val rows: List<HubRow>)
 
 /**
  * The hub's groups, in order (DESIGN.md › v1.13 — M31b, decided by Steven from a preview): INSTRUMENTS
- * (what plays and what is played from), THE PIANO (the piano's own settings), PLAYING (how the app plays,
+ * (what plays and what is played from), THE PIANO (the piano's own settings, and from v1.26 — M60 its 24 V power plug), PLAYING (how the app plays,
  * on the piano and on the tablet), SHARING (the web panel and its guests), THIS TABLET (the app on this
  * tablet: System first (v1.18 — M50: the tablet, the piano and what runs), its look and resting screen, kiosk,
  * updates, the library's artwork, help). A later feature adds
@@ -34,7 +34,7 @@ data class HubGroup(val title: String, val rows: List<HubRow>)
 object HubGroups {
     val all: List<HubGroup> = listOf(
         HubGroup("Instruments", pages(SettingsPage.Instrument, SettingsPage.Keyboard)),
-        HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware)),
+        HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware, SettingsPage.Power)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Quiet)),
         HubGroup("Sharing", pages(SettingsPage.Remote, SettingsPage.Guests)),
         HubGroup("This tablet", pages(SettingsPage.System, SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help)),
@@ -45,7 +45,7 @@ object HubGroups {
 
     /**
      * What the hub shows while a MIDI piano plays (v1.11 — M29): THE PIANO's pages belong to Steven Piano (its
-     * sound and touch, lights, pedal and firmware), so they are hidden; [midiPiano] false, [shown].
+     * sound and touch, lights, pedal and firmware, and its power plug), so they are hidden; [midiPiano] false, [shown].
      */
     fun shown(midiPiano: Boolean): List<HubGroup> = if (midiPiano) shown.filter { it.title != PIANO } else shown
 

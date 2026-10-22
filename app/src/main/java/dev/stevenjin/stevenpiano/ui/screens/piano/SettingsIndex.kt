@@ -156,6 +156,7 @@ object SettingsIndex {
         SettingsPage.Feel to listOf("feel", "touch", "dynamics"),
         SettingsPage.Lighting to listOf("lighting", "LEDs", "lights"),
         SettingsPage.Firmware to listOf("version", "status"),
+        SettingsPage.Power to listOf("smart plug", "Shelly", "24 V", "relay", "supply", "solenoids"),   // v1.26 — M60
         SettingsPage.Remote to listOf("remote control", "web control", "browser"),
         SettingsPage.Quiet to listOf("quiet", "downtime", "silent", "class", "schedule"),
         SettingsPage.Guests to listOf("requests", "visitors"),

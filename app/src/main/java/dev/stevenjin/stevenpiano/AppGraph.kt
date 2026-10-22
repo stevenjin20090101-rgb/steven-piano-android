@@ -156,6 +156,26 @@ import dev.stevenjin.stevenpiano.web.relay.CloudAddress
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
 import dev.stevenjin.stevenpiano.web.relay.EnrolResult
 import dev.stevenjin.stevenpiano.web.relay.Enrolment
+import dev.stevenjin.stevenpiano.firmware.FirmwareState
+import dev.stevenjin.stevenpiano.instruments.KeyboardListener
+import dev.stevenjin.stevenpiano.midi.MidiBatch
+import dev.stevenjin.stevenpiano.piano.LockPhase
+import dev.stevenjin.stevenpiano.power.AndroidPlugTransport
+import dev.stevenjin.stevenpiano.power.Boards
+import dev.stevenjin.stevenpiano.power.GuestLink
+import dev.stevenjin.stevenpiano.power.PairFlow
+import dev.stevenjin.stevenpiano.power.PlayerNow
+import dev.stevenjin.stevenpiano.power.PlugClient
+import dev.stevenjin.stevenpiano.power.PlugSettings
+import dev.stevenjin.stevenpiano.power.PlugStore
+import dev.stevenjin.stevenpiano.power.RailGate
+import dev.stevenjin.stevenpiano.power.RailHold
+import dev.stevenjin.stevenpiano.power.RailKeeper
+import dev.stevenjin.stevenpiano.power.RailPhase
+import dev.stevenjin.stevenpiano.power.RailPower
+import dev.stevenjin.stevenpiano.power.ShellyRail
+import dev.stevenjin.stevenpiano.ui.LockCopy
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -361,7 +381,7 @@ class AppGraph(private val app: Application) {
     private val link = lazy {
         val saved = settings.value
         InstrumentSwitch(
-            stevenPlays,
+            railPlays,   // v1.26 — M60: the lock's gate, then the 24 V rail's (see the M60 block)
             midiLink,
             appScope,
             initial = if (saved.instrumentKind == InstrumentChoice.MIDI_PIANO && saved.midiOutId != null) InstrumentKind.MidiPiano else InstrumentKind.StevenPiano,
@@ -932,6 +952,7 @@ class AppGraph(private val app: Application) {
             restoreInstrument(s)
             followLive()
             followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
+            startRail()   // v1.26 — M60: the 24 V rail on its smart plug (see the M60 block)
             launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
             // connects with the same switch; by cable it needs no permission.
@@ -1333,6 +1354,192 @@ class AppGraph(private val app: Application) {
         }
     }
 
+    // ==== v1.26 — M60: the 24 V rail on a smart plug (firmware/docs/SMART_PLUG.md; DESIGN.md › v1.26 — M60) ================
+    // M60's one block. Outside it, two lines name it: the instrument plays through [railPlays], and [start] calls [startRail].
+
+    /** The plug's own settings (the "power_plug" DataStore): its pairing, its switch, guest play this tablet started. */
+    val plugStore: PlugStore by lazy { PlugStore(app) }
+
+    /** The plug's settings as they stand; null until they have been read. */
+    val plugSettings: StateFlow<PlugSettings?> by lazy { plugStore.settings.stateIn(appScope, SharingStarted.Eagerly, null) }
+
+    /** Whether the plug switches the rail: paired, and its switch on. Until the settings are read, no. */
+    private val plugSwitches: StateFlow<Boolean> by lazy {
+        plugSettings.map { it?.switches == true }.stateIn(appScope, SharingStarted.Eagerly, false)
+    }
+
+    /** The plug's JSON-RPC over Bluetooth (one request in flight); on the emulator in debug builds, the fake plug. */
+    val plug: PlugClient by lazy {
+        PlugClient(
+            Emulator.plugTransport() ?: AndroidPlugTransport(app, scanThrottle),
+            appScope,
+            address = { plugSettings.value?.pairing?.address },
+            log = LinkLog::warn,
+        )
+    }
+
+    /** The CHECK: the piano's `get boards`, answered within 2 s (null: no answer, or no console). */
+    private suspend fun railCheck(): Boards? = Boards.parse(pianoSettings.ask(BOARDS_FACT, RAIL_CHECK_MS))
+
+    /** The tablet as the 24 V supply's dead-man's switch ([RailKeeper]); [railPower] is how other features see it. */
+    val rail: RailKeeper by lazy {
+        RailKeeper(
+            scope = appScope,
+            plug = ShellyRail(plug),
+            check = ::railCheck,
+            pianoConnected = { stevenLink.state.value is LinkState.Connected && stevenLink.console != null },
+            stopSequence = ::railStopSequence,
+            stopPlaying = ::stopForRail,
+            available = plugSwitches,
+            now = SystemClock::elapsedRealtime,
+            guest = railGuest,
+            log = LinkLog::warn,
+        )
+    }
+
+    /** The rail as the safety check (M61) and anything else that wants it sees it. */
+    val railPower: RailPower get() = rail
+
+    /** Steven Piano's link as everything that plays sees it: the lock's gate, then the rail's (notes wait while it comes up). */
+    private val railPlays: PianoLink by lazy { RailGate(stevenPlays, rail.notesHeld) }
+
+    /** The Pair screen's work (Piano › Power plug). */
+    val pairFlow: PairFlow by lazy { PairFlow(plug, plugStore, appScope, check = ::railCheck, now = SystemClock::elapsedRealtime, log = LinkLog::warn) }
+
+    /** The stop sequence (CC64 = 0, CC123) straight to Steven Piano, past both gates, and written before it returns. */
+    private suspend fun railStopSequence() {
+        stevenLink.send(MidiBatch().apply { add(CONTROL_CHANGE, SUSTAIN, 0); add(CONTROL_CHANGE, ALL_NOTES_OFF, 0) }, dropPending = false)
+        withContext(Dispatchers.IO) { stevenLink.flush(RAIL_FLUSH_MS) }
+    }
+
+    /** The rail failed or was cut: what plays on Steven Piano stops (the piece, Test every key, the Keys tab's keys). */
+    private fun stopForRail() {
+        if (!player.locked) player.stop()
+        keyTest.stop()
+        player.silenceLive()
+    }
+
+    /** Guest play's link: the tablet lets go of the piano, connects again, and ends guest play there. */
+    private val railGuest = object : GuestLink {
+        override fun letGo() {
+            appScope.launch {
+                player.pauseAndFlush(DISCONNECT_FLUSH_MS)
+                if (pianoLink.kind.value == InstrumentKind.StevenPiano) pianoLink.disconnect()
+                LinkLog.warn("Guest play: the tablet lets go of the piano")
+            }
+        }
+
+        override suspend fun reconnect(): Boolean {
+            if (pianoLink.kind.value != InstrumentKind.StevenPiano) return false
+            if (stevenLink.state.value !is LinkState.Connected && BlePermissions.missing(app).isEmpty()) pianoLink.connect(settings.value.lastDeviceAddress)
+            return withTimeoutOrNull(GUEST_RECONNECT_MS) { pianoSettings.lock.first { it.manageable || it.phase == LockPhase.None && pianoSettings.state.value is PianoState.Ready } } != null
+        }
+
+        override fun endOnPiano() = pianoSettings.guestPlay(0)
+    }
+
+    /**
+     * Guest play from this tablet (Firmware and status' switch): `lock guest 60`; with the plug switching the rail, once the
+     * piano says guest play is on, the rail is kept for it (60 minutes at most) and the tablet lets go of the piano.
+     */
+    fun startGuestPlay() {
+        pianoSettings.guestPlay(LockCopy.GUEST_MINUTES)
+        if (!plugSwitches.value) return
+        appScope.launch {
+            withTimeoutOrNull(GUEST_START_MS) { pianoSettings.lock.first { it.guestSeconds > 0 } } ?: return@launch
+            rail.startGuest(LockCopy.GUEST_MINUTES)
+        }
+    }
+
+    /** End guest play: with the rail kept for it, the full sequence (reconnect, `lock guest 0`, the stop sequence, CUT). */
+    fun endGuestPlay() {
+        if (rail.guestUntil.value == null) {
+            pianoSettings.guestPlay(0)
+            return
+        }
+        appScope.launch { rail.endGuest() }
+    }
+
+    /** The Keys tab on screen ([on]) with Steven Piano the instrument: it wants the rail, until 10 minutes without a key. */
+    fun railKeysShown(on: Boolean) = rail.keysOnScreen(on && pianoLink.kind.value == InstrumentKind.StevenPiano)
+
+    /** A key on the Keys tab: the idle cut starts over, and a rail cut for idling wakes ("Waking the piano…"). */
+    fun railKeyPressed() = rail.keyPressed()
+
+    /** The plug's switch, from Piano › Power plug: off, what plays stops and the rail is cut first. */
+    fun setPlugOn(on: Boolean) {
+        appScope.launch {
+            if (!on) rail.release()
+            plugStore.setOn(on)
+        }
+    }
+
+    /** Forget the plug: the rail cut, this tablet dropped from the plug's bonds (when known), the pairing gone. */
+    fun forgetPlug() {
+        appScope.launch {
+            rail.release()
+            val pairing = plugSettings.value?.pairing
+            pairing?.bondEntry?.let { entry -> plug.call("BLE.DeletePairedDevice", org.json.JSONObject().put("addr", entry)) }
+            plugStore.forget()
+            plug.drop()
+            pairFlow.restart()
+            LinkLog.warn("Power plug forgotten")
+        }
+    }
+
+    /** Admit a replacement tablet: the plug's pairing window for 3 minutes. True when the plug opened it. */
+    suspend fun admitTablet(): Boolean =
+        plug.call("BLE.StartPairing", org.json.JSONObject().put("timeout", PairFlow.PAIRING_WINDOW_S))?.ok == true
+
+    /** What the rail follows: the player (a piece playing; held while the rail comes up), Test every key, a firmware update, Live's keys. */
+    private fun startRail() {
+        rail.start()
+        RailHold(
+            appScope,
+            player = combine(player.state, pianoLink.kind) { s, kind ->
+                PlayerNow(playing = kind == InstrumentKind.StevenPiano && s.status == PlaybackStatus.Playing, stopped = s.status == PlaybackStatus.Stopped, pieceId = s.piece?.pieceId)
+            },
+            held = rail.notesHeld,
+            positionMicros = player::positionMicrosNow,
+            pause = player::pause,
+            resume = player::resume,
+            want = { rail.wanted(RailKeeper.PLAY, it) },
+        ).start()
+        appScope.launch { keyTest.state.map { it.running }.distinctUntilChanged().collect { rail.wanted(RailKeeper.KEY_TEST, it) } }
+        appScope.launch { firmwareUpdater.state.map(::updateWantsRail).distinctUntilChanged().collect(rail::updateRunning) }
+        appScope.launch { rail.phase.map { it != RailPhase.Off }.distinctUntilChanged().collect(plug::hold) }
+        // A keyboard's keys through Live are keys on the Keys tab: each starts the idle cut over, or wakes the rail.
+        val main = Handler(android.os.Looper.getMainLooper())
+        keyboard.listen(
+            object : KeyboardListener {
+                override fun onKeys(events: KeyEvents, arrivalNanos: Long, stampNanos: Long) {
+                    if (events.downs() > 0 && liveThru.state.value.open) main.post(rail::keyPressed)
+                }
+            },
+        )
+        // Guest play this tablet started survives a restart of the app: its end, on the wall clock, is kept.
+        appScope.launch {
+            val until = plugSettings.first { it != null }?.guestUntil ?: return@launch
+            val left = until - System.currentTimeMillis()
+            if (left > 0) rail.restoreGuest(SystemClock.elapsedRealtime() + left) else plugStore.setGuestUntil(null)
+        }
+        appScope.launch {
+            rail.guestUntil.drop(1).collect { until ->
+                plugStore.setGuestUntil(until?.let { System.currentTimeMillis() + (it - SystemClock.elapsedRealtime()) })
+            }
+        }
+    }
+
+    /** A firmware update wants the rail from BEGIN (its transfer under way) until its outcome is known. */
+    private fun updateWantsRail(state: FirmwareState): Boolean = when (state) {
+        is FirmwareState.Sending -> state.bytes > 0
+        is FirmwareState.PianoVerifying, is FirmwareState.Restarting -> true
+        is FirmwareState.Done -> state.confirming
+        else -> false
+    }
+
+    // ==== end of M60's block ==================================================================================================
+
     private companion object {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"
@@ -1367,6 +1574,16 @@ class AppGraph(private val app: Application) {
 
         /** The piano's controller temperature, °C, a fact of later firmware's `dump` (v1.18 — M46; BLE_DIAG.md). */
         const val TEMP_FACT = "temp"
+
+        // v1.26 — M60: the rail.
+        const val BOARDS_FACT = "boards"
+        const val RAIL_CHECK_MS = 2_000L
+        const val RAIL_FLUSH_MS = 300L
+        const val GUEST_RECONNECT_MS = 15_000L
+        const val GUEST_START_MS = 5_000L
+        const val CONTROL_CHANGE = 0xB0
+        const val SUSTAIN = 64
+        const val ALL_NOTES_OFF = 123
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L

@@ -103,7 +103,7 @@ class PianoPagesTest {
         assertEquals(
             listOf(
                 listOf(SettingsPage.Instrument, SettingsPage.Keyboard),
-                listOf(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware),
+                listOf(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware, SettingsPage.Power),
                 listOf(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Quiet),
                 listOf(SettingsPage.Remote, SettingsPage.Guests),
                 listOf(SettingsPage.System, SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help),
@@ -113,7 +113,7 @@ class PianoPagesTest {
         assertEquals(
             listOf(
                 listOf("Instrument", "Keyboard"),
-                listOf("Sound and touch", "Lights and screen", "Pedal", "Firmware and status"),
+                listOf("Sound and touch", "Lights and screen", "Pedal", "Firmware and status", "Power plug"),
                 listOf("Playback", "Tablet sound", "Quiet times"),
                 listOf("Web panel", "Guests"),
                 listOf("System", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about"),
@@ -128,7 +128,12 @@ class PianoPagesTest {
         assertEquals(HubGroups.shown, HubGroups.shown(midiPiano = false))
         assertEquals(listOf("Instruments", "Playing", "Sharing", "This tablet"), HubGroups.shown(midiPiano = true).map { it.title })
         val hidden = HubGroups.shown.flatMap { it.rows } - HubGroups.shown(midiPiano = true).flatMap { it.rows }.toSet()
-        assertEquals("only the piano's own pages", PianoPage.entries.toList(), hidden.map { ((it as HubRow.Page).page).piano })
+        assertEquals(
+            "only the piano's own pages, and its power plug (v1.26 — M60)",
+            PianoPage.entries.toList() + null,
+            hidden.map { ((it as HubRow.Page).page).piano },
+        )
+        assertEquals(SettingsPage.Power, (hidden.last() as HubRow.Page).page)
     }
 
     @Test
@@ -136,7 +141,7 @@ class PianoPagesTest {
         val opened = HubGroups.all.flatMap { it.rows }.filterIsInstance<HubRow.Page>().map { it.page }
         assertEquals(SettingsPage.entries.toList(), opened)
         val piano = HubGroups.all.single { it.title == HubGroups.PIANO }.rows.map { (it as HubRow.Page).page }
-        assertEquals(SettingsPage.entries.filter { it.piano != null }, piano)
-        assertEquals(PianoPage.entries.toList(), piano.map { it.piano })
+        assertEquals("the piano's own pages, then its power plug (v1.26 — M60)", SettingsPage.entries.filter { it.piano != null } + SettingsPage.Power, piano)
+        assertEquals(PianoPage.entries.toList() + null, piano.map { it.piano })
     }
 }

@@ -24,6 +24,8 @@ import dev.stevenjin.stevenpiano.instruments.EmulatedMidiPorts
 import dev.stevenjin.stevenpiano.instruments.MidiDebugHooks
 import dev.stevenjin.stevenpiano.instruments.MidiPorts
 import dev.stevenjin.stevenpiano.library.LibraryOverride
+import dev.stevenjin.stevenpiano.power.EmulatedPlug
+import dev.stevenjin.stevenpiano.power.PlugTransport
 import dev.stevenjin.stevenpiano.update.ModelsOverride
 import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
@@ -73,6 +75,12 @@ object Emulator {
     fun librarySource(): UpdateSource? = LibraryOverride.source()
 
     /**
+     * The 24 V power plug's Bluetooth on the emulator (v1.26 — M60): the fake plug beside the emulated piano, as
+     * `debug.stevenpiano.plug` makes it ([EmulatedPlug]); null for the real Bluetooth.
+     */
+    fun plugTransport(): PlugTransport? = if (on) EmulatedPlug.transport() else null
+
+    /**
      * adb's intents to the activity, on the emulator only:
      * - `--es dev.stevenjin.stevenpiano.EMULATOR_SET "ledbright 300"` sets a value past the controls' ranges, so a refusal
      *   can be seen;
@@ -80,7 +88,9 @@ object Emulator {
      *   the crash report and the next launch's banner can be seen;
      * - `--es …EMULATOR_MIDI "90 3C 64 80 3C 00"` plays those bytes (malformed ones too, as they are) from the emulated
      *   keyboard; `--ez …EMULATOR_MIDI_PLUG false` unplugs it and `true` plugs it in again; `--es …EMULATOR_MIDI_SERVICE
-     *   "…"` plays bytes from the debug build's test device through Android's own MIDI service (v1.11 — M29).
+     *   "…"` plays bytes from the debug build's test device through Android's own MIDI service (v1.11 — M29);
+     * - `--es …EMULATOR_PLUG "away"` takes the fake power plug out of range (`back`, `reset confirmed`, `trunk one-missing`,
+     *   `weld on`: [EmulatedPlug.command]; v1.26 — M60).
      */
     fun onIntent(graph: AppGraph, intent: Intent) {
         if (!on) return
@@ -91,6 +101,7 @@ object Emulator {
         stringExtra(intent, EXTRA_MIDI)?.let { midi?.feed(EmulatedMidiPorts.hex(it)) }
         stringExtra(intent, EXTRA_MIDI_SERVICE)?.let { text -> MidiDebugHooks.testDeviceOutput?.invoke(EmulatedMidiPorts.hex(text)) }
         if (intent.hasExtra(EXTRA_MIDI_PLUG)) midi?.plug(booleanExtra(intent, EXTRA_MIDI_PLUG))
+        stringExtra(intent, EXTRA_POWER_PLUG)?.let(EmulatedPlug::command)   // v1.26 — M60: away, back, reset, trunk, weld
     }
 
     private fun stringExtra(intent: Intent, name: String): String? = runCatching { intent.getStringExtra(name) }.getOrNull()
@@ -102,4 +113,5 @@ object Emulator {
     private const val EXTRA_MIDI = "dev.stevenjin.stevenpiano.EMULATOR_MIDI"
     private const val EXTRA_MIDI_SERVICE = "dev.stevenjin.stevenpiano.EMULATOR_MIDI_SERVICE"
     private const val EXTRA_MIDI_PLUG = "dev.stevenjin.stevenpiano.EMULATOR_MIDI_PLUG"
+    private const val EXTRA_POWER_PLUG = "dev.stevenjin.stevenpiano.EMULATOR_PLUG"
 }

@@ -22,6 +22,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.CompositionLocalProvider
@@ -30,6 +32,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.os.BundleCompat
@@ -44,6 +48,7 @@ import dev.stevenjin.stevenpiano.ui.AppFrame
 import dev.stevenjin.stevenpiano.ui.PianoNavHost
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.components.LocalHazeState
+import dev.stevenjin.stevenpiano.ui.components.RailBanner
 import dev.stevenjin.stevenpiano.ui.components.rememberHazeState
 import dev.stevenjin.stevenpiano.ui.screens.library.ShareSheet
 import dev.stevenjin.stevenpiano.ui.theme.PianoTheme
@@ -95,8 +100,12 @@ class MainActivity : ComponentActivity() {
             PianoTheme(darkTheme = dark) {
                 // The navigation content, the glass's source: the share sheet over it blurs it too (DESIGN.md › v1.9).
                 val content = rememberHazeState()
-                PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }, content = content) { source ->
-                    ImportService.start(this, source, fromPicker = true)
+                Box(Modifier.fillMaxSize()) {
+                    PianoNavHost(frame, requestedTab, onTabShown = { requestedTab = null }, content = content) { source ->
+                        ImportService.start(this@MainActivity, source, fromPicker = true)
+                    }
+                    // v1.26 — M60: the 24 V rail's words ("Waking the piano…", "24 V off", a failure), over every screen.
+                    RailBanner(Modifier.align(Alignment.TopCenter))
                 }
                 if (pendingShare.isNotEmpty()) {
                     CompositionLocalProvider(LocalHazeState provides content) {

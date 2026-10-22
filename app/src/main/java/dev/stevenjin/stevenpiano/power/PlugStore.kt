@@ -45,8 +45,16 @@ data class PlugSettings(val pairing: PlugPairing? = null, val on: Boolean = fals
 /** The plug's own small store ("power_plug"), apart from the app's settings, which another run shares. */
 private val Context.plugDataStore: DataStore<Preferences> by preferencesDataStore(name = "power_plug")
 
+/** Where the Pair screen keeps what it paired with ([PlugStore]; a fake in tests). */
+interface PairingStore {
+    /** Paired with [pairing]; its switch [on]. */
+    suspend fun pair(pairing: PlugPairing, on: Boolean = true)
+
+    suspend fun setOn(on: Boolean)
+}
+
 /** [PlugSettings] in the "power_plug" DataStore. A store that can't be read reads as no plug: the app as before it. */
-class PlugStore(private val store: DataStore<Preferences>) {
+class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
     constructor(context: Context) : this(context.applicationContext.plugDataStore)
 
     val settings: Flow<PlugSettings> = store.data
@@ -60,19 +68,19 @@ class PlugStore(private val store: DataStore<Preferences>) {
             )
         }
 
-    /** Paired with [pairing]: its switch comes on. */
-    suspend fun pair(pairing: PlugPairing) {
+    /** Paired with [pairing]; its switch [on] (off until the Pair screen's last step). */
+    override suspend fun pair(pairing: PlugPairing, on: Boolean) {
         store.edit { prefs ->
             prefs[ADDRESS] = pairing.address
             pairing.id?.let { prefs[ID] = it } ?: prefs.remove(ID)
             pairing.model?.let { prefs[MODEL] = it } ?: prefs.remove(MODEL)
             pairing.firmware?.let { prefs[FIRMWARE] = it } ?: prefs.remove(FIRMWARE)
             pairing.bondEntry?.let { prefs[BOND_ENTRY] = it } ?: prefs.remove(BOND_ENTRY)
-            prefs[ON] = true
+            prefs[ON] = on
         }
     }
 
-    suspend fun setOn(on: Boolean) {
+    override suspend fun setOn(on: Boolean) {
         store.edit { it[ON] = on }
     }
 
