@@ -518,6 +518,9 @@ INDEX.csv links go to the end of their playlist.
 
 ## The queue — `player/Queue.kt` (replaces `Playlist.kt`)
 
+*(v1.26 — M61: shuffle removed: no `original`, `withShuffle`, `random` or `QueueSnapshot.shuffle`; `startingAt(pieceId,
+ids, previous)` and `all(ids, previous)` keep the order given. See v1.26 — M61.)*
+
 - `QueueEntry(uid, pieceId)`: every entry has its own uid (numbering carries across queues),
   so a piece can be queued twice. `Queue(entries, index, original?, repeat, nextUid)` is
   immutable: `next / previous / previousRestarts / afterEnd / playNext / addToQueue /
@@ -537,6 +540,8 @@ INDEX.csv links go to the end of their playlist.
   remain as computed properties.
 
 ## Player — `player/Player.kt`
+
+*(v1.26 — M61: no `setShuffle`, no `Random`, no shuffle setting; `playAll(ids, channel)`; one piece per Play.)*
 
 - New: `playAll(ids, shuffle)` (a playlist's Play or Shuffle; sets the shuffle mode),
   `playNext(ids)` and `addToQueue(ids)` (with nothing queued they start playing and return
@@ -2301,6 +2306,8 @@ with every row (`SchemaV3Test` migrates one on a real SQLite, then checks it aga
   `distinctUntilChanged` (a play count changes the library, not a card), failures logged,
   `stateIn(Eagerly, null)`; `summary(key)`. A card's composers: the pool's pieces with a known
   composer grouped by key, most pieces first, then by name, four.
+- *(v1.26 — M61: no `random`, no reshuffle or `RECENT`: `deal(n)` takes the pool in its order and starts again from its
+  top; `ChannelDeck.playAll(ids, channel)`; a `StartGate` is asked first.)*
 - **`ChannelPlayer(deck, pools, volumeOf, piano, scope, random)`**, on the main thread after
   `start()` (which collects `deck.state`):
   - `play(key)`: the pool from `pools(key)` (the card's ids; null until worked out), distinct;
@@ -2697,11 +2704,10 @@ on a 401 from login and on every 429.
 | GET | `/api/requests` | read | — | `{guests, approveFirst, pending: [{id, pieceId, title, composer, at}]}` |
 | GET | `/api/piano` | read | — | the piano's state, `statusText`, `presets`, and the Feel · Lighting · Pedal table |
 | POST | `/api/play` | write | `{pieceId, queue?}` | 204; 404 (queue: the library's pieces only) |
-| POST | `/api/play-all` | write | `{ids \| playlistId, shuffle?}` | 204; 404 |
+| POST | `/api/play-all` | write | `{ids \| playlistId}` (v1.26 — M61: a `shuffle` field is 400) | 204; 404; 409 `safety` |
 | POST | `/api/transport` | write | `{action}`: toggle · pause · resume · next · previous · stop | 204 |
 | POST | `/api/seek` | write | `{ms}` ≥ 0 | 204 |
 | POST | `/api/tempo` | write | `{pct}` in the app's tempo range | 204 |
-| POST | `/api/shuffle` | write | `{on}` | 204 |
 | POST | `/api/repeat` | write | `{mode}`: off · all · one | 204 |
 | POST | `/api/queue` | write | `{action, ids?, uid?, toIndex?}`: playNext · add · remove · move · clear · skip | 204; 404 |
 | POST | `/api/channels/{key}/play` | write | — | 204; 409 too small; 404 |
@@ -2734,7 +2740,7 @@ the next update".
   loading, piece: {id, title, composer, composerShort, composerKey, durationMs, favorite, art:
   "portrait" | "roll"} | null, positionMs (below zero during the pause before a piece), tempoPct,
   transpose, velocityPct, preRollMs, channel: {key, name, volume} | null, queue: {ids, uids, index,
-  shuffle, repeat, items: [piece + uid + requested] (the current piece and up to 100 after it)},
+  repeat, items: [piece + uid + requested] (the current piece and up to 100 after it)},
   problem}, link: {state, name}, piano: {state, values, facts, lastError, errorAbout}, import:
   {running, done, total, imported, duplicates, failed, current}, artwork: {running, done, total},
   requests: {pending, guests, approveFirst}, web: {address, guestAddress, guests}, monochrome}`.
@@ -9220,3 +9226,151 @@ snapshot no longer loads; debug build installed over the 1.24-era build):
 M58's own pass on the API 36 tablet AVD is listed in its section (lock flow, debugging warning, sheets, predictive back,
 dataSync timeout, chord rotation, kiosk with a silent update, reboot).
 Not seen: the lock against real firmware 2.1.0 (published only once 1.25 is on the school tablet), the school tablet.
+
+# v1.26 — M61: one piece per Play, no shuffle, a safety check every 6 pieces
+
+Read `DESIGN.md › v1.26 — M61` first. Brief from the app session (2026-10-21, `~/.claude/plans/m61-safety-cycle-brief.md`);
+built in a worktree (`android-wt-m61`, branch `m61-safety-cycle`, from 1.25's `9c56859`) beside M60 (the 24 V smart plug,
+`android-wt-m60`), which owns `power/**`, the plug's Bluetooth, `SystemPage.kt`, `FirmwarePage.kt`, `PianoSettingRows.kt`,
+`Routes.kt`, `HubGroups.kt`, `PageRows.kt`, `GroupSummaries.kt` and the emulated piano (`D/ble/EmulatedPianoLink.kt`,
+`EmulatedConsole.kt`). The restart is firmware 2.1.1's (`firmware/docs/SMART_PLUG.md` › The firmware's side). No version
+bump, no signing, no release.
+
+## One piece per Play (`player/`)
+- `Player.MAX_IN_A_ROW` 4 → 1: `autoAdvance` (unchanged) loads what follows with `startCurrent(auto = true, start =
+  false)`, or for Repeat one seeks the piece to 0. A piece left waiting so (and a guest's request, `waitLoaded`) is
+  `markOnPlay`: `resume()` marks it played (`PieceSource.markPlayed`), as `startCurrent(start = true)` does; every stop,
+  `forget` and a new start clear it.
+- `resume()` returns at once with no current entry (nothing to play, so nothing to ask the safety check).
+
+## No shuffle
+- `Queue(entries, index, repeat, nextUid)`: no `original`, `shuffled`, `withShuffle`; `startingAt(pieceId, ids, previous)`,
+  `all(ids, previous)`. `QueueSnapshot(ids, uids, index, repeat)`. `Player`: no `random`, no `setShuffle`;
+  `ChannelDeck.playAll(ids, channel)`.
+- `ChannelPlayer`: no `random`, `RECENT` or reshuffle: `Session.deal(n)` takes `ArrayDeque(pool)` in order and refills
+  it from the pool's top. Pools are `Channels.summaries` over `library.all()` (`ORDER BY titleKey`), a built-in list's
+  in its list's order.
+- `TransportBar(playing, hasNext, repeat, onRepeat, onPrevious, onPlayPause, onNext)`: a 48 dp `Spacer` where Shuffle
+  was (`CONTROLS_WIDTH` and `TransportMinWidth` unchanged); `ModeToggle` is Repeat's alone (a button, no switch role).
+  `PlaylistHeader(…, onPlay, …)`: an outlined Play (`ic_play`). `ComposerTile(onPlayAll: () -> Unit)`: *Play all*
+  alone. `PlaybackStarter.playAll(ids)`. `ic_shuffle.xml` deleted.
+- `MediaSessionHolder`: no `onSetShuffleMode`, no `setShuffleMode`, no `ACTION_SET_SHUFFLE_MODE`.
+- `SettingsRepository`: `shuffle`/`setShuffle` gone; `forgetShuffle()` removes the old `shuffle` key once (reads first,
+  writes only when it is there), called at the top of `AppGraph.start()`'s repeat collector; Share diagnostics loses its
+  line.
+- Web: `/api/shuffle` gone (404); `/api/play-all` takes `{ids | playlistId}` (a `shuffle` field is 400, `onlyKeys`);
+  `WebBackend.playAll(ids)`, `playPlaylist(id)`, no `setShuffle`; the state's `queue.shuffle` gone. The panel: no
+  `#i-shuffle`, no `#now-shuffle` (an empty `.transport-room` keeps the play circle centred), a group's page has Play
+  alone.
+
+## The safety check (`safety/`)
+- **`SafetyCheck`** (pure): `start(listens, coils, boards, restart)` → `Step(CheckState, Command)`; `on(state, Event)`
+  → the next `Step`; `struck(state, done, of)` the sweep's progress; `boards(value)` → (OK, of). Commands: `Release`,
+  `Ask(fact)` (`active`, `boards`, `ota`), `Sweep`, `Restart`, `AwaitBack`, `Repower`, `Finish(outcome)`. Events:
+  `Released`, `Answer(value?)`, `Swept(results)`, `SweepStopped(said)`, `Restarted(reply?)`, `Back(ok)`,
+  `Repowered(ok, plugged)`, `Interrupted(said)`. Outcomes: `Passed(keys?, recovered)`, `CoilOn`, `KeysSilent(keys)`,
+  `Unfinished(why, said?)`. Lines: `StepLine(step, mark, done, of, keys, why, said)` in the order begun; `steps()` adds
+  those to come in the order they will run; `progress` weighs RELEASE 1, COILS 0.5, BOARDS 0.5, SWEEP 12, RESTART 4,
+  REPOWER 2, SWEEP_AGAIN 12.
+  Rules: `!active` > 0 → CoilOn at once (also after the recovery). A board missing, or `!active`/`!boards` unanswered,
+  before the recovery → the recovery; unanswered after it → Unfinished(NO_ANSWER); boards still missing after it → the
+  sweep (which then names the silent keys). Keys silent before the recovery → the recovery; after it → KeysSilent. The
+  recovery (once): `restart` only with `restart` (the dump's `!restartproto=1`) and `ota` not `pending`; `restarting`
+  → AwaitBack → Repower; any other reply (every refusal carries "refused") → REFUSED with the piano's words → Repower;
+  none → NO_ANSWER → Repower; then the coils and the boards again, and the sweep (SWEEP_AGAIN after a failed one).
+  `listens` false → no sweep: Passed(keys = null). A fact the dump doesn't list is SKIPPED (NOT_REPORTED). An event in
+  the wrong phase, or `Interrupted`, ends Unfinished.
+- **`SafetyRunner(scope, store, host, listens, repower, cutNow, plugged, power, clock, log)`**, `: StartGate`, main
+  thread: `start()` reads the store (pieces that played before count after) and collects `host.played`. A piece counts
+  when `host.pianoReady()` (Steven Piano, `pianoLink.state` Connected: the lock's gate holds it at Connecting until
+  trusted). The 6th since the last pass (`EVERY`): `deferral()` null → `begin()`, else `pending`. `begin()`: `pending`
+  saved true (a check the app never finished stays due), `power(true)`, `run()`: pause, wait up to 15 s for the piano
+  (NO_PIANO otherwise), `facts()`, then the machine's commands: `RELEASE_MS` 1 s after `release()`; the sweep waits up to
+  5 s for a waiting piece's load (the key test reads loading as playing), follows `KeyTestState` into `struck`, and stops
+  the key test if cancelled; `AwaitBack`: the link gone within 3 s, then back with every board OK within 60 s, looked at
+  each second; `repower()`/`cutNow()`/titles run through `attempt` (a failure is logged and carried on). Before each
+  command `deferral()` other than NO_PIANO interrupts (UPDATING, QUIET, AWAY, GUEST_PLAY). `finish`: Passed → count 0,
+  no pending, no lock, `LastCheck`, the waiting start runs; CoilOn → `cutNow()` then `host.stopEverything()`, locked;
+  KeysSilent → locked; Unfinished → pending; then `power(false)`; a passed or unfinished check stays on the card
+  `PASSED_SHOWN_MS` 3 s / `UNFINISHED_SHOWN_MS` 8 s (`dismiss()` sooner).
+  `admit(pieceId, start)`: not loaded → kept; locked → false (`refused` counted, the card back); running → kept; pending
+  → deferral null: kept and `begin()`; NO_PIANO or GUEST_PLAY: true; else false. `open` = loaded, no lock, no check, not
+  pending. `refusal()` (the web): the lock's words, or `SafetyCopy.deferral(AWAY)` while pending and away. `runNow()`:
+  the card's Run (null, or the `Deferral`). `putAside()`/`showCard()`: the locked card's Not now and Show.
+- **`SafetyStore`** / `DataStoreSafetyStore` (DataStore `safety_check`, apart from `Settings.kt`): `count`, `pending`,
+  `lock` (`coil` or `keys:36,61`; anything else still locks), `lastAt`, `lastPassed`, `lastKeys`, `lastSilent`,
+  `lastCoil`, `lastBoardsOk`, `lastBoardsOf`, `lastRecovered`. An unreadable record reads as `SafetyRecord(pending = true)`.
+- **`AppGraph`** (one marked block): `safety` (lazy), `safetyGate` (the player's and the channels' `StartGate`),
+  `SafetyCheckHost` (`deferral()`: `player.locked || firmwareUpdater.busy` → UPDATING, `quiet.holds()` → QUIET,
+  `!listening.inFront` → AWAY, `pianoSettings.lock.guestLeft(elapsed) > 0` → GUEST_PLAY, not ready → NO_PIANO;
+  `release()` = `silenceLive` + `allKeysOff`; `stopEverything()` = `player.stop()`, `silenceLive`, the piano's `off`;
+  `restart()` = `stevenLink.expectRestart(60 s)` then `pianoSettings.restart()`; the sweep = `keyTest.start(null)`;
+  `nextPiece()` from the queue and its repeat; titles from `library.summaries`), `startSafety()` from `start()`, and
+  `listens = settings.safetyCheckListens && microphoneAllowed()`.
+  **The integrator connects M60's `RailPower`** there: `repower = { rail.repower() }`, `cutNow = { rail.cutNow() }`,
+  `plugged = { rail.available.value }`, `power = { on -> rail.wanted("safety", on) }`. `power(true)` comes at the check's
+  start, before the release, so the rail is up for `!boards` (M60 cuts it a second after a piece's stop; without the
+  hold every check would find all seven boards missing).
+- **`Player`**: `gate: StartGate` (default `StartGate.Open`) asked by `play`, `playAll`, `resume`, `next`, `previous`,
+  `skipToQueueEntry` (with the piece each would start), and `gate.open` by `enqueue` (what joins an empty queue waits
+  loaded while it isn't); `played: SharedFlow<Played(pieceId, ended)>`, emitted on the scheduler thread by `sounded()`
+  after every step: `loadedId` set where `engine.load` runs, `sounding` from the first Playing until ended, Stopped, or
+  `loadedId` changes (a pause is no end). `ChannelPlayer(…, gate)` asks before it takes a channel's loudness.
+- **`PianoSettingsRepository`**: `suspend fun ask(fact: String, timeoutMs: Long = 2_000): String?` (the brief's
+  signature; M60 adds the same, the integrator keeps one): `get !<fact>` through the session's `send` (reads go whatever
+  the lock says), the first `!<fact>=` line completes it (`Session.asked`), a `Mutex` keeps one at a time. `suspend fun
+  restart(timeoutMs = 2_000): String?`: only `ready` and `writable`, and not while a write waits out its 150 ms, waits for
+  the lock or is being read back (`restart` saves nothing); the reply (`restarting`, or any line with "refused" or
+  "unknown command") is taken after the lock's handshake has seen it and never becomes `lastError`.
+- **`Listening`**: `localAllowedNow` (Android's permission) for `token == null`; `Ears.allowed(token)`; `refresh()` and the
+  tick stop everything without the permission, and with the panel's switch off only the panels' hearings
+  (`stopPanels()`); `inFront: StateFlow<Boolean>`. `KeyTest.start(null)` is refused `ListenCopy.NO_PERMISSION` without
+  the permission. `AppGraph.followListening` no longer stops the key test itself.
+- **`Settings.safetyCheckListens`** (`safetyCheckListens`, default true) and Share diagnostics' line.
+
+## The card and the rest of the tablet (`ui/`)
+- `ui/components/SafetyCheckCard.kt`: `BoxScope.SafetyCheckCard()`, composed in `NavHost` after `DisplayOverlay` and
+  before `MicrophoneBanner` (the banner stays above it). Full-screen `GlassSurface(fill = Sheet)` (`matchParentSize`),
+  `pointerInput` and `BackHandler` hold what's beneath; `paneTitle`; a centred column (520 dp) that scrolls when taller.
+  Running/ended: `Checking` (title, line, "Next: …", `StepRow`s with a cross-faded mark, `ProgressHairline`, OK);
+  locked: `Locked` (title, the keys in `LocalAttention` over `KeyMap` (now `internal` in `ListenCard.kt`), or "A key is
+  still on" in `LocalLive` with `LiveDot(Sending, breathing = false)`; Run the safety check (filled) and Not now, both
+  `KioskGate.run`; the deferral's words when Run can't start); `LockedCapsule` while put aside. `KeepScreenOn` sets the
+  window's `FLAG_KEEP_SCREEN_ON` while running (the root view's `keepScreenOn` is the Keys tab's and the resting
+  screen's). Strings: `ui/SafetyCopy.kt` (also `whenSaid`: "today 14:20", "yesterday 9:05", "Mon 14:20", "21 Oct 14:20").
+- `MicrophoneBanner`: "Microphone on · safety check" while `safety.running`.
+- `ListenCard`: the switch (checked = setting and permission; on without the permission launches `RECORD_AUDIO`'s request
+  and sets it on a grant), `SafetyCopy.NO_PERMISSION` while on without it, and `safetyLine`.
+- `PlaybackService`: `checking` (`safety.state.running`) renders as playing (foreground, wake lock), never as the gap after
+  a piece; a second collector re-renders as it changes.
+
+## The web panel
+- `WebState.safety: WebSafety(running, step, of, locked, failedKeys, coil, text)`, `WebSafety.of(SafetyState)` (step: the
+  running line's place in `steps()`, 1-based; `text`: "Safety check · <the line>" or the lock's words; null otherwise),
+  `WebApi.safety`; `WebService`'s hub watches `safety.state`.
+- `WebBackend.safetyRefusal()` (`AppWebBackend`: `safety.refusal()` on the main thread). `WebServer.startRefusal()`:
+  409 `safety` with those words, then the quiet time's 409, on `/api/play`, `/api/play-all`, `/api/transport` when it
+  would start, `/api/queue` skip, `/api/channels/{key}/play`. No route starts a check.
+- The panel: `#safety-capsule` in Now playing's head (`.capsule.glass`, `.dot` on / attention / live) from `state.safety`
+  (`renderSafety`, from `renderNow`).
+
+## The debug build's microphone (`src/debug/…/audio/`)
+- `MicrophoneStandIn.of(real, struck)` (release: `real`): on the emulator (`Emulator.on`) a `FakeMicrophone(struck)`:
+  100 ms frames in ten 10 ms slices on `System.nanoTime`, room noise (±60) and, for each new key in `KeyTestState`
+  (key, done), its fundamental and two harmonics (−16 dBFS, 5 ms rise, 0.3 s fall, a 30 ms damper after `HOLD_MS`).
+  `debug.stevenpiano.silentkeys` (`36,61`, read at each start) leaves keys silent. The emulated piano has no `!active`
+  (its coil line reads "not reported") and no `restart` (the restart is left out): both are M60's file.
+
+## Tests (piano safety)
+`SafetyCheckTest` 13 (the pass; a coil on, before and after the recovery; a board missing → restart and repower before
+the sweep; keys silent → restart, repower, a second sweep → lock, or a pass; the restart left out: no `!restartproto`,
+`!ota=pending`, each refusal, no reply; the repower unconfirmed with and without a plug; the microphone off, a board
+missing too; facts not reported and a piano that never answers; stopped and interrupted; `!boards` read; the bar);
+`SafetyRunnerTest` 11 (the 6th piece and pieces the piano didn't play; the count and the lock across a restart; each
+deferral → due → the next Play waits and goes; due with the app away refused, with no piano or guest play let go; a
+coil on → cut, stop, lock; keys silent → lock, refused on every start, unlocked only by a pass; a missing board; no
+restart on 2.1.0; the microphone off; a check stopped on the way; one under way when the app was killed);
+`SafetyStoreTest` 3; `PianoAskRestartTest` 5; `PlayerTest` (one piece per Play, Repeat one and all, Play next, the
+waiting piece's Play, `played`, the gate on every start path); `ListeningTest` (the tablet's own hearing);
+`QueueTest`, `ChannelPlayerTest` (in order, wrapping), `SettingsRepositoryTest` (the cleanup), `WebServerTest` (no
+`/api/shuffle`, `shuffle` 400, 409 `safety` on every start route), `WebApiTest` (`safety`).
