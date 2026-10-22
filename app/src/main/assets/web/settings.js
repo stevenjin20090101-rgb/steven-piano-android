@@ -164,14 +164,17 @@ export function create(host, body, tools) {
   }
 
   /**
-   * Why the piano's controls can't be used now, as today's page says it; null when they can. The lock's own words when it
-   * keeps this tablet out (v1.27 — M63), and while the tablet proves its key the reading line, as the tablet says it.
+   * Why the piano's controls can't be used now, as today's page says it; null when they can. The lock's own words first
+   * while it keeps this tablet out (v1.27 — M63), as the tablet puts them atop each piano page: the link reads an error
+   * then, though the piano is there and says why. While the tablet proves its key, the reading line.
    */
   function pianoStatus() {
+    const locked = piano().lock && piano().lock.message;
+    if (locked) return locked;
     if (!connected()) return 'Connect to the piano to adjust its settings.';
     if (piano().state === 'unsupported') return "This piano's firmware doesn't offer settings over Bluetooth yet.";
     if (piano().state !== 'ready') return "Reading the piano's settings…";
-    if (!pianoWritable()) return piano().lock.message || "Reading the piano's settings…";
+    if (!pianoWritable()) return "Reading the piano's settings…";
     return null;
   }
 
