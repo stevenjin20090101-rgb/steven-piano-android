@@ -1409,7 +1409,7 @@ button, input, select { font: inherit; color: inherit; }
    drifting on a transform-only path (each its own pace) while a piece plays and still otherwise, under a veil of the
    surface (55 % on paper, 62 % on the camera body) so the words, in the primary colour over it, keep 4.5:1 over any hue.
    Since v1.18 — M47 the layer is fixed to the window, behind the rail, the page and Up next (the mock's places for the
-   discs). The colours are the art's (--bd1 … --bd4: hue and saturation, set by app.js from a 32 × 32 sample of the loaded
+   discs). The colours are the art's (--bd1 … --bd4: hue and saturation, set by now.js from a 32 × 32 sample of the loaded
    picture); the lightness is the appearance's. None in black and white, with Album colours off on the tablet, with
    reduced transparency or more contrast; still with reduced motion. */
 

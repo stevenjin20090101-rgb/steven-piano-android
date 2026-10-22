@@ -65,6 +65,11 @@ object WebAssets {
         "/app.js" to Asset("app.js", JS),
         // The helpers the panel's modules share (v1.27 — M63), imported by app.js and the modules that use them.
         "/ui.js" to Asset("ui.js", JS),
+        // The sections (v1.27 — M63): Now playing, Up next, the Library and Studio, each a module app.js imports.
+        "/now.js" to Asset("now.js", JS),
+        "/upnext.js" to Asset("upnext.js", JS),
+        "/library.js" to Asset("library.js", JS),
+        "/studio.js" to Asset("studio.js", JS),
         // The mark (v1.20 — M53): the app's icon in the browser's tab and beside the rail's name; the guests' list has it too.
         "/favicon.svg" to Asset("favicon.svg", SVG),
         // The Settings and System pages (v1.18 — M47b): modules the page imports the first time each shows.

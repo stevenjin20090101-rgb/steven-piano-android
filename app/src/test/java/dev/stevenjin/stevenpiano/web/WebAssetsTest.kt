@@ -78,8 +78,8 @@ class WebAssetsTest {
     /** The frame's scripts and the guests' page's: each builds its requests from the page's own ROOT. */
     private val framed = listOf("app.js", "request.js")
 
-    /** The modules the frame hands its host to: each asks the tablet only through it, from host.ROOT. */
-    private val hosted = listOf("settings.js", "system.js", "covers.js", "quiet.js")
+    /** The modules the frame hands its host to (the sections' own since v1.27 — M63): each asks the tablet only through it, from host.ROOT. */
+    private val hosted = listOf("settings.js", "system.js", "covers.js", "quiet.js", "now.js", "upnext.js", "library.js", "studio.js")
 
     /** Now playing's views: they ask nothing themselves (the frame's api object does). */
     private val views = listOf("clock.js", "wire.js", "roll.js", "score.js", "views.js")
