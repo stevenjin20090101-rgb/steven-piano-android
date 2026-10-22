@@ -188,8 +188,18 @@ class RailKeeper(
 
     private val _welded = MutableStateFlow(false)
 
-    /** The plug still reports its output on, or the supply still draws, after a CUT it took: a relay stuck closed. */
+    /**
+     * The supply still draws after a CUT the plug took: a relay stuck closed. `apower` is the proof (SMART_PLUG.md › rule 9;
+     * `output` is only the commanded state, which a welded contact still reads as off): above half the supply's idle draw
+     * with the piano silent, at least [WELDED_WATTS] ([weldedAbove]).
+     */
     val welded: StateFlow<Boolean> = _welded.asStateFlow()
+
+    /**
+     * The supply's draw with the piano silent (v1.26 — M62), read at each rail-up once its boards are up and before the
+     * first note: what a CUT is weighed against. Null before a reading.
+     */
+    private var idleWatts: Double? = null
 
     /** One want: since when ([seq] orders them), until when it lasts, and until when it may ARM without a CHECK. */
     private class Want(val seq: Long, val until: Long, val uncheckedUntil: Long)
@@ -429,6 +439,8 @@ class RailKeeper(
             }
         }
         if (baseline.isEmpty()) return fail(RailMessage.TrunkFault(0, before.total, cut = true))
+        // The supply's idle draw, its boards up and the piano silent: notes are still held (v1.26 — M62).
+        plug.status()?.watts?.takeIf { it.isFinite() && it >= 0.0 }?.let { idleWatts = it }
         _baseline.value = baseline
         needsBaseline = false
         val total = _boards.value?.total ?: Boards.TOTAL
@@ -610,8 +622,8 @@ class RailKeeper(
 
     /**
      * CUT, best effort: when it fails the plug's timer cuts within 30 s. Then, a few seconds on and unless the rail was armed
-     * again meanwhile, whether the relay really let go: the plug's output still on, or the supply still drawing, is a relay
-     * stuck closed ([welded]).
+     * again meanwhile, whether the relay really let go: the supply still drawing more than [weldedAbove] is a relay stuck
+     * closed ([welded]); the plug's `output` reads off either way.
      */
     private suspend fun cutRail() {
         if (plug.cut()) {
@@ -622,13 +634,20 @@ class RailKeeper(
                 if (!available.value || _armedAt.value != null) return@launch
                 val status = plug.status() ?: return@launch
                 if (_armedAt.value != null) return@launch
-                _welded.value = status.output || (status.watts ?: 0.0) > WELDED_WATTS
-                if (_welded.value) log("After a CUT the plug reports output ${status.output}, ${status.watts} W: its relay may be stuck")
+                val above = weldedAbove()
+                _welded.value = (status.watts ?: 0.0) > above
+                if (_welded.value) log("After a CUT the supply still draws ${status.watts} W (above $above W): the plug's relay may be stuck")
             }
         } else {
             log("CUT: the plug didn't answer; its timer cuts within ${TOGGLE_AFTER_S} s")
         }
     }
+
+    /**
+     * Above this the supply still draws after a CUT (v1.26 — M62; SMART_PLUG.md › rule 9): half its idle draw with the piano
+     * silent ([idleWatts], read at the last rail-up), at least [WELDED_WATTS]; [WELDED_WATTS] before any reading.
+     */
+    private fun weldedAbove(): Double = maxOf(WELDED_WATTS, (idleWatts ?: 0.0) / 2)
 
     /** A CHECK, and a second 500 ms later when the first went unanswered: null when neither was (two in a row). */
     private suspend fun checkTwice(): Boards? = check() ?: run {
@@ -744,7 +763,7 @@ class RailKeeper(
         const val CALM_MS = 4_000L
         const val WELD_CHECK_MS = 3_000L
 
-        /** More than this drawn after a CUT: the supply is still powered (it draws a few watts idle). */
+        /** The least drawn after a CUT that means the supply is still powered; half its idle draw when that is more (M62). */
         const val WELDED_WATTS = 2.0
 
         /** The reasons the app's own features want the rail by. */

@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.power
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -29,11 +30,12 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PairFlowTest {
-    /** The fake plug's Bluetooth, at once: every request's method is in [methods]. */
+    /** The fake plug's Bluetooth, at once (a locked plug's silence takes the caller's whole time): every request's method is in [methods]. */
     private class Transport(private val shelly: EmulatedShelly) : PlugTransport {
         private var up = false
         val methods = mutableListOf<String>()
         override var refused: Boolean = false
+        override var reached: Boolean = false
 
         override fun blocker(): String? = null
 
@@ -44,6 +46,7 @@ class PairFlowTest {
 
         override suspend fun connect(address: String): Boolean {
             up = !shelly.rebooting()
+            reached = up
             return up
         }
 
@@ -57,6 +60,10 @@ class PairFlowTest {
                 is EmulatedShelly.Answer.Reply -> answer.json.toByteArray(Charsets.UTF_8)
                 EmulatedShelly.Answer.Refused -> {
                     refused = true
+                    null
+                }
+                EmulatedShelly.Answer.Silent -> {
+                    delay(timeoutMs)
                     null
                 }
             }
@@ -195,14 +202,27 @@ class PairFlowTest {
     }
 
     @Test
-    fun `a locked plug - a power cycle, said`() = runTest {
+    fun `a locked plug - it connects and gives no reply in 5 s, and with no bond a power cycle is said (v1_26 M62)`() = runTest {
         val s = setup(Provision.Locked)
         s.flow.shellyAppDone()
         settle()
         s.flow.choose(s.flow.state.value.found.single())
+        advanceTimeBy(PlugClient.SILENT_MS - 100)
+        runCurrent()
+        assertNull("5 s to answer: no verdict yet", s.flow.state.value.problem)
         settle()
-        assertEquals(Provision.Locked, s.flow.state.value.info?.provision)
         assertEquals(PairFlow.LOCKED, s.flow.state.value.problem)
+        assertNull("it said nothing of itself", s.flow.state.value.info)
+        assertEquals("asked once: Shelly.GetDeviceInfo, never answered", listOf("Shelly.GetDeviceInfo"), s.transport.methods)
+
+        // A bonded plug that stays silent is no lock (a bonded plug in complete always answers): it just didn't answer.
+        val bonded = setup(Provision.Locked, bonded = true)
+        bonded.flow.shellyAppDone()
+        settle()
+        bonded.flow.choose(bonded.flow.state.value.found.single())
+        advanceTimeBy(PlugClient.SILENT_MS)
+        settle()
+        assertEquals(PairFlow.UNREACHABLE, bonded.flow.state.value.problem)
     }
 
     @Test

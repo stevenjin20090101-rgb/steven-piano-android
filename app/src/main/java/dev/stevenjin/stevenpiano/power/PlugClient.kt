@@ -67,24 +67,37 @@ class PlugClient(
 
     /** [method] with [params] to the plug at [to] (the paired one by default); null when it couldn't be asked or didn't answer. */
     suspend fun call(method: String, params: JSONObject? = null, to: String? = null, timeoutMs: Long = CALL_TIMEOUT_MS): RpcAnswer? =
+        ask(method, params, to, timeoutMs).answer
+
+    /** [method] to the plug at [to] under the one lock: its answer, or what kept it ([Miss]). */
+    private suspend fun ask(method: String, params: JSONObject?, to: String?, timeoutMs: Long): Outcome =
         withContext(io) {
             calls.withLock {
-                val target = to ?: address() ?: return@withLock null
-                val answer = exchange(target, method, params, timeoutMs)
-                _reachable.value = answer != null
+                val target = to ?: address() ?: return@withLock Outcome(null, Miss.NoConnection)
+                val outcome = exchange(target, method, params, timeoutMs)
+                _reachable.value = outcome.answer != null
                 scheduleIdle()
-                answer
+                outcome
             }
         }
 
-    private suspend fun exchange(target: String, method: String, params: JSONObject?, timeoutMs: Long): RpcAnswer? {
+    /** One exchange's end: the [answer], or the [miss] that kept it. */
+    private class Outcome(val answer: RpcAnswer?, val miss: Miss?)
+
+    /** Why there was no answer: no connection; the plug refusing this tablet; connected and nothing came back; a reply out of step. */
+    private enum class Miss { NoConnection, Refused, NoReply, Garbled }
+
+    private suspend fun exchange(target: String, method: String, params: JSONObject?, timeoutMs: Long): Outcome {
         if (!transport.connected || connectedTo != target) {
             connectedTo = null
             val up = withTimeoutOrNull(CONNECT_TIMEOUT_MS) { transport.connect(target) } == true
             if (!up) {
+                // Reached, but no RPC service to ask (v1.26 — M62): as silent as a plug that never replies.
+                val reached = transport.reached
                 transport.disconnect()
-                if (_reachable.value != false) log("Plug: no connection to $target")   // once, not at every poll while away
-                return null
+                // Once, not at every poll while away.
+                if (_reachable.value != false) log("Plug: " + if (reached) "$target connected without its RPC service" else "no connection to $target")
+                return Outcome(null, if (reached) Miss.NoReply else Miss.NoConnection)
             }
             connectedTo = target
         }
@@ -93,13 +106,14 @@ class PlugClient(
         val answer = bytes?.let { ShellyRpc.answer(String(it, Charsets.UTF_8)) }
         if (answer == null || (answer.id != null && answer.id != id)) {
             // No answer, or another request's: the frames are out of step, so the next call starts on a fresh connection.
+            val refused = bytes == null && transport.refused
             transport.disconnect()
             connectedTo = null
             if (_reachable.value != false) log("Plug: $method — " + if (bytes == null) "no answer" else "an answer that isn't this request's")
-            return null
+            return Outcome(null, if (bytes != null) Miss.Garbled else if (refused) Miss.Refused else Miss.NoReply)
         }
         if (!answer.ok) log("Plug: $method — error ${answer.code} ${answer.message}")
-        return answer
+        return Outcome(answer, null)
     }
 
     /** The connection goes [IDLE_MS] after the last call, unless the rail is wanted meanwhile. */
@@ -129,6 +143,24 @@ class PlugClient(
 
     suspend fun deviceInfo(to: String? = null): PlugInfo? = call("Shelly.GetDeviceInfo", to = to)?.takeIf { it.ok }?.let { PlugInfo.of(it.result) }
 
+    /**
+     * The plug at [to] (the paired one by default) read for what it is (v1.26 — M62; SMART_PLUG.md › One-time setup):
+     * `Shelly.GetDeviceInfo` given [SILENT_MS] to answer. A plug that connects but gives no reply in that time, or has no
+     * RPC service at all, is [PlugRead.Silent]: with no bond, a `locked` plug (its RPC over Bluetooth is off until a power
+     * cycle); a bonded plug in `complete` always answers.
+     */
+    suspend fun read(to: String? = null): PlugRead {
+        val outcome = ask("Shelly.GetDeviceInfo", null, to, SILENT_MS)
+        outcome.answer?.let { answer ->
+            return answer.takeIf { it.ok }?.let { PlugInfo.of(it.result) }?.let(PlugRead::Read) ?: PlugRead.Unreachable
+        }
+        return when (outcome.miss) {
+            Miss.Refused -> PlugRead.Refused
+            Miss.NoReply -> PlugRead.Silent
+            else -> PlugRead.Unreachable
+        }
+    }
+
     /** ARM (`on` with [toggleAfter]) or CUT: true when the plug took it. */
     suspend fun switchSet(on: Boolean, toggleAfter: Int? = null, to: String? = null): Boolean =
         call("Switch.Set", ShellyRpc.switchSet(on, toggleAfter), to)?.ok == true
@@ -140,7 +172,25 @@ class PlugClient(
         const val CALL_TIMEOUT_MS = 3_000L
         const val CONNECT_TIMEOUT_MS = 10_000L
         const val IDLE_MS = 30_000L
+
+        /** A plug with no bond that connects and gives no reply in this long is `locked` (v1.26 — M62; SMART_PLUG.md). */
+        const val SILENT_MS = 5_000L
     }
+}
+
+/** What reading a plug found (v1.26 — M62; [PlugClient.read]). */
+sealed interface PlugRead {
+    /** It answered: what it said of itself. */
+    data class Read(val info: PlugInfo) : PlugRead
+
+    /** No connection (out of range, Bluetooth off, restarting), or an answer that didn't read. */
+    data object Unreachable : PlugRead
+
+    /** It refuses this tablet: pairing enforced, and no bond with it (GATT authentication or encryption). */
+    data object Refused : PlugRead
+
+    /** It connected and gave no reply in [PlugClient.SILENT_MS], or has no RPC service: with no bond, a `locked` plug. */
+    data object Silent : PlugRead
 }
 
 /** The rail's plug over [client] ([RailPlug]): ARM, CUT and the switch's status. */

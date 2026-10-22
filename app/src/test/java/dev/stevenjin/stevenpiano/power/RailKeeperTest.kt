@@ -484,6 +484,41 @@ class RailKeeperTest {
         assertFalse(keeper.welded.value)
     }
 
+    @Test
+    fun `a welded relay - apower after a CUT above half the idle draw read at rail-up, at least 2 W (v1_26 M62)`() = runTest {
+        val bench = Bench(this)
+        var idle: Double? = 20.0   // the supply's draw at rail-up, the piano silent (null: the plug didn't say)
+        var after = 9.0   // what it still draws after the CUT
+        var cut = false
+        val plug = object : RailPlug {
+            override suspend fun arm(seconds: Int): Boolean = bench.plug.arm(seconds).also { cut = false }
+
+            override suspend fun cut(): Boolean = bench.plug.cut().also { cut = true }
+
+            override suspend fun status(): PlugStatus? = if (cut) PlugStatus(output = false, watts = after) else idle?.let { PlugStatus(output = true, watts = it) }
+        }
+        fun keeper(): RailKeeper = RailKeeper(backgroundScope, plug, bench::check, MutableStateFlow(true), {}, {}, bench.available, { currentTime }).also { it.start() }
+        fun pieceThenCut(keeper: RailKeeper) {
+            keeper.wanted(RailKeeper.PLAY, true)
+            advanceTimeBy(3_000)
+            assertEquals(RailPhase.Up, keeper.phase.value)
+            keeper.wanted(RailKeeper.PLAY, false)
+            advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + RailKeeper.WELD_CHECK_MS + 500)
+        }
+        val keeper = keeper()
+        pieceThenCut(keeper)
+        assertFalse("9 W after the CUT, under half of the 20 W idle: the relay let go", keeper.welded.value)
+        after = 11.0
+        pieceThenCut(keeper)
+        assertTrue("11 W after the CUT, over half of the 20 W idle: stuck", keeper.welded.value)
+        // No idle reading at rail-up: 2 W.
+        idle = null
+        after = 3.0
+        val fresh = keeper()
+        pieceThenCut(fresh)
+        assertTrue("3 W after the CUT, over 2 W", fresh.welded.value)
+    }
+
     // ---- The update exception ------------------------------------------------------------------------------------
 
     @Test
