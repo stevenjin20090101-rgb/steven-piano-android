@@ -9220,3 +9220,152 @@ snapshot no longer loads; debug build installed over the 1.24-era build):
 M58's own pass on the API 36 tablet AVD is listed in its section (lock flow, debugging warning, sheets, predictive back,
 dataSync timeout, chord rotation, kiosk with a silent update, reboot).
 Not seen: the lock against real firmware 2.1.0 (published only once 1.25 is on the school tablet), the school tablet.
+
+# v1.26 — M60: the 24 V rail on a smart plug
+
+Read `DESIGN.md › v1.26 — M60` first. Brief `~/.claude/plans/m60-smart-plug-brief.md` (amended 2026-10-21); the contract is
+the firmware repository's `docs/SMART_PLUG.md` (HEAD `266acaa`, read only here). Built in a worktree (`android-wt-m60`,
+branch `m60-smart-plug`, from 1.25's `9c56859`) beside M61 (the safety cycle, `android-wt-m61`), which owns `player/**`,
+`channels/**`, `safety/**`, `audio/**`, the web panel and `Settings.kt`. No version bump, no signing, no release.
+
+## `power/` (new)
+- **`RailPower`** (the API M61's safety check is wired to after the merge): `available: StateFlow<Boolean>`,
+  `suspend repower(): Boolean`, `suspend cutNow()`, `wanted(reason, on)`. With the plug unavailable `repower` is false at
+  once, and the others do nothing.
+- **`RailKeeper`** implements it; one coroutine (`run`) on `appScope`'s thread, its inputs called there:
+  - **wants** by reason, each a `Want(seq, until, uncheckedUntil)`: `wanted(reason, on)`; `keysOnScreen(on)` /
+    `keyPressed()` (`KEYS`, until 10 min after the last key); `updateRunning(on)` (`UPDATE`, unchecked for
+    `UPDATE_CAP_MS` = 3 min from its first on); `startGuest(minutes)` / `restoreGuest(until)` (`GUEST`, unchecked
+    until its end, at most `GUEST_MAX_MIN` = 60); `repower`'s own `REPOWER` (60 s). A failure, `cutNow` and `release`
+    end every want so far (`consumedThrough`): a want counts again only when said anew.
+  - **phases** `RailPhase { Off, Waking, Up, Kept, Stopping }`; `notesHeld` = available ∧ phase ∉ {Up, Kept} ∧ (the
+    piano connected ∨ phase ≠ Off).
+  - **rail-up** (`railUp`): the CHECK (null = no answer), ARM (`TOGGLE_AFTER_S` = 30), then the CHECK at ARM + 500 ms ×
+    k until every board reads OK or `RAIL_UP_MS` = 10 s; two misses in a row → `PianoSilent`, two refused ARMs →
+    `PlugLost`; every board OK on the CHECK before ARM with the rail off → a fixed `CONTROLLER_FED_MS` = 1.5 s, then the
+    baseline; an empty baseline → `TrunkFault(0, total, cut = true)`; fewer than all → `TrunkFault(n, total, false)`.
+  - **keep**: at the last ARM + `KEEP_EVERY_MS` = 10 s: unchecked → ARM; else the CHECK, good = answered ∧ every baseline
+    board OK (the first after an exception sets the baseline), then ARM; a failed CHECK or ARM again after `RETRY_MS`
+    = 2 s; two in a row → `fail`: what plays stops (`stopPlaying`), the stop sequence, CUT, the message.
+  - **stop** (`stopRail`): the stop sequence, `STOP_TO_CUT_MS` = 1 s (a want back meanwhile keeps the rail), CUT,
+    `RailMessage.Off` for `CALM_MS` = 4 s. After a CUT the plug took, `WELD_CHECK_MS` = 3 s later (unless armed again)
+    `Switch.GetStatus`: output on or more than `WELDED_WATTS` = 2 W → `welded`.
+  - **guest** (`guestEnds`, by its clock or `endGuest()`): `GuestLink.reconnect()` (15 s), `endOnPiano()` (`lock guest
+    0`), the stop sequence, 1 s, then CUT unless something else wants the rail (then the CHECK rules from a fresh
+    baseline). `startGuest` also calls `letGo()`.
+  - **commands** (`repower`, `cutNow`, `endGuest`, `release`) take the routine's place under a mutex: the loop is
+    cancelled, the command runs on the keeper's thread, the loop starts again.
+  - outputs: `phase`, `notesHeld`, `message: RailMessage?` (`Waking`, `Off`, `PianoSilent`, `PlugLost`, `TrunkFault`;
+    `attention` but for the first two; `dismissMessage()`), `boards`, `baseline`, `armedAt`, `guestUntil`, `welded`.
+- **`RailGate`** (a `PianoLink` around the lock's gate): `send`/`sendLive` pass only `LockGate.releasing(…)` while
+  `notesHeld`; the state, the console, the version, OTA, `emergencySilence` and `flush` are the link's own.
+- **`RailHold`**: from the player's state (`PlayerNow(playing, stopped, pieceId)`) it calls `want(playing ∨ held ∨
+  resuming)` on changes only; while the rail is held and a piece plays, it polls the position every `POLL_MS` = 40 ms and
+  pauses the piece at −`MARGIN_US` (150 ms), then resumes it when the rail is up (`RESUME_MS` = 3 s of want after the
+  resume, until the player says it plays); a Play while held is paused again; a stop or another piece ends the hold.
+- **`ShellyRpc` / `ShellyGatt`**: the UUIDs, `length`/`lengthOf` (4 bytes big-endian), `chunks(frame, mtu)` (MTU − 3,
+  20 at the least), `MAX_FRAME` 16 KB; the request frame (`src` "steven-piano"), `answer` (`RpcAnswer(id, result,
+  code, message)`), the parameter builders (`switchSet`, `switchConfig(inMode)`, `bleRpcOn`, `cloudOff`, `networkOff`,
+  `networkOn`), `restartRequired`, `pairedAddresses` (any array of strings or `{addr|mac}`), `Provision`, `PlugInfo`
+  (`pairs` = firmware ≥ 2.0.0), `plugStatusOf` (`output`, `timer_duration`, `apower`).
+- **`PlugTransport`** (`blocker`, `scan`, `connect`, `connected`, `exchange`, `refused`, `disconnect`, `bond`,
+  `bonded`) and **`AndroidPlugTransport`**: its own `BluetoothGatt` (TRANSPORT_LE, MTU 247 asked, services discovered,
+  data / tx_ctl / rx_ctl), one operation awaited at a time (`CompletableDeferred`, 5 tries on a busy stack), writes
+  with response, rx_ctl read every 30 ms until non-zero, then data read until whole; GATT status 5 or 15 marks
+  `refused`. The scan is unfiltered, low latency, names beginning `ShellyPlugUSG4-`, on the app's `ScanThrottle`; the
+  bond is `createBond()` with `ACTION_BOND_STATE_CHANGED` (not exported).
+- **`PlugClient`**: `call(method, params, to, timeoutMs = 3 s)` under one mutex on `Dispatchers.IO`: connect when needed
+  (10 s), the frame, the answer matched by id; no answer (or another's) drops the connection; `hold(on)` keeps it while
+  the rail isn't Off, else it goes 30 s after the last call; `status`, `reachable`. `ShellyRail` is the keeper's
+  `RailPlug` over it.
+- **`PlugStore`** (DataStore "power_plug", not `Settings.kt`): `PlugSettings(pairing: PlugPairing(address, id, model,
+  firmware, bondEntry)?, on, guestUntil)`; `switches` = paired ∧ on; `pair(pairing, on)`, `setOn`, `setGuestUntil`
+  (wall clock), `forget`. It implements `PairingStore`, which `PairFlow` takes.
+- **`PairFlow`**: `PairState(step: PairStep, found, searching, plug, info, tasks: Set<SetUpTask>, bonds, verify:
+  VerifyState, working, problem, fallback, overBluetooth)`; `shellyAppDone`, `search` (10 s), `choose`, `refresh`,
+  `setUp` (`Switch.SetConfig` and its retry without `in_mode`, `BLE.SetConfig` with `Shelly.Reboot` and 6 s when asked,
+  `BLE.ListPairedDevices` before, `BLE.StartPairing {timeout:180}`, the bond (60 s), the list after (the new entry is
+  `bondEntry`; the pairing kept with its switch off), `Cloud.SetConfig`), `awaitComplete` (every 5 s), `closeNetwork`,
+  `verify` (the CHECK first, ARM with `toggle_after:5`, the CHECK every 500 ms for 12 s: passed when all seven answered
+  and then none), `finish` (the switch on), and the fallback's `bondWhilePending`, `provision(ssid, pass)` (then
+  `confirmed` awaited, 24 × 5 s) and `join` (a plug another tablet opened its window for).
+- **`RailFact`** and `AppGraph.railFact` (below).
+
+## The app
+- **`PianoSettingsRepository.ask(fact, timeoutMs = 2_000)`**: `get <fact>`, the first `!<fact>=` line's value or null;
+  one at a time under its own mutex, straight on the console (reads pass the lock), the answer reaching the facts too.
+  Nothing else in the file changed. M61 adds the same signature; keep one.
+- **`AppGraph`**: one block ("v1.26 — M60") with `plugStore`, `plugSettings`, `plug`, `rail`, `railPower`,
+  `stevenConnected`, `railFact`, `railPlays`, `pairFlow`, `railStopSequence` (B0 40 00, B0 7B 00 to the transport,
+  flushed 300 ms), `stopForRail` (the player's stop unless locked, `keyTest.stop()`, `silenceLive()`), `railGuest`,
+  `startGuestPlay()` / `endGuestPlay()`, `railKeysShown(on)` (Steven Piano only), `railKeyPressed()`, `setPlugOn(on)`
+  (off: `rail.release()` first), `forgetPlug()` (release, `BLE.DeletePairedDevice` of `bondEntry`, the store, the
+  client), `admitTablet()`, and `startRail()`: `RailHold` on the player, Test every key's `running`, the updater's state
+  (`Sending` with bytes > 0, `PianoVerifying`, `Restarting`, `Done(confirming)`), the plug's connection held while the
+  rail isn't Off, Live's Note Ons as keys, guest play's end kept across a restart. Outside the block: `InstrumentSwitch`
+  takes `railPlays` instead of `stevenPlays`, and `start()` calls `startRail()`; the imports.
+- **The keys**: `KeysViewModel.onScreen` and `noteOn` call `railKeysShown` / `railKeyPressed`.
+- **UI**: `SettingsPage.Power` ("power", "Power plug", `ic_g_power`), in `HubGroups`' THE PIANO after Firmware;
+  `PageRows.PAIR_PLUG`, `PLUG_SWITCH`, `ADMIT_TABLET`, `FORGET_PLUG`, `END_GUEST`; `SettingsIndex` synonyms (smart plug,
+  Shelly, 24 V, relay, supply, solenoids); `GroupSummaries.power` (`PowerCopy.hub`); `PianoScreen` composes
+  `PowerPlugPage()`; words in `ui/PowerCopy.kt`. `RailBanner` (`ui/components/`) is composed by `MainActivity` over
+  `PianoNavHost`, at the top, 64 dp lower while the microphone's banner shows. Firmware and status: `RailGuestRows`
+  (shown connected or not) and the guest switch's plug-aware handler and note. System: `PlugFact` on the Piano card
+  (polled every 5 s while paired and shown) and, in `rememberAttention`, `Attention.Inputs.railOff` (boards missing
+  aren't an item while the plug switches the rail and it isn't up) and `plugStuck` (`Attention.Part.Plug`, "The power
+  plug's relay may be stuck on", after a held key).
+
+## The web panel's JSON (for the integrator)
+`AppGraph.railFact: StateFlow<RailFact>`, e.g. as `state.plug` and in `/api/system`'s piano part:
+```json
+"plug": {"paired": true, "on": true, "rail": "off|waking|on|kept|stopping", "waking": false,
+         "output": true, "watts": 6.4, "timerEndsAt": 1761100000000, "answered": 7, "total": 7,
+         "message": "24 V off", "attention": false, "welded": false, "guestEndsAt": null}
+```
+Times are wall-clock ms; `message` is the tablet's words (`PowerCopy`). The panel's System page should also leave boards
+out of its attention while `on && rail != "on" && rail != "kept"` (the tablet's `Attention.railOff`), and show `waking`
+in the Play capsule.
+
+## Debug builds (`src/debug`)
+- `Emulator.plugTransport()` (release: null): on the emulator, `EmulatedPlug.transport()`.
+- `EmulatedPlug`: the process's fake plug from `debug.stevenpiano.plug` (`pending`, `confirmed`, `complete`, `locked`,
+  `paired`, `old`; unset or `none`: no plug, and the boards answer as before), `debug.stevenpiano.trunk`
+  (`one-missing`: board 5 never answers; `dead`), and adb's `EMULATOR_PLUG` (`away`, `back`, `reset <state>`, `trunk
+  …`, `weld on|off`, `boardsup <ms>`); its transport logs every frame under `Plug`.
+- `EmulatedShelly`: the methods above, `provision` (confirmed → complete after `COMPLETE_AFTER_MS` = 2 min online;
+  pending or confirmed offline past `WINDOW_MS` = 10 min → locked), pairing enforced from complete (a stranger gets
+  `Answer.Refused`; locked answers only `Shelly.GetDeviceInfo`), bonds (20) only in a `BLE.StartPairing` window,
+  `restart_required` on the first `BLE.SetConfig`, `toggle_after`, `apower` 6.4 W while the supply is up, `weld`.
+- `EmulatedConsole.railBoards` (default: none) and `get <fact>` answered with or without the "!" (as the firmware's
+  `findSettingRow`); `EmulatedPianoLink` feeds it `EmulatedPlug.boards()` (OK 0.9 s after the relay closes).
+
+## Simplified, and why
+- **No "Connecting" while the rail comes up** (the plan's suggestion): see DESIGN.md › Decided in the run. `Player.kt`
+  stays untouched all the same.
+- **No 10 s wait for an absent piano**: the rail waits for the link instead, and nothing is held meanwhile.
+- **The update's window starts at the first ACKed window** (`Sending` with bytes > 0), a fraction of a second after
+  BEGIN, so the unchecked ARMs never start before BEGIN.
+
+## Tests
+`RailKeeperTest` (26, the brief's piano-safety list on a fake clock with a relay, a supply and seven boards behind a fake
+plug: feature off = no calls; rail-up holds notes until every board answers (and at the gate: only what releases); a
+trunk fault's baseline; no board → cut; controller-fed boards → 1.5 s; no piano → waits, nothing held; the piano gone →
+cut; never ARM without a good CHECK over a long mixed run; CHECK then ARM every 10 s; two failed CHECKs → stop, stop
+sequence, CUT, and nothing comes back by itself; one failed CHECK → kept; two failed ARMs → stop, "Lost the power plug";
+a lost baseline board → no ARM, then the cut; stop → 1 s → CUT and "24 V off"; a want back within the second; the welded
+relay; the update unchecked until its outcome, and the CHECK again after 3 minutes; guest play capped at 60 minutes and
+ending reconnect → `lock guest 0` → stop sequence → CUT; End guest play; a window the tablet didn't start; the Keys idle
+cut and the next key; repower; cutNow; the switch off mid-piece), `RailHoldTest` (4), `PairFlowTest` (5, against
+`EmulatedShelly`), `ShellyRpcTest` (9), `PianoAskTest` (3), two in `EmulatedConsoleTest`. The hub's shape tests
+(`RoutesTest`, `PianoPagesTest`, `GroupSummariesTest`) list the new page; nothing else changed in the existing tests.
+
+## Seen on the emulator (`steven_piano_audit`, the debug build, the fake plug)
+The Pair screen end to end (Shelly app → find → confirmed → set up and bonded → complete → network closed → "7 of 7
+answering", then "0 of 7", passed → paired), the fallback for a plug complete without this tablet, Play from idle with the
+boards slowed to 5 s (the piece held at 0:00 under "Waking the piano…"; the log: ARM 04:08:50.632, "Rail up: 7 of 7
+boards" 04:08:55.732, the first Note On 04:08:55.901, none before), the pause → stop sequence → CUT 1.18 s later and "24
+V off", guest play's countdown and End guest play (reconnect, `lock guest 0`, the stop sequence, CUT 1.05 s later), the
+trunk fault ("Only 6 of 7 power boards answered", the piece starting at the 10 s mark), System's "Power plug On · 23 s
+left · 6.4 W", the plug out of range mid-piece ("Lost the power plug", the piece stopped) and back (the next Play armed
+on a fresh connection), and the Keys tab (up while open, cut on leaving). Not seen: a real Shelly plug, Android's real
+bond dialog, real BLE beside the piano's link (the emulator has no Bluetooth), a firmware update with the plug.

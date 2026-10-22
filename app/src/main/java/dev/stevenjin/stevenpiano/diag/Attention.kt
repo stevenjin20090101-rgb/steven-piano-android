@@ -23,7 +23,7 @@ import kotlin.math.roundToInt
  */
 object Attention {
     /** What an item colours on the page: a dial, a meter, the boards, a running row; (v1.23 — M55) the keys held now. */
-    enum class Part { Battery, Heat, Memory, Storage, Boards, Chip, Heap, Debugging, Relay, Running, Held }
+    enum class Part { Battery, Heat, Memory, Storage, Boards, Chip, Heap, Debugging, Relay, Running, Held, Plug }
 
     /** One thing that needs attention: the [part] it colours, the sentence that says it ([text]), the running row's [key]. */
     data class Item(val part: Part, val text: String, val key: String? = null)
@@ -41,10 +41,20 @@ object Attention {
         val cloudOn: Boolean = false,
         val cloud: CloudStatus = CloudStatus.Off,
         val keyHeld: Boolean = false,
+        /**
+         * v1.26 — M60: the smart plug switches the 24 V and it is off now (or still coming up): the power boards are
+         * unpowered, so their missing is the rail being off, not a fault.
+         */
+        val railOff: Boolean = false,
+        /** v1.26 — M60: after a CUT the plug still reads on, or its supply still draws: its relay may be stuck closed. */
+        val plugStuck: Boolean = false,
     )
 
     /** A key held on (v1.23 — M55): first of all, since a key held down can overheat. */
     const val KEY_HELD = "A key is held on"
+
+    /** The plug's relay stuck closed (v1.26 — M60): the 24 V can't be cut by the tablet. */
+    const val PLUG_STUCK = "The power plug's relay may be stuck on"
 
     /** Where attention starts (system.js's constants). */
     const val BATTERY_LOW_PCT = 20
@@ -77,6 +87,7 @@ object Attention {
     fun of(inputs: Inputs): List<Item> {
         val items = mutableListOf<Item>()
         if (inputs.keyHeld) items += Item(Part.Held, KEY_HELD)
+        if (inputs.plugStuck) items += Item(Part.Plug, PLUG_STUCK)
         inputs.reading?.let { reading ->
             val battery = reading.battery
             val percent = battery.percent
@@ -95,7 +106,7 @@ object Attention {
         }
         inputs.piano?.let { piano ->
             val missing = piano.boards?.count { it == PianoDiag.MISSING } ?: 0
-            if (missing > 0) items += Item(Part.Boards, if (missing == 1) "A power board is missing" else "$missing power boards are missing")
+            if (missing > 0 && !inputs.railOff) items += Item(Part.Boards, if (missing == 1) "A power board is missing" else "$missing power boards are missing")
             piano.temp?.takeIf { it >= CHIP_HOT_C }?.let { items += Item(Part.Chip, "The controller is hot · ${it.roundToInt()} °C") }
             piano.heapMin?.takeIf { it < HEAP_LOW_BYTES }?.let { items += Item(Part.Heap, "The controller ran low on memory") }
         }

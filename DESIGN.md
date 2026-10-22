@@ -3385,3 +3385,96 @@ app behaves exactly as before with it.
   piano's pairing window open claims it.
 - **Firmware updates** say "The piano didn't accept this tablet (not authorised)." (the piano's ERR 11) and "That
   firmware isn't newer than the piano's." (ERR 12); neither offers Try again.
+
+# v1.26 — M60: the 24 V rail on a smart plug
+
+Steven's decision after the stuck-coil incident of 2026-10-21 (a key held down with its coil hot while the piano sat idle;
+the controller had been dark or rebooting, once unpowered with the 24 V still on). The 24 V solenoid supply now hangs on a
+Bluetooth smart plug, a Shelly Plug US Gen4, that switches itself off 30 seconds after the tablet last told it to stay on.
+The tablet tells it so only while something should play and the piano answers with its power boards; everything else (the
+tablet asleep, the app closed or crashed, Bluetooth gone, the controller dark or rebooting, the trunk broken) leaves the
+plug to its timer. Nothing can stay hot while the piano is idle. The contract is the firmware repository's
+`docs/SMART_PLUG.md`, written with the firmware chat; this is the app's side. The relay board of `SAFETY_CUTOFF.md` stays
+the proper fix.
+
+## Piano › Power plug
+A new row in THE PIANO, after Firmware and status, with a bolt drawn in the panel's line style. Its value: "Not paired",
+"Off" (paired, its switch off), "24 V off", "Waking the piano…" or "24 V on". Behind the kiosk PIN as every Piano page.
+- **No plug:** what it is for, in a paragraph, and **Pair the power plug** ("About 15 minutes, with your phone and the
+  Shelly app. Only the 24 V supply goes on the plug.").
+- **The Pair screen:** six numbered steps in the contract's setup order, the one under way open with its words and its
+  action, those done ticked, **Start over** at the foot:
+  1. *Set it up with the Shelly app* (the phone's hotspot with internet, the cloud declined, firmware 2.0.0 or later; "the
+     next steps must start within about 5 minutes"): **Done in the Shelly app**.
+  2. *Find the plug*: a search for names beginning ShellyPlugUSG4, each found plug a row with its signal; the one chosen
+     shows its model, its firmware and its setup state, read live ("Pending: new, not set up yet", "Confirmed: set up,
+     finishing", "Complete", "Locked: needs a power cycle"). Confirmed: **Pair and set up**. Pending: **Set it up from
+     here** (the fallback, below). Complete and refusing this tablet: the factory reset's words, **Find the plug again** and
+     **Pair with a plug another tablet set up**. Locked: "Unplug the power plug for 5 seconds and plug it back in, then open
+     Pair the power plug again." Firmware older than 2.0.0: update it in the Shelly app first.
+  3. *Pair it with this tablet*: Settings · Bluetooth control · Pairing window · Paired with this tablet · On the plug's list
+     · Cloud off, each ticked as it lands ("when Android asks to pair with the plug, tap Pair"); the first that fails stops,
+     saying which, with **Try again**.
+  4. *Wait while it finishes its setup* (about 5 minutes; keep the hotspot on): its setup state, read every 5 s.
+  5. *Close its network*: the plug forgets every network and closes its own access point; then the hotspot can go off.
+  6. *Check it*: **Turn the 24 V on for 5 s** reads "7 of 7 answering" with the 24 V on, then "0 of 7" once the plug has
+     switched itself off; **Finish** once it passed, or **Finish without the check**.
+  The fallback, when the plug finished its setup without this tablet: a factory reset (hold its button about 10 s), find it
+  again, pair first while it is new, then the hotspot's name and password go to it over Bluetooth, and the steps go on from
+  4. A plug another tablet set up joins once that tablet opened **Admit a replacement tablet**.
+- **Paired:** THE PLUG: 24 V ("On · 24 s left", "Off", "Not answering"), The supply draws ("6.4 W"), Setup, Plug firmware,
+  read every 2 s while shown; a relay that stays on after a cut in amber. Then **Switch the 24 V with the plug** (on: "The
+  24 V comes on for each piece, Test every key, the Keys tab and updates, and goes off after"; off: "The app leaves the plug
+  alone, and the plug stays off: to play without it, plug the 24 V supply into a wall socket"), **Admit a replacement
+  tablet** (3 minutes) and **Forget the plug** (after "Forget the power plug?").
+
+## What a person notices
+- **A piece:** the tap on Play brings the 24 V up while the pause before the piece (2 s by default) runs; firmware 2.1.0's
+  boards answer within about a second, so the piece starts as before. When the boards are slower the piece waits at its
+  start, "Waking the piano…" at the top of the screen, and begins the moment every board answers: nothing of it is lost. The
+  24 V goes off a second after the piece ends (one piece per Play: one relay cycle a piece), "24 V off" for a few seconds.
+- **The Keys tab** keeps the 24 V on while it is open, until 10 minutes pass without a key; the next key wakes it ("Waking
+  the piano…") and the keys after it sound.
+- **Test every key**, the safety check (M61) and a firmware update keep it on while they run; the update from its BEGIN
+  until the piano has confirmed the new firmware (or rolled it back), 3 minutes at most, without asking the piano, which is
+  restarting.
+- **Guest play** (Firmware and status, with the plug switching the 24 V): **Let anyone play for 1 hour** keeps the 24 V on
+  for the hour without asking the piano, and the tablet lets go of the piano so the iPad can connect. The page shows "The
+  24 V stays on for guest play · 52 min left" and **End guest play** (the tablet connects again, ends guest play, releases
+  every key, then turns the 24 V off); the end of the hour does the same by itself. Guest play started from another device
+  keeps nothing on.
+- **The words** come as a glass capsule at the top of every screen (under the microphone's when both show), the plug's bolt
+  beside them: "Waking the piano…" and "24 V off" pass by themselves; "The piano stopped answering — 24 V cut", "Lost the
+  power plug" and "Only 6 of 7 power boards answered" (with "— 24 V cut" when it cut) are amber with **OK**.
+- **System**: the Piano card gains Power plug ("On · 24 s left · 6.4 W"), amber with "After the 24 V was cut the plug still
+  reads on: its relay may be stuck…" when a cut didn't take. Boards missing while the 24 V is off are no longer "7 power
+  boards are missing": with the rail off they are expected.
+- **Without the plug** (none paired, or its switch off) nothing of this happens: the app behaves exactly as before.
+
+## The rules (SMART_PLUG.md › The app's routine)
+- **Rail-up:** the piano's `get boards` answered (the CHECK), then ARM (`Switch.Set` on with `toggle_after:30`), then the
+  CHECK every 500 ms until every board reads OK, 10 s at most. The boards that answered are this rail-up's baseline; fewer
+  than seven is a trunk fault, said; none cuts. Boards that answer with the rail off (a trunk fed from the controller)
+  prove nothing: the wait is then a fixed 1.5 s. Notes wait until then: only what releases goes.
+- **While on:** every 10 s the CHECK, then ARM only when the piano answered and every baseline board still reads OK. A
+  failure is tried again 2 s later; two failed CHECKs in a row (no answer, or a baseline board gone) stop the music, send
+  the stop sequence and CUT; two failed ARMs stop the music and say "Lost the power plug". Nothing ARMs without a good
+  CHECK just before it, but the update and guest play this tablet started.
+- **Stop:** the stop sequence (CC64 = 0, CC123), a second, then CUT. A Play within that second keeps the rail up.
+- **A failure ends what wanted the rail**: the next Play, key or start brings it up again, through a fresh CHECK.
+- **No piano connected:** the rail waits for it and nothing is held (the notes would go nowhere anyway, as before); once it
+  connects the rail comes up first.
+
+## Decided in the run
+- **The link isn't made to look dropped while the rail comes up.** The plan suggested the gate read "Connecting" until
+  rail-up, as the lock's gate does. That would end Test every key ("the piano disconnected"), close Live, and turn the
+  tablet's own sound on for a moment; and the player doesn't resume after a drop. Instead the gate holds notes, and a piece
+  whose pause runs out first is paused just before its first note and resumed at rail-up (`RailHold`), with "Waking the
+  piano…" saying why.
+- **The rail-up's ARM has a CHECK before it too** (the piano answering, its boards off), so every ARM outside the two
+  exceptions follows a good CHECK, as the required test checks.
+- **A baseline board gone counts as a failed CHECK**, so a lost board cuts within about 12 s instead of leaving a silent rail
+  to its timer while the piece "plays" on.
+- **Switching the plug off or forgetting it** first stops what plays, sends the stop sequence and cuts, so the rail never
+  stays up unkept; the page says the plug then stays off.
+- **The emulator's plug** completes its setup 2 minutes after it was confirmed (the real one about 5).

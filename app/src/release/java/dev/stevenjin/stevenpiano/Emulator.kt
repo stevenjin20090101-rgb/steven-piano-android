@@ -14,6 +14,7 @@ import android.os.Handler
 import dev.stevenjin.stevenpiano.ble.PianoLink
 import dev.stevenjin.stevenpiano.firmware.FirmwareStandIn
 import dev.stevenjin.stevenpiano.instruments.MidiPorts
+import dev.stevenjin.stevenpiano.power.PlugTransport
 import dev.stevenjin.stevenpiano.update.UpdateSource
 
 /**
@@ -35,6 +36,9 @@ object Emulator {
     fun modelsSource(): UpdateSource? = null
 
     fun librarySource(): UpdateSource? = null
+
+    /** The 24 V power plug's real Bluetooth (v1.26 — M60). */
+    fun plugTransport(): PlugTransport? = null
 
     fun onIntent(graph: AppGraph, intent: Intent) = Unit
 }

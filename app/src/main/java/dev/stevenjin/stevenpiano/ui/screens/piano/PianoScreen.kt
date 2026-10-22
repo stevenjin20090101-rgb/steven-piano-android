@@ -65,6 +65,7 @@ import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.LockedFirmware
 import dev.stevenjin.stevenpiano.ui.LockedPage
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
@@ -90,6 +91,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LightingPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LockedFirmwareUpdate
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PowerPlugPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.ReadWhileShown
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SYSTEM_ROW_MS
@@ -307,7 +309,12 @@ private fun PianoHub(
     ReadWhileShown(SYSTEM_ROW_MS, vm::readSystem)
     val system by vm.system.collectAsStateWithLifecycle()
     val attention = rememberAttention(vm, system)
-    val summaries = remember(piano, settings, web, firmware, firmwarePiano, quiet, keyboard, instrument, linkWords, update, system, attention) {
+    // The Power plug row (v1.26 — M60): paired or not, its switch, where the 24 V stands.
+    val graph = LocalContext.current.graph
+    val plug by graph.plugSettings.collectAsStateWithLifecycle()
+    val rail by graph.rail.phase.collectAsStateWithLifecycle()
+    val power = PowerCopy.hub(plug, rail)
+    val summaries = remember(piano, settings, web, firmware, firmwarePiano, quiet, keyboard, instrument, linkWords, update, system, attention, power) {
         GroupSummaries.from(
             piano,
             settings,
@@ -321,6 +328,7 @@ private fun PianoHub(
             BuildConfig.VERSION_NAME,
             system?.reading,
             attention,
+            power,
         )
     }
     val query = vm.query
@@ -451,6 +459,7 @@ private fun SettingsPageView(
                         SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)
                         SettingsPage.Pedal -> PedalPage(pianoReport(vm), vm)
                         SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm, firmwareReport(vm), vm)
+                        SettingsPage.Power -> PowerPlugPage()   // v1.26 — M60
                         SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                         SettingsPage.TabletSound -> TabletSoundPage(appSettings(vm), vm)
                         SettingsPage.Quiet -> QuietTimesPage()

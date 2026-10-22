@@ -95,12 +95,14 @@ import dev.stevenjin.stevenpiano.diag.SystemSample
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.ui.DisplayRule
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalIdleState
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
@@ -261,7 +263,13 @@ internal fun rememberAttention(vm: PianoViewModel, system: SystemNow?): List<Att
     val kind by vm.instrumentKind.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cloud by vm.cloud.collectAsStateWithLifecycle()
-    return remember(system, link, piano, kind, settings, cloud) {
+    // v1.26 — M60: the 24 V on its smart plug: boards missing while it is off are no fault; a relay stuck on is.
+    val graph = LocalContext.current.graph
+    val plug by graph.plugSettings.collectAsStateWithLifecycle()
+    val rail by graph.rail.phase.collectAsStateWithLifecycle()
+    val welded by graph.rail.welded.collectAsStateWithLifecycle()
+    val railOff = plug?.switches == true && rail != RailPhase.Up && rail != RailPhase.Kept
+    return remember(system, link, piano, kind, settings, cloud, railOff, welded) {
         Attention.of(
             Attention.Inputs(
                 reading = system?.reading,
@@ -270,6 +278,8 @@ internal fun rememberAttention(vm: PianoViewModel, system: SystemNow?): List<Att
                 cloudOn = vm.cloudLink(settings, cloud) != null,
                 cloud = cloud,
                 keyHeld = system?.keyHeld == true,
+                railOff = railOff,
+                plugStuck = welded,
             ),
         )
     }
@@ -361,12 +371,32 @@ private fun PianoCard(
     SystemCard(SystemCopy.PIANO, SystemCopy.pianoLine(mode, boards, instrument)) {
         PowerBoards(boards)
         for (fact in SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts, Attention.Part.Held in parts)) CardFact(fact)
+        PlugFact(Attention.Part.Plug in parts)   // v1.26 — M60
         FootRow(
             SettingsPage.Firmware.title,
             GroupSummaries.firmware(piano, firmware, (firmwarePiano as? FirmwarePiano.Connected)?.text),
             onClick = { onOpenPage(SettingsPage.Firmware) },
         )
     }
+}
+
+/**
+ * The 24 V smart plug on the Piano card (v1.26 — M60), once one is paired: "On · 24 s left · 6.4 W", "Off · 0.0 W" or "Not
+ * answering", read every 5 s while the page shows; amber, with what it means, when the relay may be stuck on ([stuck]).
+ */
+@Composable
+private fun PlugFact(stuck: Boolean) {
+    val graph = LocalContext.current.graph
+    val settings by graph.plugSettings.collectAsStateWithLifecycle()
+    if (settings?.pairing == null) return
+    val status by graph.plug.status.collectAsStateWithLifecycle()
+    val reachable by graph.plug.reachable.collectAsStateWithLifecycle()
+    val armedAt by graph.rail.armedAt.collectAsStateWithLifecycle()
+    PollWhileShown(SYSTEM_MS) { graph.plug.switchStatus() }
+    val left = secondsLeft(armedAt)
+    val value = if (reachable == false) PowerCopy.NOT_ANSWERING else PowerCopy.fact(status, left)
+    CardFact(SystemCopy.Fact(PowerCopy.TITLE, value, attention = stuck))
+    if (stuck) CardNote(PowerCopy.WELDED)
 }
 
 @Composable

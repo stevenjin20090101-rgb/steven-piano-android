@@ -22,6 +22,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.firmware.FirmwareFailures
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.firmware.FirmwareState
@@ -43,6 +45,7 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.LockedFirmware
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.FilledButton
@@ -59,6 +62,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoPageContent
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoReport
 import dev.stevenjin.stevenpiano.ui.screens.piano.PianoSettingsActions
 import dev.stevenjin.stevenpiano.ui.theme.Tabular
+import kotlinx.coroutines.delay
 
 /**
  * Firmware and status: FIRMWARE (the piano's firmware version and its updates, v1.6 — M21) ·
@@ -135,7 +139,31 @@ private fun FirmwareSection(firmware: FirmwareReport, actions: FirmwareActions, 
         }
     }
     UpdateBlock(state, canSend, onUpdate = { actions.updateFirmware(context) }, onCancel = actions::cancelFirmware, waiting = waiting)
+    RailGuestRows()   // v1.26 — M60: shown whether or not the tablet holds the piano (it lets go during guest play)
     LockRows(lock, context.graph.pianoSettings)
+}
+
+/**
+ * Guest play this tablet started while the 24 V is on its smart plug (v1.26 — M60; DESIGN.md › v1.26 — M60): the time left
+ * (the tablet keeps the 24 V on for it, 60 minutes at most, and has let go of the piano so another device can connect) and
+ * **End guest play** (connect again, `lock guest 0`, the stop sequence, then the 24 V off). Nothing otherwise.
+ */
+@Composable
+private fun RailGuestRows() {
+    val graph = LocalContext.current.graph
+    val until by graph.rail.guestUntil.collectAsStateWithLifecycle()
+    val end = until ?: return
+    val left by produceState(((end - SystemClock.elapsedRealtime()) / MS_PER_S).coerceAtLeast(0), end) {
+        while (value > 0) {
+            delay(GUEST_TICK_MS)
+            value = ((end - SystemClock.elapsedRealtime()) / MS_PER_S).coerceAtLeast(0)
+        }
+    }
+    Anchored(PageRows.END_GUEST.anchor) {
+        ActionRow(note = PowerCopy.guestLeft(left) + ". " + PowerCopy.END_GUEST_NOTE) {
+            ActionButton(PowerCopy.END_GUEST, onClick = graph::endGuestPlay)
+        }
+    }
 }
 
 /**
@@ -166,13 +194,25 @@ private fun LockRows(lock: PianoLock, settings: PianoSettingsRepository) {
         }
     }
     val left = lock.guestLeft(SystemClock.elapsedRealtime())
+    // v1.26 — M60: with the 24 V on its smart plug, guest play from here keeps the 24 V on for it (60 minutes at most), and
+    // its end is the full sequence (End guest play).
+    val graph = LocalContext.current.graph
+    val plug by graph.plugSettings.collectAsStateWithLifecycle()
+    val railGuest by graph.rail.guestUntil.collectAsStateWithLifecycle()
+    val withPlug = plug?.switches == true
     Anchored(PageRows.LOCK_GUEST.anchor) {
         SwitchRow(
             LockCopy.GUEST,
-            checked = left > 0,
-            onChange = { on -> settings.guestPlay(if (on) LockCopy.GUEST_MINUTES else 0) },
+            checked = left > 0 || railGuest != null,
+            onChange = { on ->
+                when {
+                    !withPlug -> settings.guestPlay(if (on) LockCopy.GUEST_MINUTES else 0)
+                    on -> graph.startGuestPlay()
+                    else -> graph.endGuestPlay()
+                }
+            },
             enabled = can,
-            note = LockCopy.guestNote(left),
+            note = LockCopy.guestNote(left) + if (withPlug && left <= 0) " " + PowerCopy.GUEST_WITH_PLUG else "",
         )
     }
     lock.said?.let {
@@ -197,6 +237,10 @@ private fun LockRows(lock: PianoLock, settings: PianoSettingsRepository) {
 
 /** How often the lock's two facts are read again while the page shows. */
 private const val LOCK_READ_MS = 30_000L
+
+/** Guest play's time left on the plug, counted down in minutes (v1.26 — M60). */
+private const val GUEST_TICK_MS = 15_000L
+private const val MS_PER_S = 1_000L
 
 /**
  * The update as it stands, under the check; nothing while there is none to show. [locked]: no Update or Retry (kiosk).

@@ -65,8 +65,11 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
         graph.appScope.launch { graph.settingsRepository.setLiveToPiano(on) }
     }
 
-    /** The Keys tab is on screen with the app in the foreground: Live may play. */
-    fun onScreen(on: Boolean) = graph.liveThru.setOnScreen(on)
+    /** The Keys tab is on screen with the app in the foreground: Live may play, and (v1.26 — M60) the 24 V rail is wanted. */
+    fun onScreen(on: Boolean) {
+        graph.liveThru.setOnScreen(on)
+        graph.railKeysShown(on)
+    }
 
     /** The sustain as the piano was last told; a stop elsewhere lifts it. */
     val sustain: StateFlow<Boolean> = player.liveSustain
@@ -93,6 +96,7 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
 
     /** Sent while the piano is connected, or while the tablet plays the piano sound itself (v1.8 — M25); recorded while a take runs (v1.11 — M29). */
     override fun noteOn(key: Int, velocity: Int) {
+        graph.railKeyPressed()   // v1.26 — M60: the idle cut starts over; a rail cut for idling wakes
         if (link.value is LinkState.Connected || graph.tabletSound.active) player.liveNoteOn(key, velocity)
         graph.recorder.screenKey(down = true, key = key, velocity = velocity)
         showVelocity(velocity)
