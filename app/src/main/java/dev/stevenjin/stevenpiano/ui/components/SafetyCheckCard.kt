@@ -193,7 +193,7 @@ private fun Checking(state: SafetyState, onDismiss: () -> Unit) {
         else -> SafetyCopy.TITLE
     }
     val line = when (ended) {
-        is SafetyOutcome.Unfinished -> listOfNotNull(unfinishedWhy(ended), SafetyCopy.AGAIN).joinToString(" ")
+        is SafetyOutcome.Unfinished -> listOfNotNull(SafetyCopy.stopped(ended), SafetyCopy.AGAIN).joinToString(" ")
         else -> SafetyCopy.LINE
     }
     Text(
@@ -226,15 +226,6 @@ private fun Checking(state: SafetyState, onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = TOUCH)) { Text(SafetyCopy.OK) }
         }
     }
-}
-
-/** Why a check stopped, in words. */
-private fun unfinishedWhy(ended: SafetyOutcome.Unfinished): String? = ended.said ?: when (ended.why) {
-    Why.NO_ANSWER -> "The piano didn't answer."
-    Why.NO_DUMP -> SafetyCopy.RECONNECT
-    Why.NO_PIANO -> SafetyCopy.NOT_CONNECTED
-    Why.RAIL_DOWN -> SafetyCopy.RAIL_DOWN.replaceFirstChar { it.uppercase() } + "."
-    else -> null
 }
 
 /** One step: its mark and its words, in the content colour, faint while to come, amber when failed (red for a coil on). */

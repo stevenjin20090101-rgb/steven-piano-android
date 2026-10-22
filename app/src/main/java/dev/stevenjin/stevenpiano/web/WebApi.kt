@@ -445,8 +445,8 @@ object WebApi {
         .put("attention", p.attention)
 
     /**
-     * The safety check in the state (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, text}`; [WebSafety.text] null
-     * while there is nothing for the panel's capsule to say.
+     * The safety check in the state (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, stopped, text}` (`stopped`:
+     * v1.27 — M64); [WebSafety.text] null while there is nothing for the panel's capsule to say.
      */
     fun safety(w: WebSafety): JSONObject = JSONObject()
         .put("running", w.running)
@@ -455,6 +455,7 @@ object WebApi {
         .put("locked", w.locked)
         .put("failedKeys", JSONArray(w.failedKeys))
         .put("coil", w.coil)
+        .put("stopped", w.stopped)
         .put("text", w.text ?: JSONObject.NULL)
 
     /** The views of the piece playing (v1.13 — M32): `{rev, notes, hands, fingers, chords, score}`. */

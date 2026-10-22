@@ -167,15 +167,16 @@ export function create(host) {
 
   // ---- The safety check (v1.26 — M61) ----------------------------------------------------------------------------
   //
-  // The state's `safety` ({running, step, of, locked, failedKeys, coil, text}; absent on older tablets: nothing). While a
-  // check runs on the tablet, or Play is locked until one passes there, Now playing's head says so in the tablet's own
-  // words: the dot on while it runs, amber while keys lock Play, red only for a key still on. A Play the tablet refuses
-  // meanwhile (409 safety) says why, as every refusal does. The panel can't start a check: the microphone needs the
-  // tablet in front.
+  // The state's `safety` ({running, step, of, locked, failedKeys, coil, stopped, text}; absent on older tablets: nothing).
+  // While a check runs on the tablet, or Play is locked until one passes there, Now playing's head says so in the tablet's
+  // own words: the dot on while it runs, amber while keys lock Play, red only for a key still on; and (v1.27 — M64) for the
+  // moment the tablet's card says why a check stopped ("Safety check stopped · The piano didn't report its keys. Reconnect
+  // it."), with a plain ring. A Play the tablet refuses meanwhile (409 safety) says why, as every refusal does. The panel
+  // can't start a check: the microphone needs the tablet in front.
 
   function renderSafety() {
     const safety = state() && state().safety;
-    const on = !!(safety && safety.text && (safety.running || safety.locked));
+    const on = !!(safety && safety.text && (safety.running || safety.locked || safety.stopped));
     $('safety-capsule').hidden = !on;
     if (!on) return;
     const dot = $('safety-dot');
