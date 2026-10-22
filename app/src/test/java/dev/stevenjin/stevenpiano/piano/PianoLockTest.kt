@@ -111,7 +111,8 @@ class PianoLockTest {
     @Test
     fun `an open piano is trusted at once and claimed for this tablet, which keeps the piano's own K by its address`() = runTest {
         val piano = lock()
-        val console = FakeConsole(EmulatedConsole(lock = piano)::handle)
+        val emulated = EmulatedConsole(lock = piano)
+        val console = FakeConsole(emulated::handle)
         val repo = connected(console)
         val claim = console.sent.single { it.startsWith("claim ") }
         assertTrue(claim, Regex("claim [0-9a-f]{64}").matches(claim))
@@ -122,6 +123,9 @@ class PianoLockTest {
         val kept = keys.kept.getValue(ADDRESS)
         assertTrue("the tablet's K is the piano's", piano.knows(kept))
         assertEquals(1, piano.keyCount)
+        // v1.27 — M64: the emulated piano says its lock as it stands when asked; the connection's dump came before the claim.
+        assertEquals(listOf("!lock=claimed"), emulated.handle("dump").filter { it.startsWith("!lock=") })
+        assertEquals(listOf("!lock=claimed"), emulated.handle("get !lock"))
         repo.set("ledbright", 40)
         advanceTimeBy(200)
         runCurrent()
