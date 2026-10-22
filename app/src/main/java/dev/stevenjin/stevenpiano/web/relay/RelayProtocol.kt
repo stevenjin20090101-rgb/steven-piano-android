@@ -111,7 +111,7 @@ object RelayProtocol {
         }
     }
 
-    private fun read(json: JSONObject): RelayMessage? = when (json.opt("t")) {
+    private fun read(json: JSONObject): RelayMessage? = when (json.opt("t") as? String) {
         "hello" -> hello(json)
         "req" -> req(json)
         "req.abort" -> id(json)?.let { RelayMessage.ReqAbort(it) }
@@ -147,7 +147,7 @@ object RelayProtocol {
         "cmd" -> {
             val id = id(json)
             val name = (json.opt("name") as? String)?.takeIf(COMMAND::matches)
-            val args = when (val raw = json.opt("args")) {
+            val args = when (val raw: Any? = json.opt("args")) {
                 null, JSONObject.NULL -> emptyMap()
                 is JSONObject -> args(raw)
                 else -> null
@@ -181,7 +181,7 @@ object RelayProtocol {
         val id = id(json) ?: return null
         val method = (json.opt("method") as? String)?.takeIf(METHOD::matches) ?: return null
         val path = text(json.opt("path"), MAX_PATH)?.takeIf { it.startsWith('/') } ?: return null
-        val query = when (val raw = json.opt("query")) {
+        val query = when (val raw: Any? = json.opt("query")) {
             null, JSONObject.NULL -> ""
             is String -> raw.removePrefix("?").takeIf { it.length <= MAX_PATH && !hasBreak(it) } ?: return null
             else -> return null

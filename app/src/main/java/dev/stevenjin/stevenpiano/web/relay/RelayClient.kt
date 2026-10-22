@@ -215,7 +215,9 @@ class RelayClient(
 
     /** Waits [ms], or less when [nudge]d. */
     private suspend fun waitOrNudge(ms: Long) {
-        while (wake.tryReceive().isSuccess) Unit   // a nudge from before the wait began is not this wait's
+        do {
+            val stale = wake.tryReceive()   // a nudge from before the wait began is not this wait's
+        } while (stale.isSuccess)
         coroutineScope {
             val sleeper = async { sleep(ms) }
             select<Unit> {
