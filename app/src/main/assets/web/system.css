@@ -337,6 +337,16 @@
 
 .system-page .octave.missing .rail { fill: none; stroke: var(--attention); stroke-width: 1.5; }
 
+/* v1.26 — M62: the power plug keeps the 24 V off, so a board that doesn't answer is unpowered: hollow in ink, not amber. */
+.system-page .octave.off .natural { fill: none; stroke: var(--tertiary); stroke-width: 1; }
+
+.system-page .octave.off .sharp { fill: var(--elevated); stroke: var(--tertiary); stroke-width: 1; }
+
+.system-page .octave.off .rail { fill: none; stroke: var(--tertiary); stroke-width: 1.5; }
+
+/* v1.26 — M62: under the Power plug row, what needs attention, in words: a relay stuck on, the tablet's words for a failure. */
+.system-page .plug-note { margin: -2px 0 0; padding: 0 var(--inset) 10px; font-size: 13px; line-height: 18px; color: var(--attention); font-weight: 600; }
+
 .system-page .board-labels {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

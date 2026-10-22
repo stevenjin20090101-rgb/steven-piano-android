@@ -524,10 +524,12 @@ private fun TabRail(current: Route, onSelect: (Route) -> Unit, albumBackdrop: Bo
     val graph = LocalContext.current.graph
     val state by graph.player.state.collectAsStateWithLifecycle()
     val link by graph.pianoLink.state.collectAsStateWithLifecycle()
+    val held by graph.railHoldsNotes.collectAsStateWithLifecycle()
     val playing = state.piece?.takeIf { current == Route.NowPlaying }
     val backdrop = rememberBackdrop(playing?.pieceId, playing?.composerKey, albumBackdrop) != null
-    // The piano link, as the "Sent to piano" capsule reads it: red only while a piece's notes go to the piano.
-    val dot = LinkDot.of(link is LinkState.Connected, sending = state.status == PlaybackStatus.Playing)
+    // The piano link, as the "Sent to piano" capsule reads it: red only while a piece's notes reach the piano, so not
+    // while the 24 V comes up and holds them (v1.26 — M62): the connected dot meanwhile.
+    val dot = LinkDot.of(link is LinkState.Connected, sending = state.status == PlaybackStatus.Playing && !held)
     val label = railLabel()
     val density = LocalDensity.current
     val cap = labelScaleThatFits(RailWidth - RailSide * 2, label)

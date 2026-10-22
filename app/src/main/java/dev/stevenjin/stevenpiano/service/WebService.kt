@@ -51,6 +51,7 @@ import dev.stevenjin.stevenpiano.web.Poster
 import dev.stevenjin.stevenpiano.web.WebAddress
 import dev.stevenjin.stevenpiano.web.WebApi
 import dev.stevenjin.stevenpiano.web.WebAssets
+import dev.stevenjin.stevenpiano.web.WebPower
 import dev.stevenjin.stevenpiano.web.WebServer
 import dev.stevenjin.stevenpiano.web.WebSocketHub
 import dev.stevenjin.stevenpiano.web.WebStatus
@@ -422,6 +423,9 @@ class WebService : Service() {
             graph.keyTest.state.map { },
             // The safety check (v1.26 — M61): its steps as they go, Play locked or free again.
             graph.safety.state.map { },
+            // The 24 V power plug (v1.26 — M62): the state's little part only (waking, the rail, the words), not the
+            // plug's readings, which change every few seconds and stay on /api/system.
+            graph.railFact.map(WebPower::of).distinctUntilChanged().map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created

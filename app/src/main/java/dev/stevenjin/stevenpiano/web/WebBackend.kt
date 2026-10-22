@@ -21,6 +21,7 @@ import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.safety.Mark
 import dev.stevenjin.stevenpiano.safety.SafetyLock
 import dev.stevenjin.stevenpiano.safety.SafetyState
@@ -552,7 +553,29 @@ data class WebState(
     val keytest: dev.stevenjin.stevenpiano.audio.KeyTestState = dev.stevenjin.stevenpiano.audio.KeyTestState(),
     /** The safety check (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, text}`. */
     val safety: WebSafety = WebSafety(),
+    /** The 24 V power plug (v1.26 — M62): `{paired, on, rail, waking, message, attention}`. */
+    val power: WebPower = WebPower(),
 )
+
+/**
+ * The 24 V power plug in the state (v1.26 — M62; DESIGN.md › v1.26 — M60), the little Now playing needs: a plug [paired],
+ * its switch [on] (together: the plug switches the rail), where the rail stands ([rail]: "off", "waking", "on", "kept",
+ * "stopping", [RailFact.word]), [waking] while it comes up (Now playing's "Waking the piano…"), and the tablet's words now
+ * ([message], [dev.stevenjin.stevenpiano.ui.PowerCopy]) with whether they need [attention]. The plug's readings change
+ * every few seconds, so they stay on `/api/system`'s `power` ([RailFact]) and the state isn't sent again for them.
+ */
+data class WebPower(
+    val paired: Boolean = false,
+    val on: Boolean = false,
+    val rail: String = "off",
+    val waking: Boolean = false,
+    val message: String? = null,
+    val attention: Boolean = false,
+) {
+    companion object {
+        fun of(fact: RailFact): WebPower = WebPower(fact.paired, fact.on, fact.rail, fact.waking, fact.message, fact.attention)
+    }
+}
 
 /**
  * The safety check (v1.26 — M61) as the panel's capsule reads it: a check [running], at [step] of the [of] steps it means
@@ -697,7 +720,8 @@ object WebLimits {
 
 /**
  * `GET /api/system` (v1.18 — M46): [at] (epoch ms), the tablet's and the app's [reading], the [piano], what is [running]
- * ([dev.stevenjin.stevenpiano.diag.RunningNow]), the panel's [web] counts and the album [covers]' counts. Every unknown is null on the wire.
+ * ([dev.stevenjin.stevenpiano.diag.RunningNow]), the panel's [web] counts and the album [covers]' counts; and (v1.26 — M62)
+ * the 24 V [power] plug ([RailFact]: `paired` false with none). Every unknown is null on the wire.
  */
 data class WebSystem(
     val at: Long,
@@ -706,6 +730,7 @@ data class WebSystem(
     val running: List<dev.stevenjin.stevenpiano.diag.RunningNow.Activity> = emptyList(),
     val web: WebSystemWeb = WebSystemWeb(),
     val covers: WebCovers = WebCovers(),
+    val power: RailFact = RailFact(),
 )
 
 /**

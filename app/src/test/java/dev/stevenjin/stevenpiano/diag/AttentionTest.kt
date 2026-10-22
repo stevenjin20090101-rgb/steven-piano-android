@@ -104,6 +104,22 @@ class AttentionTest {
     }
 
     @Test
+    fun `the 24 V off on its power plug - boards not answering are no item, a relay stuck on still is (v1_26 M60, M62)`() {
+        val unpowered = PianoDiag(mapOf("boards" to "missing,missing,missing,missing,missing,missing,missing"))
+        assertTrue("0 of 7 with the 24 V off is normal", items(Attention.Inputs(reading = calm, piano = unpowered, railOff = true)).isEmpty())
+        assertEquals(
+            "with it up, or with no plug, a board that doesn't answer is a fault, as before",
+            listOf(Attention.Item(Attention.Part.Boards, "7 power boards are missing")),
+            items(Attention.Inputs(reading = calm, piano = unpowered, railOff = false)),
+        )
+        assertEquals(
+            "a relay stuck on stays, second only to a key held on",
+            listOf(Attention.Item(Attention.Part.Held, Attention.KEY_HELD), Attention.Item(Attention.Part.Plug, Attention.PLUG_STUCK)),
+            items(Attention.Inputs(reading = calm, piano = unpowered, keyHeld = true, railOff = true, plugStuck = true)),
+        )
+    }
+
+    @Test
     fun `the internet link down while the panel is on the internet`() {
         val down = items(Attention.Inputs(cloudOn = true, cloud = CloudStatus.Waiting("No network", 5_000, 0)))
         assertEquals(listOf(Attention.Item(Attention.Part.Relay, "The internet link is not connected")), down)

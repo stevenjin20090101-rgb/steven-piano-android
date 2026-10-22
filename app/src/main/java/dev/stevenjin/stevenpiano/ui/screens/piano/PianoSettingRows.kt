@@ -65,6 +65,7 @@ import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.OutlinedBanner
 import dev.stevenjin.stevenpiano.ui.components.PowerBoards
+import dev.stevenjin.stevenpiano.ui.components.rememberRailOff
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.pressScale
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
@@ -412,7 +413,8 @@ private fun TestKeyRow(title: String, key: Int, onKey: (Int) -> Unit, enabled: B
 private fun PianoFact(name: String, label: String, ready: PianoState.Ready?) {
     val value = ready?.facts?.get(name)
     if (name == "boards") {
-        PowerBoards(PianoDiag(if (value == null) emptyMap() else mapOf(name to value)).boards, title = label)
+        // v1.26 — M62: with the power plug keeping the 24 V off, the boards that don't answer are unpowered, not missing.
+        PowerBoards(PianoDiag(if (value == null) emptyMap() else mapOf(name to value)).boards, title = label, off = rememberRailOff())
     } else {
         FactRow(SystemCopy.Fact(label, factText(name, value)))
     }

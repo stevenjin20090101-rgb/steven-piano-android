@@ -64,6 +64,7 @@ import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
 import dev.stevenjin.stevenpiano.power.PlugInfo
+import dev.stevenjin.stevenpiano.power.PlugRead
 import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.Provision
 import dev.stevenjin.stevenpiano.power.RailKeeper
@@ -380,19 +381,31 @@ private fun PairedPlug(settings: PlugSettings) {
     val reachable by graph.plug.reachable.collectAsStateWithLifecycle()
     val armedAt by graph.rail.armedAt.collectAsStateWithLifecycle()
     val welded by graph.rail.welded.collectAsStateWithLifecycle()
-    var info by remember { mutableStateOf<PlugInfo?>(null) }
+    var heard by remember { mutableStateOf<PlugRead?>(null) }
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     var asking by rememberSaveable { mutableStateOf(false) }
     PollWhileShown(STATUS_EVERY_MS) { graph.plug.switchStatus() }
-    LaunchedEffect(settings.pairing?.address) { info = graph.plug.deviceInfo() }
+    LaunchedEffect(settings.pairing?.address) { heard = graph.plug.read() }
     val left = secondsLeft(armedAt)
+    val info = (heard as? PlugRead.Read)?.info
+    // v1.26 — M62: a plug this tablet has no bond with that connects and stays silent has locked (SMART_PLUG.md).
+    val locked = heard == PlugRead.Silent && settings.pairing?.address?.let(graph.plug.bluetooth::bonded) == false
 
     SectionEyebrow(PowerCopy.STATE)
     val answering = reachable != false
     ReadingRow(PowerCopy.OUTPUT, if (answering) PowerCopy.output(status, left) else PowerCopy.NOT_ANSWERING)
     ReadingRow(PowerCopy.DRAW, if (answering) PowerCopy.watts(status) else "—")
-    ReadingRow(PowerCopy.SETUP, info?.provision?.let(PowerCopy::provision) ?: PowerCopy.READING)
+    ReadingRow(
+        PowerCopy.SETUP,
+        when {
+            info != null -> PowerCopy.provision(info.provision)
+            locked -> PowerCopy.provision(Provision.Locked)
+            heard == null -> PowerCopy.READING
+            else -> PowerCopy.NOT_ANSWERING
+        },
+    )
     ReadingRow(PowerCopy.FIRMWARE, info?.ver ?: settings.pairing?.firmware ?: "—")
+    if (locked) Problem(PairFlow.LOCKED)
     if (welded) Problem(PowerCopy.WELDED)
 
     SectionEyebrow(PowerCopy.TITLE)

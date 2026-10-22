@@ -1125,6 +1125,7 @@
     $('link-state').textContent = connected ? ', connected' : ', not connected';
     renderQuiet();
     renderSafety();
+    renderPower();
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
     updateBackdrop();
@@ -1204,6 +1205,18 @@
     dot.classList.toggle('attention', !safety.running && !!safety.locked && !safety.coil);
     dot.classList.toggle('live', !safety.running && !!safety.coil);
     if ($('safety-text').textContent !== safety.text) $('safety-text').textContent = safety.text;
+  }
+
+  // ---- The 24 V power plug (v1.26 — M62; the tablet's M60) -------------------------------------------------------
+  //
+  // The state's `power` ({paired, on, rail, waking, message, attention}; absent on older tablets: nothing). While the
+  // tablet brings the 24 V up for a piece (its power plug), Now playing's head says "Waking the piano…" beside the safety
+  // check's capsule, with the plug's bolt: calm, not an error, and gone by itself once every board answers. The plug's
+  // readings and its failures are on Settings › System.
+
+  function renderPower() {
+    const power = state && state.power;
+    $('power-capsule').hidden = !(power && power.waking === true);
   }
 
   $('quiet-override').addEventListener('click', async () => {

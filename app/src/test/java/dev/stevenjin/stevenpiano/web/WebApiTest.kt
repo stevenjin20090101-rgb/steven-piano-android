@@ -212,7 +212,21 @@ class WebApiTest {
         assertEquals("no shuffle (v1.26 — M61)", setOf("ids", "uids", "index", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display", "quiet", "listen", "keytest", "safety"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display", "quiet", "listen", "keytest", "safety", "power"), json.keys().asSequence().toSet())
+        // The 24 V power plug (v1.26 — M62): its little part, nothing of it without a plug; Now playing's "Waking the piano…".
+        val unplugged = json.getJSONObject("power")
+        assertEquals(setOf("paired", "on", "rail", "waking", "message", "attention"), unplugged.keys().asSequence().toSet())
+        assertFalse(unplugged.getBoolean("paired") || unplugged.getBoolean("waking") || unplugged.getBoolean("attention"))
+        assertEquals("off", unplugged.getString("rail"))
+        assertTrue(unplugged.isNull("message"))
+        val waking = WebApi.state(
+            state.copy(power = WebPower.of(dev.stevenjin.stevenpiano.power.RailFact(paired = true, on = true, rail = "waking", waking = true, watts = 6.4, message = "Waking the piano…"))),
+            pending = 0,
+        ).getJSONObject("power")
+        assertTrue(waking.getBoolean("paired") && waking.getBoolean("on") && waking.getBoolean("waking") && !waking.getBoolean("attention"))
+        assertEquals("waking", waking.getString("rail"))
+        assertEquals("Waking the piano…", waking.getString("message"))
+        assertFalse("the plug's readings stay on /api/system", waking.has("watts"))
         // The safety check (v1.26 — M61): the capsule's fields, nothing to say while all is well.
         val safe = json.getJSONObject("safety")
         assertEquals(setOf("running", "step", "of", "locked", "failedKeys", "coil", "text"), safe.keys().asSequence().toSet())
@@ -367,7 +381,29 @@ class WebApiTest {
     @Test
     fun `the System page's object has every key, null where nothing is known, and the piano's diag only from its facts (v1_18 M46)`() {
         val bare = WebApi.system(WebSystem(at = 5))
-        assertEquals(setOf("at", "app", "tablet", "piano", "running", "web", "covers"), keys(bare))
+        assertEquals(setOf("at", "app", "tablet", "piano", "running", "web", "covers", "power"), keys(bare))
+        // The 24 V power plug (v1.26 — M62): every key, none paired, nothing known.
+        val power = bare.getJSONObject("power")
+        assertEquals(
+            setOf("paired", "on", "rail", "waking", "output", "watts", "timerEndsAt", "answered", "total", "message", "attention", "welded", "guestEndsAt"),
+            keys(power),
+        )
+        assertFalse(power.getBoolean("paired") || power.getBoolean("welded"))
+        for (key in listOf("output", "watts", "timerEndsAt", "answered", "total", "message", "guestEndsAt")) assertTrue("$key: unknown is null", power.isNull(key))
+        val plugged = WebApi.system(
+            WebSystem(
+                at = 5,
+                power = dev.stevenjin.stevenpiano.power.RailFact(
+                    paired = true, on = true, rail = "on", output = true, watts = 6.4, timerEndsAt = 1_790_000_030_000L, answered = 6, total = 7,
+                    message = "Only 6 of 7 power boards answered", attention = true,
+                ),
+            ),
+        ).getJSONObject("power")
+        assertTrue(plugged.getBoolean("output") && plugged.getBoolean("attention"))
+        assertEquals(6.4, plugged.getDouble("watts"), 1e-9)
+        assertEquals(1_790_000_030_000L, plugged.getLong("timerEndsAt"))
+        assertEquals(6, plugged.getInt("answered"))
+        assertEquals("Only 6 of 7 power boards answered", plugged.getString("message"))
         val app = bare.getJSONObject("app")
         assertEquals(setOf("version", "build", "pid", "threads", "uptimeMs", "heapUsed", "heapMax", "nativeHeap", "cpuPct", "deviceOwner", "kiosk"), keys(app))
         val tablet = bare.getJSONObject("tablet")

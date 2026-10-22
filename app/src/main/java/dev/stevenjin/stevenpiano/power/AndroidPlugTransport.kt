@@ -53,6 +53,10 @@ class AndroidPlugTransport(private val context: Context, private val throttle: S
     override var refused: Boolean = false
         private set
 
+    @Volatile
+    override var reached: Boolean = false
+        private set
+
     override val connected: Boolean get() = session?.ready == true
 
     override fun blocker(): String? {
@@ -102,11 +106,16 @@ class AndroidPlugTransport(private val context: Context, private val throttle: S
     override suspend fun connect(address: String): Boolean {
         disconnect()
         refused = false
+        reached = false
         val adapter = adapter ?: return false
         if (blocker() != null || !BluetoothAdapter.checkBluetoothAddress(address)) return false
         val next = Session()
         session = next
-        val opened = withTimeoutOrNull(CONNECT_MS) { next.open(adapter.getRemoteDevice(address)) } == true
+        val opened = try {
+            withTimeoutOrNull(CONNECT_MS) { next.open(adapter.getRemoteDevice(address)) } == true
+        } finally {
+            reached = next.reached   // v1.26 — M62: connected, even if its RPC service then wasn't there (a locked plug)
+        }
         if (!opened) {
             next.close()
             if (session === next) session = null
@@ -168,6 +177,10 @@ class AndroidPlugTransport(private val context: Context, private val throttle: S
 
         @Volatile
         var refused = false
+
+        /** Its GATT connection was made (v1.26 — M62), whatever its services then were. */
+        @Volatile
+        var reached = false
         private var gatt: BluetoothGatt? = null
         private var mtu = ShellyGatt.MIN_MTU
         private var data: BluetoothGattCharacteristic? = null
@@ -186,6 +199,7 @@ class AndroidPlugTransport(private val context: Context, private val throttle: S
             val connectedOp = expect()
             gatt = device.connectGatt(context, false, this, BluetoothDevice.TRANSPORT_LE) ?: return false
             if (!connectedOp.await().ok) return false
+            reached = true
             val mtuOp = expect()
             if (gatt?.requestMtu(WANTED_MTU) == true) withTimeoutOrNull(OP_MS) { mtuOp.await() }
             val discovered = expect()

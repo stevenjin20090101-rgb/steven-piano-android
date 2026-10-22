@@ -178,6 +178,9 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
     val channel = rememberChannelName(state.channel)
     val connected = link is LinkState.Connected
     val playing = state.status == PlaybackStatus.Playing
+    // The live red: a piece's notes reaching the piano, so not while its 24 V comes up and holds them (v1.26 — M62).
+    val held by graph.railHoldsNotes.collectAsStateWithLifecycle()
+    val sending = playing && !held
     // Quiet times (v1.20 — M54): what the foot says while one holds, held as the screen fades away.
     val quiet = heldWhile(!resting, rememberQuiet())
     val until = if (quiet.holds) quietUntil(quiet) else null
@@ -223,7 +226,7 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
                 { modifier -> RestingQuiet(shown, onLeave, anyway, modifier) }
             }
             if (piece != null && settings.standbyShows == StandbyShows.PAPER_ROLL) {
-                PaperRoll(piece, state, connected, playing, channel, insets, drift, quietLine)
+                PaperRoll(piece, state, connected, playing, sending, channel, insets, drift, quietLine)
             } else {
                 // No album colours at rest (v1.19, Steven's choice): the canvas stays plain, black by default. Now playing
                 // keeps them (Album colours on Piano › Display).
@@ -238,7 +241,7 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
                     veilArea = if (black) words.side else null,
                 )
                 OnBackdrop(backdrop != null) {
-                    ArtAndNotes(piece, connected, playing, channel, insets, drift, words, quietLine)
+                    ArtAndNotes(piece, connected, sending, channel, insets, drift, words, quietLine)
                 }
             }
         }
@@ -338,7 +341,7 @@ private class Held<T>(var value: T)
 private fun ArtAndNotes(
     piece: NowPlaying?,
     connected: Boolean,
-    playing: Boolean,
+    sending: Boolean,
     channel: String?,
     insets: PaddingValues,
     drift: State<IntOffset>,
@@ -383,7 +386,7 @@ private fun ArtAndNotes(
             ) {
                 // The dot alone, without its words (DESIGN.md › v1.7.1); TalkBack still says them.
                 LiveDot(
-                    LinkDot.of(connected, sending = playing),
+                    LinkDot.of(connected, sending = sending),
                     Modifier.semantics { contentDescription = if (connected) "Sent to piano" else "Not connected" },
                 )
             }
@@ -589,6 +592,7 @@ private fun PaperRoll(
     state: PlayerState,
     connected: Boolean,
     playing: Boolean,
+    sending: Boolean,
     channel: String?,
     insets: PaddingValues,
     drift: State<IntOffset>,
@@ -660,7 +664,7 @@ private fun PaperRoll(
         KeyboardStrip(frame, { player.activeKeysLow }, { player.activeKeysHigh }, clock = roll)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            LiveDot(LinkDot.of(connected, sending = playing))
+            LiveDot(LinkDot.of(connected, sending = sending))
             Spacer(Modifier.width(8.dp))
             Text(
                 if (connected) "Sent to piano" else "Not connected",

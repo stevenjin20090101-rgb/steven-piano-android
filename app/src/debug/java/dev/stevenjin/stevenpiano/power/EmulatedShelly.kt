@@ -22,7 +22,8 @@ import java.util.Locale
  * - **Its setup** (`provision`): [Provision.Pending] (new) → [Provision.Confirmed] once on a network → [Provision.Complete]
  *   [completeAfterMs] later while it stays online; offline when its setup window ([windowMs] from the start) runs out
  *   before that, [Provision.Locked]. From Complete pairing is enforced: a central without a bond is refused everything
- *   ([Answer.Refused]). Locked answers `Shelly.GetDeviceInfo` alone (a power cycle, [reset], ends it).
+ *   ([Answer.Refused]). Locked answers nothing at all, `Shelly.GetDeviceInfo` included ([Answer.Silent], v1.26 — M62, as
+ *   the firmware chat confirmed in SMART_PLUG.md): a power cycle, [reset], ends it.
  * - **Bonds:** `BLE.StartPairing` opens a window in which [bond] succeeds (20 bonds at most); `BLE.ListPairedDevices` and
  *   `BLE.DeletePairedDevice` list and drop them. `BLE.SetConfig` turning RPC on asks for a restart the first time
  *   (`Shelly.Reboot`: away for [rebootMs]).
@@ -39,11 +40,16 @@ class EmulatedShelly(
     /** Firmware older than 2.0.0 has no pairing (`BLE.StartPairing`). */
     private val firmware: String = FIRMWARE,
 ) {
-    /** What one request gets: its reply frame, or the GATT refusal a stranger to a plug that enforces pairing gets. */
+    /**
+     * What one request gets: its reply frame, the GATT refusal a stranger to a plug that enforces pairing gets, or nothing
+     * ever (a locked plug: the connection is made, and its RPC over Bluetooth stays silent).
+     */
     sealed interface Answer {
         data class Reply(val json: String) : Answer
 
         data object Refused : Answer
+
+        data object Silent : Answer
     }
 
     private var provision = Provision.Pending
@@ -145,9 +151,8 @@ class EmulatedShelly(
         val method = request.optString("method")
         val params = request.optJSONObject("params") ?: JSONObject()
         val state = provisionNow()
-        val enforced = state == Provision.Complete || state == Provision.Locked
-        if (enforced && central !in bonds && method != INFO) return Answer.Refused
-        if (state == Provision.Locked && method != INFO) return Answer.Refused
+        if (state == Provision.Locked) return Answer.Silent   // RPC over Bluetooth off until a power cycle
+        if (state == Provision.Complete && central !in bonds && method != INFO) return Answer.Refused
         if (!rpcOn && method != "BLE.SetConfig" && method != INFO) return Answer.Refused
         return Answer.Reply(
             when (method) {

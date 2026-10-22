@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -86,8 +87,12 @@ import kotlinx.coroutines.withContext
 class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateHandle) : ViewModel(), PianoSettingsActions, FirmwareActions {
     val link: StateFlow<LinkState> = graph.pianoLink.state
     val settings: StateFlow<PianoSettings> = graph.settings
-    val playing: StateFlow<Boolean> = graph.player.state
-        .map { it.status == PlaybackStatus.Playing }
+
+    /**
+     * A piece's notes reach the piano now, which the link's live red says: a piece playing, and (v1.26 — M62) not held
+     * while Steven Piano's 24 V comes up ([AppGraph.railHoldsNotes]).
+     */
+    val sending: StateFlow<Boolean> = combine(graph.player.state, graph.railHoldsNotes) { state, held -> state.status == PlaybackStatus.Playing && !held }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), false)
 
     /** What the piano reports of its own settings. */

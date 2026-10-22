@@ -511,11 +511,13 @@ private fun LibraryItems(
 ) {
     val columns = LocalAppFrame.current.tileColumns
     val graph = LocalContext.current.graph
-    // Which channel plays, for its card, and the piano link's dot beside it: red only while its notes go to the piano.
+    // Which channel plays, for its card, and the piano link's dot beside it: red only while its notes reach the piano
+    // (v1.26 — M62: not while the 24 V comes up and holds them).
     val player = graph.player.state.collectAsStateWithLifecycle().value
     val playingChannel = player.channel
     val connected = graph.pianoLink.state.collectAsStateWithLifecycle().value is LinkState.Connected
-    val dot = LinkDot.of(connected, sending = player.status == PlaybackStatus.Playing)
+    val held = graph.railHoldsNotes.collectAsStateWithLifecycle().value
+    val dot = LinkDot.of(connected, sending = player.status == PlaybackStatus.Playing && !held)
     val listing = state.listing
     val group = state.group
     val playlistId = (group as? Group.Playlist)?.id

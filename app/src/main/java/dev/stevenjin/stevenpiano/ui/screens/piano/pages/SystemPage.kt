@@ -95,7 +95,6 @@ import dev.stevenjin.stevenpiano.diag.SystemSample
 import dev.stevenjin.stevenpiano.firmware.FirmwarePiano
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.piano.PianoAction
-import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.ui.DisplayRule
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
@@ -115,6 +114,7 @@ import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.PowerBoards
+import dev.stevenjin.stevenpiano.ui.components.rememberRailOff
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.SmallFigures
 import dev.stevenjin.stevenpiano.ui.components.mirrored
@@ -265,10 +265,8 @@ internal fun rememberAttention(vm: PianoViewModel, system: SystemNow?): List<Att
     val cloud by vm.cloud.collectAsStateWithLifecycle()
     // v1.26 — M60: the 24 V on its smart plug: boards missing while it is off are no fault; a relay stuck on is.
     val graph = LocalContext.current.graph
-    val plug by graph.plugSettings.collectAsStateWithLifecycle()
-    val rail by graph.rail.phase.collectAsStateWithLifecycle()
     val welded by graph.rail.welded.collectAsStateWithLifecycle()
-    val railOff = plug?.switches == true && rail != RailPhase.Up && rail != RailPhase.Kept
+    val railOff = rememberRailOff()   // v1.26 — M62: one rule for the attention, the drawing and the boards row
     return remember(system, link, piano, kind, settings, cloud, railOff, welded) {
         Attention.of(
             Attention.Inputs(
@@ -368,9 +366,12 @@ private fun PianoCard(
     val firmwarePiano by vm.firmwarePiano.collectAsStateWithLifecycle()
     val piano by vm.piano.collectAsStateWithLifecycle()
     val boards = diag?.boards?.takeIf { mode == SystemCopy.Mode.Ready }
+    // v1.26 — M62: with the power plug keeping the 24 V off, the boards that don't answer are unpowered, not missing.
+    val railOff = rememberRailOff()
     SystemCard(SystemCopy.PIANO, SystemCopy.pianoLine(mode, boards, instrument)) {
-        PowerBoards(boards)
-        for (fact in SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts, Attention.Part.Held in parts)) CardFact(fact)
+        PowerBoards(boards, off = railOff)
+        val facts = SystemCopy.pianoFacts(mode, diag, link, Attention.Part.Boards in parts, Attention.Part.Held in parts, railOff = railOff)
+        for (fact in facts) CardFact(fact)
         PlugFact(Attention.Part.Plug in parts)   // v1.26 — M60
         FootRow(
             SettingsPage.Firmware.title,
@@ -401,8 +402,8 @@ private fun PlugFact(stuck: Boolean) {
 
 @Composable
 private fun RunningCard(vm: PianoViewModel, system: SystemNow?, link: LinkState) {
-    val playing by vm.playing.collectAsStateWithLifecycle()
-    val toPiano = playing && link is LinkState.Connected
+    val sending by vm.sending.collectAsStateWithLifecycle()   // red only while notes reach the piano (v1.26 — M62)
+    val toPiano = sending && link is LinkState.Connected
     SystemCard(SystemCopy.RUNNING, SystemCopy.appLine(system?.reading?.app)) {
         val rows = system?.running
         if (rows == null) {

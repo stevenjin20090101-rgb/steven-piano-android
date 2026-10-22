@@ -30,6 +30,13 @@ interface PlugTransport {
     /** Connects to the plug at [address] (any connection before is dropped): true once its RPC service is ready. */
     suspend fun connect(address: String): Boolean
 
+    /**
+     * Whether the last [connect] reached the plug, its GATT connection made, even when its RPC service then wasn't there
+     * (v1.26 — M62): a `locked` plug connects, but its RPC over Bluetooth is absent or silent (SMART_PLUG.md › One-time
+     * setup).
+     */
+    val reached: Boolean
+
     /** Whether the connection [connect] made is up. */
     val connected: Boolean
 

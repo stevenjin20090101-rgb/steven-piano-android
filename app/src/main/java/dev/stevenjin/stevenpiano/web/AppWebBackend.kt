@@ -220,6 +220,7 @@ class AppWebBackend(
             listen = graph.listening.state.value,   // v1.23 — M55
             keytest = graph.keyTest.state.value,
             safety = WebSafety.of(graph.safety.state.value),   // v1.26 — M61
+            power = WebPower.of(graph.railFact.value),   // v1.26 — M62
         )
     }
 
@@ -761,6 +762,9 @@ class AppWebBackend(
         /** How long the library must be quiet before the guests' Modern list is worked out again, as the channels wait. */
         private const val SETTLE_MS = 500L
 
+        /** The 24 V plug's switch, read for the panels' System page at most this often (v1.26 — M62; the tablet's page: 5 s). */
+        private const val PLUG_READ_MS = 5_000L
+
         /** The guests' lists' genres, and the Modern list's key and name (v1.14 — M37). */
         private val CLASSICAL = Genres.name(Genres.CLASSICAL)
         private val MODERN = Genres.name(Genres.MODERN)
@@ -816,7 +820,24 @@ class AppWebBackend(
                 WebRelay(dev.stevenjin.stevenpiano.diag.RunningNow.relayWord(inputs.relay.status), inputs.relay.answered, inputs.relay.refused),
             ),
             covers = coversOf(counts, inputs.covers.blockedUntil),
+            power = power(),   // v1.26 — M62
         )
+    }
+
+    /** The plug's switch read again for the panels at most once in 5 s, as the tablet's own System page reads it (v1.26 — M62). */
+    private val plugFloor = RefreshFloor(PLUG_READ_MS, android.os.SystemClock::elapsedRealtime)
+
+    /**
+     * The 24 V plug as the System page shows it (v1.26 — M62): the rail's fact with the plug's reading as the tablet last
+     * had it, none while the plug doesn't answer ("Not answering", as the tablet's page says). With a plug paired its switch
+     * is read again in the background, at most once in 5 s whichever panel asks, and the next read carries the answer: a
+     * panel never waits on the plug's Bluetooth.
+     */
+    private fun power(): dev.stevenjin.stevenpiano.power.RailFact {
+        val fact = graph.railFact.value
+        if (!fact.paired) return fact
+        if (plugFloor.take()) graph.appScope.launch { graph.plug.switchStatus() }
+        return if (graph.plug.reachable.value == false) fact.copy(output = null, watts = null) else fact
     }
 
     /** The covers' counts by their lookup's status (all null when the library couldn't be read), and Apple's stop. */

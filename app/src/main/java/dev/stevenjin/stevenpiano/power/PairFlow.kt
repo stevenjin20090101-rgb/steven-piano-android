@@ -77,8 +77,9 @@ data class PairState(
  * button can't hold it on), RPC over Bluetooth (a restart when it asks), the pairing window and Android's bond, the cloud
  * off; then `complete` awaited; then every network forgotten and the access point closed; then the check: the 24 V on for
  * 5 s with every board answering, off again by itself. A plug `complete` without this tablet is the fallback (a factory
- * reset, the bond while `pending`, the network over Bluetooth); `locked` asks for a power cycle. Runs in [scope] (the
- * app's), so leaving the page cuts nothing short. Main thread.
+ * reset, the bond while `pending`, the network over Bluetooth); `locked` asks for a power cycle: a locked plug answers
+ * nothing over Bluetooth, so one with no bond that connects and gives no reply in 5 s is taken as locked (v1.26 — M62,
+ * [PlugClient.read]). Runs in [scope] (the app's), so leaving the page cuts nothing short. Main thread.
  */
 class PairFlow(
     private val client: PlugClient,
@@ -130,11 +131,23 @@ class PairFlow(
 
     private suspend fun read() {
         val plug = address ?: return
-        val info = client.deviceInfo(to = plug)
-        if (info == null) {
-            val refused = client.bluetooth.refused
-            _state.update { it.copy(info = null, fallback = refused, problem = if (refused) REFUSED else UNREACHABLE) }
-            return
+        val info = when (val heard = client.read(to = plug)) {
+            is PlugRead.Read -> heard.info
+            PlugRead.Refused -> {
+                _state.update { it.copy(info = null, fallback = true, problem = REFUSED) }
+                return
+            }
+            // v1.26 — M62 (SMART_PLUG.md): a plug with no bond that connects but gives no reply in 5 s is `locked`.
+            PlugRead.Silent -> {
+                val locked = !client.bluetooth.bonded(plug)
+                if (locked) log("Plug: no reply in ${PlugClient.SILENT_MS / 1_000} s and no bond: locked")
+                _state.update { it.copy(info = null, fallback = false, problem = if (locked) LOCKED else UNREACHABLE) }
+                return
+            }
+            PlugRead.Unreachable -> {
+                _state.update { it.copy(info = null, fallback = false, problem = UNREACHABLE) }
+                return
+            }
         }
         _state.update { it.copy(info = info, problem = null, fallback = false) }
         when {
@@ -203,11 +216,19 @@ class PairFlow(
         return true
     }
 
-    /** Step 4: the setup state read every 5 s until `complete` (the hotspot stays on meanwhile). */
+    /**
+     * Step 4: the setup state read every 5 s until `complete` (the hotspot stays on meanwhile). A plug that went silent with
+     * no bond has locked (v1.26 — M62): its setup window ran out before it got online.
+     */
     private suspend fun awaitComplete() {
         val plug = address ?: return
         while (scope.isActive) {
-            val info = client.deviceInfo(to = plug)
+            val heard = client.read(to = plug)
+            if (heard == PlugRead.Silent && !client.bluetooth.bonded(plug)) {
+                _state.update { it.copy(problem = LOCKED) }
+                return
+            }
+            val info = (heard as? PlugRead.Read)?.info
             if (info != null) _state.update { it.copy(info = info) }
             when (info?.provision) {
                 Provision.Complete -> {

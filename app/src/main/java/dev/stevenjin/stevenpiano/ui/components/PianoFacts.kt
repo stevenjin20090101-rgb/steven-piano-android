@@ -26,12 +26,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
@@ -39,7 +41,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.diag.PianoDiag
+import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.theme.LocalAttention
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
@@ -103,23 +108,46 @@ private fun NeedsTag() {
 }
 
 /**
+ * Whether the 24 V power plug switches the rail and it isn't up now (v1.26 — M62): off, coming up or going off. A power
+ * board that doesn't answer then is unpowered, not missing ([PowerBoards]' `off`, `Attention.Inputs.railOff`, the boards
+ * row's "· 24 V off"). False with no plug paired or its switch off: the boards as before the plug.
+ */
+@Composable
+fun rememberRailOff(): Boolean {
+    val graph = LocalContext.current.graph
+    val plug by graph.plugSettings.collectAsStateWithLifecycle()
+    val rail by graph.rail.phase.collectAsStateWithLifecycle()
+    return plug?.switches == true && rail != RailPhase.Up && rail != RailPhase.Kept
+}
+
+/**
  * The seven power boards as seven octaves of keys, C1 to C7 (the panel's drawing; the System page and the piano's
  * Firmware and status page draw it, one drawing since v1.24 — M57): an answering board's keys in the content colour, a
  * missing one hollow and amber with "Missing" under it, an unknown one faint, [title] above them when given. [boards] as
- * `PianoDiag.boards` reads them. TalkBack reads them in a line.
+ * `PianoDiag.boards` reads them. While the power plug keeps the 24 V off ([off], v1.26 — M62, [rememberRailOff]) a board
+ * that doesn't answer is unpowered, not missing: hollow in ink, never amber, nothing under it but its name. TalkBack reads
+ * them in a line.
  */
 @Composable
-fun PowerBoards(boards: List<String>?, title: String? = null) {
+fun PowerBoards(boards: List<String>?, title: String? = null, off: Boolean = false) {
     val content = MaterialTheme.colorScheme.onSurface
     val card = MaterialTheme.colorScheme.surfaceVariant
     val hairline = LocalHairline.current
     val amber = LocalAttention.current
     val tertiary = LocalTertiary.current
-    val spoken = boards?.mapIndexed { i, board -> "C${i + 1} ${if (board == PianoDiag.OK) "OK" else if (board == PianoDiag.MISSING) "missing" else "not known"}" }
+    val spoken = boards?.mapIndexed { i, board ->
+        "C${i + 1} " + when {
+            board == PianoDiag.OK -> "OK"
+            board == PianoDiag.MISSING -> if (off) "off" else "missing"
+            else -> "not known"
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()
-            .clearAndSetSemantics { contentDescription = "Power boards: " + (spoken?.joinToString(", ") ?: "not known") }
+            .clearAndSetSemantics {
+                contentDescription = (if (off) "Power boards, the 24 V off: " else "Power boards: ") + (spoken?.joinToString(", ") ?: "not known")
+            }
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         if (title != null) {
@@ -135,7 +163,9 @@ fun PowerBoards(boards: List<String>?, title: String? = null) {
             for (o in 0 until BOARDS) {
                 val state = boards?.getOrNull(o)
                 val x = o * OCTAVE_STEP
-                val missing = state == PianoDiag.MISSING
+                val absent = state == PianoDiag.MISSING
+                val missing = absent && !off
+                val unpowered = absent && off
                 val known = state == PianoDiag.OK
                 drawRoundRect(if (missing) amber else hairline, Offset((x + 2) * u, 2 * u), Size(56 * u, 44 * u), CornerRadius(6 * u), style = line)
                 for (k in 0 until NATURALS) {
@@ -143,6 +173,7 @@ fun PowerBoards(boards: List<String>?, title: String? = null) {
                     val key = Size(6.3f * u, 38 * u)
                     when {
                         missing -> drawRoundRect(amber, at, key, CornerRadius(1.5f * u), style = line)
+                        unpowered -> drawRoundRect(tertiary, at, key, CornerRadius(1.5f * u), style = line)
                         known -> drawRoundRect(content.copy(alpha = KEY_ALPHA), at, key, CornerRadius(1.5f * u))
                         else -> drawRoundRect(content.copy(alpha = FAINT_ALPHA), at, key, CornerRadius(1.5f * u))
                     }
@@ -151,12 +182,12 @@ fun PowerBoards(boards: List<String>?, title: String? = null) {
                     val at = Offset((x + 4 + k * KEY_STEP + 4.6f) * u, 5 * u)
                     val key = Size(4.4f * u, 23 * u)
                     drawRoundRect(card, at, key, CornerRadius(1.2f * u))
-                    if (missing) drawRoundRect(amber, at, key, CornerRadius(1.2f * u), style = line)
+                    if (absent) drawRoundRect(if (missing) amber else tertiary, at, key, CornerRadius(1.2f * u), style = line)
                 }
                 val railAt = Offset((x + 2) * u, 54 * u)
                 val rail = Size(56 * u, 6 * u)
                 when {
-                    missing -> drawRoundRect(amber, railAt, rail, CornerRadius(3 * u), style = Stroke(width = 1.5.dp.toPx()))
+                    absent -> drawRoundRect(if (missing) amber else tertiary, railAt, rail, CornerRadius(3 * u), style = Stroke(width = 1.5.dp.toPx()))
                     known -> drawRoundRect(content, railAt, rail, CornerRadius(3 * u))
                     else -> drawRoundRect(content.copy(alpha = FAINT_ALPHA), railAt, rail, CornerRadius(3 * u))
                 }
@@ -165,7 +196,7 @@ fun PowerBoards(boards: List<String>?, title: String? = null) {
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
             for (o in 0 until BOARDS) {
                 val state = boards?.getOrNull(o)
-                val missing = state == PianoDiag.MISSING
+                val missing = state == PianoDiag.MISSING && !off
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         if (state == PianoDiag.OK) "C${o + 1} · OK" else "C${o + 1}",

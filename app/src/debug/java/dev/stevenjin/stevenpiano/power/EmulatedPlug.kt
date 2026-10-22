@@ -129,6 +129,10 @@ object EmulatedPlug {
         override var refused: Boolean = false
             private set
 
+        @Volatile
+        override var reached: Boolean = false
+            private set
+
         override fun blocker(): String? = null
 
         private fun reachable(): EmulatedShelly? = shelly()?.takeIf { !away && !it.rebooting() }
@@ -144,6 +148,7 @@ object EmulatedPlug {
             delay(CONNECT_MS)
             refused = false
             up = reachable() != null && address.equals(EmulatedShelly.ADDRESS, ignoreCase = true)
+            reached = up
             if (!up) Log.d(TAG, "connect $address: not reachable")
             return up
         }
@@ -167,6 +172,12 @@ object EmulatedPlug {
                 EmulatedShelly.Answer.Refused -> {
                     Log.d(TAG, "< refused: insufficient authentication")
                     refused = true
+                    null
+                }
+                EmulatedShelly.Answer.Silent -> {
+                    // Locked (v1.26 — M62): connected, and its RPC never replies; the caller's time runs out.
+                    delay((timeoutMs - RPC_MS).coerceAtLeast(0))
+                    Log.d(TAG, "< nothing in $timeoutMs ms (locked)")
                     null
                 }
             }
