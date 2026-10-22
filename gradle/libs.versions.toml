@@ -24,7 +24,7 @@ androidxComposeBom = "2026.06.01"
 #noinspection GradleDependency
 navigationCompose = "2.9.8"
 room = "2.8.5"
-datastore = "1.2.1"
+datastore = "1.3.0"
 media = "1.8.0"
 # A picked photo's EXIF orientation (v1.24 — M57: lint's ExifInterface; the platform's has known bugs on older Androids).
 exifinterface = "1.4.2"
@@ -60,7 +60,7 @@ okhttp = "4.12.0"
 # The piano's Bluetooth lock (v1.25 — M58, firmware/docs/BLE_LOCK.md): Tink's pure-Java X25519 (Apache-2.0) for the
 # claim's key agreement: Android's own "XDH" (Conscrypt) can't be relied on down to minSdk 26.
 # Only piano/LockCrypto.kt names it; R8 keeps just what that file uses.
-tink = "1.23.0"
+tink = "1.24.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
