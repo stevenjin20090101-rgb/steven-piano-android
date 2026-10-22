@@ -112,7 +112,7 @@ class PairFlow(
 
     /** Looks for plugs nearby (2.5 s on the emulator, 10 s on a tablet). */
     fun search() = run {
-        _state.update { it.copy(searching = true, found = emptyList(), problem = null) }
+        _state.update { it.copy(searching = true, found = emptyList(), plug = null, info = null, fallback = false, problem = null) }
         val why = client.bluetooth.scan(SCAN_MS) { found ->
             _state.update { now -> if (now.found.any { it.address == found.address }) now else now.copy(found = now.found + found) }
         }

@@ -29,7 +29,8 @@ import java.util.Locale
  *   0.9 s after it closes (firmware 2.1.0's re-probe); `debug.stevenpiano.trunk one-missing` keeps board 5 (MIDI 72–83)
  *   missing, `dead` every board.
  * - adb's `--es dev.stevenjin.stevenpiano.EMULATOR_PLUG "…"` ([command]): `away` (out of range) and `back`, `reset <state>`
- *   (a power cycle), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed).
+ *   (a power cycle), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed), `boardsup <ms>` (how long the
+ *   boards take after the supply comes up: 5000 for firmware 2.0.1's re-probe).
  *
  * Every request and answer is logged (`adb logcat -s Plug`), and the link log says what changed.
  */
@@ -46,6 +47,10 @@ object EmulatedPlug {
     @Volatile
     var away = false
         private set
+
+    /** How long the boards take to answer after the supply comes up (`boardsup <ms>`: 5000 is firmware 2.0.1's re-probe). */
+    @Volatile
+    private var boardsUpMs = BOARDS_UP_MS
 
     /** The fake plug, made at the first ask from `debug.stevenpiano.plug`; null with none. */
     fun shelly(): EmulatedShelly? {
@@ -71,7 +76,7 @@ object EmulatedPlug {
     fun boards(now: Long = SystemClock.elapsedRealtime()): String? {
         val shelly = shelly() ?: return null
         val since = shelly.poweredSince()
-        val up = since != null && now - since >= BOARDS_UP_MS
+        val up = since != null && now - since >= boardsUpMs
         return (0 until BOARDS).joinToString(",") { i -> if (up && answers(i)) "OK" else "MISSING" }
     }
 
@@ -95,6 +100,7 @@ object EmulatedPlug {
                 }
             }
             "trunk" -> trunk = argument
+            "boardsup" -> boardsUpMs = argument.toLongOrNull()?.coerceIn(0L, MAX_BOARDS_UP_MS) ?: BOARDS_UP_MS
             "weld" -> shelly()?.weld = argument == "on"
             else -> Log.w(TAG, "Unknown plug command: $line")
         }
@@ -186,6 +192,7 @@ object EmulatedPlug {
 
     /** Firmware 2.1.0 re-probes a missing board every second: the boards answer about this long after the supply comes up. */
     const val BOARDS_UP_MS = 900L
+    private const val MAX_BOARDS_UP_MS = 30_000L
     private const val FIND_MS = 800L
     private const val SCAN_MS = 2_500L
     private const val CONNECT_MS = 250L

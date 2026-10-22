@@ -83,7 +83,7 @@ class PlugClient(
             val up = withTimeoutOrNull(CONNECT_TIMEOUT_MS) { transport.connect(target) } == true
             if (!up) {
                 transport.disconnect()
-                log("Plug: no connection to $target")
+                if (_reachable.value != false) log("Plug: no connection to $target")   // once, not at every poll while away
                 return null
             }
             connectedTo = target
@@ -95,7 +95,7 @@ class PlugClient(
             // No answer, or another request's: the frames are out of step, so the next call starts on a fresh connection.
             transport.disconnect()
             connectedTo = null
-            log("Plug: $method — " + if (bytes == null) "no answer" else "an answer that isn't this request's")
+            if (_reachable.value != false) log("Plug: $method — " + if (bytes == null) "no answer" else "an answer that isn't this request's")
             return null
         }
         if (!answer.ok) log("Plug: $method — error ${answer.code} ${answer.message}")

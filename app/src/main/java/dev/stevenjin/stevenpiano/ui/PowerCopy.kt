@@ -28,7 +28,6 @@ object PowerCopy {
     const val WAKING = "Waking the piano…"
     const val RAIL_OFF = "24 V off"
     const val PIANO_SILENT = "The piano stopped answering — 24 V cut"
-    const val NOT_CONNECTED = "The piano isn't connected — 24 V off"
     const val PLUG_LOST = "Lost the power plug"
     const val OK = "OK"
 
@@ -41,7 +40,6 @@ object PowerCopy {
         RailMessage.Waking -> WAKING
         RailMessage.Off -> RAIL_OFF
         RailMessage.PianoSilent -> PIANO_SILENT
-        RailMessage.NotConnected -> NOT_CONNECTED
         RailMessage.PlugLost -> PLUG_LOST
         is RailMessage.TrunkFault -> trunk(message.answered, message.total, message.cut)
     }

@@ -43,7 +43,12 @@ class RailKeeperTest {
         private var armedAt = 0L
         private var toggleS = 0
         private var onSince = 0L
-        var connected = true
+        val link = MutableStateFlow(true)
+        var connected: Boolean
+            get() = link.value
+            set(value) {
+                link.value = value
+            }
         var silent = false
         var missing = setOf<Int>()
         var controllerFed = false
@@ -134,7 +139,7 @@ class RailKeeperTest {
             scope = test.backgroundScope,
             plug = plug,
             check = ::check,
-            pianoConnected = { connected },
+            connected = link,
             stopSequence = { log += Event(now(), "STOP") },
             stopPlaying = { log += Event(now(), "STOP PLAYING") },
             available = available,
@@ -297,17 +302,35 @@ class RailKeeperTest {
     }
 
     @Test
-    fun `a piano not connected - waits 10 s for it, then says so, never ARMs`() = runTest {
+    fun `no piano connected - nothing asked, nothing held, and the rail comes up once it connects`() = runTest {
         val bench = Bench(this)
         bench.connected = false
         val keeper = bench.keeper()
         keeper.wanted(RailKeeper.PLAY, true)
-        advanceTimeBy(5_000)
+        advanceTimeBy(60_000)
+        assertEquals("the rail waits for the piano", RailPhase.Off, keeper.phase.value)
+        assertTrue("no CHECK, no ARM without it", bench.log.isEmpty())
+        assertFalse("notes go nowhere anyway: nothing to hold, as before the plug", keeper.notesHeld.value)
+        assertNull(keeper.message.value)
+        bench.connected = true
+        runCurrent()
         assertEquals(RailPhase.Waking, keeper.phase.value)
-        advanceTimeBy(6_000)
-        assertEquals(RailMessage.NotConnected, keeper.message.value)
+        assertTrue("held from the connection until the rail is up", keeper.notesHeld.value)
+        advanceTimeBy(3_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        bench.assertEveryArmChecked()
+    }
+
+    @Test
+    fun `the piano gone mid-piece - two failed CHECKs, the stop and CUT`() = runTest {
+        val bench = Bench(this)
+        val keeper = bench.keeper()
+        upFor(bench, keeper)
+        bench.connected = false
+        advanceTimeBy(15_000)
+        assertEquals(listOf("CHECK", "CHECK", "STOP PLAYING", "STOP", "CUT"), bench.kinds())
+        assertEquals(RailMessage.PianoSilent, keeper.message.value)
         assertTrue(bench.arms().isEmpty())
-        assertEquals("the stop, and a CUT in case", listOf("STOP PLAYING", "STOP", "CUT"), bench.kinds())
     }
 
     // ---- While wanted --------------------------------------------------------------------------------------------
@@ -451,7 +474,7 @@ class RailKeeperTest {
         val welded = object : RailPlug by bench.plug {
             override suspend fun status(): PlugStatus = PlugStatus(output = false, watts = IDLE_WATTS)
         }
-        val keeper2 = RailKeeper(backgroundScope, welded, bench::check, { true }, {}, {}, bench.available, { currentTime })
+        val keeper2 = RailKeeper(backgroundScope, welded, bench::check, MutableStateFlow(true), {}, {}, bench.available, { currentTime })
         keeper2.start()
         keeper2.wanted(RailKeeper.PLAY, true)
         advanceTimeBy(3_000)

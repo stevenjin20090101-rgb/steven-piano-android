@@ -290,7 +290,7 @@ class EmulatedShelly(
         const val IDLE_WATTS = 6.4
 
         /** Shortened for the emulator: the real plug takes about 5 minutes from confirmed to complete. */
-        const val COMPLETE_AFTER_MS = 40_000L
+        const val COMPLETE_AFTER_MS = 120_000L
 
         /** Its setup window: past it, offline and not complete, it locks. */
         const val WINDOW_MS = 10 * 60_000L

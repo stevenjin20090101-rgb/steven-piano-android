@@ -93,9 +93,6 @@ sealed interface RailMessage {
     /** "The piano stopped answering — 24 V cut". */
     data object PianoSilent : RailMessage
 
-    /** "The piano isn't connected — 24 V off": the rail can't come up without the piano's CHECK. */
-    data object NotConnected : RailMessage
-
     /** "Lost the power plug": ARM failed twice in a row. */
     data object PlugLost : RailMessage
 
@@ -135,8 +132,11 @@ class RailKeeper(
     private val plug: RailPlug,
     /** The CHECK: the piano's boards from `get boards`, or null when it didn't answer within 2 s (or isn't connected). */
     private val check: suspend () -> Boards?,
-    /** Whether the piano's own link is connected with its console now: a CHECK can be asked. */
-    private val pianoConnected: () -> Boolean,
+    /**
+     * Whether Steven Piano's own link is connected now: a CHECK can be asked. Without it the rail waits (but for the
+     * update and guest play, which need none), and notes aren't held: they go nowhere anyway, as before the plug.
+     */
+    private val connected: StateFlow<Boolean>,
     /** The stop sequence (CC64 = 0, CC123) to the piano, written before it returns (300 ms at most). */
     private val stopSequence: suspend () -> Unit,
     /** Stops what plays: the piece, Test every key, the Keys tab's keys (a failure, or a cut). */
@@ -155,7 +155,10 @@ class RailKeeper(
 
     private val _held = MutableStateFlow(false)
 
-    /** Notes wait ([RailGate]: only what releases goes): the plug switches the rail, and it isn't up with its baseline, or kept. */
+    /**
+     * Notes wait ([RailGate]: only what releases goes): the plug switches the rail, and it isn't up with its baseline, or
+     * kept; with no piano connected and the rail off, nothing is held (it would go nowhere anyway).
+     */
     val notesHeld: StateFlow<Boolean> = _held.asStateFlow()
 
     private val _message = MutableStateFlow<RailMessage?>(null)
@@ -215,6 +218,12 @@ class RailKeeper(
         if (loop != null) return
         scope.launch {
             available.collect {
+                refreshHeld()
+                changed()
+            }
+        }
+        scope.launch {
+            connected.collect {
                 refreshHeld()
                 changed()
             }
@@ -328,7 +337,9 @@ class RailKeeper(
                 RailPhase.Up, RailPhase.Kept -> keep()
                 else -> {
                     setPhase(RailPhase.Off)
-                    waitFor { wantedNow() }
+                    // The CHECK needs the piano's link: without it, what wants the rail waits for it (the update and
+                    // guest play need none).
+                    waitFor { wantedNow() && (uncheckedNow() || connected.value) }
                     session()
                 }
             }
@@ -356,15 +367,14 @@ class RailKeeper(
     }
 
     /**
-     * Rail-up: the piano's link (10 s at most), the CHECK before ARM, ARM, then the CHECK every 500 ms until every board
-     * reads OK, 10 s at most; true once up with its baseline. False when it ended otherwise: failed (said), or no longer
-     * wanted (the rail off again).
+     * Rail-up: the CHECK before ARM, ARM, then the CHECK every 500 ms until every board reads OK, 10 s at most; true once
+     * up with its baseline. False when it ended otherwise: failed (said), or no longer wanted (the rail off again).
      */
     private suspend fun railUp(): Boolean {
         val mayBeUp = mayBeUp()
+        if (!connected.value) return quietly(mayBeUp)   // gone meanwhile: the loop waits for it again
         setPhase(RailPhase.Waking)
         _message.value = RailMessage.Waking
-        if (!waitFor(now() + RAIL_UP_MS) { pianoConnected() || !wantedNow() }) return fail(RailMessage.NotConnected)
         if (!wantedNow()) return quietly(mayBeUp)
         // The CHECK before ARM: never ARM without a good one. Two unanswered in a row, or two refused ARMs, end it.
         var before: Boards? = null
@@ -686,9 +696,10 @@ class RailKeeper(
         if (phase != RailPhase.Waking && _message.value == RailMessage.Waking) _message.value = null
     }
 
+    /** Notes wait while the plug switches the rail and it isn't up; with no piano connected and the rail off, they go nowhere anyway. */
     private fun refreshHeld() {
         val phase = _phase.value
-        _held.value = available.value && phase != RailPhase.Up && phase != RailPhase.Kept
+        _held.value = available.value && phase != RailPhase.Up && phase != RailPhase.Kept && (connected.value || phase != RailPhase.Off)
     }
 
     /** [message] for a few seconds (the calm "24 V off"), unless another comes meanwhile. */

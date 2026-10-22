@@ -168,6 +168,7 @@ import dev.stevenjin.stevenpiano.power.PlayerNow
 import dev.stevenjin.stevenpiano.power.PlugClient
 import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.PlugStore
+import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.power.RailGate
 import dev.stevenjin.stevenpiano.power.RailHold
 import dev.stevenjin.stevenpiano.power.RailKeeper
@@ -175,6 +176,7 @@ import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.RailPower
 import dev.stevenjin.stevenpiano.power.ShellyRail
 import dev.stevenjin.stevenpiano.ui.LockCopy
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -1387,7 +1389,7 @@ class AppGraph(private val app: Application) {
             scope = appScope,
             plug = ShellyRail(plug),
             check = ::railCheck,
-            pianoConnected = { stevenLink.state.value is LinkState.Connected && stevenLink.console != null },
+            connected = stevenConnected,
             stopSequence = ::railStopSequence,
             stopPlaying = ::stopForRail,
             available = plugSwitches,
@@ -1399,6 +1401,41 @@ class AppGraph(private val app: Application) {
 
     /** The rail as the safety check (M61) and anything else that wants it sees it. */
     val railPower: RailPower get() = rail
+
+    /** Steven Piano's own link connected: the rail's CHECK can be asked. */
+    private val stevenConnected: StateFlow<Boolean> by lazy {
+        stevenLink.state.map { it is LinkState.Connected }.distinctUntilChanged().stateIn(appScope, SharingStarted.Eagerly, false)
+    }
+
+    /**
+     * The plug and its rail in one fact for the web panel (the integrator adds it to `/api/system` and the state JSON after
+     * the merge: BUILD_SPEC.md › v1.26 — M60): paired, the switch, where the rail stands, the plug's reading, the boards, the
+     * tablet's words, a stuck relay, guest play's end.
+     */
+    val railFact: StateFlow<RailFact> by lazy {
+        combine(
+            combine(plugSettings, rail.phase, rail.message) { s, phase, message -> Triple(s, phase, message) },
+            combine(plug.status, rail.armedAt, rail.boards) { status, armedAt, boards -> Triple(status, armedAt, boards) },
+            combine(rail.welded, rail.guestUntil) { welded, guest -> welded to guest },
+        ) { (s, phase, message), (status, armedAt, boards), (welded, guest) ->
+            val wall = System.currentTimeMillis() - SystemClock.elapsedRealtime()
+            RailFact(
+                paired = s?.pairing != null,
+                on = s?.on == true,
+                rail = RailFact.word(phase),
+                waking = phase == RailPhase.Waking,
+                output = status?.output,
+                watts = status?.watts,
+                timerEndsAt = armedAt?.let { it + RailKeeper.TOGGLE_AFTER_S * 1_000L + wall },
+                answered = boards?.answered,
+                total = boards?.total,
+                message = message?.let(PowerCopy::message),
+                attention = message?.attention == true,
+                welded = welded,
+                guestEndsAt = guest?.let { it + wall },
+            )
+        }.stateIn(appScope, SharingStarted.Eagerly, RailFact())
+    }
 
     /** Steven Piano's link as everything that plays sees it: the lock's gate, then the rail's (notes wait while it comes up). */
     private val railPlays: PianoLink by lazy { RailGate(stevenPlays, rail.notesHeld) }
