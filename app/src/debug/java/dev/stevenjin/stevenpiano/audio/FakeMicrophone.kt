@@ -47,9 +47,12 @@ class FakeMicrophone(
         if (current != null) return true
         val hearing = Hearing(frames)
         current = hearing
-        val silent = silentKeys()
-        if (silent.isNotEmpty()) Log.i(TAG, "Silent keys: ${silent.sorted()}")
-        Thread({ hear(hearing, struck(), silent) }, "steven-piano-fake-mic").apply {
+        val test = struck()
+        Thread({
+            val silent = silentKeys()   // on this thread: reading a property starts a process
+            if (silent.isNotEmpty()) Log.i(TAG, "Silent keys: ${silent.sorted()}")
+            hear(hearing, test, silent)
+        }, "steven-piano-fake-mic").apply {
             isDaemon = true
             start()
         }

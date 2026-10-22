@@ -287,4 +287,45 @@ class SafetyCheckTest {
         }
         assertTrue(before <= 1f)
     }
+
+    @Test
+    fun `the 24 V not up before a sweep judges no key - the repower straight away, then the keys, or unfinished (v1_26 M61)`() {
+        val first = run()
+            .then(Event.Released, Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(allOk), Command.Sweep)
+            .then(Event.RailDown, Command.Repower)
+        val skipped = first.step.state.line(SafetyStep.SWEEP)!!
+        assertEquals(Mark.SKIPPED to Why.RAIL_DOWN, skipped.mark to skipped.why)
+        assertTrue("no key failed", skipped.keys.isEmpty())
+        assertNull("no restart for a rail", first.step.state.line(SafetyStep.RESTART))
+        assertTrue(first.step.state.steps().none { it.step == SafetyStep.RESTART })
+        first.then(Event.Repowered(true), Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(allOk), Command.Sweep)
+        assertEquals("the same line, swept now", SafetyStep.SWEEP to Mark.RUNNING, first.step.state.running?.let { it.step to it.mark })
+        first.then(sweep(), Command.Finish(SafetyOutcome.Passed(keys = 84, recovered = true)))
+
+        // Down again after the repower: the check can't finish (no lock: no key was judged).
+        run()
+            .then(Event.Released, Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(allOk), Command.Sweep)
+            .then(Event.RailDown, Command.Repower)
+            .then(Event.Repowered(false, plugged = true), Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(allOk), Command.Sweep)
+            .then(Event.RailDown, Command.Finish(SafetyOutcome.Unfinished(Why.RAIL_DOWN)))
+
+        // And before the second sweep, after keys didn't sound: unfinished too, never a lock from keys not judged.
+        run(restart = false)
+            .then(Event.Released, Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(allOk), Command.Sweep)
+            .then(sweep(setOf(40)), Command.Repower)
+            .then(Event.Repowered(true), Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(allOk), Command.Sweep)
+            .then(Event.RailDown, Command.Finish(SafetyOutcome.Unfinished(Why.RAIL_DOWN)))
+    }
 }

@@ -61,6 +61,9 @@ object SafetyCopy {
     const val NO_PLUG = "no power plug"
     const val NOT_CONFIRMED = "not confirmed"
 
+    /** The 24 V (the power plug) didn't come up for the keys: none of them is judged. */
+    const val RAIL_DOWN = "the 24 V didn't come up"
+
     // ---- Play locked ------------------------------------------------------------------------------------------------
     const val ASK = "Ask whoever looks after the piano to check these keys."
     const val ASK_COIL = "The power to the keys was cut. Ask whoever looks after the piano to check it."
@@ -118,7 +121,8 @@ object SafetyCopy {
     fun line(line: StepLine): String {
         val figures = when (line.step) {
             SafetyStep.BOARDS -> if (line.of > 0) " (${line.done} of ${line.of})" else ""
-            SafetyStep.SWEEP, SafetyStep.SWEEP_AGAIN -> if (line.of > 0 && line.mark == Mark.RUNNING) " (${line.done} of ${line.of})" else ""
+            SafetyStep.SWEEP, SafetyStep.SWEEP_AGAIN ->
+                if (line.of > 0 && (line.mark == Mark.RUNNING || line.mark == Mark.DONE)) " (${line.done} of ${line.of})" else ""
             else -> ""
         }
         val base = when (line.step) {
@@ -145,6 +149,7 @@ object SafetyCopy {
             Why.NO_PLUG -> NO_PLUG
             Why.NOT_CONFIRMED -> NOT_CONFIRMED
             Why.NO_PIANO -> NOT_CONNECTED.removeSuffix(".").replaceFirstChar { it.lowercase() }
+            Why.RAIL_DOWN -> RAIL_DOWN
             Why.STOPPED -> line.said?.removeSuffix(".")?.replaceFirstChar { it.lowercase() }
         }
         return if (why == null) base else "$base · $why"

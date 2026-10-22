@@ -79,6 +79,9 @@ enum class Why {
     /** The piano was not connected (or its lock had not accepted this tablet) when the check began. */
     NO_PIANO,
 
+    /** The 24 V rail (the power plug, M60) didn't come up within 10 s before a sweep: no key is judged. */
+    RAIL_DOWN,
+
     /** The check stopped before its end (its words say why). */
     STOPPED,
 }
@@ -149,6 +152,9 @@ sealed interface Event {
     /** The sweep stopped before its end, as the key test [said]. */
     data class SweepStopped(val said: String) : Event
 
+    /** Before the sweep, the 24 V rail didn't come up within 10 s (the power plug's `awaitRail`): no key was struck. */
+    data object RailDown : Event
+
     /** The piano's reply to `restart` ([reply]: `restarting`, or a refusal), null with none in 2 s. */
     data class Restarted(val reply: String?) : Event
 
@@ -183,6 +189,8 @@ data class CheckState(
     val recovered: Boolean = false,
     val sweeps: Int = 0,
     val outcome: SafetyOutcome? = null,
+    /** The recovery was called for by the rail not coming up: the repower alone, no restart. */
+    val railDown: Boolean = false,
 ) {
     /** The line of [step], if it has begun. */
     fun line(step: SafetyStep): StepLine? = lines.firstOrNull { it.step == step }
@@ -206,7 +214,7 @@ data class CheckState(
         want(SafetyStep.COILS)
         want(SafetyStep.BOARDS)
         if (recovered) {
-            want(SafetyStep.RESTART)
+            if (!railDown) want(SafetyStep.RESTART)
             want(SafetyStep.REPOWER)
         }
         if (sweeps == 0) want(SafetyStep.SWEEP) else if (recovered && listens && sweeps == 1) want(SafetyStep.SWEEP_AGAIN)
@@ -288,6 +296,7 @@ object SafetyCheck {
             } else {
                 lost(state)
             }
+            Event.RailDown -> if (state.phase == Phase.SWEEP) onRailDown(state) else lost(state)
             is Event.Restarted -> if (state.phase == Phase.RESTART) onRestart(state, event.reply) else lost(state)
             is Event.Back -> if (state.phase == Phase.BACK) {
                 repower(if (event.ok) state.put(SafetyStep.RESTART, Mark.DONE) else state.put(SafetyStep.RESTART, Mark.FAILED, why = Why.NOT_BACK))
@@ -373,6 +382,18 @@ object SafetyCheck {
         }
         val failed = state.put(step, Mark.FAILED, done = heard, of = results.size, keys = silent, why = Why.KEYS_SILENT)
         return if (state.recovered) end(failed, SafetyOutcome.KeysSilent(silent)) else recover(failed)
+    }
+
+    /**
+     * The rail didn't come up for the sweep: no key is judged (a key with no power can't sound). The first time, the
+     * repower straight away (the restart is for keys that didn't sound), then the piano read again and the sweep tried
+     * again; once recovered, the check can't finish, and runs again before the next Play.
+     */
+    private fun onRailDown(state: CheckState): Step {
+        val step = sweepStep(state)
+        val skipped = state.put(step, Mark.SKIPPED, why = Why.RAIL_DOWN).copy(sweeps = state.sweeps - 1)
+        if (state.recovered) return end(skipped, SafetyOutcome.Unfinished(Why.RAIL_DOWN))
+        return repower(skipped.copy(recovered = true, railDown = true))
     }
 
     /** The restart and the repower, once a check: the restart only where the piano offers it. */

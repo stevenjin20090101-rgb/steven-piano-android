@@ -232,6 +232,7 @@ private fun Checking(state: SafetyState, onDismiss: () -> Unit) {
 private fun unfinishedWhy(ended: SafetyOutcome.Unfinished): String? = ended.said ?: when (ended.why) {
     Why.NO_ANSWER -> "The piano didn't answer."
     Why.NO_PIANO -> SafetyCopy.NOT_CONNECTED
+    Why.RAIL_DOWN -> SafetyCopy.RAIL_DOWN.replaceFirstChar { it.uppercase() } + "."
     else -> null
 }
 

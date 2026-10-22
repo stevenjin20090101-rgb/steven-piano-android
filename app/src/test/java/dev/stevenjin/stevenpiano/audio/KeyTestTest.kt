@@ -223,6 +223,41 @@ class KeyTestTest {
         assertNull(test.state.value.results)
     }
 
+    @Test
+    fun `it waits for the 24 V before its first key, and ends with no key struck when it doesn't come up (v1_26 M61)`() = runTest {
+        val piano = Piano { testScheduler.currentTime }
+        val ears = FakeEars()
+        val railUpAt = 1_200L   // the power plug's rail: up about a second after it is wanted
+        val test = KeyTest(backgroundScope, piano, ears, nanos = { testScheduler.currentTime * 1_000_000 }, before = {
+            delay(railUpAt)
+            true
+        })
+        assertEquals(ListenAnswer.Started, test.start(null))
+        runCurrent()
+        testScheduler.advanceTimeBy(1_500)
+        runCurrent()
+        assertTrue("nothing struck before the rail and the room's baseline", piano.struck.isEmpty())
+        testScheduler.advanceTimeBy(400)
+        runCurrent()
+        assertEquals("the first key after the rail, then the lead", 24, piano.struck.first().first)
+        assertTrue(piano.struck.first().second >= 1_200 + KeyTest.LEAD_MS)
+        test.stop()
+        runCurrent()
+
+        piano.struck.clear()
+        piano.asked.clear()
+        // The rail never comes up.
+        val never = KeyTest(backgroundScope, piano, ears, nanos = { testScheduler.currentTime * 1_000_000 }, before = { false })
+        assertEquals(ListenAnswer.Started, never.start(null))
+        runCurrent()
+        assertFalse(never.running)
+        assertEquals(ListenCopy.STOPPED_RAIL, never.state.value.stopped)
+        assertTrue("no key struck", piano.struck.isEmpty())
+        assertEquals("the stop sequence went, and nothing else", 1, piano.asked.count { it.startsWith("stop") })
+        assertTrue(piano.asked.none { it.startsWith("on ") })
+        assertFalse("the tablet's sound back", piano.muted)
+    }
+
     private companion object {
         const val FRAME_MS = 100L
     }

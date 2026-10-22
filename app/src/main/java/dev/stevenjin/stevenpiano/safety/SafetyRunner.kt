@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.safety
 import dev.stevenjin.stevenpiano.audio.KeyTestState
 import dev.stevenjin.stevenpiano.player.Played
 import dev.stevenjin.stevenpiano.player.StartGate
+import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -132,9 +133,11 @@ data class SafetyState(
  *   heard after the restart and the repower: Play locked. Unfinished: due again before the next Play. Only a check that
  *   passes unlocks Play ([runNow], the card's Run the safety check); the lock and the count survive a restart of the app
  *   ([store]).
- * - **The power plug** (M60's `RailPower`, connected by the integrator): [power] says when the check wants the 24 V up
- *   (from its start to its end); [repower] (CUT, 3 s, ARM, the rail-up CHECK; true when every board answers) and [cutNow];
- *   [plugged] whether a plug is there, for the card's words. Without them: no-ops.
+ * - **The power plug** (M60's `RailPower`, connected by the integrator): [wantRail] says when the check wants the 24 V up
+ *   (from its start to its end, and again before each sweep); [awaitRail] waits for it before each sweep (10 s at most;
+ *   false: no key is judged, "the 24 V didn't come up", and the repower follows); [repower] (CUT, 3 s, ARM, the rail-up
+ *   CHECK; true when every board answers) and [cutNow]; [plugged] whether a plug is there, for the card's words. Without
+ *   them: no-ops, the rail taken as up.
  *
  * [listens]: the switch "Automatic safety check (uses the microphone)" on and Android's permission; off, the check runs
  * without its sweep, so no key can lock Play. Main thread ([scope]'s).
@@ -147,7 +150,8 @@ class SafetyRunner(
     private val repower: suspend () -> Boolean = { false },
     private val cutNow: suspend () -> Unit = {},
     private val plugged: () -> Boolean = { false },
-    private val power: (Boolean) -> Unit = {},
+    private val wantRail: (Boolean) -> Unit = {},
+    private val awaitRail: suspend () -> Boolean = { true },
     private val clock: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = {},
 ) : StartGate {
@@ -293,7 +297,7 @@ class SafetyRunner(
         // Under way it is due: a check the app never finished (killed meanwhile) runs before the next Play.
         record = record.copy(pending = true)
         save()
-        power(true)
+        wantRail(true)
         val next = waitingPiece ?: host.nextPiece()
         _state.update { it.copy(running = true, check = null, ended = null, next = null, aside = false) }
         publish()
@@ -308,7 +312,7 @@ class SafetyRunner(
             conduct { check = it }
         } catch (e: CancellationException) {
             host.stopSweep()
-            power(false)
+            wantRail(false)
             throw e
         } catch (e: Exception) {
             // Nothing a step does may leave the check hanging: it ends unfinished, and runs before the next Play.
@@ -351,7 +355,11 @@ class SafetyRunner(
             Event.Released
         }
         is Command.Ask -> Event.Answer(host.ask(command.fact))
-        Command.Sweep -> sweep(state, seen)
+        Command.Sweep -> {
+            // The keys sound only with the 24 V up: with the power plug it comes up a second or so after it is wanted.
+            wantRail(true)
+            if (attempt(false) { awaitRail() }) sweep(state, seen) else Event.RailDown
+        }
         Command.Restart -> Event.Restarted(host.restart())
         Command.AwaitBack -> Event.Back(awaitBack(state.boards))
         Command.Repower -> Event.Repowered(attempt(false) { repower() }, plugged())
@@ -375,7 +383,12 @@ class SafetyRunner(
                 !test.running
             }
             val results = end.results
-            return if (results != null) Event.Swept(results) else Event.SweepStopped(end.stopped ?: SafetyCopy.STOPPED)
+            return when {
+                results != null -> Event.Swept(results)
+                // The key test's own wait for the 24 V (its `before`) found it down: no key struck, as with [awaitRail].
+                end.stopped == ListenCopy.STOPPED_RAIL -> Event.RailDown
+                else -> Event.SweepStopped(end.stopped ?: SafetyCopy.STOPPED)
+            }
         } finally {
             if (host.sweep.value.running) host.stopSweep()   // stopped meanwhile: the test ends, with the stop sequence
         }
@@ -433,7 +446,7 @@ class SafetyRunner(
             }
         }
         if (outcome is SafetyOutcome.Passed) log("Safety check passed")
-        power(false)
+        wantRail(false)
         job = null
         save()
         val start = waiting.takeIf { outcome is SafetyOutcome.Passed }

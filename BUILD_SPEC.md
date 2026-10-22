@@ -9264,35 +9264,40 @@ bump, no signing, no release.
   alone.
 
 ## The safety check (`safety/`)
-- **`SafetyCheck`** (pure): `start(listens, coils, boards, restart)` → `Step(CheckState, Command)`; `on(state, Event)`
-  → the next `Step`; `struck(state, done, of)` the sweep's progress; `boards(value)` → (OK, of). Commands: `Release`,
+- **`SafetyCheck`** (pure): `start(listens, coils, boards, restart)` → `Step(CheckState, Command)`; `on(state, Event)` →
+  the next `Step`; `struck(state, done, of)` the sweep's progress; `boards(value)` → (OK, of). Commands: `Release`,
   `Ask(fact)` (`active`, `boards`, `ota`), `Sweep`, `Restart`, `AwaitBack`, `Repower`, `Finish(outcome)`. Events:
-  `Released`, `Answer(value?)`, `Swept(results)`, `SweepStopped(said)`, `Restarted(reply?)`, `Back(ok)`,
+  `Released`, `Answer(value?)`, `Swept(results)`, `SweepStopped(said)`, `RailDown`, `Restarted(reply?)`, `Back(ok)`,
   `Repowered(ok, plugged)`, `Interrupted(said)`. Outcomes: `Passed(keys?, recovered)`, `CoilOn`, `KeysSilent(keys)`,
   `Unfinished(why, said?)`. Lines: `StepLine(step, mark, done, of, keys, why, said)` in the order begun; `steps()` adds
   those to come in the order they will run; `progress` weighs RELEASE 1, COILS 0.5, BOARDS 0.5, SWEEP 12, RESTART 4,
-  REPOWER 2, SWEEP_AGAIN 12.
-  Rules: `!active` > 0 → CoilOn at once (also after the recovery). A board missing, or `!active`/`!boards` unanswered,
-  before the recovery → the recovery; unanswered after it → Unfinished(NO_ANSWER); boards still missing after it → the
-  sweep (which then names the silent keys). Keys silent before the recovery → the recovery; after it → KeysSilent. The
-  recovery (once): `restart` only with `restart` (the dump's `!restartproto=1`) and `ota` not `pending`; `restarting`
-  → AwaitBack → Repower; any other reply (every refusal carries "refused") → REFUSED with the piano's words → Repower;
-  none → NO_ANSWER → Repower; then the coils and the boards again, and the sweep (SWEEP_AGAIN after a failed one).
-  `listens` false → no sweep: Passed(keys = null). A fact the dump doesn't list is SKIPPED (NOT_REPORTED). An event in
-  the wrong phase, or `Interrupted`, ends Unfinished.
-- **`SafetyRunner(scope, store, host, listens, repower, cutNow, plugged, power, clock, log)`**, `: StartGate`, main
-  thread: `start()` reads the store (pieces that played before count after) and collects `host.played`. A piece counts
-  when `host.pianoReady()` (Steven Piano, `pianoLink.state` Connected: the lock's gate holds it at Connecting until
-  trusted). The 6th since the last pass (`EVERY`): `deferral()` null → `begin()`, else `pending`. `begin()`: `pending`
-  saved true (a check the app never finished stays due), `power(true)`, `run()`: pause, wait up to 15 s for the piano
-  (NO_PIANO otherwise), `facts()`, then the machine's commands: `RELEASE_MS` 1 s after `release()`; the sweep waits up to
-  5 s for a waiting piece's load (the key test reads loading as playing), follows `KeyTestState` into `struck`, and stops
-  the key test if cancelled; `AwaitBack`: the link gone within 3 s, then back with every board OK within 60 s, looked at
-  each second; `repower()`/`cutNow()`/titles run through `attempt` (a failure is logged and carried on). Before each
-  command `deferral()` other than NO_PIANO interrupts (UPDATING, QUIET, AWAY, GUEST_PLAY). `finish`: Passed → count 0,
-  no pending, no lock, `LastCheck`, the waiting start runs; CoilOn → `cutNow()` then `host.stopEverything()`, locked;
-  KeysSilent → locked; Unfinished → pending; then `power(false)`; a passed or unfinished check stays on the card
-  `PASSED_SHOWN_MS` 3 s / `UNFINISHED_SHOWN_MS` 8 s (`dismiss()` sooner).
+  REPOWER 2, SWEEP_AGAIN 12. Rules: `!active` > 0 → CoilOn at once (also after the recovery). A board missing, or
+  `!active`/`!boards` unanswered, before the recovery → the recovery; unanswered after it → Unfinished(NO_ANSWER);
+  boards still missing after it → the sweep (which then names the silent keys). Keys silent before the recovery → the
+  recovery; after it → KeysSilent. The recovery (once): `restart` only with `restart` (the dump's `!restartproto=1`) and
+  `ota` not `pending`; `restarting` → AwaitBack → Repower; any other reply (every refusal carries "refused") → REFUSED
+  with the piano's words → Repower; none → NO_ANSWER → Repower; then the coils and the boards again, and the sweep
+  (SWEEP_AGAIN after a failed one). `listens` false → no sweep: Passed(keys = null). A fact the dump doesn't list is
+  SKIPPED (NOT_REPORTED). An event in the wrong phase, or `Interrupted`, ends Unfinished. `RailDown` (the 24 V not up
+  for a sweep): the sweep's line SKIPPED (RAIL_DOWN) with no keys, `sweeps` back one; before the recovery → the recovery
+  as the repower alone (`railDown`: no RESTART line, `steps()` doesn't offer one), then the coils, the boards and the
+  same sweep line again; after it → Unfinished(RAIL_DOWN). After a rail recovery, keys silent in the sweep that follows
+  → KeysSilent (the one recovery was the repower; flagged for the designer).
+- **`SafetyRunner(scope, store, host, listens, repower, cutNow, plugged, wantRail, awaitRail, clock, log)`**,
+  `: StartGate`, main thread: `start()` reads the store (pieces that played before count after) and collects
+  `host.played`. A piece counts when `host.pianoReady()` (Steven Piano, `pianoLink.state` Connected: the lock's gate
+  holds it at Connecting until trusted). The 6th since the last pass (`EVERY`): `deferral()` null → `begin()`, else
+  `pending`. `begin()`: `pending` saved true (a check the app never finished stays due), `wantRail(true)`, `run()`:
+  pause, wait up to 15 s for the piano (NO_PIANO otherwise), `facts()`, then the machine's commands: `RELEASE_MS` 1 s
+  after `release()`; the sweep: `wantRail(true)` and `awaitRail()` (through `attempt`; false or a failure → `RailDown`,
+  nothing struck), then waits up to 5 s for a waiting piece's load (the key test reads loading as playing), follows
+  `KeyTestState` into `struck` (a key test that ends `ListenCopy.STOPPED_RAIL`, its own wait failing, is `RailDown`
+  too), and stops the key test if cancelled; `AwaitBack`: the link gone within 3 s, then back with every board OK within
+  60 s, looked at each second; `repower()`/`cutNow()`/titles run through `attempt` (a failure is logged and carried on).
+  Before each command `deferral()` other than NO_PIANO interrupts (UPDATING, QUIET, AWAY, GUEST_PLAY). `finish`: Passed
+  → count 0, no pending, no lock, `LastCheck`, the waiting start runs; CoilOn → `cutNow()` then `host.stopEverything()`,
+  locked; KeysSilent → locked; Unfinished → pending; then `wantRail(false)` (also when cancelled); a passed or
+  unfinished check stays on the card `PASSED_SHOWN_MS` 3 s / `UNFINISHED_SHOWN_MS` 8 s (`dismiss()` sooner).
   `admit(pieceId, start)`: not loaded → kept; locked → false (`refused` counted, the card back); running → kept; pending
   → deferral null: kept and `begin()`; NO_PIANO or GUEST_PLAY: true; else false. `open` = loaded, no lock, no check, not
   pending. `refusal()` (the web): the lock's words, or `SafetyCopy.deferral(AWAY)` while pending and away. `runNow()`:
@@ -9306,11 +9311,14 @@ bump, no signing, no release.
   `release()` = `silenceLive` + `allKeysOff`; `stopEverything()` = `player.stop()`, `silenceLive`, the piano's `off`;
   `restart()` = `stevenLink.expectRestart(60 s)` then `pianoSettings.restart()`; the sweep = `keyTest.start(null)`;
   `nextPiece()` from the queue and its repeat; titles from `library.summaries`), `startSafety()` from `start()`, and
-  `listens = settings.safetyCheckListens && microphoneAllowed()`.
-  **The integrator connects M60's `RailPower`** there: `repower = { rail.repower() }`, `cutNow = { rail.cutNow() }`,
-  `plugged = { rail.available.value }`, `power = { on -> rail.wanted("safety", on) }`. `power(true)` comes at the check's
-  start, before the release, so the rail is up for `!boards` (M60 cuts it a second after a piece's stop; without the
-  hold every check would find all seven boards missing).
+  `listens = settings.safetyCheckListens && microphoneAllowed()`. **The integrator connects M60's `RailPower`** there:
+  `repower = { rail.repower() }`, `cutNow = { rail.cutNow() }`, `plugged = { rail.available.value }`,
+  `wantRail = { on -> rail.wanted("safety", on) }`, and `awaitRail` (suspends until the rail is up and its `notesHeld`
+  over; false when not within 10 s). `wantRail(true)` comes at the check's start, before the release, so the rail is up
+  for `!boards` (M60 cuts it a second after a piece's stop; without the hold every check would find all seven boards
+  missing), and again before each sweep. And `keyTestRail` (the marked block; `{ true }` until then) →
+  `KeyTest(…, before = keyTestRail)`: the same wait for Test every key, whoever starts it (the System page, the panel's
+  route, the check). Nothing here imports `power/`.
 - **`Player`**: `gate: StartGate` (default `StartGate.Open`) asked by `play`, `playAll`, `resume`, `next`, `previous`,
   `skipToQueueEntry` (with the piece each would start), and `gate.open` by `enqueue` (what joins an empty queue waits
   loaded while it isn't); `played: SharedFlow<Played(pieceId, ended)>`, emitted on the scheduler thread by `sounded()`
@@ -9322,6 +9330,9 @@ bump, no signing, no release.
   restart(timeoutMs = 2_000): String?`: only `ready` and `writable`, and not while a write waits out its 150 ms, waits for
   the lock or is being read back (`restart` saves nothing); the reply (`restarting`, or any line with "refused" or
   "unknown command") is taken after the lock's handshake has seen it and never becomes `lastError`.
+- **`KeyTest(scope, piano, ears, nanos, before)`**: `before: suspend () -> Boolean` (default `{ true }`) awaited at the
+  start of the sweep, before `LEAD_MS` and the first strike; false (or a failure) ends it `ListenCopy.STOPPED_RAIL`
+  ("Stopped: the 24 V didn't come up.") with the stop sequence and no key struck.
 - **`Listening`**: `localAllowedNow` (Android's permission) for `token == null`; `Ears.allowed(token)`; `refresh()` and the
   tick stop everything without the permission, and with the panel's switch off only the panels' hearings
   (`stopPanels()`); `inFront: StateFlow<Boolean>`. `KeyTest.start(null)` is refused `ListenCopy.NO_PERMISSION` without
@@ -9362,15 +9373,17 @@ bump, no signing, no release.
   (its coil line reads "not reported") and no `restart` (the restart is left out): both are M60's file.
 
 ## Tests (piano safety)
-`SafetyCheckTest` 13 (the pass; a coil on, before and after the recovery; a board missing → restart and repower before
+`SafetyCheckTest` 14 (the pass; a coil on, before and after the recovery; a board missing → restart and repower before
 the sweep; keys silent → restart, repower, a second sweep → lock, or a pass; the restart left out: no `!restartproto`,
 `!ota=pending`, each refusal, no reply; the repower unconfirmed with and without a plug; the microphone off, a board
-missing too; facts not reported and a piano that never answers; stopped and interrupted; `!boards` read; the bar);
-`SafetyRunnerTest` 11 (the 6th piece and pieces the piano didn't play; the count and the lock across a restart; each
-deferral → due → the next Play waits and goes; due with the app away refused, with no piano or guest play let go; a
-coil on → cut, stop, lock; keys silent → lock, refused on every start, unlocked only by a pass; a missing board; no
-restart on 2.1.0; the microphone off; a check stopped on the way; one under way when the app was killed);
-`SafetyStoreTest` 3; `PianoAskRestartTest` 5; `PlayerTest` (one piece per Play, Repeat one and all, Play next, the
-waiting piece's Play, `played`, the gate on every start path); `ListeningTest` (the tablet's own hearing);
-`QueueTest`, `ChannelPlayerTest` (in order, wrapping), `SettingsRepositoryTest` (the cleanup), `WebServerTest` (no
-`/api/shuffle`, `shuffle` 400, 409 `safety` on every start route), `WebApiTest` (`safety`).
+missing too; facts not reported and a piano that never answers; stopped and interrupted; `!boards` read; the bar; the 24
+V not up: the repower alone, then the keys, or unfinished, never a lock); `SafetyRunnerTest` 12 (the 6th piece and
+pieces the piano didn't play; the count and the lock across a restart; each deferral → due → the next Play waits and
+goes; due with the app away refused, with no piano or guest play let go; a coil on → cut, stop, lock; keys silent →
+lock, refused on every start, unlocked only by a pass; a missing board; no restart on 2.1.0; the microphone off; a check
+stopped on the way; one under way when the app was killed; the 24 V not up, from `awaitRail` or the key test's own wait:
+no key judged, the repower, then the keys, or due again); `KeyTestTest` (+1: the wait for the 24 V before the first key,
+and no key struck without it); `SafetyStoreTest` 3; `PianoAskRestartTest` 5; `PlayerTest` (one piece per Play, Repeat
+one and all, Play next, the waiting piece's Play, `played`, the gate on every start path); `ListeningTest` (the tablet's
+own hearing); `QueueTest`, `ChannelPlayerTest` (in order, wrapping), `SettingsRepositoryTest` (the cleanup),
+`WebServerTest` (no `/api/shuffle`, `shuffle` 400, 409 `safety` on every start route), `WebApiTest` (`safety`).

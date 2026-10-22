@@ -1152,7 +1152,11 @@ check** card shows, over whatever was on the tablet, the resting screen too, wit
 3. **Boards answering (7 of 7)**: every power board answers. A missing one calls for the restart and the power off and
    on below, before the keys are tested.
 4. **Testing each key (37 of 84)**: the piano strikes each key once, low to high (about 40 s), while the tablet's
-   microphone listens; the banner says "Microphone on · safety check". Nothing is recorded or sent.
+   microphone listens; the banner says "Microphone on · safety check". Nothing is recorded or sent. The keys are
+   struck only once the power to them is up (with the power plug, a second or so after it is wanted). If it doesn't
+   come up within 10 seconds no key is judged ("Testing each key · the 24 V didn't come up"): the power goes off and
+   on, then the keys are tested; if it still doesn't come up, the check runs again before the next piece, and Play
+   isn't locked by keys that weren't tested.
 5. A key not heard: **Restarting the piano** (on firmware that has the restart, 2.1.1 and later; never while a new
    firmware is still confirming itself) and **Power off and on** (with the power plug), then every key again.
 6. **Still not heard**: Play is locked. The card says "Safety check failed", shows the keys that didn't sound
@@ -1176,6 +1180,8 @@ piece. Pieces played by guests, from an iPad, or on the Keys tab don't count.
 the piano strikes each key once while the tablet listens. Nothing is recorded or sent."). Turning it on asks Android for
 the microphone; without it, the check runs without listening, and says so. Off, the check still releases the keys and
 reads the coils and the boards, and no key can lock Play. Under it: "Last safety check: today 14:20 · all 84 keys".
+**Test every key** waits for the power to the keys too, and stops with "Stopped: the 24 V didn't come up." when it
+doesn't come up.
 After a restart of the piano its System page reads the last reset as "Restarted": expected, not a fault.
 
 **On the emulator** (debug builds): the tablet's microphone is a stand-in that hears the keys the check strikes.

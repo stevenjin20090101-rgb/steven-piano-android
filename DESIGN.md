@@ -3424,7 +3424,12 @@ for it and goes once it passes. The count and a lock survive a restart of the ap
    sound stops, the piano's own `off`, and Play is locked. **Boards answering (5 of 7)** (`!boards`): any board missing
    calls for the restart and the power off and on before the keys are tested.
 3. **Testing each key (37 of 84)**: Test every key's sweep (all 84, 450 ms apart, at velocity 100, the tablet's own
-   piano sound held silent) while the microphone listens; the banner reads **Microphone on · safety check**.
+   piano sound held silent) while the microphone listens; the banner reads **Microphone on · safety check**. A key
+   with no power can't sound, so the sweep waits for the 24 V (the power plug's rail, wanted from the check's start)
+   before its first key, 10 s at most. If it doesn't come up, no key is judged: the line reads **Testing each key · the
+   24 V didn't come up**, the power goes off and on (no restart: the restart is for keys that didn't sound), then the
+   coils, the boards and the keys again. Still not up: the check can't finish and runs again before the next Play; it
+   never locks Play for keys it couldn't test.
 4. **A key not heard**: **Restarting the piano** where the firmware offers it (2.1.1's `restart`; never while a new
    firmware hasn't confirmed itself; a refusal goes straight on), the wait for the piano and its boards (a minute at
    most), **Power off and on** (the plug's repower), then the coils and the boards read again and every key again.
@@ -3433,7 +3438,8 @@ for it and goes once it passes. The count and a lock survive a restart of the ap
 
 Facts the firmware doesn't report are left out ("not reported by this piano"); a piano that doesn't answer is restarted
 and repowered, and if it still doesn't the check runs again before the next Play. The restart and the power off and on
-happen at most once in a check.
+happen at most once in a check: after a power off and on for the 24 V, keys that then don't sound lock Play (a judgement
+call in the build, for the designer to confirm; the restart isn't tried as well).
 
 **Play locked** is refused everywhere: the tablet, the web panel (409, "Safety check failed: C2, F♯4") and the media
 controls. Only a check that passes, run at the tablet, unlocks it.
@@ -3460,7 +3466,9 @@ the microphone; without it the check runs without listening, and the card's line
 sweep, so no key can lock Play. Under it: "Last safety check: today 14:20 · all 84 keys" (or the keys that didn't sound,
 "a key was still on", "keys not tested (microphone off)", "after a restart"), and "A safety check runs before the next
 piece." while one is due. Test every key on this card no longer needs Listening from the panel: the tablet hearing for
-itself needs Android's permission alone; that switch governs what the panel hears.
+itself needs Android's permission alone; that switch governs what the panel hears. Test every key (here, from the web
+panel, or in the check) waits for the 24 V before its first key, and stops with "Stopped: the 24 V didn't come up."
+when it doesn't come up.
 
 **The web panel**: a capsule in Now playing's head while a check runs ("Safety check · Testing each key (37 of 84)",
 the dot on) or Play is locked ("Safety check failed: C2, F♯4", the dot amber; red for a key still on). Its Play answers

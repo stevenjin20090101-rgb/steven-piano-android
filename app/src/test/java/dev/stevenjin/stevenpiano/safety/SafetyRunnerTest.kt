@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.safety
 import dev.stevenjin.stevenpiano.audio.KeyResult
 import dev.stevenjin.stevenpiano.audio.KeyTestState
 import dev.stevenjin.stevenpiano.player.Played
+import dev.stevenjin.stevenpiano.ui.ListenCopy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -76,6 +77,9 @@ class SafetyRunnerTest {
         /** Keys the microphone doesn't hear. */
         var silent: Set<Int> = emptySet()
         var sweepRefusal: String? = null
+
+        /** Whether the key test's own wait finds the 24 V up, for each sweep in turn (then up). */
+        val testRail = ArrayDeque<Boolean>()
         private val test = MutableStateFlow(KeyTestState())
         private var sweeping: Job? = null
 
@@ -135,6 +139,10 @@ class SafetyRunnerTest {
             calls += "sweep"
             test.value = KeyTestState(running = true)
             sweeping = scope.launch {
+                if (testRail.removeFirstOrNull() == false) {
+                    test.value = KeyTestState(stopped = ListenCopy.STOPPED_RAIL)
+                    return@launch
+                }
                 for (i in 1..84) {
                     delay(450)
                     test.value = KeyTestState(running = true, key = 23 + i, done = i)
@@ -168,6 +176,9 @@ class SafetyRunnerTest {
         var repowers = 0
         var repowerOk = true
         val power = mutableListOf<Boolean>()
+
+        /** Whether the 24 V comes up for each sweep, in turn (then up); and when it was waited for. */
+        val rail = ArrayDeque<Boolean>()
         val runner = SafetyRunner(
             scope = scope.backgroundScope,
             store = store,
@@ -180,7 +191,11 @@ class SafetyRunnerTest {
             },
             cutNow = { host.calls += "cut" },
             plugged = { true },
-            power = { power += it },
+            wantRail = { power += it },
+            awaitRail = {
+                host.calls += "await rail"
+                rail.removeFirstOrNull() ?: true
+            },
         )
 
         fun play(count: Int = 1, id: Long = 1L) = repeat(count) { host.pieces.tryEmit(Played(id, ended = true)) }
@@ -217,7 +232,7 @@ class SafetyRunnerTest {
         runCurrent()
         assertTrue(rig.runner.state.value.running)
         assertTrue("the card shows", rig.runner.state.value.card)
-        assertEquals(listOf(true), rig.power)
+        assertEquals("the rail wanted from the check's start", listOf(true), rig.power)
         settle()
         val done = rig.runner.state.value
         assertFalse(done.running)
@@ -226,9 +241,9 @@ class SafetyRunnerTest {
         assertFalse(done.pending)
         assertTrue(done.last!!.passed)
         assertEquals(84, done.last!!.keys)
-        assertEquals(listOf(true, false), rig.power)
+        assertEquals("wanted again for the sweep, let go at the end", listOf(true, true, false), rig.power)
         assertEquals(
-            listOf("pause", "release", "ask active", "ask boards", "sweep"),
+            listOf("pause", "release", "ask active", "ask boards", "await rail", "sweep"),
             rig.host.calls,
         )
         assertEquals(0, rig.store.record.count)
@@ -333,7 +348,10 @@ class SafetyRunnerTest {
         assertFalse("a Play during the check waits", rig.runner.admit(1L) { waited++ })
         settle()
         assertEquals(
-            listOf("pause", "release", "ask active", "ask boards", "sweep", "ask ota", "restart", "ask boards", "repower", "ask active", "ask boards", "sweep"),
+            listOf(
+                "pause", "release", "ask active", "ask boards", "await rail", "sweep", "ask ota", "restart", "ask boards", "repower",
+                "ask active", "ask boards", "await rail", "sweep",
+            ),
             rig.host.calls,
         )
         assertEquals(SafetyLock.KeysSilent(listOf(36, 66)), rig.runner.state.value.lock)
@@ -409,6 +427,41 @@ class SafetyRunnerTest {
         assertTrue(rig.runner.state.value.last!!.passed)
         assertNull("keys not tested", rig.runner.state.value.last!!.keys)
         assertEquals(listOf("pause", "release", "ask active", "ask boards"), rig.host.calls)
+    }
+
+    @Test
+    fun `the 24 V not up for the keys fails none of them - the repower, then the keys, or due again (v1_26 M61)`() = runTest {
+        val rig = started(MemoryStore(SafetyRecord(count = 5)))
+        rig.rail += false   // the first wait: the rail doesn't come up; the second: it does
+        rig.play()
+        settle()
+        assertEquals(
+            listOf("pause", "release", "ask active", "ask boards", "await rail", "repower", "ask active", "ask boards", "await rail", "sweep"),
+            rig.host.calls,
+        )
+        assertNull(rig.runner.state.value.lock)
+        assertTrue(rig.runner.state.value.last!!.passed)
+
+        val never = started(MemoryStore(SafetyRecord(count = 5)))
+        never.rail += listOf(false, false)
+        never.host.silent = setOf(36)   // would fail, were it swept
+        never.play()
+        settle()
+        assertEquals(0, never.host.sweeps())
+        assertEquals(1, never.repowers)
+        assertNull("no key judged, no lock", never.runner.state.value.lock)
+        assertTrue("due again before the next Play", never.runner.state.value.pending)
+
+        // The key test's own wait finding it down is the same: no key judged, the repower, then the keys.
+        val own = started(MemoryStore(SafetyRecord(count = 5)))
+        own.host.testRail += false
+        own.host.silent = setOf(36)   // only heard on the second sweep, after the repower: one restart-free failure
+        own.play()
+        settle()
+        assertEquals(2, own.host.sweeps())
+        assertEquals(1, own.repowers)
+        assertTrue("no restart for a rail", "restart" !in own.host.calls)
+        assertEquals(SafetyLock.KeysSilent(listOf(36)), own.runner.state.value.lock)
     }
 
     @Test

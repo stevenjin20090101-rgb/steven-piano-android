@@ -1286,7 +1286,7 @@ class AppGraph(private val app: Application) {
     }
 
     /** Test every key (v1.23 — M55): every strike through the player's live path, the microphone hearing which keys sounded. */
-    val keyTest: KeyTest by lazy { KeyTest(appScope, keyTestPiano, listening) }
+    val keyTest: KeyTest by lazy { KeyTest(appScope, keyTestPiano, listening, before = keyTestRail) }
 
     /** The piano as the key test strikes it: the player's live keys and stop sequence, the instrument's link, the gates. */
     private val keyTestPiano = object : KeyTest.Piano {
@@ -1360,7 +1360,8 @@ class AppGraph(private val app: Application) {
      * where keys stay silent, and Play locked when they still do. Its record in its own small DataStore.
      *
      * For the integrator, after M60 merges: `repower = { rail.repower() }`, `cutNow = { rail.cutNow() }`,
-     * `plugged = { rail.available.value }`, `power = { on -> rail.wanted("safety", on) }` with M60's `RailPower`.
+     * `plugged = { rail.available.value }`, `wantRail = { on -> rail.wanted("safety", on) }` and `awaitRail` (the rail up,
+     * its notes no longer held, within 10 s) with M60's `RailPower`; and [keyTestRail] for Test every key.
      */
     val safety: SafetyRunner by lazy {
         SafetyRunner(
@@ -1371,10 +1372,18 @@ class AppGraph(private val app: Application) {
             repower = { false },   // M60: RailPower.repower()
             cutNow = {},   // M60: RailPower.cutNow()
             plugged = { false },   // M60: RailPower.available.value
-            power = {},   // M60: RailPower.wanted("safety", on)
+            wantRail = {},   // M60: RailPower.wanted("safety", on)
+            awaitRail = { true },   // M60: the rail up (its notesHeld over) within 10 s, else false
             log = LinkLog::warn,
         )
     }
+
+    /**
+     * Test every key's wait before its first strike (v1.26 — M61), whoever started it (the System page, the panel, the
+     * safety check): the 24 V up. The integrator connects M60's `RailPower` here (want the rail, then wait for it, 10 s at
+     * most, false when it doesn't come up); until then the rail is taken as up.
+     */
+    private val keyTestRail: suspend () -> Boolean = { true }
 
     /** The player's and the channels' start gate: the safety check's, asked as each start comes (the two never make each other). */
     private val safetyGate: StartGate by lazy {
