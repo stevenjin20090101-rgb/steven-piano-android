@@ -111,8 +111,11 @@ class AndroidPlugTransport(private val context: Context, private val throttle: S
         if (blocker() != null || !BluetoothAdapter.checkBluetoothAddress(address)) return false
         val next = Session()
         session = next
-        val opened = withTimeoutOrNull(CONNECT_MS) { next.open(adapter.getRemoteDevice(address)) } == true
-        reached = next.reached   // v1.26 — M62: connected, even if its RPC service then wasn't there (a locked plug)
+        val opened = try {
+            withTimeoutOrNull(CONNECT_MS) { next.open(adapter.getRemoteDevice(address)) } == true
+        } finally {
+            reached = next.reached   // v1.26 — M62: connected, even if its RPC service then wasn't there (a locked plug)
+        }
         if (!opened) {
             next.close()
             if (session === next) session = null
