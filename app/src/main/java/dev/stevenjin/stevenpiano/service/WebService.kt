@@ -419,13 +419,13 @@ class WebService : Service() {
             graph.liveThru.state.map { it.open }.distinctUntilChanged().map { },
             graph.recording.state.map { it is RecordingState.Recording }.distinctUntilChanged().map { },
             // Listening and the key test (v1.23 — M55): the microphone on or off, its time, the key struck, the results.
-            graph.listening.state.map { },
-            graph.keyTest.state.map { },
+            graph.remote.listening.state.map { },
+            graph.remote.keyTest.state.map { },
             // The safety check (v1.26 — M61): its steps as they go, Play locked or free again.
             graph.safety.state.map { },
             // The 24 V power plug (v1.26 — M62): the state's little part only (waking, the rail, the words), not the
             // plug's readings, which change every few seconds and stay on /api/system.
-            graph.railFact.map(WebPower::of).distinctUntilChanged().map { },
+            graph.remote.railFact.map(WebPower::of).distinctUntilChanged().map { },
             // The link's dot (v1.27 — M63): red only once the 24 V lets the notes through.
             graph.railHoldsNotes.map { },
         )

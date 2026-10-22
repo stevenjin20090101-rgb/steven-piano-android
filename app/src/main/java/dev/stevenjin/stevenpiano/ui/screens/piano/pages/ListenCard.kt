@@ -89,7 +89,7 @@ internal fun ListenCard(vm: PianoViewModel, gate: KioskGate) {
     val askForCheck = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             setCheckListens(true)
-            graph.listening.refresh()
+            graph.remote.listening.refresh()
         }
     }
     val microphone = listen.allowed || vm.microphoneAllowed()

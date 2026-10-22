@@ -218,10 +218,10 @@ class AppWebBackend(
                 handColours = settings.handColours,
             ),
             quiet = graph.quiet.now(),
-            listen = graph.listening.state.value,   // v1.23 — M55
-            keytest = graph.keyTest.state.value,
+            listen = graph.remote.listening.state.value,   // v1.23 — M55
+            keytest = graph.remote.keyTest.state.value,
             safety = WebSafety.of(graph.safety.state.value),   // v1.26 — M61
-            power = WebPower.of(graph.railFact.value),   // v1.26 — M62
+            power = WebPower.of(graph.remote.railFact.value),   // v1.26 — M62
         )
     }
 
@@ -790,15 +790,15 @@ class AppWebBackend(
     // ---- The System page (v1.18 — M46) -------------------------------------------------------
 
     /** The piano's live facts at most once in 10 s, whichever panel, listener or the tablet's own System page asks (firmware/docs/BLE_DIAG.md). */
-    private val refreshFloor = graph.factsFloor
+    private val refreshFloor = graph.remote.factsFloor
 
     override suspend fun system(): WebSystem {
-        val reading = withContext(Dispatchers.IO) { graph.systemProbe.read() }
+        val reading = withContext(Dispatchers.IO) { graph.remote.systemProbe.read() }
         val link = graph.pianoLink.state.value
         val piano = graph.pianoSettings.state.value
         val now = System.currentTimeMillis()
         // What runs, gathered as the tablet's own System page gathers it (AppGraph.runningInputs, v1.18 — M50).
-        val inputs = graph.runningInputs(now)
+        val inputs = graph.remote.runningInputs(now)
         val counts = library { graph.library.coverCounts() }
         return WebSystem(
             at = now,
@@ -809,7 +809,7 @@ class AppWebBackend(
                 state = pianoOf(piano).state,
                 facts = (piano as? PianoState.Ready)?.facts,
                 factsAt = graph.pianoSettings.factsAt.value,
-                keyHeld = graph.keyHeld(),   // v1.23 — M55
+                keyHeld = graph.remote.keyHeld(),   // v1.23 — M55
             ),
             running = dev.stevenjin.stevenpiano.diag.RunningNow.of(inputs),
             web = WebSystemWeb(
@@ -831,7 +831,7 @@ class AppWebBackend(
      * panel never waits on the plug's Bluetooth.
      */
     private fun power(): dev.stevenjin.stevenpiano.power.RailFact {
-        val fact = graph.railFact.value
+        val fact = graph.remote.railFact.value
         if (!fact.paired) return fact
         if (plugFloor.take()) graph.appScope.launch { graph.plug.switchStatus() }
         return if (graph.plug.reachable.value == false) fact.copy(output = null, watts = null) else fact
@@ -849,7 +849,7 @@ class AppWebBackend(
         )
     }
 
-    override suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample> = graph.systemHistory.snapshot()
+    override suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample> = graph.remote.systemHistory.snapshot()
 
     /** At most once in 10 s ([refreshFloor]), on the main thread where the piano's settings live; nothing during a firmware update. */
     override suspend fun refreshPiano(): Boolean = refreshFloor.take() && onMain { graph.pianoSettings.refreshFacts() }
@@ -861,7 +861,7 @@ class AppWebBackend(
             SystemToolResult.DONE
         }
         SystemTool.RECONNECT -> if (onMain { graph.reconnectPiano() }) SystemToolResult.DONE else SystemToolResult.BUSY
-        SystemTool.UPDATE -> if (onMain { graph.updateFromAfar() }) SystemToolResult.DONE else SystemToolResult.BUSY
+        SystemTool.UPDATE -> if (onMain { graph.remote.updateFromAfar() }) SystemToolResult.DONE else SystemToolResult.BUSY
     }
 
     override suspend fun diagnostics(): ByteArray? = withContext(Dispatchers.IO) {
@@ -915,13 +915,13 @@ class AppWebBackend(
 
     // ---- Listening and the key test (v1.23 — M55) --------------------------------------------------------------------------
 
-    override suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.listening.startLive(token) }
+    override suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.remote.listening.startLive(token) }
 
-    override suspend fun listenStop() = onMain { graph.listening.stopLive() }
+    override suspend fun listenStop() = onMain { graph.remote.listening.stopLive() }
 
-    override suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.keyTest.start(token) }
+    override suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.remote.keyTest.start(token) }
 
-    override suspend fun keyTestStop() = onMain { graph.keyTest.stop() }
+    override suspend fun keyTestStop() = onMain { graph.remote.keyTest.stop() }
 }
 
 /** The piano's Full power setting, by its firmware name (v1.18 — M47b: the Settings page's line under Velocity). */

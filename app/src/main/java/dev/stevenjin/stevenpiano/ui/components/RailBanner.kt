@@ -64,7 +64,7 @@ import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 fun RailBanner(modifier: Modifier = Modifier) {
     val graph = LocalContext.current.graph
     val message by graph.rail.message.collectAsStateWithLifecycle()
-    val listen by graph.listening.state.collectAsStateWithLifecycle()
+    val listen by graph.remote.listening.state.collectAsStateWithLifecycle()
     val reduced = rememberReducedMotion()
     val last = remember { mutableStateOf<RailMessage?>(null) }
     message?.let { SideEffect { last.value = it } }
