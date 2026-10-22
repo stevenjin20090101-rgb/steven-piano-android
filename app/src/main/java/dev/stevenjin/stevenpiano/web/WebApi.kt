@@ -876,7 +876,7 @@ object WebApi {
     const val QUIET_DEPTH = 5
 
     /** The quiet now, in the state and in `GET /api/quiet`: `{now, until, overridden, next}`, the times epoch ms or null. */
-    fun quietNow(q: dev.stevenjin.stevenpiano.schedule.QuietNow): JSONObject = JSONObject()
+    fun quietNow(q: dev.stevenjin.stevenpiano.quiet.QuietNow): JSONObject = JSONObject()
         .put("now", q.now)
         .put("until", q.until ?: JSONObject.NULL)
         .put("overridden", q.overridden)
@@ -910,13 +910,13 @@ object WebApi {
     /**
      * `PUT /api/quiet`: `{sections: [{name, days, blocks: [{start, end}]}]}`, every section at once, read strictly
      * (nothing but those keys; days whole numbers 1 to 7; times `HH:MM`) and then checked as the tablet's editor checks
-     * them ([dev.stevenjin.stevenpiano.schedule.QuietTimes.validate]): 400 `quiet` with the editor's words.
+     * them ([dev.stevenjin.stevenpiano.quiet.QuietTimes.validate]): 400 `quiet` with the editor's words.
      */
-    fun quietSections(json: JSONObject): List<dev.stevenjin.stevenpiano.schedule.QuietSection> {
+    fun quietSections(json: JSONObject): List<dev.stevenjin.stevenpiano.quiet.QuietSection> {
         onlyKeys(json, setOf("sections"))
         val list = json.opt("sections") as? JSONArray ?: throw ApiError(400, "field", "sections must be a list.")
-        if (list.length() > dev.stevenjin.stevenpiano.schedule.QuietTimes.MAX_SECTIONS) {
-            throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.schedule.QuietTimes.TOO_MANY_SECTIONS)
+        if (list.length() > dev.stevenjin.stevenpiano.quiet.QuietTimes.MAX_SECTIONS) {
+            throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.quiet.QuietTimes.TOO_MANY_SECTIONS)
         }
         val sections = (0 until list.length()).map { i ->
             val item = list.get(i) as? JSONObject ?: throw ApiError(400, "field", "Each section must be {name, days, blocks}.")
@@ -930,22 +930,22 @@ object WebApi {
                 mask = mask or (1 shl (day.toInt() - 1))
             }
             val blocks = item.opt("blocks") as? JSONArray ?: throw ApiError(400, "field", "blocks must be a list.")
-            if (blocks.length() > dev.stevenjin.stevenpiano.schedule.QuietTimes.MAX_BLOCKS) {
-                throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.schedule.QuietTimes.TOO_MANY_BLOCKS)
+            if (blocks.length() > dev.stevenjin.stevenpiano.quiet.QuietTimes.MAX_BLOCKS) {
+                throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.quiet.QuietTimes.TOO_MANY_BLOCKS)
             }
             val read = (0 until blocks.length()).map { j ->
                 val block = blocks.get(j) as? JSONObject ?: throw ApiError(400, "field", "Each block must be {start, end}.")
                 onlyKeys(block, setOf("start", "end"))
-                dev.stevenjin.stevenpiano.schedule.QuietBlock(minuteOf(string(block, "start", MAX_TIME_TEXT)), minuteOf(string(block, "end", MAX_TIME_TEXT)))
+                dev.stevenjin.stevenpiano.quiet.QuietBlock(minuteOf(string(block, "start", MAX_TIME_TEXT)), minuteOf(string(block, "end", MAX_TIME_TEXT)))
             }
-            dev.stevenjin.stevenpiano.schedule.QuietSection(name, mask, read)
+            dev.stevenjin.stevenpiano.quiet.QuietSection(name, mask, read)
         }
-        dev.stevenjin.stevenpiano.schedule.QuietTimes.validate(sections)?.let { throw ApiError(400, "quiet", it) }
+        dev.stevenjin.stevenpiano.quiet.QuietTimes.validate(sections)?.let { throw ApiError(400, "quiet", it) }
         return sections
     }
 
     /** The guests' catalogue's `quiet` (v1.20 — M54): `{until}` (epoch ms) while a quiet time holds the piano, else null. */
-    fun guestQuiet(q: dev.stevenjin.stevenpiano.schedule.QuietNow): Any =
+    fun guestQuiet(q: dev.stevenjin.stevenpiano.quiet.QuietNow): Any =
         q.until?.takeIf { q.holds }?.let { JSONObject().put("until", it) } ?: JSONObject.NULL
 
     /** A time as the wire has it, "08:40" (two-digit hours). */

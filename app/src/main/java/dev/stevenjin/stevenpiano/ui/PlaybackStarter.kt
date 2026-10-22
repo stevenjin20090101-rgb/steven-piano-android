@@ -27,7 +27,7 @@ import dev.stevenjin.stevenpiano.channels.ChannelPlayer
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
-import dev.stevenjin.stevenpiano.schedule.QuietGate
+import dev.stevenjin.stevenpiano.quiet.QuietGate
 import dev.stevenjin.stevenpiano.service.PlaybackService
 
 /**

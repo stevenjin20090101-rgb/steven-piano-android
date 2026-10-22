@@ -21,7 +21,7 @@ import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import kotlinx.coroutines.TimeoutCancellationException

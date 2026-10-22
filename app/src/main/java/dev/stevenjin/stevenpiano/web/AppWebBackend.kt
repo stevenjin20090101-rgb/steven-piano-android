@@ -900,15 +900,15 @@ class AppWebBackend(
 
     // ---- Quiet times (v1.20 — M54) ----------------------------------------------------------------------------------------
 
-    override suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow = graph.quiet.now()
+    override suspend fun quietNow(): dev.stevenjin.stevenpiano.quiet.QuietNow = graph.quiet.now()
 
     override suspend fun safetyRefusal(): String? = onMain { graph.safety.refusal() }
 
-    override suspend fun quiet(): WebQuiet = WebQuiet(graph.schedules.sections(), graph.quiet.now())
+    override suspend fun quiet(): WebQuiet = WebQuiet(graph.quietStore.sections(), graph.quiet.now())
 
     /** Every section, checked by the route; kept in one transaction and the alarm planned again (the gate follows the table). */
-    override suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection>) {
-        graph.schedules.saveQuiet(sections)?.let { throw ApiError(400, "quiet", it) }
+    override suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.quiet.QuietSection>) {
+        graph.quietStore.saveQuiet(sections)?.let { throw ApiError(400, "quiet", it) }
     }
 
     override suspend fun overrideQuiet(): Boolean = graph.quiet.override()

@@ -17,8 +17,8 @@ import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.player.RepeatMode
-import dev.stevenjin.stevenpiano.schedule.QuietNow
-import dev.stevenjin.stevenpiano.schedule.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietNow
+import dev.stevenjin.stevenpiano.quiet.QuietSection
 import java.io.File
 import java.util.Collections
 

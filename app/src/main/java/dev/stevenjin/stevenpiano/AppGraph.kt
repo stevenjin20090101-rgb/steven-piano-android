@@ -124,9 +124,9 @@ import dev.stevenjin.stevenpiano.safety.SafetyCheck
 import dev.stevenjin.stevenpiano.safety.SafetyHost
 import dev.stevenjin.stevenpiano.safety.SafetyRunner
 import dev.stevenjin.stevenpiano.safety.safetyDataStore
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
-import dev.stevenjin.stevenpiano.schedule.QuietGate
-import dev.stevenjin.stevenpiano.schedule.Schedules
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietGate
+import dev.stevenjin.stevenpiano.quiet.QuietStore
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.LibraryService
 import dev.stevenjin.stevenpiano.service.StudioService
@@ -766,13 +766,13 @@ class AppGraph(private val app: Application) {
     }.getOrNull() ?: -1L
 
     /** The schedules table (v1.20 — M54: the quiet times' blocks alone; timed plays were removed), each save of the quiet times one transaction. */
-    val schedules: Schedules by lazy { Schedules(this, database.schedules()) { block -> database.withTransaction { block() } } }
+    val quietStore: QuietStore by lazy { QuietStore(this, database.schedules()) { block -> database.withTransaction { block() } } }
 
     /**
      * Quiet times' gate (Piano › Quiet times, v1.20 — M54): whether a block is on now and whether Play anyway lifted it;
      * the player starts nothing while one holds, and stops as a block begins ([start]).
      */
-    val quiet: QuietGate by lazy { QuietGate(schedules.quietRows) }
+    val quiet: QuietGate by lazy { QuietGate(quietStore.quietRows) }
 
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
     val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }

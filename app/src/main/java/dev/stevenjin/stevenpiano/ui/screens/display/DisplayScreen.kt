@@ -92,7 +92,7 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.NowPlaying
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.PlayerState
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows

@@ -7,22 +7,22 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.schedule
+package dev.stevenjin.stevenpiano.quiet
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.DayOfWeek
 
 /** How days read, on the tablet and in the web panel: the design's own lines. */
-class ScheduleCopyTest {
+class QuietCopyTest {
     @Test
     fun `the days read as the design writes them`() {
-        assertEquals("Every day", ScheduleCopy.days(127))
-        assertEquals("Weekdays", ScheduleCopy.days(31))
-        assertEquals("Weekends", ScheduleCopy.days(96))
-        assertEquals("Wednesdays", ScheduleCopy.days(QuietTimes.dayBit(DayOfWeek.WEDNESDAY)))
-        assertEquals("Mon, Wed, Fri", ScheduleCopy.days(1 or 4 or 16))
-        assertEquals("in week order, Monday first", "Mon, Sun", ScheduleCopy.days(64 or 1))
-        assertEquals("No days", ScheduleCopy.days(0))
+        assertEquals("Every day", QuietCopy.days(127))
+        assertEquals("Weekdays", QuietCopy.days(31))
+        assertEquals("Weekends", QuietCopy.days(96))
+        assertEquals("Wednesdays", QuietCopy.days(QuietTimes.dayBit(DayOfWeek.WEDNESDAY)))
+        assertEquals("Mon, Wed, Fri", QuietCopy.days(1 or 4 or 16))
+        assertEquals("in week order, Monday first", "Mon, Sun", QuietCopy.days(64 or 1))
+        assertEquals("No days", QuietCopy.days(0))
     }
 }

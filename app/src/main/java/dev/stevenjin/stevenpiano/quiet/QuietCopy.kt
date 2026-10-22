@@ -7,20 +7,23 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.schedule
+package dev.stevenjin.stevenpiano.quiet
 
 import dev.stevenjin.stevenpiano.ui.Format
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /**
  * What quiet times say (DESIGN.md › v1.20 — M54), on the tablet and in the web panel's answers alike: "Quiet until
  * 9:30", "Quiet now · until 9:30", "Next quiet time 9:40" (a weekday before the time when it isn't today: "Next quiet
  * time Mon 8:40"), a block "8:40–9:30", the hub's "Quiet until 9:30" or "Next Mon 8:40", and the panel's refusal
  * "Quiet until 9:30. Use Play anyway." Times are the tablet's, on the 24-hour clock, the hour without a leading zero.
- * Pure.
+ * And how days read (DESIGN.md › v1.6.2 — M19; ScheduleCopy's until v1.27 — M63): "Weekdays", "Mon, Wed, Fri". Pure.
  */
 object QuietCopy {
     const val TITLE = "Quiet times"
@@ -41,11 +44,11 @@ object QuietCopy {
 
     /** When the quiet ends, "9:30"; a short weekday before it when that is a day or more away ("Tue 7:00"). */
     fun until(until: ZonedDateTime, now: ZonedDateTime): String =
-        if (ChronoUnit.HOURS.between(now, until) >= HOURS_PER_DAY) "${ScheduleCopy.short(until.dayOfWeek)} ${Format.timeOfDay(until)}" else Format.timeOfDay(until)
+        if (ChronoUnit.HOURS.between(now, until) >= HOURS_PER_DAY) "${short(until.dayOfWeek)} ${Format.timeOfDay(until)}" else Format.timeOfDay(until)
 
     /** When the next block starts, "9:40" today, else with its short weekday, "Mon 8:40". */
     fun next(next: ZonedDateTime, now: ZonedDateTime): String =
-        if (next.toLocalDate() == now.toLocalDate()) Format.timeOfDay(next) else "${ScheduleCopy.short(next.dayOfWeek)} ${Format.timeOfDay(next)}"
+        if (next.toLocalDate() == now.toLocalDate()) Format.timeOfDay(next) else "${short(next.dayOfWeek)} ${Format.timeOfDay(next)}"
 
     /** The capsule on Now playing and the resting screen, "Quiet until 9:30". */
     fun capsule(until: String): String = "Quiet until $until"
@@ -80,6 +83,24 @@ object QuietCopy {
 
     /** An epoch-ms moment in [zone]. */
     fun at(millis: Long, zone: ZoneId): ZonedDateTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(millis), zone)
+
+    /** "Every day", "Weekdays", "Weekends", "Wednesdays" for one day, else the days in week order: "Mon, Wed, Fri". */
+    fun days(mask: Int): String {
+        when (mask and QuietTimes.ALL_DAYS) {
+            QuietTimes.ALL_DAYS -> return "Every day"
+            QuietTimes.WEEKDAYS -> return "Weekdays"
+            QuietTimes.WEEKENDS -> return "Weekends"
+            0 -> return "No days"
+        }
+        val chosen = DayOfWeek.entries.filter { mask and QuietTimes.dayBit(it) != 0 }
+        return if (chosen.size == 1) full(chosen.single()) + "s" else chosen.joinToString(", ") { short(it) }
+    }
+
+    /** "Wednesday". */
+    fun full(day: DayOfWeek): String = day.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+
+    /** "Wed". */
+    fun short(day: DayOfWeek): String = day.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
 
     private const val HOURS_PER_DAY = 24L
 }

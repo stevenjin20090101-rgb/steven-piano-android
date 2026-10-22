@@ -7,10 +7,10 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.schedule
+package dev.stevenjin.stevenpiano.quiet
 
-import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
-import dev.stevenjin.stevenpiano.data.db.ScheduleKind
+import dev.stevenjin.stevenpiano.data.db.QuietEntity
+import dev.stevenjin.stevenpiano.data.db.QuietKind
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -33,7 +33,7 @@ data class QuietSection(val name: String, val days: Int, val blocks: List<QuietB
 data class QuietSpell(val since: ZonedDateTime, val until: ZonedDateTime)
 
 /**
- * Quiet times (DESIGN.md › v1.20 — M54), pure: sections of days, each with blocks, kept as one [ScheduleKind.QUIET]
+ * Quiet times (DESIGN.md › v1.20 — M54), pure: sections of days, each with blocks, kept as one [QuietKind.QUIET]
  * row a block (its section's name as the target, its days, both minutes). Every answer comes from the rows and a time
  * given, in that time's zone, through [ZonedDateTime] (a block in the hour the clocks skip starts that much later; one
  * in the hour autumn repeats starts at the first of the two; midnight is crossed into the next day).
@@ -89,7 +89,7 @@ object QuietTimes {
      * The sections [rows] hold: the quiet rows grouped by name and days, in the order they were saved (by id), each
      * section's blocks by start. A row without an end is none of a section's.
      */
-    fun sections(rows: List<ScheduleEntity>): List<QuietSection> =
+    fun sections(rows: List<QuietEntity>): List<QuietSection> =
         rows.asSequence()
             .filter { it.endMinute != null }
             .sortedBy { it.id }
@@ -99,13 +99,13 @@ object QuietTimes {
             }
 
     /** The rows [sections] are kept as, a block each, section by section (their names trimmed); [createdAt] on each. */
-    fun rows(sections: List<QuietSection>, createdAt: Long): List<ScheduleEntity> =
+    fun rows(sections: List<QuietSection>, createdAt: Long): List<QuietEntity> =
         sections.flatMap { section ->
             section.blocks.sortedWith(BLOCK_ORDER).map { block ->
-                ScheduleEntity(
+                QuietEntity(
                     days = section.days,
                     startMinute = block.start,
-                    kind = ScheduleKind.QUIET,
+                    kind = QuietKind.QUIET,
                     target = section.name.trim(),
                     endMinute = block.end,
                     createdAt = createdAt,
@@ -180,7 +180,7 @@ object QuietTimes {
      * ends: the latest end of the blocks on, carried on through every block that starts before that end (or at it) and
      * goes on past it, whichever section it is in.
      */
-    fun at(rows: List<ScheduleEntity>, now: ZonedDateTime): QuietSpell? {
+    fun at(rows: List<QuietEntity>, now: ZonedDateTime): QuietSpell? {
         val spans = spans(rows, now)
         val on = spans.filter { !it.start.isAfter(now) && it.end.isAfter(now) }
         if (on.isEmpty()) return null
@@ -200,7 +200,7 @@ object QuietTimes {
     }
 
     /** The next start of any block strictly after [now]; null when there are no blocks. */
-    fun next(rows: List<ScheduleEntity>, now: ZonedDateTime): ZonedDateTime? =
+    fun next(rows: List<QuietEntity>, now: ZonedDateTime): ZonedDateTime? =
         spans(rows, now).asSequence().map { it.start }.filter { it.isAfter(now) }.minOrNull()
 
     /**
@@ -215,7 +215,7 @@ object QuietTimes {
     }
 
     /** Every quiet block's run from yesterday to a week ahead, in [now]'s zone. */
-    private fun spans(rows: List<ScheduleEntity>, now: ZonedDateTime): List<Span> {
+    private fun spans(rows: List<QuietEntity>, now: ZonedDateTime): List<Span> {
         val first = now.toLocalDate().minusDays(DAYS_BEFORE)
         val spans = ArrayList<Span>()
         for (row in rows) {

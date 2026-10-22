@@ -20,7 +20,7 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.library.PackState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
 import dev.stevenjin.stevenpiano.studio.JobState
 import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy

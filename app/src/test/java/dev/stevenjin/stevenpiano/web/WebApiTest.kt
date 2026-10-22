@@ -37,7 +37,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
-import dev.stevenjin.stevenpiano.schedule.QuietNow
+import dev.stevenjin.stevenpiano.quiet.QuietNow
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

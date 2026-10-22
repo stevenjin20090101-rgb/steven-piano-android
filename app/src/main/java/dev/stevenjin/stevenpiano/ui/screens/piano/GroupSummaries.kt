@@ -17,7 +17,7 @@ import dev.stevenjin.stevenpiano.firmware.FirmwareState
 import dev.stevenjin.stevenpiano.firmware.FirmwareVersion
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.piano.PianoState
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy

@@ -20,9 +20,9 @@ import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
-import dev.stevenjin.stevenpiano.schedule.QuietBlock
-import dev.stevenjin.stevenpiano.schedule.QuietNow
-import dev.stevenjin.stevenpiano.schedule.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietBlock
+import dev.stevenjin.stevenpiano.quiet.QuietNow
+import dev.stevenjin.stevenpiano.quiet.QuietSection
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import org.junit.After

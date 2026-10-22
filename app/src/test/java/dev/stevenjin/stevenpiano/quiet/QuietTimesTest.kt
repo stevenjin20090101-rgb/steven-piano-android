@@ -7,10 +7,10 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.schedule
+package dev.stevenjin.stevenpiano.quiet
 
-import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
-import dev.stevenjin.stevenpiano.data.db.ScheduleKind
+import dev.stevenjin.stevenpiano.data.db.QuietEntity
+import dev.stevenjin.stevenpiano.data.db.QuietKind
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -46,7 +46,7 @@ class QuietTimesTest {
     private fun block(from: String, to: String) = QuietBlock(hm(from), hm(to))
 
     private fun quiet(id: Long, name: String, days: Int, from: String, to: String) =
-        ScheduleEntity(id, days, hm(from), ScheduleKind.QUIET, name, hm(to), createdAt = 0)
+        QuietEntity(id, days, hm(from), QuietKind.QUIET, name, hm(to), createdAt = 0)
 
     private val monday = QuietTimes.dayBit(java.time.DayOfWeek.MONDAY)
     private val sunday = QuietTimes.dayBit(java.time.DayOfWeek.SUNDAY)
@@ -69,7 +69,7 @@ class QuietTimesTest {
             sections,
         )
         val kept = QuietTimes.rows(sections, createdAt = 42).mapIndexed { i, row -> row.copy(id = i + 1L) }
-        assertTrue(kept.all { it.kind == ScheduleKind.QUIET && it.createdAt == 42L })
+        assertTrue(kept.all { it.kind == QuietKind.QUIET && it.createdAt == 42L })
         assertEquals("back again, the same", sections, QuietTimes.sections(kept))
         assertEquals("a name is kept trimmed", "Night", QuietTimes.rows(listOf(QuietSection("  Night ", 1, listOf(block("21:00", "07:00")))), 0).single().target)
     }
@@ -155,7 +155,7 @@ class QuietTimesTest {
     @Test
     fun `the gate stops the player once as a block begins, Play anyway lifts it until the block ends, and a new block is quiet again`() = runTest {
         var clock = ms(at("2026-10-05", "08:30"))
-        val rows = MutableStateFlow<List<ScheduleEntity>?>(null)
+        val rows = MutableStateFlow<List<QuietEntity>?>(null)
         val gate = QuietGate(rows, clock = { clock }, zone = { zone })
         var hushes = 0
         gate.start(backgroundScope) { hushes++ }
@@ -190,7 +190,7 @@ class QuietTimesTest {
     @Test
     fun `a lift holds until a block of another section begins, and the app starting inside a block stops the player`() = runTest {
         var clock = ms(at("2026-10-05", "08:30"))
-        val rows = MutableStateFlow<List<ScheduleEntity>?>(listOf(quiet(1, "Mornings", monday, "08:00", "10:00"), quiet(2, "Exams", monday, "09:00", "11:00")))
+        val rows = MutableStateFlow<List<QuietEntity>?>(listOf(quiet(1, "Mornings", monday, "08:00", "10:00"), quiet(2, "Exams", monday, "09:00", "11:00")))
         val gate = QuietGate(rows, clock = { clock }, zone = { zone })
         var hushes = 0
         gate.start(backgroundScope) { hushes++ }
@@ -209,7 +209,7 @@ class QuietTimesTest {
     @Test
     fun `a clock set by hand into a block stops the player exactly once, and the wait is planned again from the new time (v1_24 M57)`() = runTest {
         var wall = ms(at("2026-10-05", "07:00"))   // the tablet's clock, less the test's own time
-        val rows = MutableStateFlow<List<ScheduleEntity>?>(
+        val rows = MutableStateFlow<List<QuietEntity>?>(
             listOf(quiet(1, "School days", QuietTimes.WEEKDAYS, "08:40", "09:30"), quiet(2, "School days", QuietTimes.WEEKDAYS, "09:40", "10:30")),
         )
         val gate = QuietGate(rows, clock = { wall + testScheduler.currentTime }, zone = { zone })
@@ -244,9 +244,9 @@ class QuietTimesTest {
 
     @Test
     fun `the repository replaces every quiet block at once`() = runBlocking {
-        val dao = FakeScheduleDao(listOf(quiet(1, "Old", monday, "08:00", "09:00")))
+        val dao = FakeQuietDao(listOf(quiet(1, "Old", monday, "08:00", "09:00")))
         var transactions = 0
-        val repository = ScheduleRepository(dao, clock = { 7L }) { block ->
+        val repository = QuietRepository(dao, clock = { 7L }) { block ->
             transactions++
             block()
         }
@@ -258,6 +258,6 @@ class QuietTimesTest {
         assertThrows(IllegalArgumentException::class.java) { runBlocking { repository.replaceQuiet(listOf(school.copy(days = 0))) } }
         assertEquals("a section with a problem is never written", listOf(school), repository.sections())
         repository.replaceQuiet(emptyList())
-        assertEquals(emptyList<ScheduleEntity>(), dao.snapshot)
+        assertEquals(emptyList<QuietEntity>(), dao.snapshot)
     }
 }

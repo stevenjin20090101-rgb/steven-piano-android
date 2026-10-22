@@ -222,7 +222,7 @@ interface WebBackend {
     // ---- Quiet times (v1.20 — M54) -----------------------------------------------------------------------------------
 
     /** The quiet now: the state's, and what weighs every route that would play. */
-    suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow
+    suspend fun quietNow(): dev.stevenjin.stevenpiano.quiet.QuietNow
 
     // ---- The safety check (v1.26 — M61) -------------------------------------------------------------------------------
 
@@ -235,8 +235,8 @@ interface WebBackend {
     /** Piano › Quiet times as the panel shows it: the sections, and the quiet now. */
     suspend fun quiet(): WebQuiet
 
-    /** Every section, already checked ([dev.stevenjin.stevenpiano.schedule.QuietTimes.validate]): they replace the ones kept. */
-    suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection>)
+    /** Every section, already checked ([dev.stevenjin.stevenpiano.quiet.QuietTimes.validate]): they replace the ones kept. */
+    suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.quiet.QuietSection>)
 
     /** Play anyway: true when a block is on (the quiet lifts until it ends), false when none is. */
     suspend fun overrideQuiet(): Boolean
@@ -584,7 +584,7 @@ data class WebState(
     /** The display settings the panel's View control mirrors (v1.13 — M32). */
     val display: WebDisplay = WebDisplay(),
     /** The quiet times now (v1.20 — M54): `{now, until, overridden, next}`. */
-    val quiet: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
+    val quiet: dev.stevenjin.stevenpiano.quiet.QuietNow = dev.stevenjin.stevenpiano.quiet.QuietNow(),
     /** The tablet's microphone (v1.23 — M55): `{on, until, allowed}`. */
     val listen: dev.stevenjin.stevenpiano.audio.ListenState = dev.stevenjin.stevenpiano.audio.ListenState(),
     /** The key test (v1.23 — M55): `{running, key, done, total, results, stopped}`. */
@@ -855,6 +855,6 @@ data class WebSettings(
 
 /** `GET /api/quiet`: the sections as they are kept, and the quiet now. */
 data class WebQuiet(
-    val sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection> = emptyList(),
-    val now: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
+    val sections: List<dev.stevenjin.stevenpiano.quiet.QuietSection> = emptyList(),
+    val now: dev.stevenjin.stevenpiano.quiet.QuietNow = dev.stevenjin.stevenpiano.quiet.QuietNow(),
 )

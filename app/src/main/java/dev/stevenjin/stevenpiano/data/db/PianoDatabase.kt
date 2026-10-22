@@ -26,7 +26,7 @@ import androidx.room.RoomDatabase
  * wiping the library.
  */
 @Database(
-    entities = [PieceEntity::class, PlaylistEntity::class, PlaylistPieceEntity::class, ArtworkEntity::class, ScheduleEntity::class, GenerationEntity::class],
+    entities = [PieceEntity::class, PlaylistEntity::class, PlaylistPieceEntity::class, ArtworkEntity::class, QuietEntity::class, GenerationEntity::class],
     views = [ComposerGroup::class],
     version = 6,
     exportSchema = true,
@@ -38,7 +38,7 @@ abstract class PianoDatabase : RoomDatabase() {
 
     abstract fun artwork(): ArtworkDao
 
-    abstract fun schedules(): ScheduleDao
+    abstract fun schedules(): QuietDao
 
     abstract fun generations(): GenerationDao
 

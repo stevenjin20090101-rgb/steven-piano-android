@@ -57,11 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
-import dev.stevenjin.stevenpiano.schedule.QuietBlock
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
-import dev.stevenjin.stevenpiano.schedule.QuietSection
-import dev.stevenjin.stevenpiano.schedule.QuietTimes
-import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.quiet.QuietBlock
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietTimes
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
@@ -118,7 +117,7 @@ fun QuietEditorSheet(index: Int?, sections: List<QuietSection>, onDismiss: () ->
         saving = true
         // In the app's scope: a save outlives the sheet it came from.
         graph.appScope.launch {
-            val problem = graph.schedules.saveQuiet(kept)
+            val problem = graph.quietStore.saveQuiet(kept)
             saving = false
             if (problem == null) onDismiss() else failure = problem
         }
@@ -262,7 +261,7 @@ private fun DayChips(days: Int, onChange: (Int) -> Unit) {
         ) {
             for (day in DayOfWeek.entries) {
                 val bit = QuietTimes.dayBit(day)
-                SheetChip(ScheduleCopy.short(day), days and bit != 0, description = ScheduleCopy.full(day)) { onChange(days xor bit) }
+                SheetChip(QuietCopy.short(day), days and bit != 0, description = QuietCopy.full(day)) { onChange(days xor bit) }
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
