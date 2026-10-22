@@ -1029,6 +1029,68 @@ v1.6 — M21):
       finishes it.
 - [ ] While updating, tap a piece, a channel and the Keys screen: nothing sounds.
 
+## The 24 V power plug
+
+From 1.26 the piano's 24 V supply for its keys (the solenoids) can hang on a Bluetooth smart plug, a **Shelly Plug US
+Gen4**, that switches itself off 30 seconds after the tablet last told it to stay on. The tablet tells it so only while
+something plays and the piano answers with its power boards. If the tablet sleeps, the app closes, Bluetooth drops or the
+piano's controller goes dark, the plug turns the 24 V off by itself: no key can stay hot while the piano is idle.
+`firmware/docs/SMART_PLUG.md` is the contract.
+
+**Only the 24 V supply goes on the plug.** The controller's own supply and the LED strip's stay on another socket, so the
+piano keeps its screen, Bluetooth and settings while the 24 V is off. Label the plug *PIANO 24 V — must stay on the smart
+plug*.
+
+**Setting it up, on the day** (about 15 minutes; Piano › Power plug › **Pair the power plug** walks through it):
+
+1. Plug the 24 V supply into the plug and the plug into the wall. On your phone, turn on a hotspot that has internet. In
+   the **Shelly app**, add the plug on that hotspot, decline the cloud, and let it update its firmware (2.0.0 or later).
+2. Straight after (within about 5 minutes), on the tablet: **Done in the Shelly app**, choose the plug
+   (ShellyPlugUSG4-…) and tap **Pair and set up**. When Android asks to pair with the plug, tap **Pair**. The tablet sets
+   the plug up (off after a power cut, its button can't hold the 24 V on, its cloud off).
+3. Keep the hotspot on while the plug finishes its setup (about 5 minutes; the screen shows when).
+4. **Close its network**: the plug forgets every network and closes its own. Turn the hotspot off.
+5. Connect to the piano, then **Turn the 24 V on for 5 s**: it should read "7 of 7 answering", then "0 of 7" when the plug
+   clicks off. **Finish**.
+
+If the plug says it finished its setup without this tablet, reset it (hold its button about 10 seconds), find it again,
+tap **Set it up from here** and give it the hotspot's name and password. If it says **Locked**, unplug it for 5 seconds,
+plug it back in, and open Pair the power plug again.
+
+**What it says** (at the top of the screen):
+
+- **Waking the piano…** — the 24 V is coming up. A piece waits at its start until every board answers (usually within
+  the pause before the piece, so you won't notice), then plays from the top. On the Keys tab, the first key after 10
+  minutes without one wakes it, and the keys after that sound.
+- **24 V off** — the piece ended or was paused: the 24 V goes off a second later. This is normal.
+- **The piano stopped answering — 24 V cut** — the piano didn't answer twice in a row, so the music stopped and the 24 V
+  went off. Check the piano is on and connected, then play again.
+- **Only 6 of 7 power boards answered** — one board didn't come up with the 24 V (a trunk or board fault): the others
+  play. With "— 24 V cut", a board went missing while playing and the 24 V went off. Check the cables between the boards.
+- **Lost the power plug** — the tablet couldn't reach the plug twice: the music stopped (the plug switches itself off
+  within 30 s anyway). Bring the tablet nearer the plug, then play again.
+
+**Guest play with the plug** (Firmware and status › **Let anyone play for 1 hour**): the 24 V stays on for the hour and
+the tablet lets go of the piano so the iPad can connect. The page shows the time left and **End guest play**, which
+connects the tablet again, ends guest play, releases every key and turns the 24 V off; the end of the hour does the same.
+
+**Piano › Power plug** also shows the plug (the 24 V on or off with its timer, what the supply draws), **Switch the 24 V
+with the plug** (off: the app leaves the plug alone and it stays off, so to play without it plug the supply into a wall
+socket), **Admit a replacement tablet** (3 minutes for another tablet to pair) and **Forget the plug**. Piano › System
+shows the plug on the Piano card, in amber if its relay seems stuck on after a cut. Without a plug paired, nothing of
+this happens.
+
+**Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60), with the
+firmware's bench checks in `SMART_PLUG.md`:
+
+- [ ] Pair it as above; Piano › Power plug shows it paired; a second phone can't switch it.
+- [ ] Play a piece from idle: the first note within about 3 s; the 24 V off a second after the piece ends.
+- [ ] Kill the app mid-piece: the 24 V off within 30 s, no key down.
+- [ ] Press RST on the controller mid-piece (or pull the trunk's cable): the 24 V off within 40 s.
+- [ ] Guest play: the iPad plays for the hour; End guest play turns the 24 V off.
+- [ ] A firmware update with the plug: the new firmware confirms itself.
+- [ ] Press the plug's button, and pull its mains and restore it: the 24 V stays off.
+
 ## Kiosk
 
 Kiosk mode (v1.6.1) locks the school tablet to the app: no Home, no Recents, no

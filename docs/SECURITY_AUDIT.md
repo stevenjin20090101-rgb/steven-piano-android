@@ -2298,3 +2298,36 @@ never sets `DISALLOW_DEBUGGING_FEATURES`, as adb is the documented way back into
   anyone until the tablet reconnects and claims it again.
 - **The debugging warning is advice**: the app can't turn debugging off, and a paired computer keeps full control
   through wireless debugging while it is on.
+
+## 1.26 — the 24 V power plug (notes, M60)
+
+2026-10-21, notes written with M60 for the next audit, not an audit (BUILD_SPEC.md › v1.26 — M60). The piano's 24 V
+solenoid supply hangs on a Shelly Plug US Gen4 that the tablet keeps on over Bluetooth (`firmware/docs/SMART_PLUG.md`).
+Nothing new listens on the tablet and no new host is reached; the plug is a new Bluetooth peer.
+
+- **No network.** The plug goes on a network once (Steven's phone hotspot, for its firmware and its provisioning), then
+  the Pair screen sends `WiFi.SetConfig {sta:{enable:false}, ap:{enable:false}}`: it forgets every network and closes its
+  own access point (an open access point would be an unauthenticated HTTP path to the relay), and `Cloud.SetConfig
+  {enable:false}` turns its cloud off. Nothing can change its firmware or settings from a network afterwards.
+- **Its Bluetooth RPC is paired.** From `provision: complete` the plug answers RPC over Bluetooth only to a bonded
+  device. The tablet bonds (Android's Just Works pairing) inside the 3-minute window `BLE.StartPairing` opens, during the
+  setup or from the bonded tablet's **Admit a replacement tablet**; the plug keeps at most 20 bonds, and **Forget the
+  plug** deletes this tablet's (`BLE.DeletePairedDevice`, the entry the plug listed right after the bond). The bond lives
+  in Android's Bluetooth stack; the app keeps only the plug's address, id, model and firmware (DataStore `power_plug`,
+  not in backups).
+- **What a stranger can do.** Before the setup completes (about 5 minutes, at the plug, during the setup) anyone in range
+  could switch the relay, as anyone could on firmware older than 2.0.0. Either way is fail safe for the piano: on, the
+  controller still holds every coil off; off, silence. Its button can't hold the 24 V on (`in_locked`), and after a mains
+  blip it stays off (`initial_state: off`).
+- **The dead-man's switch.** The app turns the 24 V on only with a 30 s timer, and only after the piano answered its
+  `get boards` with every board it had (but for a firmware update, 3 minutes at most, and guest play this tablet started,
+  60 minutes at most); the stop sequence goes before every cut (`RailKeeperTest`).
+
+### Residuals (stated honestly)
+
+- **Just Works pairing has no protection against someone in the middle**: a radio expert at the plug during a pairing
+  window could pair a device of their own. A window opens only during the setup or when a bonded tablet asks.
+- **The plug's relay can weld**, and someone can move the supply to a wall socket: the piano is then as before the plug.
+  The app warns when the plug still reads on, or still draws, after a cut; the label asks people not to move it.
+- **The plug's firmware is frozen** off every network: a flaw found in it later can't be patched without bringing it
+  online again (the Shelly app over a hotspot, then the network closed once more).
