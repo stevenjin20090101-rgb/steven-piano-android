@@ -121,6 +121,8 @@ sealed interface RailMessage {
  * - **Stop:** when nothing wants the rail, the stop sequence (CC64 = 0, CC123), a second, then CUT; "24 V off" for a few
  *   seconds. A want back within that second keeps the rail up.
  * - **A failure ends what wanted the rail:** the next Play, key or start brings it up again, through a fresh CHECK.
+ * - **The safety check's restart** ([expectRestart], v1.27 — M64) is no failure: the piano gone meanwhile, the rail goes
+ *   quietly off with its wants kept, and comes up again with the piano.
  * - **Without the plug** ([available] false: none paired, or its switch off) nothing here calls the plug or the piano, and
  *   [notesHeld] stays false: the app behaves exactly as before.
  *
@@ -215,6 +217,9 @@ class RailKeeper(
 
     private var keysShown = false
     private var needsBaseline = false
+
+    /** Until when ([now]'s clock) a lost link is the restart [expectRestart] announced; ended by the piano connecting again. */
+    private var restartUntil = 0L
     private var failedChecks = 0
     private var failedArms = 0
     private var loop: Job? = null
@@ -234,6 +239,7 @@ class RailKeeper(
         }
         scope.launch {
             connected.collect {
+                if (it) restartUntil = 0L   // back from a restart: a later loss is a failure again
                 refreshHeld()
                 changed()
             }
@@ -289,6 +295,17 @@ class RailKeeper(
         put(GUEST, until = until, unchecked = until)
         _guestUntil.value = until
         watchGuest(until)
+    }
+
+    /**
+     * The safety check's `restart` (v1.27 — M64; SMART_PLUG.md rule 10): the piano lets go of the link at once and is back
+     * a few seconds later. For [withinMs], or until it is connected again, a CHECK that finds it gone is no failure: the
+     * rail goes quietly to Off with every want kept (no stop, no CUT, nothing said; the plug's own timer bounds the rail,
+     * as for a rebooting controller), and the rail-up with its CHECK follows the piano back. Outside it, nothing changes.
+     */
+    fun expectRestart(withinMs: Long) {
+        restartUntil = now() + withinMs
+        log("Rail: the piano restarts; its link lost in the next ${withinMs / MS_PER_S} s is no failure")
     }
 
     /** The message is read (its OK): it goes. */
@@ -486,6 +503,14 @@ class RailKeeper(
             if (!wantedNow() || !available.value) {
                 next = now()
                 continue
+            }
+            if (read == null && !connected.value && now() < restartUntil) {
+                // The restart the safety check asked for (v1.27 — M64): the wants stay and the plug's timer bounds the rail;
+                // the loop waits for the piano, and the rail-up with its CHECK restores the baseline.
+                log("CHECK: no answer while the piano restarts, as the safety check asked")
+                _baseline.value = null
+                setPhase(RailPhase.Off)
+                return
             }
             val baseline = _baseline.value
             val good = read != null && if (needsBaseline || baseline == null) read.answered > 0 else read.holds(baseline)

@@ -408,10 +408,13 @@ object SafetyCheck {
         return Step(state.copy(phase = Phase.RESTART), Command.Restart)
     }
 
+    /** Whether the piano's reply to `restart` says it restarts now: it lets go of the link about 200 ms later. */
+    fun restarting(reply: String?): Boolean = reply?.trim()?.startsWith(RESTARTING) == true
+
     private fun onRestart(state: CheckState, reply: String?): Step {
         val text = reply?.trim()
         return when {
-            text != null && text.startsWith(RESTARTING) -> Step(state.copy(phase = Phase.BACK), Command.AwaitBack)
+            restarting(text) -> Step(state.copy(phase = Phase.BACK), Command.AwaitBack)
             text != null -> repower(state.put(SafetyStep.RESTART, Mark.SKIPPED, why = Why.REFUSED, said = text))
             else -> repower(state.put(SafetyStep.RESTART, Mark.SKIPPED, why = Why.NO_ANSWER))
         }

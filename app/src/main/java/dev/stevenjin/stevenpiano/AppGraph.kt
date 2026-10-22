@@ -1453,7 +1453,11 @@ class AppGraph(private val app: Application) {
 
         override suspend fun restart(): String? {
             stevenLink.expectRestart(SAFETY_RESTART_WINDOW_MS)
-            return pianoSettings.restart()
+            return pianoSettings.restart().also { reply ->
+                // v1.27 — M64: the drop after `restarting` is the restart asked for, not a dead piano: the 24 V's keeper lets
+                // it pass, and brings the rail up again with the piano.
+                if (SafetyCheck.restarting(reply)) rail.expectRestart(SAFETY_RESTART_WINDOW_MS)
+            }
         }
 
         override fun startSweep(): String? = (remote.keyTest.start(null) as? ListenAnswer.Refused)?.message
