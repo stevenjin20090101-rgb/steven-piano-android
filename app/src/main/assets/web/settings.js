@@ -14,7 +14,7 @@
 // 900 px; below that the list, and a page over it with a back row (system.css › Settings). Every element is built with
 // DOM calls, what the tablet says goes in as text, sizes go through the CSSOM, and every request is built from host.ROOT.
 
-import { guarded, holdToRepeat, whole } from './ui.js';
+import { guarded, holdToRepeat, linkDot, paintDot, whole } from './ui.js';
 
 /** The app's own words (ui/SettingNotes.kt, ui/PlaybackCopy.kt), so the panel says what the tablet says. */
 const NOTES = {
@@ -129,7 +129,8 @@ export function create(host, body, tools) {
   });
 
   const linkName = h('span');
-  const linkCapsule = h('span', { class: 'capsule glass wide', hidden: true }, h('span', { class: 'dot live' }), linkName);
+  const linkDotNode = h('span', { class: 'dot' });
+  const linkCapsule = h('span', { class: 'capsule glass wide', hidden: true }, linkDotNode, linkName);
   const save = h('button', { class: 'outlined filled', type: 'button', hidden: true }, glyph('g-save'), h('span', { text: 'Save to the piano' }));
   /** System's page (v1.20 — M53): its head's capsules in [system.tools], its cards in [system.holder], made once. */
   const system = { state: 'idle', page: null, showing: false, holder: h('div', { class: 'system-holder' }), tools: h('span', { class: 'system-tools', hidden: true }) };
@@ -996,6 +997,7 @@ export function create(host, body, tools) {
     const showLink = connected() && !onSystem;
     linkCapsule.hidden = !showLink;
     if (showLink) {
+      paintDot(linkDotNode, linkDot(link()));   // v1.27 — M64: ink while connected and silent, red only while notes go out
       const name = link().name || otherInstrument() || 'the piano';
       const fw = typeof facts().fw === 'string' ? facts().fw.split('+')[0].trim() : '';
       const text = fw && !otherInstrument() ? `${name} · firmware ${fw}` : name;

@@ -13,7 +13,7 @@
 // dropZone() }; the uploads are the frame's (host.addUploads), one at a time with Studio's. It asks the tablet only
 // through the host, from host.ROOT.
 
-import { $, clock, plural, debounce } from './ui.js';
+import { $, clock, plural, debounce, linkDot, paintDot } from './ui.js';
 
 export function create(host) {
   const { h, glyph, chip, setEmpty, segmented, get, post, readState, toast, failed, show, staggerIn, openSheet, closeSheet } = host;
@@ -59,6 +59,7 @@ export function create(host) {
     loaded: false,      // the list asked for last is drawn
     asking: false,      // a list or a group is on its way
     failedAt: -Infinity,
+    playingDot: null,   // the playing channel's dot, painted at every state (v1.27 — M64)
   };
   const PAGE = 50;
 
@@ -468,6 +469,17 @@ export function create(host) {
     }, true);
   }
 
+  /**
+   * The playing channel's dot (v1.27 — M64): the piano's link as ui.js's linkDot says it, red only while the channel's notes
+   * reach the piano (ink while the 24 V comes up, a ring with no piano), painted again at every state ([render]).
+   */
+  function playingDot() {
+    const dot = h('span', { class: 'dot' });
+    paintDot(dot, linkDot(state() && state().link));
+    library.playingDot = dot;
+    return dot;
+  }
+
   /** A channel's card: a mosaic of the composers it holds most, its name on the band, and how many pieces, or Playing with the dot. */
   function channelTile(channel) {
     const cells = channel.composers.slice(0, 4);
@@ -475,7 +487,7 @@ export function create(host) {
     if (cells.length === 0) mosaic.append(monogram(channel.name));
     for (const composer of cells.length === 3 ? cells.concat(cells[0]) : cells) mosaic.append(art(h('div', { class: 'art' }), portraitOf(composer), 'tile'));
     const meta = channel.playing
-      ? h('p', { class: 'eyebrow' }, h('span', { class: 'dot live' }), 'Playing')
+      ? h('p', { class: 'eyebrow' }, playingDot(), 'Playing')
       : h('p', { class: 'eyebrow', text: channel.playable ? plural(channel.size, 'piece', 'pieces') : 'Add more pieces' });
     const tile = h('button', { class: 'tile', type: 'button', 'aria-label': `${channel.name} channel${channel.playing ? ', playing' : ''}` },
       mosaic, h('div', { class: 'band' }, h('p', { class: 'name', text: channel.name }), meta));
@@ -607,6 +619,7 @@ export function create(host) {
     const shows = host.section() === 'library';
     if (shows && !library.loaded && !library.asking && performance.now() - library.failedAt >= LIBRARY_RETRY_MS) libraryLoad();
     if (shows && before && library.category === 'channels' && !library.query && channelOf(before) !== channelOf(state())) channelsLoad();
+    if (library.playingDot && library.playingDot.isConnected) paintDot(library.playingDot, linkDot(state() && state().link));
     renderTally();
   }
 

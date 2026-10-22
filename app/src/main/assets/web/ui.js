@@ -72,6 +72,27 @@ export function clock(ms) {
 
 export const plural = (n, one, many) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
+/**
+ * The piano's link as a dot, as the tablet draws it (v1.27 — M63, its LinkDot; v1.27 — M64: every dot that shows the link
+ * reads it here): 'off', a ring, while it isn't connected (or the tablet can't be reached, [fresh] false); 'on', filled in
+ * ink, while it is and silent; 'live', the red, only while notes reach the piano (the state's link.sending, worked out on
+ * the tablet: a piece playing, its 24 V up).
+ */
+export function linkDot(link, fresh = true) {
+  if (!fresh || !link || link.state !== 'connected') return 'off';
+  return link.sending === true ? 'live' : 'on';
+}
+
+/** A `.dot`'s class for [shown] ([linkDot]): the ring, the ink, or the red. */
+export const dotClass = (shown) => (shown === 'on' || shown === 'live' ? `dot ${shown}` : 'dot');
+
+/** [node], a `.dot`, painted as [shown] says ([linkDot]); the red breathes unless [breathing] is false. */
+export function paintDot(node, shown, breathing = true) {
+  node.classList.toggle('on', shown === 'on');
+  node.classList.toggle('live', shown === 'live');
+  node.classList.toggle('breathing', breathing && shown === 'live');
+}
+
 /** Calls [fn] once things have been quiet for [ms]. */
 export function debounce(fn, ms) {
   let timer = null;
