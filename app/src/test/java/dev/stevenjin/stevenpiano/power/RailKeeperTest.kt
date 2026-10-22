@@ -352,6 +352,18 @@ class RailKeeperTest {
         assertEquals(listOf("CHECK", "ARM"), bench.kinds(from = back).take(2))
         assertEquals((0 until 7).toSet(), keeper.baseline.value)
         bench.assertEveryArmChecked()
+
+        // The check stopped while the piano restarts: nothing wants the rail, so the usual stop, not the plug's timer.
+        keeper.expectRestart(60_000)
+        bench.connected = false
+        advanceTimeBy(12_000)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        val ended = currentTime
+        keeper.wanted("safety", false)
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(2_000)
+        assertEquals(listOf("STOP", "CUT"), bench.kinds(from = ended))
+        assertEquals("calm, not a failure", RailMessage.Off, keeper.message.value)
     }
 
     @Test

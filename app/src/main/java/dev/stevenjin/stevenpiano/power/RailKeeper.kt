@@ -506,10 +506,15 @@ class RailKeeper(
             }
             if (read == null && !connected.value && now() < restartUntil) {
                 // The restart the safety check asked for (v1.27 — M64): the wants stay and the plug's timer bounds the rail;
-                // the loop waits for the piano, and the rail-up with its CHECK restores the baseline.
+                // once the piano is back the rail-up with its CHECK restores the baseline. Wanted no more before, the usual stop.
                 log("CHECK: no answer while the piano restarts, as the safety check asked")
                 _baseline.value = null
                 setPhase(RailPhase.Off)
+                waitFor { connected.value || !wantedNow() }
+                when {
+                    !available.value -> abandon()
+                    !wantedNow() -> stopRail()
+                }
                 return
             }
             val baseline = _baseline.value
