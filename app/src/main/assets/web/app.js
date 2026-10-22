@@ -1124,6 +1124,7 @@
     $('link-dot').classList.toggle('breathing', connected && playing);
     $('link-state').textContent = connected ? ', connected' : ', not connected';
     renderQuiet();
+    renderSafety();
     if (player.problem && player.problem !== shownProblem) toast(player.problem);
     shownProblem = player.problem;
     updateBackdrop();
@@ -1183,6 +1184,26 @@
     const until = Number(state.quiet.until);
     const text = until > 0 ? `Quiet until ${timeOfDay(until)}` : 'Quiet now';
     if ($('quiet-text').textContent !== text) $('quiet-text').textContent = text;
+  }
+
+  // ---- The safety check (v1.26 — M61) ----------------------------------------------------------------------------
+  //
+  // The state's `safety` ({running, step, of, locked, failedKeys, coil, text}; absent on older tablets: nothing). While a
+  // check runs on the tablet, or Play is locked until one passes there, Now playing's head says so in the tablet's own
+  // words: the dot on while it runs, amber while keys lock Play, red only for a key still on. A Play the tablet refuses
+  // meanwhile (409 safety) says why, as every refusal does. The panel can't start a check: the microphone needs the
+  // tablet in front.
+
+  function renderSafety() {
+    const safety = state && state.safety;
+    const on = !!(safety && safety.text && (safety.running || safety.locked));
+    $('safety-capsule').hidden = !on;
+    if (!on) return;
+    const dot = $('safety-dot');
+    dot.classList.toggle('on', !!safety.running);
+    dot.classList.toggle('attention', !safety.running && !!safety.locked && !safety.coil);
+    dot.classList.toggle('live', !safety.running && !!safety.coil);
+    if ($('safety-text').textContent !== safety.text) $('safety-text').textContent = safety.text;
   }
 
   $('quiet-override').addEventListener('click', async () => {

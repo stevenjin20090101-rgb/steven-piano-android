@@ -219,6 +219,7 @@ class AppWebBackend(
             quiet = graph.quiet.now(),
             listen = graph.listening.state.value,   // v1.23 — M55
             keytest = graph.keyTest.state.value,
+            safety = WebSafety.of(graph.safety.state.value),   // v1.26 — M61
         )
     }
 
@@ -882,6 +883,8 @@ class AppWebBackend(
     // ---- Quiet times (v1.20 — M54) ----------------------------------------------------------------------------------------
 
     override suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow = graph.quiet.now()
+
+    override suspend fun safetyRefusal(): String? = onMain { graph.safety.refusal() }
 
     override suspend fun quiet(): WebQuiet = WebQuiet(graph.schedules.sections(), graph.quiet.now())
 

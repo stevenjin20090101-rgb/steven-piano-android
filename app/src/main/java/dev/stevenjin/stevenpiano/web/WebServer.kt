@@ -397,7 +397,7 @@ class WebServer(
             WebApi.onlyKeys(body, setOf("pieceId", "queue"))
             val pieceId = WebApi.id(body, "pieceId")
             val queue = WebApi.idsOrNull(body, "queue")
-            quietRefusal()?.let { return@Route it }
+            startRefusal()?.let { return@Route it }
             if (backend.play(pieceId, queue)) noContent() else notFound()
         },
         Route(Method.POST, Regex("/api/play-all"), Access.WRITE, "/api/play-all") { call ->
@@ -407,7 +407,7 @@ class WebServer(
             val ids = WebApi.idsOrNull(body, "ids")
             val playlist = WebApi.wholeOrNull(body, "playlistId")
             if ((ids == null) == (playlist == null)) throw ApiError(400, "field", "Give ids or playlistId.")
-            quietRefusal()?.let { return@Route it }
+            startRefusal()?.let { return@Route it }
             val started = if (ids != null) ids.isNotEmpty() && backend.playAll(ids) else backend.playPlaylist(playlist!!)
             if (started) noContent() else notFound()
         },
@@ -415,7 +415,7 @@ class WebServer(
             val body = call.body()
             WebApi.onlyKeys(body, setOf("action"))
             val action = Transport.of(WebApi.string(body, "action", 16)) ?: throw ApiError(400, "field", "Unknown action.")
-            if (startsPlaying(action)) quietRefusal()?.let { return@Route it }
+            if (startsPlaying(action)) startRefusal()?.let { return@Route it }
             backend.transport(action)
             noContent()
         },
@@ -442,11 +442,11 @@ class WebServer(
         Route(Method.POST, Regex("/api/queue"), Access.WRITE, "/api/queue") { call ->
             val command = WebApi.queueCommand(call.body())
             // Playing an entry now starts it; what is added waits while quiet (the player keeps it, loaded, for Play).
-            if (command is QueueCommand.Skip) quietRefusal()?.let { return@Route it }
+            if (command is QueueCommand.Skip) startRefusal()?.let { return@Route it }
             if (backend.queue(command)) noContent() else notFound()
         },
         Route(Method.POST, Regex("/api/channels/([a-z0-9_-]{1,40})/play"), Access.WRITE, "/api/channels/calm/play") { call ->
-            quietRefusal()?.let { return@Route it }
+            startRefusal()?.let { return@Route it }
             when (backend.playChannel(call.groups[0])) {
                 ChannelStart.STARTED -> noContent()
                 ChannelStart.TOO_SMALL -> refuse(409, "too-small", "Add more pieces: this channel needs three at least.")
@@ -1233,6 +1233,16 @@ class WebServer(
         val zone = java.time.ZoneId.systemDefault()
         val now = QuietCopy.at(System.currentTimeMillis(), zone)
         return refuse(409, "quiet", QuietCopy.refusal(QuietCopy.until(QuietCopy.at(until, zone), now)))
+    }
+
+    /**
+     * Why a route that would start a piece is refused now: the safety check's lock, or a check due while the app is away
+     * (v1.26 — M61: 409 `safety`, the tablet's words; the panel can't start a check, the microphone needs the tablet in
+     * front), then a quiet time (409 `quiet`); null when the start may go.
+     */
+    private suspend fun startRefusal(): Response? {
+        backend.safetyRefusal()?.let { return refuse(409, "safety", it) }
+        return quietRefusal()
     }
 
     /** Whether [action] would start a piece: Play (a toggle while nothing plays, or Resume), Next, Previous. */

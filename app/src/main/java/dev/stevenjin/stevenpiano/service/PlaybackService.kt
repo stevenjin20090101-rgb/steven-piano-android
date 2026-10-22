@@ -31,6 +31,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -40,7 +42,9 @@ import kotlinx.coroutines.launch
  * the media notification and session and a partial wake lock while playing. Nothing starts it by
  * itself since 1.20 (M54: timed plays were removed). Pausing detaches the notification; a stop ends
  * the service. Swiping the app away, or the service ending while the piano is sounding, silences
- * the piano first (pedal up, then all notes off).
+ * the piano first (pedal up, then all notes off). While the safety check runs (v1.26 — M61: right after the 6th piece,
+ * a minute or two) the service stays in the foreground and awake, as while a piece plays, rather than ending after the
+ * gap it gives a piece's end.
  */
 class PlaybackService : Service() {
     private val scope = MainScope()
@@ -60,6 +64,7 @@ class PlaybackService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             .apply { setReferenceCounted(false) }
         scope.launch { player.state.collect(::render) }
+        scope.launch { graph.safety.state.map { it.running }.distinctUntilChanged().collect { render(player.state.value) } }   // v1.26 — M61
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -97,10 +102,11 @@ class PlaybackService : Service() {
 
     private fun render(state: PlayerState) {
         session.update(state)
-        val playing = state.status == PlaybackStatus.Playing
-        // Between pieces of a queue the player is stopped for 1.5 s, then plays whatever follows:
-        // the next piece, the top again (Repeat all) or the same piece (Repeat one).
-        val advancing = state.status == PlaybackStatus.Stopped && state.piece != null && state.problem == null &&
+        val checking = graph.safety.state.value.running   // v1.26 — M61: the safety check keeps the service as a piece does
+        val playing = state.status == PlaybackStatus.Playing || checking
+        // After a piece of a queue the player is stopped for 1.5 s, then what follows loads and waits for Play (one piece
+        // per Play, v1.26 — M61): the next piece, the top again (Repeat all) or the same piece (Repeat one).
+        val advancing = !checking && state.status == PlaybackStatus.Stopped && state.piece != null && state.problem == null &&
             state.queue.advancesAtEnd
         when {
             playing || state.loading || advancing -> {

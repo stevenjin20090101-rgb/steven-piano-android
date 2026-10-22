@@ -1273,6 +1273,45 @@ class WebServerTest {
     }
 
     @Test
+    fun `while the safety check locks Play, every route that would play answers 409 safety with its words and reaches nothing (v1_26 M61)`() {
+        val (server, http) = start()
+        val token = login(http)
+        backend.state = WebState(player = WebPlayer(queue = dev.stevenjin.stevenpiano.player.QueueSnapshot(listOf(1, 2), listOf(8, 9), 0)))
+        backend.safety = "Safety check failed: C2, F♯4"
+        backend.quietHeld = QuietNow(now = true, until = 1_800_000_000_000L, next = null)   // the lock speaks first
+        backend.calls.clear()
+        fun post(path: String, body: String) = http.api("POST", path, body, session = token)
+        val plays = listOf(
+            "/api/play" to """{"pieceId":1}""",
+            "/api/play-all" to """{"ids":[1,2]}""",
+            "/api/play-all" to """{"playlistId":10}""",
+            "/api/transport" to """{"action":"toggle"}""",
+            "/api/transport" to """{"action":"resume"}""",
+            "/api/transport" to """{"action":"next"}""",
+            "/api/transport" to """{"action":"previous"}""",
+            "/api/queue" to """{"action":"skip","uid":9}""",
+            "/api/channels/calm/play" to "{}",
+        )
+        for ((path, body) in plays) {
+            val refused = post(path, body)
+            assertEquals("$path $body", 409, refused.status)
+            assertEquals("safety", refused.json().getString("error"))
+            assertEquals("Safety check failed: C2, F♯4", refused.json().getString("message"))
+        }
+        assertEquals("nothing that would play reached the app", emptyList<String>(), backend.calls.toList())
+        // Pause and stop still go; the panel has no way to start a check.
+        assertEquals(204, post("/api/transport", """{"action":"pause"}""").status)
+        assertEquals(204, post("/api/transport", """{"action":"stop"}""").status)
+        assertTrue(server.routes.none { it.sample.contains("safety") })
+        // Unlocked (a check passed at the tablet): Play reaches the app again.
+        backend.safety = null
+        backend.quietHeld = QuietNow()
+        backend.calls.clear()
+        assertEquals(204, post("/api/play", """{"pieceId":1}""").status)
+        assertEquals(listOf("play 1 queue=null"), backend.calls.toList())
+    }
+
+    @Test
     fun `while a quiet time holds, every route that would play answers 409 and reaches nothing, and after Play anyway they play (v1_20 M54)`() {
         val (_, http) = start()
         val token = login(http)

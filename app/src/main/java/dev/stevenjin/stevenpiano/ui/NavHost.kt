@@ -129,6 +129,7 @@ import dev.stevenjin.stevenpiano.ui.components.LocalReducedTransparency
 import dev.stevenjin.stevenpiano.ui.components.MicrophoneBanner
 import dev.stevenjin.stevenpiano.ui.components.MiniPlayer
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
+import dev.stevenjin.stevenpiano.ui.components.SafetyCheckCard
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
 import dev.stevenjin.stevenpiano.ui.components.miniPlayerShown
 import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
@@ -364,7 +365,11 @@ fun PianoNavHost(
             }
             // Composed last, a sibling after the frame: above the glass bar, the mini player and the rail.
             DisplayOverlay(idle, kiosk, onLeave = onTouch)
-            // While the microphone is on (v1.23 — M55): on every screen, the resting screen too, with Stop.
+            // The safety check (v1.26 — M61): a full-screen card over every screen, the resting screen too, while a check
+            // runs and while Play is locked.
+            SafetyCheckCard()
+            // While the microphone is on (v1.23 — M55): on every screen, the resting screen too, with Stop; above the
+            // safety check's card, whose sweep it announces ("Microphone on · safety check").
             MicrophoneBanner(Modifier.align(Alignment.TopCenter))
         }
         if (kioskSheet && kiosk) KioskExitSheet(onDismiss = { kioskSheet = false })

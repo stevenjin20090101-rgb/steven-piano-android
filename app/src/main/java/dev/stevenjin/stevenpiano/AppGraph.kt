@@ -39,6 +39,7 @@ import dev.stevenjin.stevenpiano.audio.KeyTest
 import dev.stevenjin.stevenpiano.audio.KeyTestState
 import dev.stevenjin.stevenpiano.audio.ListenAnswer
 import dev.stevenjin.stevenpiano.audio.Listening
+import dev.stevenjin.stevenpiano.audio.MicrophoneStandIn
 import dev.stevenjin.stevenpiano.audio.PianoVoice
 import dev.stevenjin.stevenpiano.audio.TabletSound
 import dev.stevenjin.stevenpiano.ble.BlePermissions
@@ -1270,12 +1271,13 @@ class AppGraph(private val app: Application) {
      * The tablet's microphone for the web panel (DESIGN.md › v1.23 — M55): only with Listening from the panel on and Android's
      * permission, only while the app is in the foreground ([MainActivity] says so), each frame to the hearing sessions'
      * sockets alone, through the web service's hub (the listeners' and the relay's), nothing kept. The tablet hears for
-     * itself (its own Test every key, the safety check: v1.26 — M61) with Android's permission alone.
+     * itself (its own Test every key, the safety check: v1.26 — M61) with Android's permission alone. On the emulator in
+     * debug builds the microphone is a stand-in that hears the keys the key test strikes ([MicrophoneStandIn]).
      */
     val listening: Listening by lazy {
         Listening(
             appScope,
-            AndroidMicrophone(app),
+            MicrophoneStandIn.of(AndroidMicrophone(app)) { keyTest.state },
             allowedNow = { settings.value.listenFromPanel && microphoneAllowed() },
             sessionValid = { web.sessions.isValid(it) },
             send = { token, text -> web.hub?.sendToSession(token, text) ?: 0 },

@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -42,8 +43,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.audio.KeyTest
 import dev.stevenjin.stevenpiano.audio.KeyTestState
+import dev.stevenjin.stevenpiano.graph
+import dev.stevenjin.stevenpiano.safety.SafetyState
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.ListenCopy
+import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
@@ -56,24 +60,39 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoViewModel
 import dev.stevenjin.stevenpiano.ui.theme.LocalAttention
 import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import kotlinx.coroutines.launch
 
 /**
  * Listen and test (v1.23 — M55; DESIGN.md › v1.23 — M55), a card of the System page: **Listening from the panel**, the
  * switch that lets the web panel hear the room through the tablet's microphone (off by default; turning it on asks Android
- * for the microphone first; behind the kiosk PIN as the page is), and **Test every key**, which strikes the piano's 84
- * keys in turn while the microphone hears which didn't sound: no live sound here, its progress ("Key 37 of 84") and then
- * the keyboard map, the keys not heard in the attention amber with the words that name them.
+ * for the microphone first; behind the kiosk PIN as the page is); **Automatic safety check (uses the microphone)**
+ * (v1.26 — M61; on by default, asking Android for the microphone when turned on, and saying so while Android hasn't
+ * allowed it), with how the last check went ("Last safety check: today 14:20 · all 84 keys"), a check due, or Play locked;
+ * and **Test every key**, which strikes the piano's 84 keys in turn while the microphone hears which didn't sound: no
+ * live sound here, its progress ("Key 37 of 84") and then the keyboard map, the keys not heard in the attention amber with
+ * the words that name them.
  */
 @Composable
 internal fun ListenCard(vm: PianoViewModel, gate: KioskGate) {
     val listen by vm.listen.collectAsStateWithLifecycle()
     val test by vm.keyTest.collectAsStateWithLifecycle()
+    val graph = LocalContext.current.graph
+    val settings by graph.settings.collectAsStateWithLifecycle()
+    val safety by graph.safety.state.collectAsStateWithLifecycle()
     var refused by rememberSaveable { mutableStateOf(false) }
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refused = !granted
         if (granted) vm.microphoneGranted()
     }
+    val setCheckListens: (Boolean) -> Unit = { on -> graph.appScope.launch { graph.settingsRepository.setSafetyCheckListens(on) } }
+    val askForCheck = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            setCheckListens(true)
+            graph.listening.refresh()
+        }
+    }
+    val microphone = listen.allowed || vm.microphoneAllowed()
     SystemCard(ListenCopy.TITLE, ListenCopy.LINE) {
         Anchored(PageRows.LISTEN_FROM_PANEL.anchor) {
             SwitchRow(
@@ -93,6 +112,31 @@ internal fun ListenCard(vm: PianoViewModel, gate: KioskGate) {
             )
         }
         if (refused && !listen.allowed) NoteLine(ListenCopy.NOT_ALLOWED)
+        // The safety check (v1.26 — M61): its microphone, and how the last check went.
+        SwitchRow(
+            SafetyCopy.SWITCH,
+            checked = settings.safetyCheckListens && microphone,
+            onChange = { on ->
+                gate.run {
+                    when {
+                        !on -> setCheckListens(false)
+                        microphone -> setCheckListens(true)
+                        else -> askForCheck.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            },
+            note = SafetyCopy.SWITCH_NOTE,
+            locked = gate.locked,
+        )
+        if (settings.safetyCheckListens && !microphone) NoteLine(SafetyCopy.NO_PERMISSION)
+        Text(
+            safetyLine(safety, System.currentTimeMillis()),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (safety.lock != null) LocalAttention.current else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Anchored(PageRows.TEST_EVERY_KEY.anchor) {
             ActionRow(note = said ?: ListenCopy.TEST_NOTE) {
                 if (test.running) {
@@ -120,6 +164,21 @@ internal fun ListenCard(vm: PianoViewModel, gate: KioskGate) {
             color = if (test.results?.any { !it.heard } == true) LocalAttention.current else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * The safety check's line (v1.26 — M61): Play locked and why, or how the last check went ("Last safety check: today 14:20 ·
+ * all 84 keys"), or none yet; with "A safety check runs before the next piece." while one is due.
+ */
+private fun safetyLine(safety: SafetyState, now: Long): String {
+    val lock = safety.lock
+    val last = safety.last
+    val said = when {
+        lock != null -> SafetyCopy.locked(lock)
+        last != null -> SafetyCopy.last(last, now)
+        else -> SafetyCopy.NEVER
+    }
+    return if (safety.pending && lock == null && !safety.running) "$said. ${SafetyCopy.DUE}" else said
 }
 
 /** What the test says now: its progress while it runs, then the result, or why it stopped, or that none ran yet. */
@@ -151,10 +210,11 @@ private fun shadeOf(key: Int, test: KeyTestState, heard: Map<Int, Boolean>?): Sh
 /**
  * The piano's 84 keys as seven octaves, C1 to C7, in the board octaves' style: while the test runs the keys struck so far,
  * the one struck now in the content colour, those to come faint; then every key heard as the octaves draw an answering
- * board's, every key not heard in the attention amber. TalkBack reads the line beside it, which names those keys.
+ * board's, every key not heard in the attention amber. TalkBack reads the line beside it, which names those keys. The
+ * safety check's card shows the keys that locked Play on it too (v1.26 — M61).
  */
 @Composable
-private fun KeyMap(test: KeyTestState) {
+internal fun KeyMap(test: KeyTestState) {
     val content = MaterialTheme.colorScheme.onSurface
     val card = MaterialTheme.colorScheme.surfaceVariant
     val hairline = LocalHairline.current

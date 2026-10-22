@@ -306,6 +306,12 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
 
     override suspend fun quietNow(): QuietNow = quietHeld
 
+    /** Why Play is refused by the safety check (v1.26 — M61), as the test sets it; null: Play may go. */
+    @Volatile
+    var safety: String? = null
+
+    override suspend fun safetyRefusal(): String? = safety
+
     override suspend fun quiet(): WebQuiet = WebQuiet(sectionsHeld.toList(), quietHeld)
 
     override suspend fun saveQuiet(sections: List<QuietSection>) {
