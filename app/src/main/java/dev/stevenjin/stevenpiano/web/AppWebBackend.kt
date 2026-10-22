@@ -318,23 +318,23 @@ class AppWebBackend(
         return true
     }
 
-    override suspend fun playAll(ids: List<Long>, shuffle: Boolean): Boolean {
+    override suspend fun playAll(ids: List<Long>): Boolean {
         val held = library { graph.library.summaries(ids) }.orEmpty()
         val kept = ids.filter { it in held }
         if (kept.isEmpty()) return false
         onMain {
-            graph.player.playAll(kept, shuffle)
+            graph.player.playAll(kept)
             startPlayback()
         }
         return true
     }
 
-    override suspend fun playPlaylist(id: Long, shuffle: Boolean): Boolean {
+    override suspend fun playPlaylist(id: Long): Boolean {
         if (playlists().none { it.id == id }) return false
         val ids = library { graph.library.inPlaylist(id).first() }.orEmpty().map { it.id }
         if (ids.isEmpty()) return false
         onMain {
-            graph.player.playAll(ids, shuffle)
+            graph.player.playAll(ids)
             startPlayback()
         }
         return true
@@ -364,8 +364,6 @@ class AppWebBackend(
     }
 
     override suspend fun setTempo(pct: Int) = onMain { graph.player.setTempo(pct) }
-
-    override suspend fun setShuffle(on: Boolean) = onMain { graph.player.setShuffle(on) }
 
     override suspend fun setRepeat(mode: RepeatMode) = onMain { graph.player.setRepeat(mode) }
 

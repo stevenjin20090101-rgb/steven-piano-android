@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The app's outlined buttons (ActionButton, Disconnect and Cancel, Shuffle, Add MIDI files) label in
+ * The app's outlined buttons (ActionButton, Disconnect and Cancel, a playlist's Play, Add MIDI files) label in
  * the content colour, and in the secondary one only when unavailable (DESIGN.md › v1.5 › Action row),
  * not in Material 3's outlined default, the secondary ink whether enabled or not.
  */

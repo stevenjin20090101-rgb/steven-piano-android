@@ -402,13 +402,13 @@ class WebServer(
         },
         Route(Method.POST, Regex("/api/play-all"), Access.WRITE, "/api/play-all") { call ->
             val body = call.body()
-            WebApi.onlyKeys(body, setOf("ids", "playlistId", "shuffle"))
-            val shuffle = WebApi.boolOrNull(body, "shuffle") ?: false
+            // v1.26 — M61: no shuffle anywhere; a body that still sends one is answered 400 (an unknown field).
+            WebApi.onlyKeys(body, setOf("ids", "playlistId"))
             val ids = WebApi.idsOrNull(body, "ids")
             val playlist = WebApi.wholeOrNull(body, "playlistId")
             if ((ids == null) == (playlist == null)) throw ApiError(400, "field", "Give ids or playlistId.")
             quietRefusal()?.let { return@Route it }
-            val started = if (ids != null) ids.isNotEmpty() && backend.playAll(ids, shuffle) else backend.playPlaylist(playlist!!, shuffle)
+            val started = if (ids != null) ids.isNotEmpty() && backend.playAll(ids) else backend.playPlaylist(playlist!!)
             if (started) noContent() else notFound()
         },
         Route(Method.POST, Regex("/api/transport"), Access.WRITE, "/api/transport") { call ->
@@ -431,12 +431,6 @@ class WebServer(
             val body = call.body()
             WebApi.onlyKeys(body, setOf("pct"))
             backend.setTempo(WebApi.int(body, "pct", PlaybackLimits.TempoPct))
-            noContent()
-        },
-        Route(Method.POST, Regex("/api/shuffle"), Access.WRITE, "/api/shuffle") { call ->
-            val body = call.body()
-            WebApi.onlyKeys(body, setOf("on"))
-            backend.setShuffle(WebApi.bool(body, "on"))
             noContent()
         },
         Route(Method.POST, Regex("/api/repeat"), Access.WRITE, "/api/repeat") { call ->

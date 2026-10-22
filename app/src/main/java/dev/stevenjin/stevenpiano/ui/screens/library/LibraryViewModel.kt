@@ -297,7 +297,7 @@ class LibraryViewModel(
     fun reorderPlaylist(playlistId: Long, orderedIds: List<Long>) = write { library.reorderPlaylist(playlistId, orderedIds) }
 
     /**
-     * A composer's pieces of the genre shown, by title, for Play all and Shuffle on the composer's tile. Nothing plays
+     * A composer's pieces of the genre shown, by title, for Play all on the composer's tile. Nothing plays
      * if they can't be read.
      */
     fun composerPieces(composerKey: String, then: (List<Long>) -> Unit) {

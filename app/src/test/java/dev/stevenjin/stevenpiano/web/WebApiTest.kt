@@ -173,7 +173,7 @@ class WebApiTest {
                 tempoPct = 90,
                 preRollMs = 2_000,
                 channel = WebChannelPlaying("calm", "Calm", 70),
-                queue = QueueSnapshot(listOf(1, 2), listOf(5, 6), 0, shuffle = false, repeat = RepeatMode.ALL),
+                queue = QueueSnapshot(listOf(1, 2), listOf(5, 6), 0, repeat = RepeatMode.ALL),
                 items = listOf(WebQueueItem(5, piece), WebQueueItem(6, piece.copy(id = 2), requested = true)),
             ),
             link = WebLink("connected", "Steven Piano"),
@@ -209,7 +209,7 @@ class WebApiTest {
         assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "artVersion"), player.getJSONObject("piece").keys().asSequence().toSet())
         assertEquals("Calm", player.getJSONObject("channel").getString("name"))
         val queue = player.getJSONObject("queue")
-        assertEquals(setOf("ids", "uids", "index", "shuffle", "repeat", "items"), queue.keys().asSequence().toSet())
+        assertEquals("no shuffle (v1.26 — M61)", setOf("ids", "uids", "index", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
         assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display", "quiet", "listen", "keytest"), json.keys().asSequence().toSet())

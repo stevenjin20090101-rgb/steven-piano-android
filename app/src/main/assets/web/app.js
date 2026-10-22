@@ -1094,8 +1094,6 @@
     const queue = player.queue;
     $('now-previous').disabled = !piece;
     $('now-next').disabled = !piece || (queue.index + 1 >= queue.ids.length && queue.repeat !== 'all');
-    $('now-shuffle').setAttribute('aria-pressed', queue.shuffle ? 'true' : 'false');
-    $('now-shuffle').setAttribute('aria-label', queue.shuffle ? 'Shuffle on' : 'Shuffle off');
     $('now-repeat').setAttribute('aria-pressed', queue.repeat !== 'off' ? 'true' : 'false');
     $('now-repeat').setAttribute('aria-label', { off: 'Repeat off', all: 'Repeat all', one: 'Repeat one' }[queue.repeat]);
     $('now-repeat-glyph').setAttribute('href', queue.repeat === 'one' ? '#i-repeat-one' : '#i-repeat');
@@ -1452,13 +1450,6 @@
   $('now-play').addEventListener('click', transport('toggle'));
   $('now-previous').addEventListener('click', transport('previous'));
   $('now-next').addEventListener('click', transport('next'));
-  $('now-shuffle').addEventListener('click', async () => {
-    try {
-      await post(ROOT + '/api/shuffle', { on: !state.player.queue.shuffle });
-    } catch (e) {
-      failed(e);
-    }
-  });
   $('now-repeat').addEventListener('click', async () => {
     const next = { off: 'all', all: 'one', one: 'off' }[state.player.queue.repeat];
     try {
@@ -2163,7 +2154,7 @@
   function openPlaylist(list) {
     return libraryAsk(() => get(ROOT + `/api/playlists/${list.id}`), (detail) => {
       showGroup(detail.playlist.name, [detail.playlist.builtIn ? 'Built in' : null, plural(detail.pieces.length, 'piece', 'pieces')].filter(Boolean).join(' · '), detail.pieces,
-        (shuffle) => post(ROOT + '/api/play-all', { playlistId: list.id, shuffle }));
+        () => post(ROOT + '/api/play-all', { playlistId: list.id }));
     }, false);
   }
 
@@ -2193,16 +2184,16 @@
     return libraryAsk(() => get(scoped(ROOT + `/api/composers/${encodeURIComponent(composer.key)}`)), (detail) => {
       const ids = detail.pieces.map((p) => p.id);
       showGroup(detail.composer.name || unknownName(), plural(detail.pieces.length, 'piece', 'pieces'), detail.pieces,
-        (shuffle) => post(ROOT + '/api/play-all', { ids, shuffle }));
+        () => post(ROOT + '/api/play-all', { ids }));
     }, false);
   }
 
-  /** A playlist or a composer opened: back, its name, Play and Shuffle, then its pieces. */
+  /** A playlist or a composer opened: back, its name, Play (from the top, in order: v1.26 — M61), then its pieces. */
   function showGroup(name, meta, pieces, playAll) {
     const crumb = $('lib-crumb');
-    const run = (shuffle) => async () => {
+    const run = async () => {
       try {
-        await playAll(shuffle);
+        await playAll();
         toast('Playing on the piano.');
       } catch (e) {
         failed(e);
@@ -2211,8 +2202,7 @@
     crumb.replaceChildren(
       h('button', { class: 'icon-button', type: 'button', 'aria-label': 'Back', onclick: () => libraryLoad(true) }, glyph('i-back')),
       h('div', { class: 'text' }, h('p', { class: 'title', text: name }), h('p', { class: 'eyebrow', text: meta })),
-      h('button', { class: 'outlined', type: 'button', onclick: run(false), disabled: pieces.length === 0 }, glyph('i-play'), 'Play'),
-      h('button', { class: 'outlined', type: 'button', onclick: run(true), disabled: pieces.length === 0 }, 'Shuffle'));
+      h('button', { class: 'outlined', type: 'button', onclick: run, disabled: pieces.length === 0 }, glyph('i-play'), 'Play'));
     crumb.hidden = false;
     $('lib-more').hidden = true;
     library.listKey = 'group';

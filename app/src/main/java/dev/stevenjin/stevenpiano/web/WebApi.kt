@@ -404,7 +404,6 @@ object WebApi {
                             .put("ids", JSONArray(p.queue.ids))
                             .put("uids", JSONArray(p.queue.uids))
                             .put("index", p.queue.index)
-                            .put("shuffle", p.queue.shuffle)
                             .put("repeat", p.queue.repeat.name.lowercase())
                             .put("items", JSONArray().apply { p.items.forEach { put(piece(it.piece).put("uid", it.uid).put("requested", it.requested)) } }),
                     )

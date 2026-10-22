@@ -15,7 +15,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.random.Random
 
 class QueueTest {
     private val ids = listOf(1L, 2L, 3L, 4L, 5L, 6L)
@@ -55,7 +54,7 @@ class QueueTest {
         assertEquals(null, Queue.Empty.current)
     }
 
-    // v1.2: repeat, Up next, shuffle.
+    // v1.2: repeat and Up next (shuffle was removed in v1.26 — M61: the order is always the one given).
 
     @Test
     fun `repeat all wraps both ways, the other modes stop at the ends`() {
@@ -105,36 +104,7 @@ class QueueTest {
     }
 
     @Test
-    fun `shuffle keeps the current piece first and gives the order back when turned off`() {
-        val q = Queue.startingAt(3, ids)
-        val shuffled = q.withShuffle(true, Random(7))
-        assertTrue(shuffled.shuffled)
-        assertEquals(0, shuffled.index)
-        assertEquals(3L, shuffled.playing)
-        assertEquals(ids.toSet(), shuffled.pieces.toSet())
-        val restored = shuffled.next().withShuffle(false, Random(7))
-        assertFalse(restored.shuffled)
-        assertEquals(ids, restored.pieces)
-        assertEquals(shuffled.next().playing, restored.playing)
-        assertSame(q, q.withShuffle(false, Random(7)))
-    }
-
-    @Test
-    fun `play next while shuffled lands after the current piece in both orders`() {
-        val shuffled = Queue.startingAt(3, ids).withShuffle(true, Random(1)).playNext(listOf(9L))
-        assertEquals(listOf(3L, 9L), shuffled.pieces.take(2))
-        assertEquals(listOf(1L, 2L, 3L, 9L, 4L, 5L, 6L), shuffled.withShuffle(false, Random(1)).pieces)
-    }
-
-    @Test
-    fun `added while shuffled comes back right after the current piece`() {
-        val shuffled = Queue.startingAt(3, ids).withShuffle(true, Random(2)).addToQueue(listOf(8L))
-        assertEquals(8L, shuffled.pieces.last())
-        assertEquals(listOf(1L, 2L, 3L, 8L, 4L, 5L, 6L), shuffled.withShuffle(false, Random(2)).pieces)
-    }
-
-    @Test
-    fun `remove takes an entry out of both orders, but never the one playing`() {
+    fun `remove takes an entry out, but never the one playing`() {
         val q = Queue.startingAt(3, ids)
         val without4 = q.remove(q.uidOf(4))
         assertEquals(listOf(1L, 2L, 3L, 5L, 6L), without4.pieces)
@@ -142,20 +112,14 @@ class QueueTest {
         val without1 = q.remove(q.uidOf(1))
         assertEquals(1, without1.index)
         assertEquals(3L, without1.playing)
-        val shuffled = q.withShuffle(true, Random(3))
-        assertEquals(listOf(1L, 2L, 3L, 5L, 6L), shuffled.remove(shuffled.uidOf(4)).withShuffle(false, Random(3)).pieces)
     }
 
     @Test
-    fun `move rearranges up next only, and never the order shuffle came from`() {
+    fun `move rearranges up next only`() {
         val q = Queue.startingAt(2, listOf(1L, 2L, 3L, 4L, 5L))
         assertEquals(listOf(1L, 2L, 5L, 3L, 4L), q.move(q.uidOf(5), 0).pieces)
         assertEquals(listOf(1L, 2L, 4L, 5L, 3L), q.move(q.uidOf(3), 99).pieces)
         assertSame(q, q.move(q.uidOf(1), 0))   // behind the current piece: not up next
-        val shuffled = q.withShuffle(true, Random(4))
-        val moved = shuffled.move(shuffled.upNext.last().uid, 0)
-        assertEquals(shuffled.upNext.last().pieceId, moved.upNext.first().pieceId)
-        assertEquals(listOf(1L, 2L, 3L, 4L, 5L), moved.withShuffle(false, Random(4)).pieces)
     }
 
     @Test
@@ -165,8 +129,6 @@ class QueueTest {
         assertEquals(listOf(1L, 2L), cleared.pieces)
         assertEquals(2L, cleared.playing)
         assertFalse(cleared.hasNext)
-        val shuffled = q.withShuffle(true, Random(5)).clearUpNext()
-        assertEquals(listOf(2L), shuffled.withShuffle(false, Random(5)).pieces)
     }
 
     @Test
@@ -179,29 +141,27 @@ class QueueTest {
     }
 
     @Test
-    fun `a new queue keeps the modes - shuffled, the piece tapped plays first`() {
-        val modes = Queue.Empty.withShuffle(true, Random(6)).withRepeat(RepeatMode.ALL)
-        assertTrue(modes.shuffled)
-        val q = Queue.startingAt(4, ids, modes, Random(6))
+    fun `a new queue keeps the repeat mode and the order given, the piece tapped where it stands (v1_26 M61)`() {
+        val modes = Queue.Empty.withRepeat(RepeatMode.ALL)
+        val q = Queue.startingAt(4, ids, modes)
         assertEquals(4L, q.playing)
-        assertEquals(0, q.index)
-        assertTrue(q.shuffled)
+        assertEquals(3, q.index)
+        assertEquals("the order given, never shuffled", ids, q.pieces)
         assertEquals(RepeatMode.ALL, q.repeat)
-        assertEquals(ids, q.withShuffle(false, Random(6)).pieces)
     }
 
     @Test
-    fun `play all runs from the top, or shuffles every piece`() {
-        val inOrder = Queue.all(ids, shuffle = false)
+    fun `play all runs from the top in the order given, every time (v1_26 M61)`() {
+        val inOrder = Queue.all(ids)
         assertEquals(ids, inOrder.pieces)
         assertEquals(1L, inOrder.playing)
-        assertFalse(inOrder.shuffled)
-        val shuffled = Queue.all(ids, shuffle = true, random = Random(8))
-        assertTrue(shuffled.shuffled)
-        assertEquals(0, shuffled.index)
-        assertEquals(ids.toSet(), shuffled.pieces.toSet())
-        assertEquals(ids, shuffled.withShuffle(false, Random(8)).pieces)
-        assertNull(Queue.all(emptyList(), shuffle = false).current)
+        assertEquals(0, inOrder.index)
+        assertEquals("again: the same order", ids, Queue.all(ids, inOrder).pieces)
+        assertNull(Queue.all(emptyList()).current)
+        // Up next as it was given, whatever is added and however it moves on.
+        val moved = inOrder.next().next().addToQueue(listOf(9L)).playNext(listOf(8L))
+        assertEquals(listOf(1L, 2L, 3L, 8L, 4L, 5L, 6L, 9L), moved.pieces)
+        assertEquals(listOf(8L, 4L, 5L, 6L, 9L), moved.snapshot().upNextIds)
     }
 
     @Test

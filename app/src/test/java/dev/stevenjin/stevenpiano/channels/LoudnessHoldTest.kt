@@ -61,7 +61,7 @@ class LoudnessHoldTest {
         private val flow = MutableStateFlow(PlayerState())
         override val state: StateFlow<PlayerState> = flow
 
-        override fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String?) = Unit
+        override fun playAll(pieceIds: List<Long>, channel: String?) = Unit
 
         override fun addToQueue(pieceIds: List<Long>, channel: String?): Boolean = false
 

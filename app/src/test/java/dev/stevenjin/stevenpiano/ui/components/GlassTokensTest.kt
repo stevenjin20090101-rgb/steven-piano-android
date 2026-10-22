@@ -66,7 +66,7 @@ class GlassTokensTest {
 
     @Test
     fun `on a bar secondary glyphs clear 3 to 1, and neither the secondary text nor the tertiary grey would clear 4_5`() {
-        // The tab bar's unselected glyphs, the transport's Shuffle and Repeat while off: graphics, 3:1.
+        // The tab bar's unselected glyphs, the transport's Repeat while off: graphics, 3:1.
         assertTrue(Wcag.contrast(SilverSecondary, darkGlass(GlassTokens.ContainerAlpha)) >= 3.0)
         assertTrue(Wcag.contrast(CarbonSecondary, lightGlass(GlassTokens.ContainerAlpha)) >= 3.0)
         // Why a bar's text is the content colour (a header's byline, its progress lines, with content beneath).

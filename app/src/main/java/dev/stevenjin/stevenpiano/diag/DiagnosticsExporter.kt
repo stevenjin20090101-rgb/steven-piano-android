@@ -200,7 +200,6 @@ object DiagnosticsText {
         line("expression", s.expression)
         line("restrikeMs", s.restrikeMs)
         line("keysViewportStart", s.keysViewportStart)
-        line("shuffle", s.shuffle)
         line("repeat", s.repeat)
         line("artworkMonochrome", s.artworkMonochrome)
         line("fetchArtworkAutomatically", s.fetchArtworkAutomatically)

@@ -113,10 +113,10 @@ class WebServerTest {
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
         assertEquals(
-            "the table's thirty-four routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
+            "the table's thirty-three routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
                 "three from 1.18, the quiet times' two from 1.20, listening's and the key test's four from 1.23, Confirm it's you from 1.24; " +
-                "the schedules' three, gone since 1.20, left the table in 1.24)",
-            34,
+                "the schedules' three, gone since 1.20, left the table in 1.24; Shuffle's, gone in 1.26)",
+            33,
             writes.size,
         )
         assertTrue(writes.any { it.sample == "/api/confirm" } && server.routes.none { it.sample.startsWith("/api/schedules") })
@@ -969,12 +969,14 @@ class WebServerTest {
         assertEquals(400, post("/api/seek", """{"ms":-1}"""))
         assertEquals(204, post("/api/tempo", """{"pct":80}"""))
         assertEquals(400, post("/api/tempo", """{"pct":300}"""))
-        assertEquals(204, post("/api/shuffle", """{"on":true}"""))
+        assertEquals("shuffle is gone (v1.26 — M61)", 404, post("/api/shuffle", """{"on":true}"""))
         assertEquals(204, post("/api/repeat", """{"mode":"one"}"""))
         assertEquals(400, post("/api/repeat", """{"mode":"twice"}"""))
         assertEquals(204, post("/api/queue", """{"action":"move","uid":8,"toIndex":0}"""))
         assertEquals("a stale entry", 404, post("/api/queue", """{"action":"remove","uid":99}"""))
-        assertEquals(204, post("/api/play-all", """{"playlistId":10,"shuffle":true}"""))
+        assertEquals("no shuffle to ask for (v1.26 — M61)", 400, post("/api/play-all", """{"playlistId":10,"shuffle":true}"""))
+        assertEquals(400, post("/api/play-all", """{"playlistId":10,"shuffle":false}"""))
+        assertEquals(204, post("/api/play-all", """{"playlistId":10}"""))
         assertEquals(400, post("/api/play-all", """{"playlistId":10,"ids":[1]}"""))
         assertEquals(204, post("/api/channels/calm/play", "{}"))
         assertEquals(409, post("/api/channels/tiny/play", "{}"))
@@ -983,8 +985,8 @@ class WebServerTest {
         assertEquals(400, http.api("PUT", "/api/channels/calm/volume", """{"pct":140}""", session = token).status)
         assertEquals(
             listOf(
-                "transport next", "seek 90000", "tempo 80", "shuffle true", "repeat one", "queue Move(uid=8, toIndex=0)", "queue Remove(uid=99)",
-                "play-playlist 10 shuffle=true", "channel play calm", "channel volume calm 40",
+                "transport next", "seek 90000", "tempo 80", "repeat one", "queue Move(uid=8, toIndex=0)", "queue Remove(uid=99)",
+                "play-playlist 10", "channel play calm", "channel volume calm 40",
             ),
             backend.calls.toList(),
         )

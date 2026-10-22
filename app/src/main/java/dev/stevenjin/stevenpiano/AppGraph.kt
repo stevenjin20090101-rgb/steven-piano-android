@@ -832,9 +832,9 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * From [App.onCreate]: settings flow into the player; the queue's shuffle and repeat start as
-     * they were left and are remembered whenever they change; the piano is reached if the person
-     * allows it; files a crashed import left behind are swept away.
+     * From [App.onCreate]: settings flow into the player; the queue's repeat starts as it was left
+     * and is remembered whenever it changes (shuffle's old key is removed once: v1.26 — M61); the
+     * piano is reached if the person allows it; files a crashed import left behind are swept away.
      */
     @OptIn(FlowPreview::class)
     fun start() {
@@ -861,13 +861,15 @@ class AppGraph(private val app: Application) {
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         pianoSettings.start()
         appScope.launch {
+            try {
+                settingsRepository.forgetShuffle()   // v1.26 — M61: shuffle is gone; its stored value goes once
+            } catch (e: java.io.IOException) {
+                Log.w(TAG, "Shuffle's old setting couldn't be removed")
+            }
             val saved = settingsRepository.settings.first()
-            player.setShuffle(saved.shuffle)
             player.setRepeat(saved.repeat)
-            player.state.map { it.queue.shuffle to it.queue.repeat }.distinctUntilChanged().collect { (shuffle, repeat) ->
-                val stored = settingsRepository.settings.first()
-                if (stored.shuffle != shuffle) settingsRepository.setShuffle(shuffle)
-                if (stored.repeat != repeat) settingsRepository.setRepeat(repeat)
+            player.state.map { it.queue.repeat }.distinctUntilChanged().collect { repeat ->
+                if (settingsRepository.settings.first().repeat != repeat) settingsRepository.setRepeat(repeat)
             }
         }
         appScope.launch {

@@ -34,8 +34,9 @@ import kotlinx.coroutines.launch
 /**
  * The media session: the lock screen, the system's media controls, headset buttons and car
  * displays see the player through it and drive it back. It mirrors [PlayerState]: the piece, the
- * position, the shuffle and repeat modes, and a window of the queue (at most 50 entries, a Binder
+ * position, the repeat mode, and a window of the queue (at most 50 entries, a Binder
  * limit), named through [names] (the library, off the main thread). [onStop] ends the service.
+ * Shuffle is neither offered nor shown (v1.26 — M61: the queue keeps its order everywhere).
  * Create it, and call it, on the main thread, like the player.
  */
 class MediaSessionHolder(
@@ -60,8 +61,6 @@ class MediaSessionHolder(
 
                 override fun onSeekTo(positionMs: Long) = player.seek(positionMs * 1_000L)
 
-                override fun onSetShuffleMode(shuffleMode: Int) = player.setShuffle(shuffleMode != PlaybackStateCompat.SHUFFLE_MODE_NONE)
-
                 override fun onSetRepeatMode(repeatMode: Int) = player.setRepeat(repeatOf(repeatMode))
 
                 override fun onStop() {
@@ -75,7 +74,6 @@ class MediaSessionHolder(
         isActive = true
     }
     private var shownPieceId: Long? = null
-    private var shownShuffle: Boolean? = null
     private var shownRepeat: RepeatMode? = null
     private var shownWindow: List<Long>? = null
     private var queueJob: Job? = null
@@ -97,10 +95,6 @@ class MediaSessionHolder(
             )
         }
         val queue = state.queue
-        if (queue.shuffle != shownShuffle) {
-            shownShuffle = queue.shuffle
-            session.setShuffleMode(if (queue.shuffle) PlaybackStateCompat.SHUFFLE_MODE_ALL else PlaybackStateCompat.SHUFFLE_MODE_NONE)
-        }
         if (queue.repeat != shownRepeat) {
             shownRepeat = queue.repeat
             session.setRepeatMode(repeatModeOf(queue.repeat))
@@ -177,8 +171,7 @@ class MediaSessionHolder(
         const val ACTIONS = PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or
             PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_SEEK_TO or PlaybackStateCompat.ACTION_STOP or
-            PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM or PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE or
-            PlaybackStateCompat.ACTION_SET_REPEAT_MODE
+            PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM or PlaybackStateCompat.ACTION_SET_REPEAT_MODE
 
         fun repeatModeOf(mode: RepeatMode): Int = when (mode) {
             RepeatMode.OFF -> PlaybackStateCompat.REPEAT_MODE_NONE

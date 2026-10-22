@@ -71,11 +71,11 @@ interface WebBackend {
     /** Plays piece [pieceId], then [queue] around it (just the piece when null). False when the library has no such piece. */
     suspend fun play(pieceId: Long, queue: List<Long>?): Boolean
 
-    /** Plays [ids] from the top (in random order when [shuffle]); the ones the library does not hold are left out. False when none is left. */
-    suspend fun playAll(ids: List<Long>, shuffle: Boolean): Boolean
+    /** Plays [ids] from the top, in their order; the ones the library does not hold are left out. False when none is left. */
+    suspend fun playAll(ids: List<Long>): Boolean
 
-    /** Plays playlist [id] from the top, or shuffled. False when it does not exist or is empty. */
-    suspend fun playPlaylist(id: Long, shuffle: Boolean): Boolean
+    /** Plays playlist [id] from the top, in its order. False when it does not exist or is empty. */
+    suspend fun playPlaylist(id: Long): Boolean
 
     suspend fun transport(action: Transport)
 
@@ -84,8 +84,6 @@ interface WebBackend {
 
     /** The live tempo, already checked to be in range. */
     suspend fun setTempo(pct: Int)
-
-    suspend fun setShuffle(on: Boolean)
 
     suspend fun setRepeat(mode: RepeatMode)
 

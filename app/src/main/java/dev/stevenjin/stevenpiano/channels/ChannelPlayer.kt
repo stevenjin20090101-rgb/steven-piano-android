@@ -13,14 +13,13 @@ import dev.stevenjin.stevenpiano.player.PlayerState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 /** What a channel needs from the player (`Player`; a fake in tests). */
 interface ChannelDeck {
     val state: StateFlow<PlayerState>
 
-    /** Plays [pieceIds] from the top ([shuffle]: in random order); with [channel], as that channel's. */
-    fun playAll(pieceIds: List<Long>, shuffle: Boolean, channel: String? = null)
+    /** Plays [pieceIds] from the top, in their order; with [channel], as that channel's. */
+    fun playAll(pieceIds: List<Long>, channel: String? = null)
 
     /** Queues [pieceIds] at the end; [channel] marks them as its top-up. True when they started playing (nothing was queued). */
     fun addToQueue(pieceIds: List<Long>, channel: String? = null): Boolean
@@ -51,13 +50,12 @@ interface PianoVolume {
 }
 
 /**
- * Endless play from a channel's pool (DESIGN.md › v1.5 — M17). [play] shuffles the pool into a
- * deck and starts the first [FIRST] pieces as the channel's queue; while it plays, whenever fewer
- * than [TOP_UP_BELOW] pieces are up next, the next [TOP_UP] are added. When the deck runs out the
- * pool is shuffled again without the last [RECENT] pieces dealt (at most half the pool, so a small
- * pool still shuffles), so nothing repeats until the pool is exhausted and nothing just heard comes
- * straight back. [stop] is the player's stop; the channel ends whenever [PlayerState.channel] stops
- * being its key.
+ * Endless play from a channel's pool (DESIGN.md › v1.5 — M17). [play] deals the pool in its own order (the library's,
+ * as [pools] gives it; v1.26 — M61: no shuffle anywhere) and starts the first [FIRST] pieces as the channel's queue;
+ * while it plays, whenever fewer than [TOP_UP_BELOW] pieces are up next, the next [TOP_UP] are added. When the pool
+ * runs out it is dealt again from its top, so nothing repeats until the pool is exhausted. One piece plays per Play
+ * (`Player.MAX_IN_A_ROW`): the channel's next piece waits, loaded, for it. [stop] is the player's stop; the channel
+ * ends whenever [PlayerState.channel] stops being its key.
  *
  * The channel's volume ([volumeOf], 70 % unless the person set it; a schedule may give its own)
  * goes to the piano's own volume when the piano offers one ([piano]), else to the app's velocity
@@ -75,7 +73,6 @@ class ChannelPlayer(
     private val volumeOf: (String) -> Int,
     piano: PianoVolume,
     private val scope: CoroutineScope,
-    private val random: Random = Random.Default,
     /** The loudness a channel holds while it plays, shared with the schedules. */
     val loudness: LoudnessHold = LoudnessHold(piano, deck),
 ) {
@@ -93,8 +90,8 @@ class ChannelPlayer(
     }
 
     /**
-     * Plays channel [key] from a fresh shuffle of its pool, at [volumePct] (a schedule's) or the
-     * channel's own volume. False (and nothing changes) when its pool is unknown or too small.
+     * Plays channel [key] from the top of its pool, at [volumePct] (a schedule's) or the channel's own volume. False (and
+     * nothing changes) when its pool is unknown or too small.
      */
     fun play(key: String, volumePct: Int? = null): Boolean {
         val pool = pools(key)?.distinct() ?: return false
@@ -104,7 +101,7 @@ class ChannelPlayer(
         try {
             loudness.hold(next, volumePct ?: volumeOf(key))
             session = next
-            deck.playAll(next.deal(FIRST), shuffle = false, channel = key)
+            deck.playAll(next.deal(FIRST), channel = key)
         } finally {
             starting = false
         }
@@ -138,23 +135,14 @@ class ChannelPlayer(
         if (state.queue.upNextIds.size < TOP_UP_BELOW) deck.addToQueue(current.deal(TOP_UP), channel = current.key)
     }
 
-    /** One channel's run: its pool, the shuffled deck still to deal, and the pieces dealt last. */
-    private inner class Session(val key: String, private val pool: List<Long>) {
-        private val remaining = ArrayDeque(pool.shuffled(random))
-        private val recent = ArrayDeque<Long>()
+    /** One channel's run: its pool, in its order, and what is still to deal from it before it starts again from the top. */
+    private class Session(val key: String, private val pool: List<Long>) {
+        private val remaining = ArrayDeque(pool)
 
-        /** The next [count] pieces; the deck is shuffled again as it runs out. */
+        /** The next [count] pieces, in the pool's order; at its end it starts again from the top. */
         fun deal(count: Int): List<Long> = List(count) {
-            if (remaining.isEmpty()) reshuffle()
-            remaining.removeFirst().also { dealt ->
-                recent.addLast(dealt)
-                if (recent.size > RECENT) recent.removeFirst()
-            }
-        }
-
-        private fun reshuffle() {
-            val keepOut = recent.toList().takeLast(minOf(RECENT, pool.size / 2)).toHashSet()
-            remaining.addAll(pool.filter { it !in keepOut }.shuffled(random))
+            if (remaining.isEmpty()) remaining.addAll(pool)
+            remaining.removeFirst()
         }
     }
 
@@ -167,9 +155,6 @@ class ChannelPlayer(
 
         /** …by this many. */
         const val TOP_UP = 10
-
-        /** A reshuffled deck leaves out this many pieces dealt last. */
-        const val RECENT = 20
 
         /** A channel's volume unless the person sets it. */
         const val DEFAULT_VOLUME = 70
