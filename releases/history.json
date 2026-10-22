@@ -317,5 +317,14 @@
     "minSdk": 26,
     "tag": "v1.26",
     "publishedAt": "2026-10-22"
+  },
+  {
+    "versionCode": 37,
+    "versionName": "1.27",
+    "notes": "Checked and tidied. A full review of the app found and fixed five problems: Stop pressed while the next piece was loading could leave Play stuck, and could keep the safety check from running until the app restarted; the safety check's own restart of the piano could be taken for a dead piano, switching the 24 V off with a misleading message; a quiet time could stop silencing the piano after the tablet's clock was set back; with the microphone sweep off, the safety check could pass when the piano hadn't reported its coils (it now asks again, then says to reconnect); and the tablet's own sound could hold a note when the piano reconnected mid-piece. The web panel now shows the piano's Bluetooth lock and the debugging warning, its dots follow the tablet's (red only while notes go to the piano), and Play next says it worked only when it did. On the tablet: the System page in the new cards, Retry alone when the piano refuses this tablet, and a stopped import says so.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.27/steven-piano-1.27.apk",
+    "minSdk": 26,
+    "tag": "v1.27",
+    "draft": true
   }
 ]

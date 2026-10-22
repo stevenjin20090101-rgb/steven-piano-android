@@ -9816,3 +9816,35 @@ the panel's dots ink and red, no raw lock facts, the stopped capsule, and Play n
 - `SafetyCheckHost.nextPiece()` gives the entry after the current one, so a check run from the lock card while a piece
   waits at its start names the piece after it as "Next".
 - The emulated piano has no `restart`, so the keeper's restart window is seen in RailKeeperTest only.
+
+## The release: 1.27 (versionCode 37)
+
+M63 (the tidy-up, merged as `dde4d44`) and M64 (the audit's fixes, merged as `b512ce9`).
+- **M63:**
+  - the panel's Bluetooth lock and debugging facts;
+  - its dots in the tablet's three states through `link.sending`;
+  - `app.js` split into `now.js`, `upnext.js`, `library.js` and `studio.js` with `ui.js`, and the panel's dead code
+    removed;
+  - `schedule/` → `quiet/` (the Room schema unchanged);
+  - `WebServer.kt` split into the plumbing plus `WebRoutes.kt`, and `AppGraph.kt` into the wiring plus
+    `RemoteActions.kt`;
+  - M58/M59/M62's tablet notes and the M56/M57 leftovers.
+- **The audit:** Fable reviewers read the app area by area: A1 the note path, A2 power and safety, A3 data and
+  plumbing, B2 ui/studio/score/audio, and B1 the internet-facing code after M63's splits. A second reviewer then
+  confirmed each finding:
+  - A1-01, A2-01 and A3-01 confirmed;
+  - A2-U2 and B2-U1 promoted;
+  - five dropped with their reasons;
+  - B1 found nothing: all 55 routes kept their guards through the split.
+- **M64:** fixed the five, with a test for each but B2-U1, plus M63's follow-ups (the panel's last red dots, Play
+  next's toast, the lock's raw facts hidden, the fake tablet's state).
+- **Full suite:** 1,780 tests green (12 skipped); lint "No issues found".
+- **Seen** (`~/.claude/plans/m63-shots/`, `m64-shots/`):
+  - a quiet block kept across the upgrade over 1.26;
+  - the panel's sections unchanged but for the dot;
+  - a passing safety check;
+  - two silent keys through the repower to the lock;
+  - Stop during a load, then Play playing the queue's current piece;
+  - the check stopped, not passed, when the piano gave no dump.
+- **Not seen:** the keeper's restart window on a real piano (the emulated piano has no `restart`), a real Shelly
+  plug, or the microphone sweep at the school.
