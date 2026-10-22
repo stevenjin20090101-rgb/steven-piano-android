@@ -121,6 +121,7 @@ function playerState() {
     loading: false,
     piece: piano.status === 'stopped' ? null : piece,
     positionMs: positionMs(),
+    at: Date.now(),
     tempoPct: 100,
     transpose: 0,
     velocityPct: 100,
@@ -129,30 +130,41 @@ function playerState() {
     tablet: { mode: 'off', volume: 50, active: false, installed: false },
     queue: {
       ids: PIECES.map((p) => p.id),
-      uids: PIECES.map((p) => p.id * 10),
       index: piano.index,
-      shuffle: false,
       repeat: 'off',
       items: PIECES.slice(piano.index).map((p) => ({ ...p, uid: p.id * 10, requested: false })),
     },
     problem: null,
+    views: null,
   };
 }
 
-/** The panel's state, as WebApi.state builds it. */
+/**
+ * The panel's state, as WebApi.state builds it (in step with 1.27, M64: no `artwork`, `schedule`, `queue.uids` or
+ * `queue.shuffle`; the link's `sending` and the piano's `lock`, and the parts since 1.11, each as the tablet sends it idle).
+ */
 function state(type) {
   return {
     ...(type ? { type } : {}),
     player: playerState(),
-    link: { state: 'connected', name: 'Steven Piano (fake)' },
-    piano: { state: 'ready', values: {}, facts: {}, lastError: null, errorAbout: null },
-    import: { running: false, done: 0, total: 0, imported: 0, duplicates: 0, failed: 0, current: null },
-    artwork: { running: false, done: 0, total: 0 },
+    link: { state: 'connected', name: 'Steven Piano (fake)', sending: piano.status === 'playing' },
+    instruments: { instrument: { kind: 'steven', name: 'Steven Piano', state: 'connected' }, keyboard: null, live: false, recording: false },
+    piano: {
+      state: 'ready', values: {}, facts: {}, lastError: null, errorAbout: null,
+      lock: { state: 'trusted', piano: 'claimed', guestSecondsLeft: 0, keyStored: true, writable: true, message: null },
+    },
+    import: { running: false, done: 0, total: 0, imported: 0, duplicates: 0, failed: 0, current: null, playlist: null },
     requests: { pending: 0, guests: piano.guests, approveFirst: piano.approveFirst },
-    web: { address: piano.panelUrl, guestAddress: null, guests: piano.guests },
+    web: { address: piano.panelUrl, guestAddress: null, guests: piano.guests, cloud: null },
     monochrome: false,
-    schedule: { next: null, revision: 0 },
+    albumBackdrop: true,
     studio: { available: false, reason: 'Not on the fake tablet.', models: [], jobs: [] },
+    display: { noteDisplay: 'paperRoll', rollStyle: 'paperRoll', fingering: true, chordNames: true, handColours: false },
+    quiet: { now: false, until: null, overridden: false, next: null },
+    listen: { on: false, until: null, allowed: false },
+    keytest: { running: false, key: null, done: 0, total: 84, results: null, stopped: null },
+    safety: { running: false, step: 0, of: 0, locked: false, failedKeys: [], coil: false, text: null },
+    power: { paired: false, on: false, rail: 'off', waking: false, message: null, attention: false },
   };
 }
 
@@ -478,7 +490,8 @@ function connect() {
     statusTimer = setInterval(() => send(status()), 30_000);
     progressTimer = setInterval(() => {
       if (piano.status !== 'playing') return;
-      for (const [id, b] of browsers) if (b.accepted) send({ t: 'ws.text', id, data: JSON.stringify({ type: 'progress', positionMs: positionMs(), at: Date.now() }) });
+      const progress = { type: 'progress', positionMs: positionMs(), at: Date.now(), playing: true, tempoPct: 100 };   // as WebApi.progress
+      for (const [id, b] of browsers) if (b.accepted) send({ t: 'ws.text', id, data: JSON.stringify(progress) });
     }, 1000);
     pingTimer = setInterval(() => socket.readyState === WebSocket.OPEN && socket.send('ping'), 25_000);
   });
