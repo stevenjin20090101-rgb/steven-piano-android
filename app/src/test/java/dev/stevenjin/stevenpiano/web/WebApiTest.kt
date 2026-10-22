@@ -234,8 +234,8 @@ class WebApiTest {
         assertFalse("the plug's readings stay on /api/system", waking.has("watts"))
         // The safety check (v1.26 — M61): the capsule's fields, nothing to say while all is well.
         val safe = json.getJSONObject("safety")
-        assertEquals(setOf("running", "step", "of", "locked", "failedKeys", "coil", "text"), safe.keys().asSequence().toSet())
-        assertFalse(safe.getBoolean("running") || safe.getBoolean("locked"))
+        assertEquals(setOf("running", "step", "of", "locked", "failedKeys", "coil", "stopped", "text"), safe.keys().asSequence().toSet())
+        assertFalse(safe.getBoolean("running") || safe.getBoolean("locked") || safe.getBoolean("stopped"))
         assertTrue(safe.isNull("text"))
         val locked = WebApi.state(state.copy(safety = WebSafety(locked = true, failedKeys = listOf(36, 66), text = "Safety check failed: C2, F♯4")), pending = 0)
             .getJSONObject("safety")
@@ -565,5 +565,11 @@ class WebApiTest {
         val coil = WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(lock = dev.stevenjin.stevenpiano.safety.SafetyLock.CoilOn))
         assertEquals(WebSafety(locked = true, coil = true, text = "Safety check failed: a key is still on"), coil)
         assertEquals("nothing to say", WebSafety(), WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(pending = true)))
+        // v1.27 — M64: a check that couldn't finish, for the moment the tablet's card says why.
+        val noDump = dev.stevenjin.stevenpiano.safety.SafetyOutcome.Unfinished(dev.stevenjin.stevenpiano.safety.Why.NO_DUMP)
+        assertEquals(
+            WebSafety(stopped = true, text = "Safety check stopped · The piano didn't report its keys. Reconnect it."),
+            WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(ended = noDump, pending = true)),
+        )
     }
 }

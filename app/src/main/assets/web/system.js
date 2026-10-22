@@ -16,7 +16,7 @@
 // once with DOM calls and brought up to date in place: a dial's arc eases to its new value (480 ms, none under reduced
 // motion) and nothing loops. Amber, `--attention`, only where attention() says something needs it, and never alone.
 
-import { guarded, whole } from './ui.js';
+import { dotClass, guarded, linkDot, whole } from './ui.js';
 
 const NEEDS_FIRMWARE = 'Needs newer firmware';
 
@@ -704,14 +704,15 @@ export function create(host, body, tools) {
       boardsFact.set(`${answering} of ${list.length} answering${why}`, parts.has('boards'));
     } else boardsFact.set(missing);
 
-    // Bluetooth: the link's state with the live dot, and the piano's own reading of the signal when it gives one.
+    // Bluetooth: the link's state with its dot (v1.27 — M64, ui.js's linkDot: red only while notes reach the piano), and
+    // the piano's own reading of the signal when it gives one.
     if (m === 'midi') bluetoothFact.set(null);
     else {
       const state = linkState() || (piano.link && piano.link.state) || 'disconnected';
-      const on = state === 'connected';
+      const shown = linkDot(st && st.link ? st.link : { state });
       const rssi = ready ? finite(diag.rssi) : null;
       const text = [LINK_WORDS[state] || capital(state), rssi !== null ? `${host.signed(Math.round(rssi))} dBm` : null].filter(Boolean).join(' · ');
-      bluetoothFact.set([h('span', { class: on ? 'dot live' : 'dot' }), h('span', { text })], false, `${on}:${text}`);
+      bluetoothFact.set([h('span', { class: dotClass(shown) }), h('span', { text })], false, `${shown}:${text}`);
     }
     // The piano's Bluetooth lock (v1.27 — M63), while it has one, and guest play while it lasts: the tablet's words.
     const lock = m === 'midi' ? null : (st && st.piano && st.piano.lock) || null;
@@ -796,12 +797,14 @@ export function create(host, body, tools) {
           return row.node;
         }));
     }
-    const playing = !!(st && st.player && st.player.status === 'playing') && linkState() === 'connected';
+    // The player's red only while its notes reach the piano (v1.27 — M64, ui.js's linkDot), not while it plays and the 24 V
+    // comes up, or plays the tablet's own sound: then ink, as any row running.
+    const sending = linkDot(st && st.link) === 'live';
     for (const item of list) {
       const row = rows.get(item.key);
       if (!row) continue;
       let dot = 'dot';
-      if (item.key === 'player' && item.state === 'running' && playing) dot = 'dot live';
+      if (item.key === 'player' && item.state === 'running' && sending) dot = 'dot live';
       else if (item.state === 'problem' || (item.state === 'waiting' && (item.key === 'covers' || item.key === 'relay'))) dot = 'dot attention';
       else if (item.state === 'running') dot = 'dot on';
       row.set({
@@ -1228,8 +1231,8 @@ function makeTask(h) {
   const node = h('div', { class: 'task' }, dot, title, h('div', { class: 'detail' }, detailText, bar), word);
   return {
     node,
-    set({ dot: dotClass, title: titleText, detail, progress, word: wordText, idle }) {
-      if (dot.className !== dotClass) dot.className = dotClass;
+    set({ dot: dotClassName, title: titleText, detail, progress, word: wordText, idle }) {
+      if (dot.className !== dotClassName) dot.className = dotClassName;
       setText(title, titleText);
       setText(detailText, detail);
       if (detailText.title !== detail) detailText.title = detail;

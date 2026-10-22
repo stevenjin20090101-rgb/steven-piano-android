@@ -9,12 +9,18 @@
 
 package dev.stevenjin.stevenpiano.player
 
+import dev.stevenjin.stevenpiano.audio.Ears
+import dev.stevenjin.stevenpiano.audio.KeyTest
+import dev.stevenjin.stevenpiano.audio.ListenAnswer
+import dev.stevenjin.stevenpiano.audio.MicFrame
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
 import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.midi.MidiPiece
 import dev.stevenjin.stevenpiano.midi.SmfBuilder
 import dev.stevenjin.stevenpiano.midi.SmfException
 import dev.stevenjin.stevenpiano.midi.SmfParser
+import dev.stevenjin.stevenpiano.safety.SafetyRunner
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -584,6 +590,74 @@ class PlayerTest {
         delay(200)
         assertEquals("each once", 3, heard.size)
         listening.cancel()
+    }
+
+    @Test
+    fun `a stop while the next piece loads empties the player, and Play loads the queue's current afresh (v1_27 M64)`() = runBlocking {
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 30)
+        onMain { player.play(1, listOf(1, 2)) }
+        withTimeout(5_000) { while ("90 3C 50" !in link.messages) delay(5) }
+        source.loadDelayMs = 1_000   // the next piece's read takes a while
+        withTimeout(5_000) { player.state.first { it.loading && it.queue.index == 1 } }   // piece 1 ended; piece 2 loads to wait
+        onMain { player.stop() }
+        delay(1_500)
+        assertFalse("the stop ended the load", player.state.value.loading)
+        assertNull("nothing is loaded", player.state.value.piece)
+        assertEquals(1, player.state.value.queue.index)
+        link.clear()
+        onMain { player.resume() }
+        withTimeout(5_000) { while ("90 3E 50" !in link.messages) delay(10) }
+        assertFalse("never the old piece again", "90 3C 50" in link.messages)
+        assertEquals(listOf(1L, 2L, 2L), source.loads.toList())
+        assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `a stop while the 6th piece's successor loads leaves the safety check's sweep free to start (v1_27 M64)`() = runBlocking {
+        val ended = CompletableDeferred<Played>()
+        val listening = scope.launch { player.played.collect { ended.complete(it) } }
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 30)
+        onMain { player.play(1, listOf(1, 2)) }
+        withTimeout(5_000) { ended.await() }   // the 6th piece ended: the check begins, as what follows it loads
+        source.loadDelayMs = 1_000
+        withTimeout(5_000) { player.state.first { it.loading && it.queue.index == 1 } }
+        onMain { player.stop() }   // the panel's Stop, a channel's, the media controls'
+        // The check's sweep waits for the player (SafetyRunner.SETTLE_MS), then asks the key test, which refuses while a piece
+        // plays or loads: AppGraph's host and the key test read the player as here.
+        fun busy() = player.state.value.let { it.status == PlaybackStatus.Playing || it.loading }
+        withTimeout(SafetyRunner.SETTLE_MS) { while (busy()) delay(10) }
+        val sweep = KeyTest(scope, PlayerPiano(::busy), AllowedEars())
+        assertEquals(ListenAnswer.Started, onMain { sweep.start(null) })
+        onMain { sweep.stop() }
+        listening.cancel()
+    }
+
+    /** The piano as the key test sees it through the player: connected, and playing while [busy]. */
+    private class PlayerPiano(private val busy: () -> Boolean) : KeyTest.Piano {
+        override val connected = true
+        override val playing: Boolean get() = busy()
+        override val updating = false
+
+        override fun quiet(): String? = null
+
+        override fun noteOn(key: Int, velocity: Int) = Unit
+
+        override fun noteOff(key: Int) = Unit
+
+        override fun stopSequence() = Unit
+
+        override fun muteTablet(on: Boolean) = Unit
+    }
+
+    /** The tablet's microphone, allowed. */
+    private class AllowedEars : Ears {
+        override fun allowed(token: String?): Boolean = true
+
+        override fun tap(token: String?, frames: (MicFrame) -> Unit, ended: () -> Unit): ListenAnswer = ListenAnswer.Started
+
+        override fun untap() = Unit
     }
 
     /** The safety check's say, as a test sets it: every start [open]s, is refused, or is kept for later ([kept]). */

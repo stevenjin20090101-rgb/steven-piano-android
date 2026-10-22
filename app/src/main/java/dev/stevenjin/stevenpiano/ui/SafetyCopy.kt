@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.safety.Deferral
 import dev.stevenjin.stevenpiano.safety.LastCheck
 import dev.stevenjin.stevenpiano.safety.Mark
 import dev.stevenjin.stevenpiano.safety.SafetyLock
+import dev.stevenjin.stevenpiano.safety.SafetyOutcome
 import dev.stevenjin.stevenpiano.safety.SafetyStep
 import dev.stevenjin.stevenpiano.safety.StepLine
 import dev.stevenjin.stevenpiano.safety.Why
@@ -63,6 +64,24 @@ object SafetyCopy {
 
     /** The 24 V (the power plug) didn't come up for the keys: none of them is judged. */
     const val RAIL_DOWN = "the 24 V didn't come up"
+
+    /** No dump from the piano's console on this connection, even asked again (v1.27 — M64): its coils can't be read. */
+    const val NO_DUMP = "the piano didn't report its keys"
+
+    /** A check stopped for [NO_DUMP], as the card and the panel say it: what to do. */
+    const val RECONNECT = "The piano didn't report its keys. Reconnect it."
+
+    /**
+     * Why a check stopped, in words: the card's line and, after "Safety check stopped", the panel's capsule (one place for
+     * both since v1.27 — M64); null when there is nothing to add.
+     */
+    fun stopped(ended: SafetyOutcome.Unfinished): String? = ended.said ?: when (ended.why) {
+        Why.NO_ANSWER -> "The piano didn't answer."
+        Why.NO_DUMP -> RECONNECT
+        Why.NO_PIANO -> NOT_CONNECTED
+        Why.RAIL_DOWN -> RAIL_DOWN.replaceFirstChar { it.uppercase() } + "."
+        else -> null
+    }
 
     // ---- Play locked ------------------------------------------------------------------------------------------------
     const val ASK = "Ask whoever looks after the piano to check these keys."
@@ -137,6 +156,7 @@ object SafetyCopy {
         val why = when (line.why) {
             null -> null
             Why.NOT_REPORTED -> NOT_REPORTED
+            Why.NO_DUMP -> NO_DUMP
             Why.NO_ANSWER -> NO_ANSWER
             Why.COIL_ON -> COIL_ON
             Why.BOARDS_MISSING -> null   // the figures say it

@@ -40,8 +40,8 @@ class SafetyCheckTest {
         val marks: List<Pair<SafetyStep, Mark>> get() = step.state.lines.map { it.step to it.mark }
     }
 
-    private fun run(listens: Boolean = true, coils: Boolean = true, boards: Boolean = true, restart: Boolean = true): Run {
-        val start = SafetyCheck.start(listens, coils, boards, restart)
+    private fun run(listens: Boolean = true, coils: Boolean = true, boards: Boolean = true, restart: Boolean = true, reported: Boolean = true): Run {
+        val start = SafetyCheck.start(listens, coils, boards, restart, reported)
         assertEquals("the release first", Command.Release, start.command)
         return Run(start)
     }
@@ -244,6 +244,17 @@ class SafetyCheckTest {
             .then(Event.Answer(null), Command.Repower)   // no answer in 2 s: the repower (no restart on this firmware)
             .then(Event.Repowered(true), Command.Ask("active"))
             .then(Event.Answer(null), Command.Finish(SafetyOutcome.Unfinished(Why.NO_ANSWER)))   // still nothing: not passed, not locked
+    }
+
+    @Test
+    fun `no dump on this connection - the keys released, then unfinished, never passed, though the microphone is off (v1_27 M64)`() {
+        val check = run(listens = false, coils = false, boards = false, restart = false, reported = false)
+            .then(Event.Released, Command.Finish(SafetyOutcome.Unfinished(Why.NO_DUMP)))
+        assertEquals(listOf(SafetyStep.RELEASE to Mark.DONE, SafetyStep.COILS to Mark.FAILED), check.marks)
+        assertEquals(Why.NO_DUMP, check.step.state.line(SafetyStep.COILS)?.why)
+        // A piano with no console at all: its facts left out, and it passes as before.
+        run(listens = false, coils = false, boards = false, restart = false)
+            .then(Event.Released, Command.Finish(SafetyOutcome.Passed(keys = null, recovered = false)))
     }
 
     @Test

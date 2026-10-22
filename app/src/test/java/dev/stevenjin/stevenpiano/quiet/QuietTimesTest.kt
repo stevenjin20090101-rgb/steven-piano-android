@@ -243,6 +243,34 @@ class QuietTimesTest {
     }
 
     @Test
+    fun `a block met again after the clock is set back stops the player again (v1_27 M64)`() = runTest {
+        var wall = ms(at("2026-10-05", "08:41"))
+        val rows = MutableStateFlow<List<QuietEntity>?>(listOf(quiet(1, "School days", QuietTimes.WEEKDAYS, "08:40", "09:30")))
+        val gate = QuietGate(rows, clock = { wall + testScheduler.currentTime }, zone = { zone })
+        var hushes = 0
+        gate.start(backgroundScope) { hushes++ }
+        runCurrent()
+        assertEquals("started inside the block: once", 1, hushes)
+        wall = ms(at("2026-10-05", "09:32")) - testScheduler.currentTime   // past its end: a piece may play
+        gate.clockChanged()
+        runCurrent()
+        assertFalse(gate.state.value.now)
+        wall = ms(at("2026-10-05", "09:25")) - testScheduler.currentTime   // set back inside it: what plays stops again
+        gate.clockChanged()
+        runCurrent()
+        assertTrue(gate.state.value.holds)
+        assertEquals(2, hushes)
+        wall = ms(at("2026-10-05", "08:30")) - testScheduler.currentTime   // before its start
+        gate.clockChanged()
+        runCurrent()
+        assertFalse(gate.state.value.now)
+        wall = ms(at("2026-10-05", "08:41")) - testScheduler.currentTime   // and across it once more
+        gate.clockChanged()
+        runCurrent()
+        assertEquals(3, hushes)
+    }
+
+    @Test
     fun `the repository replaces every quiet block at once`() = runBlocking {
         val dao = FakeQuietDao(listOf(quiet(1, "Old", monday, "08:00", "09:00")))
         var transactions = 0

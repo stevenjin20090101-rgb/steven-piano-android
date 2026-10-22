@@ -16,7 +16,7 @@
 // upnext.js, library.js, studio.js), made here through the host as the pages' modules are; the
 // helpers the modules share are ui.js's.
 
-import { $, guarded } from './ui.js';
+import { $, guarded, linkDot, paintDot } from './ui.js';
 import { create as createNowPlaying } from './now.js';
 import { create as createUpNext } from './upnext.js';
 import { create as createLibrary } from './library.js';
@@ -481,14 +481,15 @@ import { create as createStudio } from './studio.js';
   const connection = { socket: null, offline: false };
 
   /**
-   * The dot is the piano's link (v1.27 — M63, [linkDot]), as is Now playing's "Piano" capsule's, painted here with it. The
-   * pill under the name says what is wrong, and only then: the socket dropped or the piano offline ("Reconnecting…"), else
-   * the piano's link down ("Piano not connected"); all well, nothing.
+   * The dot is the piano's link (v1.27 — M63, ui.js's linkDot: a ring, ink, or red only while notes reach the piano), as is
+   * Now playing's "Piano" capsule's, painted here with it; while the tablet can't be reached it is a ring. The pill under
+   * the name says what is wrong, and only then: the socket dropped or the piano offline ("Reconnecting…"), else the
+   * piano's link down ("Piano not connected"); all well, nothing.
    */
   function renderStatus() {
     const up = connection.socket === true && !connection.offline;
     const dot = $('conn-dot');
-    const shown = linkDot();
+    const shown = linkDot(state && state.link, connection.socket !== false && !connection.offline);
     paintDot(dot, shown);
     dot.setAttribute('aria-label', LINK_WORDS[shown]);
     paintDot($('link-dot'), shown);
@@ -503,26 +504,8 @@ import { create as createStudio } from './studio.js';
     pill.hidden = !text;
   }
 
-  /**
-   * The piano's link as a dot, as the tablet's rail draws it (v1.27 — M63, LinkDot): 'off', a ring, while it isn't
-   * connected (or the tablet can't be reached, which the pill says); 'on', filled in the content colour, while it is and
-   * silent; 'live', the red, breathing, only while notes reach the piano (the state's link.sending, worked out on the
-   * tablet as its own dot is: a piece playing, its 24 V up).
-   */
-  function linkDot() {
-    const fresh = connection.socket !== false && !connection.offline;
-    if (!fresh || !state || !state.link || state.link.state !== 'connected') return 'off';
-    return state.link.sending === true ? 'live' : 'on';
-  }
-
   /** The dot's words (the tablet's rail reads its mark so). */
   const LINK_WORDS = { off: 'Not connected', on: 'Connected', live: 'Sending notes to the piano' };
-
-  function paintDot(node, shown) {
-    node.classList.toggle('on', shown === 'on');
-    node.classList.toggle('live', shown === 'live');
-    node.classList.toggle('breathing', shown === 'live');
-  }
 
   // ---- Sections ---------------------------------------------------------------------------------
 

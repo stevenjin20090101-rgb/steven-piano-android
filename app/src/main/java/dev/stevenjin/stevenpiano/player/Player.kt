@@ -341,7 +341,7 @@ class Player(
 
     override fun stop() {
         setChannel(null)
-        loadJob?.cancel()
+        dropLoad()
         markOnPlay = null
         command { engine.stop(it) }
     }
@@ -474,7 +474,7 @@ class Player(
     fun stopAndFlush(timeoutMs: Long): Boolean {
         setChannel(null)
         advanceJob?.cancel()
-        loadJob?.cancel()
+        dropLoad()
         markOnPlay = null
         return settle(timeoutMs) { engine.stop(it) }
     }
@@ -504,9 +504,26 @@ class Player(
     suspend fun stopQuietly(timeoutMs: Long): Boolean {
         setChannel(null)
         advanceJob?.cancel()
-        loadJob?.cancel()
+        dropLoad()
         markOnPlay = null
         return withContext(io) { settle(timeoutMs) { engine.stop(it) } }
+    }
+
+    /**
+     * A stop while a piece loads (v1.27 — M64): the load is dropped and the player empties as [forget] empties it, so the
+     * next Play loads the queue's current afresh, never the engine's old piece, and nothing reads as loading for good (the
+     * safety check's sweep waits for a load to end). A piece already loaded, waiting at its start or playing, stays.
+     */
+    private fun dropLoad() {
+        val job = loadJob ?: return
+        job.cancel()
+        if (!_state.value.loading) return
+        scheduler.submit {
+            engine.eject()
+            loadedId = null
+        }
+        loaded(Long.MAX_VALUE)
+        _state.update { it.copy(loading = false, piece = null) }
     }
 
     /** Pauses, then waits (off the main thread) until the stop sequence has been written: before a user disconnect. */

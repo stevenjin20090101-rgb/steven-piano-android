@@ -333,6 +333,67 @@ class RailKeeperTest {
         assertTrue(bench.arms().isEmpty())
     }
 
+    @Test
+    fun `the safety check's restart - the piano gone inside its window is no failure, and the rail-up follows it back (v1_27 M64)`() = runTest {
+        val bench = Bench(this)
+        val keeper = bench.keeper()
+        upFor(bench, keeper)
+        keeper.wanted("safety", true)
+        keeper.expectRestart(60_000)
+        bench.connected = false   // `restarting`: the piano lets go of the link
+        advanceTimeBy(10_000)   // the keep's CHECK, and the retry 2 s after it, fall in here
+        assertTrue("no stop, no CUT while the piano restarts: ${bench.kinds()}", bench.kinds().none { it == "STOP PLAYING" || it == "STOP" || it == "CUT" })
+        assertNull("nothing said", keeper.message.value)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        val back = currentTime
+        bench.connected = true
+        advanceTimeBy(3_000)
+        assertEquals("the wants kept: up again with the piano", RailPhase.Up, keeper.phase.value)
+        assertEquals(listOf("CHECK", "ARM"), bench.kinds(from = back).take(2))
+        assertEquals((0 until 7).toSet(), keeper.baseline.value)
+        bench.assertEveryArmChecked()
+
+        // The check stopped while the piano restarts: nothing wants the rail, so the usual stop, not the plug's timer.
+        keeper.expectRestart(60_000)
+        bench.connected = false
+        advanceTimeBy(12_000)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        val ended = currentTime
+        keeper.wanted("safety", false)
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(2_000)
+        assertEquals(listOf("STOP", "CUT"), bench.kinds(from = ended))
+        assertEquals("calm, not a failure", RailMessage.Off, keeper.message.value)
+    }
+
+    @Test
+    fun `the same silence outside the restart's window still fails and cuts - the window over, or the piano back (v1_27 M64)`() = runTest {
+        val late = Bench(this)
+        val keeper = late.keeper()
+        upFor(late, keeper)
+        keeper.expectRestart(5_000)
+        advanceTimeBy(6_000)
+        late.connected = false
+        advanceTimeBy(15_000)
+        assertEquals(listOf("CHECK", "CHECK", "STOP PLAYING", "STOP", "CUT"), late.kinds())
+        assertEquals(RailMessage.PianoSilent, keeper.message.value)
+
+        val again = Bench(this)
+        val second = again.keeper()
+        upFor(again, second)
+        second.expectRestart(60_000)
+        again.connected = false
+        advanceTimeBy(10_000)
+        again.connected = true   // back from its restart: the expectation is spent
+        advanceTimeBy(3_000)
+        assertEquals(RailPhase.Up, second.phase.value)
+        again.log.clear()
+        again.connected = false   // gone again inside the minute: a dead piano now
+        advanceTimeBy(15_000)
+        assertEquals(listOf("CHECK", "CHECK", "STOP PLAYING", "STOP", "CUT"), again.kinds())
+        assertEquals(RailMessage.PianoSilent, second.message.value)
+    }
+
     // ---- While wanted --------------------------------------------------------------------------------------------
 
     @Test

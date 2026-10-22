@@ -215,6 +215,23 @@ class PianoSettingsRepository(
         return session?.refreshFacts() ?: false
     }
 
+    /**
+     * The piano's dump asked for once more on this connection (v1.27 — M64, the safety check): its console didn't answer
+     * the first within 2 s ([PianoState.Unsupported] with a console there), so a fresh conversation sends `dump` again, and
+     * [state] says how it went (the lock decides afresh with it). False, nothing asked, without a console, once the piano
+     * has answered, or while a firmware update runs.
+     */
+    fun dumpAgain(): Boolean {
+        val connection = (link.state.value as? LinkState.Connected)?.connection ?: return false
+        val console = link.console ?: return false
+        if (_state.value != PianoState.Unsupported || updating()) return false
+        log("The dump asked for again on this connection")
+        session?.close()
+        _state.value = PianoState.Unknown
+        session = Session(console, connection, link.address).also { it.open() }
+        return true
+    }
+
     /** The screen has shown the last error; it goes until the next one. */
     fun dismissError() {
         session?.dismissError()
@@ -783,8 +800,11 @@ class PianoSettingsRepository(
 
         const val NANOS_PER_MS = 1_000_000L
 
-        /** Facts the lock reads and no screen shows (v1.25 — M58): the connection's one-use challenge. */
-        val HIDDEN_FACTS = setOf(LockHandshake.NONCE)
+        /**
+         * Facts the lock reads and no screen shows (v1.25 — M58): the connection's one-use challenge; and (v1.27 — M64) the
+         * lock's raw words, which [PianoState.Ready.lock] says in words (read at the dump, they go stale after a claim).
+         */
+        val HIDDEN_FACTS = setOf(LockHandshake.NONCE, LockHandshake.LOCKPROTO, LockHandshake.LOCK, LockHandshake.AUTH, LockHandshake.GUEST)
 
         /** Lines that only read: they go whatever the lock says (the piano answers them untrusted). */
         fun isRead(line: String): Boolean = line == "dump" || line.startsWith("get ") || line == PianoAction.Status.command || line == "help"

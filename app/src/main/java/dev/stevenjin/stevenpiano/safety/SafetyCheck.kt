@@ -43,6 +43,12 @@ enum class Why {
     /** The piano's firmware does not report it (no `!active` or no `!boards` in its dump). */
     NOT_REPORTED,
 
+    /**
+     * The piano's console gave no dump on this connection, even asked again (v1.27 — M64): what it reports, the coils
+     * first, is unknown, so the check can't finish.
+     */
+    NO_DUMP,
+
     /** Asked, and the piano did not answer within 2 s. */
     NO_ANSWER,
 
@@ -176,14 +182,15 @@ enum class Phase { RELEASE, COILS, BOARDS, SWEEP, OTA, RESTART, BACK, REPOWER, D
 
 /**
  * One check as far as it has come: whether it will sweep ([listens]), what the piano's dump offers ([coils]: `!active`,
- * [boards]: `!boards`, [restart]: `!restartproto=1`), the card's [lines], whether the restart and repower were done
- * ([recovered]), how many sweeps ran, and how it ended ([outcome]).
+ * [boards]: `!boards`, [restart]: `!restartproto=1`; [reported] false: no dump came on this connection, v1.27 — M64), the
+ * card's [lines], whether the restart and repower were done ([recovered]), how many sweeps ran, and how it ended ([outcome]).
  */
 data class CheckState(
     val listens: Boolean,
     val coils: Boolean,
     val boards: Boolean,
     val restart: Boolean,
+    val reported: Boolean = true,
     val lines: List<StepLine> = emptyList(),
     val phase: Phase = Phase.RELEASE,
     val recovered: Boolean = false,
@@ -260,7 +267,8 @@ data class CheckState(
  * 1. **Release**: the player's stop sequence, then a second.
  * 2. **Coils**: `!active` above 0 is a fire risk: the check ends at once ([SafetyOutcome.CoilOn]: the 24 V cut,
  *    everything stopped, Play locked). **Boards**: any board missing (or either fact unanswered) calls for the restart
- *    and the repower before the sweep. A fact the piano's firmware doesn't report is left out.
+ *    and the repower before the sweep. A fact the piano's firmware doesn't report is left out; with no dump at all from
+ *    its console on this connection the coils can't be read, and the check can't finish (v1.27 — M64, [Why.NO_DUMP]).
  * 3. **Sweep** (only when the check [CheckState.listens]: the microphone switch on and allowed; without it no key can
  *    lock Play): the 84 keys while the microphone listens.
  * 4. **Any key not heard**: the restart (only when the piano offers it, `!restartproto=1`, and never while
@@ -274,9 +282,9 @@ data class CheckState(
  * [SafetyOutcome.Unfinished]: it runs again before the next Play.
  */
 object SafetyCheck {
-    /** Begins a check: the release first. */
-    fun start(listens: Boolean, coils: Boolean, boards: Boolean, restart: Boolean): Step =
-        Step(CheckState(listens, coils, boards, restart, lines = listOf(StepLine(SafetyStep.RELEASE, Mark.RUNNING))), Command.Release)
+    /** Begins a check: the release first. [reported] false: the piano's console gave no dump on this connection. */
+    fun start(listens: Boolean, coils: Boolean, boards: Boolean, restart: Boolean, reported: Boolean = true): Step =
+        Step(CheckState(listens, coils, boards, restart, reported, lines = listOf(StepLine(SafetyStep.RELEASE, Mark.RUNNING))), Command.Release)
 
     /** What [event] (the last command's result, or an interruption) leads to from [state]. */
     fun on(state: CheckState, event: Event): Step {
@@ -327,6 +335,8 @@ object SafetyCheck {
     }
 
     private fun coils(state: CheckState): Step {
+        // v1.27 — M64: no dump, nothing known: never "not reported", which would let a check pass with no coil read.
+        if (!state.reported) return end(state.put(SafetyStep.COILS, Mark.FAILED, why = Why.NO_DUMP), SafetyOutcome.Unfinished(Why.NO_DUMP))
         if (!state.coils) return boards(state.put(SafetyStep.COILS, Mark.SKIPPED, why = Why.NOT_REPORTED))
         return Step(state.copy(phase = Phase.COILS).put(SafetyStep.COILS, Mark.RUNNING), Command.Ask(ACTIVE))
     }
@@ -408,10 +418,13 @@ object SafetyCheck {
         return Step(state.copy(phase = Phase.RESTART), Command.Restart)
     }
 
+    /** Whether the piano's reply to `restart` says it restarts now: it lets go of the link about 200 ms later. */
+    fun restarting(reply: String?): Boolean = reply?.trim()?.startsWith(RESTARTING) == true
+
     private fun onRestart(state: CheckState, reply: String?): Step {
         val text = reply?.trim()
         return when {
-            text != null && text.startsWith(RESTARTING) -> Step(state.copy(phase = Phase.BACK), Command.AwaitBack)
+            restarting(text) -> Step(state.copy(phase = Phase.BACK), Command.AwaitBack)
             text != null -> repower(state.put(SafetyStep.RESTART, Mark.SKIPPED, why = Why.REFUSED, said = text))
             else -> repower(state.put(SafetyStep.RESTART, Mark.SKIPPED, why = Why.NO_ANSWER))
         }

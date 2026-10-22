@@ -26,6 +26,7 @@ import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.safety.Mark
 import dev.stevenjin.stevenpiano.safety.SafetyLock
+import dev.stevenjin.stevenpiano.safety.SafetyOutcome
 import dev.stevenjin.stevenpiano.safety.SafetyState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
@@ -617,9 +618,11 @@ data class WebPower(
 
 /**
  * The safety check (v1.26 — M61) as the panel's capsule reads it: a check [running], at [step] of the [of] steps it means
- * to take; Play [locked] (the keys that didn't sound, [failedKeys], MIDI; [coil]: a key was still on); and the tablet's
- * own words for it ([text]: "Safety check · Testing each key (37 of 84)", "Safety check failed: C2, F♯4"), null while
- * there is nothing to show. The panel can't start a check: the microphone needs the tablet in front.
+ * to take; Play [locked] (the keys that didn't sound, [failedKeys], MIDI; [coil]: a key was still on); a check that
+ * [stopped] before its end, for the moment the tablet's card says why (v1.27 — M64); and the tablet's own words for it
+ * ([text]: "Safety check · Testing each key (37 of 84)", "Safety check failed: C2, F♯4", "Safety check stopped · The piano
+ * didn't report its keys. Reconnect it."), null while there is nothing to show. The panel can't start a check: the
+ * microphone needs the tablet in front.
  */
 data class WebSafety(
     val running: Boolean = false,
@@ -628,6 +631,7 @@ data class WebSafety(
     val locked: Boolean = false,
     val failedKeys: List<Int> = emptyList(),
     val coil: Boolean = false,
+    val stopped: Boolean = false,
     val text: String? = null,
 ) {
     companion object {
@@ -635,9 +639,11 @@ data class WebSafety(
             val lock = state.lock
             val steps = if (state.running) state.check?.steps().orEmpty() else emptyList()
             val now = steps.indexOfFirst { it.mark == Mark.RUNNING }
+            val stopped = (state.ended as? SafetyOutcome.Unfinished)?.takeIf { !state.running && lock == null }
             val text = when {
                 state.running -> steps.getOrNull(now)?.let { "${SafetyCopy.TITLE} · ${SafetyCopy.line(it)}" } ?: SafetyCopy.TITLE
                 lock != null -> SafetyCopy.locked(lock)
+                stopped != null -> listOfNotNull(SafetyCopy.STOPPED, SafetyCopy.stopped(stopped)).joinToString(" · ")
                 else -> null
             }
             return WebSafety(
@@ -647,6 +653,7 @@ data class WebSafety(
                 locked = lock != null,
                 failedKeys = (lock as? SafetyLock.KeysSilent)?.keys.orEmpty(),
                 coil = lock == SafetyLock.CoilOn,
+                stopped = stopped != null,
                 text = text,
             )
         }
