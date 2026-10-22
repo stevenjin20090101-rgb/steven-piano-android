@@ -1092,7 +1092,8 @@ connects the tablet again, ends guest play, releases every key and turns the 24 
 with the plug** (off: the app leaves the plug alone and it stays off, so to play without it plug the supply into a wall
 socket), **Admit a replacement tablet** (3 minutes for another tablet to pair) and **Forget the plug**. Piano › System
 shows the plug on the Piano card, in amber if its relay seems stuck on after a cut (the supply still drawing more than
-half what it draws idle, at least 2 W). The web panel's Settings › System shows it too. Without a plug paired, nothing of
+half what it draws idle, at least 2 W); while the 24 V is off its power boards show unpowered, "0 of 7 answering · 24 V
+off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug paired, nothing of
 this happens.
 
 **Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60), with the

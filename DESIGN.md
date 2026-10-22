@@ -3590,6 +3590,12 @@ Red means notes reaching the piano. While the 24 V comes up its notes are held, 
 playing, its panel beside the Library, the Keys tab, the resting screen), the rail's mark, the Piano tab's card, a
 playing channel's card and Running now's player row show the connected (ink) dot, and turn red once the notes go out.
 
+## The tablet's System page with the 24 V off
+As on the panel: while the plug keeps the 24 V off, the boards that don't answer are drawn unpowered (hollow, in ink,
+no "Missing"), the row reads "0 of 7 answering · 24 V off", and neither the status line nor the hub's System row flags
+them (since M60). Firmware and status draws them the same way. A missing board with the 24 V up, the trunk fault and the
+stuck relay stay amber; without a plug, everything is as before.
+
 ## Decided in the run
 - **The check reads the boards once the 24 V is up.** It wants the rail from its start; after the 6th piece the rail is
   still up, but a check due before the next Play, or run from the lock card, begins with it off, and read a second later

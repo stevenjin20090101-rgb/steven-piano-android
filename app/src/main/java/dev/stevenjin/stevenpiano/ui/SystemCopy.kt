@@ -259,18 +259,30 @@ object SystemCopy {
     }
 
     /**
-     * The piano's rows: its firmware, the power boards ([boardsAttention]: one is missing), Bluetooth with the live dot
-     * ([link]; none while another instrument plays), the pedal board, I²C errors, the repeat period, the keys held now and
-     * the hold watchdog; then every other fact it gives, under its own name.
+     * The piano's rows: its firmware, the power boards ([boardsAttention]: one is missing; [railOff], v1.26 — M62: the power
+     * plug keeps the 24 V off, so the boards that don't answer are unpowered: "0 of 7 answering · 24 V off"), Bluetooth with
+     * the live dot ([link]; none while another instrument plays), the pedal board, I²C errors, the repeat period, the keys
+     * held now and the hold watchdog; then every other fact it gives, under its own name.
      */
-    fun pianoFacts(mode: Mode, diag: PianoDiag?, link: LinkState, boardsAttention: Boolean, heldAttention: Boolean = false): List<Fact> {
+    fun pianoFacts(
+        mode: Mode,
+        diag: PianoDiag?,
+        link: LinkState,
+        boardsAttention: Boolean,
+        heldAttention: Boolean = false,
+        railOff: Boolean = false,
+    ): List<Fact> {
         val ready = diag?.takeIf { mode == Mode.Ready }
         val needs = mode == Mode.Ready || mode == Mode.Old
         fun fact(label: String, value: String?, attention: Boolean = false) = Fact(label, value, needs = value == null && needs, attention = attention && value != null)
         val boards = ready?.boards
         val boardsLine = boards?.let { list ->
             val absent = list.indices.filter { list[it] == PianoDiag.MISSING }.map { "C${it + 1}" }
-            "${list.count { it == PianoDiag.OK }} of ${list.size} answering" + if (absent.isNotEmpty()) " · ${absent.joinToString(", ")} missing" else ""
+            "${list.count { it == PianoDiag.OK }} of ${list.size} answering" + when {
+                railOff -> " · ${PowerCopy.RAIL_OFF}"
+                absent.isNotEmpty() -> " · ${absent.joinToString(", ")} missing"
+                else -> ""
+            }
         }
         val bluetooth = if (mode == Mode.Midi) {
             Fact("Bluetooth", null)

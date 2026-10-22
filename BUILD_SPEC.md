@@ -9570,6 +9570,12 @@ No version bump, no signing, no release.
   `NowPlayingPanel`, the Keys tab), `LibraryScreen` (a channel's card), `DisplayScreen` (both resting layouts; a `sending`
   parameter beside `PaperRoll`'s `playing`, which keeps driving its clock); `PianoViewModel.playing` → `sending` (the
   connection card, Running now's player row).
+- The boards with the 24 V off, as on the panel (asked for by the coordinator after the first report):
+  `rememberRailOff()` (`ui/components/PianoFacts.kt`: the plug switches the rail and it is neither `Up` nor `Kept`) is the
+  one rule for `rememberAttention` (M60's `Attention.Inputs.railOff`, the hub row and the status line), the System
+  page's Piano card and the Firmware and status page's drawing: `PowerBoards(boards, title, off)` draws a board that
+  doesn't answer hollow in `LocalTertiary` with no "Missing" (TalkBack: "Power boards, the 24 V off: C1 off, …"), and
+  `SystemCopy.pianoFacts(…, railOff)` reads "0 of 7 answering · 24 V off". Without a plug, `off` is false: as before.
 - The safety check's glue (AppGraph's M61 block): `wantRail(false)` also says `wanted(RailKeeper.REPOWER, false)`;
   `SafetyCheckHost.ask(SafetyCheck.BOARDS)` first awaits `railUpWithin(RAIL_AWAIT_MS)` (at once without the plug or with
   the rail up). `SafetyRunner` and its tests are unchanged.
@@ -9601,7 +9607,8 @@ published sum), DataStore 1.2.1 → 1.3.0, Tink 1.23.0 → 1.24.0: lint's three 
 paired plug's values); `WebServerTest` (`/api/system`'s keys and its `power`), `FakeWebBackend.systemHeld` with a paired
 plug; `PairFlowTest` (a locked plug: connects, no reply in 5 s, no bond → the power cycle; bonded → not answering);
 `RailKeeperTest` +1 (the threshold: 20 W idle, 9 W after the CUT not welded, 11 W welded; no idle reading, 3 W welded).
-1,776 tests (12 skipped), lint clean.
+`AttentionTest` +1 (the 24 V off: no boards item; up or no plug: as before; a stuck relay stays). 1,777 tests (12
+skipped), lint clean.
 
 ## Seen on the emulator (`steven_piano_audit`, debug build, `debug.stevenpiano.plug paired`)
 - Play from idle with the boards slowed to 6 s: CHECK 11:04:11.18, ARM 11.475, `!boards` MISSING every 500 ms, OK
@@ -9624,9 +9631,9 @@ plug; `PairFlowTest` (a locked plug: connects, no reply in 5 s, no bond → the 
 - The panel's System page with the 24 V off: "Everything is running normally", the boards unpowered in ink, "0 of 7
   answering · 24 V off", "Power plug · Off · 0.0 W". `EMULATOR_PLUG reset locked`: Piano › Power plug "Locked: needs a
   power cycle" and the power-cycle words after the 5 s read.
+- The tablet's System page with the 24 V off (`18-tablet-system-rail-off.png`): the boards unpowered, "0 of 7 answering ·
+  24 V off", the hub row on its first item ("USB debugging is on", the emulator's adb), no boards alarm.
 - Screenshots and `logcat-evidence.txt` in `~/.claude/plans/m62-shots/`.
 
 ## Left as it was
-- The tablet's own System page still draws the boards amber "Missing" while the 24 V is off (its head no longer flags
-  them since M60); the panel now draws them unpowered. A design call, for the designer.
 - The panel's "Piano" capsule keeps its own dot (live while connected, M53); only the tablet's dots changed.
