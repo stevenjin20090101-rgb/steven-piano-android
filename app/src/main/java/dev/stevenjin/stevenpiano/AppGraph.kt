@@ -1730,6 +1730,21 @@ class AppGraph(private val app: Application) {
 
     // ==== end of the safety check's block ==============================================================================
 
+    // ==== v1.26 — M62: the plug and the safety check together (DESIGN.md › v1.26 — M62) ================================
+
+    /**
+     * Steven Piano's notes held for its 24 V (v1.26 — M62): Steven Piano is the instrument, and its power plug's rail holds
+     * every note but what releases while it comes up ([RailKeeper.notesHeld], which [RailGate] applies), so nothing reaches
+     * the piano. Red means notes reaching the piano: the "Sent to piano" dots and the rail's are red only while a piece plays
+     * and this is false, and the connected dot while the rail wakes. Always false without the plug (the dots as before).
+     */
+    val railHoldsNotes: StateFlow<Boolean> by lazy {
+        combine(rail.notesHeld, pianoLink.kind) { held, kind -> held && kind == InstrumentKind.StevenPiano }
+            .stateIn(appScope, SharingStarted.Eagerly, false)
+    }
+
+    // ==== end of M62's block ==========================================================================================
+
     private companion object {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"

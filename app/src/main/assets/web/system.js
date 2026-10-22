@@ -21,6 +21,36 @@ const NEEDS_FIRMWARE = 'Needs newer firmware';
 /** A key held on (v1.23 — M55; the tablet's Attention.KEY_HELD). */
 const KEY_HELD = 'A key is held on';
 
+/** The 24 V power plug's words (v1.26 — M62): the tablet's Attention.PLUG_STUCK and PowerCopy's. */
+const PLUG_STUCK = "The power plug's relay may be stuck on";
+const PLUG_WELDED = 'After the 24 V was cut the plug still reads on: its relay may be stuck. Unplug the supply and check the plug.';
+const PLUG_NOT_ANSWERING = 'Not answering';
+const RAIL_OFF = '24 V off';
+
+/**
+ * Whether the power plug switches the 24 V and it isn't up now (v1.26 — M62; the tablet's Attention.railOff): off, coming
+ * up or going off. The power boards are unpowered then, so a board that doesn't answer is the rail off, not a fault:
+ * 0 of 7 is normal with the 24 V off. From /api/system's [sys], the same read as the boards it excuses.
+ */
+function railOff(sys) {
+  const power = sys && sys.power;
+  return !!power && power.paired === true && power.on === true && power.rail !== 'on' && power.rail !== 'kept';
+}
+
+/**
+ * The plug as the tablet's System page says it (PowerCopy.fact): "On · 23 s left · 6.4 W", "On · 6.4 W", "Off · 0.0 W",
+ * or "Not answering" while there is no reading. [tabletNow]: the tablet's clock now (ms), against which its timer runs.
+ */
+function plugFact(power, tabletNow) {
+  if (typeof power.output !== 'boolean') return PLUG_NOT_ANSWERING;
+  const watts = finite(power.watts);
+  const draw = watts === null ? '—' : `${watts.toFixed(1)} W`;
+  if (!power.output) return `Off · ${draw}`;
+  const ends = finite(power.timerEndsAt);
+  const left = ends === null ? 0 : Math.ceil((ends - tabletNow) / 1000);
+  return left > 0 ? `On · ${left} s left · ${draw}` : `On · ${draw}`;
+}
+
 /** Android's thermal status (SystemReading.THERMAL_WORDS), 0–6, and the dial's word for each. */
 const THERMAL = ['none', 'light', 'moderate', 'severe', 'critical', 'emergency', 'shutdown'];
 const THERMAL_WORDS = ['Normal', 'Warm', 'Warm', 'Hot', 'Hot', 'Hot', 'Hot'];
@@ -82,8 +112,9 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
  * What needs attention now, most pressing first, from /api/system's object [sys] and the panel's state [state] (for
- * the cloud address): each `{ part, text, short }`, [part] naming what it colours (battery, heat, memory, storage,
- * boards, chip, heap, relay, running), [text] the head's sentence and [short] the rail's word. Empty when all is well.
+ * the cloud address): each `{ part, text, short }`, [part] naming what it colours (held, plug, battery, heat, memory,
+ * storage, boards, chip, heap, relay, running), [text] the head's sentence and [short] the rail's word. Empty when all is
+ * well. Boards that don't answer while the power plug keeps the 24 V off are no item (v1.26 — M62: [railOff]).
  */
 export function attention(sys, state) {
   const items = [];
@@ -92,6 +123,8 @@ export function attention(sys, state) {
   const connected = piano.link && piano.link.state === 'connected';
   // A key held on (v1.23 — M55): the piano still holds a key 5 s after anything last played. First of all: it can overheat.
   if (connected && piano.keyHeld === true) items.push({ part: 'held', text: KEY_HELD, short: 'key held' });
+  // The 24 V plug's relay still on after a cut (v1.26 — M62, the tablet's order): the tablet can't cut the 24 V.
+  if (sys.power && sys.power.welded === true) items.push({ part: 'plug', text: PLUG_STUCK, short: 'relay stuck' });
   const tablet = sys.tablet || {};
   const battery = tablet.battery || {};
   const thermal = tablet.thermal || {};
@@ -115,7 +148,8 @@ export function attention(sys, state) {
   const diag = piano.diag || {};
   if (connected) {
     const missing = Array.isArray(diag.boards) ? diag.boards.filter((b) => b === 'missing').length : 0;
-    if (missing > 0) {
+    // Not while the power plug keeps the 24 V off (v1.26 — M62): unpowered boards don't answer.
+    if (missing > 0 && !railOff(sys)) {
       items.push({ part: 'boards', text: missing === 1 ? 'A power board is missing' : `${missing} power boards are missing`, short: missing === 1 ? 'board missing' : `${missing} boards missing` });
     }
     const chip = finite(diag.temp);
@@ -208,7 +242,7 @@ export function vitals(host, node) {
     set(heat, celsius === null ? '—' : hot ? capital(hot.short) : `${Math.round(celsius)} °C`, !!hot);
     const instrument = state && state.instruments && state.instruments.instrument;
     const linkState = (state && state.link && state.link.state) || (sys && sys.piano && sys.piano.link && sys.piano.link.state) || null;
-    const trouble = instrument && instrument.kind === 'midi' ? null : first(['held', 'boards', 'chip', 'heap']);
+    const trouble = instrument && instrument.kind === 'midi' ? null : first(['held', 'plug', 'boards', 'chip', 'heap']);
     const flagged = !!trouble && linkState === 'connected';
     set(piano, flagged ? capital(trouble.short) : '—', flagged);
     piano.node.hidden = !flagged;
@@ -298,11 +332,17 @@ export function create(host, body, tools) {
   const extraFacts = h('div', { class: 'facts extra' });
   const extras = new Map();
   let extraNames = null;
+  // The 24 V power plug (v1.26 — M62), last as on the tablet's card, only with a plug paired: its reading, and under it
+  // in amber a relay that stayed on after a cut, and the tablet's words for a failure ("Only 6 of 7 power boards answered").
+  const powerFact = makeFact(h, fill, 'Power plug');
+  const plugWelded = h('p', { class: 'plug-note', hidden: true, text: PLUG_WELDED });
+  const plugMessage = h('p', { class: 'plug-note', hidden: true });
+  const plugFacts = h('div', { class: 'facts extra', hidden: true }, powerFact.node, plugWelded, plugMessage);
   const pianoCard = h('section', { class: 'card', 'aria-label': 'Piano' },
     h('div', { class: 'card-head' }, glyph('g-keys'), h('h2', { text: 'Piano' }), pianoMeta),
     boards.node,
     h('div', { class: 'facts' }, firmwareFact.node, boardsFact.node, bluetoothFact.node, pedalFact.node, i2cFact.node, repeatFact.node, activeFact.node, tripsFact.node),
-    extraFacts);
+    extraFacts, plugFacts);
 
   // ---- Running now ---------------------------------------------------------------------------------------------------
 
@@ -590,7 +630,9 @@ export function create(host, body, tools) {
     const missing = m === 'ready' || m === 'old' ? NEEDS : null;
     const list = ready && Array.isArray(diag.boards) ? diag.boards : null;
     const other = instrument();
-    boards.set(list);
+    // With the power plug keeping the 24 V off (v1.26 — M62), a board that doesn't answer is unpowered: never amber.
+    const off = railOff(sys);
+    boards.set(list, off);
     setText(pianoMeta, list ? `${list.length * 12} keys · ${list.length} power boards`
       : m === 'midi' ? `${(other && other.name) || 'Another piano'} is the instrument` : m === 'off' ? 'Not connected' : '');
 
@@ -600,7 +642,8 @@ export function create(host, body, tools) {
     if (list) {
       const answering = list.filter((b) => b === 'ok').length;
       const absent = list.map((b, i) => (b === 'missing' ? `C${i + 1}` : null)).filter(Boolean);
-      boardsFact.set(`${answering} of ${list.length} answering${absent.length ? ` · ${absent.join(', ')} missing` : ''}`, parts.has('boards'));
+      const why = off ? ` · ${RAIL_OFF}` : absent.length ? ` · ${absent.join(', ')} missing` : '';
+      boardsFact.set(`${answering} of ${list.length} answering${why}`, parts.has('boards'));
     } else boardsFact.set(missing);
 
     // Bluetooth: the link's state with the live dot, and the piano's own reading of the signal when it gives one.
@@ -637,6 +680,28 @@ export function create(host, body, tools) {
     }
     for (const [name, row] of extras) row.set(String(facts[name]));
     extraFacts.hidden = others.length === 0;
+    paintPower();
+  }
+
+  /**
+   * The Power plug row (v1.26 — M62), the tablet's words for it, hidden with no plug paired: amber while its relay may be
+   * stuck on, that warning under it, and the tablet's words for a failure while it has any. Again every second, from the
+   * last read, so its timer counts down as the tablet's does; the tablet's clock is the read's time plus what passed here.
+   */
+  function paintPower() {
+    const sys = shared.sys;
+    const power = sys && sys.power;
+    const paired = !!power && power.paired === true;
+    plugFacts.hidden = !paired;
+    if (!paired) return;
+    const at = finite(sys.at);
+    const tabletNow = at === null ? Date.now() : at + (Date.now() - shared.at);
+    const welded = power.welded === true;
+    powerFact.set(plugFact(power, tabletNow), welded);
+    plugWelded.hidden = !welded;
+    const said = power.attention === true && typeof power.message === 'string' ? power.message : '';
+    setText(plugMessage, said);
+    plugMessage.hidden = !said;
   }
 
   /** Running now: every row the tablet lists, in its order: a dot, the title, the detail (and its bar), the state's word. */
@@ -985,7 +1050,10 @@ export function create(host, body, tools) {
     timers.system = setInterval(loadSystem, host.RELAYED ? SYSTEM_RELAYED_MS : SYSTEM_MS);
     timers.refresh = setInterval(refreshPiano, REFRESH_MS);
     timers.history = setInterval(loadHistory, HISTORY_MS);
-    timers.tick = setInterval(paintUpdated, 1000);
+    timers.tick = setInterval(() => {
+      paintUpdated();
+      paintPower();   // v1.26 — M62: the plug's timer, as the tablet counts it
+    }, 1000);
   }
 
   function stop() {
@@ -1183,7 +1251,10 @@ function makeDial(h, label, low, high) {
   };
 }
 
-/** The seven power boards as seven octaves of keys, C1 to C7: each answering, or hollow and amber when missing. */
+/**
+ * The seven power boards as seven octaves of keys, C1 to C7: each answering, or hollow and amber when missing; with the
+ * power plug keeping the 24 V off (v1.26 — M62) a board that doesn't answer is unpowered, hollow in ink and never amber.
+ */
 function makeBoards(h) {
   const svgEl = svgNode('svg', { class: 'octaves', viewBox: '0 0 420 62', role: 'img', 'aria-label': 'Power boards: not known', focusable: 'false' });
   const octaves = [];
@@ -1202,22 +1273,23 @@ function makeBoards(h) {
   let shown = null;
   return {
     node,
-    /** [list]: `ok` / `missing` per board, C1 first; null while not known. */
-    set(list) {
-      const key = list ? list.join(',') : '';
+    /** [list]: `ok` / `missing` per board, C1 first; null while not known. [off]: the 24 V is off (the power plug). */
+    set(list, off) {
+      const key = (list ? list.join(',') : '') + (off ? '|off' : '');
       if (key === shown) return;
       shown = key;
       const spoken = [];
       octaves.forEach((group, i) => {
         const b = list ? list[i] : undefined;
-        const state = b === 'ok' ? 'ok' : b === 'missing' ? 'missing' : 'unknown';
+        const state = b === 'ok' ? 'ok' : b === 'missing' ? (off ? 'off' : 'missing') : 'unknown';
         group.setAttribute('class', `octave ${state}`);
         if (state === 'missing') labels[i].replaceChildren(`C${i + 1}`, h('span', { class: 'word', text: 'Missing' }));
         else labels[i].textContent = state === 'ok' ? `C${i + 1} · OK` : `C${i + 1}`;
         labels[i].className = state === 'missing' ? 'missing' : '';
-        if (state !== 'unknown') spoken.push(`C${i + 1} ${state === 'ok' ? 'OK' : 'missing'}`);
+        if (state !== 'unknown') spoken.push(`C${i + 1} ${state === 'ok' ? 'OK' : state === 'off' ? 'off' : 'missing'}`);
       });
-      svgEl.setAttribute('aria-label', spoken.length ? `Power boards: ${spoken.join(', ')}` : 'Power boards: not known');
+      const head = off ? 'Power boards, the 24 V off' : 'Power boards';
+      svgEl.setAttribute('aria-label', spoken.length ? `${head}: ${spoken.join(', ')}` : 'Power boards: not known');
     },
   };
 }

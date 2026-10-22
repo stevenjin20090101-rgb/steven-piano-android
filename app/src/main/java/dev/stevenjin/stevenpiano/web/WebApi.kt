@@ -27,6 +27,7 @@ import dev.stevenjin.stevenpiano.player.Performance
 import dev.stevenjin.stevenpiano.player.PlaybackLimits
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import org.json.JSONArray
 import org.json.JSONException
@@ -431,7 +432,20 @@ object WebApi {
             .put("listen", listen(s.listen))   // v1.23 — M55
             .put("keytest", keyTest(s.keytest))
             .put("safety", safety(s.safety))   // v1.26 — M61
+            .put("power", power(s.power))   // v1.26 — M62
     }
+
+    /**
+     * The 24 V power plug in the state (v1.26 — M62): `{paired, on, rail, waking, message, attention}`; [WebPower.message]
+     * null while the tablet says nothing. Now playing's "Waking the piano…" reads `waking`.
+     */
+    fun power(p: WebPower): JSONObject = JSONObject()
+        .put("paired", p.paired)
+        .put("on", p.on)
+        .put("rail", p.rail)
+        .put("waking", p.waking)
+        .put("message", p.message ?: JSONObject.NULL)
+        .put("attention", p.attention)
 
     /**
      * The safety check in the state (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, text}`; [WebSafety.text] null
@@ -640,7 +654,8 @@ object WebApi {
      * `GET /api/system`: `{at, app{…}, tablet{…, battery{…}, thermal{…}, memory{…}, storage{…}, cpu{…}, network{…}},
      * piano{link{state, name, mtu}, state, facts, factsAt, diag{…}}, running[{key, title, state, detail, progress}],
      * web{sessions, sockets, guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting,
-     * blockedUntil}}` (BUILD_SPEC.md › v1.18 — M46). Every key is always there: what is not known is null.
+     * blockedUntil}, power{…}}` (BUILD_SPEC.md › v1.18 — M46; `power`, the 24 V plug, v1.26 — M62: [railFact]). Every
+     * key is always there: what is not known is null.
      */
     fun system(s: WebSystem): JSONObject {
         val r = s.reading
@@ -706,7 +721,29 @@ object WebApi {
                 JSONObject().put("found", s.covers.found.orNull()).put("missing", s.covers.missing.orNull()).put("failed", s.covers.failed.orNull())
                     .put("waiting", s.covers.waiting.orNull()).put("blockedUntil", s.covers.blockedUntil.orNull()),
             )
+            .put("power", railFact(s.power))   // v1.26 — M62
     }
+
+    /**
+     * The 24 V power plug on the System page (v1.26 — M62; BUILD_SPEC.md › v1.26 — M60): `{paired, on, rail, waking,
+     * output, watts, timerEndsAt, answered, total, message, attention, welded, guestEndsAt}`. `output` and `watts` are the
+     * plug's last reading (null before one, or while the plug doesn't answer: the page then says "Not answering"); the
+     * times are the tablet's wall clock (ms), to be read against `at`; `message` is the tablet's words.
+     */
+    fun railFact(f: RailFact): JSONObject = JSONObject()
+        .put("paired", f.paired)
+        .put("on", f.on)
+        .put("rail", f.rail)
+        .put("waking", f.waking)
+        .put("output", f.output.orNull())
+        .put("watts", f.watts?.takeIf { it.isFinite() }.orNull())
+        .put("timerEndsAt", f.timerEndsAt.orNull())
+        .put("answered", f.answered.orNull())
+        .put("total", f.total.orNull())
+        .put("message", f.message.orNull())
+        .put("attention", f.attention)
+        .put("welded", f.welded)
+        .put("guestEndsAt", f.guestEndsAt.orNull())
 
     /**
      * The piano's facts as numbers and words (firmware/docs/BLE_DIAG.md), every name of [PianoSettings.diagFacts] in its

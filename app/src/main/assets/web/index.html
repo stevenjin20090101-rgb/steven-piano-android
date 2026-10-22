@@ -74,6 +74,8 @@
   <symbol id="g-check" viewBox="0 0 24 24"><path class="glyph-stroke" d="M5.5 12.5l4.2 4.2 8.8-9.2"/></symbol>
   <symbol id="g-mic" viewBox="0 0 24 24"><path class="glyph-stroke" d="M9.5 6.5a2.5 2.5 0 0 1 5 0v5a2.5 2.5 0 0 1-5 0zM6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3"/></symbol>
   <symbol id="g-stop" viewBox="0 0 24 24"><path class="glyph-stroke" d="M7.5 7.5h9v9h-9z"/></symbol>
+  <!-- v1.26 — M62: the 24 V power plug's bolt (the tablet's ic_g_power). -->
+  <symbol id="g-power" viewBox="0 0 24 24"><path class="glyph-stroke" d="M13.5 3.5L6.5 13h5l-1 7.5 7-9.5h-5z"/></symbol>
 </svg>
 
 <main id="gate" class="gate" hidden>
@@ -142,6 +144,7 @@
           <p class="capsule glass quiet-capsule" id="quiet-capsule" hidden><svg class="glyph" aria-hidden="true"><use href="#g-moon"/></svg><span id="quiet-text">Quiet now</span></p>
           <button class="capsule glass button" id="quiet-override" type="button" hidden><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg><span>Play anyway</span></button>
           <p class="capsule glass safety-capsule" id="safety-capsule" aria-live="polite" hidden><span class="dot on" id="safety-dot"></span><span id="safety-text">Safety check</span></p>
+          <p class="capsule glass power-capsule" id="power-capsule" aria-live="polite" hidden><svg class="glyph" aria-hidden="true"><use href="#g-power"/></svg><span>Waking the piano…</span></p>
           <button class="capsule glass button up-next-button" id="queue-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="queue-sheet"><svg class="glyph" aria-hidden="true"><use href="#g-queue"/></svg><span>Up next</span><span class="count" data-count="requests" hidden>0</span></button>
           <p class="capsule glass link-capsule"><span class="dot" id="link-dot"></span><span>Piano</span><span class="visually-hidden" id="link-state">, not connected</span></p>
         </div>

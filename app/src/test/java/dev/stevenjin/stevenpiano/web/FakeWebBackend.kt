@@ -257,9 +257,14 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     /**
      * The System page (v1.18 — M46): what its reads answer (fixed, so a listener's answer and the relay's match), the
      * refresh's floor on [clock] (the app's own [RefreshFloor]), whether a firmware update runs, and the zip. By default
-     * the clock moves 10 s on at each look, so the floor never trips: a test that sets [clock] sees it.
+     * the clock moves 10 s on at each look, so the floor never trips: a test that sets [clock] sees it. A 24 V power plug
+     * is paired (v1.26 — M62), its rail off.
      */
-    var systemHeld = WebSystem(at = 1_790_000_000_000L, piano = WebSystemPiano(facts = mapOf("proto" to "1", "fw" to "2.0.0+a1b2c3d")))
+    var systemHeld = WebSystem(
+        at = 1_790_000_000_000L,
+        piano = WebSystemPiano(facts = mapOf("proto" to "1", "fw" to "2.0.0+a1b2c3d")),
+        power = dev.stevenjin.stevenpiano.power.RailFact(paired = true, on = true, output = false, watts = 0.0),
+    )
     var historyHeld = listOf(dev.stevenjin.stevenpiano.diag.SystemSample(1_790_000_000_000L, batteryPct = 80, batteryTenthsC = 312))
     private var looks = 0L
     var clock: () -> Long = { ++looks * RefreshFloor.REFRESH_FLOOR_MS }

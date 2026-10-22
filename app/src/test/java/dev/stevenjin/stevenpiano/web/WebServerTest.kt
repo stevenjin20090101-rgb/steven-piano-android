@@ -1385,7 +1385,11 @@ class WebServerTest {
         val system = http.get("/api/system", cookie)
         assertEquals(200, system.status)
         assertEquals("no-store", system.header("cache-control"))
-        assertEquals(setOf("at", "app", "tablet", "piano", "running", "web", "covers"), system.json().keys().asSequence().toSet())
+        assertEquals(setOf("at", "app", "tablet", "piano", "running", "web", "covers", "power"), system.json().keys().asSequence().toSet())
+        // The 24 V power plug (v1.26 — M62): served as the app gives it.
+        val power = system.json().getJSONObject("power")
+        assertTrue(power.getBoolean("paired") && !power.getBoolean("output"))
+        assertEquals("off", power.getString("rail"))
         val history = http.get("/api/system/history", cookie).json()
         assertEquals(60_000L, history.getLong("everyMs"))
         assertEquals("tenths of a degree as °C", 31.2, history.getJSONArray("samples").getJSONArray(0).getDouble(2), 1e-9)

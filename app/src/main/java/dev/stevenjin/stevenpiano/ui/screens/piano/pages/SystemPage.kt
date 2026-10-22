@@ -401,8 +401,8 @@ private fun PlugFact(stuck: Boolean) {
 
 @Composable
 private fun RunningCard(vm: PianoViewModel, system: SystemNow?, link: LinkState) {
-    val playing by vm.playing.collectAsStateWithLifecycle()
-    val toPiano = playing && link is LinkState.Connected
+    val sending by vm.sending.collectAsStateWithLifecycle()   // red only while notes reach the piano (v1.26 — M62)
+    val toPiano = sending && link is LinkState.Connected
     SystemCard(SystemCopy.RUNNING, SystemCopy.appLine(system?.reading?.app)) {
         val rows = system?.running
         if (rows == null) {

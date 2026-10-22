@@ -43,7 +43,9 @@ class PianoAskTest {
         val repo = connected(console)
         console.clearSent()
         assertEquals("OK,OK,OK,OK,OK,OK,OK", repo.ask("boards"))
-        assertEquals(listOf("get boards"), console.sent)
+        // The kept ask (M61's) names the fact with its "!", as the app always does; the firmware and the emulated console
+        // answer `get boards` and `get !boards` alike (BLE_SETTINGS.md › 4).
+        assertEquals(listOf("get !boards"), console.sent)
         assertEquals("named with its mark too", "OK,OK,OK,OK,OK,OK,OK", repo.ask("!boards"))
         piano.setFact("boards", "OK,MISSING,OK,OK,OK,OK,OK")
         assertEquals("OK,MISSING,OK,OK,OK,OK,OK", repo.ask("boards"))

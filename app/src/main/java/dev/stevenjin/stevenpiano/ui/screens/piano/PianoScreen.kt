@@ -293,7 +293,7 @@ private fun PianoHub(
 ) {
     val link by vm.link.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val playing by vm.playing.collectAsStateWithLifecycle()
+    val playing by vm.sending.collectAsStateWithLifecycle()   // the card's live red: notes reaching the piano (v1.26 — M62)
     val piano by vm.piano.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     val web by vm.web.collectAsStateWithLifecycle()
