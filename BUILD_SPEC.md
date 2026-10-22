@@ -9637,3 +9637,17 @@ skipped), lint clean.
 
 ## Left as it was
 - The panel's "Piano" capsule keeps its own dot (live while connected, M53); only the tablet's dots changed.
+
+## The release: 1.26 (versionCode 36)
+
+M60 (the smart plug, merged as `075d6c3`), M61 (the safety cycle, merged as `cac7fce`, with the integrator's wiring of
+its rail lambdas to `RailPower` and one `ask`) and M62 (the integration, merged as `3cf9ff7`: the panel's plug fact and
+waking capsule, red only when notes reach the piano, the locked-plug rule (no RPC reply within 5 s), the weld threshold
+max(2 W, idle/2), the tablet's boards unpowered in ink with the 24 V off, Gradle 9.8.2, DataStore 1.3.0, Tink 1.24.0).
+Full suite: 1,777 tests green (12 skipped); lint "No issues found". Contracts: `firmware/docs/SMART_PLUG.md` (with the
+firmware chat's nine answers) and the `restart` command of firmware 2.1.1 (`!restartproto=1`; published 2026-10-22).
+Seen: M62's end-to-end pass with the fake plug and the fake microphone (`~/.claude/plans/m62-shots/`: rail-up before
+the first note, CUT after the stop, the safety check with two silent keys through repower to the lock, the lock refusing
+Play on the tablet and the panel, a passing check unlocking it, the trunk fault, the locked plug); an upgrade install on
+the demo emulator (no crash; no Shuffle). Not seen: a real Shelly plug, the real microphone sweep at the school, the
+2.1.1 restart on the real piano.

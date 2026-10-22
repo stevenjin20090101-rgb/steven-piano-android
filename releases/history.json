@@ -306,5 +306,14 @@
     "minSdk": 26,
     "tag": "v1.25",
     "publishedAt": "2026-10-13"
+  },
+  {
+    "versionCode": 36,
+    "versionName": "1.26",
+    "notes": "Safer between pieces. One piece plays per Play, and Shuffle is gone everywhere (channels play in order). After every 6 pieces the tablet runs a Safety check, shown full screen: every key released, no coil left on, every power board answering, then all 84 keys struck once while the tablet listens (nothing is recorded). If a key stays silent, the piano restarts and its 24 V is switched off and on, then it tests again; if keys still fail, Play stays locked until a check at the tablet passes. New: the 24 V power plug (Piano › Power plug). With a Shelly Plug US Gen4 paired, the piano's 24 V is on only while something plays and the piano answers, and it switches itself off within 40 s if anything stops answering. The web panel shows the plug and 'Waking the piano…'.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.26/steven-piano-1.26.apk",
+    "minSdk": 26,
+    "tag": "v1.26",
+    "draft": true
   }
 ]
