@@ -120,6 +120,7 @@ import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.record.RecordingStore
 import dev.stevenjin.stevenpiano.safety.DataStoreSafetyStore
 import dev.stevenjin.stevenpiano.safety.Deferral
+import dev.stevenjin.stevenpiano.safety.SafetyCheck
 import dev.stevenjin.stevenpiano.safety.SafetyHost
 import dev.stevenjin.stevenpiano.safety.SafetyRunner
 import dev.stevenjin.stevenpiano.safety.safetyDataStore
@@ -1616,7 +1617,12 @@ class AppGraph(private val app: Application) {
             repower = { railPower.repower() },
             cutNow = { railPower.cutNow() },
             plugged = { railPower.available.value },
-            wantRail = { on -> railPower.wanted(SAFETY_RAIL, on) },
+            wantRail = { on ->
+                railPower.wanted(SAFETY_RAIL, on)
+                // v1.26 — M62: the check's end lets go of its repower's own hold too (60 s from the repower), so the 24 V
+                // goes off a second after the check, as after a piece: nothing is sent once it ended.
+                if (!on) railPower.wanted(RailKeeper.REPOWER, false)
+            },
             awaitRail = { railUpWithin(RAIL_AWAIT_MS) },
             log = LinkLog::warn,
         )
@@ -1697,7 +1703,14 @@ class AppGraph(private val app: Application) {
             return (read as? PianoState.Ready)?.facts.orEmpty()
         }
 
-        override suspend fun ask(fact: String): String? = pianoSettings.ask(fact)
+        override suspend fun ask(fact: String): String? {
+            // v1.26 — M62: the power boards answer only with the 24 V up, which the check wanted at its start. After the
+            // 6th piece it is still up; a check that begins with it off (due before the next Play, or run from the lock
+            // card) reads them once it is up (10 s at most), not a second after wanting it, which would find them all
+            // missing and power the piano off and on for nothing.
+            if (fact == SafetyCheck.BOARDS) railUpWithin(RAIL_AWAIT_MS)
+            return pianoSettings.ask(fact)
+        }
 
         override suspend fun restart(): String? {
             stevenLink.expectRestart(SAFETY_RESTART_WINDOW_MS)
