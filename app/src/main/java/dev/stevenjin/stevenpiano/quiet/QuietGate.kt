@@ -41,8 +41,8 @@ data class QuietNow(val now: Boolean = false, val until: Long? = null, val overr
  * change, at every block's start and end (and at least once a minute), and as a block begins without a lift [hush]
  * runs, once a block (the player's stop sequence: at a block's start anything playing stops). A block on as the app
  * starts stops it at once; a clock or time zone changed by hand ([clockChanged], v1.24 — M57) is weighed at once, and
- * the wait to the next edge is planned again from the new time. Anything playing holds a wake lock, so the tablet is
- * awake to stop it.
+ * the wait to the next edge is planned again from the new time; a block met again after the clock went back stops it
+ * again (v1.27 — M64). Anything playing holds a wake lock, so the tablet is awake to stop it.
  */
 class QuietGate(
     private val rows: StateFlow<List<QuietEntity>?>,
@@ -120,7 +120,12 @@ class QuietGate(
     fun check() {
         val weighed = weigh(clock())
         _state.value = weighed.quiet
-        val since = weighed.since ?: return
+        val since = weighed.since
+        if (since == null) {
+            // v1.27 — M64: no block on. The next one met, or this one again after the clock went back, stops it once more.
+            hushedFor = null
+            return
+        }
         if (weighed.quiet.holds && since != hushedFor) {
             hushedFor = since
             hush()
