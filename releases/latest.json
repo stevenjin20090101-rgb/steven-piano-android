@@ -1,9 +1,9 @@
 {
-  "versionCode": 36,
-  "versionName": "1.26",
-  "notes": "Safer between pieces. One piece plays per Play, and Shuffle is gone everywhere (channels play in order). After every 6 pieces the tablet runs a Safety check, shown full screen: every key released, no coil left on, every power board answering, then all 84 keys struck once while the tablet listens (nothing is recorded). If a key stays silent, the piano restarts and its 24 V is switched off and on, then it tests again; if keys still fail, Play stays locked until a check at the tablet passes. New: the 24 V power plug (Piano › Power plug). With a Shelly Plug US Gen4 paired, the piano's 24 V is on only while something plays and the piano answers, and it switches itself off within 40 s if anything stops answering. The web panel shows the plug and 'Waking the piano…'.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.26/steven-piano-1.26.apk",
-  "sha256": "775c7e71eb21ca71fe0714c410a6b20e6fd5015d30df45a90335587cc1d275d6",
-  "sizeBytes": 14428497,
+  "versionCode": 37,
+  "versionName": "1.27",
+  "notes": "Checked and tidied. A full review of the app found and fixed five problems: Stop pressed while the next piece was loading could leave Play stuck, and could keep the safety check from running until the app restarted; the safety check's own restart of the piano could be taken for a dead piano, switching the 24 V off with a misleading message; a quiet time could stop silencing the piano after the tablet's clock was set back; with the microphone sweep off, the safety check could pass when the piano hadn't reported its coils (it now asks again, then says to reconnect); and the tablet's own sound could hold a note when the piano reconnected mid-piece. The web panel now shows the piano's Bluetooth lock and the debugging warning, its dots follow the tablet's (red only while notes go to the piano), and Play next says it worked only when it did. On the tablet: the System page in the new cards, Retry alone when the piano refuses this tablet, and a stopped import says so.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.27/steven-piano-1.27.apk",
+  "sha256": "d8b24b59b79a42103fb4774c6c1f3077ffc97ef9daf10fae440c5379cc9f72d9",
+  "sizeBytes": 14439825,
   "minSdk": 26
 }
