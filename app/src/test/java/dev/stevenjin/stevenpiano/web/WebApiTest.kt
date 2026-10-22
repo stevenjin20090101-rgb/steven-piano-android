@@ -477,7 +477,7 @@ class WebApiTest {
         assertTrue("2.0.0 has none of these", listOf("heapblock", "tasks", "stack", "looprate", "active", "trips", "crashes").all { diag.isNull(it) })
         assertFalse("a fact outside the list stays in facts only", diag.has("mystery") || diag.has("proto"))
         val running = full.getJSONArray("running")
-        assertEquals(RunningNow.KEYS, (0 until running.length()).map { running.getJSONObject(it).getString("key") })
+        assertEquals(listOf("player", "link", "web", "relay", "covers", "import", "studio", "pack", "update", "firmware", "schedule", "sound"), (0 until running.length()).map { running.getJSONObject(it).getString("key") })
         assertEquals(setOf("key", "title", "state", "detail", "progress"), keys(running.getJSONObject(0)))
         assertTrue("nothing playing: no progress", running.getJSONObject(0).isNull("progress"))
         assertEquals(12, full.getJSONObject("web").getJSONObject("relay").getInt("answered"))

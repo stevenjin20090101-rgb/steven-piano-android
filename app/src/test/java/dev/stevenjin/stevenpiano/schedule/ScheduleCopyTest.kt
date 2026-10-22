@@ -13,7 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.DayOfWeek
 
-/** How days and times read, on the tablet and in the web panel: the design's own lines. */
+/** How days read, on the tablet and in the web panel: the design's own lines. */
 class ScheduleCopyTest {
     @Test
     fun `the days read as the design writes them`() {
@@ -24,12 +24,5 @@ class ScheduleCopyTest {
         assertEquals("Mon, Wed, Fri", ScheduleCopy.days(1 or 4 or 16))
         assertEquals("in week order, Monday first", "Mon, Sun", ScheduleCopy.days(64 or 1))
         assertEquals("No days", ScheduleCopy.days(0))
-    }
-
-    @Test
-    fun `the web panel's wire time, on the 24-hour clock with two-digit hours`() {
-        assertEquals("00:00", ScheduleCopy.clock(0))
-        assertEquals("09:05", ScheduleCopy.clock(545))
-        assertEquals("23:59", ScheduleCopy.clock(1_439))
     }
 }

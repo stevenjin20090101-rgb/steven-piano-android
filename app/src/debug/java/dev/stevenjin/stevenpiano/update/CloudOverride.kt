@@ -18,7 +18,8 @@ import dev.stevenjin.stevenpiano.SystemProperty
  * person typed, before the app starts: enrolment posts to that origin's `/api/enrol` and the relay
  * client connects to its `/tablet` over `ws://` (the debug build's network security config allows
  * plain HTTP to 10.0.2.2 and nowhere else), and the panel there is plain `http`. Inert on a phone or
- * tablet, and in every release build: those reach only `https://`/`wss://` at the typed host.
+ * tablet; a release build carries none of it (v1.27 — M63: `src/debug`, asked through [Emulator.cloudOverride]) and
+ * reaches only `https://`/`wss://` at the typed host.
  */
 object CloudOverride {
     const val PROPERTY = "debug.stevenpiano.cloudurl"

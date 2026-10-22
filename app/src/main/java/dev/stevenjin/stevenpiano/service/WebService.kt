@@ -33,9 +33,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.Emulator
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.graph
@@ -323,7 +323,7 @@ class WebService : Service() {
      */
     private suspend fun listen(settings: PianoSettings) {
         val choice = withContext(Dispatchers.IO) { WebAddress.choose(WebAddress.list()) }
-        val wanted = WebAddress.plan(choice, loopback = LoggingPianoLink.isWanted())
+        val wanted = WebAddress.plan(choice, loopback = Emulator.on)
         if (wanted == listening && servers.isNotEmpty() && servers.size == wanted.size && servers.all { it.isAlive }) return
         stopListening()
         val started = withContext(Dispatchers.IO) { wanted.mapNotNull(::server) }

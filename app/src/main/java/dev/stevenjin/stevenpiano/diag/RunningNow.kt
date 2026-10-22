@@ -39,8 +39,9 @@ import java.util.Locale
 
 /**
  * What the app is doing now, as the System page lists it (v1.18 — M46): always the same twelve rows, in the same order
- * ([KEYS]), each built from what the app already knows ([Inputs]) and said as the app says it elsewhere (its copy
- * objects). Pure, so it is tested on the JVM.
+ * ([of]: player, link, web, relay, covers, import, studio, pack, update, firmware, schedule, sound), each built from what
+ * the app already knows ([Inputs]) and said as the app says it elsewhere (its copy objects). "schedule" is the quiet
+ * times' row since 1.20 (M54), its key kept for the panels that know it. Pure, so it is tested on the JVM.
  */
 object RunningNow {
     const val RUNNING = "running"
@@ -48,12 +49,6 @@ object RunningNow {
     const val IDLE = "idle"
     const val OFF = "off"
     const val PROBLEM = "problem"
-
-    /**
-     * The rows' keys, in the order they are listed. "schedule" is the quiet times' row since 1.20 (M54), its key kept for
-     * the panels that know it.
-     */
-    val KEYS = listOf("player", "link", "web", "relay", "covers", "import", "studio", "pack", "update", "firmware", "schedule", "sound")
 
     /**
      * One row: its [key] and [title]; its [state] ([RUNNING], [WAITING], [IDLE], [OFF] or [PROBLEM]); [detail], one plain

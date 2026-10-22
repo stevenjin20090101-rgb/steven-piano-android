@@ -9,15 +9,14 @@
 
 package dev.stevenjin.stevenpiano.schedule
 
-import dev.stevenjin.stevenpiano.ui.Format
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * How days read (DESIGN.md › v1.6.2 — M19), on the tablet and in the web panel alike: "Weekdays", "Mon, Wed, Fri";
- * and the web panel's wire time, "08:40". Quiet times' own words are [QuietCopy]'s. The timed plays' lines went with
- * them in 1.20 (M54). Pure.
+ * How days read (DESIGN.md › v1.6.2 — M19), on the tablet and in the web panel alike: "Weekdays", "Mon, Wed, Fri".
+ * Quiet times' own words are [QuietCopy]'s. The timed plays' lines went with them in 1.20 (M54); the web panel's wire
+ * time is [dev.stevenjin.stevenpiano.ui.Format.timeOfDay]'s (v1.27 — M63). Pure.
  */
 object ScheduleCopy {
     /** "Every day", "Weekdays", "Weekends", "Wednesdays" for one day, else the days in week order: "Mon, Wed, Fri". */
@@ -31,9 +30,6 @@ object ScheduleCopy {
         val chosen = DayOfWeek.entries.filter { mask and QuietTimes.dayBit(it) != 0 }
         return if (chosen.size == 1) full(chosen.single()) + "s" else chosen.joinToString(", ") { short(it) }
     }
-
-    /** "07:45", "12:30", "23:05": the web panel's quiet times on the wire ([Format.timeOfDay], two-digit hours). */
-    fun clock(minute: Int): String = Format.timeOfDay(minute, twoDigitHour = true)
 
     /** "Wednesday". */
     fun full(day: DayOfWeek): String = day.getDisplayName(TextStyle.FULL, Locale.ENGLISH)

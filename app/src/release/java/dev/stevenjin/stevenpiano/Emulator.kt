@@ -37,6 +37,9 @@ object Emulator {
 
     fun librarySource(): UpdateSource? = null
 
+    /** The relay the person typed, always (v1.27 — M63). */
+    fun cloudOverride(): String? = null
+
     /** The 24 V power plug's real Bluetooth (v1.26 — M60). */
     fun plugTransport(): PlugTransport? = null
 

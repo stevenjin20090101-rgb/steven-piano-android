@@ -11,10 +11,10 @@ package dev.stevenjin.stevenpiano.web
 
 import android.content.Context
 import dev.stevenjin.stevenpiano.AppGraph
+import dev.stevenjin.stevenpiano.Emulator
 import dev.stevenjin.stevenpiano.settings.PianoSettings
 import dev.stevenjin.stevenpiano.settings.SettingsRepository
 import dev.stevenjin.stevenpiano.settings.StoredPin
-import dev.stevenjin.stevenpiano.update.CloudOverride
 import dev.stevenjin.stevenpiano.web.relay.CloudAddress
 import dev.stevenjin.stevenpiano.web.relay.CloudSecrets
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
@@ -86,8 +86,8 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
         CloudSecrets(KeystoreSealer(), read = { graph.settingsRepository.cloudSecret() }, write = { graph.settingsRepository.setCloudSecret(it) })
     }
 
-    /** The debug build's local relay on the emulator, read once ([CloudOverride]); null everywhere else. */
-    val cloudOverride: String? by lazy { CloudOverride.origin() }
+    /** The debug build's local relay on the emulator, read once ([Emulator.cloudOverride]); null everywhere else. */
+    val cloudOverride: String? by lazy { Emulator.cloudOverride() }
 
     val backend: AppWebBackend by lazy {
         AppWebBackend(

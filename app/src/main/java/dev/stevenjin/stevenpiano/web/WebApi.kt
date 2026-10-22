@@ -29,6 +29,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.ui.Format
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -943,8 +944,8 @@ object WebApi {
         .put("last", JSONObject.NULL)
         .put("exactAlarms", true)
 
-    /** A time as the wire has it, "08:40". */
-    private fun wireTime(minute: Int): String = dev.stevenjin.stevenpiano.schedule.ScheduleCopy.clock(minute)
+    /** A time as the wire has it, "08:40" (two-digit hours). */
+    private fun wireTime(minute: Int): String = Format.timeOfDay(minute, twoDigitHour = true)
 
     /** "08:40" as minutes after midnight; anything else is refused. */
     private fun minuteOf(text: String): Int {

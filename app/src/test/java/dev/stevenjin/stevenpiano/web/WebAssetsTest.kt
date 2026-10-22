@@ -227,7 +227,7 @@ class WebAssetsTest {
         pinned("NUMERALS_TALL", NUMERALS_TALL.toInt())
         pinned("MAX_CHORD_DRAWS", MAX_CHORD_DRAWS)
         pinned("STRIP_HEIGHT", KeyboardStripHeight.value.toInt())
-        pinned("FLIP_MS", Motion.FastMs)
+        pinned("FLIP_MS", Motion.QuickMs)
         assertEquals(1f / 3f, TRACKER_FROM_BOTTOM)
         assertTrue(roll.contains("  TRACKER_FROM_BOTTOM: 1 / 3,"))
     }

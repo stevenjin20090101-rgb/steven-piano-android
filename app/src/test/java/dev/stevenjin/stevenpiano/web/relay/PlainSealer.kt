@@ -7,15 +7,22 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.ble
+package dev.stevenjin.stevenpiano.web.relay
 
-import dev.stevenjin.stevenpiano.Emulator
+/** The JVM tests' sealer: the secret marked, not hidden (there is no Keystore off Android). */
+class PlainSealer : SecretSealer {
+    var forgotten = 0
+        private set
 
-/**
- * Whether this is a debug build on Android's emulator ([Emulator.on]), by the name the web service still asks it
- * (`WebService`'s loopback listener). The emulator's stand-in link moved to `src/debug` as `EmulatedPianoLink` in
- * v1.24 (M57); once the web service asks [Emulator] itself, this goes.
- */
-object LoggingPianoLink {
-    fun isWanted(): Boolean = Emulator.on
+    override fun seal(secret: String): String = PREFIX + secret
+
+    override fun open(sealed: String): String? = sealed.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)
+
+    override fun forget() {
+        forgotten++
+    }
+
+    private companion object {
+        const val PREFIX = "plain:"
+    }
 }

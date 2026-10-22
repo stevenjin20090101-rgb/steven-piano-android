@@ -26,6 +26,7 @@ import dev.stevenjin.stevenpiano.instruments.MidiPorts
 import dev.stevenjin.stevenpiano.library.LibraryOverride
 import dev.stevenjin.stevenpiano.power.EmulatedPlug
 import dev.stevenjin.stevenpiano.power.PlugTransport
+import dev.stevenjin.stevenpiano.update.CloudOverride
 import dev.stevenjin.stevenpiano.update.ModelsOverride
 import dev.stevenjin.stevenpiano.update.UpdateOverride
 import dev.stevenjin.stevenpiano.update.UpdateSource
@@ -36,6 +37,7 @@ import dev.stevenjin.stevenpiano.update.UpdateSource
  * ranchu hardware, or a generic build) the piano is [EmulatedPianoLink], the MIDI devices gain an emulated keyboard and
  * MIDI piano ([EmulatedMidiPorts]), the firmware update can be a [FakeOta] scenario, the app's updates, Studio's models
  * and the library pack can come from a server on the Mac (`debug.stevenpiano.updateurl`, `…modelsurl`, `…libraryurl`),
+ * the relay too (`…cloudurl`),
  * and adb's intents set a value, crash the app or play MIDI ([onIntent]). On a phone or tablet a debug build is inert,
  * as release is.
  */
@@ -73,6 +75,9 @@ object Emulator {
 
     /** The library pack's manifest from the server `debug.stevenpiano.libraryurl` names, or null for GitHub. */
     fun librarySource(): UpdateSource? = LibraryOverride.source()
+
+    /** The relay on the Mac `debug.stevenpiano.cloudurl` names ([CloudOverride], v1.27 — M63: asked here), or null. */
+    fun cloudOverride(): String? = CloudOverride.origin()
 
     /**
      * The 24 V power plug's Bluetooth on the emulator (v1.26 — M60): the fake plug beside the emulated piano, as
