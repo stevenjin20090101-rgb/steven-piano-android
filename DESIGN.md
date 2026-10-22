@@ -3566,3 +3566,51 @@ when it doesn't come up.
 **The web panel**: a capsule in Now playing's head while a check runs ("Safety check · Testing each key (37 of 84)",
 the dot on) or Play is locked ("Safety check failed: C2, F♯4", the dot amber; red for a key still on). Its Play answers
 with the tablet's words while locked, or while a check is due and the app isn't in front. It can't start a check.
+
+# v1.26 — M62: the plug and the safety check together
+
+The integration of M60 (the 24 V on a smart plug) and M61 (the safety check every 6 pieces), merged on main with the
+check's rail lambdas wired. Brief `~/.claude/plans/m62-integration-brief.md`; two plug rules from the firmware chat's
+answers of 2026-10-22 (SMART_PLUG.md) came in during the run.
+
+## The web panel
+- **Settings › System**, the Piano card: **Power plug** in the tablet's words ("On · 23 s left · 6.4 W", "Off · 0.0 W",
+  "Not answering"), its timer counting down each second; hidden with no plug paired. Under it, in the attention amber,
+  "After the 24 V was cut the plug still reads on: its relay may be stuck…" (the row amber too) and the tablet's words for
+  a failure ("Only 6 of 7 power boards answered", "Lost the power plug", "The piano stopped answering — 24 V cut"). A
+  stuck relay is also the head's "The power plug's relay may be stuck on" and the rail's foot's "Relay stuck".
+- **No missing-boards alarm while the plug keeps the 24 V off**: 0 of 7 is normal then. The boards are drawn unpowered
+  (hollow, in ink, never amber), the row reads "0 of 7 answering · 24 V off", and neither the head nor the rail's foot
+  says a board is missing. With the 24 V up a missing board is amber as before ("6 of 7 answering · C5 missing").
+- **Now playing**: "Waking the piano…" with the plug's bolt, a calm capsule beside the safety check's, while the 24 V
+  comes up (the piece waits at its start meanwhile); it goes by itself.
+
+## The tablet: red only when notes really go out
+Red means notes reaching the piano. While the 24 V comes up its notes are held, so every "Sent to piano" dot (Now
+playing, its panel beside the Library, the Keys tab, the resting screen), the rail's mark, the Piano tab's card, a
+playing channel's card and Running now's player row show the connected (ink) dot, and turn red once the notes go out.
+
+## Decided in the run
+- **The check reads the boards once the 24 V is up.** It wants the rail from its start; after the 6th piece the rail is
+  still up, but a check due before the next Play, or run from the lock card, begins with it off, and read a second later
+  every board would be missing on the real piano and call for a needless power off and on. The boards are read once
+  the rail is up (10 s at most).
+- **The check's end lets the 24 V go.** After a power off and on the rail stayed up for the repower's own minute, about
+  17 s past the lock; now the 24 V goes off a second after the check, as after a piece.
+- **A locked plug is silent** (the firmware chat, SMART_PLUG.md): it answers nothing over Bluetooth, not even its device
+  info. A plug this tablet has no bond with that connects but gives no reply in 5 s is taken as locked: the Pair screen,
+  and Piano › Power plug for a paired plug that lost its bond, say "Unplug the power plug for 5 seconds and plug it back
+  in, then open Pair the power plug again" (Setup: "Locked: needs a power cycle"). A bonded plug in `complete` always
+  answers.
+- **A welded relay is judged by the supply's draw alone** (the firmware chat): `output` is only what the plug was told,
+  and a welded contact reads off. The idle draw is read at each rail-up, the boards up and no note sent yet; after a cut,
+  more than half of it (at least 2 W, or 2 W before any reading) means the relay may be stuck.
+- **Toolchain**: Gradle 9.8.2, DataStore 1.3.0, Tink 1.24.0 (lint's three notices; lint clean).
+
+## Seen on the emulator (`steven_piano_audit`, the fake plug and the fake microphone)
+Play from idle under "Waking the piano…" (the dots ink, the piece held at its start; the panel's capsule), one piece,
+the stop, "24 V off"; the check after the 6th piece with two keys silent: the sweep, the power off and on, the second
+sweep, the lock, Play refused on the tablet and the panel (409 `safety`) and the panel's lock capsule; the check run from
+the lock card passing and the count starting again; a board missing ("Only 6 of 7 power boards answered" on both); the
+panel's System page with the 24 V off and on; a locked plug's page. Screenshots and the log's lines:
+`~/.claude/plans/m62-shots/`.

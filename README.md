@@ -889,6 +889,12 @@ From 1.18 the tablet also answers the panel's System routes (behind the PIN like
 memory and network, what the app is doing, the piano's own facts and Share diagnostics' zip, for the System page a
 later version shows.
 
+From 1.26, with the 24 V power plug (see *The 24 V power plug*): **Settings › System** shows **Power plug** on the Piano
+card in the tablet's words ("On · 23 s left · 6.4 W", "Off · 0.0 W"), in amber with what it means if its relay seems
+stuck on or the 24 V failed ("Only 6 of 7 power boards answered"). While the plug keeps the 24 V off, the boards not
+answering is normal, not a fault: they show unpowered and read "0 of 7 answering · 24 V off". **Now playing** says
+"Waking the piano…" while the 24 V comes up for a piece.
+
 While the web panel is on, a quiet notification reads "Web panel on" with the address.
 The panel runs as a foreground service, as playback does: set the app's battery use to
 *Unrestricted* (see *Keep playing with the screen off*) so Android leaves it running
@@ -1059,7 +1065,8 @@ plug*.
 
 If the plug says it finished its setup without this tablet, reset it (hold its button about 10 seconds), find it again,
 tap **Set it up from here** and give it the hotspot's name and password. If it says **Locked**, unplug it for 5 seconds,
-plug it back in, and open Pair the power plug again.
+plug it back in, and open Pair the power plug again. (A locked plug answers nothing over Bluetooth: one this tablet isn't
+paired with that stays silent for 5 seconds is taken as locked.)
 
 **What it says** (at the top of the screen):
 
@@ -1074,6 +1081,9 @@ plug it back in, and open Pair the power plug again.
 - **Lost the power plug** — the tablet couldn't reach the plug twice: the music stopped (the plug switches itself off
   within 30 s anyway). Bring the tablet nearer the plug, then play again.
 
+While the 24 V wakes, the dot beside "Sent to piano" (and on the app's mark in the rail) stays the plain connected dot:
+it turns red only once the notes reach the piano. The web panel says "Waking the piano…" in Now playing too.
+
 **Guest play with the plug** (Firmware and status › **Let anyone play for 1 hour**): the 24 V stays on for the hour and
 the tablet lets go of the piano so the iPad can connect. The page shows the time left and **End guest play**, which
 connects the tablet again, ends guest play, releases every key and turns the 24 V off; the end of the hour does the same.
@@ -1081,7 +1091,8 @@ connects the tablet again, ends guest play, releases every key and turns the 24 
 **Piano › Power plug** also shows the plug (the 24 V on or off with its timer, what the supply draws), **Switch the 24 V
 with the plug** (off: the app leaves the plug alone and it stays off, so to play without it plug the supply into a wall
 socket), **Admit a replacement tablet** (3 minutes for another tablet to pair) and **Forget the plug**. Piano › System
-shows the plug on the Piano card, in amber if its relay seems stuck on after a cut. Without a plug paired, nothing of
+shows the plug on the Piano card, in amber if its relay seems stuck on after a cut (the supply still drawing more than
+half what it draws idle, at least 2 W). The web panel's Settings › System shows it too. Without a plug paired, nothing of
 this happens.
 
 **Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60), with the

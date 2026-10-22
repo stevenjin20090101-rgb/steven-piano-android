@@ -9536,3 +9536,97 @@ and no key struck without it); `SafetyStoreTest` 3; `PianoAskRestartTest` 5; `Pl
 one and all, Play next, the waiting piece's Play, `played`, the gate on every start path); `ListeningTest` (the tablet's
 own hearing); `QueueTest`, `ChannelPlayerTest` (in order, wrapping), `SettingsRepositoryTest` (the cleanup),
 `WebServerTest` (no `/api/shuffle`, `shuffle` 400, 409 `safety` on every start route), `WebApiTest` (`safety`).
+
+# v1.26 — M62: the plug and the safety check together
+
+Read `DESIGN.md › v1.26 — M62` first. Brief `~/.claude/plans/m62-integration-brief.md`; built in a worktree
+(`android-wt-m62`, branch `m62-integration`, from main's `cac7fce`: M60 and M61 merged, the check's rail lambdas wired).
+No version bump, no signing, no release.
+
+## The web panel
+- `WebPower(paired, on, rail, waking, message, attention)` (`WebPower.of(RailFact)`) as `WebState.power`, and the whole
+  `RailFact` as `WebSystem.power`; `WebApi.power` (the state's `power`) and `WebApi.railFact` (`/api/system`'s `power`:
+  `{paired, on, rail, waking, output, watts, timerEndsAt, answered, total, message, attention, welded, guestEndsAt}`, every
+  key, unknowns null). `AppWebBackend.state()` fills it from `graph.railFact`; `system()` through `power()`: with a plug
+  paired `graph.plug.switchStatus()` is launched in the background at most once in `PLUG_READ_MS` 5 s (`plugFloor`, a
+  `RefreshFloor`), whichever panel asks, and the next read carries it; `output` and `watts` null while
+  `plug.reachable == false` ("Not answering"). `WebService`'s hub also follows `railFact.map(WebPower::of)
+  .distinctUntilChanged()` (the readings stay on `/api/system`).
+- `index.html`: `#g-power` (the tablet's `ic_g_power`), `#power-capsule` after `#safety-capsule`. `app.js`:
+  `renderPower()` from `renderNow()`, shown while `state.power.waking`.
+- `system.js`: `PLUG_STUCK`, `PLUG_WELDED`, `PLUG_NOT_ANSWERING`, `RAIL_OFF`; `railOff(sys)` (`paired && on && rail` not
+  `on`/`kept`, the tablet's `Attention.railOff`, from the same `/api/system` read as the boards); `plugFact(power,
+  tabletNow)` (`PowerCopy.fact`: seconds left `ceil((timerEndsAt − tabletNow) / 1000)`). `attention()`: `plug` ("The power
+  plug's relay may be stuck on", `short` "relay stuck") after `held`, as the tablet's order; `boards` not while
+  `railOff`. The rail's foot looks at `held, plug, boards, chip, heap`. The Piano card: `powerFact` and two `.plug-note`s
+  (the welded words; the tablet's message while `attention`) in a `facts extra` block after the extra facts, painted by
+  `paintPower()` at each read and each second (`tabletNow = sys.at + (Date.now() − shared.at)`); `makeBoards().set(list,
+  off)` draws a missing board `octave off` while `railOff`; the boards row reads "… · 24 V off". `system.css`:
+  `.octave.off` (hollow, `--tertiary`), `.plug-note` (13 px, `--attention`).
+
+## The tablet
+- `AppGraph.railHoldsNotes` (the M62 block): `rail.notesHeld && pianoLink.kind == StevenPiano`. `LinkDot.of(connected,
+  sending = playing && !held)` at `NavHost.TabRail` (the rail's mark), `ConnectionLine` (Now playing's foot,
+  `NowPlayingPanel`, the Keys tab), `LibraryScreen` (a channel's card), `DisplayScreen` (both resting layouts; a `sending`
+  parameter beside `PaperRoll`'s `playing`, which keeps driving its clock); `PianoViewModel.playing` → `sending` (the
+  connection card, Running now's player row).
+- The safety check's glue (AppGraph's M61 block): `wantRail(false)` also says `wanted(RailKeeper.REPOWER, false)`;
+  `SafetyCheckHost.ask(SafetyCheck.BOARDS)` first awaits `railUpWithin(RAIL_AWAIT_MS)` (at once without the plug or with
+  the rail up). `SafetyRunner` and its tests are unchanged.
+
+## From the firmware chat (2026-10-22, SMART_PLUG.md)
+- `PlugTransport.reached` (the last `connect` made its GATT connection, its RPC service there or not;
+  `AndroidPlugTransport.Session.reached` once `onConnectionStateChange` connected). `PlugClient.read(to)`:
+  `Shelly.GetDeviceInfo` with `SILENT_MS` 5 s → `PlugRead.Read(info)`, `Unreachable` (no connection, or an answer that
+  doesn't read), `Refused` (`transport.refused`), `Silent` (connected or reached, no reply). `call` keeps its signature
+  over a private `ask(...)`: `Outcome(answer, Miss)`, `Miss { NoConnection, Refused, NoReply, Garbled }`.
+  `PairFlow.read()` and `awaitComplete()`: `Silent` with no bond (`transport.bonded`) → `LOCKED`; bonded → `UNREACHABLE`.
+  `PowerPlugPage`'s paired plug: `graph.plug.read()`; Setup "Locked: needs a power cycle" and `PairFlow.LOCKED` for
+  `Silent` with no bond, else "Not answering" when it didn't read. Debug: `EmulatedShelly.Answer.Silent` for every request
+  to a locked plug; the emulator's transport waits out the caller's time and logs "nothing in … ms (locked)".
+- `RailKeeper.idleWatts`: the plug's `status()` `watts` read in `railUp` once the baseline is set, before `Up` (notes still
+  held); `weldedAbove() = max(WELDED_WATTS, idleWatts / 2)` (2 W with no reading); the weld look 3 s after a CUT sets
+  `welded = watts > weldedAbove()` (`output` no longer counts).
+
+## Fixed after the merge
+- `PianoAskTest` expects the kept `ask()`'s `get !boards` (the firmware and `EmulatedConsole` take both forms).
+
+## Versions
+Gradle 9.8.1 → 9.8.2 (`distributionSha256Sum` 21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607, Gradle's
+published sum), DataStore 1.2.1 → 1.3.0, Tink 1.23.0 → 1.24.0: lint's three "newer version" notices, now "No issues found";
+`minifyReleaseWithR8` passes (nothing packaged or signed).
+
+## Tests
+`PianoAskTest` (`get !boards`); `WebApiTest` (the state's `power`, `/api/system`'s `power`: every key, unknowns null, a
+paired plug's values); `WebServerTest` (`/api/system`'s keys and its `power`), `FakeWebBackend.systemHeld` with a paired
+plug; `PairFlowTest` (a locked plug: connects, no reply in 5 s, no bond → the power cycle; bonded → not answering);
+`RailKeeperTest` +1 (the threshold: 20 W idle, 9 W after the CUT not welded, 11 W welded; no idle reading, 3 W welded).
+1,776 tests (12 skipped), lint clean.
+
+## Seen on the emulator (`steven_piano_audit`, debug build, `debug.stevenpiano.plug paired`)
+- Play from idle with the boards slowed to 6 s: CHECK 11:04:11.18, ARM 11.475, `!boards` MISSING every 500 ms, OK
+  17.519, the idle read 17.564, "Rail up: 7 of 7 boards" 17.565, the first Note On 17.806 (none before); the piece's end:
+  the player's and the rail's stop sequences 20.565/20.608, CUT 21.685, the weld look 24.734 (0 W). The tablet's dots ink
+  (20,20,20) while waking and red (205,54,62) while playing; the panel's "Waking the piano…".
+- The check after the 6th piece (`debug.stevenpiano.silentkeys 36,61`, the microphone granted): begins 11:07:11.073, the
+  rail kept, `!boards` OK 12.129, CHECK-then-ARM every 10 s through both sweeps; the repower: stop sequence 53.475, CUT
+  53.517, CHECK 56.543 (missing), ARM 56.671, OK 57.735, "Rail up" 57.780, the second sweep; "Safety check failed: C2,
+  C♯4 didn't sound; Play is locked" 11:08:39.268. Play refused on the tablet (the card back) and the panel (409 `safety`,
+  "Safety check failed: C2, C♯4"); the panel's lock capsule (`dot attention`).
+- Run the safety check from the lock card (the 24 V off at its start; the keys cleared during the first sweep): rail-up
+  11:12:42.052, the check's `!boards` 42.095 (OK), the first key 42.709; the repower; the second sweep's first key
+  11:13:27.022 after its rail-up 11:13:26.341 (no Note On between the CUT and the rail-up); "Safety check passed"
+  11:14:06.656, CUT 11:14:07.705.
+  The next piece logged "1 since the last check".
+- `debug.stevenpiano.trunk` (`trunk one-missing`): ARM 11:15:30.219, six boards OK at 31.314, the 10 s wait, "Rail up: 6 of
+  7 boards" 40.320, the first Note On 40.325; "Only 6 of 7 power boards answered" on the tablet and under the panel's Power
+  plug row ("On · 28 s left · 6.4 W"), C5 amber with the rail up.
+- The panel's System page with the 24 V off: "Everything is running normally", the boards unpowered in ink, "0 of 7
+  answering · 24 V off", "Power plug · Off · 0.0 W". `EMULATOR_PLUG reset locked`: Piano › Power plug "Locked: needs a
+  power cycle" and the power-cycle words after the 5 s read.
+- Screenshots and `logcat-evidence.txt` in `~/.claude/plans/m62-shots/`.
+
+## Left as it was
+- The tablet's own System page still draws the boards amber "Missing" while the 24 V is off (its head no longer flags
+  them since M60); the panel now draws them unpowered. A design call, for the designer.
+- The panel's "Piano" capsule keeps its own dot (live while connected, M53); only the tablet's dots changed.
