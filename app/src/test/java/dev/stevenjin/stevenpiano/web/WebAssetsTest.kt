@@ -254,12 +254,8 @@ class WebAssetsTest {
         assertFalse("no Schedule page", index.contains("Add schedule") || text("app.js").contains("/api/schedules") || text("app.js").contains("scheduleLoad"))
         assertTrue("the tablet's piano sound (1.8), its volume by its one name (1.13)", index.contains("Tablet volume") && text("app.js").contains("tabletVolume"))
         assertTrue("places named as the tablet names them (1.13)", index.contains("Piano › Web panel") && !text("app.js").contains("Remote control"))
-        // What plays and what is played from (1.11 — M29): no longer under Now playing (v1.20 — M53: Settings › System
-        // says it); the built-in Settings page keeps its two lines, and the piano's pages hide under a MIDI piano.
+        // What plays and what is played from (1.11 — M29): no longer under Now playing (v1.20 — M53: Settings › System says it).
         assertFalse(index.contains("id=\"instrument-line\"") || index.contains("id=\"keyboard-line\""))
-        for (copy in listOf("Instrument: ", "Keyboard: ", "'Live'", "'Recording'", "belong to Steven Piano and are hidden while")) {
-            assertTrue("Instruments (1.11): $copy", text("app.js").contains(copy))
-        }
         assertFalse("Live is never offered to the panel", text("app.js").contains("liveToPiano") || text("app.js").contains("/api/live"))
         assertTrue(text("poster.html").contains("data-theme=\"light\""))
     }
@@ -297,8 +293,6 @@ class WebAssetsTest {
         assertEquals("nothing else names a section", 10, Regex("data-section=\"").findAll(index).count())
         assertFalse("no More sheet", index.contains("more-sheet") || app.contains("tab-more"))
         assertTrue("the script's places are the five", app.contains("const SECTIONS = ['now', 'library', 'quiet', 'studio', 'settings'];"))
-        // The addresses of 1.19 open their new homes.
-        for (old in listOf("queue", "requests", "channels", "add", "system", "piano", "schedule")) assertTrue("#$old", app.contains("case '$old':"))
         // No stray text: the rail's head is the mark, the name and a dot, with a pill only while something is wrong.
         for (name in listOf("index.html", "app.js", "settings.js", "system.js")) assertFalse("$name: no \"Connected ·\"", text(name).contains("Connected ·"))
         assertTrue(app.contains("'Reconnecting…'") && app.contains("'Piano not connected'"))

@@ -71,10 +71,9 @@ interface WebBackend {
 
     /**
      * Piece [id]'s art at [size] (v1.17 — M45): [WebArtKind.COVER] its own cover alone, [WebArtKind.ROLL] its own roll card
-     * alone (a mask the page tints, at its one size); no [kind] (an older page): its own cover, else its composer's portrait,
-     * else its roll card. Null when there is none.
+     * alone (a mask the page tints, at its one size). Null when there is none.
      */
-    suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage?
+    suspend fun pieceArt(id: Long, kind: WebArtKind, size: WebArtSize): WebImage?
 
     /** Plays piece [pieceId], then [queue] around it (just the piece when null). False when the library has no such piece. */
     suspend fun play(pieceId: Long, queue: List<Long>?): Boolean
@@ -263,8 +262,8 @@ interface WebBackend {
     suspend fun keyTestStop() = Unit
 }
 
-/** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
-data class WebModel(val name: String, val title: String, val sizeBytes: Long, val licence: String, val installed: Boolean, val line: String, val progress: Float? = null)
+/** A model on the panel's Studio page: its size, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
+data class WebModel(val name: String, val title: String, val sizeBytes: Long, val installed: Boolean, val line: String, val progress: Float? = null)
 
 /**
  * One of Studio's jobs as the tablet's page lists it: "download", "transcribe" or "compose", "queued"… "cancelled", its
@@ -468,8 +467,6 @@ data class WebPlayer(
     val queue: QueueSnapshot = QueueSnapshot(),
     val items: List<WebQueueItem> = emptyList(),
     val problem: String? = null,
-    /** Folding out-of-range notes (v1.13 — M32: the views' keys follow it). */
-    val fold: Boolean = true,
     /** What the panel's views show of the piece playing (v1.13 — M32); null with nothing loaded. */
     val views: WebViews? = null,
 )
@@ -552,9 +549,6 @@ data class WebLock(
 /** `/api/piano`: the state, and the Read status report (null before one; "" when the piano didn't answer). */
 data class WebPiano(val state: WebPianoState, val statusText: String?, val statusReading: Boolean)
 
-/** Artwork fetched in the background: [done] of [total] while [running]. */
-data class WebArtwork(val running: Boolean, val done: Int, val total: Int)
-
 /**
  * Where the panel and the request page are reached: `http://100.101.2.3:8737`, and the guests'
  * `…/request`; and (v1.10 — M26) the panel's public link through Steven Piano Cloud,
@@ -571,21 +565,19 @@ data class CatalogueList(val key: String, val name: String, val pieces: List<Web
 /**
  * Everything `/api/state` carries but the requests waiting. [monochrome]: Artwork in black and
  * white is on, so the panel draws portraits without colour, as the app does. [albumBackdrop]: Album
- * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [schedule]: kept
- * for older pages, its next start always null since timed plays were removed (v1.20 — M54). [quiet]: the quiet
- * times now (v1.20 — M54).
+ * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [quiet]: the quiet
+ * times now (v1.20 — M54). What no page read went in v1.27 — M63: the artwork's progress, folding, the queue's uids,
+ * a model's licence, and the schedule kept for the pages of 1.19.
  */
 data class WebState(
     val player: WebPlayer = WebPlayer(),
     val link: WebLink = WebLink("disconnected"),
     val piano: WebPianoState = WebPianoState("unknown"),
     val import: ImportProgress = ImportProgress.Idle,
-    val artwork: WebArtwork = WebArtwork(running = false, done = 0, total = 0),
     val web: WebAddresses = WebAddresses(null, null),
     val guests: GuestSettings = GuestSettings(open = false, approveFirst = true),
     val monochrome: Boolean = false,
     val albumBackdrop: Boolean = true,
-    val schedule: WebScheduleState = WebScheduleState(),
     val studio: WebStudio = WebStudio(),
     /** What plays and what is played from (v1.11 — M29), read-only. */
     val instruments: WebInstruments = WebInstruments(),
@@ -706,12 +698,6 @@ data class WebInstrument(val kind: String = "steven", val name: String = "Steven
 
 /** The keyboard chosen: its [name], "usb", "bluetooth" or "virtual", and "connected", "connecting", "disconnected", "pairing" or "unavailable". */
 data class WebKeyboard(val name: String, val transport: String, val state: String)
-
-/**
- * The schedules in the state, kept for older pages (v1.6.2 — M19): the next start (always null since timed plays were
- * removed in 1.20) and a revision of the list (0).
- */
-data class WebScheduleState(val next: String? = null, val revision: Int = 0)
 
 /**
  * The preferences the panel may change (`PUT /api/settings`); null leaves one as it is. The

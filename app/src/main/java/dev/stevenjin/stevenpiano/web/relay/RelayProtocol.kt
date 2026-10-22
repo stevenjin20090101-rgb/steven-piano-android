@@ -236,8 +236,8 @@ object RelayProtocol {
      * (the relay drops a larger one). A state message too large for it (a long Up next: its rows carry
      * titles, and the whole queue's ids) gives up rows from the end of `player.queue.items` (the
      * piece playing and the next ones stay; the queue's `ids` and `index`, which the page counts
-     * from, stay whole), then the queue's `uids` (which the page doesn't read). Null when it still
-     * doesn't fit, or it is not a state message.
+     * from, stay whole); the state carries no `uids` since v1.27 (M63). Null when it still doesn't
+     * fit, or it is not a state message.
      */
     fun wsText(id: Long, text: String): String? {
         val whole = RelayMessage.WsText(id, text).encode()
@@ -258,7 +258,6 @@ object RelayProtocol {
             items = kept
             fits()?.let { return it }
         }
-        queue.put("uids", JSONArray())
         return fits()
     }
 

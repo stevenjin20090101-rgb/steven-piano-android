@@ -175,8 +175,6 @@ h1 { font-size: 22px; line-height: 28px; font-weight: 500; }
 
 .note { font-size: 15px; line-height: 21px; color: var(--secondary); }
 
-.tabular { font-variant-numeric: tabular-nums; }
-
 a { color: inherit; }
 
 button, input, select { font: inherit; color: inherit; }
@@ -1832,54 +1830,6 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 .actions.compose-start { flex-direction: column; align-items: flex-start; gap: 4px; padding-left: 4px; padding-right: 4px; }
 
 .choice .glyph { color: var(--primary); }
-
-/* ---- Settings, built in (while settings.js is not there) --------------------------------------------- */
-
-.disclosure {
-  margin-top: 12px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-card);
-  background: var(--elevated);
-  box-shadow: inset 0 1px 0 var(--specular);
-  overflow: hidden;
-}
-
-.disclosure > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: var(--row);
-  padding: 0 var(--inset);
-  font-size: 17px;
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-}
-
-.disclosure > summary::-webkit-details-marker { display: none; }
-
-.disclosure > summary .glyph { transition: transform 120ms; }
-
-.disclosure[open] > summary { border-bottom: 1px solid var(--hairline); }
-
-.disclosure[open] > summary .glyph { transform: rotate(90deg); }
-
-.disclosure .section-head { padding: 16px var(--inset) 6px; }
-
-.link-line { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--secondary); font-size: 15px; }
-
-.builtin-settings > .actions { padding-left: 0; padding-right: 0; }
-
-.appearance-card { margin-top: 20px; }
-
-.status-report {
-  margin: 12px 0;
-  padding: 12px;
-  border-radius: var(--radius-control);
-  background: var(--elevated);
-  font: 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
-  white-space: pre-wrap;
-}
 
 /* ---- Touch screens: every control at least 44 px ---------------------------------------------------------- */
 

@@ -8,7 +8,7 @@
    ============================================================================ */
 
 // The panel's Settings page (DESIGN.md › v1.18 — M47b): an ES module the frame (app.js) imports the first time the
-// section `settings` shows, create(host, body, tools) → { show(), hide(), render(state), open(page) }. A list of pages
+// section `settings` shows, create(host, body, tools) → { show(), hide(), render(state) }. A list of pages
 // (System, Playback, the piano's three, Guests, Panel; v1.20 — M53 added System, system.js's page made here through
 // host.system(), and Guests, the guests' two switches and their address) with the chosen page's cards beside it from
 // 900 px; below that the list, and a page over it with a back row (system.css › Settings). Every element is built with
@@ -1037,14 +1037,6 @@ export function create(host, body, tools) {
     },
     render(state) {
       if (state) st = state;
-      update();
-    },
-    /** [key]'s page, chosen and open (an address that names it: #system). */
-    open(key) {
-      if (typeof key !== 'string' || !key) return;
-      chosen = key;
-      opened = true;
-      remember(key);
       update();
     },
   };

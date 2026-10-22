@@ -903,8 +903,8 @@ class WebServerTest {
         assertEquals(200, http.get("/api/art/composer/debussy?size=tile", auth).status)
         assertEquals(400, http.get("/api/art/composer/debussy?size=huge", auth).status)
         assertEquals(404, http.get("/api/art/composer/chopin", auth).status)
-        assertEquals("image/png", http.get("/api/art/piece/1", auth).header("content-type"))
-        assertEquals(404, http.get("/api/art/piece/99", auth).status)
+        assertEquals("image/png", http.get("/api/art/piece/1?kind=roll", auth).header("content-type"))
+        assertEquals(404, http.get("/api/art/piece/99?kind=roll", auth).status)
     }
 
     @Test
@@ -925,9 +925,8 @@ class WebServerTest {
             assertEquals(query, 400, refused.status)
             assertEquals(query, "field", refused.json().getString("error"))
         }
-        val older = http.get("/api/art/piece/1", auth)
-        assertEquals("no kind and no version (an older page): the chain, for an hour", "private, max-age=3600", older.header("cache-control"))
-        assertEquals("image/png", older.header("content-type"))
+        assertEquals("no kind (v1.27 — M63: the chain older pages took is gone)", 400, http.get("/api/art/piece/1", auth).status)
+        assertEquals("no version: kept for an hour", "private, max-age=3600", http.get("/api/art/piece/1?kind=roll", auth).header("cache-control"))
         assertEquals("private, max-age=31536000, immutable", http.get("/api/art/composer/debussy?size=row&v=1780000000000", auth).header("cache-control"))
         assertEquals("private, max-age=3600", http.get("/api/art/composer/debussy?size=row", auth).header("cache-control"))
         assertEquals(404, http.get("/api/art/piece/99?kind=roll&v=1", auth).status)

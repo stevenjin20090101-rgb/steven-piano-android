@@ -362,10 +362,10 @@ class WebServer(
             val size = call.param("size")?.let { WebArtSize.of(it) ?: throw ApiError(400, "field", "size must be row, tile or full.") } ?: WebArtSize.ROW
             image(backend.composerArt(composerKey(call.groups[0]), size), versioned = call.param("v") != null)
         },
-        // A piece's art (v1.17 — M45): `kind` cover or roll, one picture each (absent: the chain, for older pages); `size` row, tile or
-        // (v1.18 — M47) full, Now playing's (absent: tile).
-        Route(Method.GET, Regex("/api/art/piece/(\\d{1,18})"), Access.READ, "/api/art/piece/1") { call ->
-            val kind = call.param("kind")?.let { WebArtKind.of(it) ?: throw ApiError(400, "field", "kind must be cover or roll.") }
+        // A piece's art (v1.17 — M45): `kind` cover or roll, one picture each (v1.27 — M63: always named; the chain older pages
+        // took without one is gone); `size` row, tile or (v1.18 — M47) full, Now playing's (absent: tile).
+        Route(Method.GET, Regex("/api/art/piece/(\\d{1,18})"), Access.READ, "/api/art/piece/1?kind=cover") { call ->
+            val kind = WebArtKind.of(call.param("kind")) ?: throw ApiError(400, "field", "kind must be cover or roll.")
             val size = call.param("size")?.let { WebArtSize.of(it) ?: throw ApiError(400, "field", "size must be row, tile or full.") } ?: WebArtSize.TILE
             image(backend.pieceArt(call.groups[0].toLong(), kind, size), versioned = call.param("v") != null)
         },

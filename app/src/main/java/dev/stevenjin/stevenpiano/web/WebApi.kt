@@ -404,20 +404,17 @@ object WebApi {
                         "queue",
                         JSONObject()
                             .put("ids", JSONArray(p.queue.ids))
-                            .put("uids", JSONArray(p.queue.uids))
                             .put("index", p.queue.index)
                             .put("repeat", p.queue.repeat.name.lowercase())
                             .put("items", JSONArray().apply { p.items.forEach { put(piece(it.piece).put("uid", it.uid).put("requested", it.requested)) } }),
                     )
                     .put("problem", p.problem ?: JSONObject.NULL)
-                    .put("fold", p.fold)
                     .put("views", p.views?.let(::views) ?: JSONObject.NULL),
             )
             .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL).put("sending", s.link.sending))   // sending: v1.27 — M63
             .put("instruments", instruments(s.instruments))
             .put("piano", pianoState(s.piano))
             .put("import", import(s.import))
-            .put("artwork", JSONObject().put("running", s.artwork.running).put("done", s.artwork.done).put("total", s.artwork.total))
             .put("requests", JSONObject().put("pending", pending).put("guests", s.guests.open).put("approveFirst", s.guests.approveFirst))
             .put(
                 "web",
@@ -426,7 +423,6 @@ object WebApi {
             )
             .put("monochrome", s.monochrome)
             .put("albumBackdrop", s.albumBackdrop)
-            .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))
             .put("display", display(s.display))
             .put("quiet", quietNow(s.quiet))
@@ -480,7 +476,7 @@ object WebApi {
         .put("recording", s.recording)
 
     /**
-     * Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, licence, installed, line, progress}], jobs:
+     * Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, installed, line, progress}], jobs:
      * [{id, kind, name, state, line, progress, title, step, steps, tokens, musicMs, targetMs, etaMs, notes, turn}]}` (the last
      * eight v1.12 — M30).
      */
@@ -492,7 +488,7 @@ object WebApi {
             JSONArray().apply {
                 s.models.forEach { m ->
                     put(
-                        JSONObject().put("name", m.name).put("title", m.title).put("sizeBytes", m.sizeBytes).put("licence", m.licence)
+                        JSONObject().put("name", m.name).put("title", m.title).put("sizeBytes", m.sizeBytes)
                             .put("installed", m.installed).put("line", m.line).put("progress", m.progress?.toDouble() ?: JSONObject.NULL),
                     )
                 }
@@ -951,13 +947,6 @@ object WebApi {
     /** The guests' catalogue's `quiet` (v1.20 — M54): `{until}` (epoch ms) while a quiet time holds the piano, else null. */
     fun guestQuiet(q: dev.stevenjin.stevenpiano.schedule.QuietNow): Any =
         q.until?.takeIf { q.holds }?.let { JSONObject().put("until", it) } ?: JSONObject.NULL
-
-    /** `GET /api/schedules` since 1.20, for older pages: no schedule, nothing next, nothing last, exact alarms fine. */
-    fun noSchedules(): JSONObject = JSONObject()
-        .put("schedules", JSONArray())
-        .put("next", JSONObject.NULL)
-        .put("last", JSONObject.NULL)
-        .put("exactAlarms", true)
 
     /** A time as the wire has it, "08:40" (two-digit hours). */
     private fun wireTime(minute: Int): String = Format.timeOfDay(minute, twoDigitHour = true)

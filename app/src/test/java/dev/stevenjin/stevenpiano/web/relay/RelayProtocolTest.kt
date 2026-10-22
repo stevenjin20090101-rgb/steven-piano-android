@@ -158,7 +158,7 @@ class RelayProtocolTest {
         val pieces = (1..100).map { i ->
             dev.stevenjin.stevenpiano.web.WebQueueItem(
                 uid = 1_000L + i,
-                piece = dev.stevenjin.stevenpiano.web.WebPiece(i.toLong(), "Étude \"$i\" in a very long title that goes on ".repeat(4), "Frédéric Chopin", "chopin", 200_000, composerShort = "Chopin"),
+                piece = dev.stevenjin.stevenpiano.web.WebPiece(i.toLong(), "Étude \"$i\" in a very long title that goes on ".repeat(10), "Frédéric Chopin", "chopin", 200_000, composerShort = "Chopin"),
             )
         }
         val queue = dev.stevenjin.stevenpiano.player.QueueSnapshot((1L..3_000L).toList(), (1_001L..4_000L).toList(), 0)

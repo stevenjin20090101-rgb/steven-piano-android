@@ -159,7 +159,6 @@ class AppWebBackend(
         val channel = player.channel?.let { key ->
             WebChannelPlaying(key, channelName(key) ?: key, settings.channelVolume(key))
         }
-        val artwork = graph.artwork.progress.value
         val source = nowSource()
         val views = source?.let {
             WebViews(
@@ -193,18 +192,15 @@ class AppWebBackend(
                 queue = queue,
                 items = items,
                 problem = player.problem,
-                fold = player.fold,
                 views = views,
             ),
             link = linkOf(link).copy(sending = sending),
             piano = pianoOf(graph.pianoSettings.state.value),
             import = graph.importProgress.value,
-            artwork = WebArtwork(running = !artwork.idle, done = artwork.done, total = artwork.total),
             web = addresses(),
             guests = guests(),
             monochrome = settings.artworkMonochrome,
             albumBackdrop = settings.albumBackdrop,
-            schedule = WebScheduleState(),   // timed plays were removed in 1.20 (M54): nothing next, ever
             studio = studio(),
             instruments = WebInstruments.of(
                 graph.pianoLink.kind.value,
@@ -287,15 +283,12 @@ class AppWebBackend(
         WebArtSize.FULL -> ArtSize.Full
     }
 
-    override suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage? {
-        val piece = library { graph.library.piece(id) } ?: return null
-        val art = artSize(size)
+    override suspend fun pieceArt(id: Long, kind: WebArtKind, size: WebArtSize): WebImage? {
+        library { graph.library.piece(id) } ?: return null
         // One kind each (v1.17 — M45): a cover asked for is the piece's own or none, so a roll card never lands in an <img>.
         return when (kind) {
-            WebArtKind.COVER -> image(ArtworkEntity.forPiece(id), art)
+            WebArtKind.COVER -> image(ArtworkEntity.forPiece(id), artSize(size))
             WebArtKind.ROLL -> rollCard(id)
-            // An older page: its own cover first (v1.12 — M30), else its composer's portrait, else its roll card.
-            null -> image(ArtworkEntity.forPiece(id), art) ?: portrait(piece.composerKey, art) ?: rollCard(id)
         }
     }
 
@@ -584,7 +577,6 @@ class AppWebBackend(
                     name = model.name,
                     title = model.title,
                     sizeBytes = model.sizeBytes,
-                    licence = model.licenceLabel,
                     installed = here,
                     line = download?.let { StudioCopy.jobLine(it) } ?: if (here) "Installed · ${StudioCopy.modelLine(model)}" else StudioCopy.modelLine(model),
                     progress = download?.takeIf { it.state == JobState.Running }?.progress,

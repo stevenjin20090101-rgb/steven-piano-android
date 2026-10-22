@@ -172,7 +172,6 @@ class WebApiTest {
                 piece = piece,
                 positionMs = 12_345,
                 at = 98_765_432,
-                fold = false,
                 views = WebViews(rev = 41, notes = 3_216, hands = true, fingers = false, chords = true, score = true),
                 tempoPct = 90,
                 preRollMs = 2_000,
@@ -192,10 +191,9 @@ class WebApiTest {
         assertEquals(setOf("state", "name", "sending"), json.getJSONObject("link").keys().asSequence().toSet())
         assertFalse(json.getJSONObject("link").getBoolean("sending"))
         val player = json.getJSONObject("player")
-        assertEquals(setOf("status", "loading", "piece", "positionMs", "at", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem", "fold", "views"), player.keys().asSequence().toSet())
-        // The views (v1.13 — M32): when the position was taken, folding, and what the views of the piece show.
+        assertEquals(setOf("status", "loading", "piece", "positionMs", "at", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem", "views"), player.keys().asSequence().toSet())
+        // The views (v1.13 — M32): when the position was taken, and what the views of the piece show.
         assertEquals(98_765_432L, player.getLong("at"))
-        assertFalse(player.getBoolean("fold"))
         val views = player.getJSONObject("views")
         assertEquals(setOf("rev", "notes", "hands", "fingers", "chords", "score"), views.keys().asSequence().toSet())
         assertEquals(41, views.getInt("rev"))
@@ -216,10 +214,10 @@ class WebApiTest {
         assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "artVersion"), player.getJSONObject("piece").keys().asSequence().toSet())
         assertEquals("Calm", player.getJSONObject("channel").getString("name"))
         val queue = player.getJSONObject("queue")
-        assertEquals("no shuffle (v1.26 — M61)", setOf("ids", "uids", "index", "repeat", "items"), queue.keys().asSequence().toSet())
+        assertEquals("no shuffle (v1.26 — M61), no uids (v1.27 — M63)", setOf("ids", "index", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display", "quiet", "listen", "keytest", "safety", "power"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "requests", "web", "monochrome", "albumBackdrop", "studio", "display", "quiet", "listen", "keytest", "safety", "power"), json.keys().asSequence().toSet())
         // The 24 V power plug (v1.26 — M62): its little part, nothing of it without a plug; Now playing's "Waking the piano…".
         val unplugged = json.getJSONObject("power")
         assertEquals(setOf("paired", "on", "rail", "waking", "message", "attention"), unplugged.keys().asSequence().toSet())
@@ -253,14 +251,14 @@ class WebApiTest {
         val studio = WebApi.studio(
             WebStudio(
                 available = true,
-                models = listOf(WebModel("transcription", "Transcription", 124_511_036, "CC BY 4.0", installed = false, line = "Downloading · 42 of 125 MB", progress = 0.34f)),
+                models = listOf(WebModel("transcription", "Transcription", 124_511_036, installed = false, line = "Downloading · 42 of 125 MB", progress = 0.34f)),
                 jobs = listOf(WebStudioJob(3, "transcribe", "take.m4a", "done", "Kept as take", progress = null, title = "take")),
             ),
         )
         assertEquals(setOf("available", "reason", "models", "jobs"), studio.keys().asSequence().toSet())
         assertTrue(studio.isNull("reason"))
         val model = studio.getJSONArray("models").getJSONObject(0)
-        assertEquals(setOf("name", "title", "sizeBytes", "licence", "installed", "line", "progress"), model.keys().asSequence().toSet())
+        assertEquals(setOf("name", "title", "sizeBytes", "installed", "line", "progress"), model.keys().asSequence().toSet())
         assertEquals(0.34, model.getDouble("progress"), 1e-6)
         val job = studio.getJSONArray("jobs").getJSONObject(0)
         assertEquals(
@@ -269,8 +267,6 @@ class WebApiTest {
         )
         assertTrue(job.isNull("progress"))
         assertEquals("Kept as take", job.getString("line"))
-        assertTrue("timed plays were removed (v1.20 — M54): the schedule stays for older pages, its next null", json.getJSONObject("schedule").isNull("next"))
-        assertEquals(setOf("next", "revision"), json.getJSONObject("schedule").keys().asSequence().toSet())
         // Quiet times (v1.20 — M54): {now, until, overridden, next}, the times epoch ms or null, never missing.
         val calm = json.getJSONObject("quiet")
         assertEquals(setOf("now", "until", "overridden", "next"), calm.keys().asSequence().toSet())

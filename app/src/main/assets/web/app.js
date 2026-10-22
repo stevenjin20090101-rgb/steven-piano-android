@@ -110,7 +110,7 @@
   async function call(method, path, body, confirmed) {
     const init = { method, credentials: 'same-origin', cache: 'no-store', headers: {} };
     if (method !== 'GET') init.headers['X-Steven-Piano'] = '1';
-    if (method !== 'GET' && method !== 'DELETE') {
+    if (method !== 'GET') {
       init.headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body === undefined ? {} : body);
     }
@@ -256,7 +256,6 @@
   const get = (path) => call('GET', path);
   const post = (path, body) => call('POST', path, body);
   const put = (path, body) => call('PUT', path, body);
-  const del = (path) => call('DELETE', path);
 
   /** A short line at the foot of the window for what a tap did or could not do. */
   let toastTimer = null;
@@ -285,7 +284,6 @@
   // nothing stored keeps it; Follow system removes the attribute. The control is the Settings page's (host.appearance).
 
   const APPEARANCE = 'steven-piano-appearance';
-  const APPEARANCES = [['dark', 'Dark'], ['light', 'Light'], ['system', 'Follow system']];
 
   function appearance() {
     try {
@@ -309,18 +307,11 @@
       // Private browsing: it holds for this page only.
     }
     applyAppearance(chosen);
-    renderAppearance();
   }
 
   /** A chip: the chosen one carries a check. */
   function chip(label, chosen, onClick, disabled) {
     return h('button', { class: 'chip', type: 'button', 'aria-pressed': chosen ? 'true' : 'false', disabled, onclick: onClick }, chosen ? glyph('i-check') : null, label);
-  }
-
-  /** The built-in Settings page's Appearance switch (while settings.js is not there), marked in place. */
-  function renderAppearance() {
-    const holder = $('appearance-switch');
-    if (holder) segmented(holder, APPEARANCES, appearance(), setAppearance);
   }
 
   applyAppearance(appearance());
@@ -555,48 +546,16 @@
 
   // The frame (v1.18 — M47; v1.20 — M53): five places, the same in the rail (from 900 px), the tab strip below it and
   // the phones' bar below 600 px: Now playing, Library, Quiet times, Studio, Settings. Every item names its section in
-  // data-section; the one shown carries aria-current. The other places of 1.19 live inside these now (route()): Up next
-  // beside Now playing from 1100 px and in a sheet below it, the guests' requests at its top; the channels a segment of
-  // the Library and Add music its sheet; System the first page of Settings, Guests a page there. Timed plays are gone.
+  // data-section; the one shown carries aria-current. The other places of 1.19 live inside these now: Up next beside Now
+  // playing from 1100 px and in a sheet below it, the guests' requests at its top; the channels a segment of the Library
+  // and Add music its sheet; System the first page of Settings, Guests a page there. Timed plays are gone, and 1.19's
+  // addresses for those places with them (v1.27 — M63): an address names one of the five, else Now playing.
   const SECTIONS = ['now', 'library', 'quiet', 'studio', 'settings'];
   const besideQuery = window.matchMedia('(min-width: 1100px)');
   const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   /** Reduced motion: every change is a cut (style.css cuts the rest). */
   const reduced = () => reducedQuery.matches;
   let section = 'now';
-
-  /** An address of 1.19 (a bookmark, a link) opens its new home; [hash] without its '#'. */
-  function route(hash) {
-    switch (hash) {
-      case 'queue':
-        show('now');
-        if (!besideQuery.matches) openSheet('queue');
-        return;
-      case 'requests':
-        show('now');
-        return;
-      case 'channels':
-        chooseKind('channels');
-        show('library');
-        return;
-      case 'add':
-        show('library');
-        openSheet('add');
-        return;
-      case 'system':
-        modules.settings.opening = 'system';
-        show('settings');
-        return;
-      case 'piano':
-        show('settings');
-        return;
-      case 'schedule':
-        show('quiet');
-        return;
-      default:
-        show(hash);
-    }
-  }
 
   function show(name) {
     const next = SECTIONS.includes(name) ? name : 'now';
@@ -635,7 +594,7 @@
     item.addEventListener('click', () => show(item.dataset.section));
   }
 
-  window.addEventListener('hashchange', () => route(location.hash.slice(1)));
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
   // ---- Motion (v1.20 — M53): smooth and responsive, transforms and opacity only, none under reduced motion ---------
 
@@ -725,10 +684,7 @@
     if (section === 'library' && before && library.category === 'channels' && !library.query && channelOf(before) !== channelOf(state)) channelsLoad();
     renderTally();
     if (section === 'studio') renderStudioState();
-    if (section === 'settings') {
-      if (modules.settings.page) moduleRender(modules.settings);
-      else if (modules.settings.failed) renderPiano();   // the built-in page, while settings.js is not there
-    }
+    if (section === 'settings') moduleRender(modules.settings);
     if (section === 'quiet') moduleRender(modules.quiet);
   }
 
@@ -1361,19 +1317,6 @@
       if (colours.length < 4) colours.push([(((colours[0][0] + turn) % 360) + 360) % 360, colours[0][1]]);
     }
     return colours;
-  }
-
-  /**
-   * What plays and what is played from (v1.11 — M29), in two read-only lines: "Instrument: Steven Piano" and
-   * "Keyboard: FP-30X · Live · Recording" ("None", or "· not connected"). Live, recording and the choice of a
-   * device stay the tablet's: the panel only shows them.
-   */
-  function instrumentLines(instruments) {
-    if (!instruments || !instruments.instrument) return [null, null];
-    const keyboard = instruments.keyboard;
-    const on = [instruments.live ? 'Live' : null, instruments.recording ? 'Recording' : null].filter(Boolean);
-    const named = keyboard ? keyboard.name + (keyboard.state === 'connected' ? '' : ' · not connected') : 'None';
-    return [`Instrument: ${instruments.instrument.name}`, [`Keyboard: ${named}`, ...on].join(' · ')];
   }
 
   function setRange(input, value, max) {
@@ -2915,193 +2858,14 @@
     }
   }
 
-  // ---- Piano -------------------------------------------------------------------------------------------
-
-  let pianoTable = null;
-  const openGroups = new Set(['feel']);
-  const pianoDrafts = {};
-  let pianoDragging = false;
-
-  async function pianoLoad() {
-    try {
-      pianoTable = await get(ROOT + '/api/piano');
-      renderPiano();
-    } catch (e) {
-      failed(e);
-    }
-  }
-
-  /** How a setting's wire value reads, as the app's table shows it. */
-  function shown(setting, wire) {
-    if (wire === undefined || wire === null) return '—';
-    const kind = setting.kind;
-    const number = Number(wire);
-    if (kind.type === 'switch') return wire.trim() !== '0' ? 'On' : 'Off';
-    if (kind.type === 'choice') return kind.options[number] !== undefined ? kind.options[number] : wire;
-    if (Number.isNaN(number)) return wire;
-    if (number === 0 && setting.zero) return setting.zero;
-    if (kind.type === 'slider') {
-      if (setting.percentOf255) return String(Math.floor((Math.round(number) * 100) / 255));
-      if (kind.decimals > 0) return number.toFixed(kind.decimals);
-      return signed(Math.round(number));
-    }
-    return signed(Math.round(number));
-  }
-
-  const sendSetting = debounce(async (name, value) => {
-    try {
-      await put(ROOT + `/api/piano/${encodeURIComponent(name)}`, { value });
-    } catch (e) {
-      failed(e);
-    }
-    delete pianoDrafts[name];
-  }, 150);
-
-  function control(setting, wire, enabled) {
-    const kind = setting.kind;
-    const label = h('div', { class: 'label' }, setting.label, setting.unit ? h('span', { class: 'eyebrow', text: setting.unit }) : null, setting.note ? h('span', { class: 'meta', text: setting.note }) : null);
-    if (kind.type === 'switch') {
-      const on = wire !== undefined && wire.trim() !== '0';
-      const button = h('button', { class: 'switch', role: 'switch', type: 'button', 'aria-checked': on ? 'true' : 'false', 'aria-label': setting.label, disabled: !enabled || wire === undefined });
-      button.addEventListener('click', () => {
-        button.setAttribute('aria-checked', on ? 'false' : 'true');
-        sendSetting(setting.name, !on);
-      });
-      return h('div', { class: enabled ? 'setting' : 'setting disabled' }, label, button);
-    }
-    if (kind.type === 'choice') {
-      const chosen = wire === undefined ? -1 : Number(wire);
-      return h('div', { class: enabled ? 'setting stacked' : 'setting stacked disabled' }, label,
-        h('div', { class: 'chips', role: 'group', 'aria-label': setting.label }, kind.options.map((option, index) => chip(option, index === chosen, () => sendSetting(setting.name, index), !enabled))));
-    }
-    if (kind.type === 'stepper') {
-      const value = wire === undefined ? null : Math.round(Number(wire));
-      const step = (up) => () => {
-        let next = Math.min(kind.max, Math.max(kind.min, value + (up ? kind.step : -kind.step)));
-        if (kind.lowestOn && next > 0 && next < kind.lowestOn) next = up || value > kind.lowestOn ? kind.lowestOn : 0;
-        sendSetting(setting.name, next);
-      };
-      return h('div', { class: enabled ? 'setting' : 'setting disabled' }, label,
-        h('div', { class: 'stepper' },
-          h('button', { class: 'icon-button', type: 'button', 'aria-label': `Less ${setting.label}`, disabled: !enabled || value === null || value <= kind.min, onclick: step(false) }, glyph('i-remove')),
-          h('span', { class: 'value', text: shown(setting, wire) }),
-          h('button', { class: 'icon-button', type: 'button', 'aria-label': `More ${setting.label}`, disabled: !enabled || value === null || value >= kind.max, onclick: step(true) }, glyph('i-add'))));
-    }
-    const draft = pianoDrafts[setting.name];
-    const value = draft !== undefined ? draft : wire === undefined ? kind.min : Number(wire);
-    const range = h('input', { class: 'range', type: 'range', min: kind.min, max: kind.max, step: kind.step, 'aria-label': setting.label, disabled: !enabled || wire === undefined });
-    range.value = String(value);
-    range.style.setProperty('--fill', `${((value - kind.min) / (kind.max - kind.min)) * 100}%`);
-    const valueText = h('span', { class: 'value', text: draft === undefined && wire === undefined ? '—' : shown(setting, String(value)) });
-    range.addEventListener('pointerdown', () => {
-      pianoDragging = true;
-    });
-    range.addEventListener('change', () => {
-      pianoDragging = false;
-    });
-    range.addEventListener('input', () => {
-      const next = Number(range.value);
-      pianoDrafts[setting.name] = next;
-      range.style.setProperty('--fill', `${((next - kind.min) / (kind.max - kind.min)) * 100}%`);
-      valueText.textContent = shown(setting, String(next));
-      sendSetting(setting.name, next);
-    });
-    return h('div', { class: enabled ? 'setting stacked' : 'setting stacked disabled' }, label, h('div', { class: 'with-value' }, range, valueText));
-  }
-
-  function renderPiano() {
-    const body = $('settings-body');
-    if (!pianoTable || !state || !body || pianoDragging) return;   // a slider being dragged keeps its place
-    const piano = state.piano;
-    const connected = state.link.state === 'connected';
-    const ready = piano.state === 'ready';
-    const [instrumentLine, keyboardLine] = instrumentLines(state.instruments);
-    const lines = [
-      h('p', { class: 'link-line inset' }, h('span', { class: connected ? 'dot live' : 'dot' }), connected ? `Connected to ${state.link.name || 'the piano'}` : 'Not connected'),
-      instrumentLine ? h('p', { class: 'meta inset', text: instrumentLine }) : null,
-      keyboardLine ? h('p', { class: 'meta inset', text: keyboardLine }) : null,
-    ];
-    // Another MIDI piano plays (v1.11 — M29): the piano's pages and actions are Steven Piano's, hidden meanwhile.
-    if (state.instruments && state.instruments.instrument && state.instruments.instrument.kind === 'midi') {
-      fill(body, h('div', { class: 'content builtin-settings' }, lines, h('p', { class: 'note inset', text: `Sound and touch, Lights and screen, Pedal and Firmware belong to Steven Piano and are hidden while ${state.instruments.instrument.name} plays.` }), appearanceCard()));
-      renderAppearance();
-      return;
-    }
-    const status = !connected
-      ? 'Connect to the piano to adjust its settings.'
-      : piano.state === 'unsupported'
-        ? "This piano's firmware doesn't offer settings over Bluetooth yet."
-        : ready ? null : "Reading the piano's settings…";
-    const nodes = [
-      ...lines,
-      status ? h('p', { class: 'note inset', text: status }) : null,
-      piano.lastError ? h('div', { class: 'banner', role: 'status', text: `The piano said: ${piano.lastError}` }) : null,
-    ];
-    if (piano.state !== 'unsupported') {
-      for (const page of pianoTable.pages) {
-        const details = h('details', { class: 'disclosure', open: openGroups.has(page.key) });
-        details.addEventListener('toggle', () => {
-          if (details.open) openGroups.add(page.key);
-          else openGroups.delete(page.key);
-        });
-        const children = [h('summary', null, h('span', { text: page.title }), glyph('i-chevron'))];
-        if (page.key === 'feel') {
-          children.push(h('h3', { class: 'section-head eyebrow', text: 'Presets' }),
-            h('div', { class: 'actions' }, h('div', { class: 'chips', role: 'group', 'aria-label': 'Presets' },
-              pianoTable.presets.map((preset) => chip(preset.label, false, async () => {
-                try {
-                  await post(ROOT + '/api/piano/preset', { name: preset.command });
-                  toast(`${preset.label} applied on the piano.`);
-                } catch (e) {
-                  failed(e);
-                }
-              }, !ready)))));
-        }
-        for (const part of page.sections) {
-          if (part.title) children.push(h('h3', { class: 'section-head eyebrow', text: part.title }));
-          for (const setting of part.settings) children.push(control(setting, piano.values[setting.name], ready));
-        }
-        details.append(...children);
-        nodes.push(details);
-      }
-    }
-    const act = (name, label) => h('button', { class: 'outlined', type: 'button', disabled: !ready, onclick: async () => {
-      try {
-        await post(ROOT + '/api/piano/action', { name });
-        if (name === 'status') setTimeout(pianoLoad, 2500);
-        else toast(name === 'off' ? 'Every key let go.' : 'Saved on the piano.');
-      } catch (e) {
-        failed(e);
-      }
-    } }, label);
-    nodes.push(h('h3', { class: 'section-head eyebrow', text: 'Actions' }), h('div', { class: 'actions' }, act('status', 'Read status'), act('off', 'All keys off'), act('save', 'Save to the piano now')));
-    if (pianoTable.statusText) nodes.push(h('pre', { class: 'status-report', text: pianoTable.statusText }));
-    nodes.push(appearanceCard());
-    fill(body, h('div', { class: 'content builtin-settings' }, nodes));
-    renderAppearance();
-  }
-
-  /**
-   * The panel's own Appearance (v1.18 — M47), on the built-in page: the frame no longer holds it, and settings.js offers
-   * it on its Panel page through host.appearance. Dark · Light · Follow system, kept in this browser.
-   */
-  function appearanceCard() {
-    return h('div', { class: 'card appearance-card' },
-      h('div', { class: 'card-head' }, h('h2', { text: 'Panel' })),
-      h('div', { class: 'setting' },
-        h('div', { class: 'label' }, 'Appearance', h('span', { class: 'meta', text: 'In this browser only' })),
-        h('div', { class: 'segmented', id: 'appearance-switch', role: 'group', 'aria-label': 'Appearance' })));
-  }
-
   // ---- The pages' modules: Settings (v1.18 — M47b; System and Guests among its pages, v1.20 — M53) and Quiet times ----
   //
   // settings.js (the section settings) and quiet.js (the section quiet, v1.20 — M54's) are ES modules written apart from
   // this file. Each loads the first time its section shows and exports create(host, body, tools) → { show(), hide(),
-  // render(state) }; settings.js may also have open(page), for an address that names one of its pages (#system).
-  // system.js loads after the first state, for the rail's foot (vitals(host, node)), and Settings makes its System page
-  // with system.js's create(), through host.system(). While settings.js is not there the built-in page shows; while
-  // quiet.js is not there Quiet times shows its head alone; while system.js is not there the rail's foot is empty and
-  // Settings has no System page. Nothing a module does can stop the panel: every call into one is caught.
+  // render(state) }. system.js loads after the first state, for the rail's foot (vitals(host, node)), and Settings makes
+  // its System page with system.js's create(), through host.system(). While settings.js or quiet.js is not there its
+  // section shows its head alone (the built-in Settings page went in v1.27 — M63); while system.js is not there the rail's
+  // foot is empty and Settings has no System page. Nothing a module does can stop the panel: every call into one is caught.
 
   /** What a module may use: the panel's helpers, its calls (every address from ROOT), the art loader, the sections. */
   const host = Object.freeze({
@@ -3117,12 +2881,7 @@
     toast,
     failed,
     state: () => state,
-    clock,
-    plural,
     signed,
-    debounce,
-    art,
-    show: (name) => route(name),
     appearance: Object.freeze({ get: appearance, set: setAppearance }),
     confirm,
     /** system.js (v1.20 — M53: Settings' System page): a promise of the module, or of null while it is not there. */
@@ -3135,7 +2894,7 @@
   });
 
   const modules = {
-    settings: { body: 'settings-body', tools: 'settings-tools', load: () => import('./settings.js'), loading: null, module: null, page: null, showing: false, failed: false, opening: null },
+    settings: { body: 'settings-body', tools: 'settings-tools', load: () => import('./settings.js'), loading: null, module: null, page: null, showing: false, failed: false },
     quiet: { body: 'quiet-body', tools: 'quiet-tools', load: () => import('./quiet.js'), loading: null, module: null, page: null, showing: false, failed: false },
   };
 
@@ -3198,23 +2957,12 @@
     if (m.page && m.showing && state) guarded(() => m.page.render(state));
   }
 
-  /** Settings: settings.js's page once it is in (on the page an address named, #system); the built-in page without it. */
+  /** Settings: settings.js's page once it is in; while it is not there, the section's head alone. */
   function openSettings() {
     const m = modules.settings;
-    if (m.failed) {
-      pianoLoad();
-      return;
-    }
+    if (m.failed) return;
     loadModule('settings').then(() => {
-      if (section !== 'settings') return;
-      if (!modulePage(m)) {
-        pianoLoad();
-        return;
-      }
-      moduleShow(m);
-      const page = m.opening;
-      m.opening = null;
-      if (page && typeof m.page.open === 'function') guarded(() => m.page.open(page));
+      if (section === 'settings' && modulePage(m)) moduleShow(m);
     });
   }
 
@@ -3371,7 +3119,7 @@
     $('gate').hidden = true;
     $('panel').hidden = false;
     startSystem();
-    route(location.hash.slice(1) || 'now');
+    show(location.hash.slice(1) || 'now');
     openSocket();
   }
 
