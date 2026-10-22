@@ -10,14 +10,11 @@
 package dev.stevenjin.stevenpiano
 
 import kotlinx.coroutines.withTimeoutOrNull
-import dev.stevenjin.stevenpiano.update.UpdateState
-import android.Manifest
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -33,13 +30,9 @@ import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
 import dev.stevenjin.stevenpiano.admin.KioskController
 import dev.stevenjin.stevenpiano.admin.KioskMode
 import dev.stevenjin.stevenpiano.admin.OwnerRelease
-import dev.stevenjin.stevenpiano.audio.AndroidMicrophone
 import dev.stevenjin.stevenpiano.audio.AudioOut
-import dev.stevenjin.stevenpiano.audio.KeyTest
 import dev.stevenjin.stevenpiano.audio.KeyTestState
 import dev.stevenjin.stevenpiano.audio.ListenAnswer
-import dev.stevenjin.stevenpiano.audio.Listening
-import dev.stevenjin.stevenpiano.audio.MicrophoneStandIn
 import dev.stevenjin.stevenpiano.audio.PianoVoice
 import dev.stevenjin.stevenpiano.audio.TabletSound
 import dev.stevenjin.stevenpiano.ble.BlePermissions
@@ -67,18 +60,11 @@ import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.data.imports.Importer
-import dev.stevenjin.stevenpiano.diag.AndroidSystemProbe
 import dev.stevenjin.stevenpiano.diag.CrashReports
 import dev.stevenjin.stevenpiano.diag.Diagnostics
 import dev.stevenjin.stevenpiano.diag.DiagnosticsExporter
 import dev.stevenjin.stevenpiano.diag.DiagnosticsText
-import dev.stevenjin.stevenpiano.diag.HeldKey
 import dev.stevenjin.stevenpiano.diag.LinkLog
-import dev.stevenjin.stevenpiano.diag.PianoDiag
-import dev.stevenjin.stevenpiano.diag.QuietSince
-import dev.stevenjin.stevenpiano.diag.RunningNow
-import dev.stevenjin.stevenpiano.diag.SystemHistory
-import dev.stevenjin.stevenpiano.diag.SystemProbe
 import dev.stevenjin.stevenpiano.firmware.FirmwareKeys
 import dev.stevenjin.stevenpiano.firmware.FirmwarePlayer
 import dev.stevenjin.stevenpiano.firmware.FirmwareUpdater
@@ -116,7 +102,6 @@ import dev.stevenjin.stevenpiano.player.StartGate
 import dev.stevenjin.stevenpiano.record.Recorder
 import dev.stevenjin.stevenpiano.record.RecordingPieces
 import dev.stevenjin.stevenpiano.record.RecordingSession
-import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.record.RecordingStore
 import dev.stevenjin.stevenpiano.safety.DataStoreSafetyStore
 import dev.stevenjin.stevenpiano.safety.Deferral
@@ -124,9 +109,8 @@ import dev.stevenjin.stevenpiano.safety.SafetyCheck
 import dev.stevenjin.stevenpiano.safety.SafetyHost
 import dev.stevenjin.stevenpiano.safety.SafetyRunner
 import dev.stevenjin.stevenpiano.safety.safetyDataStore
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
-import dev.stevenjin.stevenpiano.schedule.QuietGate
-import dev.stevenjin.stevenpiano.schedule.Schedules
+import dev.stevenjin.stevenpiano.quiet.QuietGate
+import dev.stevenjin.stevenpiano.quiet.QuietStore
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.LibraryService
 import dev.stevenjin.stevenpiano.service.StudioService
@@ -160,9 +144,6 @@ import dev.stevenjin.stevenpiano.update.UpdateInstaller
 import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.Updater
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
-import dev.stevenjin.stevenpiano.ui.InstrumentCopy
-import dev.stevenjin.stevenpiano.ui.StudioCopy
-import dev.stevenjin.stevenpiano.web.RefreshFloor
 import dev.stevenjin.stevenpiano.web.WebPanel
 import dev.stevenjin.stevenpiano.web.relay.CloudAddress
 import dev.stevenjin.stevenpiano.web.relay.CloudStatus
@@ -180,7 +161,6 @@ import dev.stevenjin.stevenpiano.power.PlayerNow
 import dev.stevenjin.stevenpiano.power.PlugClient
 import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.PlugStore
-import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.power.RailGate
 import dev.stevenjin.stevenpiano.power.RailHold
 import dev.stevenjin.stevenpiano.power.RailKeeper
@@ -188,7 +168,6 @@ import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.RailPower
 import dev.stevenjin.stevenpiano.power.ShellyRail
 import dev.stevenjin.stevenpiano.ui.LockCopy
-import dev.stevenjin.stevenpiano.ui.PowerCopy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -208,7 +187,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -265,7 +243,6 @@ class AppGraph(private val app: Application) {
 
     /** Studio's history (v1.12 — M30): the turns of its conversation, and the one record of its pieces' Keep or Discard. */
     val studioHistory: Generations by lazy { RoomGenerations(database.generations()) }
-
 
     private val importState = MutableStateFlow(ImportProgress.Idle)
     val importProgress: StateFlow<ImportProgress> = importState.asStateFlow()
@@ -766,13 +743,13 @@ class AppGraph(private val app: Application) {
     }.getOrNull() ?: -1L
 
     /** The schedules table (v1.20 — M54: the quiet times' blocks alone; timed plays were removed), each save of the quiet times one transaction. */
-    val schedules: Schedules by lazy { Schedules(this, database.schedules()) { block -> database.withTransaction { block() } } }
+    val quietStore: QuietStore by lazy { QuietStore(this, database.schedules()) { block -> database.withTransaction { block() } } }
 
     /**
      * Quiet times' gate (Piano › Quiet times, v1.20 — M54): whether a block is on now and whether Play anyway lifted it;
      * the player starts nothing while one holds, and stops as a block begins ([start]).
      */
-    val quiet: QuietGate by lazy { QuietGate(schedules.quietRows) }
+    val quiet: QuietGate by lazy { QuietGate(quietStore.quietRows) }
 
     /** The app's own crash reports, which [App]'s crash handler writes (on the device only). */
     val crashReports: CrashReports by lazy { Diagnostics.crashReports(app) }
@@ -803,17 +780,8 @@ class AppGraph(private val app: Application) {
         )
     }
 
-    /** The tablet's and the app's readings for the web panel's System page (v1.18 — M46). */
-    val systemProbe: SystemProbe by lazy { AndroidSystemProbe(app) }
-
-    /** The System page's day: a sample a minute while the process lives ([startSystemSamples]), in memory only. */
-    val systemHistory = SystemHistory()
-
-    /**
-     * The piano's live facts at most once in 10 s, whichever System page asks: the web panel's (`/api/system/refresh`) or the
-     * tablet's own (v1.18 — M50); `firmware/docs/BLE_DIAG.md` promises the piano one round of reads in 10 s at most.
-     */
-    val factsFloor = RefreshFloor(clock = SystemClock::elapsedRealtime)
+    /** What the panel and the relay ask for from afar, the system reading, Listen and Test every key (v1.27 — M63). */
+    val remote = RemoteActions(this, app)
 
     /** When the newest crash report was written, read once at start (null: none). */
     private val latestCrash = MutableStateFlow<Long?>(null)
@@ -830,40 +798,6 @@ class AppGraph(private val app: Application) {
     }
 
     /** Restart after a silent update: the piano is silenced first, then the new code starts. */
-    /**
-     * The app's update installed from a distance (v1.23, the panel's Install the update): checked now, then downloaded,
-     * verified and handed to Android as the Update button does; once installed it starts again on the new version by
-     * itself, the piano silenced first. False (nothing done) while a firmware update runs.
-     */
-    fun updateFromAfar(): Boolean {
-        if (firmwareUpdater.state.value.busy) return false
-        appScope.launch {
-            updateChecker.checkNow()
-            when (val state = updater.state.value) {
-                is UpdateState.ReadyToInstall -> {
-                    restartOnceInstalled()
-                    updater.install(state.manifest, state.file, app)
-                }
-                is UpdateState.Available, is UpdateState.Failed -> if (state.manifest != null) {
-                    restartOnceInstalled()
-                    dev.stevenjin.stevenpiano.service.UpdateService.start(app)
-                }
-                else -> Unit
-            }
-        }
-        return true
-    }
-
-    /** After an update started from a distance: when Android reports it installed, the app starts again on it. */
-    private fun restartOnceInstalled() {
-        appScope.launch {
-            val ended = withTimeoutOrNull(REMOTE_UPDATE_WAIT_MS) {
-                updater.state.first { it is UpdateState.Installed || (it is UpdateState.Failed) }
-            }
-            if (ended is UpdateState.Installed && ended.restartNeeded) restartForUpdate(app)
-        }
-    }
-
     fun restartForUpdate(from: Context) = updateInstaller.restart(from) {
         player.silenceLive()
         player.stopAndFlush(INSTALL_FLUSH_MS)
@@ -944,7 +878,7 @@ class AppGraph(private val app: Application) {
         appScope.launch { player.state.map { it.status == PlaybackStatus.Playing }.distinctUntilChanged().collect(tabletSound::playing) }
         channelPools.summaries   // the channels' pools are worked out from the start, for the Library's first look
         channelPlayer.start()
-        startSystemSamples()
+        remote.startSystemSamples()
         web.start()
         firmwareUpdater.start()
         // At a quiet time's start anything playing stops, with the stop sequence; on a start inside one too (v1.20 — M54).
@@ -963,7 +897,7 @@ class AppGraph(private val app: Application) {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         studio.start()
-        followListening()   // v1.23 — M55
+        remote.followListening()   // v1.23 — M55
         startSafety()   // v1.26 — M61
         appScope.launch {
             val s = settingsRepository.settings.first()
@@ -972,7 +906,7 @@ class AppGraph(private val app: Application) {
             keyboard.restore(KeyboardState.Chosen.saved(s.keyboardId, s.keyboardName))
             restoreInstrument(s)
             followLive()
-            followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
+            remote.followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
             startRail()   // v1.26 — M60: the 24 V rail on its smart plug (see the M60 block)
             launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
@@ -1211,171 +1145,6 @@ class AppGraph(private val app: Application) {
         return true
     }
 
-    /**
-     * What the System pages' running rows ([RunningNow]) are built from now, the wall clock [now]: the app's own state, read
-     * where each part keeps it (v1.18 — M46's gathering for the web panel's `/api/system`, lifted here in M50 so the tablet's
-     * own System page gathers it the same way). The quiet times' line (v1.20 — M54) is the Quiet times page's. Any thread.
-     */
-    suspend fun runningInputs(now: Long = System.currentTimeMillis()): RunningNow.Inputs {
-        val prefs = settings.value
-        val panel = web
-        val cloud = panel.cloud.value
-        val relay = panel.relay
-        val hub = panel.hub
-        val playerState = player.state.value
-        val piece = playerState.piece
-        val kind = pianoLink.kind.value
-        val quietNow = quiet.now(now)
-        val quietLine = QuietCopy.status(quietNow, QuietCopy.at(now, java.time.ZoneId.systemDefault()))
-        return RunningNow.Inputs(
-            player = RunningNow.Player(
-                status = playerState.status,
-                loading = playerState.loading,
-                title = piece?.title,
-                composer = piece?.composer,
-                channel = playerState.channel?.let { key -> channelPools.summary(key)?.name ?: channels.firstOrNull { it.key == key }?.name ?: key },
-                positionMs = if (piece == null) 0 else player.positionMicrosAt(System.nanoTime()) / MICROS_PER_MS,
-                durationMs = (piece?.durationMicros ?: 0) / MICROS_PER_MS,
-                problem = playerState.problem,
-            ),
-            link = RunningNow.Link(
-                kind = kind,
-                state = pianoLink.state.value,
-                instrument = InstrumentCopy.instrumentValue(kind, prefs.midiOutName),
-                keyboard = keyboard.state.value,
-                live = liveThru.state.value.open,
-                recording = recording.state.value is RecordingState.Recording,
-            ),
-            web = RunningNow.Web(
-                on = panel.status.value.running || cloud != CloudStatus.Off,
-                sessions = panel.sessions.count(),
-                sockets = hub?.let { it.count + it.memberCount } ?: 0,
-                guests = prefs.webGuests,
-            ),
-            relay = RunningNow.Relay(cloud, relay?.answered, relay?.refused),
-            covers = RunningNow.Covers(artwork.progress.value, artwork.coversBlockedForMs()?.let { now + it }),
-            import = importProgress.value,
-            studio = RunningNow.Studio(studio.jobs.jobs.value, StudioCopy.unsupported(studio.availability.support.value)),
-            pack = libraryPack.state.value,
-            update = updater.state.value,
-            firmware = firmwareUpdater.state.value,
-            quiet = RunningNow.Quiet(quietNow.now, quietNow.overridden, quietLine),
-            sound = tabletSound.state.value,
-            now = now,
-        )
-    }
-
-    /**
-     * The System page's day (v1.18 — M46): a sample now and every minute after, for as long as the process lives, off
-     * the main thread; the piano's temperature only when its facts were read in the last two minutes ([SystemHistory]).
-     */
-    private fun startSystemSamples() {
-        appScope.launch(Dispatchers.Default) {
-            while (true) {
-                try {
-                    val piano = pianoSettings.state.value as? PianoState.Ready
-                    val at = System.currentTimeMillis()
-                    systemHistory.add(SystemHistory.sampleOf(at, systemProbe.read(), piano?.facts?.get(TEMP_FACT), pianoSettings.factsAt.value))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "A system sample couldn't be taken")
-                }
-                delay(SystemHistory.EVERY_MS)
-            }
-        }
-    }
-
-    // ---- Listening and the key test (v1.23 — M55) -------------------------------------------------------------------
-
-    /** Whether Android allows the microphone (asked for by the System page's two switches, Listening from the panel and the safety check's). */
-    fun microphoneAllowed(): Boolean = ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-
-    /**
-     * The tablet's microphone for the web panel (DESIGN.md › v1.23 — M55): only with Listening from the panel on and Android's
-     * permission, only while the app is in the foreground ([MainActivity] says so), each frame to the hearing sessions'
-     * sockets alone, through the web service's hub (the listeners' and the relay's), nothing kept. The tablet hears for
-     * itself (its own Test every key, the safety check: v1.26 — M61) with Android's permission alone. On the emulator in
-     * debug builds the microphone is a stand-in that hears the keys the key test strikes ([MicrophoneStandIn]).
-     */
-    val listening: Listening by lazy {
-        Listening(
-            appScope,
-            MicrophoneStandIn.of(AndroidMicrophone(app)) { keyTest.state },
-            allowedNow = { settings.value.listenFromPanel && microphoneAllowed() },
-            sessionValid = { web.sessions.isValid(it) },
-            send = { token, text -> web.hub?.sendToSession(token, text) ?: 0 },
-            localAllowedNow = ::microphoneAllowed,
-        )
-    }
-
-    /** Test every key (v1.23 — M55): every strike through the player's live path, the microphone hearing which keys sounded. */
-    val keyTest: KeyTest by lazy { KeyTest(appScope, keyTestPiano, listening, before = keyTestRail) }
-
-    /** The piano as the key test strikes it: the player's live keys and stop sequence, the instrument's link, the gates. */
-    private val keyTestPiano = object : KeyTest.Piano {
-        override val connected: Boolean get() = pianoLink.state.value is LinkState.Connected
-
-        override val playing: Boolean get() = player.state.value.let { it.status == PlaybackStatus.Playing || it.loading }
-
-        override fun quiet(): String? {
-            val now = this@AppGraph.quiet.now()
-            val until = now.until?.takeIf { now.holds } ?: return null
-            val zone = java.time.ZoneId.systemDefault()
-            return QuietCopy.refusal(QuietCopy.until(QuietCopy.at(until, zone), QuietCopy.at(System.currentTimeMillis(), zone)))
-        }
-
-        override val updating: Boolean get() = player.locked || firmwareUpdater.state.value.busy
-
-        override fun noteOn(key: Int, velocity: Int) = player.liveNoteOn(key, velocity)
-
-        override fun noteOff(key: Int) = player.liveNoteOff(key)
-
-        override fun stopSequence() = player.allKeysOff()
-
-        override fun muteTablet(on: Boolean) = tabletSound.mute(on)
-    }
-
-    /** Since when nothing has played (a piece, the key test, a keyboard through Live): what a key held on is weighed against. */
-    val quietSince = QuietSince(System.currentTimeMillis())
-
-    /**
-     * Whether the piano holds a key on now ([HeldKey]): Steven Piano connected and answering says it holds a key, in facts
-     * that came in 5 s or more after anything last played.
-     */
-    fun keyHeld(): Boolean =
-        HeldKey.held(PianoDiag.of(pianoLink.kind.value, pianoLink.state.value, pianoSettings.state.value)?.active, pianoSettings.factsAt.value, quietSince.since)
-
-    /** The banner's Stop: the key test ends with the player's stop sequence, and nothing hears any more. */
-    fun stopListening() {
-        keyTest.stop()
-        listening.stopAll()
-    }
-
-    /**
-     * Listening from the panel turned off: what the panels hear ends (a key test a panel started, with the stop sequence);
-     * the tablet's own key test and the safety check hear on (v1.26 — M61). From [settings] itself, so what [listening]
-     * reads of it is already the new value.
-     */
-    private fun followListening() {
-        appScope.launch {
-            settings.map { it.listenFromPanel }.distinctUntilChanged().collect { listening.refresh() }
-        }
-    }
-
-    /** What plays, as [quietSince] follows it. */
-    private fun followPlaying() {
-        appScope.launch {
-            combine(
-                player.state.map { it.status == PlaybackStatus.Playing || it.loading },
-                keyTest.state.map { it.running },
-                liveThru.state.map { it.open },
-            ) { piece, test, live -> piece || test || live }
-                .distinctUntilChanged()
-                .collect { quietSince.see(it, System.currentTimeMillis()) }
-        }
-    }
-
     // ==== v1.26 — M60: the 24 V rail on a smart plug (firmware/docs/SMART_PLUG.md; DESIGN.md › v1.26 — M60) ================
     // M60's one block. Outside it, two lines name it: the instrument plays through [railPlays], and [start] calls [startRail].
 
@@ -1427,36 +1196,6 @@ class AppGraph(private val app: Application) {
         stevenLink.state.map { it is LinkState.Connected }.distinctUntilChanged().stateIn(appScope, SharingStarted.Eagerly, false)
     }
 
-    /**
-     * The plug and its rail in one fact for the web panel (the integrator adds it to `/api/system` and the state JSON after
-     * the merge: BUILD_SPEC.md › v1.26 — M60): paired, the switch, where the rail stands, the plug's reading, the boards, the
-     * tablet's words, a stuck relay, guest play's end.
-     */
-    val railFact: StateFlow<RailFact> by lazy {
-        combine(
-            combine(plugSettings, rail.phase, rail.message) { s, phase, message -> Triple(s, phase, message) },
-            combine(plug.status, rail.armedAt, rail.boards) { status, armedAt, boards -> Triple(status, armedAt, boards) },
-            combine(rail.welded, rail.guestUntil) { welded, guest -> welded to guest },
-        ) { (s, phase, message), (status, armedAt, boards), (welded, guest) ->
-            val wall = System.currentTimeMillis() - SystemClock.elapsedRealtime()
-            RailFact(
-                paired = s?.pairing != null,
-                on = s?.on == true,
-                rail = RailFact.word(phase),
-                waking = phase == RailPhase.Waking,
-                output = status?.output,
-                watts = status?.watts,
-                timerEndsAt = armedAt?.let { it + RailKeeper.TOGGLE_AFTER_S * 1_000L + wall },
-                answered = boards?.answered,
-                total = boards?.total,
-                message = message?.let(PowerCopy::message),
-                attention = message?.attention == true,
-                welded = welded,
-                guestEndsAt = guest?.let { it + wall },
-            )
-        }.stateIn(appScope, SharingStarted.Eagerly, RailFact())
-    }
-
     /** Steven Piano's link as everything that plays sees it: the lock's gate, then the rail's (notes wait while it comes up). */
     private val railPlays: PianoLink by lazy { RailGate(stevenPlays, rail.notesHeld) }
 
@@ -1472,7 +1211,7 @@ class AppGraph(private val app: Application) {
     /** The rail failed or was cut: what plays on Steven Piano stops (the piece, Test every key, the Keys tab's keys). */
     private fun stopForRail() {
         if (!player.locked) player.stop()
-        keyTest.stop()
+        remote.keyTest.stop()
         player.silenceLive()
     }
 
@@ -1562,7 +1301,7 @@ class AppGraph(private val app: Application) {
             resume = player::resume,
             want = { rail.wanted(RailKeeper.PLAY, it) },
         ).start()
-        appScope.launch { keyTest.state.map { it.running }.distinctUntilChanged().collect { rail.wanted(RailKeeper.KEY_TEST, it) } }
+        appScope.launch { remote.keyTest.state.map { it.running }.distinctUntilChanged().collect { rail.wanted(RailKeeper.KEY_TEST, it) } }
         appScope.launch { firmwareUpdater.state.map(::updateWantsRail).distinctUntilChanged().collect(rail::updateRunning) }
         appScope.launch { rail.phase.map { it != RailPhase.Off }.distinctUntilChanged().collect(plug::hold) }
         // A keyboard's keys through Live are keys on the Keys tab: each starts the idle cut over, or wakes the rail.
@@ -1613,7 +1352,7 @@ class AppGraph(private val app: Application) {
             scope = appScope,
             store = DataStoreSafetyStore(app.safetyDataStore, log = LinkLog::warn),
             host = safetyHost,
-            listens = { settings.value.safetyCheckListens && microphoneAllowed() },
+            listens = { settings.value.safetyCheckListens && remote.microphoneAllowed() },
             repower = { railPower.repower() },
             cutNow = { railPower.cutNow() },
             plugged = { railPower.available.value },
@@ -1633,7 +1372,7 @@ class AppGraph(private val app: Application) {
      * safety check): the 24 V up. The integrator connects M60's `RailPower` here (want the rail, then wait for it, 10 s at
      * most, false when it doesn't come up); until then the rail is taken as up.
      */
-    private val keyTestRail: suspend () -> Boolean = {
+    internal val keyTestRail: suspend () -> Boolean = {
         if (!railPower.available.value) {
             true
         } else {
@@ -1673,7 +1412,7 @@ class AppGraph(private val app: Application) {
         override fun deferral(): Deferral? = when {
             player.locked || firmwareUpdater.state.value.busy -> Deferral.UPDATING
             quiet.holds() -> Deferral.QUIET
-            !listening.inFront.value -> Deferral.AWAY
+            !remote.listening.inFront.value -> Deferral.AWAY
             pianoSettings.lock.value.guestLeft(SystemClock.elapsedRealtime()) > 0 -> Deferral.GUEST_PLAY
             !pianoReady() -> Deferral.NO_PIANO
             else -> null
@@ -1717,11 +1456,11 @@ class AppGraph(private val app: Application) {
             return pianoSettings.restart()
         }
 
-        override fun startSweep(): String? = (keyTest.start(null) as? ListenAnswer.Refused)?.message
+        override fun startSweep(): String? = (remote.keyTest.start(null) as? ListenAnswer.Refused)?.message
 
-        override val sweep: StateFlow<KeyTestState> get() = keyTest.state
+        override val sweep: StateFlow<KeyTestState> get() = remote.keyTest.state
 
-        override fun stopSweep() = keyTest.stop()
+        override fun stopSweep() = remote.keyTest.stop()
 
         override fun nextPiece(): Long? {
             val queue = player.state.value.queue
@@ -1771,7 +1510,6 @@ class AppGraph(private val app: Application) {
         const val UPDATES_DIR = "updates"
         const val DIAGNOSTICS_DIR = "diagnostics"
         const val DISCONNECT_FLUSH_MS = 300L
-        const val MICROS_PER_MS = 1_000L
         const val INSTALL_FLUSH_MS = 300L
 
         /** The piano's own volume setting, which a channel holds while it plays. */
@@ -1780,8 +1518,6 @@ class AppGraph(private val app: Application) {
         /** Whether a person switched Full power off (v1.22): its own small preference file, read when the piano connects. */
         const val FULL_POWER_CHOICE = "full_power"
 
-        /** How long an update started from a distance may take to download and install before the wait for it ends. */
-        const val REMOTE_UPDATE_WAIT_MS = 20 * 60_000L
         const val FULL_POWER_CHOSEN_OFF = "chosenOff"
 
         /** The piano's Full power, which the firmware turns off when the volume goes below 100. */
@@ -1789,9 +1525,6 @@ class AppGraph(private val app: Application) {
 
         /** The piano's steady repeat period, a fact of its `dump` (v1.16 — M44). */
         const val REPEAT_FACT = "repeatms"
-
-        /** The piano's controller temperature, °C, a fact of later firmware's `dump` (v1.18 — M46; BLE_DIAG.md). */
-        const val TEMP_FACT = "temp"
 
         // v1.26 — M60: the rail.
         const val BOARDS_FACT = "boards"

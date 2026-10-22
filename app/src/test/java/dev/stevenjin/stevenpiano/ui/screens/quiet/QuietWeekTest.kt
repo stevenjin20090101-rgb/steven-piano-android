@@ -9,9 +9,9 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.quiet
 
-import dev.stevenjin.stevenpiano.schedule.QuietBlock
-import dev.stevenjin.stevenpiano.schedule.QuietSection
-import dev.stevenjin.stevenpiano.schedule.QuietTimes
+import dev.stevenjin.stevenpiano.quiet.QuietBlock
+import dev.stevenjin.stevenpiano.quiet.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietTimes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

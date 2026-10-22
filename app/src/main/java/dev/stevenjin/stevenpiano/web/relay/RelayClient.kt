@@ -78,7 +78,7 @@ sealed interface CloudStatus {
 
 /**
  * How to reach the relay: its [url] (`wss://<host>/tablet`; `ws://10.0.2.2:8787/tablet` only in the
- * debug build's local test, `CloudOverride`), this piano's [pianoId] and bearer [secret], and the
+ * debug build's local test, `Emulator.cloudOverride`), this piano's [pianoId] and bearer [secret], and the
  * [scheme] of the panel's pages there (`https`, or `http` for that local test). [toString] never
  * prints the secret.
  */
@@ -215,7 +215,9 @@ class RelayClient(
 
     /** Waits [ms], or less when [nudge]d. */
     private suspend fun waitOrNudge(ms: Long) {
-        while (wake.tryReceive().isSuccess) Unit   // a nudge from before the wait began is not this wait's
+        do {
+            val stale = wake.tryReceive()   // a nudge from before the wait began is not this wait's
+        } while (stale.isSuccess)
         coroutineScope {
             val sleeper = async { sleep(ms) }
             select<Unit> {

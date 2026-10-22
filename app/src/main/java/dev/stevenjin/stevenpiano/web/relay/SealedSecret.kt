@@ -109,24 +109,6 @@ class KeystoreSealer(private val alias: String = ALIAS) : SecretSealer {
     }
 }
 
-/** The JVM tests' sealer: the secret marked, not hidden (there is no Keystore off Android). */
-class PlainSealer : SecretSealer {
-    var forgotten = 0
-        private set
-
-    override fun seal(secret: String): String = PREFIX + secret
-
-    override fun open(sealed: String): String? = sealed.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)
-
-    override fun forget() {
-        forgotten++
-    }
-
-    private companion object {
-        const val PREFIX = "plain:"
-    }
-}
-
 /**
  * The relay's secret as the app keeps it: sealed ([sealer]) in the settings ([read], [write], the
  * DataStore's `cloudSecret`, read on its own like the PIN). [secret] is null unless the kept text

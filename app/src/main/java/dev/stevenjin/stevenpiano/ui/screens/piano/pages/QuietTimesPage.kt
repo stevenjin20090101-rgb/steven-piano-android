@@ -40,10 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
-import dev.stevenjin.stevenpiano.schedule.QuietSection
-import dev.stevenjin.stevenpiano.schedule.QuietTimes
-import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietTimes
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.Card
@@ -80,8 +79,8 @@ const val READING_SECTIONS = "Reading the quiet times…"
 @Composable
 fun QuietTimesPage() {
     val context = LocalContext.current
-    val schedules = context.graph.schedules
-    val rows by schedules.quietRows.collectAsStateWithLifecycle()
+    val quietStore = context.graph.quietStore
+    val rows by quietStore.quietRows.collectAsStateWithLifecycle()
     val quiet = rememberQuiet()
     val playAnyway = LocalPlayAnyway.current
     val sections = remember(rows) { QuietTimes.sections(rows.orEmpty()) }
@@ -149,7 +148,7 @@ private fun SectionCard(section: QuietSection, onEdit: () -> Unit) {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(section.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface)
-                Eyebrow(ScheduleCopy.days(section.days), Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
+                Eyebrow(QuietCopy.days(section.days), Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false)
             }
             Spacer(Modifier.width(16.dp))
             ActionButton("Edit", onClick = onEdit, description = "Edit ${section.name}")

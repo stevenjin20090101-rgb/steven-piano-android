@@ -16,6 +16,7 @@
 
 import { readIndex, readPage, OP, barAt, cursorX, barStart, barRight, headsOf, HEAD, VersionError } from './wire.js';
 import { rampLevel, ramp as makeRamp, scanStart, ROLL } from './roll.js';
+import { same } from './ui.js';
 
 /** The pages kept decoded, the page fetches at once, and how long the size must settle before a new layout. */
 const KEEP_PAGES = 6;
@@ -55,8 +56,6 @@ function browsingPages(first, pageCount, pages) {
   for (let slot = 0; slot < slots; slot++) out.push(start + slot <= last && pageCount > 0 ? start + slot : -1);
   return out;
 }
-
-const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 export function createScore(pane, api, host) {
   const { h, glyph } = host;

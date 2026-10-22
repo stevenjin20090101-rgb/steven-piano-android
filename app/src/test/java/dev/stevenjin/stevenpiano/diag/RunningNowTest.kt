@@ -32,7 +32,7 @@ class RunningNowTest {
     @Test
     fun `with everything idle the twelve rows come in their order, none running, each a plain fragment`() {
         val list = RunningNow.of(RunningNow.Inputs(now = now, zone = ZoneOffset.UTC, locale = Locale.ROOT))
-        assertEquals(RunningNow.KEYS, list.map { it.key })
+        assertEquals(listOf("player", "link", "web", "relay", "covers", "import", "studio", "pack", "update", "firmware", "schedule", "sound"), list.map { it.key })
         assertTrue(list.joinToString { "${it.key}=${it.state}" }, list.none { it.state == RunningNow.RUNNING || it.state == RunningNow.PROBLEM })
         assertTrue(list.all { it.progress == null && it.title.isNotBlank() && it.detail.isNotBlank() && !it.detail.endsWith(".") })
         val row = list.associateBy { it.key }

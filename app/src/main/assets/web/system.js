@@ -16,6 +16,8 @@
 // once with DOM calls and brought up to date in place: a dial's arc eases to its new value (480 ms, none under reduced
 // motion) and nothing loops. Amber, `--attention`, only where attention() says something needs it, and never alone.
 
+import { guarded, whole } from './ui.js';
+
 const NEEDS_FIRMWARE = 'Needs newer firmware';
 
 /** A key held on (v1.23 — M55; the tablet's Attention.KEY_HELD). */
@@ -49,6 +51,54 @@ function plugFact(power, tabletNow) {
   const ends = finite(power.timerEndsAt);
   const left = ends === null ? 0 : Math.ceil((ends - tabletNow) / 1000);
   return left > 0 ? `On · ${left} s left · ${draw}` : `On · ${draw}`;
+}
+
+/**
+ * Debugging left on (v1.27 — M63; the tablet's v1.25 — M58): wireless debugging is an open port with full control of the
+ * tablet. What needs attention says it as the tablet's Attention.debugging does; the Tablet card's row as SystemCopy's.
+ */
+const DEBUGGING = 'Debugging';
+
+function debuggingOn(debug) {
+  const d = debug || {};
+  if (d.usb === true && d.wireless === true) return 'USB and wireless debugging are on';
+  if (d.usb === true) return 'USB debugging is on';
+  if (d.wireless === true) return 'Wireless debugging is on';
+  if (d.wireless === null && d.developer === true) return 'Developer options are on';
+  return null;
+}
+
+/** The Tablet card's Debugging row (SystemCopy.debugging): "USB", "Wireless", "USB and wireless", "Developer options on", "Off"; null before a reading. */
+function debuggingWord(debug) {
+  if (!debug) return null;
+  if (debug.usb === true && debug.wireless === true) return 'USB and wireless';
+  if (debug.usb === true) return 'USB';
+  if (debug.wireless === true) return 'Wireless';
+  if (debug.wireless === null && debug.developer === true) return 'Developer options on';
+  if (debug.usb === null && debug.wireless === null && debug.developer === null) return null;
+  return 'Off';
+}
+
+/**
+ * The piano's Bluetooth lock (v1.27 — M63; firmware 2.1.0, the tablet's v1.25 — M58) as the tablet's Firmware page says
+ * it (ui/LockCopy.kt), from the state's `piano.lock`: null while the piano has no lock, or before it has said.
+ */
+const LOCK = 'Bluetooth lock';
+const LOCK_WORDS = { open: 'Open: any device can claim it', pairing: 'Pairing open for 5 min', claimed: 'Locked to this tablet' };
+
+function lockWords(lock) {
+  if (!lock) return null;
+  if (lock.state === 'lockedOut' || lock.state === 'notAccepted') return 'Locked to another device';
+  if (lock.state === 'proving') return "Checking this tablet's key…";
+  if (lock.state !== 'trusted') return null;
+  return LOCK_WORDS[lock.piano] || null;
+}
+
+/** Guest play while it lasts (LockCopy.GUEST and timeLeft): "52 min left", rounded up; its last minute in words. */
+const GUEST = 'Let anyone play for 1 hour';
+
+function guestLeft(seconds) {
+  return seconds < 60 ? 'Less than a minute left' : `${Math.ceil(seconds / 60)} min left`;
 }
 
 /** Android's thermal status (SystemReading.THERMAL_WORDS), 0–6, and the dial's word for each. */
@@ -113,8 +163,9 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 /**
  * What needs attention now, most pressing first, from /api/system's object [sys] and the panel's state [state] (for
  * the cloud address): each `{ part, text, short }`, [part] naming what it colours (held, plug, battery, heat, memory,
- * storage, boards, chip, heap, relay, running), [text] the head's sentence and [short] the rail's word. Empty when all is
- * well. Boards that don't answer while the power plug keeps the 24 V off are no item (v1.26 — M62: [railOff]).
+ * storage, boards, chip, heap, debugging, relay, running), [text] the head's sentence and [short] the rail's word. Empty
+ * when all is well. Boards that don't answer while the power plug keeps the 24 V off are no item (v1.26 — M62: [railOff]);
+ * debugging left on is one, in the tablet's place (v1.27 — M63).
  */
 export function attention(sys, state) {
   const items = [];
@@ -157,6 +208,8 @@ export function attention(sys, state) {
     const heapmin = finite(diag.heapmin);
     if (heapmin !== null && heapmin < HEAP_LOW_BYTES) items.push({ part: 'heap', text: 'The controller ran low on memory', short: 'low memory' });
   }
+  const debugging = debuggingOn(tablet.debugging);
+  if (debugging) items.push({ part: 'debugging', text: debugging, short: 'debugging on' });
 
   const relay = sys.web && sys.web.relay;
   const cloud = state && state.web && state.web.cloud;
@@ -296,11 +349,12 @@ export function create(host, body, tools) {
   const networkFact = makeFact(h, fill, 'Wi-Fi');
   const tabletUptime = makeFact(h, fill, 'Running for');
   const screenFact = makeFact(h, fill, 'Screen');
+  const debuggingFact = makeFact(h, fill, DEBUGGING);
   const tabletCard = h('section', { class: 'card', 'aria-label': 'Tablet' },
     h('div', { class: 'card-head' }, glyph('g-tablet'), h('h2', { text: 'Tablet' }), tabletMeta),
     h('div', { class: 'dials' }, batteryDial.node, heatDial.node),
     memoryLevel.node, storageLevel.node,
-    h('div', { class: 'facts' }, networkFact.node, tabletUptime.node, screenFact.node));
+    h('div', { class: 'facts' }, networkFact.node, tabletUptime.node, screenFact.node, debuggingFact.node));
 
   // ---- The controller ------------------------------------------------------------------------------------------------
 
@@ -324,6 +378,8 @@ export function create(host, body, tools) {
   const firmwareFact = makeFact(h, fill, 'Firmware');
   const boardsFact = makeFact(h, fill, 'Power boards');
   const bluetoothFact = makeFact(h, fill, 'Bluetooth');
+  const lockFact = makeFact(h, fill, LOCK);
+  const guestFact = makeFact(h, fill, GUEST);
   const pedalFact = makeFact(h, fill, 'Pedal board');
   const i2cFact = makeFact(h, fill, 'I²C errors');
   const repeatFact = makeFact(h, fill, 'Repeat period');
@@ -341,7 +397,7 @@ export function create(host, body, tools) {
   const pianoCard = h('section', { class: 'card', 'aria-label': 'Piano' },
     h('div', { class: 'card-head' }, glyph('g-keys'), h('h2', { text: 'Piano' }), pianoMeta),
     boards.node,
-    h('div', { class: 'facts' }, firmwareFact.node, boardsFact.node, bluetoothFact.node, pedalFact.node, i2cFact.node, repeatFact.node, activeFact.node, tripsFact.node),
+    h('div', { class: 'facts' }, firmwareFact.node, boardsFact.node, bluetoothFact.node, lockFact.node, guestFact.node, pedalFact.node, i2cFact.node, repeatFact.node, activeFact.node, tripsFact.node),
     extraFacts, plugFacts);
 
   // ---- Running now ---------------------------------------------------------------------------------------------------
@@ -557,6 +613,8 @@ export function create(host, body, tools) {
     else networkFact.set(null);
     tabletUptime.set(duration(finite(tablet.uptimeMs) === null ? null : tablet.uptimeMs / 1000));
     screenFact.set(tablet.screenOn === true ? 'On' : tablet.screenOn === false ? 'Off' : null);
+    // v1.27 — M63: USB or wireless debugging left on, amber with the head's words (the tablet's System page).
+    debuggingFact.set(debuggingWord(tablet.debugging), parts.has('debugging'));
   }
 
   function paintController(sys, m, parts) {
@@ -655,6 +713,14 @@ export function create(host, body, tools) {
       const text = [LINK_WORDS[state] || capital(state), rssi !== null ? `${host.signed(Math.round(rssi))} dBm` : null].filter(Boolean).join(' · ');
       bluetoothFact.set([h('span', { class: on ? 'dot live' : 'dot' }), h('span', { text })], false, `${on}:${text}`);
     }
+    // The piano's Bluetooth lock (v1.27 — M63), while it has one, and guest play while it lasts: the tablet's words.
+    const lock = m === 'midi' ? null : (st && st.piano && st.piano.lock) || null;
+    const lockText = lockWords(lock);
+    lockFact.node.hidden = !lockText;
+    lockFact.set(lockText);
+    const guest = lockText && finite(lock.guestSecondsLeft) > 0 ? lock.guestSecondsLeft : 0;
+    guestFact.node.hidden = !guest;
+    guestFact.set(guest ? guestLeft(guest) : null);
     const pedal = ready && typeof diag.pedalboard === 'string' ? capital(diag.pedalboard) : null;
     pedalFact.set(pedal || missing);
     const i2c = ready ? finite(diag.i2cfails) : null;
@@ -1630,22 +1696,7 @@ const n2 = (v) => Math.round(v * 100) / 100;
 const capital = (word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A whole number from the piano's text ("348160"), or null. */
-function whole(text) {
-  if (typeof text !== 'string' && typeof text !== 'number') return null;
-  const n = Number(String(text).trim());
-  return Number.isFinite(n) ? Math.round(n) : null;
-}
-
 function setText(node, text) {
   const value = text === null || text === undefined ? '' : String(text);
   if (node.textContent !== value) node.textContent = value;
-}
-
-function guarded(fn) {
-  try {
-    fn();
-  } catch (e) {
-    if (window.console) console.error(e);
-  }
 }

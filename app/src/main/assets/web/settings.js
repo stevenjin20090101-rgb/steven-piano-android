@@ -8,11 +8,13 @@
    ============================================================================ */
 
 // The panel's Settings page (DESIGN.md › v1.18 — M47b): an ES module the frame (app.js) imports the first time the
-// section `settings` shows, create(host, body, tools) → { show(), hide(), render(state), open(page) }. A list of pages
+// section `settings` shows, create(host, body, tools) → { show(), hide(), render(state) }. A list of pages
 // (System, Playback, the piano's three, Guests, Panel; v1.20 — M53 added System, system.js's page made here through
 // host.system(), and Guests, the guests' two switches and their address) with the chosen page's cards beside it from
 // 900 px; below that the list, and a page over it with a back row (system.css › Settings). Every element is built with
 // DOM calls, what the tablet says goes in as text, sizes go through the CSSOM, and every request is built from host.ROOT.
+
+import { guarded, holdToRepeat, whole } from './ui.js';
 
 /** The app's own words (ui/SettingNotes.kt, ui/PlaybackCopy.kt), so the panel says what the tablet says. */
 const NOTES = {
@@ -52,8 +54,8 @@ const PRESET_LINES = {
   snappy: 'Fast repeats',
 };
 
-/** The piano's pages' glyphs, by the table's keys. */
-const PIANO_GLYPHS = { feel: 'g-keys', lighting: 'g-studio', pedal: 'g-piano' };
+/** The piano's pages' glyphs, by the table's keys: the tablet's own line icons (v1.27 — M63; its M59 `ic_g_*`). */
+const PIANO_GLYPHS = { feel: 'g-hammer', lighting: 'g-bulb', pedal: 'g-pedal' };
 
 /** The piano's pages until /api/piano names them (PianoPage's titles). */
 const PIANO_PAGES = [
@@ -147,6 +149,11 @@ export function create(host, body, tools) {
   const piano = () => (st && st.piano) || { state: 'unknown', values: {}, facts: {} };
   const connected = () => link().state === 'connected';
   const pianoReady = () => connected() && piano().state === 'ready';
+  /**
+   * The piano's Bluetooth lock lets this tablet write its settings (v1.27 — M63; the tablet's v1.25 — M58): not while it
+   * proves its key or the piano keeps it out, when the piano's pages read only (the app drops such writes anyway).
+   */
+  const pianoWritable = () => pianoReady() && !(piano().lock && piano().lock.writable === false);
   const values = () => piano().values || {};
   const facts = () => piano().facts || {};
 
@@ -156,11 +163,18 @@ export function create(host, body, tools) {
     return instrument && instrument.kind === 'midi' ? instrument.name || 'another piano' : null;
   }
 
-  /** Why the piano's controls can't be used now, as today's page says it; null when they can. */
+  /**
+   * Why the piano's controls can't be used now, as today's page says it; null when they can. The lock's own words first
+   * while it keeps this tablet out (v1.27 — M63), as the tablet puts them atop each piano page: the link reads an error
+   * then, though the piano is there and says why. While the tablet proves its key, the reading line.
+   */
   function pianoStatus() {
+    const locked = piano().lock && piano().lock.message;
+    if (locked) return locked;
     if (!connected()) return 'Connect to the piano to adjust its settings.';
     if (piano().state === 'unsupported') return "This piano's firmware doesn't offer settings over Bluetooth yet.";
     if (piano().state !== 'ready') return "Reading the piano's settings…";
+    if (!pianoWritable()) return "Reading the piano's settings…";
     return null;
   }
 
@@ -478,7 +492,7 @@ export function create(host, body, tools) {
       setting.unit && setting.unit !== '%' ? h('span', { class: 'eyebrow unit', text: setting.unit }) : null,
       setting.note ? h('span', { class: 'meta', text: setting.note }) : null,
     ];
-    const enabled = () => pianoReady() && pianoValue(name) !== undefined;
+    const enabled = () => pianoWritable() && pianoValue(name) !== undefined;
     const number = () => {
       const v = pianoValue(name);
       const n = v === undefined ? NaN : Number(v);
@@ -559,7 +573,7 @@ export function create(host, body, tools) {
     });
     controls.push({
       update() {
-        for (const b of buttons) b.disabled = !pianoReady();
+        for (const b of buttons) b.disabled = !pianoWritable();
       },
     });
     return h('section', { class: 'card', 'aria-label': 'Feel' },
@@ -847,7 +861,7 @@ export function create(host, body, tools) {
       : PIANO_PAGES;
     return [
       ...(system.state === 'failed' ? [] : [{ key: 'system', title: 'System', glyph: 'g-system' }]),
-      { key: 'playback', title: 'Playback', glyph: 'g-now' },
+      { key: 'playback', title: 'Playback', glyph: 'g-play' },
       ...piano.map((p) => ({ key: p.key, title: p.title, glyph: PIANO_GLYPHS[p.key] || 'g-piano', piano: true })),
       { key: 'guests', title: 'Guests', glyph: 'g-guests' },
       { key: 'panel', title: 'Panel', glyph: 'g-grid' },
@@ -889,7 +903,8 @@ export function create(host, body, tools) {
       return [`Full power ${on('fullpower') ? 'on' : 'off'}`, volume !== null ? `Volume ${volume}` : null].filter(Boolean).join(' · ');
     }
     if (page.key === 'lighting') {
-      if (typeof v.leds === 'string' && !on('leds')) return 'Strip off';
+      // The strip, or its mode, off: "Strip off", as the tablet's hub says it (GroupSummaries.lighting; v1.27 — M63).
+      if ((typeof v.leds === 'string' && !on('leds')) || read('ledmode') === 'Off') return 'Strip off';
       return [read('ledmode'), read('ledbright')].filter(Boolean).join(' · ');
     }
     if (page.key === 'pedal') {
@@ -989,7 +1004,7 @@ export function create(host, body, tools) {
     // Save to the piano: on the piano's pages only, while one shows.
     const onPianoPage = page.piano && (opened || window.matchMedia(WIDE).matches) && !otherInstrument();
     save.hidden = !onPianoPage;
-    save.disabled = !pianoReady();
+    save.disabled = !pianoWritable();
   }
 
   function update() {
@@ -1029,69 +1044,16 @@ export function create(host, body, tools) {
       if (state) st = state;
       update();
     },
-    /** [key]'s page, chosen and open (an address that names it: #system). */
-    open(key) {
-      if (typeof key !== 'string' || !key) return;
-      chosen = key;
-      opened = true;
-      remember(key);
-      update();
-    },
   };
 }
 
 // ---- Small helpers ------------------------------------------------------------------------------------------------
-
-/** A whole number from the piano's wire text ("70", " 110 "), or null. */
-function whole(text) {
-  if (typeof text !== 'string' && typeof text !== 'number') return null;
-  const n = Number(String(text).trim());
-  return Number.isFinite(n) ? Math.round(n) : null;
-}
-
-/**
- * A button that acts once when pressed and, held, again every 70 ms after 400 ms. A click no pointer made (Enter or
- * Space, a screen reader's activation: its `detail` is 0) acts once; a pointer's own click was its press.
- */
-function holdToRepeat(button, act) {
-  let delay = 0;
-  let every = 0;
-  const stop = () => {
-    clearTimeout(delay);
-    clearInterval(every);
-    delay = 0;
-    every = 0;
-  };
-  button.addEventListener('pointerdown', (event) => {
-    if (button.disabled || event.button !== 0) return;
-    stop();
-    act();
-    delay = setTimeout(() => {
-      every = setInterval(() => (button.disabled ? stop() : act()), 70);
-    }, 400);
-  });
-  for (const type of ['pointerup', 'pointerleave', 'pointercancel', 'blur']) button.addEventListener(type, stop);
-  button.addEventListener('click', (event) => {
-    if (event.detail === 0) act();
-  });
-  button.addEventListener('contextmenu', (event) => event.preventDefault());
-}
 
 function stored() {
   try {
     return localStorage.getItem(STORED_PAGE);
   } catch (e) {
     return null;
-  }
-}
-
-/** Runs [fn] for System's page; what it throws is kept from Settings. */
-function guarded(fn) {
-  try {
-    return fn();
-  } catch (e) {
-    if (window.console) console.error(e);
-    return undefined;
   }
 }
 

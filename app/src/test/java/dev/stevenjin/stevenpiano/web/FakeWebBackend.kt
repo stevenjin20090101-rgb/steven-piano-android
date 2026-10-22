@@ -17,8 +17,8 @@ import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.player.RepeatMode
-import dev.stevenjin.stevenpiano.schedule.QuietNow
-import dev.stevenjin.stevenpiano.schedule.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietNow
+import dev.stevenjin.stevenpiano.quiet.QuietSection
 import java.io.File
 import java.util.Collections
 
@@ -89,15 +89,14 @@ class FakeWebBackend(override val uploadDir: File) : WebBackend {
     override suspend fun composerArt(key: String, size: WebArtSize): WebImage? =
         if (key == "debussy") WebImage(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2), "image/jpeg") else null
 
-    /** A piece's own cover (a JPEG) when it has one, its roll card (a PNG) always; no [kind]: the cover, else the card. */
-    override suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage? {
+    /** A piece's own cover (a JPEG) when it has one, its roll card (a PNG) always. */
+    override suspend fun pieceArt(id: Long, kind: WebArtKind, size: WebArtSize): WebImage? {
         val piece = pieces.firstOrNull { it.id == id } ?: return null
         val cover = if (piece.cover) WebImage(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 3, 4), "image/jpeg") else null
         val roll = WebImage(byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte()), "image/png")
         return when (kind) {
             WebArtKind.COVER -> cover
             WebArtKind.ROLL -> roll
-            null -> cover ?: roll
         }
     }
 

@@ -59,7 +59,7 @@ import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 @Composable
 fun MicrophoneBanner(modifier: Modifier = Modifier) {
     val graph = LocalContext.current.graph
-    val listen by graph.listening.state.collectAsStateWithLifecycle()
+    val listen by graph.remote.listening.state.collectAsStateWithLifecycle()
     val safety by graph.safety.state.collectAsStateWithLifecycle()
     val reduced = rememberReducedMotion()
     AnimatedVisibility(
@@ -100,7 +100,7 @@ fun MicrophoneBanner(modifier: Modifier = Modifier) {
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.width(4.dp))
-                TextButton(onClick = graph::stopListening) { Text(ListenCopy.STOP) }
+                TextButton(onClick = graph.remote::stopListening) { Text(ListenCopy.STOP) }
             }
         }
     }

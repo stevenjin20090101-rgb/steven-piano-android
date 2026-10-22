@@ -239,10 +239,11 @@ object SystemCopy {
 
     /**
      * A row of a card: its [label] and its [value]; null [value] reads "—", [needs] reads the small "Needs newer firmware"
-     * tag, [attention] colours the value, [live] (the Bluetooth row) puts the live dot before it.
+     * tag, [attention] colours the value, [connected] (the Bluetooth row; `live` until v1.27 — M63) puts the link's dot
+     * before it: filled while connected, a ring when not.
      */
     @Immutable
-    data class Fact(val label: String, val value: String?, val needs: Boolean = false, val attention: Boolean = false, val live: Boolean? = null)
+    data class Fact(val label: String, val value: String?, val needs: Boolean = false, val attention: Boolean = false, val connected: Boolean? = null)
 
     /** The controller's rows. A fact the piano doesn't give needs newer firmware once it is ready (or too old to say); else "—". */
     fun controllerFacts(mode: Mode, diag: PianoDiag?): List<Fact> {
@@ -261,7 +262,7 @@ object SystemCopy {
     /**
      * The piano's rows: its firmware, the power boards ([boardsAttention]: one is missing; [railOff], v1.26 — M62: the power
      * plug keeps the 24 V off, so the boards that don't answer are unpowered: "0 of 7 answering · 24 V off"), Bluetooth with
-     * the live dot ([link]; none while another instrument plays), the pedal board, I²C errors, the repeat period, the keys
+     * the link's dot ([link]; none while another instrument plays), the pedal board, I²C errors, the repeat period, the keys
      * held now and the hold watchdog; then every other fact it gives, under its own name.
      */
     fun pianoFacts(
@@ -287,7 +288,7 @@ object SystemCopy {
         val bluetooth = if (mode == Mode.Midi) {
             Fact("Bluetooth", null)
         } else {
-            Fact("Bluetooth", joined(linkWord(link), ready?.rssi?.let { "${signed(it)} dBm" }), live = link is LinkState.Connected)
+            Fact("Bluetooth", joined(linkWord(link), ready?.rssi?.let { "${signed(it)} dBm" }), connected = link is LinkState.Connected)
         }
         val named = listOf(
             fact("Firmware", ready?.let { d -> d.fw?.let { joined(it, d.ota) } }),

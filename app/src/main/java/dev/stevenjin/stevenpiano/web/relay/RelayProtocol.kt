@@ -111,7 +111,7 @@ object RelayProtocol {
         }
     }
 
-    private fun read(json: JSONObject): RelayMessage? = when (json.opt("t")) {
+    private fun read(json: JSONObject): RelayMessage? = when (json.opt("t") as? String) {
         "hello" -> hello(json)
         "req" -> req(json)
         "req.abort" -> id(json)?.let { RelayMessage.ReqAbort(it) }
@@ -147,7 +147,7 @@ object RelayProtocol {
         "cmd" -> {
             val id = id(json)
             val name = (json.opt("name") as? String)?.takeIf(COMMAND::matches)
-            val args = when (val raw = json.opt("args")) {
+            val args = when (val raw: Any? = json.opt("args")) {
                 null, JSONObject.NULL -> emptyMap()
                 is JSONObject -> args(raw)
                 else -> null
@@ -181,7 +181,7 @@ object RelayProtocol {
         val id = id(json) ?: return null
         val method = (json.opt("method") as? String)?.takeIf(METHOD::matches) ?: return null
         val path = text(json.opt("path"), MAX_PATH)?.takeIf { it.startsWith('/') } ?: return null
-        val query = when (val raw = json.opt("query")) {
+        val query = when (val raw: Any? = json.opt("query")) {
             null, JSONObject.NULL -> ""
             is String -> raw.removePrefix("?").takeIf { it.length <= MAX_PATH && !hasBreak(it) } ?: return null
             else -> return null
@@ -236,8 +236,8 @@ object RelayProtocol {
      * (the relay drops a larger one). A state message too large for it (a long Up next: its rows carry
      * titles, and the whole queue's ids) gives up rows from the end of `player.queue.items` (the
      * piece playing and the next ones stay; the queue's `ids` and `index`, which the page counts
-     * from, stay whole), then the queue's `uids` (which the page doesn't read). Null when it still
-     * doesn't fit, or it is not a state message.
+     * from, stay whole); the state carries no `uids` since v1.27 (M63). Null when it still doesn't
+     * fit, or it is not a state message.
      */
     fun wsText(id: Long, text: String): String? {
         val whole = RelayMessage.WsText(id, text).encode()
@@ -258,7 +258,6 @@ object RelayProtocol {
             items = kept
             fits()?.let { return it }
         }
-        queue.put("uids", JSONArray())
         return fits()
     }
 

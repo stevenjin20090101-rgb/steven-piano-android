@@ -7,25 +7,25 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.schedule
+package dev.stevenjin.stevenpiano.quiet
 
-import dev.stevenjin.stevenpiano.data.db.ScheduleDao
-import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
+import dev.stevenjin.stevenpiano.data.db.QuietDao
+import dev.stevenjin.stevenpiano.data.db.QuietEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * The quiet times (v1.20 — M54), kept in the schedules table ([ScheduleEntity], one row a block): read as they change
+ * The quiet times (v1.20 — M54), kept in the schedules table ([QuietEntity], one row a block): read as they change
  * for the gate and the pages, and changed only through here, by the Quiet times pages of the tablet and the web panel,
  * which give every section at once ([replaceQuiet]: the old blocks go and the new ones come in one [transaction], so
  * nothing ever reads half of them). Sections with a problem are never written ([QuietTimes.validate]).
  */
-class ScheduleRepository(
-    private val dao: ScheduleDao,
+class QuietRepository(
+    private val dao: QuietDao,
     private val clock: () -> Long = System::currentTimeMillis,
     private val transaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     /** The quiet times' blocks, in the order they were saved, as they change. */
-    val quiet: Flow<List<ScheduleEntity>> = dao.observeQuiet()
+    val quiet: Flow<List<QuietEntity>> = dao.observeQuiet()
 
     /** The sections as they are kept now. */
     suspend fun sections(): List<QuietSection> = QuietTimes.sections(dao.quiet())

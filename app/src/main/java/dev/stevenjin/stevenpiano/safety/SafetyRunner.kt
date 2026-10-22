@@ -419,12 +419,18 @@ class SafetyRunner(
     private suspend fun finish(outcome: SafetyOutcome, check: CheckState?) {
         val at = clock()
         val boards = check?.line(SafetyStep.BOARDS)?.takeIf { it.of > 0 }
+        // Which recovery was done (v1.27 — M63), from the card's own marks: the words say only what really happened.
+        val restarted = check?.line(SafetyStep.RESTART)?.mark == Mark.DONE
+        val repowered = check?.line(SafetyStep.REPOWER)?.mark == Mark.DONE
         when (outcome) {
             is SafetyOutcome.Passed -> record = record.copy(
                 count = 0,
                 pending = false,
                 lock = null,
-                last = LastCheck(at, passed = true, keys = outcome.keys, boardsOk = boards?.done, boardsOf = boards?.of, recovered = outcome.recovered),
+                last = LastCheck(
+                    at, passed = true, keys = outcome.keys, boardsOk = boards?.done, boardsOf = boards?.of, recovered = outcome.recovered,
+                    restarted = restarted, repowered = repowered,
+                ),
             )
             SafetyOutcome.CoilOn -> {
                 log("Safety check failed: a coil is still on; the 24 V is cut and everything stops")
@@ -437,7 +443,10 @@ class SafetyRunner(
                 record = record.copy(
                     pending = false,
                     lock = SafetyLock.KeysSilent(outcome.keys),
-                    last = LastCheck(at, passed = false, keys = check?.lines?.lastOrNull { it.step == SafetyStep.SWEEP_AGAIN || it.step == SafetyStep.SWEEP }?.done, silent = outcome.keys, boardsOk = boards?.done, boardsOf = boards?.of, recovered = true),
+                    last = LastCheck(
+                        at, passed = false, keys = check?.lines?.lastOrNull { it.step == SafetyStep.SWEEP_AGAIN || it.step == SafetyStep.SWEEP }?.done, silent = outcome.keys,
+                        boardsOk = boards?.done, boardsOf = boards?.of, recovered = true, restarted = restarted, repowered = repowered,
+                    ),
                 )
             }
             is SafetyOutcome.Unfinished -> {

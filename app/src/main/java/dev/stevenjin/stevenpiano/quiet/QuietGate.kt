@@ -7,9 +7,9 @@
 //  Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
 // ============================================================================
 
-package dev.stevenjin.stevenpiano.schedule
+package dev.stevenjin.stevenpiano.quiet
 
-import dev.stevenjin.stevenpiano.data.db.ScheduleEntity
+import dev.stevenjin.stevenpiano.data.db.QuietEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,7 +45,7 @@ data class QuietNow(val now: Boolean = false, val until: Long? = null, val overr
  * awake to stop it.
  */
 class QuietGate(
-    private val rows: StateFlow<List<ScheduleEntity>?>,
+    private val rows: StateFlow<List<QuietEntity>?>,
     private val clock: () -> Long = System::currentTimeMillis,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {

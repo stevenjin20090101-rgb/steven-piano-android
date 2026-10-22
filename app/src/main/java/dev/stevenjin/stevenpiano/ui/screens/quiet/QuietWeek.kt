@@ -56,11 +56,10 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
-import dev.stevenjin.stevenpiano.schedule.QuietBlock
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
-import dev.stevenjin.stevenpiano.schedule.QuietSection
-import dev.stevenjin.stevenpiano.schedule.QuietTimes
-import dev.stevenjin.stevenpiano.schedule.ScheduleCopy
+import dev.stevenjin.stevenpiano.quiet.QuietBlock
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietSection
+import dev.stevenjin.stevenpiano.quiet.QuietTimes
 import dev.stevenjin.stevenpiano.ui.Format
 import dev.stevenjin.stevenpiano.ui.components.Card
 import dev.stevenjin.stevenpiano.ui.components.Hairline
@@ -211,7 +210,7 @@ private fun DayName(day: Int, today: Boolean, modifier: Modifier) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                ScheduleCopy.short(DayOfWeek.of(day + 1)),
+                QuietCopy.short(DayOfWeek.of(day + 1)),
                 style = MaterialTheme.typography.labelSmall.copy(lineHeight = 18.sp, letterSpacing = 0.4.sp),
                 color = if (today) ink else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -314,7 +313,7 @@ private fun WeekBlock(piece: WeekPiece, onEdit: (Int) -> Unit) {
             .background(ink.copy(alpha = BLOCK_FILL))
             .drawBehind { drawRect(ink, Offset.Zero, Size(BLOCK_EDGE.toPx(), size.height)) }
             .clearAndSetSemantics {
-                contentDescription = "${piece.name}, ${ScheduleCopy.full(DayOfWeek.of(piece.day + 1))}, $times"
+                contentDescription = "${piece.name}, ${QuietCopy.full(DayOfWeek.of(piece.day + 1))}, $times"
                 role = Role.Button
                 onClick(label = "Edit") {
                     onEdit(piece.section)

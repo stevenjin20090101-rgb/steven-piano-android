@@ -33,9 +33,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.BuildConfig
+import dev.stevenjin.stevenpiano.Emulator
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
-import dev.stevenjin.stevenpiano.ble.LoggingPianoLink
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.graph
@@ -323,7 +323,7 @@ class WebService : Service() {
      */
     private suspend fun listen(settings: PianoSettings) {
         val choice = withContext(Dispatchers.IO) { WebAddress.choose(WebAddress.list()) }
-        val wanted = WebAddress.plan(choice, loopback = LoggingPianoLink.isWanted())
+        val wanted = WebAddress.plan(choice, loopback = Emulator.on)
         if (wanted == listening && servers.isNotEmpty() && servers.size == wanted.size && servers.all { it.isAlive }) return
         stopListening()
         val started = withContext(Dispatchers.IO) { wanted.mapNotNull(::server) }
@@ -419,13 +419,15 @@ class WebService : Service() {
             graph.liveThru.state.map { it.open }.distinctUntilChanged().map { },
             graph.recording.state.map { it is RecordingState.Recording }.distinctUntilChanged().map { },
             // Listening and the key test (v1.23 — M55): the microphone on or off, its time, the key struck, the results.
-            graph.listening.state.map { },
-            graph.keyTest.state.map { },
+            graph.remote.listening.state.map { },
+            graph.remote.keyTest.state.map { },
             // The safety check (v1.26 — M61): its steps as they go, Play locked or free again.
             graph.safety.state.map { },
             // The 24 V power plug (v1.26 — M62): the state's little part only (waking, the rail, the words), not the
             // plug's readings, which change every few seconds and stay on /api/system.
-            graph.railFact.map(WebPower::of).distinctUntilChanged().map { },
+            graph.remote.railFact.map(WebPower::of).distinctUntilChanged().map { },
+            // The link's dot (v1.27 — M63): red only once the 24 V lets the notes through.
+            graph.railHoldsNotes.map { },
         )
         created.start(CoroutineScope(scope.coroutineContext + Dispatchers.IO), changes, player.positionJumps.drop(1).map { })
         hub = created

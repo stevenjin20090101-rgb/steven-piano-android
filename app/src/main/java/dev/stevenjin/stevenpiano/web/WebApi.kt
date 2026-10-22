@@ -29,6 +29,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
+import dev.stevenjin.stevenpiano.ui.Format
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -403,20 +404,17 @@ object WebApi {
                         "queue",
                         JSONObject()
                             .put("ids", JSONArray(p.queue.ids))
-                            .put("uids", JSONArray(p.queue.uids))
                             .put("index", p.queue.index)
                             .put("repeat", p.queue.repeat.name.lowercase())
                             .put("items", JSONArray().apply { p.items.forEach { put(piece(it.piece).put("uid", it.uid).put("requested", it.requested)) } }),
                     )
                     .put("problem", p.problem ?: JSONObject.NULL)
-                    .put("fold", p.fold)
                     .put("views", p.views?.let(::views) ?: JSONObject.NULL),
             )
-            .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL))
+            .put("link", JSONObject().put("state", s.link.state).put("name", s.link.name ?: JSONObject.NULL).put("sending", s.link.sending))   // sending: v1.27 — M63
             .put("instruments", instruments(s.instruments))
             .put("piano", pianoState(s.piano))
             .put("import", import(s.import))
-            .put("artwork", JSONObject().put("running", s.artwork.running).put("done", s.artwork.done).put("total", s.artwork.total))
             .put("requests", JSONObject().put("pending", pending).put("guests", s.guests.open).put("approveFirst", s.guests.approveFirst))
             .put(
                 "web",
@@ -425,7 +423,6 @@ object WebApi {
             )
             .put("monochrome", s.monochrome)
             .put("albumBackdrop", s.albumBackdrop)
-            .put("schedule", JSONObject().put("next", s.schedule.next ?: JSONObject.NULL).put("revision", s.schedule.revision))
             .put("studio", studio(s.studio))
             .put("display", display(s.display))
             .put("quiet", quietNow(s.quiet))
@@ -479,7 +476,7 @@ object WebApi {
         .put("recording", s.recording)
 
     /**
-     * Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, licence, installed, line, progress}], jobs:
+     * Studio (v1.7 — M23): `{available, reason, models: [{name, title, sizeBytes, installed, line, progress}], jobs:
      * [{id, kind, name, state, line, progress, title, step, steps, tokens, musicMs, targetMs, etaMs, notes, turn}]}` (the last
      * eight v1.12 — M30).
      */
@@ -491,7 +488,7 @@ object WebApi {
             JSONArray().apply {
                 s.models.forEach { m ->
                     put(
-                        JSONObject().put("name", m.name).put("title", m.title).put("sizeBytes", m.sizeBytes).put("licence", m.licence)
+                        JSONObject().put("name", m.name).put("title", m.title).put("sizeBytes", m.sizeBytes)
                             .put("installed", m.installed).put("line", m.line).put("progress", m.progress?.toDouble() ?: JSONObject.NULL),
                     )
                 }
@@ -571,6 +568,19 @@ object WebApi {
         .put("facts", JSONObject(p.facts as Map<*, *>))
         .put("lastError", p.lastError ?: JSONObject.NULL)
         .put("errorAbout", p.errorAbout ?: JSONObject.NULL)
+        .put("lock", lock(p.lock))   // v1.27 — M63
+
+    /**
+     * The piano's Bluetooth lock (v1.27 — M63; [WebLock]): `{state, piano, guestSecondsLeft, keyStored, writable, message}`,
+     * read only, on the signed-in routes alone (the state, `/api/piano`). The key, the nonce and the address never travel.
+     */
+    fun lock(l: WebLock): JSONObject = JSONObject()
+        .put("state", l.state)
+        .put("piano", l.piano ?: JSONObject.NULL)
+        .put("guestSecondsLeft", l.guestSecondsLeft)
+        .put("keyStored", l.keyStored)
+        .put("writable", l.writable)
+        .put("message", l.message ?: JSONObject.NULL)
 
     /** `/api/piano`: the state and report, the presets, and the table the page draws its controls from (Sound and touch · Lights and screen · Pedal). */
     fun piano(p: WebPiano): JSONObject = pianoState(p.state)
@@ -651,11 +661,11 @@ object WebApi {
     // ---- The System page (v1.18 — M46) -------------------------------------------------
 
     /**
-     * `GET /api/system`: `{at, app{…}, tablet{…, battery{…}, thermal{…}, memory{…}, storage{…}, cpu{…}, network{…}},
-     * piano{link{state, name, mtu}, state, facts, factsAt, diag{…}}, running[{key, title, state, detail, progress}],
-     * web{sessions, sockets, guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting,
-     * blockedUntil}, power{…}}` (BUILD_SPEC.md › v1.18 — M46; `power`, the 24 V plug, v1.26 — M62: [railFact]). Every
-     * key is always there: what is not known is null.
+     * `GET /api/system`: `{at, app{…}, tablet{…, battery{…}, thermal{…}, memory{…}, storage{…}, cpu{…}, network{…},
+     * debugging{…}}, piano{link{state, name, mtu}, state, facts, factsAt, diag{…}}, running[{key, title, state, detail,
+     * progress}], web{sessions, sockets, guests, relay{state, answered, refused}}, covers{found, missing, failed, waiting,
+     * blockedUntil}, power{…}}` (BUILD_SPEC.md › v1.18 — M46; `power`, the 24 V plug, v1.26 — M62: [railFact];
+     * `debugging {usb, wireless, developer}`, v1.27 — M63). Every key is always there: what is not known is null.
      */
     fun system(s: WebSystem): JSONObject {
         val r = s.reading
@@ -693,7 +703,9 @@ object WebApi {
                         "network",
                         JSONObject().put("online", r.network.online.orNull()).put("transport", r.network.transport.orNull())
                             .put("signalDbm", r.network.signalDbm.orNull()).put("downKbps", r.network.downKbps.orNull()),
-                    ),
+                    )
+                    // v1.27 — M63: USB and wireless debugging, and developer options (the tablet's M58 warning).
+                    .put("debugging", JSONObject().put("usb", r.debug.usb.orNull()).put("wireless", r.debug.wireless.orNull()).put("developer", r.debug.developer.orNull())),
             )
             .put(
                 "piano",
@@ -864,7 +876,7 @@ object WebApi {
     const val QUIET_DEPTH = 5
 
     /** The quiet now, in the state and in `GET /api/quiet`: `{now, until, overridden, next}`, the times epoch ms or null. */
-    fun quietNow(q: dev.stevenjin.stevenpiano.schedule.QuietNow): JSONObject = JSONObject()
+    fun quietNow(q: dev.stevenjin.stevenpiano.quiet.QuietNow): JSONObject = JSONObject()
         .put("now", q.now)
         .put("until", q.until ?: JSONObject.NULL)
         .put("overridden", q.overridden)
@@ -898,13 +910,13 @@ object WebApi {
     /**
      * `PUT /api/quiet`: `{sections: [{name, days, blocks: [{start, end}]}]}`, every section at once, read strictly
      * (nothing but those keys; days whole numbers 1 to 7; times `HH:MM`) and then checked as the tablet's editor checks
-     * them ([dev.stevenjin.stevenpiano.schedule.QuietTimes.validate]): 400 `quiet` with the editor's words.
+     * them ([dev.stevenjin.stevenpiano.quiet.QuietTimes.validate]): 400 `quiet` with the editor's words.
      */
-    fun quietSections(json: JSONObject): List<dev.stevenjin.stevenpiano.schedule.QuietSection> {
+    fun quietSections(json: JSONObject): List<dev.stevenjin.stevenpiano.quiet.QuietSection> {
         onlyKeys(json, setOf("sections"))
         val list = json.opt("sections") as? JSONArray ?: throw ApiError(400, "field", "sections must be a list.")
-        if (list.length() > dev.stevenjin.stevenpiano.schedule.QuietTimes.MAX_SECTIONS) {
-            throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.schedule.QuietTimes.TOO_MANY_SECTIONS)
+        if (list.length() > dev.stevenjin.stevenpiano.quiet.QuietTimes.MAX_SECTIONS) {
+            throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.quiet.QuietTimes.TOO_MANY_SECTIONS)
         }
         val sections = (0 until list.length()).map { i ->
             val item = list.get(i) as? JSONObject ?: throw ApiError(400, "field", "Each section must be {name, days, blocks}.")
@@ -918,33 +930,26 @@ object WebApi {
                 mask = mask or (1 shl (day.toInt() - 1))
             }
             val blocks = item.opt("blocks") as? JSONArray ?: throw ApiError(400, "field", "blocks must be a list.")
-            if (blocks.length() > dev.stevenjin.stevenpiano.schedule.QuietTimes.MAX_BLOCKS) {
-                throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.schedule.QuietTimes.TOO_MANY_BLOCKS)
+            if (blocks.length() > dev.stevenjin.stevenpiano.quiet.QuietTimes.MAX_BLOCKS) {
+                throw ApiError(400, "quiet", dev.stevenjin.stevenpiano.quiet.QuietTimes.TOO_MANY_BLOCKS)
             }
             val read = (0 until blocks.length()).map { j ->
                 val block = blocks.get(j) as? JSONObject ?: throw ApiError(400, "field", "Each block must be {start, end}.")
                 onlyKeys(block, setOf("start", "end"))
-                dev.stevenjin.stevenpiano.schedule.QuietBlock(minuteOf(string(block, "start", MAX_TIME_TEXT)), minuteOf(string(block, "end", MAX_TIME_TEXT)))
+                dev.stevenjin.stevenpiano.quiet.QuietBlock(minuteOf(string(block, "start", MAX_TIME_TEXT)), minuteOf(string(block, "end", MAX_TIME_TEXT)))
             }
-            dev.stevenjin.stevenpiano.schedule.QuietSection(name, mask, read)
+            dev.stevenjin.stevenpiano.quiet.QuietSection(name, mask, read)
         }
-        dev.stevenjin.stevenpiano.schedule.QuietTimes.validate(sections)?.let { throw ApiError(400, "quiet", it) }
+        dev.stevenjin.stevenpiano.quiet.QuietTimes.validate(sections)?.let { throw ApiError(400, "quiet", it) }
         return sections
     }
 
     /** The guests' catalogue's `quiet` (v1.20 — M54): `{until}` (epoch ms) while a quiet time holds the piano, else null. */
-    fun guestQuiet(q: dev.stevenjin.stevenpiano.schedule.QuietNow): Any =
+    fun guestQuiet(q: dev.stevenjin.stevenpiano.quiet.QuietNow): Any =
         q.until?.takeIf { q.holds }?.let { JSONObject().put("until", it) } ?: JSONObject.NULL
 
-    /** `GET /api/schedules` since 1.20, for older pages: no schedule, nothing next, nothing last, exact alarms fine. */
-    fun noSchedules(): JSONObject = JSONObject()
-        .put("schedules", JSONArray())
-        .put("next", JSONObject.NULL)
-        .put("last", JSONObject.NULL)
-        .put("exactAlarms", true)
-
-    /** A time as the wire has it, "08:40". */
-    private fun wireTime(minute: Int): String = dev.stevenjin.stevenpiano.schedule.ScheduleCopy.clock(minute)
+    /** A time as the wire has it, "08:40" (two-digit hours). */
+    private fun wireTime(minute: Int): String = Format.timeOfDay(minute, twoDigitHour = true)
 
     /** "08:40" as minutes after midnight; anything else is refused. */
     private fun minuteOf(text: String): Int {

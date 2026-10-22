@@ -55,9 +55,6 @@ object Motion {
     /** Slow, and the longest any transition may take. */
     const val SlowMs = 480
 
-    /** [QuickMs] by its name before v1.14, which only the web panel's asset test (M56's) still reads; it goes with that. */
-    const val FastMs = QuickMs
-
     /** A pressed control's scale; what grows in (the art, a popover) starts from [GrowFrom]. */
     const val PressedScale = 0.97f
     const val GrowFrom = 0.92f

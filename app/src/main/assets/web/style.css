@@ -175,8 +175,6 @@ h1 { font-size: 22px; line-height: 28px; font-weight: 500; }
 
 .note { font-size: 15px; line-height: 21px; color: var(--secondary); }
 
-.tabular { font-variant-numeric: tabular-nums; }
-
 a { color: inherit; }
 
 button, input, select { font: inherit; color: inherit; }
@@ -1411,7 +1409,7 @@ button, input, select { font: inherit; color: inherit; }
    drifting on a transform-only path (each its own pace) while a piece plays and still otherwise, under a veil of the
    surface (55 % on paper, 62 % on the camera body) so the words, in the primary colour over it, keep 4.5:1 over any hue.
    Since v1.18 — M47 the layer is fixed to the window, behind the rail, the page and Up next (the mock's places for the
-   discs). The colours are the art's (--bd1 … --bd4: hue and saturation, set by app.js from a 32 × 32 sample of the loaded
+   discs). The colours are the art's (--bd1 … --bd4: hue and saturation, set by now.js from a 32 × 32 sample of the loaded
    picture); the lightness is the appearance's. None in black and white, with Album colours off on the tablet, with
    reduced transparency or more contrast; still with reduced motion. */
 
@@ -1832,54 +1830,6 @@ body:not(.mono):not(.no-backdrop) .panel.has-backdrop :is(.now-words, .transport
 .actions.compose-start { flex-direction: column; align-items: flex-start; gap: 4px; padding-left: 4px; padding-right: 4px; }
 
 .choice .glyph { color: var(--primary); }
-
-/* ---- Settings, built in (while settings.js is not there) --------------------------------------------- */
-
-.disclosure {
-  margin-top: 12px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-card);
-  background: var(--elevated);
-  box-shadow: inset 0 1px 0 var(--specular);
-  overflow: hidden;
-}
-
-.disclosure > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: var(--row);
-  padding: 0 var(--inset);
-  font-size: 17px;
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-}
-
-.disclosure > summary::-webkit-details-marker { display: none; }
-
-.disclosure > summary .glyph { transition: transform 120ms; }
-
-.disclosure[open] > summary { border-bottom: 1px solid var(--hairline); }
-
-.disclosure[open] > summary .glyph { transform: rotate(90deg); }
-
-.disclosure .section-head { padding: 16px var(--inset) 6px; }
-
-.link-line { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--secondary); font-size: 15px; }
-
-.builtin-settings > .actions { padding-left: 0; padding-right: 0; }
-
-.appearance-card { margin-top: 20px; }
-
-.status-report {
-  margin: 12px 0;
-  padding: 12px;
-  border-radius: var(--radius-control);
-  background: var(--elevated);
-  font: 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
-  white-space: pre-wrap;
-}
 
 /* ---- Touch screens: every control at least 44 px ---------------------------------------------------------- */
 

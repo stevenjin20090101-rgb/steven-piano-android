@@ -384,7 +384,7 @@ fun PianoNavHost(
  * with nothing loaded too (its resting state); not a route, so the tabs beneath keep their state. It
  * comes over the app in a slow cross-fade and goes on a touch in a quicker one (DESIGN.md › v1.7.1,
  * [RestingMotion]; cuts under reduced motion): from the moment it starts to go, the app beneath is
- * live, its touches, Back and TalkBack. It reads only whether a piece is loaded here, apart from the
+ * live, its touches and TalkBack; Back once it has gone (v1.27 — M63, [DisplayScreen]). It reads only whether a piece is loaded here, apart from the
  * frame, so a piece changing never recomposes the frame. In kiosk mode, coming to rest ends an
  * "Unlock for now": a tablet left alone locks itself again.
  */

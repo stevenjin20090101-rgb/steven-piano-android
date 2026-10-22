@@ -44,6 +44,7 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.service.PlaybackService
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -135,6 +136,7 @@ class AppWebBackend(
 
     override suspend fun state(): WebState {
         val player = graph.player.state.value
+        val link = graph.pianoLink.state.value
         val settings = graph.settings.value
         val portraits = portraits()
         val covers = covers()
@@ -157,7 +159,6 @@ class AppWebBackend(
         val channel = player.channel?.let { key ->
             WebChannelPlaying(key, channelName(key) ?: key, settings.channelVolume(key))
         }
-        val artwork = graph.artwork.progress.value
         val source = nowSource()
         val views = source?.let {
             WebViews(
@@ -169,6 +170,9 @@ class AppWebBackend(
                 score = it.notes.size <= NowViews.MAX_SCORE_NOTES && it.bars.size <= NowViews.MAX_SCORE_BARS,
             )
         }
+        // The link's dot (v1.27 — M63), as the tablet's rail draws it (NavHost's TabRail): red only while notes reach the piano.
+        val playing = player.status == PlaybackStatus.Playing
+        val sending = LinkDot.of(link is LinkState.Connected, sending = playing && !graph.railHoldsNotes.value) == LinkDot.Sending
         // The position and the moment it was taken, on the tablet's monotonic clock, together (v1.13 — M32).
         val nanos = System.nanoTime()
         return WebState(
@@ -188,23 +192,20 @@ class AppWebBackend(
                 queue = queue,
                 items = items,
                 problem = player.problem,
-                fold = player.fold,
                 views = views,
             ),
-            link = linkOf(graph.pianoLink.state.value),
+            link = linkOf(link).copy(sending = sending),
             piano = pianoOf(graph.pianoSettings.state.value),
             import = graph.importProgress.value,
-            artwork = WebArtwork(running = !artwork.idle, done = artwork.done, total = artwork.total),
             web = addresses(),
             guests = guests(),
             monochrome = settings.artworkMonochrome,
             albumBackdrop = settings.albumBackdrop,
-            schedule = WebScheduleState(),   // timed plays were removed in 1.20 (M54): nothing next, ever
             studio = studio(),
             instruments = WebInstruments.of(
                 graph.pianoLink.kind.value,
                 settings.midiOutName,
-                linkOf(graph.pianoLink.state.value).state,
+                linkOf(link).state,
                 graph.keyboard.state.value,
                 live = graph.liveThru.state.value.open,
                 recording = graph.recording.state.value is RecordingState.Recording,
@@ -217,10 +218,10 @@ class AppWebBackend(
                 handColours = settings.handColours,
             ),
             quiet = graph.quiet.now(),
-            listen = graph.listening.state.value,   // v1.23 — M55
-            keytest = graph.keyTest.state.value,
+            listen = graph.remote.listening.state.value,   // v1.23 — M55
+            keytest = graph.remote.keyTest.state.value,
             safety = WebSafety.of(graph.safety.state.value),   // v1.26 — M61
-            power = WebPower.of(graph.railFact.value),   // v1.26 — M62
+            power = WebPower.of(graph.remote.railFact.value),   // v1.26 — M62
         )
     }
 
@@ -282,15 +283,12 @@ class AppWebBackend(
         WebArtSize.FULL -> ArtSize.Full
     }
 
-    override suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage? {
-        val piece = library { graph.library.piece(id) } ?: return null
-        val art = artSize(size)
+    override suspend fun pieceArt(id: Long, kind: WebArtKind, size: WebArtSize): WebImage? {
+        library { graph.library.piece(id) } ?: return null
         // One kind each (v1.17 — M45): a cover asked for is the piece's own or none, so a roll card never lands in an <img>.
         return when (kind) {
-            WebArtKind.COVER -> image(ArtworkEntity.forPiece(id), art)
+            WebArtKind.COVER -> image(ArtworkEntity.forPiece(id), artSize(size))
             WebArtKind.ROLL -> rollCard(id)
-            // An older page: its own cover first (v1.12 — M30), else its composer's portrait, else its roll card.
-            null -> image(ArtworkEntity.forPiece(id), art) ?: portrait(piece.composerKey, art) ?: rollCard(id)
         }
     }
 
@@ -579,7 +577,6 @@ class AppWebBackend(
                     name = model.name,
                     title = model.title,
                     sizeBytes = model.sizeBytes,
-                    licence = model.licenceLabel,
                     installed = here,
                     line = download?.let { StudioCopy.jobLine(it) } ?: if (here) "Installed · ${StudioCopy.modelLine(model)}" else StudioCopy.modelLine(model),
                     progress = download?.takeIf { it.state == JobState.Running }?.progress,
@@ -781,11 +778,11 @@ class AppWebBackend(
             is LinkState.Error -> WebLink("error")
         }
 
-        /** What the piano reported, as the panel reads it. */
-        fun pianoOf(state: PianoState): WebPianoState = when (state) {
+        /** What the piano reported, as the panel reads it; its lock (v1.27 — M63) with guest play's time counted to [nowMs]. */
+        fun pianoOf(state: PianoState, nowMs: Long = android.os.SystemClock.elapsedRealtime()): WebPianoState = when (state) {
             PianoState.Unknown -> WebPianoState("unknown")
             PianoState.Unsupported -> WebPianoState("unsupported")
-            is PianoState.Ready -> WebPianoState("ready", state.values, state.facts, state.lastError, state.errorAbout)
+            is PianoState.Ready -> WebPianoState("ready", state.values, state.facts, state.lastError, state.errorAbout, WebLock.of(state.lock, nowMs))
         }
 
     }
@@ -793,15 +790,15 @@ class AppWebBackend(
     // ---- The System page (v1.18 — M46) -------------------------------------------------------
 
     /** The piano's live facts at most once in 10 s, whichever panel, listener or the tablet's own System page asks (firmware/docs/BLE_DIAG.md). */
-    private val refreshFloor = graph.factsFloor
+    private val refreshFloor = graph.remote.factsFloor
 
     override suspend fun system(): WebSystem {
-        val reading = withContext(Dispatchers.IO) { graph.systemProbe.read() }
+        val reading = withContext(Dispatchers.IO) { graph.remote.systemProbe.read() }
         val link = graph.pianoLink.state.value
         val piano = graph.pianoSettings.state.value
         val now = System.currentTimeMillis()
         // What runs, gathered as the tablet's own System page gathers it (AppGraph.runningInputs, v1.18 — M50).
-        val inputs = graph.runningInputs(now)
+        val inputs = graph.remote.runningInputs(now)
         val counts = library { graph.library.coverCounts() }
         return WebSystem(
             at = now,
@@ -812,7 +809,7 @@ class AppWebBackend(
                 state = pianoOf(piano).state,
                 facts = (piano as? PianoState.Ready)?.facts,
                 factsAt = graph.pianoSettings.factsAt.value,
-                keyHeld = graph.keyHeld(),   // v1.23 — M55
+                keyHeld = graph.remote.keyHeld(),   // v1.23 — M55
             ),
             running = dev.stevenjin.stevenpiano.diag.RunningNow.of(inputs),
             web = WebSystemWeb(
@@ -834,7 +831,7 @@ class AppWebBackend(
      * panel never waits on the plug's Bluetooth.
      */
     private fun power(): dev.stevenjin.stevenpiano.power.RailFact {
-        val fact = graph.railFact.value
+        val fact = graph.remote.railFact.value
         if (!fact.paired) return fact
         if (plugFloor.take()) graph.appScope.launch { graph.plug.switchStatus() }
         return if (graph.plug.reachable.value == false) fact.copy(output = null, watts = null) else fact
@@ -852,7 +849,7 @@ class AppWebBackend(
         )
     }
 
-    override suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample> = graph.systemHistory.snapshot()
+    override suspend fun systemHistory(): List<dev.stevenjin.stevenpiano.diag.SystemSample> = graph.remote.systemHistory.snapshot()
 
     /** At most once in 10 s ([refreshFloor]), on the main thread where the piano's settings live; nothing during a firmware update. */
     override suspend fun refreshPiano(): Boolean = refreshFloor.take() && onMain { graph.pianoSettings.refreshFacts() }
@@ -864,7 +861,7 @@ class AppWebBackend(
             SystemToolResult.DONE
         }
         SystemTool.RECONNECT -> if (onMain { graph.reconnectPiano() }) SystemToolResult.DONE else SystemToolResult.BUSY
-        SystemTool.UPDATE -> if (onMain { graph.updateFromAfar() }) SystemToolResult.DONE else SystemToolResult.BUSY
+        SystemTool.UPDATE -> if (onMain { graph.remote.updateFromAfar() }) SystemToolResult.DONE else SystemToolResult.BUSY
     }
 
     override suspend fun diagnostics(): ByteArray? = withContext(Dispatchers.IO) {
@@ -903,28 +900,28 @@ class AppWebBackend(
 
     // ---- Quiet times (v1.20 — M54) ----------------------------------------------------------------------------------------
 
-    override suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow = graph.quiet.now()
+    override suspend fun quietNow(): dev.stevenjin.stevenpiano.quiet.QuietNow = graph.quiet.now()
 
     override suspend fun safetyRefusal(): String? = onMain { graph.safety.refusal() }
 
-    override suspend fun quiet(): WebQuiet = WebQuiet(graph.schedules.sections(), graph.quiet.now())
+    override suspend fun quiet(): WebQuiet = WebQuiet(graph.quietStore.sections(), graph.quiet.now())
 
     /** Every section, checked by the route; kept in one transaction and the alarm planned again (the gate follows the table). */
-    override suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection>) {
-        graph.schedules.saveQuiet(sections)?.let { throw ApiError(400, "quiet", it) }
+    override suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.quiet.QuietSection>) {
+        graph.quietStore.saveQuiet(sections)?.let { throw ApiError(400, "quiet", it) }
     }
 
     override suspend fun overrideQuiet(): Boolean = graph.quiet.override()
 
     // ---- Listening and the key test (v1.23 — M55) --------------------------------------------------------------------------
 
-    override suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.listening.startLive(token) }
+    override suspend fun listenStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.remote.listening.startLive(token) }
 
-    override suspend fun listenStop() = onMain { graph.listening.stopLive() }
+    override suspend fun listenStop() = onMain { graph.remote.listening.stopLive() }
 
-    override suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.keyTest.start(token) }
+    override suspend fun keyTestStart(token: String): dev.stevenjin.stevenpiano.audio.ListenAnswer = onMain { graph.remote.keyTest.start(token) }
 
-    override suspend fun keyTestStop() = onMain { graph.keyTest.stop() }
+    override suspend fun keyTestStop() = onMain { graph.remote.keyTest.stop() }
 }
 
 /** The piano's Full power setting, by its firmware name (v1.18 — M47b: the Settings page's line under Velocity). */

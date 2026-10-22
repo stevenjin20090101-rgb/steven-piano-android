@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
         graph.startWebIfOn(this)
         graph.kiosk.appOpened()   // back after "Unlock for now": locked again
         graph.releaseOwnerIfAsked()   // the adb way back, which `am start` reaches (DeviceOwnerRelease)
-        graph.listening.foreground(true)   // v1.23 — M55: the microphone may hear only while the app is in front
+        graph.remote.listening.foreground(true)   // v1.23 — M55: the microphone may hear only while the app is in front
     }
 
     /**
@@ -204,7 +204,7 @@ class MainActivity : ComponentActivity() {
             graph.liveThru.setOnScreen(false)   // v1.11 — M29: the keyboard's keys let go too; Live waits for the Keys tab
             if (graph.recording.recording) graph.recording.stop(TakeEnd.AppLeft)   // and a take ends, saved
             graph.kiosk.appLeft()
-            graph.listening.foreground(false)   // v1.23 — M55: and the microphone stops (Android would hear only silence)
+            graph.remote.listening.foreground(false)   // v1.23 — M55: and the microphone stops (Android would hear only silence)
         }
     }
 

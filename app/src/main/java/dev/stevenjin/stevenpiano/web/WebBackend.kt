@@ -15,7 +15,9 @@ import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
+import dev.stevenjin.stevenpiano.piano.LockPhase
 import dev.stevenjin.stevenpiano.piano.PianoAction
+import dev.stevenjin.stevenpiano.piano.PianoLock
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
@@ -27,6 +29,7 @@ import dev.stevenjin.stevenpiano.safety.SafetyLock
 import dev.stevenjin.stevenpiano.safety.SafetyState
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.ui.InstrumentCopy
+import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import java.io.File
 import java.util.Locale
@@ -68,10 +71,9 @@ interface WebBackend {
 
     /**
      * Piece [id]'s art at [size] (v1.17 — M45): [WebArtKind.COVER] its own cover alone, [WebArtKind.ROLL] its own roll card
-     * alone (a mask the page tints, at its one size); no [kind] (an older page): its own cover, else its composer's portrait,
-     * else its roll card. Null when there is none.
+     * alone (a mask the page tints, at its one size). Null when there is none.
      */
-    suspend fun pieceArt(id: Long, kind: WebArtKind?, size: WebArtSize): WebImage?
+    suspend fun pieceArt(id: Long, kind: WebArtKind, size: WebArtSize): WebImage?
 
     /** Plays piece [pieceId], then [queue] around it (just the piece when null). False when the library has no such piece. */
     suspend fun play(pieceId: Long, queue: List<Long>?): Boolean
@@ -220,7 +222,7 @@ interface WebBackend {
     // ---- Quiet times (v1.20 — M54) -----------------------------------------------------------------------------------
 
     /** The quiet now: the state's, and what weighs every route that would play. */
-    suspend fun quietNow(): dev.stevenjin.stevenpiano.schedule.QuietNow
+    suspend fun quietNow(): dev.stevenjin.stevenpiano.quiet.QuietNow
 
     // ---- The safety check (v1.26 — M61) -------------------------------------------------------------------------------
 
@@ -233,8 +235,8 @@ interface WebBackend {
     /** Piano › Quiet times as the panel shows it: the sections, and the quiet now. */
     suspend fun quiet(): WebQuiet
 
-    /** Every section, already checked ([dev.stevenjin.stevenpiano.schedule.QuietTimes.validate]): they replace the ones kept. */
-    suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection>)
+    /** Every section, already checked ([dev.stevenjin.stevenpiano.quiet.QuietTimes.validate]): they replace the ones kept. */
+    suspend fun saveQuiet(sections: List<dev.stevenjin.stevenpiano.quiet.QuietSection>)
 
     /** Play anyway: true when a block is on (the quiet lifts until it ends), false when none is. */
     suspend fun overrideQuiet(): Boolean
@@ -260,8 +262,8 @@ interface WebBackend {
     suspend fun keyTestStop() = Unit
 }
 
-/** A model on the panel's Studio page: its size and licence, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
-data class WebModel(val name: String, val title: String, val sizeBytes: Long, val licence: String, val installed: Boolean, val line: String, val progress: Float? = null)
+/** A model on the panel's Studio page: its size, whether it is installed, its line ("Installed · 125 MB · CC BY 4.0", or its download's), its download's progress. */
+data class WebModel(val name: String, val title: String, val sizeBytes: Long, val installed: Boolean, val line: String, val progress: Float? = null)
 
 /**
  * One of Studio's jobs as the tablet's page lists it: "download", "transcribe" or "compose", "queued"… "cancelled", its
@@ -465,8 +467,6 @@ data class WebPlayer(
     val queue: QueueSnapshot = QueueSnapshot(),
     val items: List<WebQueueItem> = emptyList(),
     val problem: String? = null,
-    /** Folding out-of-range notes (v1.13 — M32: the views' keys follow it). */
-    val fold: Boolean = true,
     /** What the panel's views show of the piece playing (v1.13 — M32); null with nothing loaded. */
     val views: WebViews? = null,
 )
@@ -491,23 +491,63 @@ data class WebDisplay(
     val handColours: Boolean = false,
 )
 
-/** The piano link: its state's name ("connected", "scanning"…) and the piano's name while connected. */
-data class WebLink(val state: String, val name: String? = null)
+/**
+ * The piano link: its state's name ("connected", "scanning"…) and the piano's name while connected; and (v1.27 — M63, the
+ * state's link alone) whether notes reach the piano now ([sending]), as the tablet's rail dot says it, for the panel's dots.
+ */
+data class WebLink(val state: String, val name: String? = null, val sending: Boolean = false)
 
-/** What the piano reported: "unknown", "unsupported" or "ready", its values and facts, and its last refusal. */
+/**
+ * What the piano reported: "unknown", "unsupported" or "ready", its values and facts, and its last refusal; and (v1.27 —
+ * M63) its Bluetooth [lock] as this tablet stands with it ([WebLock], none until the piano has been read).
+ */
 data class WebPianoState(
     val state: String,
     val values: Map<String, String> = emptyMap(),
     val facts: Map<String, String> = emptyMap(),
     val lastError: String? = null,
     val errorAbout: String? = null,
+    val lock: WebLock = WebLock(),
 )
+
+/**
+ * The piano's Bluetooth lock on the panel (v1.27 — M63; the tablet's v1.25 — M58, `firmware/docs/BLE_LOCK.md`), read
+ * only: where this tablet stands ([state]: "none", "reading", "proving", "trusted", "lockedOut" or "notAccepted"), the
+ * piano's own word ([piano]: "open", "claimed" or "pairing"; null before it said, or without the lock), guest play's whole
+ * seconds left, whether this tablet keeps a key for it ([keyStored]), whether its settings may be written now
+ * ([writable]), and why not in the tablet's words ([message], [LockCopy.readOnly]). Never the key, the nonce or the
+ * piano's address.
+ */
+data class WebLock(
+    val state: String = "none",
+    val piano: String? = null,
+    val guestSecondsLeft: Long = 0,
+    val keyStored: Boolean = false,
+    val writable: Boolean = true,
+    val message: String? = null,
+) {
+    companion object {
+        /** [lock] as the panel reads it, guest play's time left counted to [nowMs] (elapsed ms, the lock's own clock). */
+        fun of(lock: PianoLock, nowMs: Long): WebLock = WebLock(
+            state = when (lock.phase) {
+                LockPhase.None -> "none"
+                LockPhase.Reading -> "reading"
+                LockPhase.Proving -> "proving"
+                LockPhase.Trusted -> "trusted"
+                LockPhase.LockedOut -> "lockedOut"
+                LockPhase.NotAccepted -> "notAccepted"
+            },
+            piano = lock.piano?.wire,
+            guestSecondsLeft = lock.guestLeft(nowMs),
+            keyStored = lock.keyStored,
+            writable = lock.writable,
+            message = LockCopy.readOnly(lock),
+        )
+    }
+}
 
 /** `/api/piano`: the state, and the Read status report (null before one; "" when the piano didn't answer). */
 data class WebPiano(val state: WebPianoState, val statusText: String?, val statusReading: Boolean)
-
-/** Artwork fetched in the background: [done] of [total] while [running]. */
-data class WebArtwork(val running: Boolean, val done: Int, val total: Int)
 
 /**
  * Where the panel and the request page are reached: `http://100.101.2.3:8737`, and the guests'
@@ -525,28 +565,26 @@ data class CatalogueList(val key: String, val name: String, val pieces: List<Web
 /**
  * Everything `/api/state` carries but the requests waiting. [monochrome]: Artwork in black and
  * white is on, so the panel draws portraits without colour, as the app does. [albumBackdrop]: Album
- * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [schedule]: kept
- * for older pages, its next start always null since timed plays were removed (v1.20 — M54). [quiet]: the quiet
- * times now (v1.20 — M54).
+ * colours behind the player is on (v1.15 — M41), so the panel's Now playing has them too. [quiet]: the quiet
+ * times now (v1.20 — M54). What no page read went in v1.27 — M63: the artwork's progress, folding, the queue's uids,
+ * a model's licence, and the schedule kept for the pages of 1.19.
  */
 data class WebState(
     val player: WebPlayer = WebPlayer(),
     val link: WebLink = WebLink("disconnected"),
     val piano: WebPianoState = WebPianoState("unknown"),
     val import: ImportProgress = ImportProgress.Idle,
-    val artwork: WebArtwork = WebArtwork(running = false, done = 0, total = 0),
     val web: WebAddresses = WebAddresses(null, null),
     val guests: GuestSettings = GuestSettings(open = false, approveFirst = true),
     val monochrome: Boolean = false,
     val albumBackdrop: Boolean = true,
-    val schedule: WebScheduleState = WebScheduleState(),
     val studio: WebStudio = WebStudio(),
     /** What plays and what is played from (v1.11 — M29), read-only. */
     val instruments: WebInstruments = WebInstruments(),
     /** The display settings the panel's View control mirrors (v1.13 — M32). */
     val display: WebDisplay = WebDisplay(),
     /** The quiet times now (v1.20 — M54): `{now, until, overridden, next}`. */
-    val quiet: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
+    val quiet: dev.stevenjin.stevenpiano.quiet.QuietNow = dev.stevenjin.stevenpiano.quiet.QuietNow(),
     /** The tablet's microphone (v1.23 — M55): `{on, until, allowed}`. */
     val listen: dev.stevenjin.stevenpiano.audio.ListenState = dev.stevenjin.stevenpiano.audio.ListenState(),
     /** The key test (v1.23 — M55): `{running, key, done, total, results, stopped}`. */
@@ -660,12 +698,6 @@ data class WebInstrument(val kind: String = "steven", val name: String = "Steven
 
 /** The keyboard chosen: its [name], "usb", "bluetooth" or "virtual", and "connected", "connecting", "disconnected", "pairing" or "unavailable". */
 data class WebKeyboard(val name: String, val transport: String, val state: String)
-
-/**
- * The schedules in the state, kept for older pages (v1.6.2 — M19): the next start (always null since timed plays were
- * removed in 1.20) and a revision of the list (0).
- */
-data class WebScheduleState(val next: String? = null, val revision: Int = 0)
 
 /**
  * The preferences the panel may change (`PUT /api/settings`); null leaves one as it is. The
@@ -823,6 +855,6 @@ data class WebSettings(
 
 /** `GET /api/quiet`: the sections as they are kept, and the quiet now. */
 data class WebQuiet(
-    val sections: List<dev.stevenjin.stevenpiano.schedule.QuietSection> = emptyList(),
-    val now: dev.stevenjin.stevenpiano.schedule.QuietNow = dev.stevenjin.stevenpiano.schedule.QuietNow(),
+    val sections: List<dev.stevenjin.stevenpiano.quiet.QuietSection> = emptyList(),
+    val now: dev.stevenjin.stevenpiano.quiet.QuietNow = dev.stevenjin.stevenpiano.quiet.QuietNow(),
 )

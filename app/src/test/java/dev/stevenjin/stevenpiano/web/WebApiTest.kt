@@ -25,6 +25,10 @@ import dev.stevenjin.stevenpiano.instruments.InstrumentKind
 import dev.stevenjin.stevenpiano.instruments.KeyboardState
 import dev.stevenjin.stevenpiano.instruments.MidiNames
 import dev.stevenjin.stevenpiano.instruments.MidiTransport
+import dev.stevenjin.stevenpiano.ble.LOCKED_OUT_COPY
+import dev.stevenjin.stevenpiano.piano.LockPhase
+import dev.stevenjin.stevenpiano.piano.LockWord
+import dev.stevenjin.stevenpiano.piano.PianoLock
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
@@ -33,7 +37,7 @@ import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.QueueSnapshot
 import dev.stevenjin.stevenpiano.player.RepeatMode
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
-import dev.stevenjin.stevenpiano.schedule.QuietNow
+import dev.stevenjin.stevenpiano.quiet.QuietNow
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -168,7 +172,6 @@ class WebApiTest {
                 piece = piece,
                 positionMs = 12_345,
                 at = 98_765_432,
-                fold = false,
                 views = WebViews(rev = 41, notes = 3_216, hands = true, fingers = false, chords = true, score = true),
                 tempoPct = 90,
                 preRollMs = 2_000,
@@ -184,11 +187,13 @@ class WebApiTest {
             display = WebDisplay(noteDisplay = "score", rollStyle = "paperRoll", fingering = true, chordNames = false, handColours = true),
         )
         val json = WebApi.state(state, pending = 2)
+        // The link's dot (v1.27 — M63): whether notes reach the piano now, worked out on the tablet as its rail's dot.
+        assertEquals(setOf("state", "name", "sending"), json.getJSONObject("link").keys().asSequence().toSet())
+        assertFalse(json.getJSONObject("link").getBoolean("sending"))
         val player = json.getJSONObject("player")
-        assertEquals(setOf("status", "loading", "piece", "positionMs", "at", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem", "fold", "views"), player.keys().asSequence().toSet())
-        // The views (v1.13 — M32): when the position was taken, folding, and what the views of the piece show.
+        assertEquals(setOf("status", "loading", "piece", "positionMs", "at", "tempoPct", "transpose", "velocityPct", "preRollMs", "channel", "tablet", "queue", "problem", "views"), player.keys().asSequence().toSet())
+        // The views (v1.13 — M32): when the position was taken, and what the views of the piece show.
         assertEquals(98_765_432L, player.getLong("at"))
-        assertFalse(player.getBoolean("fold"))
         val views = player.getJSONObject("views")
         assertEquals(setOf("rev", "notes", "hands", "fingers", "chords", "score"), views.keys().asSequence().toSet())
         assertEquals(41, views.getInt("rev"))
@@ -209,10 +214,10 @@ class WebApiTest {
         assertEquals(setOf("id", "title", "composer", "composerShort", "composerKey", "durationMs", "favorite", "art", "artVersion"), player.getJSONObject("piece").keys().asSequence().toSet())
         assertEquals("Calm", player.getJSONObject("channel").getString("name"))
         val queue = player.getJSONObject("queue")
-        assertEquals("no shuffle (v1.26 — M61)", setOf("ids", "uids", "index", "repeat", "items"), queue.keys().asSequence().toSet())
+        assertEquals("no shuffle (v1.26 — M61), no uids (v1.27 — M63)", setOf("ids", "index", "repeat", "items"), queue.keys().asSequence().toSet())
         assertEquals("all", queue.getString("repeat"))
         assertTrue(queue.getJSONArray("items").getJSONObject(1).getBoolean("requested"))
-        assertEquals(setOf("player", "link", "instruments", "piano", "import", "artwork", "requests", "web", "monochrome", "albumBackdrop", "schedule", "studio", "display", "quiet", "listen", "keytest", "safety", "power"), json.keys().asSequence().toSet())
+        assertEquals(setOf("player", "link", "instruments", "piano", "import", "requests", "web", "monochrome", "albumBackdrop", "studio", "display", "quiet", "listen", "keytest", "safety", "power"), json.keys().asSequence().toSet())
         // The 24 V power plug (v1.26 — M62): its little part, nothing of it without a plug; Now playing's "Waking the piano…".
         val unplugged = json.getJSONObject("power")
         assertEquals(setOf("paired", "on", "rail", "waking", "message", "attention"), unplugged.keys().asSequence().toSet())
@@ -246,14 +251,14 @@ class WebApiTest {
         val studio = WebApi.studio(
             WebStudio(
                 available = true,
-                models = listOf(WebModel("transcription", "Transcription", 124_511_036, "CC BY 4.0", installed = false, line = "Downloading · 42 of 125 MB", progress = 0.34f)),
+                models = listOf(WebModel("transcription", "Transcription", 124_511_036, installed = false, line = "Downloading · 42 of 125 MB", progress = 0.34f)),
                 jobs = listOf(WebStudioJob(3, "transcribe", "take.m4a", "done", "Kept as take", progress = null, title = "take")),
             ),
         )
         assertEquals(setOf("available", "reason", "models", "jobs"), studio.keys().asSequence().toSet())
         assertTrue(studio.isNull("reason"))
         val model = studio.getJSONArray("models").getJSONObject(0)
-        assertEquals(setOf("name", "title", "sizeBytes", "licence", "installed", "line", "progress"), model.keys().asSequence().toSet())
+        assertEquals(setOf("name", "title", "sizeBytes", "installed", "line", "progress"), model.keys().asSequence().toSet())
         assertEquals(0.34, model.getDouble("progress"), 1e-6)
         val job = studio.getJSONArray("jobs").getJSONObject(0)
         assertEquals(
@@ -262,8 +267,6 @@ class WebApiTest {
         )
         assertTrue(job.isNull("progress"))
         assertEquals("Kept as take", job.getString("line"))
-        assertTrue("timed plays were removed (v1.20 — M54): the schedule stays for older pages, its next null", json.getJSONObject("schedule").isNull("next"))
-        assertEquals(setOf("next", "revision"), json.getJSONObject("schedule").keys().asSequence().toSet())
         // Quiet times (v1.20 — M54): {now, until, overridden, next}, the times epoch ms or null, never missing.
         val calm = json.getJSONObject("quiet")
         assertEquals(setOf("now", "until", "overridden", "next"), calm.keys().asSequence().toSet())
@@ -284,6 +287,17 @@ class WebApiTest {
         assertEquals("MIDI", finished.getJSONObject("playlist").getString("name"))
         assertTrue("a run under way shows none yet", WebApi.import(ImportProgress(done = 3, total = 9, finished = false, playlist = ImportedPlaylist(14, "MIDI"))).isNull("playlist"))
         assertEquals("1.4.0", json.getJSONObject("piano").getJSONObject("facts").getString("fw"))
+        // The piano's Bluetooth lock (v1.27 — M63), read only: never the key, the nonce or the piano's address.
+        val lock = json.getJSONObject("piano").getJSONObject("lock")
+        assertEquals(setOf("state", "piano", "guestSecondsLeft", "keyStored", "writable", "message"), lock.keys().asSequence().toSet())
+        assertTrue("none until the piano is read", lock.getString("state") == "none" && lock.getBoolean("writable") && lock.isNull("piano") && lock.isNull("message"))
+        val out = WebLock.of(PianoLock(LockPhase.LockedOut, LockWord.Claimed), nowMs = 0)
+        assertEquals(WebLock("lockedOut", "claimed", writable = false, message = LOCKED_OUT_COPY), out)
+        assertEquals(
+            "guest play counted to now",
+            WebLock("trusted", "claimed", guestSecondsLeft = 3_540, keyStored = true),
+            WebLock.of(PianoLock(LockPhase.Trusted, LockWord.Claimed, guestSeconds = 3_600, guestReadAt = 1_000, keyStored = true), nowMs = 61_000),
+        )
         assertEquals("state", WebApi.state(state, 0, type = "state").getString("type"))
         assertTrue("no piece: null, not missing", WebApi.state(WebState(), 0).getJSONObject("player").isNull("piece"))
         assertFalse(WebApi.progress(1, 2).has("player"))
@@ -407,7 +421,7 @@ class WebApiTest {
         val app = bare.getJSONObject("app")
         assertEquals(setOf("version", "build", "pid", "threads", "uptimeMs", "heapUsed", "heapMax", "nativeHeap", "cpuPct", "deviceOwner", "kiosk"), keys(app))
         val tablet = bare.getJSONObject("tablet")
-        assertEquals(setOf("model", "android", "uptimeMs", "screenOn", "battery", "thermal", "memory", "storage", "cpu", "network"), keys(tablet))
+        assertEquals(setOf("model", "android", "uptimeMs", "screenOn", "battery", "thermal", "memory", "storage", "cpu", "network", "debugging"), keys(tablet))
         val parts = mapOf(
             "battery" to setOf("percent", "charging", "plug", "tempC", "voltageMv", "health"),
             "thermal" to setOf("status", "headroom", "cpuC", "skinC"),
@@ -415,6 +429,7 @@ class WebApiTest {
             "storage" to setOf("total", "free"),
             "cpu" to setOf("cores", "loadPct"),
             "network" to setOf("online", "transport", "signalDbm", "downKbps"),
+            "debugging" to setOf("usb", "wireless", "developer"),   // v1.27 — M63
         )
         val unknowns = mutableListOf(app)
         for ((name, expected) in parts) unknowns += tablet.getJSONObject(name).also { assertEquals(name, expected, keys(it)) }
@@ -477,7 +492,7 @@ class WebApiTest {
         assertTrue("2.0.0 has none of these", listOf("heapblock", "tasks", "stack", "looprate", "active", "trips", "crashes").all { diag.isNull(it) })
         assertFalse("a fact outside the list stays in facts only", diag.has("mystery") || diag.has("proto"))
         val running = full.getJSONArray("running")
-        assertEquals(RunningNow.KEYS, (0 until running.length()).map { running.getJSONObject(it).getString("key") })
+        assertEquals(listOf("player", "link", "web", "relay", "covers", "import", "studio", "pack", "update", "firmware", "schedule", "sound"), (0 until running.length()).map { running.getJSONObject(it).getString("key") })
         assertEquals(setOf("key", "title", "state", "detail", "progress"), keys(running.getJSONObject(0)))
         assertTrue("nothing playing: no progress", running.getJSONObject(0).isNull("progress"))
         assertEquals(12, full.getJSONObject("web").getJSONObject("relay").getInt("answered"))

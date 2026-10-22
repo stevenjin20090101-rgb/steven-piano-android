@@ -92,7 +92,7 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.NowPlaying
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.PlayerState
-import dev.stevenjin.stevenpiano.schedule.QuietCopy
+import dev.stevenjin.stevenpiano.quiet.QuietCopy
 import dev.stevenjin.stevenpiano.settings.NoteDisplay
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
@@ -156,8 +156,9 @@ private val MARGIN_TOP_AND_FOOT = 16.dp
  *
  * While [resting], any touch, or back, leaves ([onLeave]) and the touch goes no further; the screen
  * stays on and the system bars step aside. Once it starts to fade away ([resting] false; the nav
- * host fades it, [RestingMotion]) it holds what it showed and lets everything through, so the app
- * beneath is live at once. In kiosk mode (DESIGN.md › v1.6.1 — M20) it is also the resting state
+ * host fades it, [RestingMotion]) it holds what it showed and lets every touch through, so the app
+ * beneath is live at once; Back stays its own until it has gone (v1.27 — M63), so the back swipe
+ * whose touch woke it ends here, not on the screen beneath (Home, outside kiosk). In kiosk mode (DESIGN.md › v1.6.1 — M20) it is also the resting state
  * with nothing loaded: the byline, and while guests may request, the request page's code; the
  * screen then stays on only as Android's "stay on while plugged in" says (kiosk mode sets it).
  *
@@ -191,7 +192,7 @@ fun DisplayScreen(onLeave: () -> Unit, resting: Boolean = true) {
         anyway.action = playAnyway
     }
 
-    BackHandler(enabled = resting, onBack = onLeave)
+    BackHandler(onBack = onLeave)   // while it shows at all: a back during the fade only touches again
     val view = LocalView.current
     val window = LocalActivity.current?.window
     val loaded = piece != null

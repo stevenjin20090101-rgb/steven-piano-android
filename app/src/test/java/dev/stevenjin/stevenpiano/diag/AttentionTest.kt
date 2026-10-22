@@ -41,7 +41,7 @@ class AttentionTest {
     @Test
     fun `a calm tablet, a healthy piano and an idle app need nothing, nor does a tablet not read yet`() {
         val healthy = PianoDiag(mapOf("boards" to "ok,ok,ok,ok,ok,ok,ok", "temp" to "44.0", "heapmin" to "120000"))
-        val idle = RunningNow.KEYS.map { row(it, RunningNow.IDLE) }
+        val idle = listOf("player", "link", "web", "relay", "covers", "import", "studio", "pack", "update", "firmware", "schedule", "sound").map { row(it, RunningNow.IDLE) }
         assertTrue(items(Attention.Inputs(calm, idle, healthy, cloudOn = true, cloud = CloudStatus.Connected("relay.example", "p1", 0))).isEmpty())
         assertTrue(items(Attention.Inputs()).isEmpty())
     }

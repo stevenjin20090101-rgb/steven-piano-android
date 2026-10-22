@@ -45,7 +45,7 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
-import dev.stevenjin.stevenpiano.schedule.QuietNow
+import dev.stevenjin.stevenpiano.quiet.QuietNow
 import dev.stevenjin.stevenpiano.settings.Appearance
 import dev.stevenjin.stevenpiano.settings.StandbyCanvas
 import dev.stevenjin.stevenpiano.settings.StandbyShows
@@ -376,9 +376,9 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
             try {
                 _system.value = withContext(Dispatchers.IO) {
                     val at = System.currentTimeMillis()
-                    val reading = graph.systemProbe.read()
-                    val inputs = graph.runningInputs(at)
-                    SystemNow(reading, RunningNow.of(inputs), at, loading = inputs.player.loading, keyHeld = graph.keyHeld())
+                    val reading = graph.remote.systemProbe.read()
+                    val inputs = graph.remote.runningInputs(at)
+                    SystemNow(reading, RunningNow.of(inputs), at, loading = inputs.player.loading, keyHeld = graph.remote.keyHeld())
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -390,7 +390,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
 
     /** The day's samples as they stand (the page reads them as it opens, then once a minute). */
     fun readSystemDay() {
-        _systemDay.value = SystemDay(graph.systemHistory.snapshot(), System.currentTimeMillis())
+        _systemDay.value = SystemDay(graph.remote.systemHistory.snapshot(), System.currentTimeMillis())
     }
 
     /**
@@ -399,7 +399,7 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
      */
     fun refreshPianoFacts() {
         if (PianoDiag.of(instrumentKind.value, link.value, piano.value) == null) return
-        if (graph.factsFloor.take()) graph.pianoSettings.refreshFacts()
+        if (graph.remote.factsFloor.take()) graph.pianoSettings.refreshFacts()
     }
 
     /** Find missing covers: the pieces whose album cover wasn't found are looked up again, in the app's scope. */
@@ -413,13 +413,13 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     // ---- Listen and test (v1.23 — M55) -----------------------------------------------------------------------------
 
     /** The tablet's microphone: on, until when, allowed (the switch and Android's permission). */
-    val listen: StateFlow<ListenState> = graph.listening.state
+    val listen: StateFlow<ListenState> = graph.remote.listening.state
 
     /** The key test: running, the key struck, the results of the last. */
-    val keyTest: StateFlow<KeyTestState> = graph.keyTest.state
+    val keyTest: StateFlow<KeyTestState> = graph.remote.keyTest.state
 
     /** Whether Android allows the microphone now. */
-    fun microphoneAllowed(): Boolean = graph.microphoneAllowed()
+    fun microphoneAllowed(): Boolean = graph.remote.microphoneAllowed()
 
     /** Listening from the panel on or off; on only after Android allowed the microphone (the page asks first). */
     fun setListenFromPanel(on: Boolean) = edit { setListenFromPanel(on) }
@@ -430,14 +430,14 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
      */
     fun microphoneGranted() {
         setListenFromPanel(true)
-        graph.listening.refresh()
+        graph.remote.listening.refresh()
     }
 
     /** Test every key from the tablet (no sound here): null when it began, else why not, in words. */
-    fun testEveryKey(): String? = (graph.keyTest.start(null) as? ListenAnswer.Refused)?.message
+    fun testEveryKey(): String? = (graph.remote.keyTest.start(null) as? ListenAnswer.Refused)?.message
 
     /** The key test's Stop: it ends at once with the player's stop sequence. */
-    fun stopKeyTest() = graph.keyTest.stop()
+    fun stopKeyTest() = graph.remote.keyTest.stop()
 
     /** Check now: asks the server whatever the switch says, in the app's scope so leaving the tab does not stop it. */
     fun checkNow() {

@@ -34,7 +34,9 @@ sealed interface SafetyLock {
 /**
  * The last check that came to a result (passed, or locked Play), at [at] (epoch ms): whether it [passed]; the keys heard
  * of those struck ([keys]; null with no sweep, the microphone off); those not heard ([silent]); whether a coil was on;
- * the boards answering ([boardsOk] of [boardsOf], null where not read); whether the restart and repower were needed.
+ * the boards answering ([boardsOk] of [boardsOf], null where not read); whether the restart and repower were needed
+ * ([recovered]), and which of them was done (v1.27 — M63: [restarted], the controller started again; [repowered], the
+ * 24 V off and on; null in a record kept before them).
  */
 data class LastCheck(
     val at: Long,
@@ -45,6 +47,8 @@ data class LastCheck(
     val boardsOk: Int? = null,
     val boardsOf: Int? = null,
     val recovered: Boolean = false,
+    val restarted: Boolean? = null,
+    val repowered: Boolean? = null,
 )
 
 /**
@@ -105,6 +109,8 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
                     boardsOk = this[LAST_BOARDS_OK],
                     boardsOf = this[LAST_BOARDS_OF],
                     recovered = this[LAST_RECOVERED] ?: false,
+                    restarted = this[LAST_RESTARTED],
+                    repowered = this[LAST_REPOWERED],
                 )
             },
         )
@@ -120,7 +126,7 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         }
         val last = record.last
         if (last == null) {
-            for (key in listOf(LAST_AT, LAST_PASSED, LAST_KEYS, LAST_SILENT, LAST_COIL, LAST_BOARDS_OK, LAST_BOARDS_OF, LAST_RECOVERED)) remove(key)
+            for (key in listOf(LAST_AT, LAST_PASSED, LAST_KEYS, LAST_SILENT, LAST_COIL, LAST_BOARDS_OK, LAST_BOARDS_OF, LAST_RECOVERED, LAST_RESTARTED, LAST_REPOWERED)) remove(key)
             return
         }
         this[LAST_AT] = last.at
@@ -131,6 +137,8 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         if (last.boardsOk == null) remove(LAST_BOARDS_OK) else this[LAST_BOARDS_OK] = last.boardsOk
         if (last.boardsOf == null) remove(LAST_BOARDS_OF) else this[LAST_BOARDS_OF] = last.boardsOf
         this[LAST_RECOVERED] = last.recovered
+        if (last.restarted == null) remove(LAST_RESTARTED) else this[LAST_RESTARTED] = last.restarted
+        if (last.repowered == null) remove(LAST_REPOWERED) else this[LAST_REPOWERED] = last.repowered
     }
 
     companion object {
@@ -145,6 +153,10 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         private val LAST_BOARDS_OK = intPreferencesKey("lastBoardsOk")
         private val LAST_BOARDS_OF = intPreferencesKey("lastBoardsOf")
         private val LAST_RECOVERED = booleanPreferencesKey("lastRecovered")
+
+        /** Which recovery step was done (v1.27 — M63): new keys, so a record kept before them reads as it did. */
+        private val LAST_RESTARTED = booleanPreferencesKey("lastRestarted")
+        private val LAST_REPOWERED = booleanPreferencesKey("lastRepowered")
 
         private const val COIL = "coil"
         private const val KEYS_PREFIX = "keys:"
