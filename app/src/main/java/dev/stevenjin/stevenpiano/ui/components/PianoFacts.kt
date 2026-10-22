@@ -79,9 +79,9 @@ fun FactRow(fact: SystemCopy.Fact) {
         when {
             fact.needs -> NeedsTag()
             else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                if (fact.live != null) {
+                if (fact.connected != null) {
                     // The Bluetooth row's link: filled while connected, a ring when not; it never knows of notes, so never red.
-                    LiveDot(LinkDot.of(connected = fact.live, sending = false))
+                    LiveDot(LinkDot.of(connected = fact.connected, sending = false))
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(

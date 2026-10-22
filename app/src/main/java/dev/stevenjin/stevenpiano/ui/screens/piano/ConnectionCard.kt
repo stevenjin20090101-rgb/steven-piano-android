@@ -70,7 +70,8 @@ import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
  * hairline. A problem is copy in place, with Retry or the fix under it: Turn on Bluetooth, Open
  * Location settings, Open Bluetooth settings (to forget a stale pairing, with Retry beside it). When
  * the piano was not found, a tip in the eyebrow style says how its screen shows that another
- * device holds it, with Retry and, when Location is off, Open Location settings. Permission is
+ * device holds it, with Retry and, when Location is off, Open Location settings. A piano locked to
+ * another device, or one that refused this tablet, has Retry alone (v1.27 — M63). Permission is
  * asked for here, in context, with a one-line reason. When only another piano called Steven Piano
  * answered, the phone connects to it only if the person taps Connect to it ([onConnectTo] with its
  * address). Monochrome
@@ -114,6 +115,8 @@ fun ConnectionCard(
     val fixThenRetry = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { onConnect() }
     val searching = link == LinkState.Scanning || link == LinkState.Connecting || link is LinkState.Reconnecting
     val needsPermission = bluetooth && missing.isNotEmpty() && !searching && link !is LinkState.Connected
+    // Locked out or refused (v1.27 — M63): Retry under the words is the one action, as Connect would only do the same.
+    val retryAlone = !needsPermission && link is LinkState.Error && (link.reason == LinkError.LockedOut || link.reason == LinkError.NotAccepted)
 
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -165,7 +168,7 @@ fun ConnectionCard(
                     }
                 }
             }
-            if (!showButton) return@Column
+            if (!showButton || retryAlone) return@Column
             Spacer(Modifier.height(16.dp))
             when {
                 link is LinkState.Connected -> OutlinedButton(onClick = onDisconnect, border = BorderStroke(Hairline, LocalTertiary.current), colors = actionButtonColors()) {

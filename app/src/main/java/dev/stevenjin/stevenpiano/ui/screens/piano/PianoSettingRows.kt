@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import dev.stevenjin.stevenpiano.diag.PianoDiag
 import dev.stevenjin.stevenpiano.graph
@@ -59,6 +58,7 @@ import dev.stevenjin.stevenpiano.piano.SettingKind
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.SettingNotes
+import dev.stevenjin.stevenpiano.ui.components.Card
 import dev.stevenjin.stevenpiano.ui.components.ChoiceRow
 import dev.stevenjin.stevenpiano.ui.components.DisclosureRow
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
@@ -423,7 +423,7 @@ private fun PianoFact(name: String, label: String, ready: PianoState.Ready?) {
 
 /**
  * STATUS's last row (v1.13; ACTIONS until then): Read status, with what it does under it; while it
- * reads, a hairline; then the piano's report as it wrote it, on the elevated surface, under the button.
+ * reads, a hairline; then the piano's report as it wrote it, on the app's [Card] (v1.27 — M63), under the button.
  * An outlined button, available once the piano has answered. (All keys off lives on the Instrument page.)
  */
 @Composable
@@ -433,12 +433,10 @@ private fun ReadStatusRow(ready: PianoState.Ready?, statusText: String?, statusR
         {
             if (statusReading) ProgressHairline(null, Modifier.padding(top = 8.dp))
             if (statusText != null) {
-                Surface(
+                Card(
                     Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
                     Text(
                         statusText.ifEmpty { "The piano didn't answer." },
@@ -474,8 +472,15 @@ private fun SaveNowRow(ready: PianoState.Ready?, actions: PianoSettingsActions) 
     }
 }
 
-/** A value beside its control; blank while not known, since a dash between − and + would read as one more minus. */
-private fun shownBeside(setting: PianoSetting, wire: String?): String = if (wire == null) "" else setting.display(wire)
+/**
+ * A value beside its control; blank while not known, since a dash between − and + would read as one more minus. A
+ * percentage carries its sign, as the app writes one everywhere else (v1.27 — M63: Piano volume "100%").
+ */
+private fun shownBeside(setting: PianoSetting, wire: String?): String {
+    if (wire == null) return ""
+    val shown = setting.display(wire)
+    return if (setting.unit == "%" && shown.lastOrNull()?.isDigit() == true) "$shown%" else shown
+}
 
 /**
  * How a fact reads: the firmware's version as it says it ("Unknown" until it has), uptime as h:mm, the repeat period in

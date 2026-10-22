@@ -160,8 +160,9 @@ object SafetyCopy {
 
     /**
      * The System page's line: "Last safety check: today 14:20 · all 84 keys", "… · keys not tested (microphone off)",
-     * "… · C2, F♯4 didn't sound", "… · a key was still on", with "after a restart" when one was needed; [now] and [zone]
-     * say what today is.
+     * "… · C2, F♯4 didn't sound", "… · a key was still on", with the recovery a pass needed, in the card's words for its
+     * steps (v1.27 — M63): "after a restart", "after a power off and on", or both; a record kept before 1.27 says "after a
+     * restart" as it did. [now] and [zone] say what today is.
      */
     fun last(last: LastCheck, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
         val result = when {
@@ -171,8 +172,15 @@ object SafetyCopy {
             else -> "all ${last.keys} keys"
         }
         val boards = if (last.boardsOk != null && last.boardsOf != null && last.boardsOk < last.boardsOf) ", ${last.boardsOk} of ${last.boardsOf} boards answering" else ""
-        val after = if (last.recovered && last.passed) " after a restart" else ""
+        val after = if (last.passed) recovery(last) else ""
         return "Last safety check: ${whenSaid(last.at, now, zone)} · $result$boards$after"
+    }
+
+    /** What brought the keys back: the restart, the power off and on (the card's [RESTART] and [REPOWER]), or both. */
+    private fun recovery(last: LastCheck): String {
+        if (last.restarted == null && last.repowered == null) return if (last.recovered) " after a restart" else ""
+        val done = listOfNotNull("a restart".takeIf { last.restarted == true }, "a power off and on".takeIf { last.repowered == true })
+        return if (done.isEmpty()) "" else " after " + done.joinToString(" and ")
     }
 
     /** "today 14:20", "yesterday 9:05", "Mon 14:20" within the week, else "21 Oct 14:20". */

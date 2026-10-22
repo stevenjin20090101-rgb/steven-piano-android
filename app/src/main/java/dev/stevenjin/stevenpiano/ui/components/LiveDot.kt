@@ -108,12 +108,3 @@ fun LiveDot(state: LinkDot, modifier: Modifier = Modifier, breathing: Boolean = 
         if (on > 0f) drawCircle(lerp(ink, red, live.value), alpha = on)
     }
 }
-
-/**
- * The live red alone, or a ring: [live] the red (notes going to the piano), [breathing] as it breathes. The System
- * page's Running now row draws its piano link's dot so; [LinkDot] says every other link's.
- */
-@Composable
-fun LiveDot(live: Boolean, breathing: Boolean, modifier: Modifier = Modifier) {
-    LiveDot(if (live) LinkDot.Sending else LinkDot.NotConnected, modifier, breathing)
-}

@@ -20,10 +20,18 @@ object ImportCopy {
     /**
      * "Imported 12 pieces. 1 file couldn't be read." Duplicates pass without comment. A zip's, a folder's or a
      * loose upload's says where its pieces went (v1.10.1 — M28, D7): "Imported 265 pieces · in the playlist MIDI."
+     * One Android stopped before its end (v1.27 — M63: its time for data sync ran out) says so, how far it came, and that
+     * adding the same files again finishes it, the pieces already in passing without comment: "Android stopped the import
+     * at 1,204 of 1,727 files. Imported 1,180 pieces. Adding the same files again finishes it."
      */
     fun summary(progress: ImportProgress): String {
         if (progress.unreadable) {
             return if (progress.total == 1) "Couldn't read that file. Try Add files instead." else "Couldn't read those files. Try Add files instead."
+        }
+        if (progress.finished && progress.done < progress.total) {
+            val imported = if (progress.imported > 0) " Imported ${Format.count(progress.imported, "piece", "pieces")}." else ""
+            return "Android stopped the import at ${Format.count(progress.done)} of ${Format.count(progress.total)} files.$imported " +
+                "Adding the same files again finishes it."
         }
         val where = progress.playlist?.let { " · ${inPlaylist(it.name).replaceFirstChar(Char::lowercaseChar)}" }.orEmpty()
         val imported = when {

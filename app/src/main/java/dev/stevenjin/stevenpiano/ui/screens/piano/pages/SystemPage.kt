@@ -106,12 +106,14 @@ import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.SystemCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.Apart
+import dev.stevenjin.stevenpiano.ui.components.Card
 import dev.stevenjin.stevenpiano.ui.components.DIAGNOSTICS_FAILED
 import dev.stevenjin.stevenpiano.ui.components.Dial
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.FactRow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.LinkDot
 import dev.stevenjin.stevenpiano.ui.components.LiveDot
 import dev.stevenjin.stevenpiano.ui.components.PowerBoards
 import dev.stevenjin.stevenpiano.ui.components.rememberRailOff
@@ -519,11 +521,11 @@ private fun ToolsCard(vm: PianoViewModel, gate: KioskGate) {
 
 // ---- The parts -------------------------------------------------------------------------------------------------
 
-/** A card of the page: the elevated surface with the cards' 12 dp corners, its name (a heading) with its line, then [content]. */
+/** A card of the page, the app's [Card] (v1.27 — M63): its name (a heading) with its line, then [content]. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SystemCard(title: String, line: String, content: @Composable ColumnScope.() -> Unit) {
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+    Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(bottom = 8.dp)) {
             FlowRow(
                 Modifier
@@ -657,7 +659,7 @@ private fun RunningRow(row: RunningNow.Activity, dot: SystemCopy.Dot, word: Stri
 @Composable
 private fun StateDot(dot: SystemCopy.Dot) {
     if (dot == SystemCopy.Dot.Live) {
-        LiveDot(live = true, breathing = false)
+        LiveDot(LinkDot.Sending, breathing = false)
         return
     }
     val color = when (dot) {
@@ -692,7 +694,7 @@ private fun FootRow(label: String, value: String, onClick: () -> Unit) {
         Text(value, Modifier.padding(start = 16.dp), style = MaterialTheme.typography.bodyLarge.merge(Tabular), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         Spacer(Modifier.width(8.dp))
         Icon(
-            painterResource(R.drawable.ic_chevron_right),
+            painterResource(R.drawable.ic_g_chevron),
             contentDescription = null,
             modifier = Modifier
                 .size(24.dp)
