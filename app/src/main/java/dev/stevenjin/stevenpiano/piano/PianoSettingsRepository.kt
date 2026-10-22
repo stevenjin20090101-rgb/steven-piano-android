@@ -800,8 +800,11 @@ class PianoSettingsRepository(
 
         const val NANOS_PER_MS = 1_000_000L
 
-        /** Facts the lock reads and no screen shows (v1.25 — M58): the connection's one-use challenge. */
-        val HIDDEN_FACTS = setOf(LockHandshake.NONCE)
+        /**
+         * Facts the lock reads and no screen shows (v1.25 — M58): the connection's one-use challenge; and (v1.27 — M64) the
+         * lock's raw words, which [PianoState.Ready.lock] says in words (read at the dump, they go stale after a claim).
+         */
+        val HIDDEN_FACTS = setOf(LockHandshake.NONCE, LockHandshake.LOCKPROTO, LockHandshake.LOCK, LockHandshake.AUTH, LockHandshake.GUEST)
 
         /** Lines that only read: they go whatever the lock says (the piano answers them untrusted). */
         fun isRead(line: String): Boolean = line == "dump" || line.startsWith("get ") || line == PianoAction.Status.command || line == "help"
