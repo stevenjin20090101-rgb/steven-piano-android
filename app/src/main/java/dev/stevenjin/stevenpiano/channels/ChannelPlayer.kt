@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.channels
 
 import dev.stevenjin.stevenpiano.player.PlayerState
+import dev.stevenjin.stevenpiano.player.StartGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -75,6 +76,11 @@ class ChannelPlayer(
     private val scope: CoroutineScope,
     /** The loudness a channel holds while it plays, shared with the schedules. */
     val loudness: LoudnessHold = LoudnessHold(piano, deck),
+    /**
+     * The safety check's say over a channel's start (v1.26 — M61, the player's own [StartGate]): asked before the channel
+     * takes its loudness, so a start it keeps for after the check, or refuses, changes nothing meanwhile.
+     */
+    private val gate: StartGate = StartGate.Open,
 ) {
     private var session: Session? = null
     private var started = false
@@ -91,11 +97,13 @@ class ChannelPlayer(
 
     /**
      * Plays channel [key] from the top of its pool, at [volumePct] (a schedule's) or the channel's own volume. False (and
-     * nothing changes) when its pool is unknown or too small.
+     * nothing changes) when its pool is unknown or too small; true also when the safety check keeps the start for after
+     * its run, or refuses it while Play is locked ([gate], v1.26 — M61).
      */
     fun play(key: String, volumePct: Int? = null): Boolean {
         val pool = pools(key)?.distinct() ?: return false
         if (pool.size < ChannelSummary.MIN_POOL) return false
+        if (!gate.admit(null) { play(key, volumePct) }) return true   // kept until the safety check passes, or refused
         val next = Session(key, pool)
         starting = true
         try {

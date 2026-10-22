@@ -36,6 +36,8 @@ import dev.stevenjin.stevenpiano.admin.OwnerRelease
 import dev.stevenjin.stevenpiano.audio.AndroidMicrophone
 import dev.stevenjin.stevenpiano.audio.AudioOut
 import dev.stevenjin.stevenpiano.audio.KeyTest
+import dev.stevenjin.stevenpiano.audio.KeyTestState
+import dev.stevenjin.stevenpiano.audio.ListenAnswer
 import dev.stevenjin.stevenpiano.audio.Listening
 import dev.stevenjin.stevenpiano.audio.PianoVoice
 import dev.stevenjin.stevenpiano.audio.TabletSound
@@ -106,12 +108,20 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.piano.StoredLockKeys
 import dev.stevenjin.stevenpiano.player.PianoFacts
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
+import dev.stevenjin.stevenpiano.player.Played
 import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.player.RepeatMode
+import dev.stevenjin.stevenpiano.player.StartGate
 import dev.stevenjin.stevenpiano.record.Recorder
 import dev.stevenjin.stevenpiano.record.RecordingPieces
 import dev.stevenjin.stevenpiano.record.RecordingSession
 import dev.stevenjin.stevenpiano.record.RecordingState
 import dev.stevenjin.stevenpiano.record.RecordingStore
+import dev.stevenjin.stevenpiano.safety.DataStoreSafetyStore
+import dev.stevenjin.stevenpiano.safety.Deferral
+import dev.stevenjin.stevenpiano.safety.SafetyHost
+import dev.stevenjin.stevenpiano.safety.SafetyRunner
+import dev.stevenjin.stevenpiano.safety.safetyDataStore
 import dev.stevenjin.stevenpiano.schedule.QuietCopy
 import dev.stevenjin.stevenpiano.schedule.QuietGate
 import dev.stevenjin.stevenpiano.schedule.Schedules
@@ -163,6 +173,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -380,9 +391,11 @@ class AppGraph(private val app: Application) {
     /**
      * The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23), and
      * what it sends the piano goes to the tablet's piano sound too (v1.8 — M25). While a quiet time holds (v1.20 — M54,
-     * [quiet]) it starts nothing.
+     * [quiet]) it starts nothing; the safety check has its say over every start (v1.26 — M61, [safetyGate]).
      */
-    val player: Player by lazy { Player(pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink, quiet = { quiet.holds() }) }
+    val player: Player by lazy {
+        Player(pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink, quiet = { quiet.holds() }, gate = safetyGate)
+    }
 
     /**
      * The tablet's piano sound (v1.8 — M25): the Upright Piano KW SoundFont (downloaded on demand from the
@@ -477,6 +490,7 @@ class AppGraph(private val app: Application) {
             volumeOf = { key -> settings.value.channelVolume(key) },
             piano = pianoVolume,
             scope = appScope,
+            gate = safetyGate,   // v1.26 — M61
         )
     }
 
@@ -926,6 +940,7 @@ class AppGraph(private val app: Application) {
         )
         studio.start()
         followListening()   // v1.23 — M55
+        startSafety()   // v1.26 — M61
         appScope.launch {
             val s = settingsRepository.settings.first()
             // The keyboard first (v1.11 — M29): its address is foreign to the piano's link before that link scans.
@@ -1248,13 +1263,14 @@ class AppGraph(private val app: Application) {
 
     // ---- Listening and the key test (v1.23 — M55) -------------------------------------------------------------------
 
-    /** Whether Android allows the microphone (asked for only by Listening from the panel's switch, Piano › System). */
+    /** Whether Android allows the microphone (asked for by the System page's two switches, Listening from the panel and the safety check's). */
     fun microphoneAllowed(): Boolean = ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     /**
      * The tablet's microphone for the web panel (DESIGN.md › v1.23 — M55): only with Listening from the panel on and Android's
      * permission, only while the app is in the foreground ([MainActivity] says so), each frame to the hearing sessions'
-     * sockets alone, through the web service's hub (the listeners' and the relay's), nothing kept.
+     * sockets alone, through the web service's hub (the listeners' and the relay's), nothing kept. The tablet hears for
+     * itself (its own Test every key, the safety check: v1.26 — M61) with Android's permission alone.
      */
     val listening: Listening by lazy {
         Listening(
@@ -1263,6 +1279,7 @@ class AppGraph(private val app: Application) {
             allowedNow = { settings.value.listenFromPanel && microphoneAllowed() },
             sessionValid = { web.sessions.isValid(it) },
             send = { token, text -> web.hub?.sendToSession(token, text) ?: 0 },
+            localAllowedNow = ::microphoneAllowed,
         )
     }
 
@@ -1310,15 +1327,13 @@ class AppGraph(private val app: Application) {
     }
 
     /**
-     * Listening from the panel turned off: the key test ends, with the stop sequence, and every hearing with it. From [settings]
-     * itself, so what [listening] reads of it is already the new value.
+     * Listening from the panel turned off: what the panels hear ends (a key test a panel started, with the stop sequence);
+     * the tablet's own key test and the safety check hear on (v1.26 — M61). From [settings] itself, so what [listening]
+     * reads of it is already the new value.
      */
     private fun followListening() {
         appScope.launch {
-            settings.map { it.listenFromPanel }.distinctUntilChanged().collect { on ->
-                if (!on) keyTest.stop()
-                listening.refresh()
-            }
+            settings.map { it.listenFromPanel }.distinctUntilChanged().collect { listening.refresh() }
         }
     }
 
@@ -1334,6 +1349,111 @@ class AppGraph(private val app: Application) {
                 .collect { quietSince.see(it, System.currentTimeMillis()) }
         }
     }
+
+    // ==== v1.26 — M61: the safety check (one block; M60's RailPower is connected here by the integrator) ===============
+
+    /**
+     * The safety check (v1.26 — M61; DESIGN.md › v1.26 — M61): after every 6th piece the tablet plays on Steven Piano, the
+     * release, the coils and the boards read, the 84 keys swept while the microphone listens, the restart and repower
+     * where keys stay silent, and Play locked when they still do. Its record in its own small DataStore.
+     *
+     * For the integrator, after M60 merges: `repower = { rail.repower() }`, `cutNow = { rail.cutNow() }`,
+     * `plugged = { rail.available.value }`, `power = { on -> rail.wanted("safety", on) }` with M60's `RailPower`.
+     */
+    val safety: SafetyRunner by lazy {
+        SafetyRunner(
+            scope = appScope,
+            store = DataStoreSafetyStore(app.safetyDataStore, log = LinkLog::warn),
+            host = safetyHost,
+            listens = { settings.value.safetyCheckListens && microphoneAllowed() },
+            repower = { false },   // M60: RailPower.repower()
+            cutNow = {},   // M60: RailPower.cutNow()
+            plugged = { false },   // M60: RailPower.available.value
+            power = {},   // M60: RailPower.wanted("safety", on)
+            log = LinkLog::warn,
+        )
+    }
+
+    /** The player's and the channels' start gate: the safety check's, asked as each start comes (the two never make each other). */
+    private val safetyGate: StartGate by lazy {
+        object : StartGate {
+            override val open: Boolean get() = safety.open
+
+            override fun admit(pieceId: Long?, start: () -> Unit): Boolean = safety.admit(pieceId, start)
+        }
+    }
+
+    /** What the safety check works with: the player, Steven Piano's link and console, the key test, the gates. */
+    private val safetyHost: SafetyHost by lazy { SafetyCheckHost() }
+
+    private inner class SafetyCheckHost : SafetyHost {
+        override val played: Flow<Played> get() = player.played
+
+        override fun deferral(): Deferral? = when {
+            player.locked || firmwareUpdater.state.value.busy -> Deferral.UPDATING
+            quiet.holds() -> Deferral.QUIET
+            !listening.inFront.value -> Deferral.AWAY
+            pianoSettings.lock.value.guestLeft(SystemClock.elapsedRealtime()) > 0 -> Deferral.GUEST_PLAY
+            !pianoReady() -> Deferral.NO_PIANO
+            else -> null
+        }
+
+        override fun pianoReady(): Boolean = pianoLink.kind.value == InstrumentKind.StevenPiano && pianoLink.state.value is LinkState.Connected
+
+        override fun playerBusy(): Boolean = player.state.value.let { it.status == PlaybackStatus.Playing || it.loading }
+
+        override fun pausePlayer() {
+            if (player.state.value.status == PlaybackStatus.Playing) player.pause()
+        }
+
+        override fun release() {
+            player.silenceLive()
+            player.allKeysOff()
+        }
+
+        override fun stopEverything() {
+            player.stop()
+            player.silenceLive()
+            pianoSettings.action(PianoAction.AllKeysOff)   // the piano's own `off`, which goes whatever its lock says
+        }
+
+        override suspend fun facts(): Map<String, String> {
+            val read = withTimeoutOrNull(SAFETY_FACTS_WAIT_MS) { pianoSettings.state.first { it !is PianoState.Unknown } }
+            return (read as? PianoState.Ready)?.facts.orEmpty()
+        }
+
+        override suspend fun ask(fact: String): String? = pianoSettings.ask(fact)
+
+        override suspend fun restart(): String? {
+            stevenLink.expectRestart(SAFETY_RESTART_WINDOW_MS)
+            return pianoSettings.restart()
+        }
+
+        override fun startSweep(): String? = (keyTest.start(null) as? ListenAnswer.Refused)?.message
+
+        override val sweep: StateFlow<KeyTestState> get() = keyTest.state
+
+        override fun stopSweep() = keyTest.stop()
+
+        override fun nextPiece(): Long? {
+            val queue = player.state.value.queue
+            val at = queue.index
+            return when {
+                at !in queue.ids.indices -> null
+                queue.repeat == RepeatMode.ONE -> queue.ids[at]
+                at + 1 < queue.ids.size -> queue.ids[at + 1]
+                queue.repeat == RepeatMode.ALL -> queue.ids.first()
+                else -> null
+            }
+        }
+
+        override suspend fun titleOf(pieceId: Long): String? = withContext(Dispatchers.IO) { library.summaries(listOf(pieceId))[pieceId]?.title }
+    }
+
+    /** From [start]: the safety check reads its record and follows the player. */
+    private fun startSafety() = safety.start()
+
+    // ==== end of the safety check's block ==============================================================================
 
     private companion object {
         const val TAG = "AppGraph"
@@ -1372,6 +1492,10 @@ class AppGraph(private val app: Application) {
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L
+
+        /** The safety check (v1.26 — M61): the piano's dump at most this long, and the restart's window for the link. */
+        const val SAFETY_FACTS_WAIT_MS = 5_000L
+        const val SAFETY_RESTART_WINDOW_MS = 60_000L
 
         /** Debug builds log each request and check under [tag]; release builds log no address. */
         fun debugLog(tag: String): ((String) -> Unit)? = if (BuildConfig.DEBUG) { line -> Log.d(tag, line) } else null

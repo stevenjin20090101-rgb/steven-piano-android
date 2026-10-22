@@ -42,8 +42,9 @@ data class KeyTestState(
  * tablet's own piano sound is held silent meanwhile: it would fake a result. About 39 s.
  *
  * Refused, with its reason: the piano not connected; a piece playing ("Stop the music first."); a quiet time not lifted;
- * a firmware update running; listening off; another test running; and the microphone's own refusals (the app not in the
- * foreground). [stop] ends it at once with the player's stop sequence; it ends by itself, saying why, when the piano
+ * a firmware update running; the microphone not allowed (for a panel's test, Listening from the panel off; the tablet's
+ * own, and the safety check's, need Android's permission alone: v1.26 — M61); another test running; and the
+ * microphone's own refusals (the app not in the foreground). [stop] ends it at once with the player's stop sequence; it ends by itself, saying why, when the piano
  * disconnects, a piece starts, a quiet time begins, an update starts or the microphone stops. Main thread ([scope]'s).
  */
 class KeyTest(
@@ -95,7 +96,7 @@ class KeyTest(
      */
     fun start(token: String?): ListenAnswer {
         refusal()?.let { return it }
-        if (!ears.allowed()) return ListenAnswer.Refused(ListenAnswer.OFF, ListenCopy.OFF)
+        if (!ears.allowed(token)) return ListenAnswer.Refused(ListenAnswer.OFF, if (token == null) ListenCopy.NO_PERMISSION else ListenCopy.OFF)
         if (running) return ListenAnswer.Refused(ListenAnswer.TESTING, ListenCopy.TESTING)
         val take = KeyTake()
         val heard = ears.tap(token, take::add) { end(ListenCopy.STOPPED_MICROPHONE, sequence = true) }

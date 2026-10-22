@@ -21,6 +21,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -552,6 +553,104 @@ class PlayerTest {
         assertEquals(PlaybackStatus.Stopped, player.state.value.status)
         assertFalse("the next piece never sounded", "90 3C 50" in link.messages)
         assertTrue(onMain { player.stopAndFlush(300) })
+    }
+
+    @Test
+    fun `each piece that sounded is told once - to its end, replaced, or stopped, and a pause is no end (v1_26 M61)`() = runBlocking {
+        val heard = CopyOnWriteArrayList<Played>()
+        val listening = scope.launch { player.played.collect { heard += it } }
+        source.pieces[1] = piece(60, 30)
+        source.pieces[2] = piece(62, 5_000)
+        source.pieces[3] = piece(64, 5_000)
+        onMain { player.play(1, listOf(1, 2, 3)) }
+        withTimeout(5_000) { while (heard.isEmpty()) delay(10) }
+        assertEquals(listOf(Played(1, ended = true)), heard.toList())
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 2L && !it.loading } }
+        delay(200)
+        assertEquals("loaded and waiting is not sounding", 1, heard.size)
+        onMain { player.resume() }
+        withTimeout(5_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        onMain { player.pause() }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Paused } }
+        delay(200)
+        assertEquals("a pause is no end", 1, heard.size)
+        onMain { player.next() }
+        withTimeout(5_000) { player.state.first { it.piece?.pieceId == 3L && it.status == PlaybackStatus.Playing } }
+        withTimeout(2_000) { while (heard.size < 2) delay(10) }
+        assertEquals(Played(2, ended = false), heard[1])
+        onMain { player.stop() }
+        withTimeout(2_000) { while (heard.size < 3) delay(10) }
+        assertEquals(Played(3, ended = false), heard[2])
+        delay(200)
+        assertEquals("each once", 3, heard.size)
+        listening.cancel()
+    }
+
+    /** The safety check's say, as a test sets it: every start [open]s, is refused, or is kept for later ([kept]). */
+    private class TestGate : StartGate {
+        var mode = Mode.REFUSE
+        val asked = CopyOnWriteArrayList<Long?>()
+
+        @Volatile
+        var kept: (() -> Unit)? = null
+
+        enum class Mode { OPEN, REFUSE, KEEP }
+
+        override val open: Boolean get() = mode == Mode.OPEN
+
+        override fun admit(pieceId: Long?, start: () -> Unit): Boolean {
+            asked += pieceId
+            return when (mode) {
+                Mode.OPEN -> true
+                Mode.REFUSE -> false
+                Mode.KEEP -> {
+                    kept = start
+                    false
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the safety check is asked at every start - refused, nothing starts, kept, it starts once let go (v1_26 M61)`() = runBlocking {
+        val gate = TestGate()
+        val gated = Player(link, source, scope, prepareThread = {}, gate = gate)
+        source.pieces[1] = piece(60, 5_000)
+        source.pieces[2] = piece(62, 5_000)
+        delay(200)   // the new player's own stop sequence, as it sees the link
+        link.clear()
+        onMain {
+            gated.setPerformance(PerformanceSettings(expression = ExpressionLevel.OFF, velocityFloor = 1))
+            gated.play(1, listOf(1, 2))
+            gated.playAll(listOf(2, 1))
+            gated.playAll(listOf(1), channel = "calm")
+        }
+        assertEquals(listOf<Long?>(1L, 2L, 1L), gate.asked.toList())
+        assertTrue("nothing queued", gated.state.value.queue.ids.isEmpty())
+        // What joins an empty queue waits, loaded, for a Play the gate lets go; Play, Next, an entry: refused.
+        assertFalse(onMain { gated.addToQueue(listOf(1, 2)) })
+        withTimeout(2_000) { gated.state.first { it.piece?.pieceId == 1L && !it.loading } }
+        onMain {
+            gated.resume()
+            gated.togglePlayPause()
+            gated.next()
+            gated.skipToQueueEntry(gated.state.value.queue.uids[1])
+            gated.previous()
+        }
+        delay(300)
+        assertTrue("nothing reached the piano: ${link.messages}", noteOns().isEmpty())
+        assertEquals(PlaybackStatus.Stopped, gated.state.value.status)
+        assertEquals(listOf<Long?>(1L, 2L, 1L, 1L, 1L, 2L, 2L, 1L), gate.asked.toList())
+
+        // Kept: nothing now; let go (the check passed), the same start goes.
+        gate.mode = TestGate.Mode.KEEP
+        onMain { gated.resume() }
+        delay(200)
+        assertTrue(noteOns().isEmpty())
+        gate.mode = TestGate.Mode.OPEN
+        onMain { gate.kept!!.invoke() }
+        withTimeout(2_000) { while ("90 3C 50" !in link.messages) delay(5) }
+        assertTrue(onMain { gated.stopAndFlush(300) })
     }
 
     private class FakeSource : PieceSource {

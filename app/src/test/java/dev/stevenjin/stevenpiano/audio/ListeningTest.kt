@@ -53,6 +53,9 @@ class ListeningTest {
     private class Room(scope: TestScope) {
         val mic = FakeMicrophone()
         var allowed = true
+
+        /** Android's permission alone, for what the tablet hears for itself (v1.26 — M61). */
+        var local = true
         val valid = mutableSetOf("A", "B")
         val open = mutableSetOf("A", "B")
         val sent = mutableListOf<Pair<String, String>>()
@@ -68,6 +71,7 @@ class ListeningTest {
             clock = { scope.testScheduler.currentTime },
             sender = Executor { it.run() },
             io = StandardTestDispatcher(scope.testScheduler),
+            localAllowedNow = { local },
         )
     }
 
@@ -188,5 +192,40 @@ class ListeningTest {
         runCurrent()
         assertFalse(listening.state.value.on)
         assertEquals(3, ended)
+    }
+
+    @Test
+    fun `the tablet hears for itself with Android's permission alone, and the panel's switch ends only what panels hear (v1_26 M61)`() = runTest {
+        val room = Room(this)
+        val listening = room.listening
+        listening.foreground(true)
+        assertTrue(listening.inFront.value)
+        room.allowed = false   // Listening from the panel off
+        assertTrue("the tablet's own hearing", listening.allowed(null))
+        assertFalse("a panel's", listening.allowed("A"))
+        assertEquals(ListenAnswer.Refused(ListenAnswer.OFF, ListenCopy.OFF), listening.tap("A", {}, {}))
+        var ended = 0
+        assertEquals(ListenAnswer.Started, listening.tap(null, {}, { ended++ }))   // the safety check's sweep
+        listening.refresh()
+        testScheduler.advanceTimeBy(3_000)
+        runCurrent()
+        assertTrue("it hears on, the switch off", room.mic.on)
+        assertEquals(0, ended)
+        room.local = false   // the permission taken away: nothing hears
+        listening.refresh()
+        assertFalse(room.mic.on)
+        assertEquals(1, ended)
+        assertEquals(ListenAnswer.Refused(ListenAnswer.OFF, ListenCopy.NO_PERMISSION), listening.tap(null, {}, {}))
+
+        // A key test a panel started ends with the switch; the tablet's own would have gone on.
+        room.local = true
+        room.allowed = true
+        listening.tap("B", {}, { ended++ })
+        room.allowed = false
+        listening.refresh()
+        assertEquals(2, ended)
+        assertFalse(room.mic.on)
+        listening.foreground(false)
+        assertFalse(listening.inFront.value)
     }
 }

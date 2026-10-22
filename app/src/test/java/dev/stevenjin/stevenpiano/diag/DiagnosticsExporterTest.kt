@@ -93,8 +93,8 @@ class DiagnosticsExporterTest {
         assertFalse("nor anything of its secret", "cloudSecret" in prefs)
         assertTrue("the library pack loaded (v1.10 — M27)", "cloudEnrolled = true\nlibraryPackVersion = 1\n" in prefs)
         assertEquals(
-            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a), the Library's genre (v1.14 — M37), Album covers (v1.15 — M40), Album colours (M41), how a piece is played's four (v1.16 — M44), Listening from the panel (v1.23 — M55), less Panel on Wi-Fi too (v1.24 — M56), less Shuffle (v1.26 — M61)",
-            53,
+            "35 lines, the cloud's three (v1.10 — M26), the library pack's (M27), the playlists' order (v1.10.1 — M28), the keyboard's and instrument's six (v1.11 — M29), Wide layout's line become the split's two (v1.12 — M31a), the Library's genre (v1.14 — M37), Album covers (v1.15 — M40), Album colours (M41), how a piece is played's four (v1.16 — M44), Listening from the panel (v1.23 — M55), less Panel on Wi-Fi too (v1.24 — M56), less Shuffle and plus the safety check's listening (v1.26 — M61)",
+            54,
             prefs.lines().count { it.isNotEmpty() },
         )
         assertTrue("skipDrumChannel = true\ndynamicRange = NATURAL\nvelocityFloor = 20\nexpression = LIGHT\nrestrikeMs = 0\n" in prefs)

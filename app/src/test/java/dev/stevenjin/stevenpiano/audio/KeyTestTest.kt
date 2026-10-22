@@ -65,7 +65,7 @@ class KeyTestTest {
         var frames: ((MicFrame) -> Unit)? = null
         var ended: (() -> Unit)? = null
 
-        override fun allowed(): Boolean = allowed
+        override fun allowed(token: String?): Boolean = allowed
 
         override fun tap(token: String?, frames: (MicFrame) -> Unit, ended: () -> Unit): ListenAnswer {
             refusal?.let { return it }

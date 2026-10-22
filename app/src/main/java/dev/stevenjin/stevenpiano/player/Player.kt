@@ -31,8 +31,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
@@ -90,6 +93,9 @@ class PlayablePiece(val id: Long, val title: String, val composer: String, val m
  * While a quiet time holds ([quiet]: a block is on and nobody chose Play anyway) the start paths ([play], [playAll],
  * [resume], [next], [previous], [skipToQueueEntry], the end of a piece) start nothing; what is added to an empty queue
  * waits, loaded, for Play. The Keys screen's keys and a keyboard's still sound: a person is at the piano.
+ * The safety check (v1.26 — M61, [gate]) is asked by every start a person makes: it lets the start go, keeps it until a
+ * check due has passed, or refuses it while Play is locked; what joins an empty queue meanwhile waits, loaded, for Play.
+ * Each piece that sounded is told on [played] (to its end, or stopped or replaced after it began): the check counts them.
  */
 class Player(
     private val link: PianoLink,
@@ -105,6 +111,8 @@ class Player(
     tablet: MidiSink? = null,
     /** Whether a quiet time holds now (v1.20 — M54, `schedule.QuietGate`): no start path starts a piece meanwhile. Main thread. */
     private val quiet: () -> Boolean = { false },
+    /** The safety check's say over a person's start (v1.26 — M61, `safety.SafetyRunner`); none by default. Main thread. */
+    private val gate: StartGate = StartGate.Open,
 ) : ChannelDeck {
     private val engine = PlaybackEngine(if (tablet == null) link else TeeSink(link, tablet))
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -126,6 +134,14 @@ class Player(
 
     /** Whether the Keys screen's sustain is down, as the engine last left it (a full silence lifts it). */
     val liveSustain: StateFlow<Boolean> = _liveSustain.asStateFlow()
+
+    private val _played = MutableSharedFlow<Played>(extraBufferCapacity = PLAYED_BUFFER)
+
+    /**
+     * Each piece that sounded (v1.26 — M61), once, when it is over: it played to its end, or was stopped, emptied or
+     * replaced by another after it began to play. A pause is not an end. The safety check counts them.
+     */
+    val played: SharedFlow<Played> = _played.asSharedFlow()
 
     // Owned by the scope's thread.
     private var queue = Queue.Empty
@@ -175,6 +191,10 @@ class Player(
     private var shownTempo = 100
     private var shownEnded = false
 
+    // Owned by the scheduler thread (v1.26 — M61): the piece the engine holds, and the one sounding since it began to play.
+    private var loadedId: Long? = null
+    private var sounding: Long? = null
+
     init {
         scheduler.start()
         scope.launch { link.state.collect(::onLinkState) }
@@ -194,6 +214,7 @@ class Player(
     /** Plays [pieceId]; Next, Previous and the end of the piece then move through [queue], in its order. A channel ends. */
     fun play(pieceId: Long, queue: List<Long> = listOf(pieceId)) {
         if (locked || quiet()) return
+        if (!gate.admit(pieceId) { play(pieceId, queue) }) return
         setQueue(Queue.startingAt(pieceId, queue, this.queue), channel = null)
         startCurrent()
     }
@@ -204,6 +225,7 @@ class Player(
      */
     override fun playAll(pieceIds: List<Long>, channel: String?) {
         if (pieceIds.isEmpty() || locked || quiet()) return
+        if (!gate.admit(pieceIds.first()) { playAll(pieceIds, channel) }) return
         val all = Queue.all(pieceIds, queue)
         channelUids = if (channel == null) emptySet() else all.entries.mapTo(HashSet()) { it.uid }
         // The queue and its channel in one update: a watcher never sees the new queue without its channel.
@@ -268,7 +290,10 @@ class Player(
         loadJob?.cancel()
         markOnPlay = null
         setQueue(Queue(repeat = kept.repeat, nextUid = kept.nextUid), channel = null)
-        scheduler.submit { engine.eject() }
+        scheduler.submit {
+            engine.eject()
+            loadedId = null
+        }
         loaded(Long.MAX_VALUE)
         _state.update { it.copy(piece = null, loading = false) }
     }
@@ -284,6 +309,7 @@ class Player(
         if (locked || quiet()) return
         val skipped = queue.skipTo(uid)
         if (skipped === queue) return
+        if (!gate.admit(skipped.current?.pieceId) { skipToQueueEntry(uid) }) return
         setQueue(skipped, channel = if (uid in channelUids) _state.value.channel else null)
         startCurrent()
     }
@@ -295,7 +321,8 @@ class Player(
     }
 
     fun resume() {
-        if (locked || quiet()) return
+        if (locked || quiet() || queue.current == null) return   // nothing to play: nothing to ask the safety check either
+        if (!gate.admit(queue.current?.pieceId) { resume() }) return
         // A current entry that never loaded (a request that came while the player was locked): Play loads and plays it.
         val shown = _state.value
         if (shown.piece == null && !shown.loading && shown.problem == null && queue.current != null) {
@@ -326,6 +353,7 @@ class Player(
 
     fun next() {
         if (!queue.hasNext || locked || quiet()) return
+        if (!gate.admit(queue.next().current?.pieceId) { next() }) return
         setQueue(queue.next())
         startCurrent()
     }
@@ -333,7 +361,9 @@ class Player(
     /** Restarts the piece when more than 3 s in (or first in the queue), else plays the one before. */
     fun previous() {
         if (locked || quiet()) return
-        if (queue.previousRestarts(positionMicrosNow())) {
+        val restarts = queue.previousRestarts(positionMicrosNow())
+        if (!gate.admit((if (restarts) queue else queue.previous()).current?.pieceId) { previous() }) return
+        if (restarts) {
             seek(0L)
         } else {
             setQueue(queue.previous())
@@ -535,7 +565,9 @@ class Player(
         if (pieceIds.isEmpty()) return false
         if (queue.current == null) {
             if (locked) return false
-            if (quiet()) {   // v1.20 — M54: they wait, the first loaded, for a Play after the quiet time
+            // v1.20 — M54: they wait, the first loaded, for a Play after the quiet time; v1.26 — M61: or for the Play
+            // the safety check lets go (one due, running or failed).
+            if (quiet() || !gate.open) {
                 waitLoaded(pieceIds)
                 return false
             }
@@ -580,7 +612,10 @@ class Player(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                scheduler.submit { engine.eject() }
+                scheduler.submit {
+                    engine.eject()
+                    loadedId = null
+                }
                 loaded(Long.MAX_VALUE)
                 _state.update { it.copy(loading = false, piece = null, problem = e.message ?: CANT_PLAY) }
                 return@launch
@@ -633,6 +668,7 @@ class Player(
             loaded(if (facts.freeRepeats) Long.MAX_VALUE else Performance.restrikeMs(shaping, facts) * MICROS_PER_MS)
             scheduler.submit { now ->
                 engine.load(played, now)
+                loadedId = id
                 engine.setTempo(tempo, now)
                 if (start) engine.play(now, preRoll)
             }
@@ -775,6 +811,7 @@ class Player(
 
     /** Scheduler thread, after every step: mirrors the engine into what the UI reads. */
     private fun publish() {
+        sounded()
         activeLow.set(engine.router.activeLow)
         activeHigh.set(engine.router.activeHigh)
         _liveSustain.value = engine.router.liveSustainDown
@@ -801,6 +838,20 @@ class Player(
         // Last, after what the UI reads: a run that just ended leaves its timing on the link's trail.
         engine.timing.take()?.let { run -> trail(timingLine(run)) }
         engine.liveTiming.take()?.let { run -> trail(liveLine(run)) }   // and a Live session, its keyboard's times (v1.11 — M29)
+    }
+
+    /**
+     * Scheduler thread (v1.26 — M61): a piece sounds from when it begins to play until it ends, stops, leaves the engine
+     * or gives way to another; then it is told once on [played]. A pause is not an end.
+     */
+    private fun sounded() {
+        val current = sounding
+        val loaded = loadedId
+        if (current != null && (engine.ended || engine.status == PlaybackStatus.Stopped || loaded != current)) {
+            sounding = null
+            _played.tryEmit(Played(current, ended = engine.ended && loaded == current))
+        }
+        if (sounding == null && engine.status == PlaybackStatus.Playing) sounding = loaded
     }
 
     /**
@@ -859,5 +910,8 @@ class Player(
 
         /** A start that replaces one still running waits this long first: a burst of taps settles on its last. */
         private const val SETTLE_MS = 150L
+
+        /** The pieces that sounded, held for a slow listener (one comes a piece at a time). */
+        private const val PLAYED_BUFFER = 16
     }
 }

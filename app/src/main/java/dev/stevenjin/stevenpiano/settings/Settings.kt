@@ -217,6 +217,12 @@ data class PianoSettings(
      * microphone, live, and test every key by ear; off at first (a school), and only with Android's permission besides.
      */
     val listenFromPanel: Boolean = false,
+    /**
+     * Automatic safety check (uses the microphone) (Piano › System, v1.26 — M61): every 6 pieces the check strikes each key
+     * while the tablet listens; on by default, and listening only with Android's permission besides. Off, the check
+     * still releases the keys and reads the coils and the boards, and no key can lock Play.
+     */
+    val safetyCheckListens: Boolean = true,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -483,6 +489,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** Listening from the panel on or off (v1.23 — M55); turning it on asks Android for the microphone first (the System page). */
     suspend fun setListenFromPanel(on: Boolean) = edit { it[LISTEN_FROM_PANEL] = on }
 
+    /** The safety check's listening on or off (v1.26 — M61); turning it on asks Android for the microphone first (the System page). */
+    suspend fun setSafetyCheckListens(on: Boolean) = edit { it[SAFETY_CHECK_LISTENS] = on }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -577,6 +586,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             midiOutId = this[MIDI_OUT_ID],
             midiOutName = this[MIDI_OUT_ID]?.let { this[MIDI_OUT_NAME] },
             listenFromPanel = this[LISTEN_FROM_PANEL] ?: defaults.listenFromPanel,
+            safetyCheckListens = this[SAFETY_CHECK_LISTENS] ?: defaults.safetyCheckListens,
         )
     }
 
@@ -653,6 +663,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val MIDI_OUT_ID = stringPreferencesKey("midiOutId")
         val MIDI_OUT_NAME = stringPreferencesKey("midiOutName")
         val LISTEN_FROM_PANEL = booleanPreferencesKey("listenFromPanel")
+        val SAFETY_CHECK_LISTENS = booleanPreferencesKey("safetyCheckListens")
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256
