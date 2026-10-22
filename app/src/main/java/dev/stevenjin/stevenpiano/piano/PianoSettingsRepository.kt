@@ -22,13 +22,18 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** What the app knows of the piano's own settings. The piano is the source of truth; nothing is kept between connections. */
@@ -240,6 +245,30 @@ class PianoSettingsRepository(
     /** `!lock` and `!guest` read again: the piano says nothing when its screen opens a window or guest play ends. */
     fun refreshLock() {
         session?.refreshLock()
+    }
+
+    // ---- v1.26 — M60: one fact, asked and awaited (the smart plug's CHECK; M61's safety check asks the same) ----------
+
+    /** One [ask] at a time on the console. */
+    private val asking = Mutex()
+
+    /**
+     * Sends `get <fact>` and returns the value of the first `!<fact>=…` line that comes back, or null when none comes within
+     * [timeoutMs] (or the piano has no console now). One request at a time; the read goes whatever the Bluetooth lock says
+     * (the piano answers it untrusted), and its answer reaches the settings' facts as any other.
+     */
+    suspend fun ask(fact: String, timeoutMs: Long = 2_000): String? = asking.withLock {
+        val name = fact.removePrefix("!")
+        if (!FACT_NAME.matches(name)) return@withLock null
+        val console = link.console ?: return@withLock null
+        val prefix = "!$name="
+        withTimeoutOrNull(timeoutMs) {
+            coroutineScope {
+                val answer = async(start = CoroutineStart.UNDISPATCHED) { console.lines.first { it.startsWith(prefix) } }
+                console.sendLine("get $name")
+                answer.await().removePrefix(prefix)
+            }
+        }
     }
 
     /** One connection's conversation with the piano ([connection], the piano at [address]). Everything here dies with the connection. */
