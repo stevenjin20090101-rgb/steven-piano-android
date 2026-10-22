@@ -9755,3 +9755,64 @@ the compiler's warnings 69 → 65 (the four the brief named).
 - The panel's other red dots (the System page's Bluetooth row, Settings' link capsule, Running now's player row, a
   playing channel's tile) keep 1.26's look; only the rail's and the "Piano" capsule's follow LinkDot now.
 - `cloud/tools/fake-tablet.mjs` still sends the deleted state keys (harmless; the panel ignores them).
+
+# v1.27 — M64: the audit's fixes
+
+Read `DESIGN.md › v1.27 — M64` first. Brief `~/.claude/plans/m64-fixes-brief.md` (and the coordinator's items 9–12); the
+findings `~/.claude/plans/audit-1.27/confirm-1.md`. Worktree `android-wt-m64`, branch `m64-fixes`, from `dde4d44`. No
+version bump, no signing.
+
+## The fixes
+- **A1-01:** `stop()`, `stopAndFlush()` and `stopQuietly()` cancelled the load and left `loading` true and the engine's
+  old piece in place. `Player.dropLoad()` cancels it and, while `loading`, ejects the engine's piece (`loadedId` null,
+  `loaded(Long.MAX_VALUE)`) and sets `loading = false, piece = null`, so `resume()` takes its reload path.
+- **A2-01:** the keeper read the check's `restart` as two failed CHECKs (end, stop, CUT, PianoSilent).
+  `RailKeeper.expectRestart(withinMs)` sets `restartUntil` (cleared when `connected` turns true); in `keep()` a null
+  CHECK with the link down inside it gives `_baseline` null and `Off`, no `end()`, then waits for the piano (the normal
+  rail-up follows) or, nothing wanting the rail, `stopRail()` (`abandon()` with the switch off).
+  `SafetyCheckHost.restart()` calls it when `SafetyCheck.restarting(reply)`.
+- **A3-01:** `QuietGate.check()` returned before touching `hushedFor` with no block on; it now sets it null then.
+- **A2-U2:** an unanswered dump gave empty facts, every fact "not reported", and a pass with the microphone off.
+  `SafetyHost.facts()` is `Map<String, String>?`: null for a console with no dump, empty only for a connected Steven
+  Piano with no console. `SafetyHost.dumpAgain()` (`PianoSettingsRepository.dumpAgain()`: on `Unsupported` with a
+  console, a fresh `Session` sends `dump`; false without a console, once answered, or while updating).
+  `SafetyRunner.conduct()`: null → ask again → facts again, the piano awaited (`awaitPiano()`) → `SafetyCheck.start(…,
+  reported)`; `CheckState.reported` false makes `coils()` fail COILS with `Why.NO_DUMP` and end `Unfinished(NO_DUMP)`
+  after the release. `SafetyCopy.NO_DUMP`, `RECONNECT`, and `stopped(Unfinished)` (the card's words, the panel's too).
+- **B2-U1:** `TabletSound.settle()` posted the silence before `active = false`; it flips `active` first.
+
+## The follow-ups
+- `PianoSettingsRepository.HIDDEN_FACTS` adds `lockproto`, `lock`, `auth`, `guest` to `nonce`: `PianoState.Ready.facts`,
+  `/api/state`'s and `/api/system`'s `piano.facts` drop them; the handshake reads its own unfiltered facts. Nothing in
+  Kotlin, `assets/web` or `cloud/` read them.
+- `power/RailFact.kt`'s doc names `graph.remote.railFact`.
+- The emulated piano: unchanged (its `dump` and `get !lock` read `EmulatedLock.word()` as it stands); PianoLockTest pins
+  it.
+- `ui.js`: `linkDot(link, fresh)`, `dotClass(shown)`, `paintDot(node, shown, breathing)`, from app.js's rail.
+  `system.js` (the Bluetooth row, Running now's player row), `settings.js` (the link capsule) and `library.js` (a
+  playing channel's dot, painted again at each `render`) read them; red only while `link.sending`.
+- `upnext.js` `queueCommand()` answers true or false; the Library's Play next and Add to queue toast on true only.
+- `WebSafety.stopped` (an `Unfinished` in `state.ended`, neither running nor locked) with "Safety check stopped · " and
+  `SafetyCopy.stopped()`; `WebApi.safety` puts `stopped`; `now.js` shows the capsule then, with a plain ring.
+- `cloud/tools/fake-tablet.mjs`: the state as `WebApi.state` builds it (no `artwork`, `schedule`, `queue.uids`,
+  `queue.shuffle`; `link.sending`, `piano.lock`, `player.at` and `views`, `import.playlist`, `web.cloud`, `instruments`,
+  `albumBackdrop`, `display`, `quiet`, `listen`, `keytest`, `safety`, `power`); progress with `playing` and `tempoPct`.
+
+## Tests
+PlayerTest +2 (the stop mid-load; after the 6th piece the key test starts), RailKeeperTest +2 (the restart inside its
+window, then the check ending meanwhile; the same silence after the window or once the piano is back), QuietTimesTest
++1, SafetyRunnerTest +1 (no dump; asked again and answered; no console), SafetyCheckTest +1, PianoSettingsRepositoryTest
++1; PianoLockTest and WebApiTest updated. 1,780 tests (12 skipped), lint "No issues found"; cloud's vitest 85 tests.
+
+## Seen on the emulator (`steven_piano_audit`)
+Props `debug.stevenpiano.plug paired`, `…silentkeys 36,61`, `…console mute`; the check made due through the safety
+DataStore (count 5, or pending). (a) a pass; (b) the lock after the repower and the second sweep; (c) a Stop sent by a
+socket watcher at the first state with the next piece loading: `loading` false and no piece at once, then Play played
+the queue's piece; (d) the dump asked again, the check stopped and due, and passed after a reconnect. Headless Chrome:
+the panel's dots ink and red, no raw lock facts, the stopped capsule, and Play next's toast with `/api/queue` refused
+(the tablet's words) and taken ("It plays next."). `~/.claude/plans/m64-shots/` (with `logcat-evidence.txt`).
+
+## Left as it was
+- `SafetyCheckHost.nextPiece()` gives the entry after the current one, so a check run from the lock card while a piece
+  waits at its start names the piece after it as "Next".
+- The emulated piano has no `restart`, so the keeper's restart window is seen in RailKeeperTest only.

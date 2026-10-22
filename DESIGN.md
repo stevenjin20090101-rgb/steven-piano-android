@@ -3681,3 +3681,54 @@ Quiet times, Settings, System) with no console error, Now playing and the Librar
 System page's lock and debugging facts; the piano's pages read only under `debug.stevenpiano.lock claimed`; the three
 dots with the fake plug's boards slowed to 5 s; the tablet's System page on Card, Retry alone and "100%". Screenshots:
 `~/.claude/plans/m63-shots/`.
+
+# v1.27 — M64: the audit's fixes
+
+What 1.27's bug audit confirmed (`~/.claude/plans/audit-1.27/confirm-1.md`), fixed, with M63's small follow-ups. Brief
+`~/.claude/plans/m64-fixes-brief.md`; built in a worktree (`android-wt-m64`, branch `m64-fixes`, from `dde4d44`).
+
+## The fixes
+- **A stop while the next piece loads** left the player "loading" for good: Play replayed the piece before, and after
+  the 6th piece the safety check's sweep was refused at every Play. Now the load is dropped and Play loads Up next's
+  piece.
+- **The safety check's own restart** read as a dead piano: the 24 V cut, everything stopped, "The piano stopped
+  answering", and the restart step failed a minute later. Now that drop passes quietly and the rail comes up with the
+  piano.
+- **A quiet block met again** after the tablet's clock was set back into it stopped nothing. Now every block met stops
+  the player once, again or anew.
+- **No dump, no pass:** with the microphone off and no dump from the piano's console, the check passed with nothing
+  read. Now the dump is asked for once more; still none, the check stops ("The piano didn't report its keys. Reconnect
+  it.") and runs again before the next Play.
+- **The tablet's own sound** could keep a note sounding as it fell silent (the piano connecting). Now nothing slips past
+  its silence.
+
+## The follow-ups
+- The piano's raw lock facts are no screen's: the panel's System page no longer lists "lock open" beside "Locked to this
+  tablet".
+- The panel's last red dots (the System page's Bluetooth row and Running now's player row, Settings' link capsule, a
+  playing channel's tile) follow the rail's: a ring when not connected, ink while connected and silent, red only while
+  notes reach the piano.
+- Play next and Add to queue say they worked only when the tablet took them; a refusal keeps its own words.
+- The panel's safety capsule says why a check stopped, for the moment the tablet's card does.
+- The fake tablet (`cloud/tools/fake-tablet.mjs`) sends the state as 1.27 does.
+
+## Decided in the run
+- **The restart window is narrow.** The 24 V's keeper forgives the drop only once the piano replied `restarting`, and
+  only until it is connected again (a minute at most). A check that ends while the piano restarts still has the 24 V cut
+  a second later, as after a piece, rather than left to the plug's timer.
+- **The keys are released even without a dump.** The check releases them, then stops at the coils it can't read: its
+  card shows "Keys released" ticked and "No coil on · the piano didn't report its keys" failed. A piano with no console
+  at all is left out as before.
+- **The emulated piano's lock word was right.** Its dump says `lock=open` because the tablet claims an open piano just
+  after reading it, as with the real piano; the raw word is no screen's now, so the stand-in is unchanged.
+- **After a stop mid-load, Now playing is empty until Play.** The queue keeps its place; Play (the panel's, the media
+  controls') loads Up next's piece. The tablet's own Now playing then shows "Choose a piece from the library.".
+
+## Seen on the emulator (`steven_piano_audit`, the fake plug and the fake microphone)
+A passing check after the 6th piece, its next piece loading meanwhile; keys 36 and 61 silent: the repower, the second
+sweep and the lock card; a Stop sent from the panel's socket the moment the next piece began loading: the player empty,
+then Play played Adore You, the queue's piece; a console that never answers `dump` with the microphone off: the dump
+asked again, "Safety check stopped · The piano didn't report its keys. Reconnect it." on the card and the panel, the
+check due, and after a reconnect the next Play's check passed and the piece played. The panel's System page and
+Settings' capsule ink while silent and red while a piece plays, a playing channel's tile likewise, and no raw lock
+facts. Screenshots and the log's lines: `~/.claude/plans/m64-shots/`.
