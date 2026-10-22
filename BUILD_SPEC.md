@@ -9651,3 +9651,107 @@ the first note, CUT after the stop, the safety check with two silent keys throug
 Play on the tablet and the panel, a passing check unlocking it, the trunk fault, the locked plug); an upgrade install on
 the demo emulator (no crash; no Shuffle). Not seen: a real Shelly plug, the real microphone sweep at the school, the
 2.1.1 restart on the real piano.
+
+# v1.27 — M63: the tidy-up
+
+Read `DESIGN.md › v1.27 — M63` first. Brief `~/.claude/plans/m63-tidy-brief.md`; built in a worktree (`android-wt-m63`,
+branch `m63-tidy`, from main's `fb1b78b`, the 1.26 release). No version bump, no signing, no release, no library update.
+
+## The panel's lock and debugging facts
+- `WebLock(state, piano, guestSecondsLeft, keyStored, writable, message)` as `WebPianoState.lock` (`WebLock.of(PianoLock,
+  nowMs)`: the phase as `none|reading|proving|trusted|lockedOut|notAccepted`, `piano` the lock's wire word or null,
+  `guestSecondsLeft` from `guestLeft(now)`, `message` `LockCopy.readOnly`); `WebApi.lock` puts it in the state's
+  `piano.lock`: never the key, the nonce or the piano's address. `/api/system`'s `tablet.debugging {usb, wireless,
+  developer}` (`SystemReading.debug`).
+- `system.js`: `attention()` adds `debugging` (Attention.debugging's words, `short` "debugging on") after `heap`, before
+  `relay`; the Tablet card's Debugging row (`SystemCopy.debugging`'s words, amber with the part); the Piano card's
+  Bluetooth lock row (`LockCopy`'s words) and, while guest play lasts, its time left.
+- `settings.js`: `pianoWritable()` (ready, and `lock.writable` not false) enables the piano's rows, presets and Save;
+  `pianoStatus()` returns `lock.message` first (a refusing piano's link reads `error`), then the 1.26 lines, and the
+  reading line while the tablet proves its key.
+- `docs/SECURITY_AUDIT.md`: one paragraph (signed-in routes only, the relay too, read only).
+
+## The panel's tidy-up
+- Dots: `WebLink.sending` = `LinkDot.of(connected, sending = playing && !railHoldsNotes) == Sending`
+  (`AppWebBackend.state`); the hub follows `railHoldsNotes`. `app.js` `linkDot()` → `off`, `on`, `live` for `#conn-dot` and
+  `#link-dot` (`paintDot`, `LINK_WORDS`).
+- "Strip off" for `ledmode` Off; Play anyway's toast `Lifted until ${timeOfDay(until)}.`; sprite symbols `g-hammer`,
+  `g-bulb`, `g-pedal` (the tablet's `ic_g_*`); `PIANO_GLYPHS`; Playback `g-play`.
+- Deleted: the built-in Settings page and its styles, 1.19's redirects, `del` and `call()`'s DELETE branch, the host's
+  unused entries, `.tabular`; the state's `artwork`, `player.fold`, `queue.uids`, `studio.models[].licence`, `schedule`
+  (`WebScheduleState`, `WebApi.noSchedules`, `AppWebBackend`'s part); `/api/art/piece/<id>` without `kind` is 400.
+- `ui.js` (on `WebAssets.PANEL`): `$`, `guarded`, `holdToRepeat`, `whole`, `same`, `clock`, `plural`, `debounce`, each once.
+- `app.js` split, each module `create(host)` asking only through the host from `host.ROOT` (WebAssetsTest's `hosted`):
+  `now.js` (`received`, `progress`, `render`, `renderViews`, `shown`, `closePopover`), `upnext.js` (`render`, `present`,
+  `fillSheet`, `staggerSheet`, `queueCommand`), `library.js` (`show`, `present`, `render`, `fillAdd`, `drop`,
+  `dropZone`), `studio.js` (`show`, `render`, `drop`). The host gains `setEmpty`, `segmented`, `callBinary`,
+  `readState`, `section`, `show`, `reduced`, `staggerIn`, `openSheet`, `closeSheet`, `art`, `artKey`, `artKeyOf`,
+  `artForget`, `artForgetIn`, `monogram`, `zoneFor`, `draggingFiles`, `addUploads`, `renderUploads`, `queueCommand`
+  (Up next's) and `dropZone` (Add music's). The four are on `WebAssets.PANEL`; a page load asks for four files more.
+- `WebAssetsTest` keeps the pins that guard a rule (the palettes and the glass, the roll's numbers, red the live dot's
+  alone, the served files' safety, ROOT and the socket, the modules through the host, the font, Live never offered, a
+  key held first, the microphone and the PIN) and drops the rest.
+- Kotlin 2.4's warnings: `RelayProtocol` (`as? String`, an `Any?` subject) and `RelayClient` (the drained nudge).
+
+## Leftovers (M56, M57)
+`PlainSealer` in test sources; `WebApi.wireTime` = `Format.timeOfDay(minute, twoDigitHour = true)`
+(`ScheduleCopy.clock` gone); `WebService` asks `Emulator.on` (`LoggingPianoLink.isWanted()` gone); `WebPanel` asks
+`Emulator.cloudOverride()` and `CloudOverride` lives in `src/debug`; `RunningNow.KEYS` and `Motion.FastMs` gone (the
+tests list the keys; `FLIP_MS` is pinned to `Motion.QuickMs`).
+
+## The tablet's notes
+- `SystemCard` on `Card` (`ListenCard` through it); `StateDot`'s live dot `LiveDot(LinkDot.Sending, breathing = false)`,
+  the `LiveDot(live, breathing)` overload deleted; `FootRow`'s chevron `ic_g_chevron`; `SystemCopy.Fact.live` →
+  `connected` (`FactRow` reads it).
+- `PianoSettingRows`: the status report on `Card`; `shownBeside` adds "%" for a unit of "%".
+- `ConnectionCard`: `retryAlone` (not missing a permission, `LinkError.LockedOut` or `NotAccepted`) skips the Connect
+  button.
+- `DisplayScreen`: `BackHandler(onBack = onLeave)` while composed (the fade's end removes it).
+- `ImportCopy.summary`: finished with `done < total` → "Android stopped the import at {done} of {total} files.
+  [Imported N pieces.] Adding the same files again finishes it."
+- `LastCheck.restarted` / `repowered` (`Boolean?`, DataStore `lastRestarted` / `lastRepowered`), set in
+  `SafetyRunner.finish` from the RESTART and REPOWER lines marked DONE; `SafetyCopy.last`: both null → `recovered`'s
+  " after a restart" as before, else " after a restart", " after a power off and on", or both.
+
+## The splits and the rename (moves)
+- `schedule/` → `quiet/`: `Schedules` → `QuietStore` (`AppGraph.quietStore`), `ScheduleRepository` → `QuietRepository`,
+  `ScheduleEntity` / `ScheduleKind` / `ScheduleDao` → `QuietEntity` / `QuietKind` / `QuietDao` (`@Entity(tableName =
+  "schedules")`, `PianoDatabase.schedules()` keeps the table's name), `ScheduleCopy` into `QuietCopy`, `FakeScheduleDao`
+  → `FakeQuietDao`. `git diff fb1b78b -- app/schemas` is empty.
+- `WebServer.kt` keeps the plumbing (the head reader, the deadline and limits, the threads, the host, Origin and
+  session checks, the cookies, static files, the socket, the responses); `WebRoutes.kt` holds `WebServer.routeTable()`
+  and the handlers as extensions. What they use of the server is `internal` (`backend`, `sessions`, `guard`,
+  `requests`, `assets`, `uploading`, `guestCookie`, the responses); `LimitedInputStream` is top level.
+- `AppGraph.kt` keeps the wiring; `RemoteActions.kt` (`AppGraph.remote`) holds `updateFromAfar` and its restart,
+  `railFact`, `systemProbe`, `systemHistory`, `factsFloor`, `runningInputs`, the samples, `microphoneAllowed`,
+  `listening`, `keyTest`, `quietSince`, `keyHeld`, `stopListening` and their followers; callers read `graph.remote`.
+  `keyTestRail` stays with the rail, `internal`.
+
+## Tests
+`SafetyStoreTest` +1 (a record kept before 1.27 reads `restarted` and `repowered` null and says "after a restart"; a
+power off and on alone says so); `QuietCopyTest` (was `ScheduleCopyTest`, less the wire-time test); `WebAssetsTest` 15 →
+10; `WebApiTest` (the lock's keys and words, `/api/system`'s debugging, `link.sending`, the deleted parts);
+`WebServerTest` (the art route's `kind`); `RelayProtocolTest`. 1,772 tests (12 skipped), lint "No issues found";
+the compiler's warnings 69 → 65 (the four the brief named).
+
+## Seen on the emulator (`steven_piano_audit`, debug build)
+- The rename: 1.26's debug build with "M63 rename check" (every day 0:00–23:59) set through `PUT /api/quiet`, Play 409
+  `quiet`; this build installed over it: the block on `GET /api/quiet` and the tablet's Quiet times, Play still 409
+  `quiet` ("Quiet until Fri 7:00. Use Play anyway."). The audit AVD's own sections were put back after.
+- The panel against the loopback listener in headless Chrome: Now playing, Library, Studio, Up next (its sheet at
+  900 px), Quiet times and Settings › System with no console error; Now playing and the Library pixel for pixel as on
+  1.26 but for the dot (and the scrubber's time). Through the worktree's files: the Library's four lists, the menu, Find
+  a cover, Add music and a page drop routed to it, Studio's compose form and its drop, the views (Notes, Score), the
+  popovers, tempo, repeat and Play next.
+- System: "USB debugging is on" in the head, Debugging "USB" amber, Bluetooth lock "Locked to this tablet".
+  `debug.stevenpiano.lock claimed` and Reconnect: the lock `notAccepted`, the piano's pages greyed under its words, the
+  dot a ring and the pill "Piano not connected"; the tablet's connection card with Retry alone, Piano volume "100%".
+- The dots with `EMULATOR_PLUG "boardsup 5000"`: ink while "Waking the piano…", red once notes went out.
+- The tablet's System page on Card, its foot rows' chevron, and a safety record from before 1.27 reading "after a
+  restart".
+- Screenshots: `~/.claude/plans/m63-shots/`.
+
+## Left as it was
+- The panel's other red dots (the System page's Bluetooth row, Settings' link capsule, Running now's player row, a
+  playing channel's tile) keep 1.26's look; only the rail's and the "Piano" capsule's follow LinkDot now.
+- `cloud/tools/fake-tablet.mjs` still sends the deleted state keys (harmless; the panel ignores them).

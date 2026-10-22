@@ -3620,3 +3620,64 @@ sweep, the lock, Play refused on the tablet and the panel (409 `safety`) and the
 the lock card passing and the count starting again; a board missing ("Only 6 of 7 power boards answered" on both); the
 panel's System page with the 24 V off and on; a locked plug's page. Screenshots and the log's lines:
 `~/.claude/plans/m62-shots/`.
+
+# v1.27 — M63: the tidy-up
+
+The panel catches up with the tablet (the piano's Bluetooth lock, the debugging warning, the dots), the big files are
+split, `schedule/` becomes `quiet/`, and the tablet's notes from M58, M59 and M62 are done. Brief
+`~/.claude/plans/m63-tidy-brief.md`. Nothing else changes how the app or the panel behaves.
+
+## The web panel
+- **Settings › System**, the Piano card: **Bluetooth lock** in the tablet's words ("Locked to this tablet", "Open: any
+  device can claim it", "Pairing open for 5 min", "Locked to another device", "Checking this tablet's key…"), and while
+  guest play lasts, "Let anyone play for 1 hour · 52 min left". The Tablet card: **Debugging** ("USB", "Wireless", "USB
+  and wireless"), amber, and "USB debugging is on" among what needs attention, after the tablet's and the controller's
+  own troubles and before the internet link, as the tablet's Attention orders it.
+- **The piano's pages read only while the piano keeps this tablet out** (locked to another device, not accepting it, or
+  its key still being checked): every control, preset and Save is greyed, and the line on top is the lock's own
+  ("The piano didn't accept this tablet. On the piano's screen press and hold a lighting button…").
+- **The dots are the tablet's** (LinkDot): the rail's dot and the "Piano" capsule's are a ring while the piano isn't
+  connected, filled in ink while it is and silent (the 24 V waking among it), and red, breathing, only while notes
+  reach the piano. The socket dropping stays the pill's to say ("Reconnecting…").
+- Lights › Mode Off reads "Strip off"; Play anyway's toast is the tablet's "Lifted until 9:30."; Sound and touch,
+  Lights and screen, Pedal and Playback have their own glyphs (the tablet's line icons).
+- Gone: the built-in Settings page (settings.js is the page), 1.19's addresses, and the state's parts nothing read.
+
+## The tablet
+- The System page's cards are the app's **Card** (its hairline and specular line), Listen and test with them; Running
+  now's piano dot is the shared live dot; a row that opens a page ends in the panel's chevron.
+- The piano's status report sits on a Card, and a percentage beside its slider carries its sign: Piano volume "100%".
+- A piano locked to another device, or one that refused this tablet: the connection card offers **Retry** alone.
+- The resting screen keeps Back until it has faded: the back swipe whose touch woke the app no longer carries on to
+  Home.
+- An import Android stopped (its daily time for data sync ran out): "Android stopped the import at 1,204 of 1,727
+  files. Imported 1,180 pieces. Adding the same files again finishes it."
+- The last safety check says what brought the keys back: "after a restart", "after a power off and on", or both (the
+  card's steps); a check kept before 1.27 reads as it did.
+
+## Under the hood
+- `app.js` is the frame alone (the sign-in gate, the socket, `call()`, the router, the rail, the sheets, the toasts, the
+  art loader, the uploads); Now playing, Up next, the Library with Add music, and Studio are modules of their own,
+  through the host as System is; the helpers the modules share are `ui.js`'s, once.
+- `WebServer.kt` keeps the HTTP plumbing; `WebRoutes.kt` holds the routes. `AppGraph.kt` keeps the wiring;
+  `RemoteActions.kt` holds what the panel and the relay ask for (the update from afar, the plug's fact, the system
+  reading, Listen and Test every key).
+- `schedule/` is `quiet/` (QuietStore, QuietRepository, QuietEntity, QuietDao; ScheduleCopy's day words in QuietCopy):
+  the table, its columns, the stored kind, the DataStore keys and the saved page names keep their names.
+
+## Decided in the run
+- **The panel's piano pages put the lock's words first.** A piano that keeps this tablet out turns the tablet's link
+  into an error, so "Connect to the piano…" would have hidden why; the lock's line comes first, as on the tablet.
+- **Only the dots the brief names changed.** The System page's Bluetooth row, Settings' link capsule, Running now's
+  player row and a playing channel's tile keep their 1.26 dots (red while connected or playing); they are listed for a
+  later run.
+- **A percentage carries its sign beside every slider** (Piano volume, Burst boost, Brightness), not the volume alone:
+  one rule for the page.
+
+## Seen on the emulator (`steven_piano_audit`, debug build)
+The 1.26 debug build with a quiet block set, then this build installed over it: the block still there on both the
+panel and the tablet, and Play refused (409 `quiet`). Every panel section (Now playing, Library, Studio, Up next,
+Quiet times, Settings, System) with no console error, Now playing and the Library as on 1.26 but for the dot; the
+System page's lock and debugging facts; the piano's pages read only under `debug.stevenpiano.lock claimed`; the three
+dots with the fake plug's boards slowed to 5 s; the tablet's System page on Card, Retry alone and "100%". Screenshots:
+`~/.claude/plans/m63-shots/`.

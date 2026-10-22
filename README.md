@@ -895,6 +895,13 @@ stuck on or the 24 V failed ("Only 6 of 7 power boards answered"). While the plu
 answering is normal, not a fault: they show unpowered and read "0 of 7 answering · 24 V off". **Now playing** says
 "Waking the piano…" while the 24 V comes up for a piece.
 
+From 1.27 **Settings › System** also shows the piano's **Bluetooth lock** on the Piano card in the tablet's words
+("Locked to this tablet", "Locked to another device", and "Let anyone play for 1 hour · 52 min left" while guest play
+lasts), and the Tablet card says in amber when **USB or wireless debugging** is on, as the tablet's own System page
+does. While the piano doesn't take this tablet's changes (locked to another device, or not accepted), the piano's
+pages in Settings are greyed, with the tablet's line saying why. The panel's dots read as the tablet's: a ring while
+the piano isn't connected, filled while it is, red only while notes reach the piano.
+
 While the web panel is on, a quiet notification reads "Web panel on" with the address.
 The panel runs as a foreground service, as playback does: set the app's battery use to
 *Unrestricted* (see *Keep playing with the screen off*) so Android leaves it running
