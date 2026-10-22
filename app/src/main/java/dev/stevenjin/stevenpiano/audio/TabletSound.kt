@@ -237,8 +237,10 @@ class TabletSound(
     private fun settle() {
         val s = _state.value
         val nowActive = s.active && voice.loaded
-        if (active && !nowActive) voice.silence()
-        if (active != nowActive) {
+        val was = active
+        active = nowActive   // v1.27 — M64: the flip, then the silence: a Note On let past before it is queued ahead of the silence
+        if (was && !nowActive) voice.silence()
+        if (was != nowActive) {
             val why = when {
                 nowActive -> "sounding (${s.mode.name.lowercase()}, ${if (s.connected) "the piano connected" else "no piano"})"
                 s.mode == TabletSoundMode.OFF -> "silent (off)"
@@ -247,7 +249,6 @@ class TabletSound(
             }
             log("Tablet sound: $why after ${voice.notesPosted.get()} notes")
         }
-        active = nowActive
         poke()
         when {
             s.mode == TabletSoundMode.OFF || !s.installed -> unload()
