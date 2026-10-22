@@ -1,9 +1,9 @@
 {
-  "versionCode": 35,
-  "versionName": "1.25",
-  "notes": "A new look, Android 16, and the piano's Bluetooth lock. The tablet borrows the web panel's look: a thin glass rail with the Steven Piano mark, line icons on every Piano row, cards with a thin edge, and Quiet times as a week calendar with today and the time now (tap a block to edit it). The dot by the mark is dark when the piano is connected and turns red only while notes go to the piano. The app now targets Android 16, and System warns in amber when USB or wireless debugging is on. Ready for the piano's Bluetooth lock (firmware 2.1.0, next): the tablet claims the piano and proves itself on every connection, so other phones can't play it or change its settings. Firmware and status gains Let another device pair, Unlock the piano, and Let anyone play for 1 hour (for the iPad).",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.25/steven-piano-1.25.apk",
-  "sha256": "2d2e1bbc95f1d16b18a2b34db68983ee09c9a1dad50e3e71a33f2bf88808ee40",
-  "sizeBytes": 14328461,
+  "versionCode": 36,
+  "versionName": "1.26",
+  "notes": "Safer between pieces. One piece plays per Play, and Shuffle is gone everywhere (channels play in order). After every 6 pieces the tablet runs a Safety check, shown full screen: every key released, no coil left on, every power board answering, then all 84 keys struck once while the tablet listens (nothing is recorded). If a key stays silent, the piano restarts and its 24 V is switched off and on, then it tests again; if keys still fail, Play stays locked until a check at the tablet passes. New: the 24 V power plug (Piano › Power plug). With a Shelly Plug US Gen4 paired, the piano's 24 V is on only while something plays and the piano answers, and it switches itself off within 40 s if anything stops answering. The web panel shows the plug and 'Waking the piano…'.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.26/steven-piano-1.26.apk",
+  "sha256": "775c7e71eb21ca71fe0714c410a6b20e6fd5015d30df45a90335587cc1d275d6",
+  "sizeBytes": 14428497,
   "minSdk": 26
 }
