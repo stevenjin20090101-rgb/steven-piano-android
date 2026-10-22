@@ -64,6 +64,12 @@ object SafetyCopy {
     /** The 24 V (the power plug) didn't come up for the keys: none of them is judged. */
     const val RAIL_DOWN = "the 24 V didn't come up"
 
+    /** No dump from the piano's console on this connection, even asked again (v1.27 — M64): its coils can't be read. */
+    const val NO_DUMP = "the piano didn't report its keys"
+
+    /** A check stopped for [NO_DUMP], as the card says it: what to do. */
+    const val RECONNECT = "The piano didn't report its keys. Reconnect it."
+
     // ---- Play locked ------------------------------------------------------------------------------------------------
     const val ASK = "Ask whoever looks after the piano to check these keys."
     const val ASK_COIL = "The power to the keys was cut. Ask whoever looks after the piano to check it."
@@ -137,6 +143,7 @@ object SafetyCopy {
         val why = when (line.why) {
             null -> null
             Why.NOT_REPORTED -> NOT_REPORTED
+            Why.NO_DUMP -> NO_DUMP
             Why.NO_ANSWER -> NO_ANSWER
             Why.COIL_ON -> COIL_ON
             Why.BOARDS_MISSING -> null   // the figures say it

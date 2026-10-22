@@ -65,7 +65,10 @@ class SafetyRunnerTest {
         var guest = false
         var ready = true
         var busy = false
-        var facts = mapOf("active" to "0", "boards" to "OK,OK,OK,OK,OK,OK,OK", "restartproto" to "1")
+        var facts: Map<String, String>? = mapOf("active" to "0", "boards" to "OK,OK,OK,OK,OK,OK,OK", "restartproto" to "1")
+
+        /** What the piano's dump gives when asked for again (v1.27 — M64); null: still none. */
+        var factsAfterDump: Map<String, String>? = null
         var active = "0"
         var boards = "OK,OK,OK,OK,OK,OK,OK"
         var ota = "confirmed"
@@ -108,7 +111,13 @@ class SafetyRunnerTest {
             calls += "stop everything"
         }
 
-        override suspend fun facts(): Map<String, String> = facts
+        override suspend fun facts(): Map<String, String>? = facts
+
+        override fun dumpAgain(): Boolean {
+            calls += "dump again"
+            facts = factsAfterDump
+            return true
+        }
 
         override suspend fun ask(fact: String): String? {
             calls += "ask $fact"
@@ -427,6 +436,39 @@ class SafetyRunnerTest {
         assertTrue(rig.runner.state.value.last!!.passed)
         assertNull("keys not tested", rig.runner.state.value.last!!.keys)
         assertEquals(listOf("pause", "release", "ask active", "ask boards"), rig.host.calls)
+    }
+
+    @Test
+    fun `no dump from the piano's console - asked once more, then unfinished and due again, never passed (v1_27 M64)`() = runTest {
+        val rig = started(MemoryStore(SafetyRecord(count = 5)), listens = false)
+        rig.host.facts = null   // the console didn't answer `dump` on this connection
+        rig.play()
+        advanceTimeBy(5_000)
+        assertEquals(SafetyOutcome.Unfinished(Why.NO_DUMP), rig.runner.state.value.ended)
+        assertEquals("the keys released, nothing read", listOf("pause", "dump again", "release"), rig.host.calls)
+        settle()
+        assertTrue("due before the next Play", rig.store.record.pending)
+        assertEquals(6, rig.store.record.count)
+        assertNull("no check passed", rig.store.record.last)
+        assertNull(rig.runner.state.value.lock)
+        assertFalse("Play waits for a check", rig.runner.open)
+
+        // Its dump comes when asked again: the coils are read, as on any connection.
+        val again = started(MemoryStore(SafetyRecord(count = 5)), listens = false)
+        again.host.facts = null
+        again.host.factsAfterDump = mapOf("active" to "0", "boards" to allOk, "restartproto" to "1")
+        again.play()
+        settle()
+        assertEquals(listOf("pause", "dump again", "release", "ask active", "ask boards"), again.host.calls)
+        assertTrue(again.runner.state.value.last!!.passed)
+
+        // A piano with no console at all: its facts left out, and with the microphone off it passes, as before.
+        val none = started(MemoryStore(SafetyRecord(count = 5)), listens = false)
+        none.host.facts = emptyMap()
+        none.play()
+        settle()
+        assertEquals(listOf("pause", "release"), none.host.calls)
+        assertTrue(none.runner.state.value.last!!.passed)
     }
 
     @Test

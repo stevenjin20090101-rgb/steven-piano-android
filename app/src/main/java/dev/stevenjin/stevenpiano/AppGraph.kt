@@ -1437,10 +1437,16 @@ class AppGraph(private val app: Application) {
             pianoSettings.action(PianoAction.AllKeysOff)   // the piano's own `off`, which goes whatever its lock says
         }
 
-        override suspend fun facts(): Map<String, String> {
+        override suspend fun facts(): Map<String, String>? {
             val read = withTimeoutOrNull(SAFETY_FACTS_WAIT_MS) { pianoSettings.state.first { it !is PianoState.Unknown } }
-            return (read as? PianoState.Ready)?.facts.orEmpty()
+            if (read is PianoState.Ready) return read.facts
+            // v1.27 — M64: none (empty) only for a piano with no console at all, whose facts are left out as before; a console
+            // that gave no dump on this connection says nothing of what the piano reports.
+            val noConsole = read == PianoState.Unsupported && stevenLink.state.value is LinkState.Connected && stevenLink.console == null
+            return if (noConsole) emptyMap() else null
         }
+
+        override fun dumpAgain(): Boolean = pianoSettings.dumpAgain()
 
         override suspend fun ask(fact: String): String? {
             // v1.26 — M62: the power boards answer only with the 24 V up, which the check wanted at its start. After the

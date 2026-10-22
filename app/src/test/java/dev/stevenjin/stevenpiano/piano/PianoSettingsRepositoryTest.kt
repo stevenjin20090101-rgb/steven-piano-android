@@ -100,6 +100,7 @@ class PianoSettingsRepositoryTest {
     fun `a piano without the console is Unsupported at once`() = runTest {
         val repo = connected(with = null)
         assertEquals(PianoState.Unsupported, repo.state.value)
+        assertFalse("no console: no dump to ask for again (v1.27 — M64)", repo.dumpAgain())
     }
 
     @Test
@@ -112,6 +113,22 @@ class PianoSettingsRepositoryTest {
         advanceTimeBy(2)
         runCurrent()
         assertEquals(PianoState.Unsupported, repo.state.value)
+    }
+
+    @Test
+    fun `a dump unanswered on this connection is asked for once more, and a console that answers then is read (v1_27 M64)`() = runTest {
+        var answers = false
+        val late = FakeConsole { line -> if (answers) piano.handle(line) else emptyList() }
+        val repo = connected(late)
+        advanceTimeBy(2_001)
+        runCurrent()
+        assertEquals(PianoState.Unsupported, repo.state.value)
+        answers = true
+        assertTrue(repo.dumpAgain())
+        runCurrent()
+        assertEquals(listOf("dump", "dump"), late.sent)
+        assertEquals("OK,OK,OK,OK,OK,OK,OK", repo.ready().facts["boards"])
+        assertFalse("answered: nothing more to ask", repo.dumpAgain())
     }
 
     @Test

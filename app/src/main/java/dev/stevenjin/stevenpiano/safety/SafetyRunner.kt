@@ -68,8 +68,14 @@ interface SafetyHost {
     /** Everything stops: the player (its stop sequence), the Keys screen's keys, and the piano's own `off`. */
     fun stopEverything()
 
-    /** The piano's facts as its dump gave them on this connection (waiting a few seconds for them); none without a console. */
-    suspend fun facts(): Map<String, String>
+    /**
+     * The piano's facts as its dump gave them on this connection (waiting a few seconds for them): none (empty) for a piano
+     * with no console at all; null for a console that gave no dump (v1.27 — M64: what it reports is unknown).
+     */
+    suspend fun facts(): Map<String, String>?
+
+    /** The piano's dump asked for once more on this connection (v1.27 — M64): true when its console allows it. */
+    fun dumpAgain(): Boolean
 
     /** `get !<fact>`, its answer awaited (2 s); null without one. */
     suspend fun ask(fact: String): String?
@@ -328,15 +334,16 @@ class SafetyRunner(
         host.pausePlayer()
         interruption()?.let { return SafetyOutcome.Unfinished(Why.STOPPED, SafetyCopy.interrupted(it)) }
         // The piano connected and its lock deciding, or (with the power plug) the 24 V coming up: a while at most.
-        if (!host.pianoReady() && withTimeoutOrNull(PIANO_WAIT_MS) { while (!host.pianoReady()) delay(TICK_MS) } == null) {
-            return SafetyOutcome.Unfinished(Why.NO_PIANO, SafetyCopy.NOT_CONNECTED)
-        }
-        val facts = host.facts()
+        if (!awaitPiano()) return SafetyOutcome.Unfinished(Why.NO_PIANO, SafetyCopy.NOT_CONNECTED)
+        // v1.27 — M64: no dump on this connection (null) is asked for once more; still none, the keys are released and the
+        // check ends unfinished, never passed with nothing read.
+        val facts = host.facts() ?: dumpAgain()
         var step = SafetyCheck.start(
             listens = listens(),
-            coils = SafetyCheck.ACTIVE in facts,
-            boards = SafetyCheck.BOARDS in facts,
-            restart = facts[SafetyCheck.RESTART_FACT]?.trim() == "1",
+            coils = facts != null && SafetyCheck.ACTIVE in facts,
+            boards = facts != null && SafetyCheck.BOARDS in facts,
+            restart = facts?.get(SafetyCheck.RESTART_FACT)?.trim() == "1",
+            reported = facts != null,
         )
         while (true) {
             show(step.state)
@@ -346,6 +353,22 @@ class SafetyRunner(
             val event = interruption()?.let { Event.Interrupted(SafetyCopy.interrupted(it)) } ?: perform(command, step.state, seen)
             step = SafetyCheck.on(step.state, event)
         }
+    }
+
+    /** The piano connected and its lock decided (with the power plug, the 24 V coming up): [PIANO_WAIT_MS] at most. */
+    private suspend fun awaitPiano(): Boolean =
+        host.pianoReady() || withTimeoutOrNull(PIANO_WAIT_MS) { while (!host.pianoReady()) delay(TICK_MS) } != null
+
+    /**
+     * The piano's dump asked for once more (v1.27 — M64), where its console allows it: its facts once it answers, the piano
+     * awaited again (its lock decides afresh with the new dump); null when it doesn't.
+     */
+    private suspend fun dumpAgain(): Map<String, String>? {
+        if (!host.dumpAgain()) return null
+        log("Safety check: no dump from the piano on this connection; asked for it again")
+        val facts = host.facts() ?: return null
+        awaitPiano()
+        return facts
     }
 
     private suspend fun perform(command: Command, state: CheckState, seen: (CheckState) -> Unit): Event = when (command) {
