@@ -1058,22 +1058,38 @@ piano's controller goes dark, the plug turns the 24 V off by itself: no key can 
 piano keeps its screen, Bluetooth and settings while the 24 V is off. Label the plug *PIANO 24 V — must stay on the smart
 plug*.
 
-**Setting it up, on the day** (about 15 minutes; Piano › Power plug › **Pair the power plug** walks through it):
+**Setting it up, on the day** (about 15 minutes, all from the tablet: no Shelly app, no Shelly account; Piano › Power
+plug › **Pair the power plug** walks through it). Connect the tablet to the piano first, so the last step can check the
+24 V by itself.
 
-1. Plug the 24 V supply into the plug and the plug into the wall. On your phone, turn on a hotspot that has internet. In
-   the **Shelly app**, add the plug on that hotspot, decline the cloud, and let it update its firmware (2.0.0 or later).
-2. Straight after (within about 5 minutes), on the tablet: **Done in the Shelly app**, choose the plug
-   (ShellyPlugUSG4-…) and tap **Pair and set up**. When Android asks to pair with the plug, tap **Pair**. The tablet sets
-   the plug up (off after a power cut, its button can't hold the 24 V on, its cloud off).
-3. Keep the hotspot on while the plug finishes its setup (about 5 minutes; the screen shows when).
-4. **Close its network**: the plug forgets every network and closes its own. Turn the hotspot off.
-5. Connect to the piano, then **Turn the 24 V on for 5 s**: it should read "7 of 7 answering", then "0 of 7" when the plug
-   clicks off. **Finish**.
+1. Plug the 24 V supply into the plug and the plug into the wall.
+2. On your phone, turn on a hotspot that has internet, and keep it on until the end. The plug only sees 2.4 GHz: on an
+   iPhone, turn on **Maximize Compatibility** (Settings › Personal Hotspot); on Android, choose the **2.4 GHz** band.
+3. On the tablet: **Find the plug**, and tap it (ShellyPlugUSG4-…).
+4. If its firmware is older than 2.0.0 (yours is), type the hotspot's name and password and tap **Update the plug**. The
+   plug joins the hotspot, updates itself from Shelly (about 2 minutes), clears its setup, and the tablet goes on by
+   itself: you type the hotspot only once. (A plug already on 2.0.0 or later asks for the hotspot after step 5 instead.)
+5. When Android asks to pair with the plug, tap **Pair**.
+6. Wait while the plug finishes its setup (about 5 minutes; the screen shows when), the hotspot still on. Then the plug
+   forgets every network by itself: turn the hotspot off.
+7. The 24 V comes on for 5 seconds by itself: it should read "7 of 7 answering", then "0 of 7" when the plug clicks off.
+   **Finish**. (Piano not connected? Connect it, then **Turn the 24 V on for 5 s**.)
 
-If the plug says it finished its setup without this tablet, reset it (hold its button about 10 seconds), find it again,
-tap **Set it up from here** and give it the hotspot's name and password. If it says **Locked**, unplug it for 5 seconds,
-plug it back in, and open Pair the power plug again. (A locked plug answers nothing over Bluetooth: one this tablet isn't
-paired with that stays silent for 5 seconds is taken as locked.)
+If it says **the plug won't take its update over Bluetooth**, update it once in the Shelly app (that needs a Shelly
+account), then **Search again** on the tablet; the rest is the same. If it says Shelly offers no update right now, try
+again later (or the Shelly app). If it asks you to **unplug the power plug for 5 seconds**, do, plug it back in, and
+**Search again**: the tablet picks up where the plug is.
+
+The Shelly app still works: add the plug there on the hotspot, decline the cloud, let it update, then within about 5
+minutes **Find the plug** on the tablet and tap **Pair and set up**; the tablet does the rest as before (**Close its
+network**, then the check).
+
+If the plug says it finished its setup without this tablet, reset it (hold its button about 10 seconds) and find it
+again: the tablet sets it up from there, pairing first. If it says **Locked**, unplug it for 5 seconds, plug it back in,
+and open Pair the power plug again. (A locked plug answers nothing over Bluetooth: one this tablet isn't paired with that
+stays silent for 5 seconds is taken as locked.) Nothing counts as paired until the plug is off every network, so a setup
+that stops halfway leaves the app as it was: start it again from the top. The tablet never keeps the hotspot's name or
+password.
 
 **What it says** (at the top of the screen):
 
@@ -1103,9 +1119,11 @@ half what it draws idle, at least 2 W); while the 24 V is off its power boards s
 off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug paired, nothing of
 this happens.
 
-**Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60), with the
-firmware's bench checks in `SMART_PLUG.md`:
+**Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60 and v1.28 —
+M65), with the firmware's bench checks in `SMART_PLUG.md`:
 
+- [ ] The update from the tablet (1.28): the plug takes `Shelly.Update` over Bluetooth (or the screen says it won't),
+      comes back on 2.0.0 or later, and is cleared and paired before it finishes its setup; the 24 V stays off throughout.
 - [ ] Pair it as above; Piano › Power plug shows it paired; a second phone can't switch it.
 - [ ] Play a piece from idle: the first note within about 3 s; the 24 V off a second after the piece ends.
 - [ ] Kill the app mid-piece: the 24 V off within 30 s, no key down.

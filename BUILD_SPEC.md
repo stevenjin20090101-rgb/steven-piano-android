@@ -9848,3 +9848,92 @@ M63 (the tidy-up, merged as `dde4d44`) and M64 (the audit's fixes, merged as `b5
   - the check stopped, not passed, when the piano gave no dump.
 - **Not seen:** the keeper's restart window on a real piano (the emulated piano has no `restart`), a real Shelly
   plug, or the microphone sweep at the school.
+
+# v1.28 — M65: the power plug without the Shelly app
+
+Read `DESIGN.md › v1.28 — M65` first. Brief `~/.claude/plans/m65-plug-no-shelly-app-brief.md`; the contract is the firmware
+repository's `docs/SMART_PLUG.md` (read only here; its One-time setup gains the update order, below). Worktree
+`android-wt-m65`, branch `m65-plug-setup`, from 1.27's `6251078`. No version bump, no signing.
+
+## `power/`
+- **`ShellyRpc`**: `offAtPowerUp()` (`Switch.SetConfig {id:0, config:{initial_state:"off"}}`, that key alone),
+  `updateStable()` (`{stage:"stable"}`), `online(result)` (`WiFi.GetStatus`'s `status` is "got ip"),
+  `stableOffered(result)` (`Shelly.CheckForUpdate`'s `stable.version`; null for `{}` or a beta alone).
+- **`PairFlow`**:
+  - `PairStep.Ready` (was `ShellyApp`; `ready()` was `shellyAppDone()`) and `PairStep.Update` between Find and SetUp;
+    `UpdateTask { RailOff, Online, Offered, Started, Installed, Cleared }`; `UpdateState(from, to, tasks)`;
+    `Hotspot(ssid, pass)` (a plain class, `toString()` "Hotspot"); `PairState.firmwareUpdate`, `PairState.hotspot`.
+  - `read()` routes: `locked` → `LOCKED`; `complete` ∧ `pairs` ∧ bonded → `joinSetUp`; `complete` → the fallback;
+    ¬`pairs` → step Update; `pending` → `overBluetooth`; else (`confirmed`) the person's tap.
+  - `update(ssid, pass)`, from the Update step only: `Switch.Set` off (refused → `failed(RailOff)`),
+    `Switch.SetConfig` `offAtPowerUp` (refused → logged, on); `WiFi.SetConfig` sta (refused → `NETWORK_FAILED`);
+    `WiFi.GetStatus` every `ONLINE_POLL_MS` = 2 s for `ONLINE_WAIT_MS` = 60 s (→ `NOT_ONLINE`, now with the 2.4 GHz
+    hint); `Shelly.CheckForUpdate` (`CHECK_UPDATE_MS` = 15 s; an error → `failed(Offered)`; nothing, or below 2.0.0 →
+    `NO_UPDATE`); `Shelly.Update {stage:"stable"}` (`UPDATE_CALL_MS` = 10 s; an error or no reply → `UPDATE_REFUSED`);
+    the link dropped; `read()` every `COMPLETE_POLL_MS` = 5 s for `INSTALL_WAIT_MS` = 6 min until `pairs` (Refused →
+    the fallback; the time out → `RESTART_TIMEOUT`); `clearSetup`: `complete` ∧ ¬bonded → the fallback, else
+    `Shelly.FactoryReset` (an error → `failed(Cleared)`; no reply → read on), `read()` every 5 s for `RESET_WAIT_MS` =
+    2 min until `pending` (`complete` or Refused → the fallback), then `Switch.Set` off; then `overBluetooth`.
+  - `overBluetooth(plug)`: step SetUp, `overBluetooth`, `bondNow`, then `provisionNow` with the held hotspot, or the
+    form waits. `bondWhilePending()` and `setUp()` on a `pending` plug go there.
+  - `provisionNow`: `provision`'s old body (`WiFi.SetConfig`, `confirmed` awaited 24 × 5 s, `configure`, `cloudOff`,
+    step Complete, `awaitComplete`), then `closeNetworkNow` and `runCheck(asked = false)` (the piano silent: no problem
+    shown). `awaitComplete()` returns Boolean and also stops on Refused (the fallback) and `pending` (`NOT_ONLINE`).
+  - `bondNow` keeps nothing; it holds `bondEntry`. `closeNetworkNow` sends `networkOff`, then `store.pair(PlugPairing(…,
+    bondEntry), on = false)`, sets `closed`, forgets the hotspot, step Verify (a refusal: step Network,
+    `NETWORK_FAILED`). `finish()` does nothing unless `closed`. `search()` goes back to Find from any step and clears
+    the setup (`bondEntry`, `closed`, the update, the tasks) but the hotspot.
+  - `joinSetUp`: step SetUp with Window, Bond and Listed ticked, `configure`, `cloudOff`, `closeNetworkNow`.
+  - Words: `NOT_ONLINE` (with the hint), `NO_UPDATE`, `UPDATE_REFUSED`, `RESTART_TIMEOUT`, `failed(UpdateTask)`;
+    `TOO_OLD` gone.
+
+## The page (`ui/`)
+- `PowerPlugPage`: `STEPS` with Update, left out unless `firmwareUpdate`; the Ready step's **Find the plug** with
+  `PowerCopy.SHELLY_STILL` as its note; `UpdateStep` (the six ticks by `PowerCopy.updateTask(task, update, working)`,
+  `HotspotForm` with **Update the plug** until Started, **Search again** after a stop); `HotspotForm(kept, action,
+  onSend)` keeps its fields with `remember` (was `rememberSaveable`), starting from `PairState.hotspot`; the SetUp
+  step's form and Try again only while idle; the fallback shown past Find too; FindStep's `pending` branch gone.
+- `PowerCopy`: `stepTitle`/`stepNote(step, pair)` (Ready, Update; the new-plug way's own SetUp, Complete and Verify
+  words), `updateNote(from)`, `FIND`, `SHELLY_STILL`, `UPDATE`, `INSTALLING`, `updateTask`; `PAIR_NOTE` and `FALLBACK`
+  reworded; `SHELLY_DONE`, `NEW_PLUG` and `OVER_BLUETOOTH` gone.
+
+## Debug builds (`src/debug`)
+- `EmulatedShelly`: `firmware` (now a var), `offered` (`OFFERED` = 2.1.0; null: nothing), `refuseUpdate`,
+  `networkUp()`; `WiFi.GetStatus` ("got ip" `ONLINE_AFTER_MS` = 3 s after an sta with an ssid; no `ssid` in its
+  reply), `Shelly.CheckForUpdate` (online only), `Shelly.Update` (away `UPDATE_MS` = 20 s, back on the new firmware,
+  its state kept), `Shelly.FactoryReset` (`pending`, no network, no bonds, default settings, the same firmware, away
+  `REBOOT_MS`); no `provision` before 1.7.5; `Switch.SetConfig` merges; `older(a, b)` and `redacted(frame)`.
+- `EmulatedPlug`: `debug.stevenpiano.plugver <version>` (the starting firmware; unset 2.0.3, or 1.7.5 for `old`) and
+  `debug.stevenpiano.plugupdate refuse`, read when the plug is made (the first ask, `reset <state>`); the frames are
+  logged with `ssid` and `pass` blanked.
+
+## Tests
+`PairFlowTest` 5 → 9, against `EmulatedShelly` on a fake clock: old firmware → update → reset → bond → hotspot →
+`complete` → network closed → paired (the order of requests pinned; never `complete` without this tablet's bond; the
+pairing kept only with the plug off every network); `Shelly.Update` refused (the words, no reset, nothing paired, the
+24 V off); no update offered (the words); `pending` on 2.0.0 or later set up by itself, `setUp()` on it included,
+never at the wait for `complete` before `WiFi.SetConfig`; the hotspot sent to the plug and held while needed, but in
+no kept value, no log line (the flow's and the client's) and not in the state's words, forgotten at the network close
+and at Start over. Updated: the Shelly app's way (nothing kept until the network closes, Finish refused before it), the
+join (its settings and the network once more), `ready()` for `shellyAppDone()`. `ShellyRpcTest` +1 (the update's frames
+and answers). Two mutations (the pairing kept at the bond again; a `pending` plug left to the tap) fail three tests.
+1,785 tests (12 skipped), lint "No issues found".
+
+## Seen on the emulator (`steven_piano_audit`, `debug.stevenpiano.plug pending`, `…plugver 1.6.2`)
+The whole Pair screen with the emulated piano connected, the requests in order (`~/.claude/plans/m65-shots/
+logcat-evidence.txt`): `Switch.Set` off, `Switch.SetConfig` `initial_state:"off"`, `WiFi.SetConfig` (ssid and pass
+blanked in the debug log), `WiFi.GetStatus` "connecting" then "got ip" (4 s), `Shelly.CheckForUpdate` (2.1.0),
+`Shelly.Update`, the link gone, 2.1.0 back `confirmed` 21 s later, `Shelly.FactoryReset`, `pending` 5 s later,
+`Switch.Set` off, `BLE.StartPairing`, the bond ("1 bond on the plug"), `WiFi.SetConfig` again, `confirmed`, the
+settings, `BLE.SetConfig`, `Shelly.Reboot`, `Cloud.SetConfig`, `complete` two minutes on, `WiFi.SetConfig` sta and ap
+off, "Plug paired: off every network", the check's `Switch.Set` with `toggle_after:5`; Finish; Setup "Complete",
+firmware 2.1.0. Then with `debug.stevenpiano.plugupdate refuse`: `Shelly.Update` → error −114 and the Shelly app's
+words on the Update step, the fields filled from memory. `adb logcat -d` holds neither the test hotspot's name nor its
+password. Not seen: a real Shelly plug (the unknowns of `DESIGN.md › v1.28 — M65 › For the bench`), Android's real bond
+dialog (the emulator's bond is the fake plug's).
+
+## Left as it was
+- The Shelly app's `confirmed` way keeps its taps (Close its network, the check), as the brief asks.
+- Leaving the page doesn't end the setup (it runs in the app's scope, as before), so a hotspot typed for a setup left
+  half-way stays in memory until Start over, Finish, the plug's network closing, or the app's end.
+- `SMART_PLUG.md` is the firmware chat's: the text its One-time setup should gain is in the run's report.

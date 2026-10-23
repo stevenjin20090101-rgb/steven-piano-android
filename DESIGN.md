@@ -3732,3 +3732,88 @@ asked again, "Safety check stopped · The piano didn't report its keys. Reconnec
 check due, and after a reconnect the next Play's check passed and the piece played. The panel's System page and
 Settings' capsule ink while silent and red while a piece plays, a playing channel's tile likewise, and no raw lock
 facts. Screenshots and the log's lines: `~/.claude/plans/m64-shots/`.
+
+# v1.28 — M65: the power plug without the Shelly app
+
+Steven's plug, a Shelly Plug US Gen4, came with firmware older than 2.0.0, and pairing needs 2.0.0 (`BLE.StartPairing`).
+Until now the Pair screen's first step sent him to the Shelly app, which needs a Shelly account, for the update; on old
+firmware the screen stopped there. He chose to have the tablet do it all over Bluetooth. The firmware itself still comes
+over Wi‑Fi (the plug downloads it from Shelly), so the phone's hotspot with internet stays part of the setup, as it already
+was for the plug's network. Brief `~/.claude/plans/m65-plug-no-shelly-app-brief.md`; the contract stays the firmware
+repository's `docs/SMART_PLUG.md`.
+
+## The Pair screen
+1. *Get it ready*: the 24 V supply into the plug, the plug into the wall; on the phone a hotspot with internet, kept on until
+   the setup ends (about 15 minutes); the plug only sees 2.4 GHz ("on an iPhone, turn on Maximize Compatibility; on
+   Android, choose the 2.4 GHz band"). **Find the plug**, and under it, quietly: "The Shelly app still works: set the plug up
+   there, then come straight back here within about 5 minutes."
+2. *Find the plug*, as before. Then the plug's state chooses the way:
+   - **firmware older than 2.0.0**, not set up with this tablet (`pending`, `confirmed`, or no `provision` before 1.7.5):
+     *Update its firmware*, then on as for a new plug;
+   - **`pending` on 2.0.0 or later** (new): set up from here by itself: the bond first, then the hotspot (asked for after
+     the bond unless typed already), its settings, the cloud off, `complete` awaited, the network closed, the check;
+   - **`confirmed` on 2.0.0 or later** (someone used the Shelly app): **Pair and set up**, as before;
+   - **`complete` without this tablet, or `locked`**: as before (the factory reset by its button; a power cycle).
+3. *Update its firmware*, a step only on old firmware: "The plug has firmware 1.6.2, and pairing needs 2.0.0 or later. Give
+   it your hotspot's name and password: it joins the hotspot and updates itself from Shelly (about 2 minutes), its setup is
+   cleared, then it pairs with this tablet and finishes its setup on the hotspot, all by itself." The two fields and
+   **Update the plug**; then six parts tick as they land, as the pairing's do: *24 V off through its restarts · On the
+   hotspot · Update from Shelly: 2.1.0 · Update started · Downloading and installing (about 2 minutes) · Setup cleared*.
+   After a stop short of the update the fields and the button come back (with what was typed), and **Search again**.
+4. to 7. *Pair it with this tablet*, *Wait while it finishes its setup*, *Close its network*, *Check it*, as before. On the
+   new-plug way the network closes by itself the moment the plug is `complete` ("turn the hotspot off"), and the check runs
+   by itself when the piano answers; **Finish** stays a tap.
+
+## When it can't
+- **The plug refuses `Shelly.Update` over Bluetooth** (an error or no reply; Shelly doesn't say whether it takes it): "The
+  plug won't take its update over Bluetooth. Update it once in the Shelly app (that needs a Shelly account), then search
+  again."
+- **Nothing on offer** (or nothing reaching 2.0.0): "Shelly offers no update for the plug right now. Try again later, or
+  update it once in the Shelly app (that needs a Shelly account), then search again."
+- **Not online within 60 s**: the old words, now with "The plug only sees 2.4 GHz: on an iPhone, turn on Maximize
+  Compatibility; on Android, choose the 2.4 GHz band."
+- **Not back on 2.0.0 within 6 minutes** (or not new again 2 minutes after its reset): "Unplug the power plug for 5 seconds,
+  plug it back in, then search again."
+- **Back on the new firmware but already `complete`** (it finished its setup on the hotspot during the update): the
+  factory reset by its button, as for any plug that finished without this tablet.
+
+## The rules that stay (fire safety)
+- **The 24 V stays off through the update**: `Switch.Set` off and `initial_state:"off"` before anything else (old firmware
+  refusing the second is logged, and the update goes on), and off once more when the reset plug first answers.
+- **The plug ends bonded to this tablet, off every network, its access point closed.** The pairing is now kept only once
+  that is done (until 1.27 it was kept at the bond, its switch off): a setup that stops halfway leaves nothing paired, the
+  page offers Pair the power plug again, and the app keeps not switching the 24 V. Finish does nothing until the network
+  has closed in the same setup. A `complete` plug this tablet is bonded with (set up by another tablet, or a setup here cut
+  short after its bond) gets its settings, the cloud off and the network close once more before its check.
+- **The hotspot's name and password are the Pair screen's memory only**: never DataStore, a log line or the diagnostics
+  zip, and the fields are no longer saved state. Nobody types them twice (the update and the new-plug way share them);
+  they are forgotten once the plug is off every network, at Finish and at Start over.
+
+## Decided in the run
+- **"Run automatically" covers the network's close and the check.** The new-plug way closes the network as soon as the
+  plug is `complete` (the sooner the access point shuts, the better) and checks the 24 V when the piano answers; without
+  the piano it waits for **Turn the 24 V on for 5 s** with no amber line. The Shelly app's `confirmed` way keeps its taps.
+- **An offer below 2.0.0 counts as none**: installing it would not pair, and the restart's wait is for 2.0.0.
+- **After the reset the 24 V is switched off once more** (`Switch.Set` off when `pending` first answers): the relay's
+  state after a factory reset is unknown until the bench.
+- **A `pending` plug never waits for `complete`.** `setUp()` on one (Try again's way) goes the new-plug way, and the wait
+  stops if the plug reads `pending` (no network to finish on) or refuses this tablet (its bond isn't on the plug) instead
+  of polling for ever.
+- **The update starts only from its step**, so a stray tap can't put a finished plug back on the hotspot.
+
+## For the bench (the real plug)
+- **`Shelly.Update` over Bluetooth**: accepted or not is the one unknown Shelly doesn't document; a refusal is said, with
+  the Shelly app once as the way round.
+- **The provisioning window across the update's restart**: the plug goes `confirmed` when it gets the hotspot and
+  `complete` about 5 minutes later; the update takes about 2, and the reset follows the moment the new firmware answers.
+  If the restart runs it past that, it comes back refusing and needs the reset by its button.
+- **The relay after a factory reset**, and whether firmware older than 2.0.0 takes `initial_state`.
+
+## Seen on the emulator (`steven_piano_audit`, the fake plug new from its box on firmware 1.6.2)
+The Pair screen from *Get it ready* to Done with the piano connected: Find, the Update step ("The plug has firmware
+1.6.2…") and its fields, its parts ticking, "Downloading and installing (about 2 minutes)", the setup cleared, the bond
+first ("Pairing first: when Android asks to pair with the plug, tap Pair"), the hotspot again without typing it,
+`complete` awaited, the network closed and the check run by themselves ("Every board answered with the 24 V on, and
+none once it went off"), then Finish: Setup "Complete", firmware 2.1.0. Then, with the plug refusing `Shelly.Update`,
+the Shelly app's words. The log holds the requests in the brief's order, the hotspot's name and password blanked, and
+neither anywhere in the device's log. Screenshots and the order: `~/.claude/plans/m65-shots/`.
