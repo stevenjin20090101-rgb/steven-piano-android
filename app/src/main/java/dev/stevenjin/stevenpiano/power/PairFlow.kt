@@ -22,22 +22,25 @@ import org.json.JSONObject
 
 /** The Pair screen's steps, in the setup's order (SMART_PLUG.md › One-time setup). */
 enum class PairStep {
-    /** 1. The Shelly app on the phone, over a hotspot: firmware 2.0.0 or later, the cloud declined. Ticked by the person. */
-    ShellyApp,
+    /** 1. Get it ready (v1.28 — M65): the 24 V supply on the plug, the plug in the wall, the phone's hotspot on. Ticked by the person. */
+    Ready,
 
     /** 2. Find the plug (a scan for names beginning ShellyPlugUSG4-) and connect: its model, firmware and setup state. */
     Find,
 
-    /** 3. Its settings, Bluetooth RPC, the pairing window, the bond, the cloud off, while it is still `confirmed`. */
+    /** 3. Firmware older than 2.0.0 only (v1.28 — M65): its update from Shelly over the hotspot, then its setup cleared. */
+    Update,
+
+    /** 4. Its settings, Bluetooth RPC, the pairing window, the bond, the cloud off: while `confirmed`, or the bond first while `pending`. */
     SetUp,
 
-    /** 4. Wait for `complete`, the hotspot still on. */
+    /** 5. Wait for `complete`, the hotspot still on. */
     Complete,
 
-    /** 5. Off every network, the access point closed. */
+    /** 6. Off every network, the access point closed. */
     Network,
 
-    /** 6. The check: the 24 V on for 5 s, every board answering, then off by itself. */
+    /** 7. The check: the 24 V on for 5 s, every board answering, then off by itself. */
     Verify,
 
     /** Paired, and the plug switches the rail. */
@@ -47,6 +50,23 @@ enum class PairStep {
 /** One task of [PairStep.SetUp], ticked as it goes. */
 enum class SetUpTask { Settings, Bluetooth, Window, Bond, Listed, Cloud }
 
+/**
+ * One part of [PairStep.Update] (v1.28 — M65), ticked as it lands: the 24 V off through the restarts, the plug on the
+ * hotspot, Shelly's update found, then started, the plug back on 2.0.0 or later, its setup cleared.
+ */
+enum class UpdateTask { RailOff, Online, Offered, Started, Installed, Cleared }
+
+/** The Update step (v1.28 — M65): the firmware the plug was found on ([from]), the one Shelly offered ([to]), the parts done. */
+data class UpdateState(val from: String?, val to: String? = null, val tasks: Set<UpdateTask> = emptySet())
+
+/**
+ * The phone's hotspot as typed on the Pair screen (v1.28 — M65): in memory for this setup alone, never stored or logged,
+ * and never in a string by accident.
+ */
+class Hotspot(val ssid: String, val pass: String) {
+    override fun toString(): String = "Hotspot"
+}
+
 /** What the Pair screen's check saw: the boards answering as it went, and where it stands. */
 data class VerifyState(val answered: Int? = null, val total: Int = Boards.TOTAL, val on: Boolean = false, val finished: Boolean = false, val passed: Boolean = false)
 
@@ -54,10 +74,12 @@ data class VerifyState(val answered: Int? = null, val total: Int = Boards.TOTAL,
  * The Pair screen as it stands: the [step], what the scan [found] (and whether it is [searching]), the plug chosen, what it
  * said of itself ([info]), the setup's ticked [tasks], the check's reading ([verify]), whether something runs ([working]),
  * and the [problem] in words (null: none). [fallback] is the factory-reset path (the plug finished its setup without this
- * tablet), [overBluetooth] the provisioning over Bluetooth after it (a new plug set up from here).
+ * tablet), [overBluetooth] the provisioning over Bluetooth (a new plug set up from here). [firmwareUpdate] is the Update
+ * step on firmware older than 2.0.0 (null: none in this setup), [hotspot] the phone's hotspot once typed (v1.28 — M65:
+ * forgotten once the plug is off every network, at Finish and at Start over).
  */
 data class PairState(
-    val step: PairStep = PairStep.ShellyApp,
+    val step: PairStep = PairStep.Ready,
     val found: List<FoundPlug> = emptyList(),
     val searching: Boolean = false,
     val plug: FoundPlug? = null,
@@ -69,17 +91,27 @@ data class PairState(
     val problem: String? = null,
     val fallback: Boolean = false,
     val overBluetooth: Boolean = false,
+    val firmwareUpdate: UpdateState? = null,
+    val hotspot: Hotspot? = null,
 )
 
 /**
- * The Pair screen's work (v1.26 — M60; SMART_PLUG.md › One-time setup), step by step as Steven follows it on the day:
- * the Shelly app first; then, while the plug is still `confirmed`, its settings (a mains blip leaves the rail off, its
- * button can't hold it on), RPC over Bluetooth (a restart when it asks), the pairing window and Android's bond, the cloud
- * off; then `complete` awaited; then every network forgotten and the access point closed; then the check: the 24 V on for
- * 5 s with every board answering, off again by itself. A plug `complete` without this tablet is the fallback (a factory
- * reset, the bond while `pending`, the network over Bluetooth); `locked` asks for a power cycle: a locked plug answers
- * nothing over Bluetooth, so one with no bond that connects and gives no reply in 5 s is taken as locked (v1.26 — M62,
- * [PlugClient.read]). Runs in [scope] (the app's), so leaving the page cuts nothing short. Main thread.
+ * The Pair screen's work (v1.26 — M60; SMART_PLUG.md › One-time setup), step by step as Steven follows it on the day.
+ * Since v1.28 (M65) the Shelly app is optional and the plug's state after Find chooses the way:
+ * - firmware older than 2.0.0 updates itself from Shelly over the phone's hotspot, its 24 V kept off through the restarts;
+ *   its setup is cleared at once, and it goes on as a new plug with the same hotspot ([update]);
+ * - a new plug (`pending`) bonds first, then takes the hotspot over Bluetooth, its settings and the cloud off, waits for
+ *   `complete`, closes its network and is checked, by itself;
+ * - one set up in the Shelly app (`confirmed`) takes [setUp] at the person's tap: its settings (a mains blip leaves the rail
+ *   off, its button can't hold it on), RPC over Bluetooth (a restart when it asks), the pairing window and Android's bond,
+ *   the cloud off, `complete` awaited, then the network closed and the check at their taps.
+ *
+ * The pairing is kept only once the plug is off every network and its access point closed, so a setup that stops halfway
+ * leaves nothing paired, and the app keeps not switching the 24 V. A plug `complete` without this tablet is the fallback
+ * (a factory reset, the bond while `pending`, the network over Bluetooth); `locked` asks for a power cycle: a locked plug
+ * answers nothing over Bluetooth, so one with no bond that connects and gives no reply in 5 s is taken as locked (v1.26 —
+ * M62, [PlugClient.read]). The hotspot is held in [PairState] alone. Runs in [scope] (the app's), so leaving the page cuts
+ * nothing short. Main thread.
  */
 class PairFlow(
     private val client: PlugClient,
@@ -96,24 +128,39 @@ class PairFlow(
     private var job: Job? = null
     private var watch: Job? = null
 
+    /** This tablet as the plug's list named it after the bond, kept with the pairing once the network is closed (v1.28 — M65). */
+    private var bondEntry: String? = null
+
+    /** The plug went off every network in this setup: only then can the setup finish (v1.28 — M65). */
+    private var closed = false
+
     private val address: String? get() = _state.value.plug?.address
 
-    /** From the top. */
+    /** From the top, the hotspot forgotten. */
     fun restart() {
         job?.cancel()
         watch?.cancel()
+        bondEntry = null
+        closed = false
         _state.value = PairState()
     }
 
-    /** Step 1 done: the Shelly app has set the plug up (or the person goes on without it). */
-    fun shellyAppDone() {
+    /** Step 1 done (v1.28 — M65): the plug plugged in and the hotspot on (or the Shelly app done); the search starts. */
+    fun ready() {
         _state.update { it.copy(step = PairStep.Find, problem = null) }
         search()
     }
 
-    /** Looks for plugs nearby (2.5 s on the emulator, 10 s on a tablet). */
+    /** Looks for plugs nearby (2.5 s on the emulator, 10 s on a tablet), back at Find from any step (v1.28 — M65), the hotspot kept. */
     fun search() = run {
-        _state.update { it.copy(searching = true, found = emptyList(), plug = null, info = null, fallback = false, problem = null) }
+        bondEntry = null
+        closed = false
+        _state.update {
+            it.copy(
+                step = PairStep.Find, searching = true, found = emptyList(), plug = null, info = null, tasks = emptySet(),
+                bonds = null, verify = null, fallback = false, overBluetooth = false, firmwareUpdate = null, problem = null,
+            )
+        }
         val why = client.bluetooth.scan(SCAN_MS) { found ->
             _state.update { now -> if (now.found.any { it.address == found.address }) now else now.copy(found = now.found + found) }
         }
@@ -129,6 +176,12 @@ class PairFlow(
     /** Reads the plug again (its setup state): what it is decides the next step. */
     fun refresh() = run { read() }
 
+    /**
+     * The plug read; what it is chooses the way on (v1.28 — M65). Locked: a power cycle. `complete`: kept if this tablet is
+     * bonded with it on 2.0.0 or later, else the factory reset's way. Firmware older than 2.0.0 (`pending`, `confirmed`, or
+     * no `provision` before 1.7.5): the Update step. `pending` on 2.0.0 or later: set up from here by itself. `confirmed`:
+     * the person's tap ([setUp]).
+     */
     private suspend fun read() {
         val plug = address ?: return
         val info = when (val heard = client.read(to = plug)) {
@@ -151,30 +204,168 @@ class PairFlow(
         }
         _state.update { it.copy(info = info, problem = null, fallback = false) }
         when {
-            !info.pairs -> _state.update { it.copy(problem = TOO_OLD) }
             info.provision == Provision.Locked -> _state.update { it.copy(problem = LOCKED) }
-            info.provision == Provision.Complete && client.bluetooth.bonded(plug) -> joinSetUp(info)
+            info.provision == Provision.Complete && info.pairs && client.bluetooth.bonded(plug) -> joinSetUp(info)
             info.provision == Provision.Complete -> _state.update { it.copy(fallback = true, problem = REFUSED) }
-            else -> Unit   // pending or confirmed: the setup's step waits for the person's tap
+            !info.pairs -> _state.update { it.copy(step = PairStep.Update, firmwareUpdate = UpdateState(from = info.ver)) }
+            info.provision == Provision.Pending -> overBluetooth(plug)
+            else -> Unit   // confirmed (the Shelly app's way): the setup's step waits for the person's tap
         }
     }
 
+    // ---- The update (v1.28 — M65) ---------------------------------------------------------------------------------------
+
     /**
-     * Step 3, while `confirmed`: the settings (retried with `in_locked` alone if the model refuses `in_mode`), RPC over
-     * Bluetooth (a restart if asked), the pairing window and the bond, the list of bonds, the cloud off. Each ticks as it
-     * lands; the first that fails stops, saying which.
+     * Step 3 on firmware older than 2.0.0 (v1.28 — M65): the 24 V off through the restarts, the plug on the phone's hotspot,
+     * Shelly's update found and started (whether the plug takes it over Bluetooth is Shelly's to say: a refusal says so), the
+     * plug back on 2.0.0 or later, its setup cleared at once (it went `confirmed` on the hotspot and must not reach `complete`
+     * unbonded), then on by itself as a new plug with the same hotspot. Each part ticks as it lands; the first that fails
+     * stops, saying what to do. Only from the Update step: past it the plug has its new firmware, and its network is the
+     * setup's to open and close.
+     */
+    fun update(ssid: String, pass: String) = run {
+        val plug = address ?: return@run
+        if (_state.value.step != PairStep.Update) return@run
+        val hotspot = Hotspot(ssid.trim(), pass)
+        _state.update {
+            it.copy(step = PairStep.Update, hotspot = hotspot, problem = null, fallback = false, firmwareUpdate = UpdateState(from = it.firmwareUpdate?.from ?: it.info?.ver))
+        }
+        updateNow(plug, hotspot)
+    }
+
+    private suspend fun updateNow(plug: String, hotspot: Hotspot) {
+        val from = _state.value.firmwareUpdate?.from
+        // 1. The 24 V off, and off at power-up through the update's restarts.
+        if (!client.switchSet(on = false, to = plug)) return failUpdate(UpdateTask.RailOff)
+        if (client.call("Switch.SetConfig", ShellyRpc.offAtPowerUp(), to = plug)?.ok != true) {
+            log("Plug update: Switch.SetConfig initial_state off refused on firmware $from; going on")
+        }
+        tick(UpdateTask.RailOff)
+        // 2. On the hotspot: `got ip` awaited.
+        if (client.call("WiFi.SetConfig", ShellyRpc.networkOn(hotspot.ssid, hotspot.pass), to = plug)?.ok != true) {
+            _state.update { it.copy(problem = NETWORK_FAILED) }
+            return
+        }
+        if (!awaitOnline(plug)) {
+            _state.update { it.copy(problem = NOT_ONLINE) }
+            return
+        }
+        tick(UpdateTask.Online)
+        // 3. What Shelly offers: 2.0.0 or later, or nothing worth having.
+        val offer = client.call("Shelly.CheckForUpdate", to = plug, timeoutMs = CHECK_UPDATE_MS)
+        if (offer?.ok != true) return failUpdate(UpdateTask.Offered)
+        val to = ShellyRpc.stableOffered(offer.result)
+        if (to == null || !PlugInfo.versionAtLeast(to, 2, 0)) {
+            log("Plug update: Shelly offers " + (to ?: "nothing") + " for firmware $from")
+            _state.update { it.copy(problem = NO_UPDATE) }
+            return
+        }
+        _state.update { it.copy(firmwareUpdate = it.firmwareUpdate?.copy(to = to)) }
+        tick(UpdateTask.Offered)
+        // 4. Install: an error or no reply is the plug refusing it over Bluetooth.
+        if (client.call("Shelly.Update", ShellyRpc.updateStable(), to = plug, timeoutMs = UPDATE_CALL_MS)?.ok != true) {
+            log("Plug update: Shelly.Update refused over Bluetooth on firmware $from")
+            _state.update { it.copy(problem = UPDATE_REFUSED) }
+            return
+        }
+        log("Plug update: $from to $to started")
+        tick(UpdateTask.Started)
+        // 5. The restart: the link drops; the plug read until it answers on 2.0.0 or later.
+        client.drop()
+        val updated = awaitFirmware(plug) ?: return
+        log("Plug update: firmware ${updated.ver} answering, ${updated.provision.name.lowercase()}")
+        tick(UpdateTask.Installed)
+        // 6. Its setup cleared at once, `pending` awaited.
+        if (!clearSetup(plug, updated)) return
+        tick(UpdateTask.Cleared)
+        // 7. On by itself as a new plug, with the hotspot just typed.
+        overBluetooth(plug)
+    }
+
+    /** `WiFi.GetStatus` every 2 s until the plug says `got ip`, 60 s at most. */
+    private suspend fun awaitOnline(plug: String): Boolean {
+        val started = now()
+        while (now() - started < ONLINE_WAIT_MS) {
+            delay(ONLINE_POLL_MS)
+            val status = client.call("WiFi.GetStatus", to = plug)
+            if (status?.ok == true && ShellyRpc.online(status.result)) return true
+        }
+        return false
+    }
+
+    /**
+     * The update's restart: the plug read every 5 s until it answers on 2.0.0 or later, 6 minutes at most; null when it
+     * didn't (the problem said). One that comes back refusing this tablet reached `complete` meanwhile: the factory reset's way.
+     */
+    private suspend fun awaitFirmware(plug: String): PlugInfo? {
+        val started = now()
+        while (now() - started < INSTALL_WAIT_MS) {
+            delay(COMPLETE_POLL_MS)
+            when (val heard = client.read(to = plug)) {
+                is PlugRead.Read -> if (heard.info.pairs) {
+                    _state.update { it.copy(info = heard.info) }
+                    return heard.info
+                }
+                PlugRead.Refused -> {
+                    refusedNow()
+                    return null
+                }
+                else -> Unit   // away while it downloads and restarts
+            }
+        }
+        _state.update { it.copy(problem = RESTART_TIMEOUT) }
+        return null
+    }
+
+    /**
+     * Its setup cleared: `Shelly.FactoryReset` keeps the new firmware and drops the network, the bonds and the provisioning
+     * (SMART_PLUG.md); then the plug read until it answers `pending`, and its 24 V switched off once more (the relay after a
+     * reset is the bench's to see). A plug already `complete` refuses this tablet: the reset by its button (the fallback).
+     */
+    private suspend fun clearSetup(plug: String, info: PlugInfo): Boolean {
+        if (info.provision == Provision.Complete && !client.bluetooth.bonded(plug)) return refusedNow()
+        val reset = client.call("Shelly.FactoryReset", to = plug)
+        if (reset != null && !reset.ok) {
+            failUpdate(UpdateTask.Cleared)
+            return false
+        }
+        // No reply may be the reset itself, under way: the plug read as it comes back says.
+        client.drop()
+        val started = now()
+        while (now() - started < RESET_WAIT_MS) {
+            delay(COMPLETE_POLL_MS)
+            when (val heard = client.read(to = plug)) {
+                is PlugRead.Read -> when (heard.info.provision) {
+                    Provision.Pending -> {
+                        _state.update { it.copy(info = heard.info) }
+                        if (!client.switchSet(on = false, to = plug)) log("Plug update: the 24 V off after the reset wasn't answered")
+                        log("Plug update: setup cleared, pending")
+                        return true
+                    }
+                    Provision.Complete -> return refusedNow()
+                    else -> Unit
+                }
+                PlugRead.Refused -> return refusedNow()
+                else -> Unit   // restarting
+            }
+        }
+        _state.update { it.copy(problem = RESTART_TIMEOUT) }
+        return false
+    }
+
+    // ---- Set up -----------------------------------------------------------------------------------------------------
+
+    /**
+     * Step 4, while `confirmed` (the Shelly app's way): the settings (retried with `in_locked` alone if the model refuses
+     * `in_mode`), RPC over Bluetooth (a restart if asked), the pairing window and the bond, the list of bonds, the cloud off.
+     * Each ticks as it lands; the first that fails stops, saying which. A `pending` plug goes the over-Bluetooth way instead
+     * (v1.28 — M65): it has no network to reach `complete` on.
      */
     fun setUp() = run {
         val plug = address ?: return@run
+        if (_state.value.info?.provision == Provision.Pending) return@run overBluetooth(plug)
         _state.update { it.copy(step = PairStep.SetUp, problem = null) }
-        if (!configure(plug)) return@run
-        if (!bondNow(plug)) return@run
-        val cloud = client.call("Cloud.SetConfig", ShellyRpc.cloudOff(), to = plug)
-        if (cloud?.ok != true) {
-            fail(SetUpTask.Cloud)
-            return@run
-        }
-        tick(SetUpTask.Cloud)
+        if (!configure(plug) || !bondNow(plug) || !cloudOff(plug)) return@run
         _state.update { it.copy(step = PairStep.Complete) }
         awaitComplete()
     }
@@ -197,7 +388,10 @@ class PairFlow(
         return true
     }
 
-    /** The pairing window (3 minutes), Android's bond (the person may be asked), and the plug's list of bonds after it. */
+    /**
+     * The pairing window (3 minutes), Android's bond (the person may be asked), and the plug's list of bonds after it. Nothing
+     * is kept yet (v1.28 — M65): the pairing is, once the plug is off every network ([closeNetworkNow]).
+     */
     private suspend fun bondNow(plug: String): Boolean {
         val before = client.call("BLE.ListPairedDevices", to = plug)?.takeIf { it.ok }?.let { ShellyRpc.pairedAddresses(it.result) }.orEmpty()
         val window = client.call("BLE.StartPairing", JSONObject().put("timeout", PAIRING_WINDOW_S), to = plug)
@@ -208,67 +402,98 @@ class PairFlow(
         val after = client.call("BLE.ListPairedDevices", to = plug)?.takeIf { it.ok }?.let { ShellyRpc.pairedAddresses(it.result) }
             ?: return fail(SetUpTask.Listed)
         tick(SetUpTask.Listed)
-        val info = _state.value.info
-        val entry = (after - before.toSet()).singleOrNull()
-        store.pair(PlugPairing(plug, info?.id, info?.model, info?.ver, entry), on = false)
+        (after - before.toSet()).singleOrNull()?.let { bondEntry = it }
         _state.update { it.copy(bonds = after.size) }
-        log("Plug paired: ${after.size} bond" + (if (after.size == 1) "" else "s") + " on the plug")
+        log("Plug bonded: ${after.size} bond" + (if (after.size == 1) "" else "s") + " on the plug")
+        return true
+    }
+
+    /** The cloud off. */
+    private suspend fun cloudOff(plug: String): Boolean {
+        val cloud = client.call("Cloud.SetConfig", ShellyRpc.cloudOff(), to = plug)
+        if (cloud?.ok != true) return fail(SetUpTask.Cloud)
+        tick(SetUpTask.Cloud)
         return true
     }
 
     /**
-     * Step 4: the setup state read every 5 s until `complete` (the hotspot stays on meanwhile). A plug that went silent with
-     * no bond has locked (v1.26 — M62): its setup window ran out before it got online.
+     * Step 5: the setup state read every 5 s until `complete` (the hotspot stays on meanwhile); true once it is. A plug that
+     * went silent with no bond has locked (v1.26 — M62): its setup window ran out before it got online. One that refuses this
+     * tablet, or reads `pending` with no network to finish on, stops the wait (v1.28 — M65).
      */
-    private suspend fun awaitComplete() {
-        val plug = address ?: return
+    private suspend fun awaitComplete(): Boolean {
+        val plug = address ?: return false
         while (scope.isActive) {
             val heard = client.read(to = plug)
             if (heard == PlugRead.Silent && !client.bluetooth.bonded(plug)) {
                 _state.update { it.copy(problem = LOCKED) }
-                return
+                return false
             }
+            if (heard == PlugRead.Refused) return refusedNow()
             val info = (heard as? PlugRead.Read)?.info
             if (info != null) _state.update { it.copy(info = info) }
             when (info?.provision) {
                 Provision.Complete -> {
                     _state.update { it.copy(step = PairStep.Network, problem = null) }
-                    return
+                    return true
                 }
                 Provision.Locked -> {
                     _state.update { it.copy(problem = LOCKED) }
-                    return
+                    return false
+                }
+                Provision.Pending -> {
+                    _state.update { it.copy(problem = NOT_ONLINE) }
+                    return false
                 }
                 else -> delay(COMPLETE_POLL_MS)
             }
         }
+        return false
     }
 
-    /** Step 5: off every network and the access point closed: from here the bonded tablet alone talks to the plug. */
+    /** Step 6: off every network and the access point closed: from here the bonded tablet alone talks to the plug. */
     fun closeNetwork() = run {
         val plug = address ?: return@run
-        val answer = client.call("WiFi.SetConfig", ShellyRpc.networkOff(), to = plug)
-        if (answer?.ok != true) {
-            _state.update { it.copy(problem = NETWORK_FAILED) }
-            return@run
-        }
-        _state.update { it.copy(step = PairStep.Verify, problem = null) }
+        closeNetworkNow(plug)
     }
 
     /**
-     * Step 6, the check: the piano answers (its CHECK first), then the 24 V on for 5 s (`toggle_after:5`); the boards are
+     * Off every network and the access point closed; only then the pairing kept (v1.28 — M65: never before, so a setup that
+     * stops halfway leaves nothing paired), its switch off until Finish, and the hotspot forgotten.
+     */
+    private suspend fun closeNetworkNow(plug: String): Boolean {
+        val answer = client.call("WiFi.SetConfig", ShellyRpc.networkOff(), to = plug)
+        if (answer?.ok != true) {
+            _state.update { it.copy(step = PairStep.Network, problem = NETWORK_FAILED) }
+            return false
+        }
+        closed = true
+        val info = _state.value.info
+        store.pair(PlugPairing(plug, info?.id, info?.model, info?.ver, bondEntry), on = false)
+        log("Plug paired: off every network, its access point closed")
+        _state.update { it.copy(step = PairStep.Verify, problem = null, hotspot = null) }
+        return true
+    }
+
+    /**
+     * Step 7, the check: the piano answers (its CHECK first), then the 24 V on for 5 s (`toggle_after:5`); the boards are
      * read every 500 ms until the plug switches itself off again (12 s at most). It passes when every board answered with
      * the rail up and none once it went off.
      */
     fun verify() = run {
         val plug = address ?: return@run
+        runCheck(plug, asked = true)
+    }
+
+    /** The check, [asked] for by the person; run by itself (v1.28 — M65) it waits quietly for the tap while the piano is away. */
+    private suspend fun runCheck(plug: String, asked: Boolean) {
         if (check() == null) {
-            _state.update { it.copy(problem = PIANO_FIRST) }
-            return@run
+            if (asked) _state.update { it.copy(problem = PIANO_FIRST) }
+            return
         }
         if (!client.switchSet(on = true, toggleAfter = VERIFY_S, to = plug)) {
             _state.update { it.copy(problem = UNREACHABLE) }
-            return@run
+            return
         }
         _state.update { it.copy(verify = VerifyState(on = true), problem = null) }
         var allUp = false
@@ -288,47 +513,61 @@ class PairFlow(
         _state.update { it.copy(verify = it.verify?.copy(finished = true, passed = passed), problem = if (passed) null else VERIFY_FAILED) }
     }
 
-    /** Done: the plug switches the rail from now on. */
+    /** Done: the plug switches the rail from now on; only once it went off every network in this setup (v1.28 — M65). */
     fun finish() = run {
+        if (!closed) return@run
         store.setOn(true)
-        _state.update { it.copy(step = PairStep.Done, problem = null) }
+        _state.update { it.copy(step = PairStep.Done, problem = null, hotspot = null) }
     }
 
-    // ---- The fallback ------------------------------------------------------------------------------------------------
+    // ---- A new plug, and the fallback --------------------------------------------------------------------------------
 
     /**
-     * After a factory reset the plug is `pending`: bond first (its pairing window, then Android's bond), then the network
-     * over Bluetooth ([provision]).
+     * A new plug (`pending`) set up from here (v1.28 — M65: by itself after Find, or after the update): the bond first, then
+     * the hotspot over Bluetooth ([provisionNow]) if it was typed already; if not, the form waits for it.
      */
-    fun bondWhilePending() = run {
-        val plug = address ?: return@run
-        _state.update { it.copy(overBluetooth = true, problem = null, step = PairStep.SetUp) }
-        bondNow(plug)
+    private suspend fun overBluetooth(plug: String) {
+        _state.update { it.copy(step = PairStep.SetUp, overBluetooth = true, problem = null) }
+        if (!bondNow(plug)) return
+        val hotspot = _state.value.hotspot ?: return
+        provisionNow(plug, hotspot)
     }
 
-    /** The hotspot's name and password to the plug (`WiFi.SetConfig` with `sta`), then `confirmed` awaited and the rest of the setup. */
+    /** After a factory reset the plug is `pending`: bond first, then the network over Bluetooth (Try again's way in). */
+    fun bondWhilePending() = run {
+        val plug = address ?: return@run
+        overBluetooth(plug)
+    }
+
+    /** The hotspot's name and password for the plug, kept in memory for this setup (v1.28 — M65), then the rest of the setup. */
     fun provision(ssid: String, pass: String) = run {
         val plug = address ?: return@run
-        val answer = client.call("WiFi.SetConfig", ShellyRpc.networkOn(ssid.trim(), pass), to = plug)
+        val hotspot = Hotspot(ssid.trim(), pass)
+        _state.update { it.copy(hotspot = hotspot) }
+        provisionNow(plug, hotspot)
+    }
+
+    /**
+     * The hotspot to the plug (`WiFi.SetConfig` with `sta`), then `confirmed` awaited and the rest of the setup: its settings,
+     * the cloud off, `complete` awaited, then (v1.28 — M65) the network closed and the check, by themselves.
+     */
+    private suspend fun provisionNow(plug: String, hotspot: Hotspot) {
+        _state.update { it.copy(problem = null) }
+        val answer = client.call("WiFi.SetConfig", ShellyRpc.networkOn(hotspot.ssid, hotspot.pass), to = plug)
         if (answer?.ok != true) {
             _state.update { it.copy(problem = NETWORK_FAILED) }
-            return@run
+            return
         }
         repeat(CONFIRM_POLLS) {
             delay(COMPLETE_POLL_MS)
             val info = client.deviceInfo(to = plug) ?: return@repeat
             _state.update { it.copy(info = info) }
             if (info.provision == Provision.Confirmed || info.provision == Provision.Complete) {
-                if (!configure(plug)) return@run
-                val cloud = client.call("Cloud.SetConfig", ShellyRpc.cloudOff(), to = plug)
-                if (cloud?.ok != true) {
-                    fail(SetUpTask.Cloud)
-                    return@run
-                }
-                tick(SetUpTask.Cloud)
+                if (!configure(plug) || !cloudOff(plug)) return
                 _state.update { it.copy(step = PairStep.Complete) }
-                awaitComplete()
-                return@run
+                if (!awaitComplete() || !closeNetworkNow(plug)) return
+                runCheck(plug, asked = false)
+                return
             }
         }
         _state.update { it.copy(problem = NOT_ONLINE) }
@@ -349,22 +588,37 @@ class PairFlow(
         joinSetUp(info)
     }
 
-    /** A `complete` plug that answers this bonded tablet: kept as it is, set up already; the check comes next. */
+    /**
+     * A `complete` plug that answers this bonded tablet: set up by another tablet, or a setup here cut short after its bond.
+     * Either way it ends as the setup does (v1.28 — M65): its settings and the cloud off once more (the same values: nothing
+     * changes on a plug set up already), its network closed, then the check.
+     */
     private suspend fun joinSetUp(info: PlugInfo) {
         val plug = address ?: return
         val listed = client.call("BLE.ListPairedDevices", to = plug)?.takeIf { it.ok }?.let { ShellyRpc.pairedAddresses(it.result) }
-        store.pair(PlugPairing(plug, info.id, info.model, info.ver, null), on = false)
         _state.update {
-            it.copy(info = info, step = PairStep.Verify, tasks = SetUpTask.entries.toSet(), bonds = listed?.size, fallback = false, problem = null)
+            it.copy(info = info, step = PairStep.SetUp, tasks = setOf(SetUpTask.Window, SetUpTask.Bond, SetUpTask.Listed), bonds = listed?.size, fallback = false, problem = null)
         }
+        if (!configure(plug) || !cloudOff(plug)) return
+        closeNetworkNow(plug)
     }
 
     // ---- Parts -------------------------------------------------------------------------------------------------------
 
     private fun tick(task: SetUpTask) = _state.update { it.copy(tasks = it.tasks + task) }
 
+    private fun tick(task: UpdateTask) = _state.update { pair -> pair.copy(firmwareUpdate = pair.firmwareUpdate?.let { it.copy(tasks = it.tasks + task) }) }
+
     private fun fail(task: SetUpTask): Boolean {
         _state.update { it.copy(problem = failed(task)) }
+        return false
+    }
+
+    private fun failUpdate(task: UpdateTask) = _state.update { it.copy(problem = failed(task)) }
+
+    /** The plug finished its setup without this tablet: the factory reset by its button, as for any such plug. */
+    private fun refusedNow(): Boolean {
+        _state.update { it.copy(fallback = true, problem = REFUSED) }
         return false
     }
 
@@ -395,16 +649,35 @@ class PairFlow(
         const val VERIFY_WATCH_MS = 12_000L
         private const val MS_PER_S = 1_000L
 
+        /** The update (v1.28 — M65): `got ip` asked every 2 s for 60 s; Shelly's answers given longer than a setting's. */
+        const val ONLINE_POLL_MS = 2_000L
+        const val ONLINE_WAIT_MS = 60_000L
+        const val CHECK_UPDATE_MS = 15_000L
+        const val UPDATE_CALL_MS = 10_000L
+
+        /** The plug back on its new firmware within 6 minutes, and `pending` within 2 after its reset (read every 5 s). */
+        const val INSTALL_WAIT_MS = 6 * 60_000L
+        const val RESET_WAIT_MS = 2 * 60_000L
+
         const val NOT_FOUND = "No power plug found. Check it is plugged in and near this tablet, then search again."
         const val UNREACHABLE = "The plug didn't answer. Bring the tablet nearer to it, then try again."
         const val REFUSED = "This plug finished its setup without this tablet, so it refuses it."
         const val LOCKED = "Unplug the power plug for 5 seconds and plug it back in, then open Pair the power plug again."
-        const val TOO_OLD = "The plug's firmware is older than 2.0.0. Update it in the Shelly app first, then search again."
         const val NETWORK_FAILED = "The plug didn't take the network setting. Try again."
-        const val NOT_ONLINE = "The plug didn't get online. Check the hotspot's name and password, and that it has internet."
+        const val NOT_ONLINE =
+            "The plug didn't get online. Check the hotspot's name and password, and that it has internet. The plug only sees " +
+                "2.4 GHz: on an iPhone, turn on Maximize Compatibility; on Android, choose the 2.4 GHz band."
         const val PIANO_FIRST = "Connect to the piano first (Piano › Instrument): the check reads its power boards."
         const val VERIFY_FAILED = "Not every board answered with the 24 V on, or they didn't go when it went off. Check the supply is on the plug, then try again."
         const val JOIN_FAILED = "This tablet couldn't pair. On the tablet the plug knows, open Piano › Power plug › Admit a replacement tablet, then try again within 3 minutes."
+
+        /** The update's words (v1.28 — M65). */
+        const val NO_UPDATE =
+            "Shelly offers no update for the plug right now. Try again later, or update it once in the Shelly app (that needs a " +
+                "Shelly account), then search again."
+        const val UPDATE_REFUSED =
+            "The plug won't take its update over Bluetooth. Update it once in the Shelly app (that needs a Shelly account), then search again."
+        const val RESTART_TIMEOUT = "Unplug the power plug for 5 seconds, plug it back in, then search again."
 
         fun failed(task: SetUpTask): String = when (task) {
             SetUpTask.Settings -> "The plug didn't take its settings."
@@ -414,5 +687,14 @@ class PairFlow(
             SetUpTask.Listed -> "The plug didn't list its paired devices."
             SetUpTask.Cloud -> "The plug didn't turn its cloud off."
         } + " Try again."
+
+        fun failed(task: UpdateTask): String = when (task) {
+            UpdateTask.RailOff -> "The plug didn't switch its 24 V off. Try again."
+            UpdateTask.Online -> NOT_ONLINE
+            UpdateTask.Offered -> "The plug couldn't ask Shelly for its update. Check the hotspot has internet, then try again."
+            UpdateTask.Started -> UPDATE_REFUSED
+            UpdateTask.Installed -> RESTART_TIMEOUT
+            UpdateTask.Cleared -> "The plug didn't clear its setup. Search again."
+        }
     }
 }

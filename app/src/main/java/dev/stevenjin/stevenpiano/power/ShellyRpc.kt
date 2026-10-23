@@ -132,12 +132,27 @@ object ShellyRpc {
             .put("ap", JSONObject().put("enable", false)),
     )
 
-    /** The fallback's provisioning over Bluetooth: `WiFi.SetConfig {config:{sta:{ssid, pass, enable:true}}}`. */
+    /** The phone's hotspot over Bluetooth (a new plug's provisioning, the update's network): `WiFi.SetConfig {config:{sta:{ssid, pass, enable:true}}}`. */
     fun networkOn(ssid: String, pass: String): JSONObject =
         config(JSONObject().put("sta", JSONObject().put("ssid", ssid).put("pass", pass).put("enable", true)))
 
     /** Whether a `*.SetConfig` answer asks for a restart. */
     fun restartRequired(answer: RpcAnswer?): Boolean = answer?.result?.optBoolean("restart_required", false) == true
+
+    // ---- The update (v1.28 — M65) ---------------------------------------------------------------------------------
+
+    /** The 24 V off at power-up, through the update's restarts: `Switch.SetConfig {id:0, config:{initial_state:"off"}}`. */
+    fun offAtPowerUp(): JSONObject = JSONObject().put("id", 0).put("config", JSONObject().put("initial_state", "off"))
+
+    /** Shelly's stable firmware: `Shelly.Update {stage:"stable"}`. */
+    fun updateStable(): JSONObject = JSONObject().put("stage", "stable")
+
+    /** Whether `WiFi.GetStatus` says the plug is online: `status` "got ip". */
+    fun online(result: JSONObject?): Boolean = result?.optString("status")?.trim()?.lowercase() == "got ip"
+
+    /** The stable firmware `Shelly.CheckForUpdate` offers (`stable.version`); null with none (its result is `{}` then). */
+    fun stableOffered(result: JSONObject?): String? =
+        result?.optJSONObject("stable")?.optString("version", "")?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
 
     /**
      * The addresses `BLE.ListPairedDevices` lists, upper case. Its shape isn't pinned down in Shelly's docs, so any array

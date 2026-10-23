@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui
 
+import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
 import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.PlugStatus
@@ -16,10 +17,15 @@ import dev.stevenjin.stevenpiano.power.Provision
 import dev.stevenjin.stevenpiano.power.RailMessage
 import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.SetUpTask
+import dev.stevenjin.stevenpiano.power.UpdateState
+import dev.stevenjin.stevenpiano.power.UpdateTask
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** The 24 V smart plug's words (v1.26 — M60; DESIGN.md › v1.26 — M60): the messages, Piano › Power plug, its Pair screen. */
+/**
+ * The 24 V smart plug's words (v1.26 — M60; DESIGN.md › v1.26 — M60): the messages, Piano › Power plug, its Pair screen
+ * (v1.28 — M65: without the Shelly app, the update on old firmware).
+ */
 object PowerCopy {
     const val TITLE = "Power plug"
 
@@ -72,7 +78,7 @@ object PowerCopy {
             "asleep, the app closed, the piano silent — and the plug switches it off by itself within 30 seconds, so nothing " +
             "stays hot while the piano is idle."
     const val PAIR = "Pair the power plug"
-    const val PAIR_NOTE = "About 15 minutes, with your phone and the Shelly app. Only the 24 V supply goes on the plug."
+    const val PAIR_NOTE = "About 15 minutes, with your phone's hotspot. Only the 24 V supply goes on the plug."
 
     const val SWITCH = "Switch the 24 V with the plug"
     const val SWITCH_ON_NOTE = "The 24 V comes on for each piece, Test every key, the Keys tab and updates, and goes off after."
@@ -126,8 +132,9 @@ object PowerCopy {
     // ---- The Pair screen ----------------------------------------------------------------------------------------------
 
     fun stepTitle(step: PairStep): String = when (step) {
-        PairStep.ShellyApp -> "Set it up with the Shelly app"
+        PairStep.Ready -> "Get it ready"
         PairStep.Find -> "Find the plug"
+        PairStep.Update -> "Update its firmware"
         PairStep.SetUp -> "Pair it with this tablet"
         PairStep.Complete -> "Wait while it finishes its setup"
         PairStep.Network -> "Close its network"
@@ -135,26 +142,49 @@ object PowerCopy {
         PairStep.Done -> "Done"
     }
 
-    fun stepNote(step: PairStep): String = when (step) {
-        PairStep.ShellyApp ->
-            "Plug the 24 V supply into the plug and the plug into the wall. On your phone, turn on a hotspot that has internet, " +
-                "add the plug in the Shelly app on that hotspot, decline the cloud, and let it update its firmware (2.0.0 or " +
-                "later). Then come straight back here: the next steps must start within about 5 minutes."
+    /** A step's words (v1.28 — M65: the Update step's name the plug's firmware; a new plug set up from here has its own order). */
+    fun stepNote(step: PairStep, pair: PairState): String = when (step) {
+        PairStep.Ready ->
+            "Plug the 24 V supply into the plug, and the plug into the wall. On your phone, turn on a hotspot that has internet, " +
+                "and keep it on until the setup ends (about 15 minutes). The plug only sees 2.4 GHz: on an iPhone, turn on " +
+                "Maximize Compatibility; on Android, choose the 2.4 GHz band."
         PairStep.Find -> "The tablet looks for plugs nearby. Choose yours: its name begins ShellyPlugUSG4."
-        PairStep.SetUp ->
+        PairStep.Update -> updateNote(pair.firmwareUpdate?.from)
+        PairStep.SetUp -> if (pair.overBluetooth) {
+            "Pairing first: when Android asks to pair with the plug, tap Pair. Then the plug joins your hotspot, takes its " +
+                "settings (off after a power cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud goes off."
+        } else {
             "Its settings (off after a power cut, its button can't hold the 24 V on), Bluetooth control, then pairing: when " +
                 "Android asks to pair with the plug, tap Pair. Then its cloud goes off."
-        PairStep.Complete -> "The plug finishes its setup on its own, about 5 minutes. Keep the phone's hotspot on until it does."
+        }
+        PairStep.Complete -> if (pair.overBluetooth) {
+            "The plug finishes its setup on its own, about 5 minutes. Keep the phone's hotspot on until it does: then the plug " +
+                "forgets every network by itself."
+        } else {
+            "The plug finishes its setup on its own, about 5 minutes. Keep the phone's hotspot on until it does."
+        }
         PairStep.Network ->
             "The plug forgets every network and closes its own: from now on only this tablet can talk to it. Then turn the " +
                 "hotspot off."
-        PairStep.Verify ->
+        PairStep.Verify -> (if (pair.overBluetooth) "The plug is off every network now: turn the hotspot off. " else "") +
             "The 24 V comes on for 5 seconds: every power board should answer, then the plug switches off by itself. Connect " +
-                "to the piano first."
+            "to the piano first."
         PairStep.Done -> "The 24 V now follows the music."
     }
 
-    const val SHELLY_DONE = "Done in the Shelly app"
+    /** The Update step's words (v1.28 — M65): the plug's firmware, why it must change, and what happens next. */
+    fun updateNote(firmware: String?): String =
+        "The plug has firmware ${firmware ?: "older than 2.0.0"}, and pairing needs 2.0.0 or later. Give it your hotspot's " +
+            "name and password: it joins the hotspot and updates itself from Shelly (about 2 minutes), its setup is cleared, " +
+            "then it pairs with this tablet and finishes its setup on the hotspot, all by itself. Keep the hotspot on and the " +
+            "tablet near the plug."
+
+    const val FIND = "Find the plug"
+
+    /** Step 1's quiet second line (v1.28 — M65): the Shelly app's way still works. */
+    const val SHELLY_STILL = "The Shelly app still works: set the plug up there, then come straight back here within about 5 minutes."
+    const val UPDATE = "Update the plug"
+    const val INSTALLING = "Downloading and installing (about 2 minutes)"
     const val SEARCH = "Search again"
     const val SEARCHING = "Searching…"
     const val SET_UP = "Pair and set up"
@@ -175,6 +205,16 @@ object PowerCopy {
         SetUpTask.Cloud -> "Cloud off"
     }
 
+    /** One part of the update (v1.28 — M65); the install says what it does while it runs. */
+    fun updateTask(task: UpdateTask, update: UpdateState, working: Boolean): String = when (task) {
+        UpdateTask.RailOff -> "24 V off through its restarts"
+        UpdateTask.Online -> "On the hotspot"
+        UpdateTask.Offered -> "Update from Shelly" + (update.to?.let { ": $it" } ?: "")
+        UpdateTask.Started -> "Update started"
+        UpdateTask.Installed -> if (working && UpdateTask.Started in update.tasks && task !in update.tasks) INSTALLING else "Downloaded and installed"
+        UpdateTask.Cleared -> "Setup cleared"
+    }
+
     /** "7 of 7 answering" while the check runs. */
     fun answering(answered: Int?, total: Int): String = if (answered == null) "Reading the boards…" else "$answered of $total answering"
 
@@ -183,14 +223,9 @@ object PowerCopy {
     // The fallback: the plug finished its setup without this tablet.
     const val FALLBACK =
         "Reset the plug: hold its button for about 10 seconds until its light flashes (a factory reset keeps its firmware, not " +
-            "its pairings or network). Then find it again: it will be new, and this tablet pairs first, then gives it the " +
-            "hotspot over Bluetooth."
+            "its pairings or network). Then find it again: it will be new, and this tablet sets it up from here, pairing first."
     const val JOIN = "Pair with a plug another tablet set up"
     const val JOIN_NOTE = "If the tablet the plug knows opened Admit a replacement tablet in the last 3 minutes."
-    const val NEW_PLUG =
-        "This plug hasn't been set up yet. Do step 1 in the Shelly app first, or set it up from here: this tablet pairs first, " +
-            "then gives the plug your hotspot's name and password over Bluetooth."
-    const val OVER_BLUETOOTH = "Set it up from here"
     const val HOTSPOT = "Hotspot name"
     const val PASSWORD = "Hotspot password"
     const val SEND_NETWORK = "Send to the plug"
