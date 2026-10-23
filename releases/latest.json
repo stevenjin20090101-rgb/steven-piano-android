@@ -1,9 +1,9 @@
 {
-  "versionCode": 39,
-  "versionName": "1.28.1",
-  "notes": "The power plug's setup says one more thing. When the plug's firmware is too old to pair, it can't encrypt Bluetooth yet, so the hotspot password it is given goes over unencrypted that once: the Pair screen now says to give the hotspot a password just for the day and change it afterwards. Everything else is as in 1.28: Piano › Power plug › Pair the power plug sets the plug up without the Shelly app.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.28.1/steven-piano-1.28.1.apk",
-  "sha256": "49f96d31df51b8077d9594d72dc2777532d299da7fa0a4b6c4512bba7f5b8f1a",
-  "sizeBytes": 14446881,
+  "versionCode": 40,
+  "versionName": "1.29",
+  "notes": "The power plug works on its old firmware. Piano › Power plug › Pair the power plug now offers \"Use it as it is\" on a plug that is too old to pair: no update, no Shelly app (a plug that needs one trip online gets your phone's hotspot once). It isn't locked to this tablet, so the tablet keeps watch: it puts its own settings back if they were changed, and while nothing plays it checks the plug every minute and switches it off if something else switched it on. \"Update and lock it\" is still there. The reset instructions are corrected: the plug can be reset only within the first minute after plugging it in, by holding its button 10 seconds.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.29/steven-piano-1.29.apk",
+  "sha256": "dd6f9006ef236d56b5301b6db3c0a1e5f39b80e1dfa0cb2cbecc0ffd40feaaaa",
+  "sizeBytes": 14451873,
   "minSdk": 26
 }
