@@ -172,12 +172,17 @@ object PowerCopy {
         PairStep.Done -> "The 24 V now follows the music."
     }
 
-    /** The Update step's words (v1.28 — M65): the plug's firmware, why it must change, and what happens next. */
+    /**
+     * The Update step's words (v1.28 — M65): the plug's firmware, why it must change, and what happens next; and (v1.28.1)
+     * that this firmware can't encrypt Bluetooth before pairing, so the password crosses in the clear this once
+     * (SMART_PLUG.md › One-time setup).
+     */
     fun updateNote(firmware: String?): String =
         "The plug has firmware ${firmware ?: "older than 2.0.0"}, and pairing needs 2.0.0 or later. Give it your hotspot's " +
             "name and password: it joins the hotspot and updates itself from Shelly (about 2 minutes), its setup is cleared, " +
             "then it pairs with this tablet and finishes its setup on the hotspot, all by itself. Keep the hotspot on and the " +
-            "tablet near the plug."
+            "tablet near the plug. This firmware can't encrypt Bluetooth yet, so the password goes over unencrypted this " +
+            "once: give the hotspot a password just for today, and change it afterwards."
 
     const val FIND = "Find the plug"
 

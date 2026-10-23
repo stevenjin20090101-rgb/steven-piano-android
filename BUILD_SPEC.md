@@ -9953,3 +9953,11 @@ Full suite: 1,785 tests green (12 skipped); lint "No issues found". Seen: the wh
 from step 1 to Done, and the refusal words (`~/.claude/plans/m65-shots/`). Not seen: the real plug accepting
 `Shelly.Update` over Bluetooth, the provisioning window across its restart, and the relay after a factory reset (the
 bench unknowns in the M65 section).
+
+## The release: 1.28.1 (versionCode 39)
+
+One sentence on the Pair screen's Update step (`PowerCopy.updateNote`) and in the README, from the firmware chat's
+review of M65's procedure (SMART_PLUG.md › One-time setup, now carrying it). Before 2.0.0 the plug cannot encrypt its
+Bluetooth link: pairing is enforced only from `complete` on 2.0.0+. So the hotspot password crosses in the clear for
+the one `WiFi.SetConfig` that sends it before the bond. Steven is told to give the hotspot a password just for the day
+and change it afterwards. The password sent after the bond, on the over-Bluetooth path, travels on the bonded link.

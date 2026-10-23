@@ -28,7 +28,7 @@ keeps silent at the hours you set (see *Quiet times*), on the school tablet it c
 (see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
 piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
-on the tablet*). Made by Steven Jin. Version 1.28.
+on the tablet*). Made by Steven Jin. Version 1.28.1.
 
 ## What it does
 
@@ -476,7 +476,7 @@ One-time setup, with a computer and a USB cable:
    adding a Google account**: Android refuses a device owner once any account is on
    the device. Accounts can be added afterwards.
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.28.apk`.
+   `adb install ../apk/steven-piano-1.28.1.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -538,7 +538,7 @@ from this Mac, `adb shell setprop debug.stevenpiano.updateurl
 http://10.0.2.2:8765/latest.json`, and start the app. Debug builds on an emulator only
 honour it; that address is then the only one the updater reaches (plain HTTP allowed,
 and only to 10.0.2.2). A copy that reads as newer than the one installed:
-`./gradlew assembleDebug -PversionCodeOverride=39`. A debug-only crash for the crash
+`./gradlew assembleDebug -PversionCodeOverride=40`. A debug-only crash for the crash
 banner: `adb shell am start -n dev.stevenjin.stevenpiano/.MainActivity --ez
 dev.stevenjin.stevenpiano.EMULATOR_CRASH true`.
 
@@ -1069,6 +1069,8 @@ plug › **Pair the power plug** walks through it). Connect the tablet to the pi
 4. If its firmware is older than 2.0.0 (yours is), type the hotspot's name and password and tap **Update the plug**. The
    plug joins the hotspot, updates itself from Shelly (about 2 minutes), clears its setup, and the tablet goes on by
    itself: you type the hotspot only once. (A plug already on 2.0.0 or later asks for the hotspot after step 5 instead.)
+   Firmware older than 2.0.0 can't encrypt Bluetooth before pairing, so the password goes over unencrypted this once:
+   give the hotspot a password just for the day, and change it afterwards.
 5. When Android asks to pair with the plug, tap **Pair**.
 6. Wait while the plug finishes its setup (about 5 minutes; the screen shows when), the hotspot still on. Then the plug
    forgets every network by itself: turn the hotspot off.
