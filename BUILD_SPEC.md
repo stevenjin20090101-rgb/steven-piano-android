@@ -9961,3 +9961,30 @@ review of M65's procedure (SMART_PLUG.md › One-time setup, now carrying it). B
 Bluetooth link: pairing is enforced only from `complete` on 2.0.0+. So the hotspot password crosses in the clear for
 the one `WiFi.SetConfig` that sends it before the bond. Steven is told to give the hotspot a password just for the day
 and change it afterwards. The password sent after the bond, on the over-Bluetooth path, travels on the bonded link.
+
+# v1.29 — M66: the plug as it is, and the plug watch
+
+Brief `~/.claude/plans/m66-plug-as-it-is-brief.md`; worktree `android-wt-m66`, branch `m66-plug-as-is`, from `2d68e52` (1.28.1).
+No version bump, no signing; the emulator pass and DESIGN.md were skipped for time (Steven's call). **As it is:**
+`PairFlow.asIs()` from the Update step (also after `UPDATE_REFUSED`/`NO_UPDATE`): `read()` afresh, `Switch.Set` off,
+`configure` (`Switch.SetConfig` with the `in_mode` retry, `BLE.SetConfig`, restart if asked), `cloudOff`; `pending` or
+`confirmed` → `hotspotWanted` (the M65 form) → `asIsOnline` (`WiFi.SetConfig`, `got ip`, `complete` read every 5 s for
+`AS_IS_COMPLETE_MS` 6 min); no `provision` (before 1.7.5) or `complete` → `asIsClose`: `read()` once more unpaired
+(Refused or Silent → `AS_IS_REFUSED`, nothing kept), `closeNetworkNow` (the network and access point closed before
+`store.pair`), then the check. `PlugPairing.locked` (DataStore `locked`, absent → true); as-is keeps `locked = false` and
+no `bondEntry`. `read()` sends an old `complete` plug to the Update step too. The page: the Update step's choice (Use it
+as it is first, then Update and lock it with the hotspot form); the as-is SetUp step (Settings · Bluetooth control ·
+Cloud off, the form when wanted); Piano › Power plug for `locked == false`: `PowerCopy.UNLOCKED`, no Admit, the
+silent-plug "locked" rule only for a locked pairing. `FALLBACK` and the README: the reset within the first minute, 10 s
+(5 s only restarts). **The watch:** `RailKeeper.watch()` from the Off branch of `run()`, every `WATCH_EVERY_MS` 60 s
+while nothing wants the rail, the plug switches it, and no update runs (`updating`, set by `updateRunning`):
+`plug.status()`; with the output on, `putBack()` first, then `cutRail()` (now returns whether the plug took it, its weld
+look as ever) and `RailMessage.SwitchedOn`; `RailPlug.putBack()` (default false) also the first time, after a missed
+read, and every `SETTINGS_EVERY_MS` 10 min → `RailMessage.SettingsPutBack`. `ShellyRail.putBack()`: `Switch.GetConfig`,
+`Cloud.GetConfig`, `WiFi.GetConfig`; `ShellyRpc.switchChanged` (`initial_state`, `auto_on`, `in_locked`, `in_mode`
+unless the model refused it), `cloudEnabled`, `networkEnabled` (`sta`, `sta1`, `ap`); put back with `switchConfig`,
+`cloudOff`, `networkOffAll`. Both words are rail messages (amber with OK on the banner, the panel's plug note).
+**Debug:** `EmulatedShelly.refuseUnpaired` (`debug.stevenpiano.plugunpaired refuse`), no setup states (no lock) before
+1.7.5, `Cloud.GetConfig`/`WiFi.GetConfig`; `EMULATOR_PLUG "outside on"` and `"initial on"`. **Tests:** `PairFlowTest` +3
+(as-is on 1.6.2; on 1.7.5 with the hotspot, and refused after `complete`; the update refused, then as-is), `RailKeeperTest`
++1 (the watch: found on → put back, CUT, said; settings put back; nothing while a piece plays or in the update's window).

@@ -1066,28 +1066,36 @@ plug › **Pair the power plug** walks through it). Connect the tablet to the pi
 2. On your phone, turn on a hotspot that has internet, and keep it on until the end. The plug only sees 2.4 GHz: on an
    iPhone, turn on **Maximize Compatibility** (Settings › Personal Hotspot); on Android, choose the **2.4 GHz** band.
 3. On the tablet: **Find the plug**, and tap it (ShellyPlugUSG4-…).
-4. If its firmware is older than 2.0.0 (yours is), type the hotspot's name and password and tap **Update the plug**. The
-   plug joins the hotspot, updates itself from Shelly (about 2 minutes), clears its setup, and the tablet goes on by
-   itself: you type the hotspot only once. (A plug already on 2.0.0 or later asks for the hotspot after step 5 instead.)
-   Firmware older than 2.0.0 can't encrypt Bluetooth before pairing, so the password goes over unencrypted this once:
-   give the hotspot a password just for the day, and change it afterwards.
+4. If its firmware is older than 2.0.0 (yours is), choose one of two ways (from 1.29):
+   - **Use it as it is** (the first button): no update and no pairing. It works, but any phone nearby with the Shelly app
+     could switch it; the tablet checks it every minute and switches it back off. The tablet gives it its settings and
+     turns its cloud off; a plug on firmware 1.7.5 or later then asks for the hotspot once, to finish its setup (about 5
+     minutes), and forgets every network after. Steps 5 and 6 are skipped.
+   - **Update and lock it to this tablet**: type the hotspot's name and password. The plug joins the hotspot, updates
+     itself from Shelly (about 2 minutes), clears its setup, and the tablet goes on by itself: you type the hotspot only
+     once. (A plug already on 2.0.0 or later asks for the hotspot after step 5 instead.)
+
+   Firmware older than 2.0.0 can't encrypt Bluetooth before pairing, so the password goes over unencrypted: give the
+   hotspot a password just for the day, and change it afterwards.
 5. When Android asks to pair with the plug, tap **Pair**.
 6. Wait while the plug finishes its setup (about 5 minutes; the screen shows when), the hotspot still on. Then the plug
    forgets every network by itself: turn the hotspot off.
 7. The 24 V comes on for 5 seconds by itself: it should read "7 of 7 answering", then "0 of 7" when the plug clicks off.
    **Finish**. (Piano not connected? Connect it, then **Turn the 24 V on for 5 s**.)
 
-If it says **the plug won't take its update over Bluetooth**, update it once in the Shelly app (that needs a Shelly
-account), then **Search again** on the tablet; the rest is the same. If it says Shelly offers no update right now, try
-again later (or the Shelly app). If it asks you to **unplug the power plug for 5 seconds**, do, plug it back in, and
+If it says **the plug won't take its update over Bluetooth**, or that Shelly offers no update right now, **Use it as it
+is** is offered first; or update it once in the Shelly app (that needs a Shelly account), then **Search again** on the
+tablet; the rest is the same. If, used as it is, the plug lets only paired tablets in once set up, the screen says it
+needs its update after all: reset it (below), **Search again**, and choose **Update and lock it to this tablet**. If it asks you to **unplug the power plug for 5 seconds**, do, plug it back in, and
 **Search again**: the tablet picks up where the plug is.
 
 The Shelly app still works: add the plug there on the hotspot, decline the cloud, let it update, then within about 5
 minutes **Find the plug** on the tablet and tap **Pair and set up**; the tablet does the rest as before (**Close its
 network**, then the check).
 
-If the plug says it finished its setup without this tablet, reset it (hold its button about 10 seconds) and find it
-again: the tablet sets it up from there, pairing first. If it says **Locked**, unplug it for 5 seconds, plug it back in,
+If the plug says it finished its setup without this tablet, reset it and find it again: the tablet sets it up from
+there, pairing first. **The reset** works only within the first minute after the plug is plugged in: unplug it, plug it
+back in, and within that minute hold its button for 10 seconds (5 seconds only restarts it; Shelly's documentation). If it says **Locked**, unplug it for 5 seconds, plug it back in,
 and open Pair the power plug again. (A locked plug answers nothing over Bluetooth: one this tablet isn't paired with that
 stays silent for 5 seconds is taken as locked.) Nothing counts as paired until the plug is off every network, so a setup
 that stops halfway leaves the app as it was: start it again from the top. The tablet never keeps the hotspot's name or
@@ -1115,7 +1123,15 @@ connects the tablet again, ends guest play, releases every key and turns the 24 
 
 **Piano › Power plug** also shows the plug (the 24 V on or off with its timer, what the supply draws), **Switch the 24 V
 with the plug** (off: the app leaves the plug alone and it stays off, so to play without it plug the supply into a wall
-socket), **Admit a replacement tablet** (3 minutes for another tablet to pair) and **Forget the plug**. Piano › System
+socket), **Admit a replacement tablet** (3 minutes for another tablet to pair; not for a plug used as it is) and **Forget
+the plug**. A plug used as it is says "Not locked to this tablet…"; to lock it later, Forget the plug, then Pair the
+power plug and choose Update and lock it to this tablet.
+
+**The plug watch** (1.29, every plug): while nothing wants the 24 V, the tablet reads the plug once a minute. Found on,
+it is switched off at once, saying "The power plug had been switched on by something else: switched off". Its settings
+are looked at too (the first time, after the plug was out of reach, and every 10 minutes): changed ones (on after a
+power cut, the button, an automatic on, the cloud, its network or access point) are put back, saying "The power plug's
+settings had been changed: put back". Nothing extra while a piece plays or a firmware update runs. Piano › System
 shows the plug on the Piano card, in amber if its relay seems stuck on after a cut (the supply still drawing more than
 half what it draws idle, at least 2 W); while the 24 V is off its power boards show unpowered, "0 of 7 answering · 24 V
 off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug paired, nothing of

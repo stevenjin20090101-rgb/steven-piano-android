@@ -277,9 +277,15 @@ private fun Fallback(pair: PairState, flow: PairFlow) {
 @Composable
 private fun UpdateStep(pair: PairState, flow: PairFlow) {
     val update = pair.firmwareUpdate ?: return
-    for (task in UpdateTask.entries) Tick(PowerCopy.updateTask(task, update, pair.working), task in update.tasks)
+    // v1.29 — M66: the choice first, Use it as it is the first way; the update's parts once it has begun.
+    val begun = update.tasks.isNotEmpty() || pair.working
+    if (begun) for (task in UpdateTask.entries) Tick(PowerCopy.updateTask(task, update, pair.working), task in update.tasks)
     if (pair.working || pair.fallback) return
-    if (UpdateTask.Started !in update.tasks) HotspotForm(pair.hotspot, PowerCopy.UPDATE, onSend = flow::update)
+    if (UpdateTask.Started !in update.tasks) {
+        ActionRow(note = PowerCopy.AS_IS_NOTE) { ActionButton(PowerCopy.AS_IS, onClick = flow::asIs) }
+        NoteLine(PowerCopy.LOCK_IT + ": " + PowerCopy.LOCK_NOTE)
+        HotspotForm(pair.hotspot, PowerCopy.LOCK_IT, onSend = flow::update)
+    }
     if (pair.problem != null) ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::search) }
 }
 
@@ -289,13 +295,18 @@ private fun UpdateStep(pair: PairState, flow: PairFlow) {
  */
 @Composable
 private fun SetUpStep(pair: PairState, flow: PairFlow) {
-    val tasks = if (pair.overBluetooth && SetUpTask.Settings !in pair.tasks) {
-        listOf(SetUpTask.Window, SetUpTask.Bond, SetUpTask.Listed)
-    } else {
-        SetUpTask.entries
+    val tasks = when {
+        pair.asIs -> listOf(SetUpTask.Settings, SetUpTask.Bluetooth, SetUpTask.Cloud)   // v1.29 — M66: no pairing
+        pair.overBluetooth && SetUpTask.Settings !in pair.tasks -> listOf(SetUpTask.Window, SetUpTask.Bond, SetUpTask.Listed)
+        else -> SetUpTask.entries
     }
     for (task in tasks) Tick(PowerCopy.task(task), task in pair.tasks)
     if (pair.working) return
+    if (pair.asIs) {
+        if (pair.hotspotWanted) HotspotForm(pair.hotspot, PowerCopy.SEND_NETWORK, onSend = flow::provision)
+        if (pair.problem != null) ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::search) }
+        return
+    }
     if (pair.overBluetooth && SetUpTask.Listed in pair.tasks && SetUpTask.Settings !in pair.tasks) {
         HotspotForm(pair.hotspot, PowerCopy.SEND_NETWORK, onSend = flow::provision)
     } else if (pair.problem != null) {
@@ -415,8 +426,10 @@ private fun PairedPlug(settings: PlugSettings) {
     LaunchedEffect(settings.pairing?.address) { heard = graph.plug.read() }
     val left = secondsLeft(armedAt)
     val info = (heard as? PlugRead.Read)?.info
-    // v1.26 — M62: a plug this tablet has no bond with that connects and stays silent has locked (SMART_PLUG.md).
-    val locked = heard == PlugRead.Silent && settings.pairing?.address?.let(graph.plug.bluetooth::bonded) == false
+    // v1.26 — M62: a plug this tablet has no bond with that connects and stays silent has locked (SMART_PLUG.md). v1.29 — M66:
+    // only one kept locked; no bond is normal for a plug used as it is.
+    val unlocked = settings.pairing?.locked == false
+    val locked = !unlocked && heard == PlugRead.Silent && settings.pairing?.address?.let(graph.plug.bluetooth::bonded) == false
 
     SectionEyebrow(PowerCopy.STATE)
     val answering = reachable != false
@@ -434,6 +447,7 @@ private fun PairedPlug(settings: PlugSettings) {
     ReadingRow(PowerCopy.FIRMWARE, info?.ver ?: settings.pairing?.firmware ?: "—")
     if (locked) Problem(PairFlow.LOCKED)
     if (welded) Problem(PowerCopy.WELDED)
+    if (unlocked) NoteLine(PowerCopy.UNLOCKED)   // v1.29 — M66
 
     SectionEyebrow(PowerCopy.TITLE)
     Anchored(PageRows.PLUG_SWITCH.anchor) {
@@ -444,11 +458,14 @@ private fun PairedPlug(settings: PlugSettings) {
             note = if (settings.on) PowerCopy.SWITCH_ON_NOTE else PowerCopy.SWITCH_OFF_NOTE,
         )
     }
-    Anchored(PageRows.ADMIT_TABLET.anchor) {
-        ActionRow(note = said ?: PowerCopy.ADMIT_NOTE) {
-            ActionButton(PowerCopy.ADMIT, onClick = {
-                scope.launch { said = if (graph.admitTablet()) PowerCopy.ADMIT_OPEN else PowerCopy.ADMIT_FAILED }
-            })
+    // v1.29 — M66: no pairing, nothing to admit, for a plug used as it is.
+    if (!unlocked) {
+        Anchored(PageRows.ADMIT_TABLET.anchor) {
+            ActionRow(note = said ?: PowerCopy.ADMIT_NOTE) {
+                ActionButton(PowerCopy.ADMIT, onClick = {
+                    scope.launch { said = if (graph.admitTablet()) PowerCopy.ADMIT_OPEN else PowerCopy.ADMIT_FAILED }
+                })
+            }
         }
     }
     Anchored(PageRows.FORGET_PLUG.anchor) {

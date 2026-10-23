@@ -93,6 +93,10 @@ data class PairState(
     val overBluetooth: Boolean = false,
     val firmwareUpdate: UpdateState? = null,
     val hotspot: Hotspot? = null,
+    /** Used as it is (v1.29 — M66): old firmware, no update, no bond; it works, but isn't locked to this tablet. */
+    val asIs: Boolean = false,
+    /** The as-is way waits for the hotspot (v1.29 — M66): the plug must get online once to finish its setup. */
+    val hotspotWanted: Boolean = false,
 )
 
 /**
@@ -159,6 +163,7 @@ class PairFlow(
             it.copy(
                 step = PairStep.Find, searching = true, found = emptyList(), plug = null, info = null, tasks = emptySet(),
                 bonds = null, verify = null, fallback = false, overBluetooth = false, firmwareUpdate = null, problem = null,
+                asIs = false, hotspotWanted = false,
             )
         }
         val why = client.bluetooth.scan(SCAN_MS) { found ->
@@ -177,10 +182,10 @@ class PairFlow(
     fun refresh() = run { read() }
 
     /**
-     * The plug read; what it is chooses the way on (v1.28 — M65). Locked: a power cycle. `complete`: kept if this tablet is
-     * bonded with it on 2.0.0 or later, else the factory reset's way. Firmware older than 2.0.0 (`pending`, `confirmed`, or
-     * no `provision` before 1.7.5): the Update step. `pending` on 2.0.0 or later: set up from here by itself. `confirmed`:
-     * the person's tap ([setUp]).
+     * The plug read; what it is chooses the way on (v1.28 — M65). Locked: a power cycle. `complete` on 2.0.0 or later: kept
+     * if this tablet is bonded with it, else the factory reset's way. Firmware older than 2.0.0 (`pending`, `confirmed`, no
+     * `provision` before 1.7.5, or v1.29 — M66 `complete` and still answering): the Update step, with its choice ([asIs] or
+     * [update]). `pending` on 2.0.0 or later: set up from here by itself. `confirmed`: the person's tap ([setUp]).
      */
     private suspend fun read() {
         val plug = address ?: return
@@ -206,7 +211,8 @@ class PairFlow(
         when {
             info.provision == Provision.Locked -> _state.update { it.copy(problem = LOCKED) }
             info.provision == Provision.Complete && info.pairs && client.bluetooth.bonded(plug) -> joinSetUp(info)
-            info.provision == Provision.Complete -> _state.update { it.copy(fallback = true, problem = REFUSED) }
+            info.provision == Provision.Complete && info.pairs -> _state.update { it.copy(fallback = true, problem = REFUSED) }
+            // v1.28 — M65 / v1.29 — M66: old firmware (a `complete` one that still answers too) chooses: as it is, or updated and locked.
             !info.pairs -> _state.update { it.copy(step = PairStep.Update, firmwareUpdate = UpdateState(from = info.ver)) }
             info.provision == Provision.Pending -> overBluetooth(plug)
             else -> Unit   // confirmed (the Shelly app's way): the setup's step waits for the person's tap
@@ -469,8 +475,9 @@ class PairFlow(
         }
         closed = true
         val info = _state.value.info
-        store.pair(PlugPairing(plug, info?.id, info?.model, info?.ver, bondEntry), on = false)
-        log("Plug paired: off every network, its access point closed")
+        val asIs = _state.value.asIs
+        store.pair(PlugPairing(plug, info?.id, info?.model, info?.ver, bondEntry.takeUnless { asIs }, locked = !asIs), on = false)
+        log("Plug " + (if (asIs) "kept as it is, not locked" else "paired") + ": off every network, its access point closed")
         _state.update { it.copy(step = PairStep.Verify, problem = null, hotspot = null) }
         return true
     }
@@ -520,6 +527,102 @@ class PairFlow(
         _state.update { it.copy(step = PairStep.Done, problem = null, hotspot = null) }
     }
 
+    // ---- As it is (v1.29 — M66) -----------------------------------------------------------------------------------------
+
+    /**
+     * Use it as it is (v1.29 — M66): old firmware kept, no update and no bond, from the Update step (also after the update
+     * was refused or nothing was on offer). The 24 V off, the tablet's settings, RPC over Bluetooth and the cloud off; then a
+     * plug with setup states (1.7.5 and later) gets online once on the hotspot and reaches `complete` (else it would end
+     * `locked`), and must still answer this unpaired tablet; then its network and access point close, and only then is it
+     * kept, not locked; then the check. Nothing is kept on any other end.
+     */
+    fun asIs() = run {
+        val plug = address ?: return@run
+        if (_state.value.step != PairStep.Update) return@run
+        _state.update { it.copy(step = PairStep.SetUp, asIs = true, overBluetooth = false, tasks = emptySet(), problem = null, fallback = false) }
+        val info = when (val heard = client.read(to = plug)) {
+            is PlugRead.Read -> heard.info.also { fresh -> _state.update { it.copy(info = fresh) } }
+            PlugRead.Refused, PlugRead.Silent -> return@run refusedAsIs()
+            PlugRead.Unreachable -> {
+                _state.update { it.copy(problem = UNREACHABLE) }
+                return@run
+            }
+        }
+        if (!client.switchSet(on = false, to = plug)) {
+            _state.update { it.copy(problem = failed(UpdateTask.RailOff)) }
+            return@run
+        }
+        if (!configure(plug) || !cloudOff(plug)) return@run
+        when (info.provision) {
+            Provision.Pending, Provision.Confirmed -> {
+                // It must get online once, or it ends `locked`: the hotspot, typed already or asked for now.
+                val hotspot = _state.value.hotspot
+                if (hotspot == null) _state.update { it.copy(hotspotWanted = true) } else asIsOnline(plug, hotspot)
+            }
+            Provision.Locked -> _state.update { it.copy(problem = LOCKED) }
+            else -> asIsClose(plug)   // no setup states (before 1.7.5), or `complete` and answering
+        }
+    }
+
+    /** The as-is way's network once (v1.29 — M66): the hotspot, `got ip`, `complete` awaited (about 6 minutes at most), then closed. */
+    private suspend fun asIsOnline(plug: String, hotspot: Hotspot) {
+        _state.update { it.copy(problem = null) }
+        if (client.call("WiFi.SetConfig", ShellyRpc.networkOn(hotspot.ssid, hotspot.pass), to = plug)?.ok != true) {
+            _state.update { it.copy(problem = NETWORK_FAILED) }
+            return
+        }
+        if (!awaitOnline(plug)) {
+            _state.update { it.copy(problem = NOT_ONLINE) }
+            return
+        }
+        _state.update { it.copy(step = PairStep.Complete) }
+        val started = now()
+        while (now() - started < AS_IS_COMPLETE_MS) {
+            delay(COMPLETE_POLL_MS)
+            when (val heard = client.read(to = plug)) {
+                is PlugRead.Read -> {
+                    _state.update { it.copy(info = heard.info) }
+                    when (heard.info.provision) {
+                        Provision.Complete -> return asIsClose(plug)
+                        Provision.Locked -> {
+                            _state.update { it.copy(problem = LOCKED) }
+                            return
+                        }
+                        else -> Unit
+                    }
+                }
+                // Pairing enforced from `complete` on firmware that can't pair: it needs its update after all.
+                PlugRead.Refused -> return refusedAsIs()
+                else -> Unit
+            }
+        }
+        _state.update { it.copy(problem = RESTART_TIMEOUT) }
+    }
+
+    /**
+     * The as-is way's end (v1.29 — M66): the plug read once more unpaired (some firmware lets only paired tablets in once set
+     * up), its network and access point closed, then kept, not locked, and the check by itself.
+     */
+    private suspend fun asIsClose(plug: String) {
+        when (val heard = client.read(to = plug)) {
+            is PlugRead.Read -> _state.update { it.copy(info = heard.info) }
+            PlugRead.Refused, PlugRead.Silent -> return refusedAsIs()
+            PlugRead.Unreachable -> {
+                _state.update { it.copy(problem = UNREACHABLE) }
+                return
+            }
+        }
+        _state.update { it.copy(step = PairStep.Network) }
+        if (!closeNetworkNow(plug)) {
+            if (client.bluetooth.refused) refusedAsIs()
+            return
+        }
+        runCheck(plug, asked = false)
+    }
+
+    /** This firmware lets only paired tablets in once set up, and can't pair (v1.29 — M66): its update after all, from a reset. */
+    private fun refusedAsIs(): Unit = _state.update { it.copy(problem = AS_IS_REFUSED, hotspotWanted = false) }
+
     // ---- A new plug, and the fallback --------------------------------------------------------------------------------
 
     /**
@@ -543,8 +646,8 @@ class PairFlow(
     fun provision(ssid: String, pass: String) = run {
         val plug = address ?: return@run
         val hotspot = Hotspot(ssid.trim(), pass)
-        _state.update { it.copy(hotspot = hotspot) }
-        provisionNow(plug, hotspot)
+        _state.update { it.copy(hotspot = hotspot, hotspotWanted = false) }
+        if (_state.value.asIs) asIsOnline(plug, hotspot) else provisionNow(plug, hotspot)
     }
 
     /**
@@ -655,6 +758,9 @@ class PairFlow(
         const val CHECK_UPDATE_MS = 15_000L
         const val UPDATE_CALL_MS = 10_000L
 
+        /** The as-is way (v1.29 — M66): `complete` awaited about 6 minutes at most, read every 5 s. */
+        const val AS_IS_COMPLETE_MS = 6 * 60_000L
+
         /** The plug back on its new firmware within 6 minutes, and `pending` within 2 after its reset (read every 5 s). */
         const val INSTALL_WAIT_MS = 6 * 60_000L
         const val RESET_WAIT_MS = 2 * 60_000L
@@ -678,6 +784,12 @@ class PairFlow(
         const val UPDATE_REFUSED =
             "The plug won't take its update over Bluetooth. Update it once in the Shelly app (that needs a Shelly account), then search again."
         const val RESTART_TIMEOUT = "Unplug the power plug for 5 seconds, plug it back in, then search again."
+
+        /** The as-is way refused once the plug finished its setup (v1.29 — M66): its update after all, from a reset. */
+        const val AS_IS_REFUSED =
+            "This plug's firmware lets only paired tablets in once it is set up, and it can't pair: it needs its update after " +
+                "all. Unplug it, plug it back in, and within the first minute hold its button for 10 seconds. Then search " +
+                "again and choose Update and lock it to this tablet."
 
         fun failed(task: SetUpTask): String = when (task) {
             SetUpTask.Settings -> "The plug didn't take its settings."

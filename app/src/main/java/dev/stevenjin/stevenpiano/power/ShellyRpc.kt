@@ -136,6 +136,31 @@ object ShellyRpc {
     fun networkOn(ssid: String, pass: String): JSONObject =
         config(JSONObject().put("sta", JSONObject().put("ssid", ssid).put("pass", pass).put("enable", true)))
 
+    // ---- The plug watch (v1.29 — M66) -------------------------------------------------------------------------------
+
+    /**
+     * Whether `Switch.GetConfig` differs from [switchConfig] where it matters: on at power-up, an automatic on, the button
+     * able to hold the 24 V (`in_locked`, and `in_mode` unless [inModeTaken] is false: the model refused it). Keys the
+     * plug doesn't report are no difference.
+     */
+    fun switchChanged(config: JSONObject?, inModeTaken: Boolean = true): Boolean {
+        config ?: return false
+        if (config.has("initial_state") && config.optString("initial_state") != "off") return true
+        if (config.optBoolean("auto_on", false)) return true
+        if (config.has("in_locked") && !config.optBoolean("in_locked", false)) return true
+        return inModeTaken && config.has("in_mode") && config.optString("in_mode") != "detached"
+    }
+
+    /** `Cloud.GetConfig`: whether the cloud is on. */
+    fun cloudEnabled(config: JSONObject?): Boolean = config?.optBoolean("enable", false) == true
+
+    /** `WiFi.GetConfig`: whether a network (`sta`, `sta1`) or its own access point (`ap`) is on. */
+    fun networkEnabled(config: JSONObject?): Boolean =
+        listOf("sta", "sta1", "ap").any { config?.optJSONObject(it)?.optBoolean("enable", false) == true }
+
+    /** Off every network, the second one too, the access point closed: the watch's [networkOff]. */
+    fun networkOffAll(): JSONObject = networkOff().also { it.getJSONObject("config").put("sta1", JSONObject().put("enable", false)) }
+
     /** Whether a `*.SetConfig` answer asks for a restart. */
     fun restartRequired(answer: RpcAnswer?): Boolean = answer?.result?.optBoolean("restart_required", false) == true
 

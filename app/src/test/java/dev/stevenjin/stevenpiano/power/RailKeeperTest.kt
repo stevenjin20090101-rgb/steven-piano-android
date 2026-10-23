@@ -60,6 +60,17 @@ class RailKeeperTest {
 
         fun now(): Long = test.currentTime
 
+        /** v1.29 — M66: switched on by another phone, no timer. */
+        fun switchOnFromOutside() {
+            if (!outputNow()) onSince = now()
+            output = true
+            armedAt = now()
+            toggleS = Int.MAX_VALUE / 1_000
+        }
+
+        /** v1.29 — M66: what the next settings look finds changed (and puts back). */
+        var settingsChanged = false
+
         private fun outputNow(): Boolean {
             if (output && now() - armedAt >= toggleS * 1_000L) output = false
             return output
@@ -95,6 +106,12 @@ class RailKeeperTest {
                 delay(RPC_MS)
                 log += Event(now(), "STATUS")
                 return PlugStatus(outputNow(), watts = if (outputNow()) IDLE_WATTS else 0.0)
+            }
+
+            override suspend fun putBack(): Boolean {
+                delay(RPC_MS)
+                log += Event(now(), "SETTINGS")
+                return settingsChanged.also { settingsChanged = false }
             }
         }
 
@@ -151,8 +168,8 @@ class RailKeeperTest {
             test.runCurrent()
         }
 
-        /** What the keeper did from [from], in order; the welded-relay look after a CUT ("STATUS") left out. */
-        fun kinds(from: Long = 0L): List<String> = log.filter { it.at >= from && it.kind != "STATUS" }.map { it.kind }
+        /** What the keeper did from [from], in order; the welded-relay look after a CUT and the watch's ("STATUS", "SETTINGS") left out. */
+        fun kinds(from: Long = 0L): List<String> = log.filter { it.at >= from && it.kind != "STATUS" && it.kind != "SETTINGS" }.map { it.kind }
 
         fun arms(from: Long = 0L, until: Long = Long.MAX_VALUE): List<Event> = log.filter { it.kind == "ARM" && it.at in from until until }
     }
@@ -447,7 +464,7 @@ class RailKeeperTest {
         assertEquals("the second tried 2 s after the first", RailKeeper.RETRY_MS + CHECK_TIMEOUT_MS, second.at - first.at)
         bench.log.clear()
         advanceTimeBy(5 * 60_000L)
-        assertTrue("what wanted it is ended: nothing comes back by itself", bench.log.isEmpty())
+        assertTrue("what wanted it is ended: nothing comes back by itself (the watch's reads aside)", bench.kinds().isEmpty())
     }
 
     @Test
@@ -755,6 +772,45 @@ class RailKeeperTest {
         bench.log.clear()
         advanceTimeBy(10 * 60_000L)
         assertTrue(bench.log.isEmpty())
+    }
+
+    // ---- The plug watch (v1.29 — M66) ------------------------------------------------------------------------------
+
+    @Test
+    fun `the plug watch - a plug found on while idle is CUT and said, changed settings put back, and nothing extra while a piece plays`() = runTest {
+        val bench = Bench(this)
+        val keeper = bench.keeper()
+        advanceTimeBy(RailKeeper.WATCH_EVERY_MS + 1_000)
+        assertEquals("one small read a minute, and the settings the first time", listOf("STATUS", "SETTINGS"), bench.log.map { it.kind })
+        assertNull("nothing changed: nothing said", keeper.message.value)
+
+        bench.switchOnFromOutside()
+        val on = currentTime
+        advanceTimeBy(RailKeeper.WATCH_EVERY_MS)
+        assertFalse("switched back off", bench.output)
+        assertEquals(listOf("CUT"), bench.kinds(from = on))
+        assertEquals(RailMessage.SwitchedOn, keeper.message.value)
+        val cut = bench.log.last { it.kind == "CUT" }
+        assertTrue("its settings put back first", bench.log.indexOfLast { it.kind == "SETTINGS" } < bench.log.indexOf(cut))
+        advanceTimeBy(RailKeeper.WELD_CHECK_MS + 500)
+        assertFalse("the weld look after it, as after any CUT", keeper.welded.value)
+        keeper.dismissMessage()
+
+        bench.settingsChanged = true
+        advanceTimeBy(RailKeeper.SETTINGS_EVERY_MS)
+        assertEquals(RailMessage.SettingsPutBack, keeper.message.value)
+        keeper.dismissMessage()
+
+        upFor(bench, keeper)
+        advanceTimeBy(3 * RailKeeper.WATCH_EVERY_MS)
+        assertTrue("nothing extra while a piece plays", bench.log.none { it.kind == "STATUS" || it.kind == "SETTINGS" })
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(5_000)
+        bench.log.clear()
+        keeper.updateRunning(true)
+        advanceTimeBy(RailKeeper.UPDATE_CAP_MS)
+        keeper.updateRunning(false)
+        assertTrue("never in the update's window", bench.log.none { it.kind == "SETTINGS" })
     }
 
     private fun batch(vararg bytes: Int): MidiBatch = MidiBatch().apply { for (i in bytes.indices step 3) add(bytes[i], bytes[i + 1], bytes[i + 2]) }

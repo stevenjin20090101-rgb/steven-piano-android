@@ -30,6 +30,11 @@ data class PlugPairing(
     val firmware: String? = null,
     /** This tablet as the plug's `BLE.ListPairedDevices` named it after the bond (what Forget asks it to delete); null if unknown. */
     val bondEntry: String? = null,
+    /**
+     * Locked to this tablet by a bond (v1.29 — M66). False for a plug used as it is on firmware older than 2.0.0: no bond,
+     * any phone nearby could switch it. Pairings kept before 1.29 read as locked.
+     */
+    val locked: Boolean = true,
 )
 
 /**
@@ -62,7 +67,7 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         .map { prefs ->
             val address = prefs[ADDRESS]?.takeIf { it.isNotBlank() }
             PlugSettings(
-                pairing = address?.let { PlugPairing(it, prefs[ID], prefs[MODEL], prefs[FIRMWARE], prefs[BOND_ENTRY]) },
+                pairing = address?.let { PlugPairing(it, prefs[ID], prefs[MODEL], prefs[FIRMWARE], prefs[BOND_ENTRY], locked = prefs[LOCKED] ?: true) },
                 on = prefs[ON] ?: false,
                 guestUntil = prefs[GUEST_UNTIL],
             )
@@ -76,6 +81,7 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
             pairing.model?.let { prefs[MODEL] = it } ?: prefs.remove(MODEL)
             pairing.firmware?.let { prefs[FIRMWARE] = it } ?: prefs.remove(FIRMWARE)
             pairing.bondEntry?.let { prefs[BOND_ENTRY] = it } ?: prefs.remove(BOND_ENTRY)
+            prefs[LOCKED] = pairing.locked
             prefs[ON] = on
         }
     }
@@ -100,6 +106,7 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         val FIRMWARE = stringPreferencesKey("firmware")
         val BOND_ENTRY = stringPreferencesKey("bondEntry")
         val ON = booleanPreferencesKey("on")
+        val LOCKED = booleanPreferencesKey("locked")
         val GUEST_UNTIL = longPreferencesKey("guestUntil")
     }
 }

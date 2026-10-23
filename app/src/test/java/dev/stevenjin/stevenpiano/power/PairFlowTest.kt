@@ -412,8 +412,87 @@ class PairFlowTest {
         assertNull(again.flow.state.value.hotspot)
     }
 
+    // ---- v1.29 — M66: as it is -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `as it is on 1_6_2 - no hotspot, its settings, the network closed and only then kept unlocked, then the check (v1_29 M66)`() = runTest {
+        val s = setup(Provision.Pending, firmware = OLD)
+        found(s)
+        assertEquals(PairStep.Update, s.flow.state.value.step)
+        s.flow.asIs()
+        until { s.flow.state.value.verify?.finished == true }
+        val done = s.flow.state.value
+        assertTrue(done.asIs)
+        assertFalse("no hotspot asked: no setup states before 1.7.5", done.hotspotWanted)
+        assertTrue("checked by itself", done.verify!!.passed)
+        assertFalse("off every network, its access point closed", s.shelly.networkUp())
+        assertEquals("kept only once the network was off", false, s.store.networkWhenPaired)
+        val pairing = s.store.pairing!!
+        assertFalse("not locked", pairing.locked)
+        assertNull("no bond to forget", pairing.bondEntry)
+        assertFalse(s.shelly.bonded(EmulatedShelly.TABLET))
+        assertEquals(OLD, s.shelly.firmware)
+        assertEquals(
+            listOf("Switch.Set", "Switch.SetConfig", "BLE.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
+            s.transport.methods.filter { it !in POLLS },
+        )
+        val settings = JSONObject(s.transport.frames.first { "Switch.SetConfig" in it }).getJSONObject("params").getJSONObject("config")
+        assertEquals("off", settings.getString("initial_state"))
+        assertTrue(settings.getBoolean("in_locked"))
+        assertFalse(s.store.on)
+        s.flow.finish()
+        settle()
+        assertEquals(PairStep.Done, s.flow.state.value.step)
+        assertTrue(s.store.on)
+    }
+
+    @Test
+    fun `as it is on 1_7_5 - the hotspot once, complete, still answering unpaired, then closed and kept unlocked, and refused after complete keeps nothing (v1_29 M66)`() = runTest {
+        val s = setup(Provision.Pending, firmware = WITH_STATES)
+        found(s)
+        s.flow.asIs()
+        until { s.flow.state.value.hotspotWanted }
+        assertNull("nothing kept before the hotspot", s.store.pairing)
+        s.flow.provision(SSID, PASS)
+        until { s.flow.state.value.verify?.finished == true }
+        assertTrue(s.transport.seen.any { it.first == Provision.Complete })
+        assertFalse(s.shelly.networkUp())
+        assertEquals(false, s.store.networkWhenPaired)
+        assertEquals(false, s.store.pairing?.locked)
+        assertNull("the hotspot forgotten", s.flow.state.value.hotspot)
+        assertTrue(s.logs.none { PASS in it || SSID in it })
+
+        // Firmware that lets only paired tablets in once set up: the words, nothing kept.
+        val r = setup(Provision.Pending, firmware = WITH_STATES)
+        r.shelly.refuseUnpaired = true
+        found(r)
+        r.flow.asIs()
+        until { r.flow.state.value.hotspotWanted }
+        r.flow.provision(SSID, PASS)
+        until { r.flow.state.value.problem != null }
+        assertEquals(PairFlow.AS_IS_REFUSED, r.flow.state.value.problem)
+        assertNull("nothing kept", r.store.pairing)
+        assertFalse(r.store.on)
+    }
+
+    @Test
+    fun `the update refused - Use it as it is still offered from the Update step (v1_29 M66)`() = runTest {
+        val s = setup(Provision.Pending, firmware = OLD)
+        s.shelly.refuseUpdate = true
+        found(s)
+        s.flow.update(SSID, PASS)
+        until { s.flow.state.value.problem != null }
+        assertEquals(PairFlow.UPDATE_REFUSED, s.flow.state.value.problem)
+        assertEquals(PairStep.Update, s.flow.state.value.step)
+        s.flow.asIs()
+        until { s.flow.state.value.verify?.finished == true }
+        assertEquals(false, s.store.pairing?.locked)
+        assertEquals(false, s.store.networkWhenPaired)
+    }
+
     private companion object {
         const val BOARDS_UP_MS = 900L
+        const val WITH_STATES = "1.7.5"
         const val SETTLE_MS = 1_000L
         const val OTHER_TABLET = "the old tablet"
         const val OLD = "1.6.2"
