@@ -345,8 +345,10 @@
     "versionName": "1.28.1",
     "notes": "The power plug's setup says one more thing. When the plug's firmware is too old to pair, it can't encrypt Bluetooth yet, so the hotspot password it is given goes over unencrypted that once: the Pair screen now says to give the hotspot a password just for the day and change it afterwards. Everything else is as in 1.28: Piano › Power plug › Pair the power plug sets the plug up without the Shelly app.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.28.1/steven-piano-1.28.1.apk",
+    "sha256": "49f96d31df51b8077d9594d72dc2777532d299da7fa0a4b6c4512bba7f5b8f1a",
+    "sizeBytes": 14446881,
     "minSdk": 26,
     "tag": "v1.28.1",
-    "draft": true
+    "publishedAt": "2026-10-23"
   }
 ]
