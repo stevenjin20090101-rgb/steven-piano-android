@@ -193,11 +193,39 @@ sealed interface PlugRead {
     data object Silent : PlugRead
 }
 
-/** The rail's plug over [client] ([RailPlug]): ARM, CUT and the switch's status. */
+/** The rail's plug over [client] ([RailPlug]): ARM, CUT, the switch's status, and (v1.29 — M66) its settings put back. */
 class ShellyRail(private val client: PlugClient) : RailPlug {
+    /** The model refused `in_mode` at a put-back (its retry took `in_locked` alone): not compared again. */
+    private var inModeTaken = true
+
     override suspend fun arm(seconds: Int): Boolean = client.switchSet(on = true, toggleAfter = seconds)
 
     override suspend fun cut(): Boolean = client.switchSet(on = false)
 
     override suspend fun status(): PlugStatus? = client.switchStatus()
+
+    /** The switch's settings, the cloud and the network read; what differs put back (the pairing's values). */
+    override suspend fun putBack(): Boolean? {
+        val switch = client.call("Switch.GetConfig", JSONObject().put("id", 0)) ?: return null
+        val cloud = client.call("Cloud.GetConfig") ?: return null
+        val wifi = client.call("WiFi.GetConfig") ?: return null
+        var put = false
+        if (switch.ok && ShellyRpc.switchChanged(switch.result, inModeTaken)) {
+            var set = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = inModeTaken))
+            if (set != null && !set.ok && inModeTaken) {
+                set = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = false))
+                if (set?.ok == true) inModeTaken = false
+            }
+            put = true
+        }
+        if (cloud.ok && ShellyRpc.cloudEnabled(cloud.result)) {
+            client.call("Cloud.SetConfig", ShellyRpc.cloudOff())
+            put = true
+        }
+        if (wifi.ok && ShellyRpc.networkEnabled(wifi.result)) {
+            client.call("WiFi.SetConfig", ShellyRpc.networkOffAll())
+            put = true
+        }
+        return put
+    }
 }

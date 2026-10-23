@@ -61,6 +61,13 @@ class EmulatedShelly(
     var refuseUpdate: Boolean = false
 
     /**
+     * Firmware older than 2.0.0 lets only paired centrals in once `complete` (v1.29 — M66), though it can't pair: every
+     * request refused, its device info too. Off: such a plug answers anyone, as the as-is way needs.
+     */
+    @Volatile
+    var refuseUnpaired: Boolean = false
+
+    /**
      * What one request gets: its reply frame, the GATT refusal a stranger to a plug that enforces pairing gets, or nothing
      * ever (a locked plug: the connection is made, and its RPC over Bluetooth stays silent).
      */
@@ -149,11 +156,31 @@ class EmulatedShelly(
 
     @Synchronized
     fun provisionNow(): Provision {
+        if (older(firmware, FIRST_PROVISION)) return provision   // v1.29 — M66: no setup states before 1.7.5, so no lock
         val now = clock()
         if (provision == Provision.Confirmed && staOn && now >= (confirmedAt ?: now) + completeAfterMs) provision = Provision.Complete
         if ((provision == Provision.Pending || provision == Provision.Confirmed) && !staOn && now >= startedAt + windowMs) provision = Provision.Locked
         return provision
     }
+
+    /** Switched on from outside (v1.29 — M66): another phone's Shelly app, no timer. */
+    @Synchronized
+    fun switchOnFromOutside() {
+        if (!outputNow()) onSince = clock()
+        output = true
+        timerEnd = null
+        timerS = null
+    }
+
+    /** One of its switch's settings changed from outside (v1.29 — M66), as the Shelly app would. */
+    @Synchronized
+    fun changeSetting(key: String, value: Any) {
+        config.put(key, value)
+    }
+
+    /** Its switch's settings now (v1.29 — M66). */
+    @Synchronized
+    fun switchSettings(): JSONObject = JSONObject(config.toString())
 
     /** Whether [central] is bonded. */
     @Synchronized
@@ -181,7 +208,11 @@ class EmulatedShelly(
         val params = request.optJSONObject("params") ?: JSONObject()
         val state = provisionNow()
         if (state == Provision.Locked) return Answer.Silent   // RPC over Bluetooth off until a power cycle
-        if (state == Provision.Complete && central !in bonds && method != INFO) return Answer.Refused
+        if (state == Provision.Complete && central !in bonds) {
+            // v1.29 — M66: before 2.0.0 nothing is enforced, unless [refuseUnpaired] says this firmware does.
+            if (PlugInfo.versionAtLeast(firmware, 2, 0) && method != INFO) return Answer.Refused
+            if (!PlugInfo.versionAtLeast(firmware, 2, 0) && refuseUnpaired) return Answer.Refused
+        }
         if (!rpcOn && method != "BLE.SetConfig" && method != INFO) return Answer.Refused
         return Answer.Reply(
             when (method) {
@@ -213,6 +244,11 @@ class EmulatedShelly(
                     bonds.removeAll { addressOf(it) == gone }
                     result(id, null)
                 }
+                "Cloud.GetConfig" -> result(id, JSONObject().put("enable", cloudOn).put("server", "shelly-emulator.example:6022/jrpc"))
+                "WiFi.GetConfig" -> result(
+                    id,
+                    JSONObject().put("ap", JSONObject().put("enable", apOn)).put("sta", JSONObject().put("enable", staOn)).put("sta1", JSONObject().put("enable", false)),
+                )
                 "Cloud.SetConfig" -> {
                     cloudOn = params.optJSONObject("config")?.optBoolean("enable", cloudOn) ?: cloudOn
                     result(id, JSONObject().put("restart_required", false))

@@ -33,6 +33,13 @@ interface RailPlug {
 
     /** `Switch.GetStatus {id:0}`; null when the plug can't be asked. */
     suspend fun status(): PlugStatus?
+
+    /**
+     * The plug watch (v1.29 — M66): its settings read, and what differs from the tablet's put back (the switch's, the cloud
+     * off, the network and access point closed). True when something was put back, false when nothing differed, null when
+     * the plug couldn't be read.
+     */
+    suspend fun putBack(): Boolean? = false
 }
 
 /**
@@ -98,6 +105,12 @@ sealed interface RailMessage {
 
     /** "Only [answered] of [total] power boards answered" (a trunk fault), and "— 24 V cut" when [cut]. */
     data class TrunkFault(val answered: Int, val total: Int, val cut: Boolean) : RailMessage
+
+    /** The plug watch (v1.29 — M66): found on with nothing wanting the rail, then CUT. */
+    data object SwitchedOn : RailMessage
+
+    /** The plug watch (v1.29 — M66): its settings had been changed, and were put back. */
+    data object SettingsPutBack : RailMessage
 
     /** Whether it needs attention (amber, until dismissed or the next rail-up) rather than passing by itself. */
     val attention: Boolean get() = this !is Waking && this !is Off
@@ -223,6 +236,13 @@ class RailKeeper(
     private var failedChecks = 0
     private var failedArms = 0
     private var loop: Job? = null
+
+    /** The plug watch (v1.29 — M66): a firmware update's window, from BEGIN until its outcome, whatever its want became. */
+    private var updating = false
+
+    /** When the watch last looked at the plug's settings ([now]'s clock; null: not yet), and whether it missed the plug since. */
+    private var settingsAt: Long? = null
+    private var missedPlug = false
     private var guestJob: Job? = null
     private var messageJob: Job? = null
     private var weldJob: Job? = null
@@ -271,6 +291,7 @@ class RailKeeper(
      * online); after that, until the outcome, the CHECK rules again.
      */
     fun updateRunning(on: Boolean) {
+        updating = on
         val running = wants[UPDATE]?.let { it.seq > consumedThrough } == true
         if (on && !running) put(UPDATE, unchecked = now() + UPDATE_CAP_MS) else if (!on && UPDATE in wants) remove(UPDATE)
     }
@@ -365,8 +386,8 @@ class RailKeeper(
                 else -> {
                     setPhase(RailPhase.Off)
                     // The CHECK needs the piano's link: without it, what wants the rail waits for it (the update and
-                    // guest play need none).
-                    waitFor { wantedNow() && (uncheckedNow() || connected.value) }
+                    // guest play need none). Meanwhile the plug watch looks once a minute (v1.29 — M66).
+                    while (!waitFor(now() + WATCH_EVERY_MS) { wantedNow() && (uncheckedNow() || connected.value) }) watch()
                     session()
                 }
             }
@@ -641,6 +662,47 @@ class RailKeeper(
         }
     }
 
+    // ---- The plug watch (v1.29 — M66) ----------------------------------------------------------------------------------
+
+    /**
+     * One look at the plug while nothing wants the rail (v1.29 — M66; every [WATCH_EVERY_MS]): `Switch.GetStatus`, one small
+     * read. Found on: its settings put back first (an `auto_on` must not bring it back), then CUT with its weld look, and
+     * "switched on by something else" said. Its settings are looked at too the first time, after the plug was out of reach,
+     * and every [SETTINGS_EVERY_MS]; changed ones are put back and said. Never while the rail is wanted (the keeper talks to
+     * the plug every 10 s then) or a firmware update runs; a plug out of reach says nothing new.
+     */
+    private suspend fun watch() {
+        if (!available.value || wantedNow() || updating) return
+        val status = plug.status()
+        if (status == null) {
+            missedPlug = true
+            return
+        }
+        if (!available.value || wantedNow() || updating) return
+        val t = now()
+        val settingsDue = status.output || missedPlug || settingsAt?.let { t - it >= SETTINGS_EVERY_MS } != false
+        if (settingsDue) {
+            when (plug.putBack()) {
+                true -> {
+                    settingsAt = t
+                    missedPlug = false
+                    log("Plug watch: the plug's settings had been changed; put back")
+                    if (!status.output && _message.value?.attention != true) _message.value = RailMessage.SettingsPutBack
+                }
+                false -> {
+                    settingsAt = t
+                    missedPlug = false
+                }
+                null -> missedPlug = true
+            }
+        }
+        if (status.output && !wantedNow()) {
+            log("Plug watch: the plug was on with nothing wanting the 24 V; CUT")
+            if (cutRail()) _message.value = RailMessage.SwitchedOn
+            _baseline.value = null
+        }
+    }
+
     // ---- The plug, the piano ---------------------------------------------------------------------------------------
 
     private suspend fun arm(): Boolean {
@@ -655,7 +717,7 @@ class RailKeeper(
      * again meanwhile, whether the relay really let go: the supply still drawing more than [weldedAbove] is a relay stuck
      * closed ([welded]); the plug's `output` reads off either way.
      */
-    private suspend fun cutRail() {
+    private suspend fun cutRail(): Boolean {
         if (plug.cut()) {
             _armedAt.value = null
             weldJob?.cancel()
@@ -668,9 +730,10 @@ class RailKeeper(
                 _welded.value = (status.watts ?: 0.0) > above
                 if (_welded.value) log("After a CUT the supply still draws ${status.watts} W (above $above W): the plug's relay may be stuck")
             }
-        } else {
-            log("CUT: the plug didn't answer; its timer cuts within ${TOGGLE_AFTER_S} s")
+            return true
         }
+        log("CUT: the plug didn't answer; its timer cuts within ${TOGGLE_AFTER_S} s")
+        return false
     }
 
     /**
@@ -792,6 +855,10 @@ class RailKeeper(
         const val GUEST_MAX_MIN = 60
         const val CALM_MS = 4_000L
         const val WELD_CHECK_MS = 3_000L
+
+        /** The plug watch (v1.29 — M66): one look a minute while nothing wants the rail, its settings every 10 minutes. */
+        const val WATCH_EVERY_MS = 60_000L
+        const val SETTINGS_EVERY_MS = 10 * 60_000L
 
         /** The least drawn after a CUT that means the supply is still powered; half its idle draw when that is more (M62). */
         const val WELDED_WATTS = 2.0

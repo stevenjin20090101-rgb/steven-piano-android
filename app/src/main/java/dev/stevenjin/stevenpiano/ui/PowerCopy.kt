@@ -35,6 +35,10 @@ object PowerCopy {
     const val RAIL_OFF = "24 V off"
     const val PIANO_SILENT = "The piano stopped answering — 24 V cut"
     const val PLUG_LOST = "Lost the power plug"
+
+    /** The plug watch (v1.29 — M66). */
+    const val SWITCHED_ON = "The power plug had been switched on by something else: switched off"
+    const val SETTINGS_PUT_BACK = "The power plug's settings had been changed: put back"
     const val OK = "OK"
 
     /** "Only 6 of 7 power boards answered" (a trunk fault), and "— 24 V cut" when the rail was cut for it. */
@@ -48,6 +52,8 @@ object PowerCopy {
         RailMessage.PianoSilent -> PIANO_SILENT
         RailMessage.PlugLost -> PLUG_LOST
         is RailMessage.TrunkFault -> trunk(message.answered, message.total, message.cut)
+        RailMessage.SwitchedOn -> SWITCHED_ON
+        RailMessage.SettingsPutBack -> SETTINGS_PUT_BACK
     }
 
     // ---- The hub's row and the rail in a word --------------------------------------------------------------------------
@@ -150,7 +156,9 @@ object PowerCopy {
                 "Maximize Compatibility; on Android, choose the 2.4 GHz band."
         PairStep.Find -> "The tablet looks for plugs nearby. Choose yours: its name begins ShellyPlugUSG4."
         PairStep.Update -> updateNote(pair.firmwareUpdate?.from)
-        PairStep.SetUp -> if (pair.overBluetooth) {
+        PairStep.SetUp -> if (pair.asIs) {
+            AS_IS_SETUP + if (pair.hotspotWanted) " " + AS_IS_HOTSPOT else ""
+        } else if (pair.overBluetooth) {
             "Pairing first: when Android asks to pair with the plug, tap Pair. Then the plug joins your hotspot, takes its " +
                 "settings (off after a power cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud goes off."
         } else {
@@ -178,11 +186,34 @@ object PowerCopy {
      * (SMART_PLUG.md › One-time setup).
      */
     fun updateNote(firmware: String?): String =
-        "The plug has firmware ${firmware ?: "older than 2.0.0"}, and pairing needs 2.0.0 or later. Give it your hotspot's " +
-            "name and password: it joins the hotspot and updates itself from Shelly (about 2 minutes), its setup is cleared, " +
+        "The plug has firmware ${firmware ?: "older than 2.0.0"}, and locking it to this tablet needs 2.0.0 or later. Use it " +
+            "as it is, or update it: given your hotspot's name and password, it joins the hotspot and updates itself from " +
+            "Shelly (about 2 minutes), its setup is cleared, " +
             "then it pairs with this tablet and finishes its setup on the hotspot, all by itself. Keep the hotspot on and the " +
             "tablet near the plug. This firmware can't encrypt Bluetooth yet, so the password goes over unencrypted this " +
             "once: give the hotspot a password just for today, and change it afterwards."
+
+    // ---- As it is (v1.29 — M66) -----------------------------------------------------------------------------------------
+
+    const val AS_IS = "Use it as it is"
+    const val AS_IS_NOTE =
+        "It works, but any phone nearby with the Shelly app could switch it. The tablet checks it every minute and switches " +
+            "it back off."
+    const val LOCK_IT = "Update and lock it to this tablet"
+    const val LOCK_NOTE = "About 2 more minutes on the hotspot; then only this tablet can talk to it."
+    const val AS_IS_SETUP =
+        "Its settings (off after a power cut, its button can't hold the 24 V on), Bluetooth control and the cloud off, with " +
+            "no update and no pairing."
+    const val AS_IS_HOTSPOT =
+        "It must get online once to finish its setup (about 5 minutes), then it forgets every network: give it your " +
+            "hotspot's name and password. This firmware can't encrypt Bluetooth, so the password goes over unencrypted: " +
+            "give the hotspot a password just for today, and change it afterwards."
+
+    /** Piano › Power plug for a plug used as it is (v1.29 — M66). */
+    const val UNLOCKED =
+        "Not locked to this tablet. A phone nearby with the Shelly app could switch it; the tablet checks it every minute " +
+            "and switches it back off. To lock it later: Forget the plug, then Pair the power plug and choose Update and " +
+            "lock it to this tablet."
 
     const val FIND = "Find the plug"
 
@@ -227,8 +258,9 @@ object PowerCopy {
 
     // The fallback: the plug finished its setup without this tablet.
     const val FALLBACK =
-        "Reset the plug: hold its button for about 10 seconds until its light flashes (a factory reset keeps its firmware, not " +
-            "its pairings or network). Then find it again: it will be new, and this tablet sets it up from here, pairing first."
+        "Reset the plug: unplug it, plug it back in, and within the first minute hold its button for 10 seconds (5 seconds " +
+            "only restarts it). A factory reset keeps its firmware, not its pairings or network. Then find it again: it will " +
+            "be new, and this tablet sets it up from here, pairing first."
     const val JOIN = "Pair with a plug another tablet set up"
     const val JOIN_NOTE = "If the tablet the plug knows opened Admit a replacement tablet in the last 3 minutes."
     const val HOTSPOT = "Hotspot name"

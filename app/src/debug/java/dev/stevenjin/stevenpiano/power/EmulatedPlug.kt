@@ -33,7 +33,9 @@ import java.util.Locale
  *   missing, `dead` every board.
  * - adb's `--es dev.stevenjin.stevenpiano.EMULATOR_PLUG "…"` ([command]): `away` (out of range) and `back`, `reset <state>`
  *   (a power cycle), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed), `boardsup <ms>` (how long the
- *   boards take after the supply comes up: 5000 for firmware 2.0.1's re-probe).
+ *   boards take after the supply comes up: 5000 for firmware 2.0.1's re-probe); v1.29 — M66, for the plug watch: `outside
+ *   on` (switched on by another phone) and `initial on` (its power-up state changed). `debug.stevenpiano.plugunpaired
+ *   refuse` has firmware before 2.0.0 refuse unpaired requests once `complete`.
  *
  * Every request and answer is logged (`adb logcat -s Plug`), the hotspot's name and password blanked, and the link log
  * says what changed.
@@ -106,6 +108,9 @@ object EmulatedPlug {
             "trunk" -> trunk = argument
             "boardsup" -> boardsUpMs = argument.toLongOrNull()?.coerceIn(0L, MAX_BOARDS_UP_MS) ?: BOARDS_UP_MS
             "weld" -> shelly()?.weld = argument == "on"
+            // v1.29 — M66: for the plug watch, the switch on from outside and its power-up state changed.
+            "outside" -> if (argument == "on") shelly()?.switchOnFromOutside()
+            "initial" -> shelly()?.changeSetting("initial_state", argument.ifEmpty { "on" })
             else -> Log.w(TAG, "Unknown plug command: $line")
         }
         LinkLog.shared.add("The emulated power plug: $line")
@@ -126,6 +131,8 @@ object EmulatedPlug {
             else -> EmulatedShelly(Provision.Confirmed, clock, firmware = firmware)
         }
         made?.refuseUpdate = SystemProperty.read(UPDATE_PROPERTY).trim().equals("refuse", ignoreCase = true)
+        // v1.29 — M66: old firmware that lets only paired centrals in once `complete`.
+        made?.refuseUnpaired = SystemProperty.read(REFUSE_PROPERTY).trim().equals("refuse", ignoreCase = true)
         return made
     }
 
@@ -209,6 +216,7 @@ object EmulatedPlug {
     private const val TRUNK_PROPERTY = "debug.stevenpiano.trunk"
     private const val VERSION_PROPERTY = "debug.stevenpiano.plugver"
     private const val UPDATE_PROPERTY = "debug.stevenpiano.plugupdate"
+    private const val REFUSE_PROPERTY = "debug.stevenpiano.plugunpaired"
     private const val OLD_FIRMWARE = "1.7.5"
     private const val BOARDS = 7
     private const val MISSING_BOARD = 4
