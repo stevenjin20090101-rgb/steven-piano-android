@@ -9988,3 +9988,16 @@ unless the model refused it), `cloudEnabled`, `networkEnabled` (`sta`, `sta1`, `
 1.7.5, `Cloud.GetConfig`/`WiFi.GetConfig`; `EMULATOR_PLUG "outside on"` and `"initial on"`. **Tests:** `PairFlowTest` +3
 (as-is on 1.6.2; on 1.7.5 with the hotspot, and refused after `complete`; the update refused, then as-is), `RailKeeperTest`
 +1 (the watch: found on → put back, CUT, said; settings put back; nothing while a piece plays or in the update's window).
+
+## The release: 1.29 (versionCode 40)
+
+M66 (the plug as it is, and the plug watch; merged from `6cc63b3`).
+- **Steven's choice:** use his plug on its old firmware, unlocked, since he judges tampering unlikely.
+- **The setup:** the network and access point are closed before anything is stored, and the hotspot is asked for only
+  when the plug has setup states.
+- **The plug watch:** while idle it reads the plug every minute, switches a stray on off and puts the tablet's settings
+  back.
+- **The reset words:** within the first minute after plugging in.
+- **Tests:** 1,789 green on the branch (12 skipped); lint "No issues found".
+- **Checks:** Steven asked for speed, so there was no emulator pass and no second gate on main. Main hadn't moved, so the
+  merged tree is the one tested.

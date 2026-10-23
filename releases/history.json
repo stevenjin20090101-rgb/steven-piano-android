@@ -350,5 +350,14 @@
     "minSdk": 26,
     "tag": "v1.28.1",
     "publishedAt": "2026-10-23"
+  },
+  {
+    "versionCode": 40,
+    "versionName": "1.29",
+    "notes": "The power plug works on its old firmware. Piano › Power plug › Pair the power plug now offers \"Use it as it is\" on a plug that is too old to pair: no update, no Shelly app (a plug that needs one trip online gets your phone's hotspot once). It isn't locked to this tablet, so the tablet keeps watch: it puts its own settings back if they were changed, and while nothing plays it checks the plug every minute and switches it off if something else switched it on. \"Update and lock it\" is still there. The reset instructions are corrected: the plug can be reset only within the first minute after plugging it in, by holding its button 10 seconds.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.29/steven-piano-1.29.apk",
+    "minSdk": 26,
+    "tag": "v1.29",
+    "draft": true
   }
 ]
