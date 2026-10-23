@@ -27,6 +27,11 @@ import java.util.Locale
  * - **Bonds:** `BLE.StartPairing` opens a window in which [bond] succeeds (20 bonds at most); `BLE.ListPairedDevices` and
  *   `BLE.DeletePairedDevice` list and drop them. `BLE.SetConfig` turning RPC on asks for a restart the first time
  *   (`Shelly.Reboot`: away for [rebootMs]).
+ * - **Its firmware** (v1.28 — M65): `WiFi.GetStatus` (`got ip` [onlineAfterMs] after `WiFi.SetConfig` gave it a network),
+ *   `Shelly.CheckForUpdate` ([offered] while its firmware is older; online only), `Shelly.Update` (away for [updateMs], back
+ *   on the new firmware with its state kept; [refuseUpdate] refuses it, as the real plug may over Bluetooth),
+ *   `Shelly.FactoryReset` (new again: no network, no bonds, its settings the defaults, the same firmware; away for
+ *   [rebootMs]). Before 1.7.5 its device info has no `provision`.
  * - [weld] keeps the relay closed whatever is asked (output reads off, the supply still draws): the welded relay.
  *
  * Thread-safe: every call is synchronized.
@@ -38,8 +43,23 @@ class EmulatedShelly(
     private val windowMs: Long = WINDOW_MS,
     private val rebootMs: Long = REBOOT_MS,
     /** Firmware older than 2.0.0 has no pairing (`BLE.StartPairing`). */
-    private val firmware: String = FIRMWARE,
+    firmware: String = FIRMWARE,
+    private val onlineAfterMs: Long = ONLINE_AFTER_MS,
+    private val updateMs: Long = UPDATE_MS,
 ) {
+    /** Its firmware now: what `Shelly.Update` installed, once it did (v1.28 — M65). */
+    @Volatile
+    var firmware: String = firmware
+        private set
+
+    /** What `Shelly.CheckForUpdate` offers while the firmware is older (v1.28 — M65); null: nothing. */
+    @Volatile
+    var offered: String? = OFFERED
+
+    /** `Shelly.Update` refused over Bluetooth (v1.28 — M65): whether the real plug takes it is Shelly's to say. */
+    @Volatile
+    var refuseUpdate: Boolean = false
+
     /**
      * What one request gets: its reply frame, the GATT refusal a stranger to a plug that enforces pairing gets, or nothing
      * ever (a locked plug: the connection is made, and its RPC over Bluetooth stays silent).
@@ -69,6 +89,9 @@ class EmulatedShelly(
     private var config = JSONObject()
     private var rebootUntil = 0L
 
+    /** When `WiFi.SetConfig` last gave it a network to join (v1.28 — M65); null with none. */
+    private var joinedAt: Long? = null
+
     /** The relay stuck closed: a CUT reads off but the supply stays up. */
     @Volatile
     var weld: Boolean = false
@@ -85,6 +108,7 @@ class EmulatedShelly(
         provision = if (state == Provision.Unknown) Provision.Confirmed else state
         confirmedAt = if (provision == Provision.Confirmed) now else null
         staOn = provision == Provision.Confirmed
+        joinedAt = if (staOn) now - onlineAfterMs else null   // the Shelly app left it on the hotspot, online
         apOn = provision == Provision.Pending
         cloudOn = provision != Provision.Pending
         rpcOn = true
@@ -100,15 +124,20 @@ class EmulatedShelly(
         if (provision == Provision.Complete && bonded != null) {
             // Paired, set up and off every network (the end of the Pair screen).
             staOn = false
+            joinedAt = null
             apOn = false
             cloudOn = false
             config = ShellyRpc.switchConfig().getJSONObject("config")
         }
     }
 
-    /** Whether it is restarting (`Shelly.Reboot`): no connection meanwhile. */
+    /** Whether it is restarting (`Shelly.Reboot`, `Shelly.Update`, `Shelly.FactoryReset`): no connection meanwhile. */
     @Synchronized
     fun rebooting(): Boolean = clock() < rebootUntil
+
+    /** Whether it is on a network or its own access point is open (v1.28 — M65): the Pair screen must end with neither. */
+    @Synchronized
+    fun networkUp(): Boolean = staOn || apOn
 
     /** Whether its relay feeds the 24 V supply now. */
     @Synchronized
@@ -160,7 +189,8 @@ class EmulatedShelly(
                 "Switch.Set" -> switchSet(id, params)
                 "Switch.GetStatus" -> result(id, status())
                 "Switch.SetConfig" -> {
-                    config = params.optJSONObject("config") ?: JSONObject()
+                    // Merged, as Shelly's are: the update's `initial_state` alone keeps what was set before.
+                    params.optJSONObject("config")?.let { given -> given.keys().forEach { config.put(it, given.get(it)) } }
                     result(id, JSONObject().put("restart_required", false))
                 }
                 "Switch.GetConfig" -> result(id, JSONObject(config.toString()).put("id", 0))
@@ -188,13 +218,58 @@ class EmulatedShelly(
                     result(id, JSONObject().put("restart_required", false))
                 }
                 "WiFi.SetConfig" -> wifi(id, params)
+                "WiFi.GetStatus" -> result(id, wifiStatus())
                 "Shelly.Reboot" -> {
+                    rebootUntil = clock() + rebootMs
+                    result(id, null)
+                }
+                "Shelly.CheckForUpdate" -> checkForUpdate(id)
+                "Shelly.Update" -> update(id, params)
+                "Shelly.FactoryReset" -> {
+                    // New again, the same firmware: away while it restarts.
+                    reset(Provision.Pending)
+                    config = JSONObject()
                     rebootUntil = clock() + rebootMs
                     result(id, null)
                 }
                 else -> error(id, -114, "Method $method failed: No handler")
             },
         )
+    }
+
+    /** On its network with an address (`got ip`): [onlineAfterMs] after `WiFi.SetConfig` gave it one (v1.28 — M65). */
+    private fun online(): Boolean = staOn && joinedAt?.let { clock() >= it + onlineAfterMs } == true
+
+    /** `WiFi.GetStatus`; the real plug names its network (`ssid`) too, left out here so the hotspot's name never reaches a log. */
+    private fun wifiStatus(): JSONObject = JSONObject().apply {
+        val online = online()
+        put("sta_ip", if (online) STA_IP else JSONObject.NULL)
+        put("status", if (online) "got ip" else if (staOn && joinedAt != null) "connecting" else "disconnected")
+        put("rssi", if (online) STA_RSSI else 0)
+        put("ap_client_count", 0)
+    }
+
+    /** What Shelly offers: [offered] while the firmware is older, found through its network only. */
+    private fun newer(): String? = offered?.takeIf { older(firmware, it) }
+
+    private fun checkForUpdate(id: Any?): String {
+        if (!online()) return error(id, -114, "Method Shelly.CheckForUpdate failed: no network")
+        val to = newer() ?: return result(id, JSONObject())
+        return result(id, JSONObject().put("stable", JSONObject().put("version", to).put("build_id", "20260915-120000/$to-gemulator")))
+    }
+
+    /** `Shelly.Update`: accepted, the link drops, and it is back [updateMs] later on the new firmware, its state kept. */
+    private fun update(id: Any?, params: JSONObject): String {
+        val to = newer()
+        return when {
+            refuseUpdate -> error(id, -114, "Method Shelly.Update failed: not available over Bluetooth")
+            !online() || to == null || params.optString("stage", "stable") != "stable" -> error(id, -114, "Method Shelly.Update failed: no update")
+            else -> {
+                firmware = to
+                rebootUntil = clock() + updateMs
+                result(id, null)
+            }
+        }
     }
 
     private fun switchSet(id: Any?, params: JSONObject): String {
@@ -219,8 +294,11 @@ class EmulatedShelly(
         val config = params.optJSONObject("config") ?: JSONObject()
         config.optJSONObject("sta")?.let { sta ->
             staOn = sta.optBoolean("enable", staOn)
-            // On a network with internet: provisioned (the fallback over Bluetooth).
-            if (staOn && provision == Provision.Pending && sta.optString("ssid").isNotEmpty()) {
+            val joining = staOn && sta.optString("ssid").isNotEmpty()
+            if (joining) joinedAt = clock()   // `got ip` a few seconds later (v1.28 — M65)
+            if (!staOn) joinedAt = null
+            // On a network with internet: provisioned (a new plug over Bluetooth).
+            if (joining && provision == Provision.Pending) {
                 provision = Provision.Confirmed
                 confirmedAt = clock()
             }
@@ -271,7 +349,7 @@ class EmulatedShelly(
         put("app", "PlugUSG4")
         put("auth_en", false)
         put("auth_domain", JSONObject.NULL)
-        put("provision", state.word)
+        if (!older(firmware, FIRST_PROVISION)) put("provision", state.word)   // v1.28 — M65: none before 1.7.5
     }
 
     private fun result(id: Any?, result: JSONObject?): String =
@@ -304,6 +382,40 @@ class EmulatedShelly(
         const val PAIRING_DEFAULT_S = 180
         private const val INFO = "Shelly.GetDeviceInfo"
         private const val MS_PER_S = 1_000L
+
+        /** What Shelly offers an older plug (v1.28 — M65). */
+        const val OFFERED = "2.1.0"
+
+        /** `got ip` this long after `WiFi.SetConfig` gave it a network (v1.28 — M65). */
+        const val ONLINE_AFTER_MS = 3_000L
+
+        /** `Shelly.Update`: downloaded, installed and back in this long (the real plug about 2 minutes; v1.28 — M65). */
+        const val UPDATE_MS = 20_000L
+
+        /** The first firmware with `provision` in its device info. */
+        private const val FIRST_PROVISION = "1.7.5"
+
+        /** Its address on the hotspot and the signal there: the documentation range, a made-up figure. */
+        private const val STA_IP = "192.0.2.17"
+        private const val STA_RSSI = -55
+
+        /** Whether firmware [a] is older than [b] ("1.6.2" before "2.1.0"), number by number. */
+        fun older(a: String, b: String): Boolean {
+            val x = numbers(a)
+            val y = numbers(b)
+            for (i in 0 until maxOf(x.size, y.size)) {
+                val d = x.getOrElse(i) { 0 } - y.getOrElse(i) { 0 }
+                if (d != 0) return d < 0
+            }
+            return false
+        }
+
+        private fun numbers(version: String): List<Int> = version.trim().split('.', '-', '+').map { it.toIntOrNull() }.takeWhile { it != null }.filterNotNull()
+
+        /** A request frame for the log, the hotspot's name and password blanked (v1.28 — M65: never in a log, the emulator's included). */
+        fun redacted(frame: String): String = SECRET.replace(frame) { "\"${it.groupValues[1]}\":\"…\"" }
+
+        private val SECRET = Regex("\"(ssid|pass)\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"")
 
         /** A central's address as the plug lists its bonds: the emulator's tablet, from the documentation range. */
         fun addressOf(central: String): String = if (central == TABLET) "00:00:5E:00:53:A1" else central.uppercase(Locale.ROOT)

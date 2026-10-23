@@ -23,8 +23,11 @@ import java.util.Locale
  *
  * - `pending` (new from its box), `confirmed` (set up with the Shelly app: the normal Pair screen), `complete` (finished its
  *   setup without this tablet: the fallback), `locked` (its setup window ran out offline), `paired` (paired with this
- *   tablet, set up, off every network), `old` (firmware 1.7.5: no pairing); unset or `none`, no plug in range at all, and
- *   the emulated piano's boards always answer, as before the plug.
+ *   tablet, set up, off every network), `old` (firmware 1.7.5, set up with the Shelly app: no pairing); unset or `none`, no
+ *   plug in range at all, and the emulated piano's boards always answer, as before the plug.
+ * - Its firmware (v1.28 — M65): `debug.stevenpiano.plugver 1.6.2` starts it on that one (unset: 2.0.3, or 1.7.5 for `old`);
+ *   an older one updates itself to 2.1.0 when asked. `debug.stevenpiano.plugupdate refuse` has it refuse `Shelly.Update`
+ *   over Bluetooth. Both are read when the plug is made (the first ask, or `reset <state>`).
  * - With a plug, the 24 V supply hangs on it: the emulated piano's `!boards` reads MISSING while the relay is open and OK
  *   0.9 s after it closes (firmware 2.1.0's re-probe); `debug.stevenpiano.trunk one-missing` keeps board 5 (MIDI 72–83)
  *   missing, `dead` every board.
@@ -32,7 +35,8 @@ import java.util.Locale
  *   (a power cycle), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed), `boardsup <ms>` (how long the
  *   boards take after the supply comes up: 5000 for firmware 2.0.1's re-probe).
  *
- * Every request and answer is logged (`adb logcat -s Plug`), and the link log says what changed.
+ * Every request and answer is logged (`adb logcat -s Plug`), the hotspot's name and password blanked, and the link log
+ * says what changed.
  */
 object EmulatedPlug {
     @Volatile
@@ -109,15 +113,20 @@ object EmulatedPlug {
 
     private fun create(word: String): EmulatedShelly? {
         val clock = SystemClock::elapsedRealtime
-        return when (word.trim().lowercase(Locale.ROOT)) {
+        // v1.28 — M65: the firmware it starts on, and Shelly.Update refused over Bluetooth.
+        val version = SystemProperty.read(VERSION_PROPERTY).trim().ifEmpty { null }
+        val firmware = version ?: EmulatedShelly.FIRMWARE
+        val made = when (word.trim().lowercase(Locale.ROOT)) {
             "", "none" -> null
-            "pending" -> EmulatedShelly(Provision.Pending, clock)
-            "complete" -> EmulatedShelly(Provision.Complete, clock)
-            "locked" -> EmulatedShelly(Provision.Locked, clock)
-            "old" -> EmulatedShelly(Provision.Confirmed, clock, firmware = "1.7.5")
-            "paired" -> EmulatedShelly(Provision.Complete, clock).also { it.reset(Provision.Complete, bonded = EmulatedShelly.TABLET) }
-            else -> EmulatedShelly(Provision.Confirmed, clock)
+            "pending" -> EmulatedShelly(Provision.Pending, clock, firmware = firmware)
+            "complete" -> EmulatedShelly(Provision.Complete, clock, firmware = firmware)
+            "locked" -> EmulatedShelly(Provision.Locked, clock, firmware = firmware)
+            "old" -> EmulatedShelly(Provision.Confirmed, clock, firmware = version ?: OLD_FIRMWARE)
+            "paired" -> EmulatedShelly(Provision.Complete, clock, firmware = firmware).also { it.reset(Provision.Complete, bonded = EmulatedShelly.TABLET) }
+            else -> EmulatedShelly(Provision.Confirmed, clock, firmware = firmware)
         }
+        made?.refuseUpdate = SystemProperty.read(UPDATE_PROPERTY).trim().equals("refuse", ignoreCase = true)
+        return made
     }
 
     /** [PlugTransport] to the fake plug: a scan finds it (unless away or restarting), connections and requests take a moment. */
@@ -163,7 +172,7 @@ object EmulatedPlug {
                 return null
             }
             val text = String(frame, Charsets.UTF_8)
-            Log.d(TAG, "> $text")
+            Log.d(TAG, "> ${EmulatedShelly.redacted(text)}")
             return when (val answer = shelly.handle(EmulatedShelly.TABLET, text)) {
                 is EmulatedShelly.Answer.Reply -> {
                     Log.d(TAG, "< ${answer.json}")
@@ -198,6 +207,9 @@ object EmulatedPlug {
     private const val TAG = "Plug"
     private const val PLUG_PROPERTY = "debug.stevenpiano.plug"
     private const val TRUNK_PROPERTY = "debug.stevenpiano.trunk"
+    private const val VERSION_PROPERTY = "debug.stevenpiano.plugver"
+    private const val UPDATE_PROPERTY = "debug.stevenpiano.plugupdate"
+    private const val OLD_FIRMWARE = "1.7.5"
     private const val BOARDS = 7
     private const val MISSING_BOARD = 4
 
