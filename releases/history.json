@@ -328,5 +328,14 @@
     "minSdk": 26,
     "tag": "v1.27",
     "publishedAt": "2026-10-22"
+  },
+  {
+    "versionCode": 38,
+    "versionName": "1.28",
+    "notes": "Set up the power plug from the tablet alone. Piano › Power plug › Pair the power plug no longer needs the Shelly app or a Shelly account: when the plug's firmware is too old to pair (older than 2.0.0), the tablet gives it your phone's hotspot over Bluetooth, the plug updates itself from Shelly, and the tablet then clears its setup, pairs it, takes it off every network and checks that all 7 power boards answer with the 24 V on. Keep your phone's hotspot on for about 15 minutes (the plug only sees 2.4 GHz: on an iPhone, turn on Maximize Compatibility). The hotspot's password is never saved. If the plug refuses its update over Bluetooth, the tablet says so and the Shelly app does that one step.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.28/steven-piano-1.28.apk",
+    "minSdk": 26,
+    "tag": "v1.28",
+    "draft": true
   }
 ]

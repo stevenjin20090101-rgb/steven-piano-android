@@ -9937,3 +9937,19 @@ dialog (the emulator's bond is the fake plug's).
 - Leaving the page doesn't end the setup (it runs in the app's scope, as before), so a hotspot typed for a setup left
   half-way stays in memory until Start over, Finish, the plug's network closing, or the app's end.
 - `SMART_PLUG.md` is the firmware chat's: the text its One-time setup should gain is in the run's report.
+
+## The release: 1.28 (versionCode 38)
+
+M65 (the power plug set up from the tablet alone, merged as `ff4fda8`). Steven's Shelly Plug US Gen4 shipped below
+firmware 2.0.0, which pairing needs. The Pair screen now does the whole setup without the Shelly app:
+- **old firmware:** the switch off, the phone's hotspot over Bluetooth, `CheckForUpdate` and `Update {stage:"stable"}`,
+  back on 2.0.0 or later, then `FactoryReset`;
+- **then:** bond first, the hotspot again, the settings, the cloud off, `complete`, the network closed, and the check;
+- **a `pending` plug on 2.0.0+** goes the same way;
+- **the pairing** is kept only once the plug's network is off;
+- **the hotspot** lives in memory only.
+
+Full suite: 1,785 tests green (12 skipped); lint "No issues found". Seen: the whole Pair screen on the emulated plug
+from step 1 to Done, and the refusal words (`~/.claude/plans/m65-shots/`). Not seen: the real plug accepting
+`Shelly.Update` over Bluetooth, the provisioning window across its restart, and the relay after a factory reset (the
+bench unknowns in the M65 section).
