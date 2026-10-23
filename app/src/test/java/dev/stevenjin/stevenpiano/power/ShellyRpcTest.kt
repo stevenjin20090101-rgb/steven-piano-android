@@ -95,6 +95,21 @@ class ShellyRpcTest {
     }
 
     @Test
+    fun `the update's frames and answers - off at power-up, the stable stage, got ip, the version offered (v1_28 M65)`() {
+        val off = ShellyRpc.offAtPowerUp()
+        assertEquals(0, off.getInt("id"))
+        assertEquals("off", off.getJSONObject("config").getString("initial_state"))
+        assertEquals("that alone: its other settings stay", 1, off.getJSONObject("config").length())
+        assertEquals("stable", ShellyRpc.updateStable().getString("stage"))
+        assertTrue(ShellyRpc.online(JSONObject("""{"sta_ip":"192.0.2.17","status":"got ip","rssi":-55}""")))
+        assertFalse(ShellyRpc.online(JSONObject("""{"sta_ip":null,"status":"connecting"}""")))
+        assertFalse(ShellyRpc.online(null))
+        assertEquals("2.1.0", ShellyRpc.stableOffered(JSONObject("""{"stable":{"version":"2.1.0","build_id":"20260915-120000/2.1.0-g1"}}""")))
+        assertNull("no update: an empty result", ShellyRpc.stableOffered(JSONObject("{}")))
+        assertNull("a beta alone is no stable update", ShellyRpc.stableOffered(JSONObject("""{"beta":{"version":"2.2.0-beta1"}}""")))
+    }
+
+    @Test
     fun `the plug's bonds are read whatever their list's shape`() {
         assertEquals(listOf("AA:BB:CC:DD:EE:01"), ShellyRpc.pairedAddresses(JSONObject("""{"devices":[{"addr":"aa:bb:cc:dd:ee:01"}]}""")))
         assertEquals(listOf("AA:BB:CC:DD:EE:02", "AA:BB:CC:DD:EE:03"), ShellyRpc.pairedAddresses(JSONObject("""{"paired":["aa:bb:cc:dd:ee:02",{"mac":"aa:bb:cc:dd:ee:03"}]}""")))

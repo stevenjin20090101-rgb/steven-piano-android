@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.power.FoundPlug
+import dev.stevenjin.stevenpiano.power.Hotspot
 import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
@@ -69,6 +70,7 @@ import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.Provision
 import dev.stevenjin.stevenpiano.power.RailKeeper
 import dev.stevenjin.stevenpiano.power.SetUpTask
+import dev.stevenjin.stevenpiano.power.UpdateTask
 import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
@@ -91,8 +93,9 @@ import kotlinx.coroutines.launch
 /**
  * Piano › Power plug (v1.26 — M60; DESIGN.md › v1.26 — M60), behind the kiosk PIN as every Piano page. With no plug: what
  * it is for and **Pair the power plug**, which opens the Pair screen's steps (the setup order of SMART_PLUG.md, followed on
- * the day). Paired: the plug as it stands (the 24 V on or off with its timer, the supply's draw, its setup and firmware),
- * the switch, **Admit a replacement tablet** and **Forget the plug**. The plug is read every 2 s while the page shows.
+ * the day; v1.28 — M65: without the Shelly app, an update step on old firmware). Paired: the plug as it stands (the 24 V on
+ * or off with its timer, the supply's draw, its setup and firmware), the switch, **Admit a replacement tablet** and
+ * **Forget the plug**. The plug is read every 2 s while the page shows.
  */
 @Composable
 fun PowerPlugPage() {
@@ -105,7 +108,7 @@ fun PowerPlugPage() {
         NoteLine(PowerCopy.READING)
         return
     }
-    val pairing = pair.step != PairStep.Done && (pair.step != PairStep.ShellyApp || opened)
+    val pairing = pair.step != PairStep.Done && (pair.step != PairStep.Ready || opened)
     when {
         pairing -> PairSteps(pair, graph.pairFlow, onStartOver = {
             graph.pairFlow.restart()
@@ -132,18 +135,23 @@ private fun Unpaired(onPair: () -> Unit) {
 
 // ---- The Pair screen -----------------------------------------------------------------------------------------------
 
-/** The steps, numbered, the one under way open with its words and its action; those done ticked. */
+/**
+ * The steps, numbered, the one under way open with its words and its action; those done ticked. The Update step is one only
+ * on firmware older than 2.0.0 (v1.28 — M65).
+ */
 @Composable
 private fun PairSteps(pair: PairState, flow: PairFlow, onStartOver: () -> Unit) {
     SectionEyebrow(PowerCopy.PAIR)
-    val at = STEPS.indexOf(pair.step).coerceAtLeast(0)
-    STEPS.forEachIndexed { i, step ->
+    val steps = STEPS.filter { it != PairStep.Update || pair.firmwareUpdate != null }
+    val at = steps.indexOf(pair.step).coerceAtLeast(0)
+    steps.forEachIndexed { i, step ->
         StepHeader(i + 1, PowerCopy.stepTitle(step), done = i < at, current = i == at)
         if (i == at) {
-            NoteLine(PowerCopy.stepNote(step))
+            NoteLine(PowerCopy.stepNote(step, pair))
             when (step) {
-                PairStep.ShellyApp -> ActionRow { ActionButton(PowerCopy.SHELLY_DONE, onClick = flow::shellyAppDone) }
+                PairStep.Ready -> ActionRow(note = PowerCopy.SHELLY_STILL) { ActionButton(PowerCopy.FIND, onClick = flow::ready) }
                 PairStep.Find -> FindStep(pair, flow)
+                PairStep.Update -> UpdateStep(pair, flow)
                 PairStep.SetUp -> SetUpStep(pair, flow)
                 PairStep.Complete -> ReadingRow(PowerCopy.SETUP, pair.info?.provision?.let(PowerCopy::provision) ?: PowerCopy.READING)
                 PairStep.Network -> ActionRow { ActionButton(PowerCopy.CLOSE_NETWORK, onClick = flow::closeNetwork, enabled = !pair.working) }
@@ -152,6 +160,8 @@ private fun PairSteps(pair: PairState, flow: PairFlow, onStartOver: () -> Unit) 
             }
             if (pair.working) ProgressHairline(null, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             pair.problem?.let { Problem(it) }
+            // v1.28 — M65: a plug found refusing this tablet past Find (during the update, or at `complete`) gets Find's way out.
+            if (pair.fallback && step != PairStep.Find) Fallback(pair, flow)
         }
         HairlineDivider(startInset = 16.dp)
     }
@@ -211,11 +221,8 @@ private fun FindStep(pair: PairState, flow: PairFlow) {
     PlugFacts(info)
     when {
         pair.fallback -> Fallback(pair, flow)
-        !info.pairs || info.provision == Provision.Locked -> Unit   // the problem line says what to do
-        info.provision == Provision.Pending -> {
-            NoteLine(PowerCopy.NEW_PLUG)
-            ActionRow { ActionButton(PowerCopy.OVER_BLUETOOTH, onClick = flow::bondWhilePending, enabled = !pair.working) }
-        }
+        // v1.28 — M65: old firmware goes on to the Update step and a new plug to its setup by themselves; locked: the problem line.
+        !info.pairs || info.provision == Provision.Locked || info.provision == Provision.Pending -> Unit
         info.provision == Provision.Confirmed -> ActionRow { ActionButton(PowerCopy.SET_UP, onClick = flow::setUp, enabled = !pair.working) }
         else -> ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::refresh, enabled = !pair.working) }
     }
@@ -263,7 +270,23 @@ private fun Fallback(pair: PairState, flow: PairFlow) {
     ActionRow(note = PowerCopy.JOIN_NOTE) { ActionButton(PowerCopy.JOIN, onClick = flow::join, enabled = !pair.working) }
 }
 
-/** Step 3: each task ticked as it lands; set up from here (the fallback), the hotspot's name and password after the bond. */
+/**
+ * Step 3 on firmware older than 2.0.0 (v1.28 — M65): each part ticked as it lands. Until the update has started, the hotspot's
+ * name and password and **Update the plug** (again after a stop short of it); once it stops, **Search again**.
+ */
+@Composable
+private fun UpdateStep(pair: PairState, flow: PairFlow) {
+    val update = pair.firmwareUpdate ?: return
+    for (task in UpdateTask.entries) Tick(PowerCopy.updateTask(task, update, pair.working), task in update.tasks)
+    if (pair.working || pair.fallback) return
+    if (UpdateTask.Started !in update.tasks) HotspotForm(pair.hotspot, PowerCopy.UPDATE, onSend = flow::update)
+    if (pair.problem != null) ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::search) }
+}
+
+/**
+ * Step 4: each task ticked as it lands; a new plug set up from here (v1.28 — M65: by itself) asks for the hotspot's name and
+ * password after the bond, unless it has them already.
+ */
 @Composable
 private fun SetUpStep(pair: PairState, flow: PairFlow) {
     val tasks = if (pair.overBluetooth && SetUpTask.Settings !in pair.tasks) {
@@ -272,9 +295,10 @@ private fun SetUpStep(pair: PairState, flow: PairFlow) {
         SetUpTask.entries
     }
     for (task in tasks) Tick(PowerCopy.task(task), task in pair.tasks)
+    if (pair.working) return
     if (pair.overBluetooth && SetUpTask.Listed in pair.tasks && SetUpTask.Settings !in pair.tasks) {
-        HotspotForm(enabled = !pair.working, onSend = flow::provision)
-    } else if (pair.problem != null && !pair.working) {
+        HotspotForm(pair.hotspot, PowerCopy.SEND_NETWORK, onSend = flow::provision)
+    } else if (pair.problem != null) {
         ActionRow { ActionButton("Try again", onClick = if (pair.overBluetooth) flow::bondWhilePending else flow::setUp) }
     }
 }
@@ -300,16 +324,19 @@ private fun Tick(label: String, done: Boolean) {
     }
 }
 
-/** The fallback's network for the plug: the phone hotspot's name and password, sent over Bluetooth. */
+/**
+ * The phone hotspot's name and password for the plug, sent over Bluetooth with [action]. Held as typed in memory only (v1.28 —
+ * M65: `remember`, not the saved state), starting from the hotspot the flow [kept] for this setup.
+ */
 @Composable
-private fun HotspotForm(enabled: Boolean, onSend: (String, String) -> Unit) {
-    var ssid by rememberSaveable { mutableStateOf("") }
-    var pass by rememberSaveable { mutableStateOf("") }
+private fun HotspotForm(kept: Hotspot?, action: String, onSend: (String, String) -> Unit) {
+    var ssid by remember(kept) { mutableStateOf(kept?.ssid.orEmpty()) }
+    var pass by remember(kept) { mutableStateOf(kept?.pass.orEmpty()) }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Field(PowerCopy.HOTSPOT, ssid, { ssid = it }, enabled)
-        Field(PowerCopy.PASSWORD, pass, { pass = it }, enabled, password = true)
+        Field(PowerCopy.HOTSPOT, ssid, { ssid = it }, enabled = true)
+        Field(PowerCopy.PASSWORD, pass, { pass = it }, enabled = true, password = true)
     }
-    ActionRow { ActionButton(PowerCopy.SEND_NETWORK, onClick = { onSend(ssid, pass) }, enabled = enabled && ssid.isNotBlank()) }
+    ActionRow { ActionButton(action, onClick = { onSend(ssid, pass) }, enabled = ssid.isNotBlank()) }
 }
 
 @Composable
@@ -334,7 +361,7 @@ private fun Field(label: String, value: String, onValue: (String) -> Unit, enabl
     )
 }
 
-/** Step 6: the 24 V on for 5 s, the boards answering as it goes, then Finish (or without the check). */
+/** Step 7: the 24 V on for 5 s, the boards answering as it goes, then Finish (or without the check). */
 @Composable
 private fun VerifyStep(pair: PairState, flow: PairFlow) {
     pair.verify?.let { verify ->
@@ -471,8 +498,8 @@ internal fun PollWhileShown(everyMs: Long, read: suspend () -> Unit) {
     }
 }
 
-/** The Pair screen's numbered steps, in order (Done is the end, not a step). */
-private val STEPS = listOf(PairStep.ShellyApp, PairStep.Find, PairStep.SetUp, PairStep.Complete, PairStep.Network, PairStep.Verify)
+/** The Pair screen's numbered steps, in order (Done is the end, not a step; Update only on old firmware, v1.28 — M65). */
+private val STEPS = listOf(PairStep.Ready, PairStep.Find, PairStep.Update, PairStep.SetUp, PairStep.Complete, PairStep.Network, PairStep.Verify)
 
 private const val STATUS_EVERY_MS = 2_000L
 private const val MS_PER_S = 1_000L
