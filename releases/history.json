@@ -378,8 +378,10 @@
     "versionName": "1.31",
     "notes": "The power watchdog now also catches a key already stuck on when the 24 V comes on, such as a shorted switch on a key board. The tablet remembers the plug's usual draw from its last few power-ups; if a power-up starts more than about half a key's draw above it, the tablet looks again a second later, then switches the 24 V off (\"The 24 V draws N W more than usual with nothing playing — 24 V cut\") and the safety check runs before the next piece. If the 24 V supply is ever replaced and its normal draw is higher, forget and re-pair the power plug once.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.31/steven-piano-1.31.apk",
+    "sha256": "8f6f3e42e4173ad05014477f9e1420c4a4aa593eb494d5222253de9d287e3e2b",
+    "sizeBytes": 14460745,
     "minSdk": 26,
     "tag": "v1.31",
-    "draft": true
+    "publishedAt": "2026-10-24"
   }
 ]
