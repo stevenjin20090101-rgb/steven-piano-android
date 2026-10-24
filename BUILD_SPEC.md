@@ -10086,3 +10086,14 @@ kept), `PlugStoreTest` 2 (new: the last 5 with their times across a restart; for
 after a trip a check that heard every key empties it, without a trip it stays), `SafetyRunnerTest` +1 (`heardAll` only
 for a pass with the sweep: not with the microphone off, nor with keys silent). One Gradle run (`testDebugUnitTest lintDebug
 assembleDebug`): 1,811 green (12 skipped), lint "No issues found".
+
+## The release: 1.31 (versionCode 42)
+
+M68, the usual idle remembered across rail-ups (merged as `60fcdb4`), closing the gap the firmware chat flagged in
+1.30: a coil already on at rail-up (a shorted MOSFET) was learned as idle, and one channel stays under the 30 W cap.
+- **What it does:** keeps each plug's last 5 rail-up idles; a rail-up more than T above their median, looked at twice,
+  → CUT + the safety check.
+- **Tests:** 1,811 green on the branch (12 skipped); lint "No issues found".
+- **Gate:** no emulator and no second gate on main. Main hadn't moved since the branch's base, so the merged tree is the
+  one tested.
+- **Published:** on Steven's "Publish now".
