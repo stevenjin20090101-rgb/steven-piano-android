@@ -170,6 +170,9 @@ class SafetyRunner(
 
     /** Pieces that played before the record was read: counted once it is. */
     private var early = 0
+
+    /** A check made due ([require]) before the record was read: due once it is. */
+    private var requiredEarly = false
     private var job: Job? = null
     private var shownJob: Job? = null
 
@@ -186,9 +189,10 @@ class SafetyRunner(
         scope.launch {
             record = store.read()
             loaded = true
-            if (early > 0) {
-                record = record.copy(count = record.count + early)
+            if (early > 0 || requiredEarly) {
+                record = record.copy(count = record.count + early, pending = record.pending || requiredEarly)
                 early = 0
+                requiredEarly = false
                 save()
             }
             publish()
@@ -247,6 +251,23 @@ class SafetyRunner(
         host.deferral()?.let { return it }
         begin()
         return null
+    }
+
+    /**
+     * A check before the next Play (v1.30 — M67): the power watch saw a key stay on and cut the 24 V. Due at once, as a
+     * check that couldn't run when it was due ([SafetyState.pending], kept across restarts of the app): the next Play waits
+     * while it runs, and a failure locks Play as ever. A check under way already decides by its own outcome.
+     */
+    fun require() {
+        if (!loaded) {
+            requiredEarly = true
+            return
+        }
+        if (job != null || record.pending) return
+        record = record.copy(pending = true)
+        save()
+        publish()
+        log("Safety check due before the next piece: the power watch cut the 24 V")
     }
 
     /** The locked card put aside (Not now, behind the kiosk PIN): a capsule stays; a refused Play brings the card back. */

@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.roundToInt
 
 /** ARM, CUT and the switch's status, as the keeper asks them of the plug ([ShellyRail] over Bluetooth; a fake in tests). */
 interface RailPlug {
@@ -71,6 +72,30 @@ interface GuestLink {
     }
 }
 
+/**
+ * What the power watch reads beyond the plug (v1.30 — M67; [PowerWatch]): the router's keys and pedal over time
+ * ([HeldKeys], the piano's longest hold applied), the piano's facts and its Full power, and the safety check it makes due.
+ */
+interface PowerHost {
+    /** The keys the router held over [from]..[to] ([RailKeeper]'s clock, ms), time-averaged. */
+    fun held(from: Long, to: Long): Double
+
+    /** Whether the router's sustain pedal was down at any moment of [from]..[to]. */
+    fun pedalDown(from: Long, to: Long): Boolean
+
+    /** Whether the router struck a key at or after [at]. */
+    fun struckSince(at: Long): Boolean
+
+    /** `get !<fact>` on the piano's console, answered within 2 s; null without an answer. */
+    suspend fun ask(fact: String): String?
+
+    /** The piano's Full power; true when it doesn't say (its default). */
+    val fullPower: Boolean
+
+    /** A safety check before the next Play (the 24 V was cut for a key on). */
+    fun checkDue()
+}
+
 /** Where the rail stands (DESIGN.md › v1.26 — M60). */
 enum class RailPhase {
     /** Off: nothing wants it (or it is left to the plug's timer). */
@@ -112,6 +137,15 @@ sealed interface RailMessage {
     /** The plug watch (v1.29 — M66): its settings had been changed, and were put back. */
     data object SettingsPutBack : RailMessage
 
+    /**
+     * The power watch (v1.30 — M67): a key stayed on, seen in the supply's draw while a piece played, or [afterPiece] in
+     * the check after it; the 24 V cut, and Play waits for a safety check.
+     */
+    data class StuckKey(val afterPiece: Boolean) : RailMessage
+
+    /** The power watch (v1.30 — M67): the supply drew [watts] W at rail-up with nothing sent; the 24 V cut, the check due. */
+    data class Overdraw(val watts: Int) : RailMessage
+
     /** Whether it needs attention (amber, until dismissed or the next rail-up) rather than passing by itself. */
     val attention: Boolean get() = this !is Waking && this !is Off
 }
@@ -136,6 +170,13 @@ sealed interface RailMessage {
  * - **A failure ends what wanted the rail:** the next Play, key or start brings it up again, through a fresh CHECK.
  * - **The safety check's restart** ([expectRestart], v1.27 — M64) is no failure: the piano gone meanwhile, the rail goes
  *   quietly off with its wants kept, and comes up again with the piano.
+ * - **The power watch** ([power], v1.30 — M67; SMART_PLUG.md › rule 11; [PowerWatch]), from each checked rail-up to the
+ *   rail's end: the rail-up's reading is the idle draw (above 30 W twice, a second apart, with nothing sent: CUT, "The 24 V
+ *   draws N W with nothing playing — 24 V cut"); then `!i2cfails`; then, while a piece plays, `apower` about every 2 s for
+ *   the floor watch (a key on that the music isn't holding: the piece stops, CUT, "A key stayed on — 24 V cut"). With keys
+ *   struck since the rail-up, the stop's second holds the check after the piece: a reading, `!active` and `!i2cfails`, a
+ *   second reading a second later, then CUT (a key on: "A key stayed on after the piece — 24 V cut"). Each makes a safety
+ *   check due before the next Play ([PowerHost.checkDue]).
  * - **Without the plug** ([available] false: none paired, or its switch off) nothing here calls the plug or the piano, and
  *   [notesHeld] stays false: the app behaves exactly as before.
  *
@@ -160,6 +201,8 @@ class RailKeeper(
     private val now: () -> Long,
     private val guest: GuestLink = GuestLink.None,
     private val log: (String) -> Unit = {},
+    /** The power watch's other readings (v1.30 — M67); null: no power watch, as before it. */
+    private val power: PowerHost? = null,
 ) : RailPower {
     private val context = scope.coroutineContext.minusKey(Job)
 
@@ -247,6 +290,17 @@ class RailKeeper(
     private var messageJob: Job? = null
     private var weldJob: Job? = null
     private val commands = Mutex()
+
+    /** The power watch of this rail-up (v1.30 — M67): from a checked rail-up until the rail is off or kept unchecked. */
+    private var powerWatch: PowerWatch? = null
+
+    /** When it began ([now]'s clock): keys struck since then call for the check after the piece. */
+    private var watchSince = 0L
+
+    /** When it looks next ([now]'s clock; [Long.MAX_VALUE]: never), how many looks it took, and whether `!i2cfails` was asked. */
+    private var lookAt = Long.MAX_VALUE
+    private var looks = 0
+    private var failsAsked = false
 
     /** Starts following the wants (once). */
     fun start() {
@@ -421,6 +475,7 @@ class RailKeeper(
     private suspend fun railUp(): Boolean {
         val mayBeUp = mayBeUp()
         if (!connected.value) return quietly(mayBeUp)   // gone meanwhile: the loop waits for it again
+        powerWatch = null
         setPhase(RailPhase.Waking)
         _message.value = RailMessage.Waking
         if (!wantedNow()) return quietly(mayBeUp)
@@ -478,7 +533,24 @@ class RailKeeper(
         }
         if (baseline.isEmpty()) return fail(RailMessage.TrunkFault(0, before.total, cut = true))
         // The supply's idle draw, its boards up and the piano silent: notes are still held (v1.26 — M62).
-        plug.status()?.watts?.takeIf { it.isFinite() && it >= 0.0 }?.let { idleWatts = it }
+        var idle = idleReading()
+        if (power != null && PowerWatch.railUp(idle) is PowerVerdict.Overdraw) {
+            // v1.30 — M67: above the cap with nothing sent, a channel may be on. One more look a second later (a supply still
+            // waking is no fault), notes held meanwhile; still above it (or unread), CUT, and Play waits for a safety check.
+            log("Power watch: ${PowerWatch.watts(idle)} W at rail-up with nothing sent (the cap: ${PowerWatch.watts(PowerWatch.CAP_WATTS)} W); looking again")
+            if (waitFor(now() + CAP_AGAIN_MS) { !wantedNow() }) return stopRail()
+            val again = idleReading()
+            if (again == null || PowerWatch.railUp(again) is PowerVerdict.Overdraw) {
+                val watts = again ?: idle ?: PowerWatch.CAP_WATTS
+                log("Power watch: ${PowerWatch.watts(watts)} W at rail-up with nothing sent: a channel may be on")
+                fail(RailMessage.Overdraw(watts.roundToInt()))
+                power.checkDue()
+                return false
+            }
+            idle = again
+        }
+        idle?.let { idleWatts = it }
+        if (power != null) startWatch(idle)
         _baseline.value = baseline
         needsBaseline = false
         val total = _boards.value?.total ?: Boards.TOTAL
@@ -496,7 +568,7 @@ class RailKeeper(
     private suspend fun keep() {
         var next = (_armedAt.value ?: now()) + KEEP_EVERY_MS
         while (true) {
-            val stop = waitFor(next) { !wantedNow() }
+            val stop = waitFor(minOf(next, lookAt)) { !wantedNow() }
             if (!available.value) {
                 abandon()
                 return
@@ -504,6 +576,10 @@ class RailKeeper(
             if (stop) {
                 stopRail()
                 return
+            }
+            if (now() < next) {
+                if (look()) return   // the power watch's turn between the keeper's own (v1.30 — M67)
+                continue
             }
             if (uncheckedNow()) {
                 setPhase(RailPhase.Kept)
@@ -574,12 +650,28 @@ class RailKeeper(
     /**
      * Nothing wants the rail: the stop sequence, a second, then CUT and "24 V off". Wanted again within the second, the
      * rail stays: kept unchecked, up with its baseline, or (no baseline yet) a quick rail-up from the next session.
-     * Always false (for [railUp]'s returns).
+     * With keys struck since the rail-up the check after the piece comes first ([afterPiece], v1.30 — M67), and the CUT a
+     * second later; a key on: CUT whatever wants the rail by then, and said. Always false (for [railUp]'s returns).
      */
     private suspend fun stopRail(): Boolean {
         setPhase(RailPhase.Stopping)
         stopSequence()
-        if (waitFor(now() + STOP_TO_CUT_MS) { wantedNow() }) {
+        val stopped = now()
+        val checking = powerWatch?.takeIf { power?.struckSince(watchSince) == true }
+        val back = if (checking == null) {
+            waitFor(stopped + STOP_TO_CUT_MS) { wantedNow() }
+        } else {
+            when (afterPiece(checking, stopped)) {
+                null -> true
+                is PowerVerdict.Stuck -> {
+                    fail(RailMessage.StuckKey(afterPiece = true))
+                    power?.checkDue()
+                    return false
+                }
+                else -> wantedNow()
+            }
+        }
+        if (back) {
             setPhase(
                 when {
                     uncheckedNow() -> RailPhase.Kept
@@ -594,6 +686,83 @@ class RailKeeper(
         setPhase(RailPhase.Off)
         say(RailMessage.Off)
         return false
+    }
+
+    // ---- The power watch (v1.30 — M67) --------------------------------------------------------------------------------
+
+    /** The plug's `apower` now, W; null unread. */
+    private suspend fun idleReading(): Double? = plug.status()?.watts?.takeIf { it.isFinite() && it >= 0.0 }
+
+    /** This rail-up's power watch, from its [idle] reading; its first look, at once, asks `!i2cfails`. */
+    private fun startWatch(idle: Double?) {
+        powerWatch = PowerWatch(idle)
+        watchSince = now()
+        looks = 0
+        failsAsked = false
+        lookAt = now()
+        log("Power watch: idle ${PowerWatch.watts(idle)} W at rail-up")
+    }
+
+    /** A piece plays (its want holds): the floor watch reads only then. */
+    private fun pieceNow(): Boolean = wants[PLAY]?.let { live(it, now()) } == true
+
+    /**
+     * The power watch's look, about every 2 s while the rail is up: the rail-up's `!i2cfails` first (what the check after the
+     * piece compares); then, while a piece plays, one `apower` reading for the floor watch (none plays: its run starts
+     * again). True when it found a key on that the music isn't holding: the piece stopped, CUT, said, the check due.
+     */
+    private suspend fun look(): Boolean {
+        val watch = powerWatch
+        val host = power
+        if (watch == null || host == null) {
+            lookAt = Long.MAX_VALUE
+            return false
+        }
+        lookAt = now() + PowerWatch.lookIn(looks++)
+        if (!failsAsked) {
+            failsAsked = true
+            watch.failsAtRailUp = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
+            return false
+        }
+        if (!pieceNow()) {
+            watch.pause()
+            return false
+        }
+        val asked = now()
+        val watts = plug.status()?.watts?.takeIf { it.isFinite() } ?: return false
+        if (powerWatch !== watch || !pieceNow()) return false
+        val sample = PowerWatch.sample(asked, now(), watts, host::held, host::pedalDown, host.fullPower)
+        val stuck = watch.reading(sample) as? PowerVerdict.Stuck ?: return false
+        log("Power watch: a key stayed on mid-piece — ${stuck.why}; the piece stops, CUT")
+        fail(RailMessage.StuckKey(afterPiece = false))
+        host.checkDue()
+        return true
+    }
+
+    /**
+     * The check after the piece (SMART_PLUG.md › rule 11 b), between the stop sequence at [stopped] and the CUT: an `apower`
+     * reading a second after it, the piano's `!active` and `!i2cfails`, and a second reading a second after the first. Its
+     * verdict, logged; null when something wanted the rail again before it was done (it stays up, as within the second).
+     */
+    private suspend fun afterPiece(watch: PowerWatch, stopped: Long): PowerVerdict? {
+        val host = power ?: return PowerVerdict.Fine
+        if (waitFor(stopped + STOP_TO_CUT_MS) { wantedNow() }) return null
+        val firstAt = now()
+        val first = plug.status()?.watts?.takeIf { it.isFinite() }
+        val active = host.ask(ACTIVE)?.trim()?.toIntOrNull()
+        val fails = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
+        if (waitFor(firstAt + AFTER_APART_MS) { wantedNow() }) return null
+        val second = if (first == null) null else plug.status()?.watts?.takeIf { it.isFinite() }
+        val fullPower = host.fullPower
+        val verdict = watch.afterPiece(first, second, active, fails, fullPower)
+        log(
+            "Power watch after the piece: ${PowerWatch.watts(first)} W, ${PowerWatch.watts(second)} W (idle " +
+                "${PowerWatch.watts(watch.idle)} W, T ${PowerWatch.watts(PowerWatch.threshold(fullPower))} W), !active ${active ?: "—"}, " +
+                "!i2cfails ${fails ?: "—"} (${watch.failsAtRailUp ?: "—"} at rail-up); the floor watch: ${watch.readings} readings, " +
+                "the highest ${PowerWatch.watts(watch.highest)} W above the music; " +
+                if (verdict is PowerVerdict.Stuck) "a key stayed on — ${verdict.why}" else "fine",
+        )
+        return verdict
     }
 
     /** Nothing wants the rail any more before it came up: off, and a CUT only when an ARM may have put it up. */
@@ -804,6 +973,11 @@ class RailKeeper(
 
     private fun setPhase(phase: RailPhase) {
         _phase.value = phase
+        if (phase == RailPhase.Off || phase == RailPhase.Kept) {
+            // The power watch (v1.30 — M67) runs from a checked rail-up until the rail is off or kept unchecked.
+            powerWatch = null
+            lookAt = Long.MAX_VALUE
+        }
         refreshHeld()
         if (phase != RailPhase.Waking && _message.value == RailMessage.Waking) _message.value = null
     }
@@ -862,6 +1036,17 @@ class RailKeeper(
 
         /** The least drawn after a CUT that means the supply is still powered; half its idle draw when that is more (M62). */
         const val WELDED_WATTS = 2.0
+
+        /**
+         * The power watch (v1.30 — M67): a reading above the cap at rail-up is looked at again this much later; the check
+         * after the piece takes its readings this far apart (its first a second after the stop sequence, as the CUT was).
+         */
+        const val CAP_AGAIN_MS = 1_000L
+        const val AFTER_APART_MS = 1_000L
+
+        /** The piano's facts the power watch reads: its coils believed on, and its I²C failures since it started. */
+        const val ACTIVE = "active"
+        const val I2C_FAILS = "i2cfails"
 
         /** The reasons the app's own features want the rail by. */
         const val PLAY = "play"

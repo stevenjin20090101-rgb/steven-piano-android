@@ -156,11 +156,13 @@ import dev.stevenjin.stevenpiano.piano.LockPhase
 import dev.stevenjin.stevenpiano.power.AndroidPlugTransport
 import dev.stevenjin.stevenpiano.power.Boards
 import dev.stevenjin.stevenpiano.power.GuestLink
+import dev.stevenjin.stevenpiano.power.HeldKeys
 import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PlayerNow
 import dev.stevenjin.stevenpiano.power.PlugClient
 import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.PlugStore
+import dev.stevenjin.stevenpiano.power.PowerHost
 import dev.stevenjin.stevenpiano.power.RailGate
 import dev.stevenjin.stevenpiano.power.RailHold
 import dev.stevenjin.stevenpiano.power.RailKeeper
@@ -392,10 +394,14 @@ class AppGraph(private val app: Application) {
     /**
      * The player; each run's timing goes to the link's trail (how late its events went out: v1.7 — M23), and
      * what it sends the piano goes to the tablet's piano sound too (v1.8 — M25). While a quiet time holds (v1.20 — M54,
-     * [quiet]) it starts nothing; the safety check has its say over every start (v1.26 — M61, [safetyGate]).
+     * [quiet]) it starts nothing; the safety check has its say over every start (v1.26 — M61, [safetyGate]); what its router
+     * holds goes to the power watch (v1.30 — M67, [heldKeys]).
      */
     val player: Player by lazy {
-        Player(pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink, quiet = { quiet.holds() }, gate = safetyGate)
+        Player(
+            pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink, quiet = { quiet.holds() }, gate = safetyGate,
+            held = heldKeys::record,
+        )
     }
 
     /**
@@ -1185,6 +1191,7 @@ class AppGraph(private val app: Application) {
             now = SystemClock::elapsedRealtime,
             guest = railGuest,
             log = LinkLog::warn,
+            power = railWatch,   // v1.30 — M67
         )
     }
 
@@ -1507,6 +1514,40 @@ class AppGraph(private val app: Application) {
 
     // ==== end of M62's block ==========================================================================================
 
+    // ==== v1.30 — M67: the power watch (SMART_PLUG.md › rule 11; BUILD_SPEC.md › v1.30 — M67) ==========================
+
+    /** The keys the player's router holds, over time: what the rail's power watch weighs the 24 V's draw against. */
+    val heldKeys: HeldKeys by lazy { HeldKeys(SystemClock::elapsedRealtime) }
+
+    /**
+     * What the rail's power watch reads beyond the plug: [heldKeys] (each key at most the piano's longest hold), the piano's
+     * `!active` and `!i2cfails`, its Full power (on unless it says otherwise), and the safety check it makes due.
+     */
+    private val railWatch: PowerHost by lazy {
+        object : PowerHost {
+            override fun held(from: Long, to: Long): Double = heldKeys.held(from, to, pianoLongestHold())
+
+            override fun pedalDown(from: Long, to: Long): Boolean = heldKeys.pedalDown(from, to)
+
+            override fun struckSince(at: Long): Boolean = heldKeys.struckSince(at)
+
+            override suspend fun ask(fact: String): String? = pianoSettings.ask(fact, RAIL_CHECK_MS)
+
+            override val fullPower: Boolean get() = pianoValue(PIANO_FULL_POWER) != "0"
+
+            override fun checkDue() = safety.require()
+        }
+    }
+
+    /** The piano's longest hold, ms (`hold`: its hold watchdog lets every coil go then); the firmware's ceiling unread. */
+    private fun pianoLongestHold(): Long =
+        pianoValue(PIANO_HOLD)?.toLongOrNull()?.coerceIn(PIANO_HOLD_LEAST_MS, HeldKeys.HOLD_CEILING_MS) ?: HeldKeys.HOLD_CEILING_MS
+
+    /** One of the piano's settings as it last reported it; null before its dump. */
+    private fun pianoValue(name: String): String? = (pianoSettings.state.value as? PianoState.Ready)?.values?.get(name)
+
+    // ==== end of M67's block ==========================================================================================
+
     private companion object {
         const val TAG = "AppGraph"
         const val UPDATES_TAG = "Updates"
@@ -1532,6 +1573,10 @@ class AppGraph(private val app: Application) {
 
         /** The piano's Full power, which the firmware turns off when the volume goes below 100. */
         const val PIANO_FULL_POWER = "fullpower"
+
+        /** The piano's longest hold, ms, and the least it takes (v1.30 — M67: the power watch). */
+        const val PIANO_HOLD = "hold"
+        const val PIANO_HOLD_LEAST_MS = 50L
 
         /** The piano's steady repeat period, a fact of its `dump` (v1.16 — M44). */
         const val REPEAT_FACT = "repeatms"

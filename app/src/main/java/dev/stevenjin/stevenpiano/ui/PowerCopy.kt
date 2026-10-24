@@ -41,6 +41,13 @@ object PowerCopy {
     const val SETTINGS_PUT_BACK = "The power plug's settings had been changed: put back"
     const val OK = "OK"
 
+    /** The power watch (v1.30 — M67): a key on, seen in the 24 V's draw while a piece played, or in the check after it. */
+    const val STUCK_KEY = "A key stayed on — 24 V cut"
+    const val STUCK_AFTER_PIECE = "A key stayed on after the piece — 24 V cut"
+
+    /** The power watch (v1.30 — M67): "The 24 V draws 36 W with nothing playing — 24 V cut", at rail-up. */
+    fun overdraw(watts: Int): String = "The 24 V draws $watts W with nothing playing — 24 V cut"
+
     /** "Only 6 of 7 power boards answered" (a trunk fault), and "— 24 V cut" when the rail was cut for it. */
     fun trunk(answered: Int, total: Int, cut: Boolean): String =
         (if (answered == 0) "None of the $total power boards answered" else "Only $answered of $total power boards answered") +
@@ -54,6 +61,8 @@ object PowerCopy {
         is RailMessage.TrunkFault -> trunk(message.answered, message.total, message.cut)
         RailMessage.SwitchedOn -> SWITCHED_ON
         RailMessage.SettingsPutBack -> SETTINGS_PUT_BACK
+        is RailMessage.StuckKey -> if (message.afterPiece) STUCK_AFTER_PIECE else STUCK_KEY
+        is RailMessage.Overdraw -> overdraw(message.watts)
     }
 
     // ---- The hub's row and the rail in a word --------------------------------------------------------------------------
