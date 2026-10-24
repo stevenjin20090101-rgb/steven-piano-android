@@ -10055,3 +10055,34 @@ firmware change:
 - **Not built:** the pedal-down baseline (tuning only); an idle remembered across rail-ups (a coil already on at rail-up
   is caught only by the 30 W cap).
 - **For the bench (check 12):** confirm `apower` is about a 1 s mean.
+
+# v1.31 — M68: the usual idle
+
+Brief `~/.claude/plans/m68-idle-memory-brief.md`; worktree `android-wt-m68`, branch `m68-idle-memory`, from `91d47c0`
+(main with 1.30). No version bump, no signing, no emulator pass; no firmware change (SMART_PLUG.md › rule 11). 1.30
+learned idle at each rail-up, so a coil already on then (a shorted MOSFET, the burnt-coil fault) became idle, and one
+channel (a 5–15 W supply, the pedal node, 12 W) stays under the 30 W cap. **The history:** `PlugStore` keeps each plug's
+last `PowerWatch.USUAL_KEPT` 5 rail-up readings that didn't trip, with their wall-clock times (key `idles`, "at:watts,…";
+`PlugSettings.idles` of `IdleReading`), and a trip since (`aboveUsual`); `pair()` and `forget()` empty both, nothing is
+kept without a pairing, and a failed write is caught (a reading lost, or the trip repeating). **The check:** `railUp()`,
+after the cap, on the same reading: with `USUAL_LEAST` 3 kept, `PowerWatch.againstUsual` — more than T
+(`threshold(fullPower)`: 6 W, the 3 W floor in PWM drive) above their median (`usual()`; of four, the middle two's mean)
+→ `PowerVerdict.AboveUsual(watts, usual)`; a second look `CAP_AGAIN_MS` later, notes held; still above (or unread) →
+`PowerHost.aboveUsual()`, `fail(RailMessage.AboveUsual(n))` (what plays stops, the stop sequence, CUT) and `checkDue()`,
+as the cap. A rail-up that didn't trip keeps its reading (`PowerHost.keepIdle`; the second look's when there was one), one
+that tripped never does. Every checked rail-up is weighed, the safety check's own and its repower too: while the draw
+stays above the usual that check can't sweep, so a lasting new normal (a different supply) needs the plug forgotten and
+paired again (README). **A new normal:** `SafetyRunner`'s new `heardAll`, called when a check passes with its sweep
+(`Passed.keys != null`), → AppGraph's `railHeardAll()` → `PlugStore.heardAll()`: after a trip the history and the mark go;
+with none since (a routine check) they stay. A check without the sweep (the microphone off) keeps them, so the trip
+repeats at each rail-up: annoying, but safe. **`PowerHost`** (AppGraph's `railWatch`): `usualIdle()` from `plugSettings`,
+`keepIdle` and `aboveUsual` launched on `appScope`. Words: `PowerCopy.aboveUsual(n)`, "The 24 V draws N W more than usual
+with nothing playing — 24 V cut", amber on the banner and in `railFact.message`. Logged at `LinkLog`: both readings, the
+usual, T and how many were kept, and a usual learned again. Without a plug none of it runs. **Tests:** `PowerWatchTest` +1
+(fewer than 3 never trip; +7 W over a 10 W median trips at Full power, +5 W and +6 W don't, +5 W does in PWM drive; the
+median of four and of five), `RailKeeperTest` +1 (three rail-ups learn it; a fourth with a coil on: the cap's sequence
+STOP PLAYING, STOP, CUT, CHECK DUE, notes held throughout, not kept; above at the first look only: no trip, the second look
+kept), `PlugStoreTest` 2 (new: the last 5 with their times across a restart; forgotten, re-paired or unpaired, empty;
+after a trip a check that heard every key empties it, without a trip it stays), `SafetyRunnerTest` +1 (`heardAll` only
+for a pass with the sweep: not with the microphone off, nor with keys silent). One Gradle run (`testDebugUnitTest lintDebug
+assembleDebug`): 1,811 green (12 skipped), lint "No issues found".

@@ -1122,6 +1122,13 @@ password.
 - **The 24 V draws 36 W with nothing playing — 24 V cut** (1.30) — as the 24 V came on, before any note, it drew over
   30 W twice: a key's channel may be shorted. The safety check runs before the next piece; if this comes back, leave the
   24 V unplugged and have the power boards checked.
+- **The 24 V draws 12 W more than usual with nothing playing — 24 V cut** (1.31) — as the 24 V came on, it drew more than
+  half a key above its usual (the middle of its last 5 starts, kept with the plug's pairing), twice a second apart: a
+  key's channel may have been on since before, which the 30 W cap misses. The safety check runs before the next piece.
+  After this, a check that hears every key lets the tablet learn the usual again; a check with the microphone off keeps
+  it, so this comes back at every start: annoying, but safe. While the extra draw stays, the check's own start is cut too:
+  if it keeps coming back, leave the 24 V unplugged and have the power boards checked. After changing the 24 V supply,
+  Forget the plug and pair it again.
 
 While the 24 V wakes, the dot beside "Sent to piano" (and on the app's mark in the rail) stays the plain connected dot:
 it turns red only once the notes reach the piano. The web panel says "Waking the piano…" in Now playing too.
@@ -1152,8 +1159,9 @@ an I²C hiccup that lost its release — shows as a steady extra draw: after abo
 piece stops and the 24 V goes off. Readings with the pedal down are skipped (its motor draws more then), and so is the
 watch during the piece with Full power off; the check after the piece always runs. After each piece, before the 24 V goes
 off (about a second later than before), it reads the draw twice and asks the piano whether a key is still on and whether
-it had I²C trouble. As the 24 V comes on, more than 30 W with nothing playing cuts it too. Each time, the safety check runs
-before the next piece. Without a plug paired, nothing of this happens.
+it had I²C trouble. As the 24 V comes on, more than 30 W with nothing playing cuts it too, and (1.31) so does more than
+half a key above what the plug usually draws then. Each time, the safety check runs before the next piece. Without a plug
+paired, nothing of this happens.
 
 **Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60 and v1.28 —
 M65), with the firmware's bench checks in `SMART_PLUG.md`:
