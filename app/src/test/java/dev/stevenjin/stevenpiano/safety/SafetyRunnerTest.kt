@@ -186,6 +186,9 @@ class SafetyRunnerTest {
         var repowerOk = true
         val power = mutableListOf<Boolean>()
 
+        /** Checks that passed with every key heard (v1.31 — M68: the power watch's usual idle may start again). */
+        var heardAll = 0
+
         /** Whether the 24 V comes up for each sweep, in turn (then up); and when it was waited for. */
         val rail = ArrayDeque<Boolean>()
         val runner = SafetyRunner(
@@ -205,6 +208,7 @@ class SafetyRunnerTest {
                 host.calls += "await rail"
                 rail.removeFirstOrNull() ?: true
             },
+            heardAll = { heardAll++ },
         )
 
         fun play(count: Int = 1, id: Long = 1L) = repeat(count) { host.pieces.tryEmit(Played(id, ended = true)) }
@@ -560,6 +564,28 @@ class SafetyRunnerTest {
         assertEquals("then the Play goes", 1, played)
         assertFalse(rig.runner.state.value.pending)
         assertTrue(rig.runner.open)
+    }
+
+    @Test
+    fun `only a check that passes with its sweep says every key was heard - not one without the microphone, nor one that fails (v1_31 M68)`() = runTest {
+        val swept = started(MemoryStore(SafetyRecord(count = 5)))
+        swept.play()
+        settle()
+        assertTrue(swept.runner.state.value.last!!.passed)
+        assertEquals("every key heard: after a trip, the plug's usual idle starts again", 1, swept.heardAll)
+
+        val mute = started(MemoryStore(SafetyRecord(count = 5)), listens = false)
+        mute.play()
+        settle()
+        assertTrue("passed, the microphone off", mute.runner.state.value.last!!.passed)
+        assertEquals("no sweep: the usual idle is kept, so a trip repeats at each rail-up", 0, mute.heardAll)
+
+        val silent = started(MemoryStore(SafetyRecord(count = 5)))
+        silent.host.silent = setOf(36)
+        silent.play()
+        settle()
+        assertEquals(SafetyLock.KeysSilent(listOf(36)), silent.runner.state.value.lock)
+        assertEquals(0, silent.heardAll)
     }
 
     private companion object {

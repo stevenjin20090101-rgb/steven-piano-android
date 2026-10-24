@@ -160,6 +160,11 @@ class SafetyRunner(
     private val awaitRail: suspend () -> Boolean = { true },
     private val clock: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = {},
+    /**
+     * A check passed with its microphone sweep, every key heard (v1.31 — M68): after a rail-up above the plug's usual idle,
+     * the power watch starts it again. Never after a check without the sweep (the microphone off): its pass heard no key.
+     */
+    private val heardAll: () -> Unit = {},
 ) : StartGate {
     private val _state = MutableStateFlow(SafetyState())
     val state: StateFlow<SafetyState> = _state.asStateFlow()
@@ -499,6 +504,7 @@ class SafetyRunner(
             }
         }
         if (outcome is SafetyOutcome.Passed) log("Safety check passed")
+        if (outcome is SafetyOutcome.Passed && outcome.keys != null) heardAll()   // the sweep ran: keys = null without it
         wantRail(false)
         job = null
         save()

@@ -157,6 +157,7 @@ import dev.stevenjin.stevenpiano.power.AndroidPlugTransport
 import dev.stevenjin.stevenpiano.power.Boards
 import dev.stevenjin.stevenpiano.power.GuestLink
 import dev.stevenjin.stevenpiano.power.HeldKeys
+import dev.stevenjin.stevenpiano.power.IdleReading
 import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PlayerNow
 import dev.stevenjin.stevenpiano.power.PlugClient
@@ -1371,6 +1372,7 @@ class AppGraph(private val app: Application) {
             },
             awaitRail = { railUpWithin(RAIL_AWAIT_MS) },
             log = LinkLog::warn,
+            heardAll = ::railHeardAll,   // v1.31 — M68
         )
     }
 
@@ -1536,7 +1538,23 @@ class AppGraph(private val app: Application) {
             override val fullPower: Boolean get() = pianoValue(PIANO_FULL_POWER) != "0"
 
             override fun checkDue() = safety.require()
+
+            // v1.31 — M68: the plug's usual idle, kept with its pairing in the plug's store.
+            override fun usualIdle(): List<Double> = plugSettings.value?.idles?.map { it.watts }.orEmpty()
+
+            override fun keepIdle(watts: Double) {
+                appScope.launch { plugStore.keepIdle(IdleReading(System.currentTimeMillis(), watts)) }
+            }
+
+            override fun aboveUsual() {
+                appScope.launch { plugStore.aboveUsual() }
+            }
         }
+    }
+
+    /** A safety check heard every key (v1.31 — M68): after a trip above the plug's usual idle, it is learned again. */
+    private fun railHeardAll() {
+        appScope.launch { if (plugStore.heardAll()) LinkLog.warn("Power watch: a safety check heard every key; the plug's usual idle is learned again") }
     }
 
     /** The piano's longest hold, ms (`hold`: its hold watchdog lets every coil go then); the firmware's ceiling unread. */

@@ -94,6 +94,21 @@ interface PowerHost {
 
     /** A safety check before the next Play (the 24 V was cut for a key on). */
     fun checkDue()
+
+    /**
+     * The plug's usual idle (v1.31 — M68): its last rail-up readings that didn't trip, W, oldest first
+     * ([PowerWatch.USUAL_KEPT] at most, kept with its pairing; none for a plug forgotten or paired again).
+     */
+    fun usualIdle(): List<Double>
+
+    /** A rail-up that didn't trip read [watts] with nothing sent: kept among [usualIdle]. */
+    fun keepIdle(watts: Double)
+
+    /**
+     * A rail-up tripped above [usualIdle]: the next safety check that passes with its microphone sweep starts it again, a
+     * new normal (a shorted channel holds its key down, so its strike can't sound and that sweep fails).
+     */
+    fun aboveUsual()
 }
 
 /** Where the rail stands (DESIGN.md › v1.26 — M60). */
@@ -146,6 +161,12 @@ sealed interface RailMessage {
     /** The power watch (v1.30 — M67): the supply drew [watts] W at rail-up with nothing sent; the 24 V cut, the check due. */
     data class Overdraw(val watts: Int) : RailMessage
 
+    /**
+     * The power watch (v1.31 — M68): at rail-up, with nothing sent, the supply drew [watts] W more than the plug's usual
+     * idle; the 24 V cut, the check due.
+     */
+    data class AboveUsual(val watts: Int) : RailMessage
+
     /** Whether it needs attention (amber, until dismissed or the next rail-up) rather than passing by itself. */
     val attention: Boolean get() = this !is Waking && this !is Off
 }
@@ -176,7 +197,9 @@ sealed interface RailMessage {
  *   the floor watch (a key on that the music isn't holding: the piece stops, CUT, "A key stayed on — 24 V cut"). With keys
  *   struck since the rail-up, the stop's second holds the check after the piece: a reading, `!active` and `!i2cfails`, a
  *   second reading a second later, then CUT (a key on: "A key stayed on after the piece — 24 V cut"). Each makes a safety
- *   check due before the next Play ([PowerHost.checkDue]).
+ *   check due before the next Play ([PowerHost.checkDue]). The rail-up's reading is also weighed against the plug's usual
+ *   idle (v1.31 — M68; [PowerHost.usualIdle]): more than T above it twice, a second apart, CUT, "The 24 V draws N W more
+ *   than usual with nothing playing — 24 V cut", the check due; a rail-up that didn't trip is kept, one that did never is.
  * - **Without the plug** ([available] false: none paired, or its switch off) nothing here calls the plug or the piano, and
  *   [notesHeld] stays false: the app behaves exactly as before.
  *
@@ -548,6 +571,36 @@ class RailKeeper(
                 return false
             }
             idle = again
+        }
+        if (power != null) {
+            // v1.31 — M68: the plug's usual idle, the median of its last rail-ups that didn't trip. More than T above it with
+            // nothing sent, a channel may have been on since before the rail came up (a shorted MOSFET): this rail-up would
+            // learn it as idle, and one channel stays under the cap. As the cap: one more look a second later, notes held;
+            // still above it (or unread), CUT, said, the check due. Every checked rail-up, the safety check's own too: while
+            // the draw stays up, the check's sweep can't run either.
+            val usual = power.usualIdle()
+            val fullPower = power.fullPower
+            val first = PowerWatch.againstUsual(idle, usual, fullPower)
+            if (first is PowerVerdict.AboveUsual) {
+                log(
+                    "Power watch: ${PowerWatch.watts(first.watts)} W at rail-up with nothing sent, above the usual " +
+                        "${PowerWatch.watts(first.usual)} W (T ${PowerWatch.watts(PowerWatch.threshold(fullPower))} W, ${usual.size} kept); looking again",
+                )
+                if (waitFor(now() + CAP_AGAIN_MS) { !wantedNow() }) return stopRail()
+                val again = idleReading()
+                val still = PowerWatch.againstUsual(again, usual, fullPower) as? PowerVerdict.AboveUsual ?: first.takeIf { again == null }
+                if (still != null) {
+                    // Never kept: a check that passes with its sweep, every key heard, starts the usual again (a new normal).
+                    // One without the sweep (the microphone off) keeps it, so the trip repeats at each rail-up. Annoying, but safe.
+                    log("Power watch: ${PowerWatch.watts(still.watts)} W at rail-up with nothing sent, above the usual: a channel may be on")
+                    power.aboveUsual()
+                    fail(RailMessage.AboveUsual((still.watts - still.usual).roundToInt()))
+                    power.checkDue()
+                    return false
+                }
+                idle = again
+            }
+            idle?.let(power::keepIdle)
         }
         idle?.let { idleWatts = it }
         if (power != null) startWatch(idle)

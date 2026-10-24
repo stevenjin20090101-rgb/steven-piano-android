@@ -190,6 +190,21 @@ class RailKeeperTest {
                 due++
                 log += Event(now(), "CHECK DUE")
             }
+
+            /** v1.31 — M68: the plug's usual idle as kept (the last 5), and the trips above it. */
+            val usual = mutableListOf<Double>()
+            var above = 0
+
+            override fun usualIdle(): List<Double> = usual.toList()
+
+            override fun keepIdle(watts: Double) {
+                usual += watts
+                if (usual.size > PowerWatch.USUAL_KEPT) usual.removeAt(0)
+            }
+
+            override fun aboveUsual() {
+                above++
+            }
         }
 
         fun keeper(power: PowerHost? = null): RailKeeper = RailKeeper(
@@ -988,6 +1003,50 @@ class RailKeeperTest {
         assertEquals(RailPhase.Up, keeper.phase.value)
         assertNull(keeper.message.value)
         assertEquals(1, watch.due)
+        bench.assertEveryArmChecked()
+    }
+
+    // ---- The usual idle (v1.31 — M68) -------------------------------------------------------------------------------
+
+    @Test
+    fun `the usual idle - a rail-up a coil above it with nothing sent is CUT as the cap is, never kept, and a second look back to usual is no trip`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch()
+        val keeper = bench.keeper(watch)
+        repeat(3) {
+            upFor(bench, keeper)
+            keeper.wanted(RailKeeper.PLAY, false)
+            advanceTimeBy(4_000)
+        }
+        assertEquals("three rail-ups kept", listOf(IDLE_WATTS, IDLE_WATTS, IDLE_WATTS), watch.usual)
+        val held = mutableListOf<Boolean>()
+        backgroundScope.launch { keeper.notesHeld.collect { held += it } }
+        bench.log.clear()
+        bench.extraWatts = PowerWatch.COIL_WATTS   // a channel on since before the rail came up: a shorted MOSFET, under the cap
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(5_000)
+        assertEquals(RailMessage.AboveUsual(PowerWatch.COIL_WATTS.roundToInt()), keeper.message.value)
+        assertEquals(listOf("CHECK", "ARM", "CHECK", "CHECK", "STOP PLAYING", "STOP", "CUT", "CHECK DUE"), bench.kinds())
+        assertEquals("looked at twice, a second apart", 2, bench.log.count { it.kind == "STATUS" && it.at < bench.log.first { e -> e.kind == "CUT" }.at })
+        assertTrue("no note went", held.all { it })
+        assertEquals(1, watch.due)
+        assertEquals(1, watch.above)
+        assertEquals("the reading that tripped isn't kept", listOf(IDLE_WATTS, IDLE_WATTS, IDLE_WATTS), watch.usual)
+
+        // The supply above the usual at the first look only: no trip, and the second look is kept.
+        keeper.dismissMessage()
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(1_000)
+        keeper.wanted(RailKeeper.PLAY, true)
+        launch {
+            delay(1_800)   // after the first look (about 1.3 s in), before the second a second later
+            bench.extraWatts = 0.0
+        }
+        advanceTimeBy(5_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        assertNull(keeper.message.value)
+        assertEquals(1, watch.due)
+        assertEquals(listOf(IDLE_WATTS, IDLE_WATTS, IDLE_WATTS, IDLE_WATTS), watch.usual)
         bench.assertEveryArmChecked()
     }
 

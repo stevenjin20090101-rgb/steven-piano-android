@@ -363,6 +363,21 @@ class PowerWatchTest {
         assertEquals(PowerVerdict.Fine, PowerWatch.railUp(null))
     }
 
+    // ---- The usual idle (v1.31 — M68) -----------------------------------------------------------------------------------
+
+    @Test
+    fun `the usual idle - fewer than 3 kept never trip, and more than T above their median does`() {
+        assertEquals("two kept: too few to say", PowerVerdict.Fine, PowerWatch.againstUsual(40.0, listOf(10.0, 10.0), fullPower = true))
+        val kept = listOf(10.4, 9.6, 10.0)   // the median: 10 W
+        assertEquals("+7 W at Full power", PowerVerdict.AboveUsual(17.0, 10.0), PowerWatch.againstUsual(17.0, kept, fullPower = true))
+        assertEquals("+5 W", PowerVerdict.Fine, PowerWatch.againstUsual(15.0, kept, fullPower = true))
+        assertEquals("+6 W is T itself", PowerVerdict.Fine, PowerWatch.againstUsual(16.0, kept, fullPower = true))
+        assertTrue("+5 W in PWM drive: over its 3 W floor", PowerWatch.againstUsual(15.0, kept, fullPower = false) is PowerVerdict.AboveUsual)
+        assertEquals("unread", PowerVerdict.Fine, PowerWatch.againstUsual(null, kept, fullPower = true))
+        assertEquals("one odd reading among five barely moves it", 10.0, PowerWatch.usual(listOf(10.0, 22.0, 9.8, 10.2, 10.0))!!, 1e-9)
+        assertEquals("four: the middle two's mean", 10.1, PowerWatch.usual(listOf(10.0, 10.2, 9.0, 30.0))!!, 1e-9)
+    }
+
     // ---- The keys held ----------------------------------------------------------------------------------------------
 
     @Test
