@@ -1113,6 +1113,15 @@ password.
   play. With "— 24 V cut", a board went missing while playing and the 24 V went off. Check the cables between the boards.
 - **Lost the power plug** — the tablet couldn't reach the plug twice: the music stopped (the plug switches itself off
   within 30 s anyway). Bring the tablet nearer the plug, then play again.
+- **A key stayed on — 24 V cut** (1.30) — while a piece played, the 24 V drew a key's worth more than the music was
+  holding: the piece stopped and the 24 V went off. Tap Play: the safety check runs first, then the piece. If it keeps
+  happening, have that key's power board and its cable checked.
+- **A key stayed on after the piece — 24 V cut** (1.30) — after the piece the 24 V still drew a key's worth more than
+  idle, or the piano said a key was still on, or it had I²C trouble during the piece. The same: the safety check runs
+  before the next piece; if it keeps happening, have the board and cable checked.
+- **The 24 V draws 36 W with nothing playing — 24 V cut** (1.30) — as the 24 V came on, before any note, it drew over
+  30 W twice: a key's channel may be shorted. The safety check runs before the next piece; if this comes back, leave the
+  24 V unplugged and have the power boards checked.
 
 While the 24 V wakes, the dot beside "Sent to piano" (and on the app's mark in the rail) stays the plain connected dot:
 it turns red only once the notes reach the piano. The web panel says "Waking the piano…" in Now playing too.
@@ -1137,6 +1146,15 @@ half what it draws idle, at least 2 W); while the 24 V is off its power boards s
 off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug paired, nothing of
 this happens.
 
+**The power watch** (1.30): while a piece plays, the tablet also reads what the 24 V supply draws, about every 2 seconds,
+and weighs it against the keys the music holds (about 12 W each at Full power). A key on that the music isn't holding —
+an I²C hiccup that lost its release — shows as a steady extra draw: after about 20 seconds of it with the pedal up, the
+piece stops and the 24 V goes off. Readings with the pedal down are skipped (its motor draws more then), and so is the
+watch during the piece with Full power off; the check after the piece always runs. After each piece, before the 24 V goes
+off (about a second later than before), it reads the draw twice and asks the piano whether a key is still on and whether
+it had I²C trouble. As the 24 V comes on, more than 30 W with nothing playing cuts it too. Each time, the safety check runs
+before the next piece. Without a plug paired, nothing of this happens.
+
 **Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60 and v1.28 —
 M65), with the firmware's bench checks in `SMART_PLUG.md`:
 
@@ -1149,6 +1167,9 @@ M65), with the firmware's bench checks in `SMART_PLUG.md`:
 - [ ] Guest play: the iPad plays for the hour; End guest play turns the 24 V off.
 - [ ] A firmware update with the plug: the new firmware confirms itself.
 - [ ] Press the plug's button, and pull its mains and restore it: the 24 V stays off.
+- [ ] The power watch (1.30) with a 47 Ω / 25 W dummy load on the 24 V (`SMART_PLUG.md` › check 12): plugged in mid-piece
+      with the pedal up, the piece stops within about 20 s; plugged in just before a piece ends, the check after it cuts
+      and the next Play runs the safety check first. Note what Piano › Power plug says the supply draws at rail-up.
 
 ## Kiosk
 
