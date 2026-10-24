@@ -10001,3 +10001,41 @@ M66 (the plug as it is, and the plug watch; merged from `6cc63b3`).
 - **Tests:** 1,789 green on the branch (12 skipped); lint "No issues found".
 - **Checks:** Steven asked for speed, so there was no emulator pass and no second gate on main. Main hadn't moved, so the
   merged tree is the one tested.
+
+# v1.30 — M67: the power watch
+
+Brief `~/.claude/plans/m67-power-watchdog-brief.md`; worktree `android-wt-m67`, branch `m67-power-watch`, from `97ebd81`
+(main with 1.29). No version bump, no signing, no emulator pass (Steven's call); no firmware change (SMART_PLUG.md › rule
+11). **`power/PowerWatch.kt`**, pure: `PowerWatch` (one per checked rail-up), `PowerSample`, `PowerVerdict` (`Fine`,
+`Stuck(why)`, `Overdraw(watts)`), and `HeldKeys`, the router's keys over time (each key from its strike for at least
+`MIN_ON_MS` 60, the firmware's `minstrike`, and at most the piano's `hold`, its hold watchdog: a coil on longer is the fault
+itself; `HOLD_CEILING_MS` 4000 when the dump doesn't say), fed by `Player.publish()` through its new `held` callback
+(`NoteRouter.activeLow/High` and the new `sustainDown`, on change; no allocation). **Idle:** the rail-up's existing reading
+(M62's), then the lowest reading with no key held and the pedal up (never from a reading under `WELDED_WATTS`). **The cap:**
+above `CAP_WATTS` 30 at rail-up, a second look `CAP_AGAIN_MS` later (notes still held); still above or unread →
+`RailMessage.Overdraw(n)`, CUT, check due. **The floor watch:** `RailKeeper.look()` between the keeper's own CHECK/ARM
+(`waitFor(minOf(next, lookAt))`), from the checked rail-up (`startWatch`) until the rail is Off or Kept (`setPhase` drops
+it): first `!i2cfails` (`failsAtRailUp`), then while the PLAY want holds one `Switch.GetStatus` every `lookIn(n)` (1.5–2.5 s,
+golden-ratio steps, 2 s mean). Which second `apower` averaged is the plug's own, so `PowerWatch.sample` weighs the keys
+held over each second ending 0–1 s before the ask (`LAG_MS`, `LAG_STEP_MS` 250) and keeps the most and the fewest; the pedal
+over `PEDAL_MS` 2.5 s. A reading counts when its residual is over T (`STUCK_WATTS` 6) even at the most keys, restarts the
+run when it is not even at the fewest, and otherwise waits; `RUN_READINGS` 8 counted in a row spanning `RUN_MS` 16 s →
+`fail(StuckKey(afterPiece = false))` (the piece stops, the stop sequence, CUT) and `PowerHost.checkDue()`. Pedal down, PWM
+drive (`fullpower` 0: the floor watch is skipped there, the coils drawing their notes' duty) and no idle restart the run.
+(A fixed second false-trips on 8-key chords every 2 s once the plug's second is half a second off, and misses most stuck
+coils in busy music; the synthetic traces show the bounded residual does neither, at any lag 0–1 s, for a 1 s mean.)
+**After the piece:** `stopRail()`, when `PowerHost.struckSince(watchSince)`: `afterPiece()` — a reading at the stop's
+second, `!active`, `!i2cfails`, a second reading `AFTER_APART_MS` later — then CUT (about 1.2 s later than before);
+`PowerWatch.afterPiece`: both readings more than T above idle (T `STUCK_FLOOR_WATTS` 3 in PWM drive), `!active` > 0, or
+`!i2cfails` above the rail-up's (below: a restart) → `fail(StuckKey(afterPiece = true))`, check due. A want back before
+its readings keeps the rail up, as within the second. **`PowerHost`** (AppGraph's `railWatch`): `heldKeys` with the piano's
+`hold`, `pianoSettings.ask`, `fullpower` (on unless "0"), `safety.require()` — `SafetyRunner.require()` sets `pending` (kept;
+before the record is read, once it is), so the next Play waits while the check runs and a failure locks as ever. Words:
+`PowerCopy.STUCK_KEY`, `STUCK_AFTER_PIECE`, `overdraw(n)`, amber on the banner and in `railFact.message`/`attention`. Logged at
+`LinkLog`: the rail-up idle, the cap's readings, each trip's run, and after each piece its readings, idle, T, the facts, the
+floor watch's count and highest residual, and the verdict. **Tests:** `PowerWatchTest` 12 (synthetic traces at plug lags
+0, ½ and 1 s: legato with a key always held, a key held 30 s, 8-key chords every 1 and 2 s, fast passages, 30 made-up pieces
+— no trip; a stuck coil from 5 s trips within 20 s; under long pedal-down only after 16 s of pedal-up readings; PWM skipped;
+the undecided reading; after the piece; the cap; `HeldKeys`), `RailKeeperTest` +4 (the floor watch's stop then CUT and the
+check due; pedal down and held keys; after the piece; the cap) and the no-plug test with the host, `SafetyRunnerTest` +1.
+One Gradle run (`testDebugUnitTest lintDebug assembleDebug`): 1,806 green (12 skipped), lint "No issues found".

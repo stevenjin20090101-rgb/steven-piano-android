@@ -113,6 +113,11 @@ class Player(
     private val quiet: () -> Boolean = { false },
     /** The safety check's say over a person's start (v1.26 — M61, `safety.SafetyRunner`); none by default. Main thread. */
     private val gate: StartGate = StartGate.Open,
+    /**
+     * What the router holds, after each step that changed it (v1.30 — M67: the power watch's `power.HeldKeys`): its keys
+     * as [activeKeysLow] and [activeKeysHigh] give them, and the sustain pedal as last sent. Scheduler thread.
+     */
+    private val held: ((low: Long, high: Long, pedalDown: Boolean) -> Unit)? = null,
 ) : ChannelDeck {
     private val engine = PlaybackEngine(if (tablet == null) link else TeeSink(link, tablet))
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -194,6 +199,11 @@ class Player(
     // Owned by the scheduler thread (v1.26 — M61): the piece the engine holds, and the one sounding since it began to play.
     private var loadedId: Long? = null
     private var sounding: Long? = null
+
+    // Owned by the scheduler thread (v1.30 — M67): the router's keys and pedal as [held] was last told them.
+    private var heldLow = 0L
+    private var heldHigh = 0L
+    private var heldPedal = false
 
     init {
         scheduler.start()
@@ -829,9 +839,20 @@ class Player(
     /** Scheduler thread, after every step: mirrors the engine into what the UI reads. */
     private fun publish() {
         sounded()
-        activeLow.set(engine.router.activeLow)
-        activeHigh.set(engine.router.activeHigh)
+        val low = engine.router.activeLow
+        val high = engine.router.activeHigh
+        activeLow.set(low)
+        activeHigh.set(high)
         _liveSustain.value = engine.router.liveSustainDown
+        held?.let { tell ->
+            val pedal = engine.router.sustainDown
+            if (low != heldLow || high != heldHigh || pedal != heldPedal) {
+                heldLow = low
+                heldHigh = high
+                heldPedal = pedal
+                tell(low, high, pedal)
+            }
+        }
         val status = engine.status
         val running = status == PlaybackStatus.Playing
         val duration = engine.piece?.durationMicros ?: 0L

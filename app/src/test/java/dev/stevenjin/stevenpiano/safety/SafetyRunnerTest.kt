@@ -542,6 +542,26 @@ class SafetyRunnerTest {
         assertFalse(again.runner.open)
     }
 
+    @Test
+    fun `the power watch's cut makes a check due - the next Play waits while it runs, and it is kept (v1_30 M67)`() = runTest {
+        val rig = started()
+        assertTrue(rig.runner.open)
+        rig.runner.require()
+        runCurrent()
+        assertTrue(rig.runner.state.value.pending)
+        assertFalse("Play waits", rig.runner.open)
+        assertTrue("kept across a restart of the app", rig.store.record.pending)
+        assertFalse("nothing runs until the next Play", rig.runner.state.value.running)
+        var played = 0
+        assertFalse(rig.runner.admit(3L) { played++ })
+        runCurrent()
+        assertTrue("the next Play runs it first", rig.runner.state.value.running)
+        settle()
+        assertEquals("then the Play goes", 1, played)
+        assertFalse(rig.runner.state.value.pending)
+        assertTrue(rig.runner.open)
+    }
+
     private companion object {
         /** Longer than any check takes: two sweeps, the restart's minute, the repower, and the card's moment after. */
         const val SETTLE_MS = 5 * 60_000L

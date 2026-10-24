@@ -25,6 +25,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 
 /**
  * The 24 V rail's routine (v1.26 — M60; SMART_PLUG.md › The app's routine), piano safety: on a fake clock, with a fake
@@ -71,6 +72,9 @@ class RailKeeperTest {
         /** v1.29 — M66: what the next settings look finds changed (and puts back). */
         var settingsChanged = false
 
+        /** v1.30 — M67: what the supply draws beyond its idle while the plug is on (a coil stuck on: 12 W). */
+        var extraWatts = 0.0
+
         private fun outputNow(): Boolean {
             if (output && now() - armedAt >= toggleS * 1_000L) output = false
             return output
@@ -105,7 +109,7 @@ class RailKeeperTest {
             override suspend fun status(): PlugStatus {
                 delay(RPC_MS)
                 log += Event(now(), "STATUS")
-                return PlugStatus(outputNow(), watts = if (outputNow()) IDLE_WATTS else 0.0)
+                return PlugStatus(outputNow(), watts = if (outputNow()) IDLE_WATTS + extraWatts else 0.0)
             }
 
             override suspend fun putBack(): Boolean {
@@ -152,7 +156,43 @@ class RailKeeperTest {
             }
         }
 
-        fun keeper(): RailKeeper = RailKeeper(
+        /**
+         * The power watch's other readings (v1.30 — M67): the router holding [heldKeys] keys with its pedal up, keys struck
+         * this rail-up ([struck]), the piano's `!active` and `!i2cfails` ([active], [fails]; "ASK …" in the log), Full power;
+         * a safety check made due is "CHECK DUE".
+         */
+        inner class Watch : PowerHost {
+            var heldKeys = 0.0
+            var pedal = false
+            var struck = true
+            var active = "0"
+            var fails = "0"
+            var due = 0
+
+            override fun held(from: Long, to: Long): Double = heldKeys
+
+            override fun pedalDown(from: Long, to: Long): Boolean = pedal
+
+            override fun struckSince(at: Long): Boolean = struck
+
+            override suspend fun ask(fact: String): String? {
+                log += Event(now(), "ASK $fact")
+                return when (fact) {
+                    RailKeeper.ACTIVE -> active
+                    RailKeeper.I2C_FAILS -> fails
+                    else -> null
+                }
+            }
+
+            override val fullPower: Boolean = true
+
+            override fun checkDue() {
+                due++
+                log += Event(now(), "CHECK DUE")
+            }
+        }
+
+        fun keeper(power: PowerHost? = null): RailKeeper = RailKeeper(
             scope = test.backgroundScope,
             plug = plug,
             check = ::check,
@@ -162,14 +202,19 @@ class RailKeeperTest {
             available = available,
             now = ::now,
             guest = guest,
+            power = power,
         ).also {
             keeper = it
             it.start()
             test.runCurrent()
         }
 
-        /** What the keeper did from [from], in order; the welded-relay look after a CUT and the watch's ("STATUS", "SETTINGS") left out. */
-        fun kinds(from: Long = 0L): List<String> = log.filter { it.at >= from && it.kind != "STATUS" && it.kind != "SETTINGS" }.map { it.kind }
+        /**
+         * What the keeper did from [from], in order; the welded-relay look after a CUT, the watch's ("STATUS", "SETTINGS") and the
+         * power watch's asks ("ASK …", v1.30 — M67) left out.
+         */
+        fun kinds(from: Long = 0L): List<String> =
+            log.filter { it.at >= from && it.kind != "STATUS" && it.kind != "SETTINGS" && !it.kind.startsWith("ASK") }.map { it.kind }
 
         fun arms(from: Long = 0L, until: Long = Long.MAX_VALUE): List<Event> = log.filter { it.kind == "ARM" && it.at in from until until }
     }
@@ -203,7 +248,8 @@ class RailKeeperTest {
     fun `feature off - no calls at all, nothing held, and repower answers false`() = runTest {
         val bench = Bench(this)
         bench.available.value = false
-        val keeper = bench.keeper()
+        val watch = bench.Watch()   // v1.30 — M67: nor the power watch's
+        val keeper = bench.keeper(watch)
         keeper.wanted(RailKeeper.PLAY, true)
         keeper.wanted("safety", true)
         keeper.keysOnScreen(true)
@@ -217,6 +263,7 @@ class RailKeeperTest {
         keeper.endGuest()
         advanceTimeBy(60_000L)
         assertEquals("not one call to the plug or the piano", emptyList<Event>(), bench.log)
+        assertEquals("no safety check made due", 0, watch.due)
         assertTrue(bench.guestCalls.isEmpty())
         assertFalse("notes go as they always did", keeper.notesHeld.value)
         assertEquals(RailPhase.Off, keeper.phase.value)
@@ -811,6 +858,137 @@ class RailKeeperTest {
         advanceTimeBy(RailKeeper.UPDATE_CAP_MS)
         keeper.updateRunning(false)
         assertTrue("never in the update's window", bench.log.none { it.kind == "SETTINGS" })
+    }
+
+    // ---- The power watch (v1.30 — M67) -----------------------------------------------------------------------------
+
+    @Test
+    fun `the floor watch - a key stuck mid-piece stops it, the stop sequence then CUT, said, and the safety check due`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch()
+        val keeper = bench.keeper(watch)
+        upFor(bench, keeper)
+        advanceTimeBy(12_000)
+        assertNull("readings at idle, no key held: nothing", keeper.message.value)
+        assertTrue("about every 2 s", bench.log.count { it.kind == "STATUS" } in 5..8)
+        val stuck = currentTime
+        bench.extraWatts = PowerWatch.COIL_WATTS   // a coil on that the music isn't holding
+        advanceTimeBy(25_000)
+        assertEquals(RailMessage.StuckKey(afterPiece = false), keeper.message.value)
+        assertEquals(listOf("STOP PLAYING", "STOP", "CUT", "CHECK DUE"), bench.kinds(from = stuck).filter { it != "CHECK" && it != "ARM" })
+        val cut = bench.log.single { it.kind == "CUT" }
+        assertTrue("within about 20 s (${cut.at - stuck} ms)", cut.at - stuck in PowerWatch.RUN_MS..22_000L)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        assertEquals(1, watch.due)
+        bench.log.clear()
+        advanceTimeBy(60_000)
+        assertTrue("what wanted it is ended", bench.arms().isEmpty())
+        bench.assertEveryArmChecked()
+    }
+
+    @Test
+    fun `the floor watch - with the pedal down the readings are skipped, and the router's keys are subtracted`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch()
+        val keeper = bench.keeper(watch)
+        upFor(bench, keeper)
+        watch.pedal = true
+        bench.extraWatts = PowerWatch.COIL_WATTS
+        advanceTimeBy(40_000)
+        assertNull("pedal down: no verdict", keeper.message.value)
+        watch.pedal = false
+        watch.heldKeys = 1.0   // the music holds one key: its 12 W are the music's
+        advanceTimeBy(40_000)
+        assertNull(keeper.message.value)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        assertEquals(0, watch.due)
+    }
+
+    @Test
+    fun `after the piece - two readings a second apart and the piano's facts before the CUT, a key on said and the check due`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch()
+        val keeper = bench.keeper(watch)
+        upFor(bench, keeper)
+        advanceTimeBy(5_000)
+        val stopped = currentTime
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(4_000)
+        assertEquals("a quiet piano: the CUT, about a second later than before", listOf("STOP", "CUT"), bench.kinds(from = stopped))
+        val after = bench.log.filter { it.at >= stopped }
+        assertEquals(listOf("STOP", "STATUS", "ASK active", "ASK i2cfails", "STATUS", "CUT"), after.map { it.kind }.filter { it != "CHECK" && it != "ARM" }.take(6))
+        val cut = after.first { it.kind == "CUT" }.at - stopped
+        assertTrue("the CUT ${cut} ms after the stop sequence", cut in 2 * RailKeeper.STOP_TO_CUT_MS..2 * RailKeeper.STOP_TO_CUT_MS + 3 * RPC_MS)
+        assertEquals(RailMessage.Off, keeper.message.value)
+        assertEquals(0, watch.due)
+
+        // The same with a coil left on: 12 W in both readings.
+        upFor(bench, keeper)
+        bench.extraWatts = PowerWatch.COIL_WATTS
+        val second = currentTime
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(4_000)
+        assertEquals(listOf("STOP", "STOP PLAYING", "STOP", "CUT", "CHECK DUE"), bench.kinds(from = second))
+        assertEquals(RailMessage.StuckKey(afterPiece = true), keeper.message.value)
+        assertEquals(1, watch.due)
+
+        // !active above 0, and !i2cfails up since the rail-up, each the same.
+        bench.extraWatts = 0.0
+        for ((active, fails) in listOf("1" to "0", "0" to "5")) {
+            keeper.dismissMessage()
+            watch.active = "0"
+            watch.fails = "0"
+            upFor(bench, keeper)
+            watch.active = active
+            watch.fails = fails
+            keeper.wanted(RailKeeper.PLAY, false)
+            advanceTimeBy(4_000)
+            assertEquals("!active $active, !i2cfails 0 → $fails", RailMessage.StuckKey(afterPiece = true), keeper.message.value)
+        }
+        assertEquals(3, watch.due)
+
+        // Nothing struck since the rail-up (the Keys tab opened and closed): the stop as before.
+        keeper.dismissMessage()
+        watch.active = "1"
+        watch.struck = false
+        upFor(bench, keeper)
+        val idle = currentTime
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(3_000)
+        assertEquals(listOf("STOP", "CUT"), bench.log.filter { it.at >= idle }.map { it.kind }.filter { it == "STOP" || it == "CUT" || it.startsWith("ASK") })
+        assertEquals(RailMessage.Off, keeper.message.value)
+    }
+
+    @Test
+    fun `the rail-up cap - above 30 W twice a second apart with nothing sent, CUT, said and the check due, notes held throughout`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch()
+        val keeper = bench.keeper(watch)
+        val held = mutableListOf<Boolean>()
+        backgroundScope.launch { keeper.notesHeld.collect { held += it } }
+        bench.extraWatts = 30.0
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(5_000)
+        assertEquals(RailMessage.Overdraw((IDLE_WATTS + 30.0).roundToInt()), keeper.message.value)
+        assertEquals(listOf("CHECK", "ARM", "CHECK", "CHECK", "STOP PLAYING", "STOP", "CUT", "CHECK DUE"), bench.kinds())
+        assertTrue("no note went", held.all { it })
+        assertEquals(1, watch.due)
+
+        // A supply still waking: above the cap at the first look only.
+        keeper.dismissMessage()
+        bench.log.clear()
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(1_000)
+        keeper.wanted(RailKeeper.PLAY, true)
+        launch {
+            delay(1_800)   // after the first look (about 1.3 s in), before the second a second later
+            bench.extraWatts = 0.0
+        }
+        advanceTimeBy(5_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        assertNull(keeper.message.value)
+        assertEquals(1, watch.due)
+        bench.assertEveryArmChecked()
     }
 
     private fun batch(vararg bytes: Int): MidiBatch = MidiBatch().apply { for (i in bytes.indices step 3) add(bytes[i], bytes[i + 1], bytes[i + 2]) }

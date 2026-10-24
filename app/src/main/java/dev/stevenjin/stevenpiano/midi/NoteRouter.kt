@@ -88,6 +88,9 @@ class NoteRouter {
     var liveSustainDown = false
         private set
 
+    /** Whether the sustain pedal is down as last sent, whoever moved it (v1.30 — M67: the power watch skips its draw). */
+    val sustainDown: Boolean get() = sentValue[SUSTAIN] >= HALF
+
     /** Sounding keys as bits `key - 24`: keys 24..87 here (a MIDI piano's 21-23 drawn as 33-35). */
     var activeLow = 0L
         private set
