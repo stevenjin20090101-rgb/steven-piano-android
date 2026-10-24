@@ -10039,3 +10039,19 @@ floor watch's count and highest residual, and the verdict. **Tests:** `PowerWatc
 the undecided reading; after the piece; the cap; `HeldKeys`), `RailKeeperTest` +4 (the floor watch's stop then CUT and the
 check due; pedal down and held keys; after the piece; the cap) and the no-plug test with the host, `SafetyRunnerTest` +1.
 One Gradle run (`testDebugUnitTest lintDebug assembleDebug`): 1,806 green (12 skipped), lint "No issues found".
+
+## The release: 1.30 (versionCode 41)
+
+M67, the power watchdog (merged from `ffd6cd6`). Steven's choice is both parts of SMART_PLUG.md rule 11, with no
+firmware change:
+- **The floor watch during each piece:** a plug reading every 1.5–2.5 s, against the router's held keys over every 1 s
+  window ending 0–1 s before it; each key counts for `minstrike`..`hold`. Eight readings over 16 s more than 6 W above
+  even the busiest window → stop, CUT and the safety check.
+- **The check after each piece:** two readings, `!active` and `!i2cfails`.
+- **The rail-up cap:** 30 W, looked at twice.
+- **Tests:** 1,806 green on the branch (12 skipped); lint "No issues found".
+- **Gate:** Steven asked for speed, so there was no emulator pass and no second gate on main. Main had moved only by the
+  1.29 release's JSON, so the merged code is the code tested.
+- **Not built:** the pedal-down baseline (tuning only); an idle remembered across rail-ups (a coil already on at rail-up
+  is caught only by the 30 W cap).
+- **For the bench (check 12):** confirm `apower` is about a 1 s mean.

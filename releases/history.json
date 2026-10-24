@@ -361,5 +361,14 @@
     "minSdk": 26,
     "tag": "v1.29",
     "publishedAt": "2026-10-23"
+  },
+  {
+    "versionCode": 41,
+    "versionName": "1.30",
+    "notes": "The power plug now watches for a key stuck on. While a piece plays, the tablet reads the 24 V supply's power from the plug every couple of seconds and compares it with the keys the music is holding: a steady extra draw of about one key (a key left on, for example after a lost message to a key board) stops the piece and switches the 24 V off within about 20 seconds (\"A key stayed on — 24 V cut\"). After every piece it checks that the draw falls back to idle and that the piano reports no key on and no new communication errors; if not, \"A key stayed on after the piece — 24 V cut\". Either way the safety check runs before the next piece. At power-up, more than 30 W with nothing playing is cut at once. It needs the power plug; with Full power off, only the check after the piece runs.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.30/steven-piano-1.30.apk",
+    "minSdk": 26,
+    "tag": "v1.30",
+    "draft": true
   }
 ]
