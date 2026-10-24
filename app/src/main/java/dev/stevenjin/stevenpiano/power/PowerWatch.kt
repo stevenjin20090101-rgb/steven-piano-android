@@ -37,6 +37,12 @@ sealed interface PowerVerdict {
 
     /** The supply draws [watts] at rail-up with nothing sent: a channel may be shorted. */
     data class Overdraw(val watts: Double) : PowerVerdict
+
+    /**
+     * The supply draws [watts] at rail-up with nothing sent, more than T above the plug's [usual] idle (v1.31 — M68): a
+     * channel may have been on since before the rail came up.
+     */
+    data class AboveUsual(val watts: Double, val usual: Double) : PowerVerdict
 }
 
 /**
@@ -55,6 +61,9 @@ sealed interface PowerVerdict {
  *   starts again; so in PWM drive (Full power off), whose coils draw their notes' duty, unknown here.
  * - **After the piece** ([afterPiece]): both readings more than [threshold] above idle, `!active` above 0, or more
  *   `!i2cfails` than at the rail-up ([failsAtRailUp]).
+ * - **The usual idle** (v1.31 — M68; [againstUsual]): a coil already on at rail-up (a shorted MOSFET) would be learned as
+ *   idle above, and one channel stays under [CAP_WATTS]. So the plug's last [USUAL_KEPT] rail-up readings that didn't trip
+ *   are kept with its pairing; with [USUAL_LEAST] of them, a rail-up's reading more than [threshold] above their median trips.
  */
 class PowerWatch(railUpWatts: Double?) {
     /** The supply's draw with no key held and the pedal up, W; null before a reading (a supply drawing none isn't powered). */
@@ -175,6 +184,27 @@ class PowerWatch(railUpWatts: Double?) {
 
         /** The rail-up's reading, nothing sent yet: above [CAP_WATTS], [PowerVerdict.Overdraw]. */
         fun railUp(watts: Double?): PowerVerdict = if (watts != null && watts > CAP_WATTS) PowerVerdict.Overdraw(watts) else PowerVerdict.Fine
+
+        /** The usual idle (v1.31 — M68): the plug's last this many rail-up readings that didn't trip are kept, this many judge. */
+        const val USUAL_KEPT = 5
+        const val USUAL_LEAST = 3
+
+        /** The plug's usual idle: the median of its kept [readings], W; null with fewer than [USUAL_LEAST], too few to say. */
+        fun usual(readings: List<Double>): Double? {
+            val sorted = readings.filter { it.isFinite() }.sorted()
+            if (sorted.size < USUAL_LEAST) return null
+            val mid = sorted.size / 2
+            return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
+        }
+
+        /**
+         * The rail-up's reading [watts], nothing sent yet, against the plug's [usual] idle (v1.31 — M68): more than T above
+         * it, [PowerVerdict.AboveUsual]; unread, or too few [readings] kept, [PowerVerdict.Fine].
+         */
+        fun againstUsual(watts: Double?, readings: List<Double>, fullPower: Boolean): PowerVerdict {
+            val usual = usual(readings) ?: return PowerVerdict.Fine
+            return if (watts != null && watts > usual + threshold(fullPower)) PowerVerdict.AboveUsual(watts, usual) else PowerVerdict.Fine
+        }
 
         /** The floor watch's sample of [watts], asked at [asked] and answered at [answered] (ms), with the router's keys and pedal. */
         fun sample(
