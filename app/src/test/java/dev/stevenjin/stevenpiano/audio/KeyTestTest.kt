@@ -24,7 +24,8 @@ import kotlin.math.roundToInt
 
 /**
  * Test every key (v1.23 — M55): its refusals in the brief's order, its timing (84 keys low to high, one every 450 ms, 150 ms
- * long, velocity 100), what it hears, and how it ends (Stop with the stop sequence; a piece starting; the piano gone).
+ * long, velocity 100), what it hears (on a piano out of tune since v1.32 — M69), and how it ends (Stop with the stop
+ * sequence; a piece starting; the piano gone).
  */
 class KeyTestTest {
     /** The piano through the player: what it was asked, and when (virtual ms). */
@@ -90,11 +91,12 @@ class KeyTestTest {
 
     /**
      * The room the microphone hears, a frame every 100 ms of virtual time: the notes of the keys struck, but [dead] ones,
-     * over a little noise.
+     * over a little noise, on a piano out of tune (each key up to 50 cents off: v1.32 — M69).
      */
     private fun TestScope.room(piano: Piano, ears: FakeEars, dead: Set<Int>) = backgroundScope.launch {
         var index = 0L
         val random = java.util.Random(3)
+        val cents = Tones.detune(50.0, 69)
         while (true) {
             delay(FRAME_MS)
             val from = testScheduler.currentTime - FRAME_MS
@@ -103,7 +105,7 @@ class KeyTestTest {
                 if (key in dead || from - at > (Tones.HEARD_S * 1000).toLong()) continue
                 for (n in samples.indices) {
                     val since = (from - at) / 1000.0 + n.toDouble() / Tones.RATE
-                    if (since >= 0 && since < Tones.HEARD_S) samples[n] += Tones.note(key, since)
+                    if (since >= 0 && since < Tones.HEARD_S) samples[n] += Tones.note(key, since, cents = cents.getValue(key))
                 }
             }
             ears.frames?.invoke(MicFrame(Tones.pcm(samples), index, from * 1_000_000))
@@ -145,7 +147,7 @@ class KeyTestTest {
     }
 
     @Test
-    fun `it strikes the 84 keys low to high, one every 450 ms, 150 ms each at velocity 100, the tablet silent, and names the keys not heard`() = runTest {
+    fun `it strikes the 84 keys low to high, one every 450 ms, 150 ms each at velocity 100, the tablet silent, and names the keys not heard on a piano out of tune`() = runTest {
         val (piano, ears, test) = setUp()
         room(piano, ears, dead = setOf(36, 66, 93))
         assertEquals(ListenAnswer.Started, test.start("A"))

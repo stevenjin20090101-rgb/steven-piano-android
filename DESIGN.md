@@ -3165,6 +3165,16 @@ itself after five minutes), on the LAN and through the relay alike.
 - **The check**, by ear, for each key: the energy at its fundamental and its harmonics 2 to 4 in the 300 ms from 30 ms after
   its strike, against the same frequencies in the 120 ms before it; a rise of 6 dB on any of them is "sounded", else "not
   heard". The results stay in memory until the next test.
+- **v1.32 — M69: any sound.** The school's piano is out of tune, and an exact pitch is a narrow target (a 300 ms window
+  tells about ±7 Hz: ±26 cents at A4, ±3 at B7), so most upper keys went unheard and Play locked. A key now sounded if a
+  clear new sound starts right after its strike, whatever its pitch. The tablet takes spectra every 10 ms (32 ms each) and,
+  frequency by frequency, sets what it hears 30 to 330 ms after the strike (over about 90 ms) against the loudest it was in
+  the 120 ms before; what rose more than 6 dB counts as new. Summed in three bands (60 to 500 Hz, 500 to 2,000 Hz, 2,000 Hz
+  up), a band's new sound must reach a quarter of that band's level before. Frequency by frequency, a key shows even while
+  the undamped top keys before it still ring. Still not heard: a key already held down (no new blow), a dead channel, a
+  steady room, hum, digital silence, and a key whose audio just before it is missing. The trade-off, accepted: a
+  solenoid's click counts as a sound (it proves the channel moved), and a loud sound in the room at the very moment of a
+  strike can count as that key; a key stuck on is still caught by the coil count (`!active`) and the power plug's watch.
 - **The result**: the 84 keys as seven octaves in the board octaves' style (the keys struck so far, the one struck now in the
   content colour, those to come faint while it runs), every key not heard in the attention amber, and a line: "All 84 keys
   sounded" or "3 keys didn't sound: C2, F♯4, A6".
