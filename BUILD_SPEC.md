@@ -8725,10 +8725,11 @@ of them is touched (`PianoSettings.testKeys` is only read). No emulator, no vers
   player's `allKeysOff`). `state: KeyTestState(running, key, done, total, results, stopped)`; results stay until the next test.
 - `KeyTake`: strikes and frames meet on `System.nanoTime`'s clock (the latest frame's own time maps a strike to a sample);
   a key is checked once its window has been heard, and frames no key needs are let go (about a second held).
-- `KeyCheck.heard(samples, at, key)`: Hann-windowed Goertzel at the fundamental and harmonics 2–4 (none over 7.2 kHz), the
-  300 ms from +30 ms against the 120 ms before; a rise of 6 dB on any one is "sounded". The baseline is also never under the
-  room's noise (the before window's whole power spread over every frequency as white noise would be, plus 6 dB) nor under a
-  floor of digital silence, so a room's noise never passes for a key.
+- `KeyCheck.heard(samples, at, key)` (until v1.32, which hears any sound instead: see v1.32 — M69): Hann-windowed Goertzel
+  at the fundamental and harmonics 2–4 (none over 7.2 kHz), the 300 ms from +30 ms against the 120 ms before; a rise of 6 dB
+  on any one is "sounded". The baseline is also never under the room's noise (the before window's whole power spread over
+  every frequency as white noise would be, plus 6 dB) nor under a floor of digital silence, so a room's noise never passes
+  for a key.
 
 ## A key held on (`diag/HeldKey.kt`)
 - `QuietSince` (AppGraph's `quietSince`, fed by `followPlaying()`: a piece playing or loading, the key test, Live) and
@@ -8775,8 +8776,8 @@ of them is touched (`PianoSettings.testKeys` is only read). No emulator, no vers
 - **Live listening ends when no page of its session has been open for 15 s**, besides the five minutes and the session's
   end, so a closed tab never leaves the tablet hearing.
 - **Velocity 100 goes through the player's velocity percentage**, as the Keys screen's keys do (the player's own path).
-- **The bass**: a tablet's microphone hears little under about 100 Hz, so the lowest keys are heard by their harmonics 3
-  and 4 (C1's are 98 and 131 Hz).
+- **The bass**: a tablet's microphone hears little under about 100 Hz, so the lowest keys were heard by their harmonics 3
+  and 4 (C1's are 98 and 131 Hz); since v1.32 by any of their sound from 60 Hz up.
 
 ## Tests
 `KeyCheckTest` (4: a sweep of synthetic notes, all heard; C2, F♯4 and A6 silent, those three and the line; a quiet room,
@@ -10097,3 +10098,41 @@ M68, the usual idle remembered across rail-ups (merged as `60fcdb4`), closing th
 - **Gate:** no emulator and no second gate on main. Main hadn't moved since the branch's base, so the merged tree is the
   one tested.
 - **Published:** on Steven's "Publish now".
+
+# v1.32 — M69: any sound
+
+Brief `~/.claude/plans/m69-any-sound-brief.md`; worktree `android-wt-m69`, branch `m69-any-sound`, from `ead58e0` (main
+with 1.31). No version bump, no signing, no emulator pass; no firmware change. The school's piano is out of tune, and M55's
+check listened at each key's exact equal-tempered frequencies (±7 Hz: ±26 cents at A4, ±3 at B7), so most upper keys
+went unheard, both sweeps failed and Play locked. **`KeyCheck.heard(samples, at, key, rate)`** keeps its signature
+(`key` unused) and `KeyResult`; everything downstream is as it was. A key sounded if a clear new sound starts right after
+its strike, whatever its pitch: Hann spectra of 512 samples (32 ms, bins 31.25 Hz apart) every 160 (10 ms), by a radix-2
+FFT of its own. Before: the 9 spectra that end by the strike (`BEFORE_MS` 120); each bin's loudest, averaged with 2
+neighbours on each side (`NEIGHBOURS`), times `RISE_DB` 6 dB, is its line, and each band's mean level is kept. After:
+spectra from `FROM_MS` 30 to `TO_MS` 330, each bin's mean over 7 in turn (`SMOOTH`, about 90 ms); a bin's new sound is what
+it holds over its line, summed in three bands (bins 2–15, 16–63, 64–255: 62.5–500 Hz, 500–2,000 Hz, 2,000 Hz to 8 kHz).
+Heard once a band's new sound reaches `SHARE` 0.25 of the band's level before and `FLOOR` 1e-7 (full scale 1, about −70
+dB). Not heard without a baseline: a window before the strike outside the recording, or holding 10 ms (`SILENT_MS`) of
+exact zeros (a gap `KeyTake` filled). `KeyCheck.power`, `HARMONICS`, `TOP_HZ` and the noise margin went; `frequency()`
+stays (the fake microphone, `Tones`). About 0.1 ms a key on a desktop JVM. **Decided in the run** (the brief's method was
+tried first, on the tests' own notes): three filtered bands' energy can't hear a key while the undamped keys before it
+ring (G6 to B7 all missed: the band rises only 3 to 5 dB), and its low band let loud noise within about 3 dB of passing; so
+the comparison is made bin by bin and summed per band. The loudest before (not the mean), the neighbours and the 90 ms keep
+noise out: in 2,520 windows of each, no key heard in white noise (0.001, 0.02) or pink (0.005, 0.02), 2 and 10 in brown
+rumble (0.005, 0.02), where M55's rule heard 50 to 85 in pink and brown. A band need only reach a quarter of its level,
+since keys ringing on fill it. Spectra need no priming, and leaving out the bins under 60 Hz does the pre-emphasis's
+work. Missing audio is any 10 ms before the strike, stricter than "mostly". **Known limits** (synthetic, for the bench):
+under about 500 Hz a key and the one before it share bins, so there a key must sound 6 dB over what that key still rang
+120 ms before the strike: dampers in the lowest octave slower than about τ 0.25 s would leave keys unheard (M55's rule,
+knowing the pitch, didn't mind); a key struck just after a held key went down, a few semitones under it and no louder,
+can be lost under it (the sweep fails on the held key anyway); and a held key whose unison strings beat can still read as
+a new sound, as with M55's rule (about half the time in a model of full beats). **Debug:** `FakeMicrophone` reads `debug.stevenpiano.detune` (cents, 0–100): each key's tone up
+to ± that, the same each time. **Tests:** `Tones` gains a detune in cents, stretched overtones (`stretch(key)`: B from
+1e-4 to 1e-3, the nth at n·f0·√(1 + B·n²)), an undamped decay (`ring`, `heardFor`) and `detune(cents, seed)`;
+`KeyCheckTest` 7 (was 4; the power's scale went): every key heard in tune, up to 50 cents out, and stretched; quiet notes
+(0.01) in noise of 0.003, up to 35 cents out; with 90–107 undamped (τ 1 s), in tune and 20 cents out and stretched; C2,
+F♯4, A6 dead on a piano 50 cents out (and among keys ringing on), named; E2, C4 and E7 held down 2 s before their turn
+(τ 2 s) not heard, their neighbours heard; noise of 0.001 and 0.02, a 60 Hz hum with harmonics, digital silence: none;
+zeros before each strike (all or half of the 120 ms), the room or a note after: none. `KeyTestTest`'s timing test runs on
+notes up to 50 cents out and still names C2, F♯4, A6. One Gradle run (`testDebugUnitTest lintDebug assembleDebug`): 1,814
+green (12 skipped), lint "No issues found".

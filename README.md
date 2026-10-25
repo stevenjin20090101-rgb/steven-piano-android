@@ -1310,6 +1310,11 @@ check** card shows, over whatever was on the tablet, the resting screen too, wit
    everywhere meanwhile: on the tablet, the web panel ("Safety check failed: C2, F♯4") and the media controls. The lock
    stays through a restart of the app.
 
+**How a key is heard** (from 1.32; the check and **Test every key** alike): it listens for any sound right after each key,
+so a piano out of tune passes. A solenoid's click counts as a sound too (it shows the key's channel moved), and a loud
+noise in the room at the very moment of a key can count for that key; a key stuck on is still caught by the coil check
+(step 2) and the power plug's watch.
+
 When every key sounds, the card says **Safety check passed** and closes; the next piece waits for Play as always. The
 card's **Run the safety check** (behind the kiosk PIN in kiosk mode) runs it again: only a check that passes unlocks
 Play. **Not now** (the same PIN) puts the card aside as a capsule at the top of every screen, "Play is locked · safety
@@ -1332,7 +1337,10 @@ After a restart of the piano its System page reads the last reset as "Restarted"
 
 **On the emulator** (debug builds): the tablet's microphone is a stand-in that hears the keys the check strikes.
 `adb shell setprop debug.stevenpiano.silentkeys 36,61` leaves those keys silent, so the failure and the lock can be
-seen; `adb shell "setprop debug.stevenpiano.silentkeys ''"` hears them all again. Grant the microphone first:
+seen; `adb shell "setprop debug.stevenpiano.silentkeys ''"` hears them all again.
+`adb shell setprop debug.stevenpiano.detune 40` plays every key up to 40 cents out of tune, the same each time, to see a
+piano out of tune pass; `adb shell "setprop debug.stevenpiano.detune ''"` plays it in tune again. Both are read when the
+microphone starts. Grant the microphone first:
 `adb shell pm grant dev.stevenjin.stevenpiano android.permission.RECORD_AUDIO`.
 
 **On the piano:**
