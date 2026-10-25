@@ -180,8 +180,8 @@ object PowerCopy {
                 "settings (off after a power cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud " +
                 "goes off. " + MATTER_POPUP
         } else {
-            "Its settings (off after a power cut, its button can't hold the 24 V on), Bluetooth control, then pairing: when " +
-                "Android asks to pair with the plug, tap Pair. Then its cloud goes off. " + MATTER_POPUP
+            "Pairing first: when Android asks to pair with the plug, tap Pair. Then it takes its settings (off after a power " +
+                "cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud goes off. " + MATTER_POPUP
         }
         PairStep.Complete -> if (pair.overBluetooth) {
             "The plug finishes its setup on its own, about 5 minutes. If it is on your phone's hotspot, keep the hotspot on " +

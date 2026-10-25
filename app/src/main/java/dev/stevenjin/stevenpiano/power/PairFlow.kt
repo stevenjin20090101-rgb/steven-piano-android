@@ -374,16 +374,17 @@ class PairFlow(
     // ---- Set up -----------------------------------------------------------------------------------------------------
 
     /**
-     * Step 4, while `confirmed` (the Shelly app's way): the settings (retried with `in_locked` alone if the model refuses
-     * `in_mode`), RPC over Bluetooth (a restart if asked), the pairing window and the bond, the list of bonds, the cloud off.
-     * Each ticks as it lands; the first that fails stops, saying which. A `pending` plug goes the over-Bluetooth way instead
-     * (v1.28 — M65): it has no network to reach `complete` on.
+     * Step 4, while `confirmed` (the Shelly app's way): the pairing window and the bond, the list of bonds, then the settings
+     * (retried with `in_locked` alone if the model refuses `in_mode`), RPC over Bluetooth and Matter off (a restart if
+     * asked), the cloud off. Each ticks as it lands; the first that fails stops, saying which. The bond comes first (v1.32):
+     * Matter off nearly always restarts the plug, and one that reaches `complete` meanwhile answers only a bonded tablet. A
+     * `pending` plug goes the over-Bluetooth way instead (v1.28 — M65): it has no network to reach `complete` on.
      */
     fun setUp() = run {
         val plug = address ?: return@run
         if (_state.value.info?.provision == Provision.Pending) return@run overBluetooth(plug)
         _state.update { it.copy(step = PairStep.SetUp, problem = null) }
-        if (!configure(plug) || !bondNow(plug) || !cloudOff(plug)) return@run
+        if (!bondNow(plug) || !configure(plug) || !cloudOff(plug)) return@run
         _state.update { it.copy(step = PairStep.Complete) }
         awaitComplete()
     }

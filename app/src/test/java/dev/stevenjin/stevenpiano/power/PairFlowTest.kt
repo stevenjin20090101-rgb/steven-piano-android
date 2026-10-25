@@ -123,8 +123,8 @@ class PairFlowTest {
         assertNull("nothing kept while the plug is on the hotspot (v1.28 — M65)", store.pairing)
         val order = transport.methods.filter { it !in POLLS }
         assertEquals(
-            "v1.32 — M70: Matter off beside Bluetooth control, and the restart it asks for",
-            listOf("Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "BLE.StartPairing", "bond", "Cloud.SetConfig"),
+            "v1.32: bonded first, so Matter's restart can't leave the tablet outside a plug gone `complete` meanwhile",
+            listOf("BLE.StartPairing", "bond", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig"),
             order,
         )
         assertFalse(shelly.matterOn())
