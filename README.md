@@ -1063,10 +1063,11 @@ plug › **Pair the power plug** walks through it). Connect the tablet to the pi
 24 V by itself.
 
 1. Plug the 24 V supply into the plug and the plug into the wall.
-2. On your phone, turn on a hotspot that has internet, and keep it on until the end. The plug only sees 2.4 GHz: on an
-   iPhone, turn on **Maximize Compatibility** (Settings › Personal Hotspot); on Android, choose the **2.4 GHz** band.
+2. Have a 2.4 GHz Wi-Fi with internet for the plug, on until the end (from 1.32 any will do): your phone's hotspot, or a
+   Wi-Fi such as the school's. On an iPhone's hotspot, turn on **Maximize Compatibility** (Settings › Personal Hotspot);
+   on an Android's, choose the **2.4 GHz** band. The plug forgets it at the end of the setup.
 3. On the tablet: **Find the plug**, and tap it (ShellyPlugUSG4-…).
-4. If its firmware is older than 2.0.0 (yours is), choose one of two ways (from 1.29):
+4. If its firmware is older than 2.0.0, choose one of two ways (from 1.29):
    - **Use it as it is** (the first button): no update and no pairing. It works, but any phone nearby with the Shelly app
      could switch it; the tablet checks it every minute and switches it back off. The tablet gives it its settings and
      turns its cloud off; a plug on firmware 1.7.5 or later then asks for the hotspot once, to finish its setup (about 5
@@ -1075,11 +1076,12 @@ plug › **Pair the power plug** walks through it). Connect the tablet to the pi
      itself from Shelly (about 2 minutes), clears its setup, and the tablet goes on by itself: you type the hotspot only
      once. (A plug already on 2.0.0 or later asks for the hotspot after step 5 instead.)
 
-   Firmware older than 2.0.0 can't encrypt Bluetooth before pairing, so the password goes over unencrypted: give the
-   hotspot a password just for the day, and change it afterwards.
-5. When Android asks to pair with the plug, tap **Pair**.
-6. Wait while the plug finishes its setup (about 5 minutes; the screen shows when), the hotspot still on. Then the plug
-   forgets every network by itself: turn the hotspot off.
+   Firmware older than 2.0.0 can't encrypt Bluetooth before pairing, so the password goes over unencrypted: use your
+   phone's hotspot with a password just for the day, and change it afterwards.
+5. When Android asks to pair with the plug, tap **Pair**. If Android offers to set the plug up as a **Matter** device,
+   close that (1.32): the tablet doesn't use Matter, and turns it off.
+6. Wait while the plug finishes its setup (about 5 minutes; the screen shows when), the Wi-Fi still on. Then the plug
+   forgets every network by itself: turn the hotspot off, if you used one.
 7. The 24 V comes on for 5 seconds by itself: it should read "7 of 7 answering", then "0 of 7" when the plug clicks off.
    **Finish**. (Piano not connected? Connect it, then **Turn the 24 V on for 5 s**.)
 
@@ -1089,17 +1091,23 @@ tablet; the rest is the same. If, used as it is, the plug lets only paired table
 needs its update after all: reset it (below), **Search again**, and choose **Update and lock it to this tablet**. If it asks you to **unplug the power plug for 5 seconds**, do, plug it back in, and
 **Search again**: the tablet picks up where the plug is.
 
-The Shelly app still works: add the plug there on the hotspot, decline the cloud, let it update, then within about 5
-minutes **Find the plug** on the tablet and tap **Pair and set up**; the tablet does the rest as before (**Close its
-network**, then the check).
+The Shelly app still works: add the plug there on the hotspot, decline the cloud, let it update, then within 5 minutes
+**Find the plug** on the tablet and tap **Pair and set up**; the tablet does the rest as before (**Close its network**,
+then the check). After those 5 minutes the plug answers only devices it paired with, and needs a reset.
 
-If the plug says it finished its setup without this tablet, reset it and find it again: the tablet sets it up from
-there, pairing first. **The reset** works only within the first minute after the plug is plugged in: unplug it, plug it
-back in, and within that minute hold its button for 10 seconds (5 seconds only restarts it; Shelly's documentation). If it says **Locked**, unplug it for 5 seconds, plug it back in,
-and open Pair the power plug again. (A locked plug answers nothing over Bluetooth: one this tablet isn't paired with that
-stays silent for 5 seconds is taken as locked.) Nothing counts as paired until the plug is off every network, so a setup
-that stops halfway leaves the app as it was: start it again from the top. The tablet never keeps the hotspot's name or
-password.
+**A plug already set up in the Shelly app** (yours, 1.32): it answers only the phone it paired with, so it needs a reset
+first. Open **Pair the power plug** and keep the screen open. **Find the plug** says it finished its setup somewhere
+else and shows the reset: in the Shelly app, open the plug › Settings › **Factory reset**; or unplug it, plug it back in,
+and within the first minute hold its button for 10 seconds (5 seconds only restarts it; Shelly's documentation). Then
+**Find the plug again** → it pairs first (tap **Pair**) → type the Wi-Fi's name and password → about 5 minutes while it
+finishes its setup → the 24 V check, by itself → **Finish**. Afterwards the Shelly app shows the plug offline: that is on
+purpose (off every network, only this tablet talks to it, over Bluetooth).
+
+If it says **the plug didn't answer** at Find, unplug it for 5 seconds, plug it back in and find it again; if it still
+won't, reset it as above. (A locked plug answers nothing over Bluetooth, and Android may report a refusal as silence: one
+this tablet isn't paired with that stays silent for 5 seconds gets both.) Nothing counts as paired until the plug is off
+every network, so a setup that stops halfway leaves the app as it was: start it again from the top. The tablet never keeps
+the Wi-Fi's name or password.
 
 **What it says** (at the top of the screen):
 
@@ -1147,7 +1155,9 @@ power plug and choose Update and lock it to this tablet.
 it is switched off at once, saying "The power plug had been switched on by something else: switched off". Its settings
 are looked at too (the first time, after the plug was out of reach, and every 10 minutes): changed ones (on after a
 power cut, the button, an automatic on, the cloud, its network or access point) are put back, saying "The power plug's
-settings had been changed: put back". Nothing extra while a piece plays or a firmware update runs. Piano › System
+settings had been changed: put back". From 1.32 Matter too (a second way to hold the 24 V on, with no 30 s timer): found
+on, it is turned off and the plug restarts, coming back off; the first look after the update does it quietly, for a plug
+paired before 1.32. Nothing extra while a piece plays or a firmware update runs. Piano › System
 shows the plug on the Piano card, in amber if its relay seems stuck on after a cut (the supply still drawing more than
 half what it draws idle, at least 2 W); while the 24 V is off its power boards show unpowered, "0 of 7 answering · 24 V
 off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug paired, nothing of
@@ -1175,6 +1185,8 @@ M65), with the firmware's bench checks in `SMART_PLUG.md`:
 - [ ] Guest play: the iPad plays for the hour; End guest play turns the 24 V off.
 - [ ] A firmware update with the plug: the new firmware confirms itself.
 - [ ] Press the plug's button, and pull its mains and restore it: the 24 V stays off.
+- [ ] The plug set up in the Shelly app (1.32): Find shows the reset; after it the tablet pairs it. Then unplug the plug and
+      plug it back in: no Matter pop-up nearby, and the Shelly app shows it offline.
 - [ ] The power watch (1.30) with a 47 Ω / 25 W dummy load on the 24 V (`SMART_PLUG.md` › check 12): plugged in mid-piece
       with the pedal up, the piece stops within about 20 s; plugged in just before a piece ends, the check after it cuts
       and the next Play runs the safety check first. Note what Piano › Power plug says the supply draws at rail-up.

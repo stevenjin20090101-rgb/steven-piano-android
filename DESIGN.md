@@ -3817,3 +3817,22 @@ first ("Pairing first: when Android asks to pair with the plug, tap Pair"), the 
 none once it went off"), then Finish: Setup "Complete", firmware 2.1.0. Then, with the plug refusing `Shelly.Update`,
 the Shelly app's words. The log holds the requests in the brief's order, the hotspot's name and password blanked, and
 neither anywhere in the device's log. Screenshots and the order: `~/.claude/plans/m65-shots/`.
+
+# v1.32 — M70: a plug set up in the Shelly app, and Matter off
+
+Steven set his Shelly Plug US Gen4 up in the Shelly app over Wi-Fi, on firmware 2.0.0 or later, so it reached `complete`
+without the tablet: from then on it refuses unpaired Bluetooth RPC, its device info included, and only a factory reset
+lets the tablet set it up. On the real plug 1.31 showed nothing useful at Find (the reset's way waited for facts the plug
+refuses, and silence got "Unplug it for 5 seconds"). Now **Find** shows the way out at once: the reason ("This plug
+finished its setup somewhere else, such as the Shelly app, so it only answers devices it already paired with."), the reset
+(the Shelly app's Factory reset first, then the button's within the first minute), **Find the plug again**, and **Pair with
+a plug another tablet set up** (it needs only the plug chosen). Silence with no bond keeps the power cycle as the first
+try, then shows the same reset. The Gen4 plug also runs **Matter**, a second way to hold the 24 V on with no 30 s timer,
+and advertises it after every boot (Android's "Matter device found"). Every way through the setup now turns it off beside
+Bluetooth control, one restart serving both, and the plug watch keeps it off: quietly the first time for a pairing kept
+before 1.32, then with "The power plug's settings had been changed: put back". That restart comes only while nothing wants
+the 24 V, and only with the plug's power-up state the tablet's, so the plug comes back off. The setup's network close now
+takes the second network (`sta1`) too. The words: any 2.4 GHz Wi-Fi with internet for the one-time setup (a phone's
+hotspot or the school's, still forgotten at its end; old firmware's clear-text password steered to the hotspot), the
+Shelly app's 5 minutes and what missing them means, and one line at the setup for the Matter pop-up ("close that: the
+tablet doesn't use Matter, and turns it off"). Brief `~/.claude/plans/m70-plug-matter-brief.md`; no firmware change.

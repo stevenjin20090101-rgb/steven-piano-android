@@ -10097,3 +10097,44 @@ M68, the usual idle remembered across rail-ups (merged as `60fcdb4`), closing th
 - **Gate:** no emulator and no second gate on main. Main hadn't moved since the branch's base, so the merged tree is the
   one tested.
 - **Published:** on Steven's "Publish now".
+
+# v1.32 — M70: a plug set up in the Shelly app, and Matter off
+
+Brief `~/.claude/plans/m70-plug-matter-brief.md`; worktree `android-wt-m70`, branch `m70-plug-matter`, from `ead58e0` (main
+with 1.31). No version bump, no signing, no emulator pass; no firmware change. **Find:** `PairFlow.read()`:
+`PlugRead.Refused` → `fallback` with `REFUSED` (new words); `Silent` with no bond → `fallback` with the new `SILENT` (the
+power cycle first, then "If it still won't answer, reset it:"); `LOCKED` stays for Piano › Power plug and the wait for
+`complete`. `PowerPlugPage`: FindStep no longer returns without `info` (the facts only when read); the Fallback shows under
+the problem line at every step, Find included; Join only with a plug chosen (`join()` needs the address alone: Android's
+bond, then `Shelly.GetDeviceInfo` over it). **Matter at the setup:** `ShellyRpc.matterOff()` (`Matter.SetConfig
+{config:{enable:false}}`) and `matterEnabled()`; `PairFlow.configure()`, which every way runs (the Shelly app's, a new or
+reset plug's, the update's, as it is, `joinSetUp`), sends it after `BLE.SetConfig`, and one `Shelly.Reboot` serves both
+when either answers `restart_required`; an error, "No handler" or no answer is logged and the setup goes on.
+`PlugPairing.matterOff` (DataStore `matterOff`, absent → false) is kept when the plug took it. **The close:**
+`closeNetworkNow` sends `networkOffAll()` (`sta1` too), and `networkOff()` again if a model refuses it. **The watch:**
+`ShellyRail(client, matterOff, keepMatterOff, log)`; `putBack()` ends with `Matter.GetConfig` (an error or no answer:
+skipped). Found on: `Matter.SetConfig` off and, when asked, `Shelly.Reboot`, `drop()`, `PairFlow.REBOOT_WAIT_MS` and a
+`Switch.GetStatus` before it returns, so the restart is no missed read, and a stray on is still CUT, said and weld-checked
+once the plug answers; only with the switch's settings as the tablet's (read unchanged, or put back), so the plug comes
+back off. The first time (`matterOff` false: a 1.31 pairing) is quiet and logged, then `PlugStore.matterTurnedOff()`
+(Matter found off too); after that `true` → `RailMessage.SettingsPutBack`. AppGraph passes the flag from `plugSettings`
+and `plugStore::matterTurnedOff`. **Words** (`PowerCopy`): `SHELLY_STILL`; `FALLBACK` with the Shelly app's Factory reset
+first; `HOTSPOT` "Wi-Fi name (2.4 GHz)", `PASSWORD` "Wi-Fi password"; the step notes, `PAIR_NOTE`, `LOCK_NOTE`,
+`updateNote` and `AS_IS_HOTSPOT` (a phone's hotspot or a 2.4 GHz Wi-Fi such as the school's; old firmware's clear-text
+password steered to the hotspot); `MATTER_POPUP` ending the SetUp step's note; `PairFlow.NOT_ONLINE` (the Wi-Fi's name and
+password, internet kept for the update and the setup alike). **Debug:** `EmulatedShelly`, once `complete`, refuses an
+unpaired central everything on 2.0.0+, the device info too (the real plug's GATT refusal; `refuseUnpaired` extends it to
+older firmware); `Matter.GetConfig`/`SetConfig`/`GetStatus` (on from the box and after a factory reset, off at the Pair
+screen's end; `restart_required` on a change, Matter running follows at a restart; `hasMatter` false → "No handler"); a
+restart brings the switch up as its `initial_state` says; `sta1` in `WiFi.GetConfig`/`SetConfig` and `networkUp()`;
+`EMULATOR_PLUG "matter on"` and `"sta1 on"`. **Tests:** `PairFlowTest` +1 and 6 updated (refused at Find: the reason,
+`FALLBACK` with the Shelly app's way, Find again, nothing kept, replacing the old fallback test; reset, then its own setup:
+Matter off after `BLE.SetConfig`, one restart for both, `matterOff` kept, `sta1` closed, and with "No handler" it goes on
+and keeps false; silence → `SILENT` with the fallback, nothing kept; the Shelly app's way with a second network and
+Matter's restart alone; join with no facts read; the update's and as-is orders with Matter), `ShellyRailTest` 3 (new,
+through the keeper to the fake plug: the first look quiet and kept, then no missed read, stray on or weld, and Matter on
+again said; found on with Matter on → the restart, then CUT, said and weld-checked; `Matter.GetConfig` erroring →
+nothing), `ShellyRpcTest` +1, `PlugStoreTest` +1 (a 1.31 record reads false); `PairFlowTest`'s fake transport moved to
+`FakePlugTransport` (its refusal cleared at each connection, as Android's is). Gradle (`testDebugUnitTest lintDebug
+assembleDebug`), run twice (the first stopped at a test name with a `;`, which a JVM method name can't hold): 1,817 green
+(12 skipped), lint "No issues found".
