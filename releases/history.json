@@ -383,5 +383,14 @@
     "minSdk": 26,
     "tag": "v1.31",
     "publishedAt": "2026-10-24"
+  },
+  {
+    "versionCode": 43,
+    "versionName": "1.32",
+    "notes": "The key test (Test every key, and the safety check every 6 pieces) now listens for any clear sound right after each key is struck, instead of its exact in-tune pitch, so a piano that is out of tune passes; a key that makes no sound, or one stuck down, still fails. The power plug: if it was set up in the Shelly app, the pairing screen now shows how to reset it so the tablet can take it over (in the Shelly app, Factory reset; or hold its button 10 seconds within a minute of plugging it in). The tablet also turns the plug's Matter off, which stops Android's \"Matter device found\" pop-up and closes a way to keep the 24 V on with no time limit.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.32/steven-piano-1.32.apk",
+    "minSdk": 26,
+    "tag": "v1.32",
+    "draft": true
   }
 ]

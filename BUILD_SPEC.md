@@ -10177,3 +10177,15 @@ nothing), `ShellyRpcTest` +1, `PlugStoreTest` +1 (a 1.31 record reads false); `P
 `FakePlugTransport` (its refusal cleared at each connection, as Android's is). Gradle (`testDebugUnitTest lintDebug
 assembleDebug`), run twice (the first stopped at a test name with a `;`, which a JVM method name can't hold): 1,817 green
 (12 skipped), lint "No issues found".
+
+## The release: 1.32 (versionCode 43)
+
+M69 (the key test hears any sound, merged as `821e573`) and M70 (a plug set up in the Shelly app, and Matter off, from
+`d341f17`), plus one integration fix (`79d7e39`): the Shelly app's way (`setUp()` on a `confirmed` plug) now bonds
+before it configures, because Matter off nearly always restarts the plug and one that reached `complete` during that
+restart answers only a bonded tablet.
+- **Why:** the school piano is old and out of tune, so the exact-pitch sweep failed its upper keys and locked Play; and
+  Steven set the plug up in the Shelly app, which leaves it `complete` (refusing an unpaired tablet), with Android's
+  Matter pop-up.
+- **Tests:** 1,814 on M69's branch and 1,817 on M70's; the gate below on the merged tree.
+- **Published:** on Steven's "Publish when ready".
