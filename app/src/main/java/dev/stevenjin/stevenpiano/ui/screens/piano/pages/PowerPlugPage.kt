@@ -160,8 +160,9 @@ private fun PairSteps(pair: PairState, flow: PairFlow, onStartOver: () -> Unit) 
             }
             if (pair.working) ProgressHairline(null, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             pair.problem?.let { Problem(it) }
-            // v1.28 — M65: a plug found refusing this tablet past Find (during the update, or at `complete`) gets Find's way out.
-            if (pair.fallback && step != PairStep.Find) Fallback(pair, flow)
+            // The reset's way under the reason, at Find too (v1.32 — M70: with no facts read, as the real plug refuses them),
+            // and past it (v1.28 — M65: a plug found refusing this tablet during the update, or at `complete`).
+            if (pair.fallback) Fallback(pair, flow)
         }
         HairlineDivider(startInset = 16.dp)
     }
@@ -210,17 +211,20 @@ private fun StepHeader(number: Int, title: String, done: Boolean, current: Boole
     }
 }
 
-/** Step 2: the plugs found (a tap chooses one), then what the chosen one said, and the way on from there. */
+/**
+ * Step 2: the plugs found (a tap chooses one), then what the chosen one said, and the way on from there. A plug that refused
+ * or stayed silent said nothing (v1.32 — M70): no facts, and the reset's way under the reason ([PairSteps]).
+ */
 @Composable
 private fun FindStep(pair: PairState, flow: PairFlow) {
     for (plug in pair.found) FoundRow(plug, chosen = plug.address == pair.plug?.address, enabled = !pair.working) { flow.choose(plug) }
     ActionRow(note = if (pair.searching) PowerCopy.SEARCHING else null) {
         ActionButton(PowerCopy.SEARCH, onClick = flow::search, enabled = !pair.searching && !pair.working)
     }
-    val info = pair.info ?: return
-    PlugFacts(info)
+    val info = pair.info
+    if (info != null) PlugFacts(info)
+    if (info == null || pair.fallback) return
     when {
-        pair.fallback -> Fallback(pair, flow)
         // v1.28 — M65: old firmware goes on to the Update step and a new plug to its setup by themselves; locked: the problem line.
         !info.pairs || info.provision == Provision.Locked || info.provision == Provision.Pending -> Unit
         info.provision == Provision.Confirmed -> ActionRow { ActionButton(PowerCopy.SET_UP, onClick = flow::setUp, enabled = !pair.working) }
@@ -262,12 +266,15 @@ private fun PlugFacts(info: PlugInfo) {
     ReadingRow(PowerCopy.SETUP, PowerCopy.provision(info.provision))
 }
 
-/** The plug finished its setup without this tablet: a factory reset, or a pairing window another tablet opened. */
+/**
+ * The plug finished its setup without this tablet: a factory reset, or a pairing window another tablet opened. Joining needs
+ * only the plug chosen (Android's bond, then its device info over it), so it is offered with no facts read too (v1.32 — M70).
+ */
 @Composable
 private fun Fallback(pair: PairState, flow: PairFlow) {
     NoteLine(PowerCopy.FALLBACK)
     ActionRow { ActionButton(PowerCopy.FIND_AGAIN, onClick = flow::search, enabled = !pair.working && !pair.searching) }
-    ActionRow(note = PowerCopy.JOIN_NOTE) { ActionButton(PowerCopy.JOIN, onClick = flow::join, enabled = !pair.working) }
+    if (pair.plug != null) ActionRow(note = PowerCopy.JOIN_NOTE) { ActionButton(PowerCopy.JOIN, onClick = flow::join, enabled = !pair.working) }
 }
 
 /**
@@ -336,8 +343,9 @@ private fun Tick(label: String, done: Boolean) {
 }
 
 /**
- * The phone hotspot's name and password for the plug, sent over Bluetooth with [action]. Held as typed in memory only (v1.28 —
- * M65: `remember`, not the saved state), starting from the hotspot the flow [kept] for this setup.
+ * The phone hotspot's name and password for the plug (v1.32 — M70: or a 2.4 GHz Wi-Fi's), sent over Bluetooth with [action].
+ * Held as typed in memory only (v1.28 — M65: `remember`, not the saved state), starting from the one the flow [kept] for this
+ * setup.
  */
 @Composable
 private fun HotspotForm(kept: Hotspot?, action: String, onSend: (String, String) -> Unit) {

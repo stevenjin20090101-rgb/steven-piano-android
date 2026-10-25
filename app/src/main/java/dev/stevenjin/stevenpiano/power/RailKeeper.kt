@@ -37,8 +37,9 @@ interface RailPlug {
 
     /**
      * The plug watch (v1.29 — M66): its settings read, and what differs from the tablet's put back (the switch's, the cloud
-     * off, the network and access point closed). True when something was put back, false when nothing differed, null when
-     * the plug couldn't be read.
+     * off, the network and access point closed; v1.32 — M70, Matter off, with the restart it asks for waited out before this
+     * returns, and quietly the first time). True when something was put back that should be said, false when nothing differed
+     * (or only quietly), null when the plug couldn't be read.
      */
     suspend fun putBack(): Boolean? = false
 }
@@ -891,7 +892,9 @@ class RailKeeper(
      * read. Found on: its settings put back first (an `auto_on` must not bring it back), then CUT with its weld look, and
      * "switched on by something else" said. Its settings are looked at too the first time, after the plug was out of reach,
      * and every [SETTINGS_EVERY_MS]; changed ones are put back and said. Never while the rail is wanted (the keeper talks to
-     * the plug every 10 s then) or a firmware update runs; a plug out of reach says nothing new.
+     * the plug every 10 s then) or a firmware update runs; a plug out of reach says nothing new. Matter off (v1.32 — M70) may
+     * restart the plug: [RailPlug.putBack] returns once it is back, so the restart is no missed read, and a plug found on is
+     * still CUT (and said, its weld look after) once it answers again; it comes back off, its power-up state the tablet's.
      */
     private suspend fun watch() {
         if (!available.value || wantedNow() || updating) return

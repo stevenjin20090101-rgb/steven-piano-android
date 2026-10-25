@@ -21,9 +21,10 @@ import java.util.Locale
  *   `Switch.GetStatus` with `apower` (a few watts while the 24 V supply is up), `Switch.SetConfig`.
  * - **Its setup** (`provision`): [Provision.Pending] (new) → [Provision.Confirmed] once on a network → [Provision.Complete]
  *   [completeAfterMs] later while it stays online; offline when its setup window ([windowMs] from the start) runs out
- *   before that, [Provision.Locked]. From Complete pairing is enforced: a central without a bond is refused everything
- *   ([Answer.Refused]). Locked answers nothing at all, `Shelly.GetDeviceInfo` included ([Answer.Silent], v1.26 — M62, as
- *   the firmware chat confirmed in SMART_PLUG.md): a power cycle, [reset], ends it.
+ *   before that, [Provision.Locked]. From Complete pairing is enforced on 2.0.0 and later: a central without a bond is
+ *   refused everything ([Answer.Refused]), `Shelly.GetDeviceInfo` included (v1.32 — M70: the real plug's GATT refusal,
+ *   which reaches the Pair screen's Find as such). Locked answers nothing at all, `Shelly.GetDeviceInfo` included
+ *   ([Answer.Silent], v1.26 — M62, as the firmware chat confirmed in SMART_PLUG.md): a power cycle, [reset], ends it.
  * - **Bonds:** `BLE.StartPairing` opens a window in which [bond] succeeds (20 bonds at most); `BLE.ListPairedDevices` and
  *   `BLE.DeletePairedDevice` list and drop them. `BLE.SetConfig` turning RPC on asks for a restart the first time
  *   (`Shelly.Reboot`: away for [rebootMs]).
@@ -33,6 +34,11 @@ import java.util.Locale
  *   `Shelly.FactoryReset` (new again: no network, no bonds, its settings the defaults, the same firmware; away for
  *   [rebootMs]). Before 1.7.5 its device info has no `provision`.
  * - [weld] keeps the relay closed whatever is asked (output reads off, the supply still draws): the welded relay.
+ * - **Matter** (v1.32 — M70): `Matter.GetConfig`, `Matter.SetConfig` (`restart_required` when `enable` changes; Matter
+ *   itself follows at the next restart) and `Matter.GetStatus` (`commissionable` while it runs, no fabrics); on from the box
+ *   and after a factory reset, off at the end of the Pair screen. [hasMatter] false: firmware without it ("No handler").
+ *   A restart brings the switch up as its `initial_state` says.
+ * - **A second network** (`sta1`, v1.32 — M70), which the Shelly app may set: in `WiFi.GetConfig` and `WiFi.SetConfig`.
  *
  * Thread-safe: every call is synchronized.
  */
@@ -62,10 +68,15 @@ class EmulatedShelly(
 
     /**
      * Firmware older than 2.0.0 lets only paired centrals in once `complete` (v1.29 — M66), though it can't pair: every
-     * request refused, its device info too. Off: such a plug answers anyone, as the as-is way needs.
+     * request refused, its device info too, as 2.0.0 and later always do (v1.32 — M70). Off: such a plug answers anyone, as
+     * the as-is way needs.
      */
     @Volatile
     var refuseUnpaired: Boolean = false
+
+    /** Firmware with Matter (v1.32 — M70); false: its `Matter.*` methods answer "No handler". */
+    @Volatile
+    var hasMatter: Boolean = true
 
     /**
      * What one request gets: its reply frame, the GATT refusal a stranger to a plug that enforces pairing gets, or nothing
@@ -99,6 +110,11 @@ class EmulatedShelly(
     /** When `WiFi.SetConfig` last gave it a network to join (v1.28 — M65); null with none. */
     private var joinedAt: Long? = null
 
+    /** A second network (`sta1`), and Matter as set and as running (it follows the setting at a restart; v1.32 — M70). */
+    private var sta1On = false
+    private var matterEnabled = true
+    private var matterRunning = true
+
     /** The relay stuck closed: a CUT reads off but the supply stays up. */
     @Volatile
     var weld: Boolean = false
@@ -127,14 +143,19 @@ class EmulatedShelly(
         pairingUntil = 0L
         bonds.clear()
         rebootUntil = 0L
+        sta1On = false
+        matterEnabled = true
+        matterRunning = true
         if (bonded != null) bonds += bonded
         if (provision == Provision.Complete && bonded != null) {
-            // Paired, set up and off every network (the end of the Pair screen).
+            // Paired, set up and off every network (the end of the Pair screen), Matter off (v1.32 — M70).
             staOn = false
             joinedAt = null
             apOn = false
             cloudOn = false
             config = ShellyRpc.switchConfig().getJSONObject("config")
+            matterEnabled = false
+            matterRunning = false
         }
     }
 
@@ -142,9 +163,12 @@ class EmulatedShelly(
     @Synchronized
     fun rebooting(): Boolean = clock() < rebootUntil
 
-    /** Whether it is on a network or its own access point is open (v1.28 — M65): the Pair screen must end with neither. */
+    /**
+     * Whether it is on a network (its second too, v1.32 — M70) or its own access point is open (v1.28 — M65): the Pair screen
+     * must end with neither.
+     */
     @Synchronized
-    fun networkUp(): Boolean = staOn || apOn
+    fun networkUp(): Boolean = staOn || sta1On || apOn
 
     /** Whether its relay feeds the 24 V supply now. */
     @Synchronized
@@ -182,6 +206,26 @@ class EmulatedShelly(
     @Synchronized
     fun switchSettings(): JSONObject = JSONObject(config.toString())
 
+    /** Matter turned on from outside (v1.32 — M70), as the Shelly app would, and running. */
+    @Synchronized
+    fun matterOnFromOutside() {
+        matterEnabled = true
+        matterRunning = true
+    }
+
+    /** Whether Matter is set on, and whether it runs (advertising for commissioning: Android's pop-up; v1.32 — M70). */
+    @Synchronized
+    fun matterOn(): Boolean = matterEnabled
+
+    @Synchronized
+    fun matterRunning(): Boolean = matterRunning
+
+    /** A second network (`sta1`) from outside (v1.32 — M70), as the Shelly app may set one. */
+    @Synchronized
+    fun addSecondNetwork() {
+        sta1On = true
+    }
+
     /** Whether [central] is bonded. */
     @Synchronized
     fun bonded(central: String): Boolean = central in bonds
@@ -209,9 +253,9 @@ class EmulatedShelly(
         val state = provisionNow()
         if (state == Provision.Locked) return Answer.Silent   // RPC over Bluetooth off until a power cycle
         if (state == Provision.Complete && central !in bonds) {
-            // v1.29 — M66: before 2.0.0 nothing is enforced, unless [refuseUnpaired] says this firmware does.
-            if (PlugInfo.versionAtLeast(firmware, 2, 0) && method != INFO) return Answer.Refused
-            if (!PlugInfo.versionAtLeast(firmware, 2, 0) && refuseUnpaired) return Answer.Refused
+            // 2.0.0 and later refuse everything, the device info too (v1.32 — M70: the real plug's GATT refusal). v1.29 — M66:
+            // before 2.0.0 nothing is enforced, unless [refuseUnpaired] says this firmware does.
+            if (PlugInfo.versionAtLeast(firmware, 2, 0) || refuseUnpaired) return Answer.Refused
         }
         if (!rpcOn && method != "BLE.SetConfig" && method != INFO) return Answer.Refused
         return Answer.Reply(
@@ -247,7 +291,7 @@ class EmulatedShelly(
                 "Cloud.GetConfig" -> result(id, JSONObject().put("enable", cloudOn).put("server", "shelly-emulator.example:6022/jrpc"))
                 "WiFi.GetConfig" -> result(
                     id,
-                    JSONObject().put("ap", JSONObject().put("enable", apOn)).put("sta", JSONObject().put("enable", staOn)).put("sta1", JSONObject().put("enable", false)),
+                    JSONObject().put("ap", JSONObject().put("enable", apOn)).put("sta", JSONObject().put("enable", staOn)).put("sta1", JSONObject().put("enable", sta1On)),
                 )
                 "Cloud.SetConfig" -> {
                     cloudOn = params.optJSONObject("config")?.optBoolean("enable", cloudOn) ?: cloudOn
@@ -257,6 +301,7 @@ class EmulatedShelly(
                 "WiFi.GetStatus" -> result(id, wifiStatus())
                 "Shelly.Reboot" -> {
                     rebootUntil = clock() + rebootMs
+                    restarted()
                     result(id, null)
                 }
                 "Shelly.CheckForUpdate" -> checkForUpdate(id)
@@ -268,7 +313,22 @@ class EmulatedShelly(
                     rebootUntil = clock() + rebootMs
                     result(id, null)
                 }
-                else -> error(id, -114, "Method $method failed: No handler")
+                // v1.32 — M70: Matter, on firmware that has it.
+                "Matter.GetConfig" -> if (hasMatter) result(id, JSONObject().put("enable", matterEnabled)) else noHandler(id, method)
+                "Matter.SetConfig" -> if (hasMatter) {
+                    val enable = params.optJSONObject("config")?.optBoolean("enable", matterEnabled) ?: matterEnabled
+                    val changed = enable != matterEnabled
+                    matterEnabled = enable
+                    result(id, JSONObject().put("restart_required", changed))
+                } else {
+                    noHandler(id, method)
+                }
+                "Matter.GetStatus" -> if (hasMatter) {
+                    result(id, JSONObject().put("num_fabrics", 0).put("commissionable", matterRunning))
+                } else {
+                    noHandler(id, method)
+                }
+                else -> noHandler(id, method)
             },
         )
     }
@@ -303,7 +363,30 @@ class EmulatedShelly(
             else -> {
                 firmware = to
                 rebootUntil = clock() + updateMs
+                restarted()
                 result(id, null)
+            }
+        }
+    }
+
+    /**
+     * A restart (v1.32 — M70): Matter follows its setting, and the switch comes up as its `initial_state` says ("off": off,
+     * "on": on with no timer; anything else, as it was).
+     */
+    private fun restarted() {
+        matterRunning = matterEnabled
+        when (config.optString("initial_state")) {
+            "off" -> {
+                output = false
+                timerEnd = null
+                timerS = null
+                if (!weld) onSince = null
+            }
+            "on" -> {
+                if (!outputNow()) onSince = clock()
+                output = true
+                timerEnd = null
+                timerS = null
             }
         }
     }
@@ -339,6 +422,7 @@ class EmulatedShelly(
                 confirmedAt = clock()
             }
         }
+        config.optJSONObject("sta1")?.let { sta1On = it.optBoolean("enable", sta1On) }   // v1.32 — M70
         config.optJSONObject("ap")?.let { apOn = it.optBoolean("enable", apOn) }
         return result(id, JSONObject().put("restart_required", false))
     }
@@ -390,6 +474,8 @@ class EmulatedShelly(
 
     private fun result(id: Any?, result: JSONObject?): String =
         JSONObject().put("id", id ?: JSONObject.NULL).put("src", ID).put("dst", ShellyRpc.SRC).put("result", result ?: JSONObject.NULL).toString()
+
+    private fun noHandler(id: Any?, method: String): String = error(id, -114, "Method $method failed: No handler")
 
     private fun error(id: Any?, code: Int, message: String): String =
         JSONObject().put("id", id ?: JSONObject.NULL).put("src", ID).put("dst", ShellyRpc.SRC)

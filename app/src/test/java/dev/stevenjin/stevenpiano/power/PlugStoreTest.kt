@@ -9,7 +9,12 @@
 
 package dev.stevenjin.stevenpiano.power
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +31,8 @@ import java.io.File
 
 /**
  * The power watch's usual idle in the plug's store (v1.31 — M68), piano safety: the plug's last rail-up readings outlive the
- * app, go with its pairing, and start again only after a trip and a safety check that heard every key.
+ * app, go with its pairing, and start again only after a trip and a safety check that heard every key. And (v1.32 — M70)
+ * whether the plug's Matter is off, read false from a pairing kept before 1.32.
  */
 class PlugStoreTest {
     @get:Rule
@@ -34,15 +40,18 @@ class PlugStoreTest {
 
     private val file by lazy { File(tmp.root, "power_plug.preferences_pb") }
 
-    /** The store as one run of the app opens it; [block] runs, then the run ends. */
-    private fun <T> session(block: suspend (PlugStore) -> T): T = runBlocking {
+    /** The store's file as one run of the app opens it; [block] runs, then the run ends. */
+    private fun <T> raw(block: suspend (DataStore<Preferences>) -> T): T = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         try {
-            block(PlugStore(PreferenceDataStoreFactory.create(scope = scope) { file }))
+            block(PreferenceDataStoreFactory.create(scope = scope) { file })
         } finally {
             scope.cancel()
         }
     }
+
+    /** The store as one run of the app opens it; [block] runs, then the run ends. */
+    private fun <T> session(block: suspend (PlugStore) -> T): T = raw { block(PlugStore(it)) }
 
     private fun kept(): PlugSettings = session { it.settings.first() }
 
@@ -92,6 +101,37 @@ class PlugStoreTest {
         assertEquals("a new normal is learned from the next rail-up", emptyList<IdleReading>(), again.idles)
         assertFalse(again.aboveUsual)
         assertEquals(PLUG, again.pairing)
+    }
+
+    @Test
+    fun `a pairing kept before 1_32 reads Matter not yet off, the watch's first look keeps it off, and a new pairing says (v1_32 M70)`() {
+        raw { store ->
+            store.edit { prefs ->   // as 1.31 kept it: no matterOff
+                prefs[stringPreferencesKey("address")] = PLUG.address
+                prefs[stringPreferencesKey("id")] = PLUG.id!!
+                prefs[booleanPreferencesKey("locked")] = true
+                prefs[booleanPreferencesKey("on")] = true
+            }
+        }
+        val old = kept()
+        assertEquals("read as it was", PLUG, old.pairing)
+        assertFalse("not yet off: the watch's first look is quiet", old.pairing!!.matterOff)
+        assertTrue(old.on)
+
+        session { it.matterTurnedOff() }
+        assertTrue("kept by the watch's first look", kept().pairing!!.matterOff)
+        assertTrue("the rest as it was", kept().on)
+
+        session { it.pair(PLUG) }
+        assertFalse("paired again, Matter not taken off at the setup", kept().pairing!!.matterOff)
+        session { it.pair(PLUG.copy(matterOff = true)) }
+        assertEquals(PLUG.copy(matterOff = true), kept().pairing)
+
+        session { store ->
+            store.forget()
+            store.matterTurnedOff()
+        }
+        assertEquals("no plug paired: nothing kept", PlugSettings(), kept())
     }
 
     private companion object {

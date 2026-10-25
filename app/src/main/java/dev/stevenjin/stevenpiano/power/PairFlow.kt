@@ -60,8 +60,8 @@ enum class UpdateTask { RailOff, Online, Offered, Started, Installed, Cleared }
 data class UpdateState(val from: String?, val to: String? = null, val tasks: Set<UpdateTask> = emptySet())
 
 /**
- * The phone's hotspot as typed on the Pair screen (v1.28 — M65): in memory for this setup alone, never stored or logged,
- * and never in a string by accident.
+ * The phone's hotspot (v1.32 — M70: or any 2.4 GHz Wi-Fi) as typed on the Pair screen (v1.28 — M65): in memory for this
+ * setup alone, never stored or logged, and never in a string by accident.
  */
 class Hotspot(val ssid: String, val pass: String) {
     override fun toString(): String = "Hotspot"
@@ -114,8 +114,11 @@ data class PairState(
  * leaves nothing paired, and the app keeps not switching the 24 V. A plug `complete` without this tablet is the fallback
  * (a factory reset, the bond while `pending`, the network over Bluetooth); `locked` asks for a power cycle: a locked plug
  * answers nothing over Bluetooth, so one with no bond that connects and gives no reply in 5 s is taken as locked (v1.26 —
- * M62, [PlugClient.read]). The hotspot is held in [PairState] alone. Runs in [scope] (the app's), so leaving the page cuts
- * nothing short. Main thread.
+ * M62, [PlugClient.read]). Since v1.32 (M70) the real plug's refusal shows at Find with no facts read (it refuses its device
+ * info too), and silence there gets the power cycle first and the reset after it (Android may report a refusal as silence).
+ * Every way through [configure] turns the plug's Matter off beside its Bluetooth control, one restart serving both, and
+ * the network closes with the second network (`sta1`) too. The hotspot (any 2.4 GHz Wi-Fi since v1.32) is held in
+ * [PairState] alone. Runs in [scope] (the app's), so leaving the page cuts nothing short. Main thread.
  */
 class PairFlow(
     private val client: PlugClient,
@@ -138,6 +141,9 @@ class PairFlow(
     /** The plug went off every network in this setup: only then can the setup finish (v1.28 — M65). */
     private var closed = false
 
+    /** The plug took Matter off in this setup (v1.32 — M70): kept with the pairing. */
+    private var matterOff = false
+
     private val address: String? get() = _state.value.plug?.address
 
     /** From the top, the hotspot forgotten. */
@@ -146,6 +152,7 @@ class PairFlow(
         watch?.cancel()
         bondEntry = null
         closed = false
+        matterOff = false
         _state.value = PairState()
     }
 
@@ -159,6 +166,7 @@ class PairFlow(
     fun search() = run {
         bondEntry = null
         closed = false
+        matterOff = false
         _state.update {
             it.copy(
                 step = PairStep.Find, searching = true, found = emptyList(), plug = null, info = null, tasks = emptySet(),
@@ -186,6 +194,8 @@ class PairFlow(
      * if this tablet is bonded with it, else the factory reset's way. Firmware older than 2.0.0 (`pending`, `confirmed`, no
      * `provision` before 1.7.5, or v1.29 — M66 `complete` and still answering): the Update step, with its choice ([asIs] or
      * [update]). `pending` on 2.0.0 or later: set up from here by itself. `confirmed`: the person's tap ([setUp]).
+     * v1.32 — M70: refused (the real plug refuses an unpaired tablet everything, its device info too) or silent with no bond,
+     * the reset's way shows at once, with no facts read; silence says to unplug it for 5 seconds first.
      */
     private suspend fun read() {
         val plug = address ?: return
@@ -195,11 +205,13 @@ class PairFlow(
                 _state.update { it.copy(info = null, fallback = true, problem = REFUSED) }
                 return
             }
-            // v1.26 — M62 (SMART_PLUG.md): a plug with no bond that connects but gives no reply in 5 s is `locked`.
+            // v1.26 — M62 (SMART_PLUG.md): a plug with no bond that connects but gives no reply in 5 s may be `locked`, and
+            // (v1.32 — M70) may be one that finished its setup elsewhere, its refusal reported as silence: a power cycle,
+            // then the reset.
             PlugRead.Silent -> {
-                val locked = !client.bluetooth.bonded(plug)
-                if (locked) log("Plug: no reply in ${PlugClient.SILENT_MS / 1_000} s and no bond: locked")
-                _state.update { it.copy(info = null, fallback = false, problem = if (locked) LOCKED else UNREACHABLE) }
+                val unbonded = !client.bluetooth.bonded(plug)
+                if (unbonded) log("Plug: no reply in ${PlugClient.SILENT_MS / 1_000} s and no bond: locked, or refusing this tablet")
+                _state.update { it.copy(info = null, fallback = unbonded, problem = if (unbonded) SILENT else UNREACHABLE) }
                 return
             }
             PlugRead.Unreachable -> {
@@ -376,7 +388,10 @@ class PairFlow(
         awaitComplete()
     }
 
-    /** The settings and RPC over Bluetooth, with the restart it may ask for. */
+    /**
+     * The settings and RPC over Bluetooth, and (v1.32 — M70) Matter off beside it, with the one restart either may ask for.
+     * Every way through the setup comes here: the Shelly app's, a new or reset plug's, the update's, as it is, and [joinSetUp].
+     */
     private suspend fun configure(plug: String): Boolean {
         var settings = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = true), to = plug)
         if (settings != null && !settings.ok) settings = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = false), to = plug)
@@ -384,7 +399,15 @@ class PairFlow(
         tick(SetUpTask.Settings)
         val rpc = client.call("BLE.SetConfig", ShellyRpc.bleRpcOn(), to = plug)
         if (rpc?.ok != true) return fail(SetUpTask.Bluetooth)
-        if (ShellyRpc.restartRequired(rpc)) {
+        // Matter: no 30 s timer, a second way to hold the 24 V on. Firmware without it ("No handler"), an error or no answer:
+        // logged, and the setup goes on (the plug watch looks again).
+        val matter = client.call("Matter.SetConfig", ShellyRpc.matterOff(), to = plug)
+        if (matter?.ok == true) {
+            matterOff = true
+        } else {
+            log("Plug setup: Matter off " + (if (matter == null) "unanswered" else "refused (${matter.code} ${matter.message})") + "; going on")
+        }
+        if (ShellyRpc.restartRequired(rpc) || ShellyRpc.restartRequired(matter)) {
             client.call("Shelly.Reboot", to = plug)
             client.drop()
             delay(REBOOT_WAIT_MS)
@@ -465,10 +488,13 @@ class PairFlow(
 
     /**
      * Off every network and the access point closed; only then the pairing kept (v1.28 — M65: never before, so a setup that
-     * stops halfway leaves nothing paired), its switch off until Finish, and the hotspot forgotten.
+     * stops halfway leaves nothing paired), its switch off until Finish, and the hotspot forgotten. v1.32 — M70: the second
+     * network (`sta1`, which the Shelly app may have set) closes too, so the plug watch finds nothing changed; a model that
+     * refuses `sta1` gets the two alone. Kept with it: whether the plug took Matter off.
      */
     private suspend fun closeNetworkNow(plug: String): Boolean {
-        val answer = client.call("WiFi.SetConfig", ShellyRpc.networkOff(), to = plug)
+        var answer = client.call("WiFi.SetConfig", ShellyRpc.networkOffAll(), to = plug)
+        if (answer != null && !answer.ok) answer = client.call("WiFi.SetConfig", ShellyRpc.networkOff(), to = plug)
         if (answer?.ok != true) {
             _state.update { it.copy(step = PairStep.Network, problem = NETWORK_FAILED) }
             return false
@@ -476,7 +502,7 @@ class PairFlow(
         closed = true
         val info = _state.value.info
         val asIs = _state.value.asIs
-        store.pair(PlugPairing(plug, info?.id, info?.model, info?.ver, bondEntry.takeUnless { asIs }, locked = !asIs), on = false)
+        store.pair(PlugPairing(plug, info?.id, info?.model, info?.ver, bondEntry.takeUnless { asIs }, locked = !asIs, matterOff = matterOff), on = false)
         log("Plug " + (if (asIs) "kept as it is, not locked" else "paired") + ": off every network, its access point closed")
         _state.update { it.copy(step = PairStep.Verify, problem = null, hotspot = null) }
         return true
@@ -719,7 +745,7 @@ class PairFlow(
 
     private fun failUpdate(task: UpdateTask) = _state.update { it.copy(problem = failed(task)) }
 
-    /** The plug finished its setup without this tablet: the factory reset by its button, as for any such plug. */
+    /** The plug finished its setup without this tablet: the factory reset (v1.32 — M70: the Shelly app's, or its button's). */
     private fun refusedNow(): Boolean {
         _state.update { it.copy(fallback = true, problem = REFUSED) }
         return false
@@ -767,12 +793,19 @@ class PairFlow(
 
         const val NOT_FOUND = "No power plug found. Check it is plugged in and near this tablet, then search again."
         const val UNREACHABLE = "The plug didn't answer. Bring the tablet nearer to it, then try again."
-        const val REFUSED = "This plug finished its setup without this tablet, so it refuses it."
+        /** v1.32 — M70: the real plug set up elsewhere refuses an unpaired tablet everything; the reset's way follows it. */
+        const val REFUSED = "This plug finished its setup somewhere else, such as the Shelly app, so it only answers devices it already paired with."
+
+        /** Silent with no bond at Find (v1.32 — M70): locked, or a refusal reported as silence. The reset's way follows it. */
+        const val SILENT =
+            "The plug didn't answer. Unplug it for 5 seconds and plug it back in, then find it again. If it still won't answer, reset it:"
         const val LOCKED = "Unplug the power plug for 5 seconds and plug it back in, then open Pair the power plug again."
         const val NETWORK_FAILED = "The plug didn't take the network setting. Try again."
+
+        /** Not online (v1.32 — M70: a phone's hotspot or a 2.4 GHz Wi-Fi); the update needs internet, and the setup asks for it. */
         const val NOT_ONLINE =
-            "The plug didn't get online. Check the hotspot's name and password, and that it has internet. The plug only sees " +
-                "2.4 GHz: on an iPhone, turn on Maximize Compatibility; on Android, choose the 2.4 GHz band."
+            "The plug didn't get online. Check the Wi-Fi's name and password, and that it has internet. The plug only sees " +
+                "2.4 GHz: on an iPhone's hotspot, turn on Maximize Compatibility; on an Android's, choose the 2.4 GHz band."
         const val PIANO_FIRST = "Connect to the piano first (Piano › Instrument): the check reads its power boards."
         const val VERIFY_FAILED = "Not every board answered with the 24 V on, or they didn't go when it went off. Check the supply is on the plug, then try again."
         const val JOIN_FAILED = "This tablet couldn't pair. On the tablet the plug knows, open Piano › Power plug › Admit a replacement tablet, then try again within 3 minutes."

@@ -77,6 +77,21 @@ class ShellyRpcTest {
     }
 
     @Test
+    fun `Matter off and Matter read, and the close with the second network (v1_32 M70)`() {
+        val off = ShellyRpc.matterOff().getJSONObject("config")
+        assertFalse(off.getBoolean("enable"))
+        assertEquals("that alone", 1, off.length())
+        assertTrue(ShellyRpc.matterEnabled(JSONObject("""{"enable":true}""")))
+        assertFalse(ShellyRpc.matterEnabled(JSONObject("""{"enable":false}""")))
+        assertFalse("a config that doesn't say is off", ShellyRpc.matterEnabled(JSONObject("{}")))
+        assertFalse(ShellyRpc.matterEnabled(null))
+        val close = ShellyRpc.networkOffAll().getJSONObject("config")
+        for (network in listOf("sta", "sta1", "ap")) assertFalse(network, close.getJSONObject(network).getBoolean("enable"))
+        assertTrue("the second network on is a network on", ShellyRpc.networkEnabled(JSONObject("""{"sta":{"enable":false},"sta1":{"enable":true},"ap":{"enable":false}}""")))
+        assertFalse(ShellyRpc.networkEnabled(JSONObject("""{"sta":{"enable":false},"sta1":{"enable":false},"ap":{"enable":false}}""")))
+    }
+
+    @Test
     fun `answers - a result, an error, a null result, or no answer at all`() {
         val ok = ShellyRpc.answer("""{"id":7,"src":"shellyplugusg4-a8032ab5c1d2","dst":"steven-piano","result":{"was_on":false}}""")!!
         assertEquals(7, ok.id)

@@ -22,7 +22,8 @@ import java.util.Locale
  * `debug.stevenpiano.lock`, read when the app first asks:
  *
  * - `pending` (new from its box), `confirmed` (set up with the Shelly app: the normal Pair screen), `complete` (finished its
- *   setup without this tablet: the fallback), `locked` (its setup window ran out offline), `paired` (paired with this
+ *   setup without this tablet: refusing it everything, its device info too, as the real plug does since v1.32 — M70; the
+ *   fallback at Find), `locked` (its setup window ran out offline), `paired` (paired with this
  *   tablet, set up, off every network), `old` (firmware 1.7.5, set up with the Shelly app: no pairing); unset or `none`, no
  *   plug in range at all, and the emulated piano's boards always answer, as before the plug.
  * - Its firmware (v1.28 — M65): `debug.stevenpiano.plugver 1.6.2` starts it on that one (unset: 2.0.3, or 1.7.5 for `old`);
@@ -34,8 +35,9 @@ import java.util.Locale
  * - adb's `--es dev.stevenjin.stevenpiano.EMULATOR_PLUG "…"` ([command]): `away` (out of range) and `back`, `reset <state>`
  *   (a power cycle), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed), `boardsup <ms>` (how long the
  *   boards take after the supply comes up: 5000 for firmware 2.0.1's re-probe); v1.29 — M66, for the plug watch: `outside
- *   on` (switched on by another phone) and `initial on` (its power-up state changed). `debug.stevenpiano.plugunpaired
- *   refuse` has firmware before 2.0.0 refuse unpaired requests once `complete`.
+ *   on` (switched on by another phone) and `initial on` (its power-up state changed); v1.32 — M70, `matter on` (Matter
+ *   turned on from outside: the watch turns it off) and `sta1 on` (a second network, as the Shelly app may set one).
+ *   `debug.stevenpiano.plugunpaired refuse` has firmware before 2.0.0 refuse unpaired requests once `complete`.
  *
  * Every request and answer is logged (`adb logcat -s Plug`), the hotspot's name and password blanked, and the link log
  * says what changed.
@@ -111,6 +113,9 @@ object EmulatedPlug {
             // v1.29 — M66: for the plug watch, the switch on from outside and its power-up state changed.
             "outside" -> if (argument == "on") shelly()?.switchOnFromOutside()
             "initial" -> shelly()?.changeSetting("initial_state", argument.ifEmpty { "on" })
+            // v1.32 — M70: Matter on from outside, and a second network.
+            "matter" -> if (argument == "on") shelly()?.matterOnFromOutside()
+            "sta1" -> if (argument == "on") shelly()?.addSecondNetwork()
             else -> Log.w(TAG, "Unknown plug command: $line")
         }
         LinkLog.shared.add("The emulated power plug: $line")

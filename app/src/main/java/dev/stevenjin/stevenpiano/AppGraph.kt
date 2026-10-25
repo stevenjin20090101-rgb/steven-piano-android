@@ -1183,7 +1183,8 @@ class AppGraph(private val app: Application) {
     val rail: RailKeeper by lazy {
         RailKeeper(
             scope = appScope,
-            plug = ShellyRail(plug),
+            // v1.32 — M70: the plug watch keeps Matter off, quietly the first time (kept with the pairing).
+            plug = ShellyRail(plug, matterOff = { plugSettings.value?.pairing?.matterOff == true }, keepMatterOff = plugStore::matterTurnedOff, log = LinkLog::warn),
             check = ::railCheck,
             connected = stevenConnected,
             stopSequence = ::railStopSequence,

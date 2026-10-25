@@ -9,8 +9,8 @@
 
 package dev.stevenjin.stevenpiano.power
 
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -30,67 +30,12 @@ import org.junit.Test
  * The Pair screen's work (v1.26 — M60) against the emulator's fake plug ([EmulatedShelly]), on a fake clock: the setup in
  * SMART_PLUG.md's order, and the plugs that need another way (one that finished without this tablet, one that locked).
  * Since v1.28 (M65), without the Shelly app: old firmware updated over the hotspot, a new plug set up from here by itself,
- * the pairing kept only once the plug is off every network, and the hotspot kept nowhere.
+ * the pairing kept only once the plug is off every network, and the hotspot kept nowhere. Since v1.32 (M70): the real plug's
+ * refusal at Find (its device info refused too) and silence there, each with the reset's way; Matter off beside Bluetooth
+ * control on every way, one restart for both; the second network closed too.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PairFlowTest {
-    /**
-     * The fake plug's Bluetooth, at once (a locked plug's silence takes the caller's whole time): every request's method is in
-     * [methods] (Android's bond as "bond"), its frame in [frames], and what the plug was at it in [seen].
-     */
-    private class Transport(private val shelly: EmulatedShelly) : PlugTransport {
-        private var up = false
-        val methods = mutableListOf<String>()
-        val frames = mutableListOf<String>()
-
-        /** At each request: the plug's setup state, and whether this tablet was bonded with it. */
-        val seen = mutableListOf<Pair<Provision, Boolean>>()
-        override var refused: Boolean = false
-        override var reached: Boolean = false
-
-        override fun blocker(): String? = null
-
-        override suspend fun scan(timeoutMs: Long, found: (FoundPlug) -> Unit): String? {
-            found(FoundPlug(EmulatedShelly.ADDRESS, EmulatedShelly.NAME, -60))
-            return null
-        }
-
-        override suspend fun connect(address: String): Boolean {
-            up = !shelly.rebooting()
-            reached = up
-            return up
-        }
-
-        override val connected: Boolean get() = up && !shelly.rebooting()
-
-        override suspend fun exchange(frame: ByteArray, timeoutMs: Long): ByteArray? {
-            if (!connected) return null
-            val text = String(frame, Charsets.UTF_8)
-            methods += JSONObject(text).getString("method")
-            frames += text
-            seen += shelly.provisionNow() to shelly.bonded(EmulatedShelly.TABLET)
-            return when (val answer = shelly.handle(EmulatedShelly.TABLET, text)) {
-                is EmulatedShelly.Answer.Reply -> answer.json.toByteArray(Charsets.UTF_8)
-                EmulatedShelly.Answer.Refused -> {
-                    refused = true
-                    null
-                }
-                EmulatedShelly.Answer.Silent -> {
-                    delay(timeoutMs)
-                    null
-                }
-            }
-        }
-
-        override fun disconnect() {
-            up = false
-        }
-
-        override suspend fun bond(address: String, timeoutMs: Long): Boolean = shelly.bond(EmulatedShelly.TABLET).also { methods += "bond" }
-
-        override fun bonded(address: String): Boolean = shelly.bonded(EmulatedShelly.TABLET)
-    }
-
     /** The pairing as kept, whether the plug's network was up at that moment, and every value kept as text ([kept]). */
     private class Store(private val shelly: EmulatedShelly) : PairingStore {
         var pairing: PlugPairing? = null
@@ -124,12 +69,12 @@ class PairFlowTest {
         assertTrue("not reached within ${limitMs / 1_000} s", done())
     }
 
-    private class Setup(val shelly: EmulatedShelly, val transport: Transport, val store: Store, val flow: PairFlow, val logs: List<String>)
+    private class Setup(val shelly: EmulatedShelly, val transport: FakePlugTransport, val store: Store, val flow: PairFlow, val logs: List<String>)
 
     private fun TestScope.setup(start: Provision, bonded: Boolean = false, firmware: String = EmulatedShelly.FIRMWARE): Setup {
         val shelly = EmulatedShelly(start, clock = { currentTime }, firmware = firmware)
         if (bonded) shelly.reset(start, bonded = EmulatedShelly.TABLET)
-        val transport = Transport(shelly)
+        val transport = FakePlugTransport(shelly)
         val logs = mutableListOf<String>()
         val client = PlugClient(transport, backgroundScope, address = { null }, io = StandardTestDispatcher(testScheduler), log = { logs += it })
         val store = Store(shelly)
@@ -156,6 +101,9 @@ class PairFlowTest {
         val transport = s.transport
         val store = s.store
         val flow = s.flow
+        // v1.32 — M70: the Shelly app may set a second network, and here left Bluetooth control on: Matter's restart alone.
+        shelly.addSecondNetwork()
+        shelly.handle(EmulatedShelly.TABLET, """{"id":1,"src":"app","method":"BLE.SetConfig","params":{"config":{"rpc":{"enable":true}}}}""")
         flow.ready()
         settle()
         assertEquals(PairStep.Find, flow.state.value.step)
@@ -174,7 +122,13 @@ class PairFlowTest {
         assertTrue(shelly.bonded(EmulatedShelly.TABLET))
         assertNull("nothing kept while the plug is on the hotspot (v1.28 — M65)", store.pairing)
         val order = transport.methods.filter { it !in POLLS }
-        assertEquals(listOf("Switch.SetConfig", "BLE.SetConfig", "Shelly.Reboot", "BLE.StartPairing", "bond", "Cloud.SetConfig"), order)
+        assertEquals(
+            "v1.32 — M70: Matter off beside Bluetooth control, and the restart it asks for",
+            listOf("Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "BLE.StartPairing", "bond", "Cloud.SetConfig"),
+            order,
+        )
+        assertFalse(shelly.matterOn())
+        assertFalse("Matter stopped with the restart: no more pop-ups", shelly.matterRunning())
 
         advanceTimeBy(EmulatedShelly.COMPLETE_AFTER_MS)
         settle()
@@ -189,11 +143,14 @@ class PairFlowTest {
         flow.closeNetwork()
         settle()
         assertEquals(PairStep.Verify, flow.state.value.step)
-        assertFalse("off every network, its access point closed", shelly.networkUp())
+        assertFalse("off every network, the second one too (v1.32 — M70), its access point closed", shelly.networkUp())
+        val close = JSONObject(transport.frames.last { "WiFi.SetConfig" in it }).getJSONObject("params").getJSONObject("config")
+        for (network in listOf("sta", "sta1", "ap")) assertFalse("$network closed", close.getJSONObject(network).getBoolean("enable"))
         val pairing = store.pairing!!
         assertEquals("kept once the network was off", false, store.networkWhenPaired)
         assertEquals(EmulatedShelly.ADDRESS, pairing.address)
         assertEquals("this tablet as the plug lists it, for Forget", EmulatedShelly.addressOf(EmulatedShelly.TABLET), pairing.bondEntry)
+        assertTrue("Matter off kept with it (v1.32 — M70)", pairing.matterOff)
         assertFalse("the switch stays off until the end", store.on)
 
         flow.verify()
@@ -213,12 +170,32 @@ class PairFlowTest {
     }
 
     @Test
-    fun `a plug that finished its setup without this tablet - the factory reset's way`() = runTest {
-        val s = setup(Provision.Complete)
+    fun `a plug set up in the Shelly app refuses at Find - the reason, the reset with the Shelly app's way, Find again, nothing kept (v1_32 M70)`() = runTest {
+        val s = setup(Provision.Complete)   // 2.0.3, finished its setup without this tablet: it refuses everything
         found(s)
-        assertTrue(s.flow.state.value.fallback)
-        assertEquals(PairFlow.REFUSED, s.flow.state.value.problem)
+        val refused = s.flow.state.value
+        assertEquals(PairStep.Find, refused.step)
+        assertEquals("refused at the first ask, its device info", listOf("Shelly.GetDeviceInfo"), s.transport.methods)
+        assertEquals("the reason", PairFlow.REFUSED, refused.problem)
+        assertTrue("the reset's way shows at Find", refused.fallback)
+        assertNull("no facts: it said nothing of itself", refused.info)
+        assertNotNull("chosen, so Pair with a plug another tablet set up can work", refused.plug)
+        assertTrue("the Shelly app's way first", PowerCopy.FALLBACK.startsWith("Reset the plug: in the Shelly app, open the plug › Settings › Factory reset; or "))
+        assertTrue("then the button's", "hold its button for 10 seconds" in PowerCopy.FALLBACK)
         assertNull("nothing kept", s.store.pairing)
+
+        // Find the plug again: the search starts over, and the same plug refuses the same way.
+        s.flow.search()
+        settle()
+        val again = s.flow.state.value
+        assertFalse("searching again clears it", again.fallback)
+        assertNull(again.problem)
+        s.flow.choose(again.found.single())
+        settle()
+        assertEquals(PairFlow.REFUSED, s.flow.state.value.problem)
+        assertTrue(s.flow.state.value.fallback)
+        assertNull("nothing kept", s.store.pairing)
+        assertFalse(s.store.on)
     }
 
     @Test
@@ -226,6 +203,8 @@ class PairFlowTest {
         val s = setup(Provision.Complete)
         s.shelly.reset(Provision.Complete, bonded = OTHER_TABLET)   // set up and paired by the old tablet
         found(s)
+        assertNull("v1.32 — M70: refused at Find, nothing read; joining needs only the plug chosen", s.flow.state.value.info)
+        assertTrue(s.flow.state.value.fallback)
         s.flow.join()
         settle()
         assertEquals("no window: no bond", PairFlow.JOIN_FAILED, s.flow.state.value.problem)
@@ -234,14 +213,19 @@ class PairFlowTest {
         assertTrue(opened is EmulatedShelly.Answer.Reply)
         s.flow.join()
         until { s.flow.state.value.step == PairStep.Verify }
-        assertEquals("its settings and the cloud once more, then the network off", listOf("bond", "Switch.SetConfig", "BLE.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig"), s.transport.methods.filter { it !in POLLS }.takeLast(6))
+        assertEquals(
+            "its settings, Matter (v1.32 — M70) and the cloud once more, then the network off",
+            listOf("bond", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig"),
+            s.transport.methods.filter { it !in POLLS }.takeLast(7),
+        )
         assertEquals(SetUpTask.entries.toSet(), s.flow.state.value.tasks)
         assertEquals(EmulatedShelly.ADDRESS, s.store.pairing?.address)
+        assertEquals(true, s.store.pairing?.matterOff)
         assertEquals(false, s.store.networkWhenPaired)
     }
 
     @Test
-    fun `a locked plug - it connects and gives no reply in 5 s, and with no bond a power cycle is said (v1_26 M62)`() = runTest {
+    fun `a silent plug - no reply in 5 s and no bond - the power cycle first, then the reset's way, nothing kept (v1_26 M62, v1_32 M70)`() = runTest {
         val s = setup(Provision.Locked)
         s.flow.ready()
         settle()
@@ -250,9 +234,14 @@ class PairFlowTest {
         runCurrent()
         assertNull("5 s to answer: no verdict yet", s.flow.state.value.problem)
         settle()
-        assertEquals(PairFlow.LOCKED, s.flow.state.value.problem)
-        assertNull("it said nothing of itself", s.flow.state.value.info)
+        val silent = s.flow.state.value
+        assertEquals("locked, or a refusal reported as silence: unplug it first", PairFlow.SILENT, silent.problem)
+        assertTrue("Unplug it for 5 seconds" in PairFlow.SILENT && PairFlow.SILENT.endsWith("reset it:"))
+        assertTrue("the reset's way follows the line", silent.fallback)
+        assertEquals(PairStep.Find, silent.step)
+        assertNull("it said nothing of itself", silent.info)
         assertEquals("asked once: Shelly.GetDeviceInfo, never answered", listOf("Shelly.GetDeviceInfo"), s.transport.methods)
+        assertNull("nothing kept", s.store.pairing)
 
         // A bonded plug that stays silent is no lock (a bonded plug in complete always answers): it just didn't answer.
         val bonded = setup(Provision.Locked, bonded = true)
@@ -262,6 +251,54 @@ class PairFlowTest {
         advanceTimeBy(PlugClient.SILENT_MS)
         settle()
         assertEquals(PairFlow.UNREACHABLE, bonded.flow.state.value.problem)
+        assertFalse("no reset for a plug this tablet is paired with", bonded.flow.state.value.fallback)
+    }
+
+    // ---- v1.32 — M70: reset, set up from here, Matter off ---------------------------------------------------------------
+
+    @Test
+    fun `reset after the Shelly app, its own setup - Matter off beside Bluetooth control, one restart for both, kept with it, and without Matter it goes on (v1_32 M70)`() = runTest {
+        // Steven's plug: set up in the Shelly app (refused at Find), reset there, found again: new, so pairing first.
+        val s = setup(Provision.Complete)
+        found(s)
+        assertEquals(PairFlow.REFUSED, s.flow.state.value.problem)
+        s.shelly.reset(Provision.Pending)
+        assertTrue("new again, it advertises Matter: Android's pop-up", s.shelly.matterRunning())
+        s.flow.search()
+        settle()
+        s.flow.choose(s.flow.state.value.found.single())
+        settle(30_000)
+        assertTrue("the bond first, by itself", s.flow.state.value.overBluetooth)
+        assertNull(s.flow.state.value.problem)
+        s.flow.provision(SSID, PASS)
+        until { s.flow.state.value.verify?.finished == true }
+        assertTrue(s.flow.state.value.verify!!.passed)
+        assertEquals(
+            "both asked for a restart (Bluetooth control, the first time; Matter, changed): one",
+            listOf("BLE.StartPairing", "bond", "WiFi.SetConfig", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
+            s.transport.methods.filter { it !in POLLS },
+        )
+        val matter = JSONObject(s.transport.frames.single { "Matter.SetConfig" in it }).getJSONObject("params").getJSONObject("config")
+        assertFalse(matter.getBoolean("enable"))
+        assertFalse(s.shelly.matterOn())
+        assertFalse("stopped with the restart: no more pop-ups", s.shelly.matterRunning())
+        assertTrue("kept with the pairing", s.store.pairing!!.matterOff)
+        val close = JSONObject(s.transport.frames.last { "WiFi.SetConfig" in it }).getJSONObject("params").getJSONObject("config")
+        assertFalse("the close takes the second network too", close.getJSONObject("sta1").getBoolean("enable"))
+        assertFalse(s.shelly.networkUp())
+
+        // Firmware without Matter: "No handler", logged, and the setup goes on; Bluetooth control's restart alone.
+        val n = setup(Provision.Pending)
+        n.shelly.hasMatter = false
+        found(n)
+        settle(30_000)
+        n.flow.provision(SSID, PASS)
+        until { n.flow.state.value.verify?.finished == true }
+        assertTrue(n.flow.state.value.verify!!.passed)
+        assertTrue("asked", "Matter.SetConfig" in n.transport.methods)
+        assertEquals(1, n.transport.methods.count { it == "Shelly.Reboot" })
+        assertEquals("not kept as off: the plug watch looks again", false, n.store.pairing?.matterOff)
+        assertTrue("logged", n.logs.any { it.startsWith("Plug setup: Matter off refused") && "going on" in it })
     }
 
     // ---- v1.28 — M65: without the Shelly app ---------------------------------------------------------------------------
@@ -302,7 +339,7 @@ class PairFlowTest {
                 "Switch.Set", "Switch.SetConfig", "WiFi.SetConfig", "Shelly.CheckForUpdate", "Shelly.Update", // off, the hotspot, the update
                 "Shelly.FactoryReset", "Switch.Set", // cleared, then `pending`, the 24 V off again
                 "BLE.StartPairing", "bond", "WiFi.SetConfig", // the bond first, then the hotspot once more
-                "Switch.SetConfig", "BLE.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", // its settings, the cloud off
+                "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", // its settings, Matter and the cloud off
                 "WiFi.SetConfig", "Switch.Set", // `complete`: the network off, then the check's 5 s
             ),
             s.transport.methods.filter { it !in POLLS },
@@ -433,7 +470,7 @@ class PairFlowTest {
         assertFalse(s.shelly.bonded(EmulatedShelly.TABLET))
         assertEquals(OLD, s.shelly.firmware)
         assertEquals(
-            listOf("Switch.Set", "Switch.SetConfig", "BLE.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
+            listOf("Switch.Set", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
             s.transport.methods.filter { it !in POLLS },
         )
         val settings = JSONObject(s.transport.frames.first { "Switch.SetConfig" in it }).getJSONObject("params").getJSONObject("config")

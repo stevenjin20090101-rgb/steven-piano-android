@@ -193,8 +193,18 @@ sealed interface PlugRead {
     data object Silent : PlugRead
 }
 
-/** The rail's plug over [client] ([RailPlug]): ARM, CUT, the switch's status, and (v1.29 — M66) its settings put back. */
-class ShellyRail(private val client: PlugClient) : RailPlug {
+/**
+ * The rail's plug over [client] ([RailPlug]): ARM, CUT, the switch's status, and (v1.29 — M66) its settings put back; since
+ * v1.32 (M70) its Matter kept off too, quietly the first time ([matterOff] unset: a 1.31 pairing), said after that.
+ */
+class ShellyRail(
+    private val client: PlugClient,
+    /** Whether this tablet turned the plug's Matter off already (v1.32 — M70; [PlugPairing.matterOff]). */
+    private val matterOff: () -> Boolean,
+    /** Keeps that it has (v1.32 — M70; [PlugStore.matterTurnedOff]). */
+    private val keepMatterOff: suspend () -> Unit,
+    private val log: (String) -> Unit = {},
+) : RailPlug {
     /** The model refused `in_mode` at a put-back (its retry took `in_locked` alone): not compared again. */
     private var inModeTaken = true
 
@@ -204,18 +214,21 @@ class ShellyRail(private val client: PlugClient) : RailPlug {
 
     override suspend fun status(): PlugStatus? = client.switchStatus()
 
-    /** The switch's settings, the cloud and the network read; what differs put back (the pairing's values). */
+    /** The switch's settings, the cloud and the network read; what differs put back (the pairing's values); then Matter. */
     override suspend fun putBack(): Boolean? {
         val switch = client.call("Switch.GetConfig", JSONObject().put("id", 0)) ?: return null
         val cloud = client.call("Cloud.GetConfig") ?: return null
         val wifi = client.call("WiFi.GetConfig") ?: return null
         var put = false
+        // The switch as the tablet set it (off at power-up, no automatic on): only then may Matter's restart come.
+        var switchAsSet = switch.ok
         if (switch.ok && ShellyRpc.switchChanged(switch.result, inModeTaken)) {
             var set = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = inModeTaken))
             if (set != null && !set.ok && inModeTaken) {
                 set = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = false))
                 if (set?.ok == true) inModeTaken = false
             }
+            switchAsSet = set?.ok == true
             put = true
         }
         if (cloud.ok && ShellyRpc.cloudEnabled(cloud.result)) {
@@ -226,6 +239,45 @@ class ShellyRail(private val client: PlugClient) : RailPlug {
             client.call("WiFi.SetConfig", ShellyRpc.networkOffAll())
             put = true
         }
+        if (matterPutBack(switchAsSet)) put = true
         return put
+    }
+
+    /**
+     * Matter (v1.32 — M70), last: `Matter.GetConfig`; on, `Matter.SetConfig` off and the restart it asks for. The watch runs
+     * only while nothing wants the 24 V, and the restart waits for the switch as the tablet set it, so the plug comes back
+     * off; it is waited out here, the plug read again, before the watch goes on (its CUT and weld look, its next look). The
+     * first time (nothing kept: a 1.31 pairing, or a setup whose `Matter.SetConfig` went unanswered) it is quiet, logged
+     * only, and kept, Matter found off included; after that, Matter on again is a change put back (true). An error
+     * (firmware without Matter) or no answer is skipped, nothing said.
+     */
+    private suspend fun matterPutBack(switchAsSet: Boolean): Boolean {
+        val config = client.call("Matter.GetConfig")?.takeIf { it.ok } ?: return false
+        val first = !matterOff()
+        if (!ShellyRpc.matterEnabled(config.result)) {
+            if (first) keepMatterOff()   // off already: Matter on from now on is a change
+            return false
+        }
+        if (!switchAsSet) {
+            log("Plug watch: the plug's Matter is on; left until its switch's settings are back")
+            return false
+        }
+        val off = client.call("Matter.SetConfig", ShellyRpc.matterOff())
+        if (off?.ok != true) {
+            log("Plug watch: the plug's Matter is on and it didn't take Matter off")
+            return false
+        }
+        if (first) {
+            log("Plug watch: the plug's Matter was on; turned off (the first look since pairing, so nothing said)")
+            keepMatterOff()
+        }
+        if (ShellyRpc.restartRequired(off)) {
+            log("Plug watch: the plug restarts for Matter off, with the 24 V off at power-up")
+            client.call("Shelly.Reboot")
+            client.drop()
+            delay(PairFlow.REBOOT_WAIT_MS)
+            client.switchStatus()   // back, and connected again before the watch goes on
+        }
+        return !first
     }
 }

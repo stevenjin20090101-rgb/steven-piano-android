@@ -125,6 +125,15 @@ object ShellyRpc {
 
     fun cloudOff(): JSONObject = config(JSONObject().put("enable", false))
 
+    /**
+     * Matter off (v1.32 — M70): `Matter.SetConfig {config:{enable:false}}`. The Gen4 plug runs Matter, a second way to hold
+     * the 24 V on (no 30 s timer), and advertises for commissioning after every boot. Its answer may ask for a restart.
+     */
+    fun matterOff(): JSONObject = config(JSONObject().put("enable", false))
+
+    /** `Matter.GetConfig`: whether Matter is on (v1.32 — M70). */
+    fun matterEnabled(config: JSONObject?): Boolean = config?.optBoolean("enable", false) == true
+
     /** Off every network, the access point closed: `WiFi.SetConfig {config:{sta:{enable:false}, ap:{enable:false}}}`. */
     fun networkOff(): JSONObject = config(
         JSONObject()
@@ -158,7 +167,7 @@ object ShellyRpc {
     fun networkEnabled(config: JSONObject?): Boolean =
         listOf("sta", "sta1", "ap").any { config?.optJSONObject(it)?.optBoolean("enable", false) == true }
 
-    /** Off every network, the second one too, the access point closed: the watch's [networkOff]. */
+    /** Off every network, the second one too, the access point closed: the watch's [networkOff], and (v1.32 — M70) the setup's. */
     fun networkOffAll(): JSONObject = networkOff().also { it.getJSONObject("config").put("sta1", JSONObject().put("enable", false)) }
 
     /** Whether a `*.SetConfig` answer asks for a restart. */

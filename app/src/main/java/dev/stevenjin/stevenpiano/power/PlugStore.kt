@@ -36,6 +36,11 @@ data class PlugPairing(
      * any phone nearby could switch it. Pairings kept before 1.29 read as locked.
      */
     val locked: Boolean = true,
+    /**
+     * The plug's Matter turned off by this tablet (v1.32 — M70): at the setup, when the plug took `Matter.SetConfig`, or by
+     * the plug watch's first look. Pairings kept before 1.32 read false: that first look turns it off quietly.
+     */
+    val matterOff: Boolean = false,
 )
 
 /** One rail-up's idle reading (v1.31 — M68): when ([at], the wall clock, ms), and the 24 V supply's draw with nothing sent. */
@@ -78,7 +83,9 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         .map { prefs ->
             val address = prefs[ADDRESS]?.takeIf { it.isNotBlank() }
             PlugSettings(
-                pairing = address?.let { PlugPairing(it, prefs[ID], prefs[MODEL], prefs[FIRMWARE], prefs[BOND_ENTRY], locked = prefs[LOCKED] ?: true) },
+                pairing = address?.let {
+                    PlugPairing(it, prefs[ID], prefs[MODEL], prefs[FIRMWARE], prefs[BOND_ENTRY], locked = prefs[LOCKED] ?: true, matterOff = prefs[MATTER_OFF] ?: false)
+                },
                 on = prefs[ON] ?: false,
                 guestUntil = prefs[GUEST_UNTIL],
                 idles = idlesOf(prefs[IDLES]),
@@ -95,6 +102,7 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
             pairing.firmware?.let { prefs[FIRMWARE] = it } ?: prefs.remove(FIRMWARE)
             pairing.bondEntry?.let { prefs[BOND_ENTRY] = it } ?: prefs.remove(BOND_ENTRY)
             prefs[LOCKED] = pairing.locked
+            prefs[MATTER_OFF] = pairing.matterOff
             prefs[ON] = on
             prefs.remove(IDLES)
             prefs.remove(ABOVE_USUAL)
@@ -107,6 +115,14 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
 
     suspend fun setGuestUntil(wallMs: Long?) {
         store.edit { prefs -> if (wallMs == null) prefs.remove(GUEST_UNTIL) else prefs[GUEST_UNTIL] = wallMs }
+    }
+
+    /**
+     * The plug watch found the plug's Matter off, or turned it off, the first time (v1.32 — M70): kept, so Matter on again is
+     * said from now on. Nothing without a plug paired; a write that fails only makes the next such look quiet again.
+     */
+    suspend fun matterTurnedOff() {
+        tryEdit { prefs -> if (!prefs[ADDRESS].isNullOrBlank()) prefs[MATTER_OFF] = true }
     }
 
     /** Forget the plug: everything goes, its usual idle too. */
@@ -161,6 +177,9 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         val ON = booleanPreferencesKey("on")
         val LOCKED = booleanPreferencesKey("locked")
         val GUEST_UNTIL = longPreferencesKey("guestUntil")
+
+        /** The plug's Matter turned off by this tablet (v1.32 — M70); absent before 1.32. */
+        val MATTER_OFF = booleanPreferencesKey("matterOff")
 
         /** The usual idle (v1.31 — M68): "1761300000000:9.8,…", oldest first, and a trip above it since. */
         val IDLES = stringPreferencesKey("idles")

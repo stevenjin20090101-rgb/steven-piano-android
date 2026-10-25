@@ -24,7 +24,8 @@ import kotlin.math.roundToInt
 
 /**
  * The 24 V smart plug's words (v1.26 — M60; DESIGN.md › v1.26 — M60): the messages, Piano › Power plug, its Pair screen
- * (v1.28 — M65: without the Shelly app, the update on old firmware).
+ * (v1.28 — M65: without the Shelly app, the update on old firmware; v1.32 — M70: a phone's hotspot or any 2.4 GHz Wi-Fi,
+ * the reset by the Shelly app, Matter off).
  */
 object PowerCopy {
     const val TITLE = "Power plug"
@@ -97,7 +98,7 @@ object PowerCopy {
             "asleep, the app closed, the piano silent — and the plug switches it off by itself within 30 seconds, so nothing " +
             "stays hot while the piano is idle."
     const val PAIR = "Pair the power plug"
-    const val PAIR_NOTE = "About 15 minutes, with your phone's hotspot. Only the 24 V supply goes on the plug."
+    const val PAIR_NOTE = "About 15 minutes, with your phone's hotspot or a 2.4 GHz Wi-Fi. Only the 24 V supply goes on the plug."
 
     const val SWITCH = "Switch the 24 V with the plug"
     const val SWITCH_ON_NOTE = "The 24 V comes on for each piece, Test every key, the Keys tab and updates, and goes off after."
@@ -161,37 +162,49 @@ object PowerCopy {
         PairStep.Done -> "Done"
     }
 
-    /** A step's words (v1.28 — M65: the Update step's name the plug's firmware; a new plug set up from here has its own order). */
+    /**
+     * A step's words (v1.28 — M65: the Update step's name the plug's firmware; a new plug set up from here has its own order;
+     * v1.32 — M70: a phone's hotspot or a 2.4 GHz Wi-Fi such as the school's, and the Matter pop-up at the setup).
+     */
     fun stepNote(step: PairStep, pair: PairState): String = when (step) {
         PairStep.Ready ->
-            "Plug the 24 V supply into the plug, and the plug into the wall. On your phone, turn on a hotspot that has internet, " +
-                "and keep it on until the setup ends (about 15 minutes). The plug only sees 2.4 GHz: on an iPhone, turn on " +
-                "Maximize Compatibility; on Android, choose the 2.4 GHz band."
+            "Plug the 24 V supply into the plug, and the plug into the wall. Its setup needs a 2.4 GHz Wi-Fi with internet " +
+                "until it ends (about 15 minutes): your phone's hotspot, kept on, or a Wi-Fi such as the school's. On an " +
+                "iPhone's hotspot, turn on Maximize Compatibility; on an Android's, choose the 2.4 GHz band."
         PairStep.Find -> "The tablet looks for plugs nearby. Choose yours: its name begins ShellyPlugUSG4."
         PairStep.Update -> updateNote(pair.firmwareUpdate?.from)
         PairStep.SetUp -> if (pair.asIs) {
-            AS_IS_SETUP + if (pair.hotspotWanted) " " + AS_IS_HOTSPOT else ""
+            AS_IS_SETUP + (if (pair.hotspotWanted) " " + AS_IS_HOTSPOT else "") + " " + MATTER_POPUP
         } else if (pair.overBluetooth) {
-            "Pairing first: when Android asks to pair with the plug, tap Pair. Then the plug joins your hotspot, takes its " +
-                "settings (off after a power cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud goes off."
+            "Pairing first: when Android asks to pair with the plug, tap Pair. Then the plug joins the Wi-Fi, takes its " +
+                "settings (off after a power cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud " +
+                "goes off. " + MATTER_POPUP
         } else {
             "Its settings (off after a power cut, its button can't hold the 24 V on), Bluetooth control, then pairing: when " +
-                "Android asks to pair with the plug, tap Pair. Then its cloud goes off."
+                "Android asks to pair with the plug, tap Pair. Then its cloud goes off. " + MATTER_POPUP
         }
         PairStep.Complete -> if (pair.overBluetooth) {
-            "The plug finishes its setup on its own, about 5 minutes. Keep the phone's hotspot on until it does: then the plug " +
-                "forgets every network by itself."
+            "The plug finishes its setup on its own, about 5 minutes. If it is on your phone's hotspot, keep the hotspot on " +
+                "until it does: then the plug forgets every network by itself."
         } else {
-            "The plug finishes its setup on its own, about 5 minutes. Keep the phone's hotspot on until it does."
+            "The plug finishes its setup on its own, about 5 minutes. If it is on your phone's hotspot, keep the hotspot on " +
+                "until it does."
         }
         PairStep.Network ->
             "The plug forgets every network and closes its own: from now on only this tablet can talk to it. Then turn the " +
-                "hotspot off."
-        PairStep.Verify -> (if (pair.overBluetooth) "The plug is off every network now: turn the hotspot off. " else "") +
+                "hotspot off, if you used one."
+        PairStep.Verify -> (if (pair.overBluetooth) "The plug is off every network now: you can turn the hotspot off. " else "") +
             "The 24 V comes on for 5 seconds: every power board should answer, then the plug switches off by itself. Connect " +
             "to the piano first."
         PairStep.Done -> "The 24 V now follows the music."
     }
+
+    /**
+     * The setup's line for Android's "Matter device found" pop-up (v1.32 — M70): the plug advertises Matter after every boot
+     * until the setup turns it off.
+     */
+    const val MATTER_POPUP =
+        "If Android offers to set the plug up as a Matter device, close that: the tablet doesn't use Matter, and turns it off."
 
     /**
      * The Update step's words (v1.28 — M65): the plug's firmware, why it must change, and what happens next; and (v1.28.1)
@@ -200,11 +213,11 @@ object PowerCopy {
      */
     fun updateNote(firmware: String?): String =
         "The plug has firmware ${firmware ?: "older than 2.0.0"}, and locking it to this tablet needs 2.0.0 or later. Use it " +
-            "as it is, or update it: given your hotspot's name and password, it joins the hotspot and updates itself from " +
+            "as it is, or update it: given a Wi-Fi's name and password, it joins it and updates itself from " +
             "Shelly (about 2 minutes), its setup is cleared, " +
-            "then it pairs with this tablet and finishes its setup on the hotspot, all by itself. Keep the hotspot on and the " +
+            "then it pairs with this tablet and finishes its setup on that Wi-Fi, all by itself. Keep the Wi-Fi on and the " +
             "tablet near the plug. This firmware can't encrypt Bluetooth yet, so the password goes over unencrypted this " +
-            "once: give the hotspot a password just for today, and change it afterwards."
+            "once: use your phone's hotspot with a password just for today, and change it afterwards."
 
     // ---- As it is (v1.29 — M66) -----------------------------------------------------------------------------------------
 
@@ -213,14 +226,14 @@ object PowerCopy {
         "It works, but any phone nearby with the Shelly app could switch it. The tablet checks it every minute and switches " +
             "it back off."
     const val LOCK_IT = "Update and lock it to this tablet"
-    const val LOCK_NOTE = "About 2 more minutes on the hotspot; then only this tablet can talk to it."
+    const val LOCK_NOTE = "About 2 more minutes on the Wi-Fi; then only this tablet can talk to it."
     const val AS_IS_SETUP =
         "Its settings (off after a power cut, its button can't hold the 24 V on), Bluetooth control and the cloud off, with " +
             "no update and no pairing."
     const val AS_IS_HOTSPOT =
-        "It must get online once to finish its setup (about 5 minutes), then it forgets every network: give it your " +
-            "hotspot's name and password. This firmware can't encrypt Bluetooth, so the password goes over unencrypted: " +
-            "give the hotspot a password just for today, and change it afterwards."
+        "It must get online once to finish its setup (about 5 minutes), then it forgets every network: give it a Wi-Fi's " +
+            "name and password. This firmware can't encrypt Bluetooth, so the password goes over unencrypted: use your " +
+            "phone's hotspot with a password just for today, and change it afterwards."
 
     /** Piano › Power plug for a plug used as it is (v1.29 — M66). */
     const val UNLOCKED =
@@ -230,8 +243,10 @@ object PowerCopy {
 
     const val FIND = "Find the plug"
 
-    /** Step 1's quiet second line (v1.28 — M65): the Shelly app's way still works. */
-    const val SHELLY_STILL = "The Shelly app still works: set the plug up there, then come straight back here within about 5 minutes."
+    /** Step 1's quiet second line (v1.28 — M65): the Shelly app's way still works; v1.32 — M70: and what being late means. */
+    const val SHELLY_STILL =
+        "The Shelly app still works: set the plug up there, then come straight back here within 5 minutes. After that the " +
+            "plug only answers devices it paired with, and needs a reset."
     const val UPDATE = "Update the plug"
     const val INSTALLING = "Downloading and installing (about 2 minutes)"
     const val SEARCH = "Search again"
@@ -269,15 +284,18 @@ object PowerCopy {
 
     const val VERIFY_PASSED = "Every board answered with the 24 V on, and none once it went off."
 
-    // The fallback: the plug finished its setup without this tablet.
+    // The fallback: the plug finished its setup without this tablet (v1.32 — M70: the Shelly app's reset first).
     const val FALLBACK =
-        "Reset the plug: unplug it, plug it back in, and within the first minute hold its button for 10 seconds (5 seconds " +
-            "only restarts it). A factory reset keeps its firmware, not its pairings or network. Then find it again: it will " +
-            "be new, and this tablet sets it up from here, pairing first."
+        "Reset the plug: in the Shelly app, open the plug › Settings › Factory reset; or unplug it, plug it back in, and " +
+            "within the first minute hold its button for 10 seconds (5 seconds only restarts it). A factory reset keeps its " +
+            "firmware, not its pairings or network. Then find it again: it will be new, and this tablet sets it up from " +
+            "here, pairing first."
     const val JOIN = "Pair with a plug another tablet set up"
     const val JOIN_NOTE = "If the tablet the plug knows opened Admit a replacement tablet in the last 3 minutes."
-    const val HOTSPOT = "Hotspot name"
-    const val PASSWORD = "Hotspot password"
+
+    /** The setup's form (v1.32 — M70): a phone's hotspot or a 2.4 GHz Wi-Fi such as the school's; held in memory only. */
+    const val HOTSPOT = "Wi-Fi name (2.4 GHz)"
+    const val PASSWORD = "Wi-Fi password"
     const val SEND_NETWORK = "Send to the plug"
 
     // ---- Firmware and status: guest play with the plug -------------------------------------------------------------------
