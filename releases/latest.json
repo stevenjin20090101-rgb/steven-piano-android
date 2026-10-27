@@ -1,9 +1,9 @@
 {
-  "versionCode": 45,
-  "versionName": "1.34",
-  "notes": "Power plug setup: after the plug restarts to turn its Matter off, the tablet now waits up to about 40 seconds for it to come back, instead of 6, so the setup no longer stops with \"The plug didn't turn on its Bluetooth control.\"",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.34/steven-piano-1.34.apk",
-  "sha256": "1774d4b6951c08c0160ad7d82fb59da2d47d5381abd1de084cd7409476b8b8e9",
-  "sizeBytes": 14463469,
+  "versionCode": 46,
+  "versionName": "1.35",
+  "notes": "Power plug setup: it no longer stops at \"The plug didn't turn on its Bluetooth control.\" The setup carries on past that step and never restarts the plug (its Matter turns off at the plug's next restart), and Try again no longer asks an already-paired plug to pair again.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.35/steven-piano-1.35.apk",
+  "sha256": "0f2d13cdec464a251a9ef1270bb96b887c045dcfe8cbb7bf3a7be6cb76e4725f",
+  "sizeBytes": 14463501,
   "minSdk": 26
 }
