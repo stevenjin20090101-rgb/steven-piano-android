@@ -5,12 +5,12 @@
 
 cb0ae805ea2d82b41bf921fdf79382e17197653ee23c65ce75c4031925c7203c  .gitignore
 c7a45327e0a664a8ea2914c113abd327465f06233e3f90eb0ed1c50ee8c61ca9  AUTHORS
-8dcdf06c4e7ed4891bc16e8d028993ad2bd3a1a268b1af38411dcc5891996317  BUILD_SPEC.md
-10377a217478a0e0591006816cf0c2ae34ddcd7e09709a39f2bde4f76e977f36  DESIGN.md
+620693823757be3493d4da47c223e85a7211ad320b5feb1395f56ea527356d28  BUILD_SPEC.md
+def46e02debcf5363a04295738ebea3c38dac66a24cf3ef8a47212b214a093cc  DESIGN.md
 8fd886face2eb6212f28f4d89f19f8b0170b398b56dc38ca51b2f93cd65646a6  LICENSE
 0105a012f251da8d5994e8be96da68a93ab9238ddbba266b56e0e87132112a1e  PROVENANCE.md
-d53da20941f965b21bcafb5681018a1740f5706651927cb3d2d2e91742847b48  README.md
-db37c12f8022770da8c85062689d9f5375aab7f36824b0e71f178514f1252cbc  app/build.gradle.kts
+4398e01f27b60ed71ec095fe6125efd69a5c048e3afc137caa2c7ca9af7d3041  README.md
+369ac2b451a336f09a3aba62ba84a59c5d16abad63c68de17ca7b3647bd0f9aa  app/build.gradle.kts
 f94accd7845df0fb3f72b64e557f3f5be107e051e5021c29014763f1ad120e2f  app/lint.xml
 6b7f994b74ba959befd433a63b89556d428ad9dcef74bb1dff76a179cde45610  app/proguard-rules.pro
 73b37e38ae9ea3d6c5bf03a67cd5c097588670b54133c86c1f5d41d1b813d599  app/src/debug/AndroidManifest.xml
@@ -40,7 +40,7 @@ a9fbe4dab2510b85a7b8af9e8604b3ff34481a63693a9ab16cf5e0d5c48b3a7e  app/src/debug/
 f7e1ce241a0ad5c22bb5e75bc09220fdd2674c217acf04e2b7eaaee3175a34a4  app/src/main/assets/web/covers.js
 6ac32152a02a8edad9d382da7f41a51459219c0a70970f9784f3c3c30ea0cda0  app/src/main/assets/web/index.html
 a1a537f9e907e83620c8f37c1ad3deb2c1e1634c9bf2520e74ba44c3288e531d  app/src/main/assets/web/library.js
-f54999f6e855789cb132d02ab4e719e2970554b6f4b342e1ddf2162d05588bfe  app/src/main/assets/web/now.js
+a6e482c56d78a3568001aeb8ca09055913eaad3b1c510470f5f131d4a6b6dd9b  app/src/main/assets/web/now.js
 ea21de6ca6318223cd571f9368290b59dcfdbe650860a7e8666daaa21816714a  app/src/main/assets/web/poster.html
 9e2f3fe5a29e29cbd7156e7bd2047abb8e781a344e5a59d17f7e4e441a6e7b08  app/src/main/assets/web/quiet.css
 ff83178877c4d3f6137a339edcd05c7b458ef3d7d81590bbb291157455b73d3f  app/src/main/assets/web/quiet.js
@@ -62,7 +62,7 @@ db688d5581a03702042058a865f40acb0ccdafe1af7eeb320c4a187a128c50ad  app/src/main/j
 3a963740f1bc3cb1e875f5ee5ec4b8f9642bd9944e343464a478fbf609c40b31  app/src/main/java/dev/stevenjin/stevenpiano/AppGraph.kt
 1199927df609710e8370867cf353a1ea6966e51422ed761254962b6c4e8746f4  app/src/main/java/dev/stevenjin/stevenpiano/CrashSilencer.kt
 bb619a9cd5ebef080a70b352492c1eb185abcf8f475b955d46d529907be47b93  app/src/main/java/dev/stevenjin/stevenpiano/MainActivity.kt
-9ecca65f01640f574c47a3b3c9adcb08bf05295987ebb09f6eb5672c4037b389  app/src/main/java/dev/stevenjin/stevenpiano/Provenance.kt
+4104d2ae7f38bb9d4f39e0805c91b13898cb2d6dc88f59b64c1ede9988dc2d6c  app/src/main/java/dev/stevenjin/stevenpiano/Provenance.kt
 b907a3df07caad4ebea5273838a3a7526585d1d3ae94fcdb896fca90e2c3cfc0  app/src/main/java/dev/stevenjin/stevenpiano/RemoteActions.kt
 1ee55244eca6c9cc838d2d3fb7c5806ab7bf6d17e83fd01e857740adf288bc2a  app/src/main/java/dev/stevenjin/stevenpiano/SharedFiles.kt
 3ce17dffa25b23f22540d1e10f44c23aed4d7acfc94a409c7d3229c9bff0c3b3  app/src/main/java/dev/stevenjin/stevenpiano/SystemProperty.kt
@@ -228,9 +228,9 @@ c185373410935f7e7ece2e35887d073ffe5e08b9f6bfddc52b555ee62bb2ad98  app/src/main/j
 f59eae960cf19f71065ffdfa403bd82c071eeb0adb4af88da2807b7c078c088d  app/src/main/java/dev/stevenjin/stevenpiano/record/Recorder.kt
 23288b1fdc8795ca159dce063096349e12a5d4576f22c92dd322451322f523ac  app/src/main/java/dev/stevenjin/stevenpiano/record/RecordingPieces.kt
 f54e6dfc63d5cbb294e53c20db8c9bc64d61cf1989c36a484ada8ef0c7541d78  app/src/main/java/dev/stevenjin/stevenpiano/record/RecordingSession.kt
-357a1b7e3c687e65e6f4c6907978e2b5dee17b50658de9c151d3a69df71cb55d  app/src/main/java/dev/stevenjin/stevenpiano/safety/SafetyCheck.kt
-0a93eccc1776c824840af6668d05b1cf55fc27fd79a5fe7620bcb0fedbd06cd6  app/src/main/java/dev/stevenjin/stevenpiano/safety/SafetyRunner.kt
-0a263645144bac8c6601dd4aae8423e4252da348a3acfec9909e15ed0b3ccbb5  app/src/main/java/dev/stevenjin/stevenpiano/safety/SafetyStore.kt
+8848733a05e508a3d9f03d5cddb06d84fc59b0923343fff23d8264d359befdb1  app/src/main/java/dev/stevenjin/stevenpiano/safety/SafetyCheck.kt
+3527c6c1acf6b8207ebafb80c0ec93be29b97cafa838d97fbfce60f9fba47d3d  app/src/main/java/dev/stevenjin/stevenpiano/safety/SafetyRunner.kt
+37e70136dd6ae40636b065de91c52b5297cf7b25253981ee724ea8160775298a  app/src/main/java/dev/stevenjin/stevenpiano/safety/SafetyStore.kt
 c8237d497b7745df8a4a579905ce37cf16ee18e58aba2e97a3c97bac921e03f4  app/src/main/java/dev/stevenjin/stevenpiano/score/Beams.kt
 59ef0b7cd76e9286963ef4fa27271aa6ee11da4cf56c3fbc1c1c955fd75204b1  app/src/main/java/dev/stevenjin/stevenpiano/score/Chords.kt
 493aa76b40221e1afc3443a8d19476b7fed272a49b7a7e49cdd2217f5707c0e5  app/src/main/java/dev/stevenjin/stevenpiano/score/Dynamics.kt
@@ -258,7 +258,7 @@ cb817fb90ddda3f6a2b152e7a58b846e84ca3732fc0d20fe5c88a88f6b2420eb  app/src/main/j
 8e3cab6952b574ec5b23215babae740615384a23aaa4f23c07f13e891bb5d6b6  app/src/main/java/dev/stevenjin/stevenpiano/service/StudioService.kt
 1546733166935373748b3ea2989652154bced2e17edfd8dcb1628238c0d68c75  app/src/main/java/dev/stevenjin/stevenpiano/service/UpdateService.kt
 1ef9a60b468fa134b0468de8e530918e596b29e8b8a4e6ed926d0d2ae271ad46  app/src/main/java/dev/stevenjin/stevenpiano/service/WebService.kt
-650845c4515c8de5711935c6dac0b340946cc59b9667b28b379b0bb99b386fd8  app/src/main/java/dev/stevenjin/stevenpiano/settings/Settings.kt
+bea2af5eaff738bdae9b188acb025cba28f725389f6ea10e698132aa162a414c  app/src/main/java/dev/stevenjin/stevenpiano/settings/Settings.kt
 0c8b0c84d690dfb6cea09b3b620caa45037ae76777388db827985010a77eecf7  app/src/main/java/dev/stevenjin/stevenpiano/studio/AppStudioLibrary.kt
 9968f341a8ec5ef4627949cb6a7b1e2e26267d779f677ac617ae867f69a6efea  app/src/main/java/dev/stevenjin/stevenpiano/studio/AudioDecoder.kt
 b2f22d13d1221083e8118b66bcd84b89b9fe5ae2b72ae42e3f653e262ef6bfaf  app/src/main/java/dev/stevenjin/stevenpiano/studio/Generations.kt
@@ -306,7 +306,7 @@ a048287afca6a2ea917d2e5cc041431dd01b3f75026ed936d1a3247fe90d5ef3  app/src/main/j
 cb797916e31dd3760f031cc27984f0cf6ef4b7f618901f924fa3b4ddbc42ef30  app/src/main/java/dev/stevenjin/stevenpiano/ui/PlaybackStarter.kt
 186fd1dae3163f1820e81daca5941cb3ed849e1c8f1d1e67730995868c5ff7b8  app/src/main/java/dev/stevenjin/stevenpiano/ui/PowerCopy.kt
 0ca5cb6c68f7a817981453c745da5685053d7f6e3bc57c5344c679c4b5849c1b  app/src/main/java/dev/stevenjin/stevenpiano/ui/Routes.kt
-04da66ee846a893ad7514add8063dda180b59ffef559e002216f5f5ece4edb4e  app/src/main/java/dev/stevenjin/stevenpiano/ui/SafetyCopy.kt
+422c4aace25ca0ed34231d3606ebe561073f6ccbe9537f2854ae66bd419ee3b7  app/src/main/java/dev/stevenjin/stevenpiano/ui/SafetyCopy.kt
 98871425f8711a2e0d3dc718724a633c44e1eec140f11ee7cdc19d3f007ec8a7  app/src/main/java/dev/stevenjin/stevenpiano/ui/Sentences.kt
 43df7bb5e93c1c796ae4febcde0088dd49969797723bafc3b2da3f50868c452b  app/src/main/java/dev/stevenjin/stevenpiano/ui/SettingNotes.kt
 d8cdb7942daeedd80411aa134f834d62fbad0b09a1c01ea22e80e43629206eb4  app/src/main/java/dev/stevenjin/stevenpiano/ui/StudioCopy.kt
@@ -350,7 +350,7 @@ bd69497bdbd46084382b2ce1209a8d891e070c68bb3ebb8bdf222891b98d72c1  app/src/main/j
 8188520255ea99740e57ab33b6362582249b847be10df09ec9a232ef31ccc78e  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ReadingWidth.kt
 d50efe849173cd8162d291ed3f5df31edf933d3d933046ae1b37b2efb32671f5  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/RollStrip.kt
 c79ab90163c39c65c392b95545e18eec6173890c2a19fede721b7a69a5cd02db  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/RollingText.kt
-787bd85c012c3e50b8ec6e45e4f17eca0f22e7248a703b5390f9815b991b0712  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/SafetyCheckCard.kt
+2f02af2a2ca9b509f159ee09b24788dd4cfddc5c079098a383300d801c0f6ed7  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/SafetyCheckCard.kt
 03b0dc90dd6bb83140a8d7eee30cef6ac9ed93241afd8b1e1d7c69c971d75997  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ScoreLaid.kt
 cffb07f06caf162f15bb95fadb94d91fe15cf33ecc4c84e13612d21a1e9c764a  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ScorePages.kt
 008ed2101e368b68a735ecc8ee9a5bc565b5ca50308786e02fd53cebd202f8f1  app/src/main/java/dev/stevenjin/stevenpiano/ui/components/ScreenHeader.kt
@@ -427,7 +427,7 @@ cccb8f7b8882944b0f6ac7fe20a2cad80ac38afd6953961dd813091c7afb298c  app/src/main/j
 2be818d259ba80486d2da924c8436f18390f4feaf0a9900701f1d1d16e92aed6  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/KeyboardPage.kt
 925e940c1bb957463edb972da36893390271f78a15adede66ffcb1f3c0153303  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/KioskPage.kt
 c69a5e579fb25f927b327131514486b0813179f842f8c0a623c979a1edf66c64  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/LightingPage.kt
-09b5afbb00dff295c3baad4419e20abf8d71299f800600d10a77c75bf8bbb342  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/ListenCard.kt
+6df8aaf26757f0f0580dc940f25589e4adb8f91de72ea13fa5506decd6dc3b29  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/ListenCard.kt
 1b33ef9a092c916d6853dcf6e2a6101bd765b7805101c53421f6db1b41b9fbae  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/PedalPage.kt
 a1fad6cae3ca7815472ba6df60ad64ed4f08ed352e2861fbaa67a00dd6fc9570  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/PlaybackPage.kt
 9e6188c1022eb0f91027d235d61e370d717cc5e06440a0ceded015656aec2c5c  app/src/main/java/dev/stevenjin/stevenpiano/ui/screens/piano/pages/PowerPlugPage.kt
@@ -469,10 +469,10 @@ c0f7283b25d5fd67a3a82fdf47887e3a42c6efebd743a75b2e8a255fc11fe7d9  app/src/main/j
 15b91244c85aa24de59a5b923423c095c221f4b2caad8ba6ddf0c44dd97e375f  app/src/main/java/dev/stevenjin/stevenpiano/web/Poster.kt
 5f04386a6c322768d9baa6edd5b28f96195ace5d054f66570558cf0996ffb7c0  app/src/main/java/dev/stevenjin/stevenpiano/web/PosterPrint.kt
 28e8e8b04e8643689c9f44566cde72d03d3bb76a2ea2df78e945174a933401af  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAddress.kt
-f4b879fc34516ec5e9aa07f32c43fd12877e7d77ca4a832d60f72c650696e341  app/src/main/java/dev/stevenjin/stevenpiano/web/WebApi.kt
+41842ef589bb56f84ee723c6bb2030db5a2da8b2759a4bfaf4ab5fa1bb4267e0  app/src/main/java/dev/stevenjin/stevenpiano/web/WebApi.kt
 21c60d9ae25d7322df46f70d35f32ad10434a6ef28280a6ed2958c9d87169010  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAssets.kt
 ee2b5ebb956c629277c7e25a7d90dcb240c143a1e6a9f3c30c585ea916f95b8c  app/src/main/java/dev/stevenjin/stevenpiano/web/WebAuth.kt
-61ea482acc9c82bd2d88a91aae2a062bdf79f380d6fb315b1a870b68d903d757  app/src/main/java/dev/stevenjin/stevenpiano/web/WebBackend.kt
+e42c3a2286f2249c5554a73d5e3c82b7257b69690bf2839c7ac20478fce86fee  app/src/main/java/dev/stevenjin/stevenpiano/web/WebBackend.kt
 998f57213ecea6b9759c6fac28dc15e9c23c6434845036b4484cddb29f21cc29  app/src/main/java/dev/stevenjin/stevenpiano/web/WebPanel.kt
 4c0e861788f628c74b622ae11e1d4d2dfe66db7e7c1ee0e0454b3c5bab8426ea  app/src/main/java/dev/stevenjin/stevenpiano/web/WebRoutes.kt
 94248e45788335fd6f45528e2fab67ae6eb5c7f02e6e397ed6c89d8940325b18  app/src/main/java/dev/stevenjin/stevenpiano/web/WebServer.kt
@@ -685,9 +685,9 @@ fdb31575bf1e67131676a2744050df1db65e251546b85dd7abd422fdb4af6053  app/src/test/j
 d6324a6d5298e005e84654247d5eda2a10d767044e6c0bdf87f5127aa70f31c0  app/src/test/java/dev/stevenjin/stevenpiano/quiet/QuietTimesTest.kt
 46d5e0eb50fc4a95611920312352b3aabc818f0ae257cdf0b91f136a49b37ef7  app/src/test/java/dev/stevenjin/stevenpiano/record/RecorderTest.kt
 bb3b5ecebd9878c4bd262b6287a675ea414e9cc45c6a08ffc6f2decb594006fc  app/src/test/java/dev/stevenjin/stevenpiano/record/RecordingPiecesTest.kt
-033ac4fccaf19da9f1ee52cdd60c4958e4ca89805e73d195b804075b455de204  app/src/test/java/dev/stevenjin/stevenpiano/safety/SafetyCheckTest.kt
-a9e71606d51909eba2fb1fcdbe577e98160d71090f58d227b78f258a4953d52f  app/src/test/java/dev/stevenjin/stevenpiano/safety/SafetyRunnerTest.kt
-80565abab44c57f989d36486b247c95228958bac55841e4a40c5af3d30fc176a  app/src/test/java/dev/stevenjin/stevenpiano/safety/SafetyStoreTest.kt
+b2460a9691a4624812558a92393295db6cfbe19830bac3492ae05c36f715b8e5  app/src/test/java/dev/stevenjin/stevenpiano/safety/SafetyCheckTest.kt
+3afd8b2b25a030ffebabd56a8db3e9a72ce12b0e4977422a7c56ef800ef15769  app/src/test/java/dev/stevenjin/stevenpiano/safety/SafetyRunnerTest.kt
+01895b504543fb3d7ace3459f4231c70a3aab22f94ebfec41fd91a3bb5cfe7f6  app/src/test/java/dev/stevenjin/stevenpiano/safety/SafetyStoreTest.kt
 67ad6931c964178696e06df5caf9907e63a1f9e793c240c1bbc35e76de5c04a8  app/src/test/java/dev/stevenjin/stevenpiano/score/AnalysisCancelTest.kt
 c12c30dc546ae46350b7f781aceb35d54d641dff7698abb5f1a5cde94d403194  app/src/test/java/dev/stevenjin/stevenpiano/score/BeamsTest.kt
 d1926334226bf0c3e1fc5a961c0afa865f22f0a5df87aacb34ac4a07ed4c2eda  app/src/test/java/dev/stevenjin/stevenpiano/score/ChordsTest.kt
@@ -794,8 +794,8 @@ dcfa7ccaa896899dec67cede0a944358ca0139f4a9710b0899b8992481d68adb  app/src/test/j
 81567a03e0b2271c65249db80df38f7ed251bfb3338ad4bbe1f6dc7a20cc8ada  app/src/test/java/dev/stevenjin/stevenpiano/web/PosterTest.kt
 0d25420c70a94477d72642ae3bb7064abce79a6072bb6e39e982c1d67b8a6bc8  app/src/test/java/dev/stevenjin/stevenpiano/web/RawHttp.kt
 2a3b28efc2c523f9268974cfd535dbbbf1c925729bac0ba2678f322d33f1a1e9  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAddressTest.kt
-fa3720caa658803013b06232e8fbb857f94353f47be6e2a393fdd3caabb52067  app/src/test/java/dev/stevenjin/stevenpiano/web/WebApiTest.kt
-3efadf88559b7b4118aaa7bc2deca1840921bba932e34991389b117e1bce046c  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAssetsTest.kt
+9a9f21ebac12ce68bef158ada51af1de36dec97019c2b3a96b2e1a0d9772fc6e  app/src/test/java/dev/stevenjin/stevenpiano/web/WebApiTest.kt
+53c226fb711e7687e92a7f498c1c2e9dbdadbd6303d339b1f378fb3f0d8c317b  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAssetsTest.kt
 38eb1b2155d34bdd10fcaebb02ec85118d53ed99e454d9432b9299e9443426c8  app/src/test/java/dev/stevenjin/stevenpiano/web/WebAuthTest.kt
 e71bce59f604ca8b3421f94b60f0e51811e3535b500ce2d6df5f602d4fbe58c2  app/src/test/java/dev/stevenjin/stevenpiano/web/WebServerTest.kt
 88ed82dc1587fe1ef4784f5895975038a75f46f6019d758d576b1d5564c7f003  app/src/test/java/dev/stevenjin/stevenpiano/web/WebSocketHubTest.kt
