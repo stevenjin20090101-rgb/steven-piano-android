@@ -211,7 +211,7 @@ private fun shadeOf(key: Int, test: KeyTestState, heard: Map<Int, Boolean>?): Sh
  * The piano's 84 keys as seven octaves, C1 to C7, in the board octaves' style: while the test runs the keys struck so far,
  * the one struck now in the content colour, those to come faint; then every key heard as the octaves draw an answering
  * board's, every key not heard in the attention amber. TalkBack reads the line beside it, which names those keys. The
- * safety check's card shows the keys that locked Play on it too (v1.26 — M61).
+ * safety check's card shows the keys a passed check didn't hear on it too (v1.33 — M71: a warning, never a lock).
  */
 @Composable
 internal fun KeyMap(test: KeyTestState) {

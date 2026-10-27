@@ -134,9 +134,10 @@ data class SafetyState(
  *   waits while the check runs and goes once it passes; or, while Play is locked, it is refused (the card and the web
  *   panel say why). A start with a check due while the piano can't hear it (not connected, guest play) goes, and the
  *   check waits for the next; one asked while the app is away is refused (the microphone needs the foreground).
- * - **The outcome.** Passed: the count starts again, the card says so for a moment and closes, and a start that waited
- *   goes. A coil on: [cutNow] (the power plug's CUT, wired by the integrator), everything stopped, Play locked. Keys not
- *   heard after the restart and the repower: Play locked. Unfinished: due again before the next Play. Only a check that
+ * - **The outcome.** Passed: the count starts again, the card says so for a moment (with the keys not heard, a warning
+ *   since v1.33 — M71, never a lock) and closes, and a start that waited goes. A coil on: [cutNow] (the power plug's
+ *   CUT, wired by the integrator), everything stopped, Play locked. Power boards still missing after the restart and
+ *   the repower: Play locked (v1.33 — M71). Unfinished: due again before the next Play. Only a check that
  *   passes unlocks Play ([runNow], the card's Run the safety check); the lock and the count survive a restart of the app
  *   ([store]).
  * - **The power plug** (M60's `RailPower`, connected by the integrator): [wantRail] says when the check wants the 24 V up
@@ -146,7 +147,7 @@ data class SafetyState(
  *   them: no-ops, the rail taken as up.
  *
  * [listens]: the switch "Automatic safety check (uses the microphone)" on and Android's permission; off, the check runs
- * without its sweep, so no key can lock Play. Main thread ([scope]'s).
+ * without its sweep. Main thread ([scope]'s).
  */
 class SafetyRunner(
     private val scope: CoroutineScope,
@@ -477,8 +478,8 @@ class SafetyRunner(
                 pending = false,
                 lock = null,
                 last = LastCheck(
-                    at, passed = true, keys = outcome.keys, boardsOk = boards?.done, boardsOf = boards?.of, recovered = outcome.recovered,
-                    restarted = restarted, repowered = repowered,
+                    at, passed = true, keys = outcome.keys, silent = outcome.missed, boardsOk = boards?.done, boardsOf = boards?.of,
+                    recovered = outcome.recovered, restarted = restarted, repowered = repowered,
                 ),
             )
             SafetyOutcome.CoilOn -> {
@@ -487,14 +488,13 @@ class SafetyRunner(
                 host.stopEverything()
                 record = record.copy(pending = false, lock = SafetyLock.CoilOn, last = LastCheck(at, passed = false, coilOn = true))
             }
-            is SafetyOutcome.KeysSilent -> {
-                log("Safety check failed: ${SafetyCopy.names(outcome.keys)} didn't sound; Play is locked")
+            is SafetyOutcome.BoardsMissing -> {
+                log("Safety check failed: ${outcome.answered} of ${outcome.of} power boards answered after the restart and the power off and on; Play is locked")
                 record = record.copy(
                     pending = false,
-                    lock = SafetyLock.KeysSilent(outcome.keys),
+                    lock = SafetyLock.BoardsMissing(outcome.answered, outcome.of),
                     last = LastCheck(
-                        at, passed = false, keys = check?.lines?.lastOrNull { it.step == SafetyStep.SWEEP_AGAIN || it.step == SafetyStep.SWEEP }?.done, silent = outcome.keys,
-                        boardsOk = boards?.done, boardsOf = boards?.of, recovered = true, restarted = restarted, repowered = repowered,
+                        at, passed = false, boardsOk = outcome.answered, boardsOf = outcome.of, recovered = true, restarted = restarted, repowered = repowered,
                     ),
                 )
             }
@@ -503,8 +503,9 @@ class SafetyRunner(
                 record = record.copy(pending = true)
             }
         }
-        if (outcome is SafetyOutcome.Passed) log("Safety check passed")
-        if (outcome is SafetyOutcome.Passed && outcome.keys != null) heardAll()   // the sweep ran: keys = null without it
+        if (outcome is SafetyOutcome.Passed) log(SafetyCopy.passed(outcome.missed))
+        // M68: only a sweep that heard every key vouches for them (v1.33 — M71: a pass with keys not heard never does).
+        if (outcome is SafetyOutcome.Passed && outcome.heardAll) heardAll()
         wantRail(false)
         job = null
         save()

@@ -220,7 +220,7 @@ data class PianoSettings(
     /**
      * Automatic safety check (uses the microphone) (Piano › System, v1.26 — M61): every 6 pieces the check strikes each key
      * while the tablet listens; on by default, and listening only with Android's permission besides. Off, the check
-     * still releases the keys and reads the coils and the boards, and no key can lock Play.
+     * still releases the keys and reads the coils and the boards. Keys not heard never lock Play (v1.33 — M71).
      */
     val safetyCheckListens: Boolean = true,
 ) {

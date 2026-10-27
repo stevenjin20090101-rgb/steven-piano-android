@@ -240,6 +240,14 @@ class WebAssetsTest {
     }
 
     @Test
+    fun `the safety capsule shows a pass with keys not heard, in amber, and never as a lock (v1_33 M71)`() {
+        val now = text("now.js")
+        assertTrue(now.contains("const missed = !!(safety && safety.missedKeys && safety.missedKeys.length);"))
+        assertTrue(now.contains("(safety.running || safety.locked || safety.stopped || missed)"))
+        assertTrue(now.contains("((!!safety.locked && !safety.coil) || missed)"))
+    }
+
+    @Test
     fun `the panel hears the room only when it asked, and confirms it's you before the microphone or an update (v1_23 M55, v1_24 M56)`() {
         assertTrue("the room's frames play only on the panel that asked", text("system.js").contains("if (!hear.live && !hear.test) return;"))
         val app = text("app.js")

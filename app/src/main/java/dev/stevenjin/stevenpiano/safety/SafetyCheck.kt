@@ -22,7 +22,10 @@ enum class SafetyStep {
     /** `!boards` read: every power board answering ("Boards answering (5 of 7)"). */
     BOARDS,
 
-    /** The 84 keys struck in turn while the tablet's microphone listens ("Testing each key (37 of 84)"). */
+    /**
+     * The 84 keys struck in turn while the tablet's microphone listens ("Testing each key (37 of 84)"). Keys not heard
+     * only warn (v1.33 — M71): the sweep runs once a check, never again after a restart.
+     */
     SWEEP,
 
     /** The piano's `restart` (firmware 2.1.1): every coil let go, the controller started again ("Restarting the piano"). */
@@ -30,9 +33,6 @@ enum class SafetyStep {
 
     /** The 24 V switched off and on again by the power plug (M60's `RailPower.repower`): "Power off and on". */
     REPOWER,
-
-    /** The keys struck again after the restart and the repower ("Testing each key again (12 of 84)"). */
-    SWEEP_AGAIN,
 }
 
 /** How a step stands: still to come, running, done, left out, or failed. */
@@ -55,13 +55,13 @@ enum class Why {
     /** `!active` above 0 after the release: a coil is still on. */
     COIL_ON,
 
-    /** A power board is not answering. */
+    /** A power board is not answering (after the restart and the repower too: Play is locked). */
     BOARDS_MISSING,
 
     /** No sweep: the safety check's microphone switch is off, or Android does not allow the microphone. */
     MICROPHONE_OFF,
 
-    /** Keys struck and not heard. */
+    /** Keys struck and not heard: since v1.33 — M71 a warning on a passed check, never a lock. */
     KEYS_SILENT,
 
     /** The piano offers no `restart` (no `!restartproto=1`: firmware before 2.1.1). */
@@ -108,14 +108,25 @@ data class StepLine(
 
 /** How a check ended. */
 sealed interface SafetyOutcome {
-    /** Every key heard ([keys] of them; null: no sweep, the microphone off), after the restart and repower when [recovered]. */
-    data class Passed(val keys: Int?, val recovered: Boolean) : SafetyOutcome
+    /**
+     * No coil on and every board answering: [keys] struck (null: no sweep, the microphone off), after the restart and
+     * repower when [recovered]. [missed]: the keys (MIDI, sorted) the microphone didn't hear, empty when it heard every
+     * one; since v1.33 — M71 they only warn ("3 keys weren't heard: C2, F♯4, A6"), as the sweep can't be trusted on an
+     * old piano out of tune.
+     */
+    data class Passed(val keys: Int?, val recovered: Boolean, val missed: List<Int> = emptyList()) : SafetyOutcome {
+        /** The sweep ran and heard every key: the one pass that can vouch for every key (M68's `heardAll`). */
+        val heardAll: Boolean get() = keys != null && missed.isEmpty()
+    }
 
     /** A coil was still on after the release: the 24 V is cut, everything stops, and Play is locked. */
     data object CoilOn : SafetyOutcome
 
-    /** [keys] (MIDI) were not heard, after the restart and the repower too: Play is locked. */
-    data class KeysSilent(val keys: List<Int>) : SafetyOutcome
+    /**
+     * Only [answered] of [of] power boards answered, after the restart and the repower too (v1.33 — M71): an I²C fault,
+     * the root of the stuck-key incidents. Play is locked, whether the microphone is on or off.
+     */
+    data class BoardsMissing(val answered: Int, val of: Int) : SafetyOutcome
 
     /** The check could not finish ([why], in the tablet's or the piano's [said] words): it runs again before the next Play. */
     data class Unfinished(val why: Why, val said: String? = null) : SafetyOutcome
@@ -208,8 +219,7 @@ data class CheckState(
     /**
      * Every step the check means to take: those begun, in the order they began, then those still to come
      * ([Mark.WAITING]) in the order they will run. The coils, the boards and the sweep are always to come until they
-     * have run; the restart and the repower, then (after a failed sweep) the second sweep, once a restart is called for.
-     * A check that has ended lists only what it did.
+     * have run; the restart and the repower once a restart is called for. A check that has ended lists only what it did.
      */
     fun steps(): List<StepLine> {
         if (outcome != null) return lines
@@ -224,7 +234,7 @@ data class CheckState(
             if (!railDown) want(SafetyStep.RESTART)
             want(SafetyStep.REPOWER)
         }
-        if (sweeps == 0) want(SafetyStep.SWEEP) else if (recovered && listens && sweeps == 1) want(SafetyStep.SWEEP_AGAIN)
+        if (sweeps == 0) want(SafetyStep.SWEEP)
         return lines + waiting.map { StepLine(it, Mark.WAITING) }
     }
 
@@ -255,7 +265,6 @@ data class CheckState(
             SafetyStep.SWEEP to 12.0,
             SafetyStep.RESTART to 4.0,
             SafetyStep.REPOWER to 2.0,
-            SafetyStep.SWEEP_AGAIN to 12.0,
         )
     }
 }
@@ -267,16 +276,17 @@ data class CheckState(
  * 1. **Release**: the player's stop sequence, then a second.
  * 2. **Coils**: `!active` above 0 is a fire risk: the check ends at once ([SafetyOutcome.CoilOn]: the 24 V cut,
  *    everything stopped, Play locked). **Boards**: any board missing (or either fact unanswered) calls for the restart
- *    and the repower before the sweep. A fact the piano's firmware doesn't report is left out; with no dump at all from
- *    its console on this connection the coils can't be read, and the check can't finish (v1.27 — M64, [Why.NO_DUMP]).
- * 3. **Sweep** (only when the check [CheckState.listens]: the microphone switch on and allowed; without it no key can
- *    lock Play): the 84 keys while the microphone listens.
- * 4. **Any key not heard**: the restart (only when the piano offers it, `!restartproto=1`, and never while
- *    `!ota=pending`; a refusal, or no answer, goes straight to the repower) and the wait for the piano and its boards,
- *    then the repower; then the coils and the boards are read again (a coil on still ends it) and the keys swept again.
- * 5. **Still not heard** (after the restart and repower, which happen once a check): Play is locked
- *    ([SafetyOutcome.KeysSilent]).
- * 6. **Pass**: every key heard (or, with no sweep, no coil on).
+ *    (only when the piano offers it, `!restartproto=1`, and never while `!ota=pending`; a refusal, or no answer, goes
+ *    straight to the repower), the wait for the piano and its boards, then the repower; then the coils and the boards
+ *    are read again (a coil on still ends it). Boards **still missing** after them lock Play
+ *    ([SafetyOutcome.BoardsMissing], v1.33 — M71), with the microphone on or off. A fact the piano's firmware doesn't
+ *    report is left out; with no dump at all from its console on this connection the coils can't be read, and the check
+ *    can't finish (v1.27 — M64, [Why.NO_DUMP]).
+ * 3. **Sweep** (only when the check [CheckState.listens]: the microphone switch on and allowed): the 84 keys while the
+ *    microphone listens.
+ * 4. **Pass**: no coil on and every board answering. Keys the sweep didn't hear only warn ([SafetyOutcome.Passed.missed],
+ *    v1.33 — M71): no restart, no repower and no second sweep for them, and they never lock Play. The microphone can't
+ *    be trusted to hear every key of an old piano out of tune; the coils and the boards can.
  *
  * A check that can't finish (the piano never answered, the sweep stopped, an interruption) is
  * [SafetyOutcome.Unfinished]: it runs again before the next Play.
@@ -300,7 +310,7 @@ object SafetyCheck {
             }
             is Event.Swept -> if (state.phase == Phase.SWEEP) onSwept(state, event.results) else lost(state)
             is Event.SweepStopped -> if (state.phase == Phase.SWEEP) {
-                end(state.put(sweepStep(state), Mark.FAILED, why = Why.STOPPED, said = event.said), SafetyOutcome.Unfinished(Why.STOPPED, event.said))
+                end(state.put(SafetyStep.SWEEP, Mark.FAILED, why = Why.STOPPED, said = event.said), SafetyOutcome.Unfinished(Why.STOPPED, event.said))
             } else {
                 lost(state)
             }
@@ -324,7 +334,7 @@ object SafetyCheck {
     /** The sweep's progress: [done] of [of] keys struck, on the line running. */
     fun struck(state: CheckState, done: Int, of: Int): CheckState {
         if (state.phase != Phase.SWEEP) return state
-        return state.put(sweepStep(state), Mark.RUNNING, done = done, of = of)
+        return state.put(SafetyStep.SWEEP, Mark.RUNNING, done = done, of = of)
     }
 
     /** `!boards` as [read]: how many answer (`OK`) of how many there are; null when there is no reading. */
@@ -367,15 +377,15 @@ object SafetyCheck {
             }
             read.first < read.second -> {
                 val missing = state.put(SafetyStep.BOARDS, Mark.FAILED, done = read.first, of = read.second, why = Why.BOARDS_MISSING)
-                // Once restarted and repowered, the sweep says which keys that leaves silent (the microphone off: none locks).
-                if (state.recovered) sweep(missing) else recover(missing)
+                // v1.33 — M71: still missing after the restart and repower locks Play, the microphone on or off.
+                if (state.recovered) end(missing, SafetyOutcome.BoardsMissing(read.first, read.second)) else recover(missing)
             }
             else -> sweep(state.put(SafetyStep.BOARDS, Mark.DONE, done = read.first, of = read.second))
         }
     }
 
     private fun sweep(state: CheckState): Step {
-        val step = if (state.sweeps == 0) SafetyStep.SWEEP else SafetyStep.SWEEP_AGAIN
+        val step = SafetyStep.SWEEP
         if (!state.listens) {
             return end(state.put(step, Mark.SKIPPED, why = Why.MICROPHONE_OFF), SafetyOutcome.Passed(keys = null, recovered = state.recovered))
         }
@@ -383,24 +393,23 @@ object SafetyCheck {
     }
 
     private fun onSwept(state: CheckState, results: List<KeyResult>): Step {
-        val step = sweepStep(state)
+        val step = SafetyStep.SWEEP
         if (results.isEmpty()) return end(state.put(step, Mark.FAILED, why = Why.STOPPED), SafetyOutcome.Unfinished(Why.STOPPED))
         val silent = results.filterNot { it.heard }.map { it.key }.sorted()
         val heard = results.size - silent.size
-        if (silent.isEmpty()) {
-            return end(state.put(step, Mark.DONE, done = heard, of = results.size), SafetyOutcome.Passed(keys = results.size, recovered = state.recovered))
-        }
-        val failed = state.put(step, Mark.FAILED, done = heard, of = results.size, keys = silent, why = Why.KEYS_SILENT)
-        return if (state.recovered) end(failed, SafetyOutcome.KeysSilent(silent)) else recover(failed)
+        // v1.33 — M71: keys not heard only warn: the check passes, with no restart, repower or second sweep for them.
+        val passed = SafetyOutcome.Passed(keys = results.size, recovered = state.recovered, missed = silent)
+        if (silent.isEmpty()) return end(state.put(step, Mark.DONE, done = heard, of = results.size), passed)
+        return end(state.put(step, Mark.DONE, done = heard, of = results.size, keys = silent, why = Why.KEYS_SILENT), passed)
     }
 
     /**
      * The rail didn't come up for the sweep: no key is judged (a key with no power can't sound). The first time, the
-     * repower straight away (the restart is for keys that didn't sound), then the piano read again and the sweep tried
+     * repower straight away (the restart is for boards that didn't answer), then the piano read again and the sweep tried
      * again; once recovered, the check can't finish, and runs again before the next Play.
      */
     private fun onRailDown(state: CheckState): Step {
-        val step = sweepStep(state)
+        val step = SafetyStep.SWEEP
         val skipped = state.put(step, Mark.SKIPPED, why = Why.RAIL_DOWN).copy(sweeps = state.sweeps - 1)
         if (state.recovered) return end(skipped, SafetyOutcome.Unfinished(Why.RAIL_DOWN))
         return repower(skipped.copy(recovered = true, railDown = true))
@@ -436,8 +445,6 @@ object SafetyCheck {
 
     /** An event the check wasn't waiting for: it can't go on as it was, so it ends unfinished and runs again later. */
     private fun lost(state: CheckState): Step = end(state.failRunning(Why.STOPPED, null), SafetyOutcome.Unfinished(Why.STOPPED))
-
-    private fun sweepStep(state: CheckState): SafetyStep = if (state.sweeps <= 1) SafetyStep.SWEEP else SafetyStep.SWEEP_AGAIN
 
     /** [step]'s line set to [mark] (with its figures, keys and reasons), in its place, or added at the end when it is new. */
     private fun CheckState.put(

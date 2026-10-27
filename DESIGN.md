@@ -3846,3 +3846,17 @@ takes the second network (`sta1`) too. The words: any 2.4 GHz Wi-Fi with interne
 hotspot or the school's, still forgotten at its end; old firmware's clear-text password steered to the hotspot), the
 Shelly app's 5 minutes and what missing them means, and one line at the setup for the Matter pop-up ("close that: the
 tablet doesn't use Matter, and turns it off"). Brief `~/.claude/plans/m70-plug-matter-brief.md`; no firmware change.
+
+# v1.33 — M71: the sound test warns
+
+Steven, 2026-10-27: the sweep still missed keys on the school's old piano after 1.32 and locked Play. Keys the microphone
+didn't hear now **only warn**: the check passes ("Safety check passed · 3 keys weren't heard: C2, F♯4, A6", those keys in
+amber on the card's keyboard map, the card closing as any pass does), with no restart, no repower and no second sweep for
+them, since an unreliable sweep would otherwise restart the controller and strike every key twice after every 6th piece.
+Play locks only for what the tablet can trust: a coil still on (CUT and lock, as before); **power boards still missing
+after the restart and the repower** (a new lock, "Safety check failed: 6 of 7 power boards answered", microphone on or
+off: they used to lock only through the keys they left silent); and the plug's watch, which makes a check due. The last-
+check line says "81 of 84 keys heard"; the panel's capsule shows the warning for its moment (`safety.missedKeys`). M68's
+`heardAll()` fires only for a sweep that heard every key. The first read after the upgrade clears a stored `keys:…` lock
+(once, logged) and makes a check due instead; a `coil` lock stays. Brief `~/.claude/plans/m71-sound-warns-brief.md`; no
+firmware change.

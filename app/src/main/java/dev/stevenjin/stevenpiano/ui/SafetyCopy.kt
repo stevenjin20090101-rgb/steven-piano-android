@@ -47,7 +47,6 @@ object SafetyCopy {
     const val COILS = "No coil on"
     const val BOARDS = "Boards answering"
     const val KEYS = "Testing each key"
-    const val KEYS_AGAIN = "Testing each key again"
     const val RESTART = "Restarting the piano"
     const val REPOWER = "Power off and on"
 
@@ -83,8 +82,23 @@ object SafetyCopy {
         else -> null
     }
 
+    // ---- A pass with keys not heard (v1.33 — M71): a warning, never a lock -----------------------------------------------
+
+    /** "3 keys weren't heard: C2, F♯4, A6", "1 key wasn't heard: C2". */
+    fun missed(keys: List<Int>): String = when (keys.size) {
+        0 -> ""
+        1 -> "1 key wasn't heard: ${names(keys)}"
+        else -> "${keys.size} keys weren't heard: ${names(keys)}"
+    }
+
+    /** "Safety check passed", or "Safety check passed · 3 keys weren't heard: C2, F♯4, A6": the log and the panel. */
+    fun passed(missed: List<Int>): String = if (missed.isEmpty()) PASSED else "$PASSED · ${missed(missed)}"
+
+    /** Under a pass with keys not heard, on the card: what they mean, and that Play goes on. */
+    const val MISSED_NOTE = "The microphone may have missed them. Play isn't locked; if a key really is silent, ask whoever looks after the piano."
+
     // ---- Play locked ------------------------------------------------------------------------------------------------
-    const val ASK = "Ask whoever looks after the piano to check these keys."
+    const val ASK_BOARDS = "Some of the piano's power boards didn't answer, even after a restart and a power off and on. Ask whoever looks after the piano to check it."
     const val ASK_COIL = "The power to the keys was cut. Ask whoever looks after the piano to check it."
     const val RUN = "Run the safety check"
     const val NOT_NOW = "Not now"
@@ -103,11 +117,17 @@ object SafetyCopy {
     const val NEVER = "No safety check yet"
     const val DUE = "A safety check runs before the next piece."
 
-    /** "Safety check failed: C2, F♯4", or "Safety check failed: a key is still on": Play's refusal, everywhere. */
+    /**
+     * "Safety check failed: a key is still on", or "Safety check failed: 6 of 7 power boards answered" (v1.33 — M71):
+     * Play's refusal, everywhere. Keys not heard never lock Play.
+     */
     fun locked(lock: SafetyLock): String = when (lock) {
         SafetyLock.CoilOn -> "$FAILED: $COIL_ON"
-        is SafetyLock.KeysSilent -> if (lock.keys.isEmpty()) FAILED else "$FAILED: ${names(lock.keys)}"
+        is SafetyLock.BoardsMissing -> if (lock.of > 0) "$FAILED: ${boardsAnswered(lock.answered, lock.of)}" else FAILED
     }
+
+    /** "6 of 7 power boards answered". */
+    fun boardsAnswered(answered: Int, of: Int): String = "$answered of $of power boards answered"
 
     /** Why a check can't run now, as Run the safety check and the panel's Play say it. */
     fun deferral(why: Deferral): String = when (why) {
@@ -134,13 +154,13 @@ object SafetyCopy {
 
     /**
      * What a line of the card says: its step's words, the figures while they count ("Testing each key (37 of 84)",
-     * "Boards answering (5 of 7)"), and why it was left out or failed ("Restarting the piano · not on this firmware",
-     * "Testing each key · C2, F♯4 didn't sound").
+     * "Boards answering (5 of 7)"), and why it was left out or failed ("Restarting the piano · not on this firmware"),
+     * or the keys not heard ("Testing each key (82 of 84) · 2 keys weren't heard: C2, F♯4").
      */
     fun line(line: StepLine): String {
         val figures = when (line.step) {
             SafetyStep.BOARDS -> if (line.of > 0) " (${line.done} of ${line.of})" else ""
-            SafetyStep.SWEEP, SafetyStep.SWEEP_AGAIN ->
+            SafetyStep.SWEEP ->
                 if (line.of > 0 && (line.mark == Mark.RUNNING || line.mark == Mark.DONE)) " (${line.done} of ${line.of})" else ""
             else -> ""
         }
@@ -149,7 +169,6 @@ object SafetyCopy {
             SafetyStep.COILS -> COILS
             SafetyStep.BOARDS -> BOARDS
             SafetyStep.SWEEP -> KEYS
-            SafetyStep.SWEEP_AGAIN -> KEYS_AGAIN
             SafetyStep.RESTART -> RESTART
             SafetyStep.REPOWER -> REPOWER
         } + figures
@@ -161,7 +180,7 @@ object SafetyCopy {
             Why.COIL_ON -> COIL_ON
             Why.BOARDS_MISSING -> null   // the figures say it
             Why.MICROPHONE_OFF -> MICROPHONE_OFF
-            Why.KEYS_SILENT -> silent(line.keys)
+            Why.KEYS_SILENT -> missed(line.keys).ifEmpty { null }
             Why.NOT_OFFERED -> NOT_OFFERED
             Why.OTA_PENDING -> OTA_PENDING
             Why.REFUSED -> line.said ?: "refused"
@@ -175,23 +194,27 @@ object SafetyCopy {
         return if (why == null) base else "$base · $why"
     }
 
-    /** "C2 didn't sound", "C2, F♯4 didn't sound". */
+    /** "C2 didn't sound", "C2, F♯4 didn't sound": a lock kept before v1.33 — M71, on the last-check line. */
     fun silent(keys: List<Int>): String = if (keys.isEmpty()) "keys didn't sound" else "${names(keys)} didn't sound"
 
     /**
-     * The System page's line: "Last safety check: today 14:20 · all 84 keys", "… · keys not tested (microphone off)",
-     * "… · C2, F♯4 didn't sound", "… · a key was still on", with the recovery a pass needed, in the card's words for its
+     * The System page's line: "Last safety check: today 14:20 · all 84 keys", "… · 81 of 84 keys heard" (a pass with keys
+     * not heard, v1.33 — M71), "… · keys not tested (microphone off)", "… · 6 of 7 power boards answered", "… · a key was
+     * still on" ("… · C2, F♯4 didn't sound": a record kept before 1.33), with the recovery a pass needed, in the card's words for its
      * steps (v1.27 — M63): "after a restart", "after a power off and on", or both; a record kept before 1.27 says "after a
      * restart" as it did. [now] and [zone] say what today is.
      */
     fun last(last: LastCheck, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+        val short = last.boardsOk != null && last.boardsOf != null && last.boardsOk < last.boardsOf
         val result = when {
             last.coilOn -> "a key was still on"
+            !last.passed && short && last.silent.isEmpty() -> boardsAnswered(last.boardsOk!!, last.boardsOf!!)
             !last.passed -> silent(last.silent)
             last.keys == null -> "keys not tested (microphone off)"
+            last.silent.isNotEmpty() -> "${(last.keys - last.silent.size).coerceAtLeast(0)} of ${last.keys} keys heard"
             else -> "all ${last.keys} keys"
         }
-        val boards = if (last.boardsOk != null && last.boardsOf != null && last.boardsOk < last.boardsOf) ", ${last.boardsOk} of ${last.boardsOf} boards answering" else ""
+        val boards = if (short && (last.passed || last.silent.isNotEmpty())) ", ${last.boardsOk} of ${last.boardsOf} boards answering" else ""
         val after = if (last.passed) recovery(last) else ""
         return "Last safety check: ${whenSaid(last.at, now, zone)} · $result$boards$after"
     }

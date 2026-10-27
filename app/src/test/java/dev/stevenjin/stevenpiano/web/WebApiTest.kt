@@ -234,13 +234,13 @@ class WebApiTest {
         assertFalse("the plug's readings stay on /api/system", waking.has("watts"))
         // The safety check (v1.26 — M61): the capsule's fields, nothing to say while all is well.
         val safe = json.getJSONObject("safety")
-        assertEquals(setOf("running", "step", "of", "locked", "failedKeys", "coil", "stopped", "text"), safe.keys().asSequence().toSet())
+        assertEquals(setOf("running", "step", "of", "locked", "failedKeys", "coil", "stopped", "text", "missedKeys"), safe.keys().asSequence().toSet())
         assertFalse(safe.getBoolean("running") || safe.getBoolean("locked") || safe.getBoolean("stopped"))
         assertTrue(safe.isNull("text"))
-        val locked = WebApi.state(state.copy(safety = WebSafety(locked = true, failedKeys = listOf(36, 66), text = "Safety check failed: C2, F♯4")), pending = 0)
+        val locked = WebApi.state(state.copy(safety = WebSafety(locked = true, text = "Safety check failed: 6 of 7 power boards answered")), pending = 0)
             .getJSONObject("safety")
-        assertEquals(listOf(36, 66), (0 until 2).map { locked.getJSONArray("failedKeys").getInt(it) })
-        assertEquals("Safety check failed: C2, F♯4", locked.getString("text"))
+        assertEquals(0, locked.getJSONArray("failedKeys").length())
+        assertEquals("Safety check failed: 6 of 7 power boards answered", locked.getString("text"))
         assertTrue("Album colours behind the player, on until turned off (v1.15 — M41)", json.getBoolean("albumBackdrop"))
         // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
         assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
@@ -560,8 +560,13 @@ class WebApiTest {
         assertEquals("Safety check · Testing each key (37 of 84)", running.text)
         assertFalse(running.locked)
 
-        val keys = WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(lock = dev.stevenjin.stevenpiano.safety.SafetyLock.KeysSilent(listOf(36, 66))))
-        assertEquals(WebSafety(locked = true, failedKeys = listOf(36, 66), text = "Safety check failed: C2, F♯4"), keys)
+        // v1.33 — M71: power boards missing lock; keys not heard only warn, in missedKeys, for the moment the card shows it.
+        val boards = WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(lock = dev.stevenjin.stevenpiano.safety.SafetyLock.BoardsMissing(6, 7)))
+        assertEquals(WebSafety(locked = true, text = "Safety check failed: 6 of 7 power boards answered"), boards)
+        val warned = WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(ended = dev.stevenjin.stevenpiano.safety.SafetyOutcome.Passed(84, false, listOf(36, 66))))
+        assertEquals(WebSafety(missedKeys = listOf(36, 66), text = "Safety check passed · 2 keys weren't heard: C2, F♯4"), warned)
+        assertEquals(listOf(36, 66), WebApi.safety(warned).getJSONArray("missedKeys").let { a -> List(a.length()) { a.getInt(it) } })
+        assertEquals("a full pass says nothing", WebSafety(), WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(ended = dev.stevenjin.stevenpiano.safety.SafetyOutcome.Passed(84, false))))
         val coil = WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(lock = dev.stevenjin.stevenpiano.safety.SafetyLock.CoilOn))
         assertEquals(WebSafety(locked = true, coil = true, text = "Safety check failed: a key is still on"), coil)
         assertEquals("nothing to say", WebSafety(), WebSafety.of(dev.stevenjin.stevenpiano.safety.SafetyState(pending = true)))

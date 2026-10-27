@@ -10189,3 +10189,23 @@ restart answers only a bonded tablet.
   Matter pop-up.
 - **Tests:** 1,814 on M69's branch and 1,817 on M70's; the gate below on the merged tree.
 - **Published:** on Steven's "Publish when ready".
+
+# v1.33 — M71: the sound test warns
+
+Brief `~/.claude/plans/m71-sound-warns-brief.md`; worktree `android-wt-m71`, branch `m71-sound-warns`, from `8bacec9`
+(main with 1.32). No version bump, no signing, no emulator pass; no firmware change. **`SafetyCheck`**: `onSwept` ends
+with `SafetyOutcome.Passed(keys, recovered, missed)` (the sweep line `DONE`, its `keys` the missed ones, `Why.KEYS_SILENT`
+now a warning); `SafetyOutcome.KeysSilent`, `SafetyStep.SWEEP_AGAIN` and the second sweep went (the restart and repower
+remain for boards missing or unanswered, and the rail). `onBoards` once recovered ends with
+`SafetyOutcome.BoardsMissing(answered, of)`, listening or not. `Passed.heardAll` (`keys != null && missed.isEmpty()`)
+gates M68's `heardAll()`. **`SafetyStore`**: `SafetyLock.KeysSilent` became `BoardsMissing(answered, of)`, kept as
+`boards:6/7` (anything unreadable still locks, as `BoardsMissing(0, 0)`); a pass keeps its missed keys in `lastSilent`.
+**Migration**: `DataStoreSafetyStore.read()` finds a `keys:…` lock, removes it in an `edit` that checks it is still there
+and sets `pending`, logs once, and returns no lock with a check due: idempotent, and a failed write still reads unlocked.
+**Words**: `SafetyCopy.missed`, `passed`, `boardsAnswered`, `ASK_BOARDS`, `MISSED_NOTE`; `last()` says "81 of 84 keys
+heard" and "6 of 7 power boards answered" (old failed records still read "C2, F♯4 didn't sound"). **Panel**: `WebSafety`
+gains `missedKeys` (the moment a pass with misses shows), `failedKeys` stays and is empty; `now.js` shows that text with the
+amber dot. **Tests**: `SafetyCheckTest` 17 (misses pass with no recovery commands; every key heard; boards still missing
+lock, microphone on and off; boards back then misses pass), `SafetyRunnerTest` 16 (a pass with misses: unlocked, count
+reset, no `heardAll`, its words; `BoardsMissing` locks and refuses Play, microphone on and off), `SafetyStoreTest` 6 (the
+old lock cleared once and stays so, `coil` survives, `boards:6/7` round-trips), `WebApiTest` and `WebAssetsTest` follow.

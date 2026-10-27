@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.safety
 
 import dev.stevenjin.stevenpiano.audio.KeyResult
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -111,70 +112,88 @@ class SafetyCheckTest {
     }
 
     @Test
-    fun `keys not heard - the restart where offered, the repower, a second sweep, and still not heard locks Play`() {
+    fun `keys not heard only warn - the check passes with them named, no restart, repower or second sweep (v1_33 M71)`() {
         val check = run()
             .then(Event.Released, Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
             .then(Event.Answer(allOk), Command.Sweep)
-            .then(sweep(setOf(36, 66)), Command.Ask("ota"))
-        val first = check.step.state.line(SafetyStep.SWEEP)!!
-        assertEquals(Mark.FAILED, first.mark)
-        assertEquals(listOf(36, 66), first.keys)
-        assertEquals(82 to 84, first.done to first.of)
-        check.then(Event.Answer("confirmed"), Command.Restart)
-            .then(Event.Restarted("restarting"), Command.AwaitBack)
-            .then(Event.Back(true), Command.Repower)
-            .then(Event.Repowered(true), Command.Ask("active"))
-            .then(Event.Answer("0"), Command.Ask("boards"))
-            .then(Event.Answer(allOk), Command.Sweep)
-        assertEquals(SafetyStep.SWEEP_AGAIN, check.step.state.running?.step)
-        check.then(sweep(setOf(36, 66)), Command.Finish(SafetyOutcome.KeysSilent(listOf(36, 66))))
+            .then(sweep(setOf(66, 36)), Command.Finish(SafetyOutcome.Passed(keys = 84, recovered = false, missed = listOf(36, 66))))
+        val line = check.step.state.line(SafetyStep.SWEEP)!!
+        assertEquals("a pass: the sweep done", Mark.DONE, line.mark)
+        assertEquals(listOf(36, 66), line.keys)
+        assertEquals(Why.KEYS_SILENT, line.why)
+        assertEquals(82 to 84, line.done to line.of)
         assertEquals(
-            listOf(
-                SafetyStep.RELEASE to Mark.DONE, SafetyStep.COILS to Mark.DONE, SafetyStep.BOARDS to Mark.DONE, SafetyStep.SWEEP to Mark.FAILED,
-                SafetyStep.RESTART to Mark.DONE, SafetyStep.REPOWER to Mark.DONE, SafetyStep.SWEEP_AGAIN to Mark.FAILED,
-            ),
+            listOf(SafetyStep.RELEASE to Mark.DONE, SafetyStep.COILS to Mark.DONE, SafetyStep.BOARDS to Mark.DONE, SafetyStep.SWEEP to Mark.DONE),
             check.marks,
         )
+        assertFalse(check.step.state.recovered)
+        assertEquals(1, check.step.state.sweeps)
+        assertFalse((check.step.command as Command.Finish).outcome.let { it as SafetyOutcome.Passed }.heardAll)
     }
 
     @Test
-    fun `keys heard on the second sweep pass, after the restart and repower`() {
-        run()
+    fun `every key heard - a pass with nothing missed, the one that heard them all`() {
+        val check = run()
             .then(Event.Released, Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
             .then(Event.Answer(allOk), Command.Sweep)
-            .then(sweep(setOf(40)), Command.Ask("ota"))
+            .then(sweep(), Command.Finish(SafetyOutcome.Passed(keys = 84, recovered = false, missed = emptyList())))
+        assertTrue(((check.step.command as Command.Finish).outcome as SafetyOutcome.Passed).heardAll)
+        assertFalse("no sweep heard nothing", SafetyOutcome.Passed(keys = null, recovered = false).heardAll)
+    }
+
+    @Test
+    fun `boards back after the restart and repower - the sweep, and keys not heard still only warn (v1_33 M71)`() {
+        run()
+            .then(Event.Released, Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(oneMissing), Command.Ask("ota"))
             .then(Event.Answer("none"), Command.Restart)
             .then(Event.Restarted("restarting"), Command.AwaitBack)
             .then(Event.Back(true), Command.Repower)
             .then(Event.Repowered(true), Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
             .then(Event.Answer(allOk), Command.Sweep)
-            .then(sweep(), Command.Finish(SafetyOutcome.Passed(keys = 84, recovered = true)))
+            .then(sweep(setOf(40)), Command.Finish(SafetyOutcome.Passed(keys = 84, recovered = true, missed = listOf(40))))
+    }
+
+    @Test
+    fun `boards still missing after the restart and repower lock Play, with the microphone on (v1_33 M71)`() {
+        val check = run()
+            .then(Event.Released, Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(oneMissing), Command.Ask("ota"))
+            .then(Event.Answer("confirmed"), Command.Restart)
+            .then(Event.Restarted("restarting"), Command.AwaitBack)
+            .then(Event.Back(false), Command.Repower)
+            .then(Event.Repowered(true), Command.Ask("active"))
+            .then(Event.Answer("0"), Command.Ask("boards"))
+            .then(Event.Answer(oneMissing), Command.Finish(SafetyOutcome.BoardsMissing(6, 7)))
+        assertNull("no sweep for a piano that lost a board", check.step.state.line(SafetyStep.SWEEP))
+        assertEquals(Mark.FAILED to Why.BOARDS_MISSING, check.step.state.line(SafetyStep.BOARDS)?.let { it.mark to it.why })
     }
 
     @Test
     fun `the restart is left out where the firmware has none, while an update awaits its confirmation, or when the piano refuses`() {
-        fun failedSweep(restart: Boolean) = run(restart = restart)
+        fun boardsRead(restart: Boolean) = run(restart = restart)
             .then(Event.Released, Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
-            .then(Event.Answer(allOk), Command.Sweep)
 
         // No `!restartproto=1` (firmware before 2.1.1): straight to the repower.
-        val none = failedSweep(restart = false).then(sweep(setOf(50)), Command.Repower)
+        val none = boardsRead(restart = false).then(Event.Answer(oneMissing), Command.Repower)
         assertEquals(Mark.SKIPPED to Why.NOT_OFFERED, none.step.state.line(SafetyStep.RESTART)?.let { it.mark to it.why })
 
         // `!ota=pending`: never restart (it would roll the update back).
-        val pending = failedSweep(restart = true)
-            .then(sweep(setOf(50)), Command.Ask("ota"))
+        val pending = boardsRead(restart = true)
+            .then(Event.Answer(oneMissing), Command.Ask("ota"))
             .then(Event.Answer("pending"), Command.Repower)
         assertEquals(Mark.SKIPPED to Why.OTA_PENDING, pending.step.state.line(SafetyStep.RESTART)?.let { it.mark to it.why })
 
         // Every refusal contains "refused": the piano's own words are kept for the card, and the repower follows.
         for (refusal in listOf("refused — updating firmware", "refused — this firmware has not confirmed itself yet", "refused — not authorised (send auth first)")) {
-            val refused = failedSweep(restart = true)
-                .then(sweep(setOf(50)), Command.Ask("ota"))
+            val refused = boardsRead(restart = true)
+                .then(Event.Answer(oneMissing), Command.Ask("ota"))
                 .then(Event.Answer("confirmed"), Command.Restart)
                 .then(Event.Restarted(refusal), Command.Repower)
             val line = refused.step.state.line(SafetyStep.RESTART)!!
@@ -183,8 +202,8 @@ class SafetyCheckTest {
         }
 
         // No reply at all: the repower follows too.
-        val silent = failedSweep(restart = true)
-            .then(sweep(setOf(50)), Command.Ask("ota"))
+        val silent = boardsRead(restart = true)
+            .then(Event.Answer(oneMissing), Command.Ask("ota"))
             .then(Event.Answer("confirmed"), Command.Restart)
             .then(Event.Restarted(null), Command.Repower)
         assertEquals(Why.NO_ANSWER, silent.step.state.line(SafetyStep.RESTART)?.why)
@@ -195,8 +214,7 @@ class SafetyCheckTest {
         fun recovering() = run(restart = false)
             .then(Event.Released, Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
-            .then(Event.Answer(allOk), Command.Sweep)
-            .then(sweep(setOf(50)), Command.Repower)
+            .then(Event.Answer(oneMissing), Command.Repower)
         val noPlug = recovering().then(Event.Repowered(ok = false, plugged = false), Command.Ask("active"))
         assertEquals(Mark.SKIPPED to Why.NO_PLUG, noPlug.step.state.line(SafetyStep.REPOWER)?.let { it.mark to it.why })
         val failed = recovering().then(Event.Repowered(ok = false, plugged = true), Command.Ask("active"))
@@ -204,7 +222,7 @@ class SafetyCheckTest {
     }
 
     @Test
-    fun `the microphone off - no sweep, and no key can lock Play, even with a board missing`() {
+    fun `the microphone off - no sweep, and boards still missing after the restart and repower lock Play too (v1_33 M71)`() {
         val quiet = run(listens = false)
             .then(Event.Released, Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
@@ -220,9 +238,9 @@ class SafetyCheckTest {
             .then(Event.Back(false), Command.Repower)
             .then(Event.Repowered(false, plugged = false), Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
-            .then(Event.Answer(oneMissing), Command.Finish(SafetyOutcome.Passed(keys = null, recovered = true)))
+            .then(Event.Answer(oneMissing), Command.Finish(SafetyOutcome.BoardsMissing(6, 7)))
         assertEquals("the boards as they are, shown", Mark.FAILED, missing.step.state.line(SafetyStep.BOARDS)?.mark)
-        assertTrue(missing.step.state.lines.none { it.step == SafetyStep.SWEEP_AGAIN })
+        assertNull(missing.step.state.line(SafetyStep.SWEEP))
     }
 
     @Test
@@ -328,12 +346,11 @@ class SafetyCheckTest {
             .then(Event.Answer(allOk), Command.Sweep)
             .then(Event.RailDown, Command.Finish(SafetyOutcome.Unfinished(Why.RAIL_DOWN)))
 
-        // And before the second sweep, after keys didn't sound: unfinished too, never a lock from keys not judged.
+        // And after the recovery for a missing board: unfinished too, never a lock from keys not judged.
         run(restart = false)
             .then(Event.Released, Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
-            .then(Event.Answer(allOk), Command.Sweep)
-            .then(sweep(setOf(40)), Command.Repower)
+            .then(Event.Answer(oneMissing), Command.Repower)
             .then(Event.Repowered(true), Command.Ask("active"))
             .then(Event.Answer("0"), Command.Ask("boards"))
             .then(Event.Answer(allOk), Command.Sweep)

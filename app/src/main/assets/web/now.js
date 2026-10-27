@@ -167,21 +167,23 @@ export function create(host) {
 
   // ---- The safety check (v1.26 — M61) ----------------------------------------------------------------------------
   //
-  // The state's `safety` ({running, step, of, locked, failedKeys, coil, stopped, text}; absent on older tablets: nothing).
-  // While a check runs on the tablet, or Play is locked until one passes there, Now playing's head says so in the tablet's
-  // own words: the dot on while it runs, amber while keys lock Play, red only for a key still on; and (v1.27 — M64) for the
-  // moment the tablet's card says why a check stopped ("Safety check stopped · The piano didn't report its keys. Reconnect
-  // it."), with a plain ring. A Play the tablet refuses meanwhile (409 safety) says why, as every refusal does. The panel
+  // The state's `safety` ({running, step, of, locked, failedKeys, coil, stopped, text, missedKeys}; absent on older
+  // tablets: nothing). While a check runs on the tablet, or Play is locked until one passes there, Now playing's head says
+  // so in the tablet's own words: the dot on while it runs, amber while power boards lock Play, red only for a key still
+  // on; (v1.27 — M64) for the moment the tablet's card says why a check stopped ("Safety check stopped · The piano didn't
+  // report its keys. Reconnect it."), with a plain ring; and (v1.33 — M71) for the moment a check passes with keys not
+  // heard ("Safety check passed · 3 keys weren't heard: C2, F♯4, A6"), amber: a warning, Play isn't locked. A Play the tablet refuses meanwhile (409 safety) says why, as every refusal does. The panel
   // can't start a check: the microphone needs the tablet in front.
 
   function renderSafety() {
     const safety = state() && state().safety;
-    const on = !!(safety && safety.text && (safety.running || safety.locked || safety.stopped));
+    const missed = !!(safety && safety.missedKeys && safety.missedKeys.length);
+    const on = !!(safety && safety.text && (safety.running || safety.locked || safety.stopped || missed));
     $('safety-capsule').hidden = !on;
     if (!on) return;
     const dot = $('safety-dot');
     dot.classList.toggle('on', !!safety.running);
-    dot.classList.toggle('attention', !safety.running && !!safety.locked && !safety.coil);
+    dot.classList.toggle('attention', !safety.running && ((!!safety.locked && !safety.coil) || missed));
     dot.classList.toggle('live', !safety.running && !!safety.coil);
     if ($('safety-text').textContent !== safety.text) $('safety-text').textContent = safety.text;
   }

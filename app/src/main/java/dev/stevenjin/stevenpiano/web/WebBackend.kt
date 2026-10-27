@@ -229,7 +229,7 @@ interface WebBackend {
 
     /**
      * Why Play is refused now (409 `safety` on every route that would start a piece): Play locked by the safety check
-     * ("Safety check failed: C2, F♯4"), or a check due while the app is not in front on the tablet; null when Play may go.
+     * ("Safety check failed: 6 of 7 power boards answered"), or a check due while the app is not in front on the tablet; null when Play may go.
      */
     suspend fun safetyRefusal(): String?
 
@@ -590,7 +590,7 @@ data class WebState(
     val listen: dev.stevenjin.stevenpiano.audio.ListenState = dev.stevenjin.stevenpiano.audio.ListenState(),
     /** The key test (v1.23 — M55): `{running, key, done, total, results, stopped}`. */
     val keytest: dev.stevenjin.stevenpiano.audio.KeyTestState = dev.stevenjin.stevenpiano.audio.KeyTestState(),
-    /** The safety check (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, text}`. */
+    /** The safety check (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, stopped, text, missedKeys}`. */
     val safety: WebSafety = WebSafety(),
     /** The 24 V power plug (v1.26 — M62): `{paired, on, rail, waking, message, attention}`. */
     val power: WebPower = WebPower(),
@@ -618,10 +618,13 @@ data class WebPower(
 
 /**
  * The safety check (v1.26 — M61) as the panel's capsule reads it: a check [running], at [step] of the [of] steps it means
- * to take; Play [locked] (the keys that didn't sound, [failedKeys], MIDI; [coil]: a key was still on); a check that
- * [stopped] before its end, for the moment the tablet's card says why (v1.27 — M64); and the tablet's own words for it
- * ([text]: "Safety check · Testing each key (37 of 84)", "Safety check failed: C2, F♯4", "Safety check stopped · The piano
- * didn't report its keys. Reconnect it."), null while there is nothing to show. The panel can't start a check: the
+ * to take; Play [locked] ([coil]: a key was still on; else power boards missing, v1.33 — M71; [failedKeys], kept for
+ * older panels, is empty since keys not heard never lock); a check that [stopped] before its end, for the moment the
+ * tablet's card says why (v1.27 — M64); a check that passed with keys not heard ([missedKeys], MIDI, v1.33 — M71: a
+ * warning), for the moment the tablet's card shows it; and the tablet's own words for it ([text]: "Safety check · Testing
+ * each key (37 of 84)", "Safety check failed: 6 of 7 power boards answered", "Safety check passed · 3 keys weren't heard:
+ * C2, F♯4, A6", "Safety check stopped · The piano didn't report its keys. Reconnect it."), null while there is nothing
+ * to show. The panel can't start a check: the
  * microphone needs the tablet in front.
  */
 data class WebSafety(
@@ -633,6 +636,7 @@ data class WebSafety(
     val coil: Boolean = false,
     val stopped: Boolean = false,
     val text: String? = null,
+    val missedKeys: List<Int> = emptyList(),
 ) {
     companion object {
         fun of(state: SafetyState): WebSafety {
@@ -640,10 +644,12 @@ data class WebSafety(
             val steps = if (state.running) state.check?.steps().orEmpty() else emptyList()
             val now = steps.indexOfFirst { it.mark == Mark.RUNNING }
             val stopped = (state.ended as? SafetyOutcome.Unfinished)?.takeIf { !state.running && lock == null }
+            val missed = (state.ended as? SafetyOutcome.Passed)?.takeIf { !state.running && lock == null }?.missed.orEmpty()
             val text = when {
                 state.running -> steps.getOrNull(now)?.let { "${SafetyCopy.TITLE} · ${SafetyCopy.line(it)}" } ?: SafetyCopy.TITLE
                 lock != null -> SafetyCopy.locked(lock)
                 stopped != null -> listOfNotNull(SafetyCopy.STOPPED, SafetyCopy.stopped(stopped)).joinToString(" · ")
+                missed.isNotEmpty() -> SafetyCopy.passed(missed)
                 else -> null
             }
             return WebSafety(
@@ -651,10 +657,11 @@ data class WebSafety(
                 step = now + 1,
                 of = steps.size,
                 locked = lock != null,
-                failedKeys = (lock as? SafetyLock.KeysSilent)?.keys.orEmpty(),
+                failedKeys = emptyList(),
                 coil = lock == SafetyLock.CoilOn,
                 stopped = stopped != null,
                 text = text,
+                missedKeys = missed,
             )
         }
     }

@@ -22,18 +22,26 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import java.io.IOException
 
-/** Why Play is locked (v1.26 — M61), until a safety check run at the tablet passes. */
+/**
+ * Why Play is locked (v1.26 — M61), until a safety check run at the tablet passes. Since v1.33 — M71 only what the app
+ * can trust locks: a coil still on, or power boards missing. Keys the microphone didn't hear only warn; the `keys:…`
+ * lock 1.26 to 1.32 kept is cleared at the first read ([DataStoreSafetyStore]).
+ */
 sealed interface SafetyLock {
-    /** A coil was still on after the release: the 24 V was cut. */
+    /** A coil was still on after the release: the 24 V was cut. Kept as "coil". */
     data object CoilOn : SafetyLock
 
-    /** These keys (MIDI numbers) did not sound, after the restart and the repower too. */
-    data class KeysSilent(val keys: List<Int>) : SafetyLock
+    /**
+     * Only [answered] of [of] power boards answered, after the restart and the repower too (v1.33 — M71). Kept as
+     * "boards:6/7"; [of] 0 when what was kept can't be read (it still locks).
+     */
+    data class BoardsMissing(val answered: Int, val of: Int) : SafetyLock
 }
 
 /**
- * The last check that came to a result (passed, or locked Play), at [at] (epoch ms): whether it [passed]; the keys heard
- * of those struck ([keys]; null with no sweep, the microphone off); those not heard ([silent]); whether a coil was on;
+ * The last check that came to a result (passed, or locked Play), at [at] (epoch ms): whether it [passed]; the keys
+ * struck ([keys]; null with no sweep, the microphone off); those not heard ([silent]: since v1.33 — M71 a pass's
+ * warning; before, a lock's keys, with [keys] then the keys heard); whether a coil was on;
  * the boards answering ([boardsOk] of [boardsOf], null where not read); whether the restart and repower were needed
  * ([recovered]), and which of them was done (v1.27 — M63: [restarted], the controller started again; [repowered], the
  * 24 V off and on; null in a record kept before them).
@@ -76,13 +84,41 @@ val Context.safetyDataStore: DataStore<Preferences> by preferencesDataStore(name
  * The record in its own small DataStore (`safety_check`), apart from the settings. A record that can't be read is taken
  * as a check due before the next Play: whatever it held, the piano is checked before it plays again. A write that fails
  * is logged; the runner's own copy holds until the app ends.
+ *
+ * **v1.33 — M71's migration**: a `keys:…` lock (keys not heard, 1.26 to 1.32) is cleared at the first read, logged once,
+ * and a check made due before the next Play instead, so the piano unlocks by itself and is still checked first (its
+ * boards too, which that lock may have hidden). A `coil` lock stays. Idempotent: once cleared there is nothing left to
+ * clear; if the write fails, each read still clears it for the runner until one succeeds.
  */
 class DataStoreSafetyStore(private val store: DataStore<Preferences>, private val log: (String) -> Unit = {}) : SafetyStore {
     override suspend fun read(): SafetyRecord = try {
-        store.data.first().toRecord()
+        val prefs = store.data.first()
+        val record = prefs.toRecord()
+        val kept = prefs[LOCK]
+        if (kept != null && kept.startsWith(KEYS_PREFIX)) {
+            clearKeysLock(kept)
+            record.copy(lock = null, pending = true)
+        } else {
+            record
+        }
     } catch (e: IOException) {
         log("Safety check: its record couldn't be read; a check runs before the next piece")
         SafetyRecord(pending = true)
+    }
+
+    /** M71's migration: the old `keys:…` lock removed (only if it is still there), a check due instead. */
+    private suspend fun clearKeysLock(kept: String) {
+        try {
+            store.edit {
+                if (it[LOCK]?.startsWith(KEYS_PREFIX) == true) {
+                    it.remove(LOCK)
+                    it[PENDING] = true
+                }
+            }
+            log("Safety check: the lock left by the sound test (${kept.removePrefix(KEYS_PREFIX).ifBlank { "keys unknown" }}) is cleared; keys not heard only warn now, and a check runs before the next piece")
+        } catch (e: IOException) {
+            log("Safety check: the lock left by the sound test couldn't be cleared in its record; it is ignored")
+        }
     }
 
     override suspend fun write(record: SafetyRecord) {
@@ -122,7 +158,7 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         when (val lock = record.lock) {
             null -> remove(LOCK)
             SafetyLock.CoilOn -> this[LOCK] = COIL
-            is SafetyLock.KeysSilent -> this[LOCK] = KEYS_PREFIX + lock.keys.joinToString(",")
+            is SafetyLock.BoardsMissing -> this[LOCK] = BOARDS_PREFIX + lock.answered + "/" + lock.of
         }
         val last = record.last
         if (last == null) {
@@ -159,14 +195,29 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         private val LAST_REPOWERED = booleanPreferencesKey("lastRepowered")
 
         private const val COIL = "coil"
+        /** The keys not heard, as 1.26 to 1.32 kept them: no longer a lock (v1.33 — M71). */
         private const val KEYS_PREFIX = "keys:"
+        private const val BOARDS_PREFIX = "boards:"
 
-        /** The lock as kept: none, a coil on, or the keys; anything else kept there still locks (the keys unknown). */
+        /**
+         * The lock as kept: none, a coil on, or the boards missing ("boards:6/7"). An old `keys:…` lock is none (v1.33 —
+         * M71); anything else kept there still locks, as boards missing with the figures unknown.
+         */
         fun lockOf(text: String?): SafetyLock? = when {
             text.isNullOrBlank() -> null
             text == COIL -> SafetyLock.CoilOn
-            text.startsWith(KEYS_PREFIX) -> SafetyLock.KeysSilent(keysOf(text.removePrefix(KEYS_PREFIX)))
-            else -> SafetyLock.KeysSilent(emptyList())
+            text.startsWith(KEYS_PREFIX) -> null
+            text.startsWith(BOARDS_PREFIX) -> boardsOf(text.removePrefix(BOARDS_PREFIX))
+            else -> SafetyLock.BoardsMissing(0, 0)
+        }
+
+        /** "6/7" as the boards answering of those there are; what can't be read still locks, its figures unknown. */
+        private fun boardsOf(text: String): SafetyLock.BoardsMissing {
+            val parts = text.split('/').map { it.trim().toIntOrNull() }
+            val answered = parts.getOrNull(0)
+            val of = parts.getOrNull(1)
+            if (parts.size != 2 || answered == null || of == null || answered < 0 || of <= 0 || answered > of) return SafetyLock.BoardsMissing(0, 0)
+            return SafetyLock.BoardsMissing(answered, of)
         }
 
         /** "36,61" as keys, in order; what isn't a key of the piano is left out. */

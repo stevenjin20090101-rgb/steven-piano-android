@@ -20,8 +20,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -51,8 +53,8 @@ class SafetyStoreTest {
         val kept = SafetyRecord(
             count = 4,
             pending = true,
-            lock = SafetyLock.KeysSilent(listOf(36, 66)),
-            last = LastCheck(at = 1_760_000_000_000L, passed = false, keys = 82, silent = listOf(36, 66), boardsOk = 7, boardsOf = 7, recovered = true, restarted = false, repowered = true),
+            lock = SafetyLock.BoardsMissing(6, 7),   // kept as "boards:6/7" (v1.33 — M71)
+            last = LastCheck(at = 1_760_000_000_000L, passed = false, boardsOk = 6, boardsOf = 7, recovered = true, restarted = false, repowered = true),
         )
         session(file) { store, _ -> store.write(kept) }
         assertEquals("the app started again", kept, session(file) { store, _ -> store.read() })
@@ -62,6 +64,50 @@ class SafetyStoreTest {
         val passed = SafetyRecord(last = LastCheck(at = 2L, passed = true, keys = null))
         session(file) { store, _ -> store.write(passed) }
         assertEquals("unlocked, no sweep (the microphone off)", passed, session(file) { store, _ -> store.read() })
+        val warned = SafetyRecord(last = LastCheck(at = 3L, passed = true, keys = 84, silent = listOf(36, 66)))
+        session(file) { store, _ -> store.write(warned) }
+        assertEquals("a pass with keys not heard (v1.33 — M71)", warned, session(file) { store, _ -> store.read() })
+    }
+
+    @Test
+    fun `an old keys lock is cleared once at the first read, a check due instead, and stays cleared (v1_33 M71)`() {
+        val file = File(tmp.root, "upgraded.preferences_pb")
+        session(file) { _, data ->
+            data.edit {
+                it[stringPreferencesKey("lock")] = "keys:36,61"
+                it[intPreferencesKey("count")] = 2
+            }
+        }
+        val logs = mutableListOf<String>()
+        fun read() = runBlocking {
+            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            try {
+                DataStoreSafetyStore(PreferenceDataStoreFactory.create(scope = scope) { file }) { logs += it }.read()
+            } finally {
+                scope.cancel()
+            }
+        }
+        val first = read()
+        assertNull("Play unlocks by itself", first.lock)
+        assertTrue("a check runs before the next piece", first.pending)
+        assertEquals(2, first.count)
+        assertEquals(1, logs.size)
+        assertTrue(logs.single(), logs.single().contains("36,61"))
+        val again = read()
+        assertEquals("idempotent: the same record", first, again)
+        assertEquals("logged once", 1, logs.size)
+        assertNull(session(file) { _, data -> data.data.first()[stringPreferencesKey("lock")] })
+        assertNull(DataStoreSafetyStore.lockOf("keys:36,61"))
+    }
+
+    @Test
+    fun `a coil lock survives the upgrade, and the boards' lock reads back`() {
+        val file = File(tmp.root, "coil.preferences_pb")
+        session(file) { _, data -> data.edit { it[stringPreferencesKey("lock")] = "coil" } }
+        assertEquals(SafetyLock.CoilOn, session(file) { store, _ -> store.read() }.lock)
+        assertEquals(SafetyLock.CoilOn, session(file) { store, _ -> store.read() }.lock)
+        assertEquals(SafetyLock.BoardsMissing(6, 7), DataStoreSafetyStore.lockOf("boards:6/7"))
+        assertEquals("figures unknown: still locks", SafetyLock.BoardsMissing(0, 0), DataStoreSafetyStore.lockOf("boards:x"))
     }
 
     @Test
@@ -87,7 +133,7 @@ class SafetyStoreTest {
     fun `a lock kept in a form it doesn't know still locks`() {
         val file = File(tmp.root, "odd.preferences_pb")
         session(file) { _, data -> data.edit { it[stringPreferencesKey("lock")] = "something newer" } }
-        assertEquals(SafetyLock.KeysSilent(emptyList()), session(file) { store, _ -> store.read() }.lock)
+        assertEquals(SafetyLock.BoardsMissing(0, 0), session(file) { store, _ -> store.read() }.lock)
         assertEquals(listOf(36, 61), DataStoreSafetyStore.keysOf("61, 36,x,200,36"))
     }
 

@@ -1307,31 +1307,39 @@ check** card shows, over whatever was on the tablet, the resting screen too, wit
 1. **Keys released**: every key let go and the pedal up.
 2. **No coil on**: the piano says no key is still powered. If one is, the check stops at once: the power to the keys is
    cut (with the power plug), everything stops, and Play is locked ("Safety check failed: a key is still on", in red).
-3. **Boards answering (7 of 7)**: every power board answers. A missing one calls for the restart and the power off and
-   on below, before the keys are tested.
+3. **Boards answering (7 of 7)**: every power board answers. A missing one calls for **Restarting the piano** (on
+   firmware that has the restart, 2.1.1 and later; never while a new firmware is still confirming itself) and **Power
+   off and on** (with the power plug), then the piano is read again. Boards **still missing** lock Play (from 1.33,
+   with the microphone on or off): "Safety check failed: 6 of 7 power boards answered", and the card asks for whoever
+   looks after the piano to check it.
 4. **Testing each key (37 of 84)**: the piano strikes each key once, low to high (about 40 s), while the tablet's
    microphone listens; the banner says "Microphone on · safety check". Nothing is recorded or sent. The keys are
    struck only once the power to them is up (with the power plug, a second or so after it is wanted). If it doesn't
    come up within 10 seconds no key is judged ("Testing each key · the 24 V didn't come up"): the power goes off and
-   on, then the keys are tested; if it still doesn't come up, the check runs again before the next piece, and Play
-   isn't locked by keys that weren't tested.
-5. A key not heard: **Restarting the piano** (on firmware that has the restart, 2.1.1 and later; never while a new
-   firmware is still confirming itself) and **Power off and on** (with the power plug), then every key again.
-6. **Still not heard**: Play is locked. The card says "Safety check failed", shows the keys that didn't sound
-   ("C2, F♯4") on the keyboard, and "Ask whoever looks after the piano to check these keys". Play is refused
-   everywhere meanwhile: on the tablet, the web panel ("Safety check failed: C2, F♯4") and the media controls. The lock
-   stays through a restart of the app.
+   on, then the keys are tested; if it still doesn't come up, the check runs again before the next piece.
+5. **Keys not heard only warn** (from 1.33): the microphone can't be trusted to hear every key of an old piano out of
+   tune, so the check passes, with no restart and no second sweep for them: "Safety check passed · 3 keys weren't heard:
+   C2, F♯4, A6", those keys in amber on the keyboard, and the web panel says the same for a moment. Play is never locked
+   by a key not heard.
+
+**Play locks** only for what the tablet can trust: a key still powered (step 2), power boards still missing (step 3),
+and the power plug's watch, which cuts the 24 V and makes a check due before the next piece. Play is then refused
+everywhere: on the tablet, the web panel ("Safety check failed: a key is still on", "Safety check failed: 6 of 7 power
+boards answered") and the media controls. The lock stays through a restart of the app. **Upgrading to 1.33 clears a
+lock left by the sound test** (1.26 to 1.32 locked Play for keys not heard) by itself; a check then runs before the next
+piece. A lock for a key still on stays.
 
 **How a key is heard** (from 1.32; the check and **Test every key** alike): it listens for any sound right after each key,
 so a piano out of tune passes. A solenoid's click counts as a sound too (it shows the key's channel moved), and a loud
 noise in the room at the very moment of a key can count for that key; a key stuck on is still caught by the coil check
 (step 2) and the power plug's watch.
 
-When every key sounds, the card says **Safety check passed** and closes; the next piece waits for Play as always. The
+When it passes, the card says **Safety check passed** (with any keys not heard) and closes; the next piece waits for Play as always. The
 card's **Run the safety check** (behind the kiosk PIN in kiosk mode) runs it again: only a check that passes unlocks
 Play. **Not now** (the same PIN) puts the card aside as a capsule at the top of every screen, "Play is locked · safety
 check failed", with **Show**; Play stays locked. The web panel shows the check's step, or the lock, as a capsule on Now
-playing, and can't start a check (the microphone needs the tablet in front).
+playing (and a pass with keys not heard, for a moment), and can't start a check (the microphone needs the tablet in
+front).
 
 **When it can't run** right after the 6th piece (a quiet time, Steven Piano not in front on the tablet, the piano not
 connected, a firmware update, guest play), it runs before the next Play, and that Play waits for it. A Play from the web
@@ -1342,14 +1350,14 @@ piece. Pieces played by guests, from an iPad, or on the Keys tab don't count.
 **Piano › System › Listen and test**: **Automatic safety check (uses the microphone)** is on by default ("Every 6 pieces
 the piano strikes each key once while the tablet listens. Nothing is recorded or sent."). Turning it on asks Android for
 the microphone; without it, the check runs without listening, and says so. Off, the check still releases the keys and
-reads the coils and the boards, and no key can lock Play. Under it: "Last safety check: today 14:20 · all 84 keys".
+reads the coils and the boards. Under it: "Last safety check: today 14:20 · all 84 keys", or "… · 81 of 84 keys
+heard".
 **Test every key** waits for the power to the keys too, and stops with "Stopped: the 24 V didn't come up." when it
 doesn't come up.
 After a restart of the piano its System page reads the last reset as "Restarted": expected, not a fault.
 
 **On the emulator** (debug builds): the tablet's microphone is a stand-in that hears the keys the check strikes.
-`adb shell setprop debug.stevenpiano.silentkeys 36,61` leaves those keys silent, so the failure and the lock can be
-seen; `adb shell "setprop debug.stevenpiano.silentkeys ''"` hears them all again.
+`adb shell setprop debug.stevenpiano.silentkeys 36,61` leaves those keys silent, so the warning can be seen; `adb shell "setprop debug.stevenpiano.silentkeys ''"` hears them all again.
 `adb shell setprop debug.stevenpiano.detune 40` plays every key up to 40 cents out of tune, the same each time, to see a
 piano out of tune pass; `adb shell "setprop debug.stevenpiano.detune ''"` plays it in tune again. Both are read when the
 microphone starts. Grant the microphone first:
@@ -1359,8 +1367,8 @@ microphone starts. Grant the microphone first:
 
 - [ ] Six pieces with the piano connected: right after the sixth the card shows; every key sounds once, low to high;
       the card says passed and closes; the seventh piece waits for Play.
-- [ ] Cover the tablet's microphone during the keys: they aren't heard, the piano restarts (2.1.1), the keys sound
-      again, and Play locks with the keys named. Run the safety check uncovered: Play is free again.
+- [ ] Cover the tablet's microphone during the keys: they aren't heard, and the check passes with "N keys weren't
+      heard: …" and those keys in amber; no restart, Play isn't locked, and the next piece plays.
 - [ ] A quiet time over the sixth piece's end: no check; the first Play after it runs the check, then plays.
 
 ## Studio

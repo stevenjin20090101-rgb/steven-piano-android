@@ -105,10 +105,11 @@ import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
  * - **Running**: "Safety check", why, and the next piece's title; the steps ticking as they finish ("Keys released · No
  *   coil on · Boards answering (5 of 7) · Testing each key (37 of 84) · Restarting the piano · Power off and on"), those
  *   to come faint, a step left out in the secondary grey with why; and the slim progress line. The screen stays on.
- * - **Ended**: "Safety check passed" (it closes by itself) or "Safety check stopped" with why and "It runs again before
- *   the next piece."; OK closes it at once.
- * - **Locked**: "Safety check failed", the keys that didn't sound on the keyboard map in the attention amber, "Ask
- *   whoever looks after the piano to check these keys", **Run the safety check** (the kiosk PIN while the kiosk keeps
+ * - **Ended**: "Safety check passed" (it closes by itself; with keys not heard, v1.33 — M71, "3 keys weren't heard: C2,
+ *   F♯4, A6" and those keys on the keyboard map in the attention amber: a warning, Play isn't locked) or "Safety check
+ *   stopped" with why and "It runs again before the next piece."; OK closes it at once.
+ * - **Locked** (a coil on, or power boards missing after the restart and repower): "Safety check failed", what failed,
+ *   who to ask, **Run the safety check** (the kiosk PIN while the kiosk keeps
  *   the settings locked; only a check that passes unlocks Play) and **Not now** (the same PIN), which leaves a capsule
  *   at the top of every screen until Show, or until Play is refused again. A coil still on is the one thing in red.
  *
@@ -206,6 +207,15 @@ private fun Checking(state: SafetyState, onDismiss: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurface,
     )
     Text(line, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val missed = (ended as? SafetyOutcome.Passed)?.missed.orEmpty()
+    if (missed.isNotEmpty()) {
+        // v1.33 — M71: keys not heard only warn: named, on the keyboard map in amber, as the lock card once did.
+        Text(SafetyCopy.missed(missed), Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleLarge, color = LocalAttention.current)
+        Box(Modifier.padding(vertical = 8.dp)) {
+            KeyMap(KeyTestState(results = KeyTest.KEYS.map { KeyResult(it, it !in missed) }))
+        }
+        Text(SafetyCopy.MISSED_NOTE, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     state.next?.let { next ->
         Text(
             SafetyCopy.next(next),
@@ -297,14 +307,15 @@ private fun Locked(lock: SafetyLock, said: String?, gate: KioskGate, onRun: (Def
             }
             Text(SafetyCopy.ASK_COIL, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        is SafetyLock.KeysSilent -> {
-            Text(SafetyCopy.silent(lock.keys).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleLarge, color = LocalAttention.current)
-            if (lock.keys.isNotEmpty()) {
-                Box(Modifier.padding(vertical = 8.dp)) {
-                    KeyMap(KeyTestState(results = KeyTest.KEYS.map { KeyResult(it, it !in lock.keys) }))
-                }
+        is SafetyLock.BoardsMissing -> {
+            if (lock.of > 0) {
+                Text(
+                    SafetyCopy.boardsAnswered(lock.answered, lock.of).replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = LocalAttention.current,
+                )
             }
-            Text(SafetyCopy.ASK, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(SafetyCopy.ASK_BOARDS, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     Row(
