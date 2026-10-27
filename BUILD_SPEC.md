@@ -10209,3 +10209,7 @@ amber dot. **Tests**: `SafetyCheckTest` 17 (misses pass with no recovery command
 lock, microphone on and off; boards back then misses pass), `SafetyRunnerTest` 16 (a pass with misses: unlocked, count
 reset, no `heardAll`, its words; `BoardsMissing` locks and refuses Play, microphone on and off), `SafetyStoreTest` 6 (the
 old lock cleared once and stays so, `coil` survives, `boards:6/7` round-trips), `WebApiTest` and `WebAssetsTest` follow.
+
+## The release: 1.33 (versionCode 44)
+
+M71 (the sound test warns, never locks; `44490e1`). Why: the microphone sweep keeps missing keys on the school piano and locked Play. Published on Steven's OK.
