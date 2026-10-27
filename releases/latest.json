@@ -1,9 +1,9 @@
 {
-  "versionCode": 44,
-  "versionName": "1.33",
-  "notes": "The automatic safety check no longer locks Play when the microphone doesn't hear some keys: it passes with a warning naming them (\"3 keys weren't heard: C2, F♯4, A6\"). Play still locks for a key still powered after the release, or power boards that stay missing after a restart and repower; the power plug's watch still cuts the 24 V. A lock left by the sound test is cleared when this update installs.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.33/steven-piano-1.33.apk",
-  "sha256": "9511c693632ecff18719f6ef861b4e8072035dc7291c4b1e3ea89b3e3da7e4fb",
-  "sizeBytes": 14463201,
+  "versionCode": 45,
+  "versionName": "1.34",
+  "notes": "Power plug setup: after the plug restarts to turn its Matter off, the tablet now waits up to about 40 seconds for it to come back, instead of 6, so the setup no longer stops with \"The plug didn't turn on its Bluetooth control.\"",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.34/steven-piano-1.34.apk",
+  "sha256": "1774d4b6951c08c0160ad7d82fb59da2d47d5381abd1de084cd7409476b8b8e9",
+  "sizeBytes": 14463469,
   "minSdk": 26
 }
