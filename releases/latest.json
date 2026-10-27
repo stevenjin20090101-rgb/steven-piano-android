@@ -1,9 +1,9 @@
 {
-  "versionCode": 43,
-  "versionName": "1.32",
-  "notes": "The key test (Test every key, and the safety check every 6 pieces) now listens for any clear sound right after each key is struck, instead of its exact in-tune pitch, so a piano that is out of tune passes; a key that makes no sound, or one stuck down, still fails. The power plug: if it was set up in the Shelly app, the pairing screen now shows how to reset it so the tablet can take it over (in the Shelly app, Factory reset; or hold its button 10 seconds within a minute of plugging it in). The tablet also turns the plug's Matter off, which stops Android's \"Matter device found\" pop-up and closes a way to keep the 24 V on with no time limit.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.32/steven-piano-1.32.apk",
-  "sha256": "6214893f79ac51629befd588ae3303a27aa948a44d14278fb0d3d15de48778f5",
-  "sizeBytes": 14462621,
+  "versionCode": 44,
+  "versionName": "1.33",
+  "notes": "The automatic safety check no longer locks Play when the microphone doesn't hear some keys: it passes with a warning naming them (\"3 keys weren't heard: C2, F♯4, A6\"). Play still locks for a key still powered after the release, or power boards that stay missing after a restart and repower; the power plug's watch still cuts the 24 V. A lock left by the sound test is cleared when this update installs.",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.33/steven-piano-1.33.apk",
+  "sha256": "9511c693632ecff18719f6ef861b4e8072035dc7291c4b1e3ea89b3e3da7e4fb",
+  "sizeBytes": 14463201,
   "minSdk": 26
 }

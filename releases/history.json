@@ -400,8 +400,10 @@
     "versionName": "1.33",
     "notes": "The automatic safety check no longer locks Play when the microphone doesn't hear some keys: it passes with a warning naming them (\"3 keys weren't heard: C2, F♯4, A6\"). Play still locks for a key still powered after the release, or power boards that stay missing after a restart and repower; the power plug's watch still cuts the 24 V. A lock left by the sound test is cleared when this update installs.",
     "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.33/steven-piano-1.33.apk",
+    "sha256": "9511c693632ecff18719f6ef861b4e8072035dc7291c4b1e3ea89b3e3da7e4fb",
+    "sizeBytes": 14463201,
     "minSdk": 26,
     "tag": "v1.33",
-    "draft": true
+    "publishedAt": "2026-10-27"
   }
 ]
