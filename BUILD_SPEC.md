@@ -10213,3 +10213,7 @@ old lock cleared once and stays so, `coil` survives, `boards:6/7` round-trips), 
 ## The release: 1.33 (versionCode 44)
 
 M71 (the sound test warns, never locks; `44490e1`). Why: the microphone sweep keeps missing keys on the school piano and locked Play. Published on Steven's OK.
+
+## The release: 1.34 (versionCode 45)
+
+The plug restart wait (setup and watch): retried every 6 s up to 7 times (about 40 s) instead of one 6 s wait; the real plug failed the setup at "The plug didn't turn on its Bluetooth control."

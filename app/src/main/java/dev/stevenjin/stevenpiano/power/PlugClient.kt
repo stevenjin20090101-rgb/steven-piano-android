@@ -275,8 +275,12 @@ class ShellyRail(
             log("Plug watch: the plug restarts for Matter off, with the 24 V off at power-up")
             client.call("Shelly.Reboot")
             client.drop()
-            delay(PairFlow.REBOOT_WAIT_MS)
-            client.switchStatus()   // back, and connected again before the watch goes on
+            // Back, and connected again before the watch goes on (v1.34: a real plug boots slower than one wait).
+            for (i in 1..PairFlow.REBOOT_TRIES) {
+                delay(PairFlow.REBOOT_WAIT_MS)
+                if (client.switchStatus() != null) break
+                client.drop()
+            }
         }
         return !first
     }

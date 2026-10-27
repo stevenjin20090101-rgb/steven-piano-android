@@ -411,11 +411,23 @@ class PairFlow(
         if (ShellyRpc.restartRequired(rpc) || ShellyRpc.restartRequired(matter)) {
             client.call("Shelly.Reboot", to = plug)
             client.drop()
-            delay(REBOOT_WAIT_MS)
-            if (client.deviceInfo(to = plug) == null) return fail(SetUpTask.Bluetooth)
+            if (!backAfterReboot(plug)) return fail(SetUpTask.Bluetooth)
         }
         tick(SetUpTask.Bluetooth)
         return true
+    }
+
+    /**
+     * The plug back after its restart (v1.34): a real plug takes longer than [REBOOT_WAIT_MS] to boot and advertise again,
+     * so it is asked again every [REBOOT_WAIT_MS] for [REBOOT_TRIES] tries (about 40 s) before the step fails.
+     */
+    private suspend fun backAfterReboot(plug: String): Boolean {
+        repeat(REBOOT_TRIES) {
+            delay(REBOOT_WAIT_MS)
+            if (client.deviceInfo(to = plug) != null) return true
+            client.drop()
+        }
+        return false
     }
 
     /**
@@ -770,6 +782,7 @@ class PairFlow(
         const val PAIRING_WINDOW_S = 180
         const val BOND_MS = 60_000L
         const val REBOOT_WAIT_MS = 6_000L
+        const val REBOOT_TRIES = 7
         const val COMPLETE_POLL_MS = 5_000L
         const val CONFIRM_POLLS = 24
 
