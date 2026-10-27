@@ -10217,3 +10217,7 @@ M71 (the sound test warns, never locks; `44490e1`). Why: the microphone sweep ke
 ## The release: 1.34 (versionCode 45)
 
 The plug restart wait (setup and watch): retried every 6 s up to 7 times (about 40 s) instead of one 6 s wait; the real plug failed the setup at "The plug didn't turn on its Bluetooth control."
+
+## The release: 1.35 (versionCode 46)
+
+The real plug (2.0.1) still failed at Bluetooth control. configure() now logs and goes on when BLE.SetConfig is refused or unanswered, never restarts the plug during setup (Matter off takes hold at its next restart; the watch reboots only while Matter still reads on), and bondNow skips the pairing window when already bonded (Try again).

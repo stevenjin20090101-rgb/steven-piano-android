@@ -124,11 +124,11 @@ class PairFlowTest {
         val order = transport.methods.filter { it !in POLLS }
         assertEquals(
             "v1.32: bonded first, so Matter's restart can't leave the tablet outside a plug gone `complete` meanwhile",
-            listOf("BLE.StartPairing", "bond", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig"),
+            listOf("BLE.StartPairing", "bond", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Cloud.SetConfig"),
             order,
         )
         assertFalse(shelly.matterOn())
-        assertFalse("Matter stopped with the restart: no more pop-ups", shelly.matterRunning())
+        assertTrue("v1.35: no restart in the setup; Matter stops at the plug's next one", shelly.matterRunning())
 
         advanceTimeBy(EmulatedShelly.COMPLETE_AFTER_MS)
         settle()
@@ -215,8 +215,8 @@ class PairFlowTest {
         until { s.flow.state.value.step == PairStep.Verify }
         assertEquals(
             "its settings, Matter (v1.32 — M70) and the cloud once more, then the network off",
-            listOf("bond", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig"),
-            s.transport.methods.filter { it !in POLLS }.takeLast(7),
+            listOf("bond", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Cloud.SetConfig", "WiFi.SetConfig"),
+            s.transport.methods.filter { it !in POLLS }.takeLast(6),
         )
         assertEquals(SetUpTask.entries.toSet(), s.flow.state.value.tasks)
         assertEquals(EmulatedShelly.ADDRESS, s.store.pairing?.address)
@@ -275,13 +275,13 @@ class PairFlowTest {
         assertTrue(s.flow.state.value.verify!!.passed)
         assertEquals(
             "both asked for a restart (Bluetooth control, the first time; Matter, changed): one",
-            listOf("BLE.StartPairing", "bond", "WiFi.SetConfig", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
+            listOf("BLE.StartPairing", "bond", "WiFi.SetConfig", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
             s.transport.methods.filter { it !in POLLS },
         )
         val matter = JSONObject(s.transport.frames.single { "Matter.SetConfig" in it }).getJSONObject("params").getJSONObject("config")
         assertFalse(matter.getBoolean("enable"))
         assertFalse(s.shelly.matterOn())
-        assertFalse("stopped with the restart: no more pop-ups", s.shelly.matterRunning())
+        assertTrue("v1.35: no restart in the setup; Matter stops at the plug's next one", s.shelly.matterRunning())
         assertTrue("kept with the pairing", s.store.pairing!!.matterOff)
         val close = JSONObject(s.transport.frames.last { "WiFi.SetConfig" in it }).getJSONObject("params").getJSONObject("config")
         assertFalse("the close takes the second network too", close.getJSONObject("sta1").getBoolean("enable"))
@@ -296,7 +296,7 @@ class PairFlowTest {
         until { n.flow.state.value.verify?.finished == true }
         assertTrue(n.flow.state.value.verify!!.passed)
         assertTrue("asked", "Matter.SetConfig" in n.transport.methods)
-        assertEquals(1, n.transport.methods.count { it == "Shelly.Reboot" })
+        assertEquals("v1.35: no restart in the setup", 0, n.transport.methods.count { it == "Shelly.Reboot" })
         assertEquals("not kept as off: the plug watch looks again", false, n.store.pairing?.matterOff)
         assertTrue("logged", n.logs.any { it.startsWith("Plug setup: Matter off refused") && "going on" in it })
     }
@@ -339,7 +339,7 @@ class PairFlowTest {
                 "Switch.Set", "Switch.SetConfig", "WiFi.SetConfig", "Shelly.CheckForUpdate", "Shelly.Update", // off, the hotspot, the update
                 "Shelly.FactoryReset", "Switch.Set", // cleared, then `pending`, the 24 V off again
                 "BLE.StartPairing", "bond", "WiFi.SetConfig", // the bond first, then the hotspot once more
-                "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", // its settings, Matter and the cloud off
+                "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Cloud.SetConfig", // its settings, Matter and the cloud off
                 "WiFi.SetConfig", "Switch.Set", // `complete`: the network off, then the check's 5 s
             ),
             s.transport.methods.filter { it !in POLLS },
@@ -470,7 +470,7 @@ class PairFlowTest {
         assertFalse(s.shelly.bonded(EmulatedShelly.TABLET))
         assertEquals(OLD, s.shelly.firmware)
         assertEquals(
-            listOf("Switch.Set", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Shelly.Reboot", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
+            listOf("Switch.Set", "Switch.SetConfig", "BLE.SetConfig", "Matter.SetConfig", "Cloud.SetConfig", "WiFi.SetConfig", "Switch.Set"),
             s.transport.methods.filter { it !in POLLS },
         )
         val settings = JSONObject(s.transport.frames.first { "Switch.SetConfig" in it }).getJSONObject("params").getJSONObject("config")

@@ -416,5 +416,14 @@
     "minSdk": 26,
     "tag": "v1.34",
     "publishedAt": "2026-10-27"
+  },
+  {
+    "versionCode": 46,
+    "versionName": "1.35",
+    "notes": "Power plug setup: it no longer stops at \"The plug didn't turn on its Bluetooth control.\" The setup carries on past that step and never restarts the plug (its Matter turns off at the plug's next restart), and Try again no longer asks an already-paired plug to pair again.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.35/steven-piano-1.35.apk",
+    "minSdk": 26,
+    "tag": "v1.35",
+    "draft": true
   }
 ]

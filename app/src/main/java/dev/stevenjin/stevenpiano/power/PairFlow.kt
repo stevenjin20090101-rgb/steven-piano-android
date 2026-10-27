@@ -398,8 +398,11 @@ class PairFlow(
         if (settings != null && !settings.ok) settings = client.call("Switch.SetConfig", ShellyRpc.switchConfig(inMode = false), to = plug)
         if (settings?.ok != true) return fail(SetUpTask.Settings)
         tick(SetUpTask.Settings)
+        // v1.35: the tablet is talking RPC over Bluetooth right now, so a refused or unanswered BLE.SetConfig (the real
+        // plug on 2.0.1) is logged and the setup goes on; and the setup never restarts the plug (the real one didn't come
+        // back): Matter's off takes hold at the plug's next restart, and the plug watch looks again.
         val rpc = client.call("BLE.SetConfig", ShellyRpc.bleRpcOn(), to = plug)
-        if (rpc?.ok != true) return fail(SetUpTask.Bluetooth)
+        if (rpc?.ok != true) log("Plug setup: BLE.SetConfig " + (if (rpc == null) "unanswered" else "refused (${rpc.code} ${rpc.message})") + "; going on")
         // Matter: no 30 s timer, a second way to hold the 24 V on. Firmware without it ("No handler"), an error or no answer:
         // logged, and the setup goes on (the plug watch looks again).
         val matter = client.call("Matter.SetConfig", ShellyRpc.matterOff(), to = plug)
@@ -408,26 +411,9 @@ class PairFlow(
         } else {
             log("Plug setup: Matter off " + (if (matter == null) "unanswered" else "refused (${matter.code} ${matter.message})") + "; going on")
         }
-        if (ShellyRpc.restartRequired(rpc) || ShellyRpc.restartRequired(matter)) {
-            client.call("Shelly.Reboot", to = plug)
-            client.drop()
-            if (!backAfterReboot(plug)) return fail(SetUpTask.Bluetooth)
-        }
+        if (ShellyRpc.restartRequired(rpc) || ShellyRpc.restartRequired(matter)) log("Plug setup: a restart was asked for; left to the plug's next one")
         tick(SetUpTask.Bluetooth)
         return true
-    }
-
-    /**
-     * The plug back after its restart (v1.34): a real plug takes longer than [REBOOT_WAIT_MS] to boot and advertise again,
-     * so it is asked again every [REBOOT_WAIT_MS] for [REBOOT_TRIES] tries (about 40 s) before the step fails.
-     */
-    private suspend fun backAfterReboot(plug: String): Boolean {
-        repeat(REBOOT_TRIES) {
-            delay(REBOOT_WAIT_MS)
-            if (client.deviceInfo(to = plug) != null) return true
-            client.drop()
-        }
-        return false
     }
 
     /**
@@ -435,6 +421,11 @@ class PairFlow(
      * is kept yet (v1.28 — M65): the pairing is, once the plug is off every network ([closeNetworkNow]).
      */
     private suspend fun bondNow(plug: String): Boolean {
+        // v1.35: Try again after the bond landed: already paired, so no second pairing window (the plug refuses it).
+        if (client.bluetooth.bonded(plug)) {
+            for (task in listOf(SetUpTask.Window, SetUpTask.Bond, SetUpTask.Listed)) tick(task)
+            return true
+        }
         val before = client.call("BLE.ListPairedDevices", to = plug)?.takeIf { it.ok }?.let { ShellyRpc.pairedAddresses(it.result) }.orEmpty()
         val window = client.call("BLE.StartPairing", JSONObject().put("timeout", PAIRING_WINDOW_S), to = plug)
         if (window?.ok != true) return fail(SetUpTask.Window)
