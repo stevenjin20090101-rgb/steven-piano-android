@@ -10221,3 +10221,24 @@ The plug restart wait (setup and watch): retried every 6 s up to 7 times (about 
 ## The release: 1.35 (versionCode 46)
 
 The real plug (2.0.1) still failed at Bluetooth control. configure() now logs and goes on when BLE.SetConfig is refused or unanswered, never restarts the plug during setup (Matter off takes hold at its next restart; the watch reboots only while Matter still reads on), and bondNow skips the pairing window when already bonded (Try again).
+
+# v1.36 — M72: the SwitchBot plug
+
+Brief `~/.claude/plans/m72-switchbot-brief.md`; worktree `android-wt-m72`, branch `m72-switchbot`, from `cc5452c` (main
+with 1.35). No version bump, no signing, no emulator pass; no firmware change. **Gone:** `ShellyRpc`/`ShellyGatt`,
+`ShellyRail`, the Shelly parts of `PlugClient` and `AndroidPlugTransport` (RPC frames, bond, refusal), `PairFlow`'s setup
+(Wi-Fi, hotspot, update, provisioning, Matter, bond, reset), Admit a replacement tablet, `EmulatedShelly`, their words
+and tests. **New:** `SwitchBot` (the advert parser, the draw `((b10 << 8) | b11) & 0x7FFF` tenths in one function, the
+frames `570f5101`, `570f50010180`, `570f50010100` and their replies), `PlugClient` (one command in flight, a reply on the
+TX notification; a new connection to the paired plug calls `RailKeeper.plugConnected`), `SwitchBotRail` (ARM on, the
+seconds ignored; CUT off; status = GATT output + the advert's draw if under 3 s old; `putBack` false, the contract's
+"nothing differed"), `PlugAdverts` (the advert watch; `seen` null after 10 s; a silence over 10 s logged once),
+`RailKeeper.advert` / `appStarted` / `plugConnected` (each CUTs unless the keeper holds the rail: up, coming up, stopping,
+or wanted with its own ARM standing; a want still waiting for the piano holds nothing), `EnergyMeter` and `PowerUse`, `EmulatedSwitchBot` (adb: `outside on`,
+`draw 12`, `silent on`, `reset` = a power cut). **Changed in `RailKeeper`:** the safety check's restart CUTs, `mayBeUp` is
+any ARM no CUT took since, `release()` CUTs even with the rail off, the failed-CUT log, `welded` also from 3 CUTs that
+don't take. **Store:** `PlugPairing(address, mac)`, `kind = switchbot`; `migrate()` clears a pairing without it once
+(logged) and sets `shellyCleared`; `energy` keeps `EnergyMeter.encode()` (62 days, the all-time peak, the total; written at
+most once a minute, at each CUT taken and at the activity's stop). **Panel:** the JSON is unchanged (`timerEndsAt` always
+null); the words are "SwitchBot plug · off · 0.0 W". **Tests:** `SwitchBotTest` 3, `AdvertWatchTest` 5, `PairFlowTest` 3,
+`PlugStoreTest` 4, `EnergyMeterTest` 4; `RailKeeperTest`'s bench plug has no timer, its restart test expects the quiet CUT.

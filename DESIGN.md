@@ -3860,3 +3860,23 @@ check line says "81 of 84 keys heard"; the panel's capsule shows the warning for
 `heardAll()` fires only for a sweep that heard every key. The first read after the upgrade clears a stored `keys:…` lock
 (once, logged) and makes a check due instead; a `coil` lock stays. Brief `~/.claude/plans/m71-sound-warns-brief.md`; no
 firmware change.
+
+# v1.36 — M72: the SwitchBot plug
+
+Steven, 2026-10-31: the Shelly Plug US Gen4 never finished its setup on the real plug (secure provisioning, required
+pairing, Matter), so the 24 V now hangs on a **SwitchBot Smart Plug Mini**, set up from the tablet alone (nothing in the
+SwitchBot app), and the Shelly's setup and driver are gone. The rail logic stays (`RailPlug`, `RailPower`, `RailGate`,
+`RailHold`, `PowerWatch`, the safety check, M68's usual idle); a new `SwitchBotRail` speaks the plug's GATT (on, off,
+status; no pairing, no encryption) and reads the draw from its adverts (company 2409; under 3 s old, else unread). The
+trade-off, said plainly everywhere: **the plug has no timer of its own**, and comes on by itself after a power cut. So the
+tablet turns it off after every piece and watches it while idle: a low-power scan of its adverts for the life of the app
+(fast while the rail is up, for the power watch) CUTs at once when one says on and the tablet isn't holding the 24 V on
+(the SwitchBot app, a power cut, a missed CUT; three that don't take show the amber "relay may be stuck"); it CUTs at app
+start and at every new connection on the same rule; the minute's look stays; and wherever the Shelly's 30 s timer bounded
+the rail (the safety check's restart, a failed CUT, "may be up") the tablet now CUTs or keeps the rail counted as up until
+a CUT. An outlet timer is the hardware backstop. Pairing is three steps: find (15 s, by signal, the MAC's last 4
+digits), tap (off, on, off: "The plug clicked on and off"), kept. A stored Shelly pairing is cleared once at the first
+read, with the usual idle; Piano › Power plug says to pair the SwitchBot. **Piano › Power use**, under Power plug: the watts
+now, the last 10 minutes as a still line, today's and the all-time peak, and the kWh today, this month and since pairing,
+integrated from the adverts (a gap over 10 s is no data) and kept with the pairing. Brief
+`~/.claude/plans/m72-switchbot-brief.md`; no firmware change.

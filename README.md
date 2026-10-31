@@ -890,7 +890,7 @@ memory and network, what the app is doing, the piano's own facts and Share diagn
 later version shows.
 
 From 1.26, with the 24 V power plug (see *The 24 V power plug*): **Settings › System** shows **Power plug** on the Piano
-card in the tablet's words ("On · 23 s left · 6.4 W", "Off · 0.0 W"), in amber with what it means if its relay seems
+card in the tablet's words ("SwitchBot plug · off · 0.0 W", "SwitchBot plug · on · 6.4 W", or "· not seen"; from 1.36), in amber with what it means if its relay seems
 stuck on or the 24 V failed ("Only 6 of 7 power boards answered"). While the plug keeps the 24 V off, the boards not
 answering is normal, not a fault: they show unpowered and read "0 of 7 answering · 24 V off". **Now playing** says
 "Waking the piano…" while the 24 V comes up for a piece.
@@ -1048,66 +1048,36 @@ v1.6 — M21):
 
 ## The 24 V power plug
 
-From 1.26 the piano's 24 V supply for its keys (the solenoids) can hang on a Bluetooth smart plug, a **Shelly Plug US
-Gen4**, that switches itself off 30 seconds after the tablet last told it to stay on. The tablet tells it so only while
-something plays and the piano answers with its power boards. If the tablet sleeps, the app closes, Bluetooth drops or the
-piano's controller goes dark, the plug turns the 24 V off by itself: no key can stay hot while the piano is idle.
-`firmware/docs/SMART_PLUG.md` is the contract.
+From 1.36 the piano's 24 V supply for its keys (the solenoids) can hang on a Bluetooth smart plug, a **SwitchBot Smart
+Plug Mini** (15 A). The tablet switches it on only while something plays and the piano answers with its power boards, and
+off after every piece. (1.26 to 1.35 used a Shelly Plug US Gen4, whose setup never finished on the real plug; 1.36 clears
+a stored Shelly pairing once, and Piano › Power plug then says **Pair the SwitchBot plug**.) `firmware/docs/SMART_PLUG.md`
+is the contract.
+
+**The trade-off, plainly: the SwitchBot has no timer of its own.** The Shelly switched itself off 30 seconds after the
+tablet last told it to stay on; the SwitchBot stays on until it is told to go off. So the tablet switches it off after
+every piece, at app start, whenever it connects to it, and whenever its adverts (about 3 a second) say it is on with
+nothing wanting the 24 V; and it reads it once a minute while idle. It also comes on by itself after a power cut, until
+the tablet switches it off. **If the tablet stops (flat battery, app closed, Bluetooth off), the 24 V stays on.** So keep
+an **outlet timer** between the wall and the plug as the hardware backup. **Anyone nearby with the SwitchBot app could
+switch it on** (it has no pairing); the tablet switches it straight back off. If three switch-offs in a row don't take,
+it says so in amber ("its relay may be stuck").
 
 **Only the 24 V supply goes on the plug.** The controller's own supply and the LED strip's stay on another socket, so the
 piano keeps its screen, Bluetooth and settings while the 24 V is off. Label the plug *PIANO 24 V — must stay on the smart
 plug*.
 
-**Setting it up, on the day** (about 15 minutes, all from the tablet: no Shelly app, no Shelly account; Piano › Power
-plug › **Pair the power plug** walks through it). Connect the tablet to the piano first, so the last step can check the
-24 V by itself.
+**Setting it up** (about a minute, all from the tablet; Piano › Power plug › **Pair the SwitchBot plug**):
 
-1. Plug the 24 V supply into the plug and the plug into the wall.
-2. Have a 2.4 GHz Wi-Fi with internet for the plug, on until the end (from 1.32 any will do): your phone's hotspot, or a
-   Wi-Fi such as the school's. On an iPhone's hotspot, turn on **Maximize Compatibility** (Settings › Personal Hotspot);
-   on an Android's, choose the **2.4 GHz** band. The plug forgets it at the end of the setup.
-3. On the tablet: **Find the plug**, and tap it (ShellyPlugUSG4-…).
-4. If its firmware is older than 2.0.0, choose one of two ways (from 1.29):
-   - **Use it as it is** (the first button): no update and no pairing. It works, but any phone nearby with the Shelly app
-     could switch it; the tablet checks it every minute and switches it back off. The tablet gives it its settings and
-     turns its cloud off; a plug on firmware 1.7.5 or later then asks for the hotspot once, to finish its setup (about 5
-     minutes), and forgets every network after. Steps 5 and 6 are skipped.
-   - **Update and lock it to this tablet**: type the hotspot's name and password. The plug joins the hotspot, updates
-     itself from Shelly (about 2 minutes), clears its setup, and the tablet goes on by itself: you type the hotspot only
-     once. (A plug already on 2.0.0 or later asks for the hotspot after step 5 instead.)
+1. Plug the SwitchBot into the wall (through the outlet timer), and the piano's 24 V supply into it.
+2. **Don't add it to the SwitchBot app**: the tablet talks to it directly.
+3. **Find the plug**: the tablet looks for 15 seconds and lists SwitchBot plugs by signal, with the last 4 characters of
+   each one's MAC (Steven's: **…47CA**). Tap yours.
+4. The tablet connects and switches it off, on and off again: "The plug clicked on and off". It is paired, and the 24 V
+   follows the music from now on. If it says the plug didn't answer, bring the tablet nearer and tap it again: nothing is
+   paired until the clicks work.
 
-   Firmware older than 2.0.0 can't encrypt Bluetooth before pairing, so the password goes over unencrypted: use your
-   phone's hotspot with a password just for the day, and change it afterwards.
-5. When Android asks to pair with the plug, tap **Pair**. If Android offers to set the plug up as a **Matter** device,
-   close that (1.32): the tablet doesn't use Matter, and turns it off.
-6. Wait while the plug finishes its setup (about 5 minutes; the screen shows when), the Wi-Fi still on. Then the plug
-   forgets every network by itself: turn the hotspot off, if you used one.
-7. The 24 V comes on for 5 seconds by itself: it should read "7 of 7 answering", then "0 of 7" when the plug clicks off.
-   **Finish**. (Piano not connected? Connect it, then **Turn the 24 V on for 5 s**.)
-
-If it says **the plug won't take its update over Bluetooth**, or that Shelly offers no update right now, **Use it as it
-is** is offered first; or update it once in the Shelly app (that needs a Shelly account), then **Search again** on the
-tablet; the rest is the same. If, used as it is, the plug lets only paired tablets in once set up, the screen says it
-needs its update after all: reset it (below), **Search again**, and choose **Update and lock it to this tablet**. If it asks you to **unplug the power plug for 5 seconds**, do, plug it back in, and
-**Search again**: the tablet picks up where the plug is.
-
-The Shelly app still works: add the plug there on the hotspot, decline the cloud, let it update, then within 5 minutes
-**Find the plug** on the tablet and tap **Pair and set up**; the tablet does the rest as before (**Close its network**,
-then the check). After those 5 minutes the plug answers only devices it paired with, and needs a reset.
-
-**A plug already set up in the Shelly app** (yours, 1.32): it answers only the phone it paired with, so it needs a reset
-first. Open **Pair the power plug** and keep the screen open. **Find the plug** says it finished its setup somewhere
-else and shows the reset: in the Shelly app, open the plug › Settings › **Factory reset**; or unplug it, plug it back in,
-and within the first minute hold its button for 10 seconds (5 seconds only restarts it; Shelly's documentation). Then
-**Find the plug again** → it pairs first (tap **Pair**) → type the Wi-Fi's name and password → about 5 minutes while it
-finishes its setup → the 24 V check, by itself → **Finish**. Afterwards the Shelly app shows the plug offline: that is on
-purpose (off every network, only this tablet talks to it, over Bluetooth).
-
-If it says **the plug didn't answer** at Find, unplug it for 5 seconds, plug it back in and find it again; if it still
-won't, reset it as above. (A locked plug answers nothing over Bluetooth, and Android may report a refusal as silence: one
-this tablet isn't paired with that stays silent for 5 seconds gets both.) Nothing counts as paired until the plug is off
-every network, so a setup that stops halfway leaves the app as it was: start it again from the top. The tablet never keeps
-the Wi-Fi's name or password.
+**Forget the plug** switches the 24 V off and stops the app switching it.
 
 **What it says** (at the top of the screen):
 
@@ -1119,8 +1089,8 @@ the Wi-Fi's name or password.
   went off. Check the piano is on and connected, then play again.
 - **Only 6 of 7 power boards answered** — one board didn't come up with the 24 V (a trunk or board fault): the others
   play. With "— 24 V cut", a board went missing while playing and the 24 V went off. Check the cables between the boards.
-- **Lost the power plug** — the tablet couldn't reach the plug twice: the music stopped (the plug switches itself off
-  within 30 s anyway). Bring the tablet nearer the plug, then play again.
+- **Lost the power plug** — the tablet couldn't reach the plug twice: the music stopped and the tablet keeps trying to
+  switch the 24 V off (the plug has no timer of its own). Bring the tablet nearer the plug, then play again.
 - **A key stayed on — 24 V cut** (1.30) — while a piece played, the 24 V drew a key's worth more than the music was
   holding: the piece stopped and the 24 V went off. Tap Play: the safety check runs first, then the piece. If it keeps
   happening, have that key's power board and its cable checked.
@@ -1145,26 +1115,21 @@ it turns red only once the notes reach the piano. The web panel says "Waking the
 the tablet lets go of the piano so the iPad can connect. The page shows the time left and **End guest play**, which
 connects the tablet again, ends guest play, releases every key and turns the 24 V off; the end of the hour does the same.
 
-**Piano › Power plug** also shows the plug (the 24 V on or off with its timer, what the supply draws), **Switch the 24 V
-with the plug** (off: the app leaves the plug alone and it stays off, so to play without it plug the supply into a wall
-socket), **Admit a replacement tablet** (3 minutes for another tablet to pair; not for a plug used as it is) and **Forget
-the plug**. A plug used as it is says "Not locked to this tablet…"; to lock it later, Forget the plug, then Pair the
-power plug and choose Update and lock it to this tablet.
+**Piano › Power plug** also shows the plug as its adverts say it (the 24 V on or off, what the supply draws, or "Not
+seen"), **Switch the 24 V with the plug** (off: the app leaves the plug alone, so to play without it plug the supply into
+a wall socket), **Power use** and **Forget the plug**. Piano › System shows the plug on the Piano card ("SwitchBot plug ·
+off · 0.0 W"), in amber if its relay seems stuck on after a cut (the supply still drawing more than half what it draws
+idle, at least 2 W) or three switch-offs didn't take; while the 24 V is off its power boards show unpowered, "0 of 7
+answering · 24 V off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug
+paired, nothing of this happens.
 
-**The plug watch** (1.29, every plug): while nothing wants the 24 V, the tablet reads the plug once a minute. Found on,
-it is switched off at once, saying "The power plug had been switched on by something else: switched off". Its settings
-are looked at too (the first time, after the plug was out of reach, and every 10 minutes): changed ones (on after a
-power cut, the button, an automatic on, the cloud, its network or access point) are put back, saying "The power plug's
-settings had been changed: put back". From 1.32 Matter too (a second way to hold the 24 V on, with no 30 s timer): found
-on, it is turned off and the plug restarts, coming back off; the first look after the update does it quietly, for a plug
-paired before 1.32. Nothing extra while a piece plays or a firmware update runs. Piano › System
-shows the plug on the Piano card, in amber if its relay seems stuck on after a cut (the supply still drawing more than
-half what it draws idle, at least 2 W); while the 24 V is off its power boards show unpowered, "0 of 7 answering · 24 V
-off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug paired, nothing of
-this happens.
+**Power use** (1.36, Piano › Power use, under Power plug): the watts the piano's 24 V supply draws now (from the plug's
+adverts; "—" when none came for 10 seconds), the last 10 minutes as a line, today's and the all-time peak with their
+times, and the energy today, this month and since pairing in kWh. It counts only the 24 V supply on the plug. A gap in
+the adverts over 10 seconds counts as nothing, not as the last reading. Kept with the pairing; Forget clears it.
 
-**The power watch** (1.30): while a piece plays, the tablet also reads what the 24 V supply draws, about every 2 seconds,
-and weighs it against the keys the music holds (about 12 W each at Full power). A key on that the music isn't holding —
+**The power watch** (1.30; from 1.36 the draw comes from the SwitchBot's adverts): while a piece plays, the tablet also
+reads what the 24 V supply draws, about every 2 seconds, and weighs it against the keys the music holds (about 12 W each at Full power). A key on that the music isn't holding —
 an I²C hiccup that lost its release — shows as a steady extra draw: after about 20 seconds of it with the pedal up, the
 piece stops and the 24 V goes off. Readings with the pedal down are skipped (its motor draws more then), and so is the
 watch during the piece with Full power off; the check after the piece always runs. After each piece, before the 24 V goes
@@ -1173,23 +1138,18 @@ it had I²C trouble. As the 24 V comes on, more than 30 W with nothing playing c
 half a key above what the plug usually draws then. Each time, the safety check runs before the next piece. Without a plug
 paired, nothing of this happens.
 
-**Needs the real plug** (the emulator runs every step against a fake plug; see BUILD_SPEC.md › v1.26 — M60 and v1.28 —
-M65), with the firmware's bench checks in `SMART_PLUG.md`:
+**Needs the real plug** (the tests run every step against a fake plug), with the firmware's bench checks in
+`SMART_PLUG.md`:
 
-- [ ] The update from the tablet (1.28): the plug takes `Shelly.Update` over Bluetooth (or the screen says it won't),
-      comes back on 2.0.0 or later, and is cleared and paired before it finishes its setup; the 24 V stays off throughout.
-- [ ] Pair it as above; Piano › Power plug shows it paired; a second phone can't switch it.
+- [ ] Pair it as above: the list shows …47CA, it clicks on and off, Piano › Power plug shows it paired.
 - [ ] Play a piece from idle: the first note within about 3 s; the 24 V off a second after the piece ends.
-- [ ] Kill the app mid-piece: the 24 V off within 30 s, no key down.
-- [ ] Press RST on the controller mid-piece (or pull the trunk's cable): the 24 V off within 40 s.
+- [ ] Switch it on with the SwitchBot app (or press its button) while idle: the tablet switches it off within a few seconds.
+- [ ] Pull its mains and restore it: it comes on by itself, and the tablet switches it off within a few seconds.
+- [ ] Kill the app mid-piece: the 24 V **stays on** (no plug timer); the outlet timer is what ends it. Open the app: off.
 - [ ] Guest play: the iPad plays for the hour; End guest play turns the 24 V off.
-- [ ] A firmware update with the plug: the new firmware confirms itself.
-- [ ] Press the plug's button, and pull its mains and restore it: the 24 V stays off.
-- [ ] The plug set up in the Shelly app (1.32): Find shows the reset; after it the tablet pairs it. Then unplug the plug and
-      plug it back in: no Matter pop-up nearby, and the Shelly app shows it offline.
-- [ ] The power watch (1.30) with a 47 Ω / 25 W dummy load on the 24 V (`SMART_PLUG.md` › check 12): plugged in mid-piece
-      with the pedal up, the piece stops within about 20 s; plugged in just before a piece ends, the check after it cuts
-      and the next Play runs the safety check first. Note what Piano › Power plug says the supply draws at rail-up.
+- [ ] The draw under load, with a 47 Ω / 25 W dummy load on the 24 V (`SMART_PLUG.md` › check 12): Power use reads about
+      12 W more, and the power watch stops a piece within about 20 s. This confirms the advert's power formula, and whether
+      the plug keeps advertising while the tablet holds its connection during a piece.
 
 ## Kiosk
 
