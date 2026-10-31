@@ -10242,3 +10242,7 @@ don't take. **Store:** `PlugPairing(address, mac)`, `kind = switchbot`; `migrate
 most once a minute, at each CUT taken and at the activity's stop). **Panel:** the JSON is unchanged (`timerEndsAt` always
 null); the words are "SwitchBot plug · off · 0.0 W". **Tests:** `SwitchBotTest` 3, `AdvertWatchTest` 5, `PairFlowTest` 3,
 `PlugStoreTest` 4, `EnergyMeterTest` 4; `RailKeeperTest`'s bench plug has no timer, its restart test expects the quiet CUT.
+
+## The release: 1.36 (versionCode 47)
+
+M72 merged: the SwitchBot Plug Mini replaces the Shelly (verified from the Mac 2026-10-31: unencrypted GATT on/off/status, adverts about 3 a second, on at power-up), and Piano › Power use (now, peaks, kWh). Unverified until the school: the advert power formula under load, and whether adverts continue while the tablet holds the connection during a piece.
