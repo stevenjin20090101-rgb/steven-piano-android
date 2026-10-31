@@ -9,12 +9,9 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano.pages
 
-import android.os.SystemClock
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,25 +20,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -50,32 +40,22 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.power.FoundPlug
-import dev.stevenjin.stevenpiano.power.Hotspot
 import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
-import dev.stevenjin.stevenpiano.power.PlugInfo
-import dev.stevenjin.stevenpiano.power.PlugRead
 import dev.stevenjin.stevenpiano.power.PlugSettings
-import dev.stevenjin.stevenpiano.power.Provision
-import dev.stevenjin.stevenpiano.power.RailKeeper
-import dev.stevenjin.stevenpiano.power.SetUpTask
-import dev.stevenjin.stevenpiano.power.UpdateTask
 import dev.stevenjin.stevenpiano.ui.PowerCopy
+import dev.stevenjin.stevenpiano.ui.SettingsPage
 import dev.stevenjin.stevenpiano.ui.components.ActionButton
 import dev.stevenjin.stevenpiano.ui.components.ActionRow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 import dev.stevenjin.stevenpiano.ui.components.HairlineDivider
+import dev.stevenjin.stevenpiano.ui.components.NavRow
 import dev.stevenjin.stevenpiano.ui.components.NoteLine
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.ReadingRow
@@ -85,20 +65,16 @@ import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
 import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.theme.LocalAttention
-import dev.stevenjin.stevenpiano.ui.theme.LocalHairline
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
- * Piano › Power plug (v1.26 — M60; DESIGN.md › v1.26 — M60), behind the kiosk PIN as every Piano page. With no plug: what
- * it is for and **Pair the power plug**, which opens the Pair screen's steps (the setup order of SMART_PLUG.md, followed on
- * the day; v1.28 — M65: without the Shelly app, an update step on old firmware). Paired: the plug as it stands (the 24 V on
- * or off with its timer, the supply's draw, its setup and firmware), the switch, **Admit a replacement tablet** and
- * **Forget the plug**. The plug is read every 2 s while the page shows.
+ * Piano › Power plug (v1.26 — M60; the SwitchBot Plug Mini since v1.36 — M72), behind the kiosk PIN as every Piano page.
+ * With no plug: what it is for, what to do first (the plug in the wall, nothing in the SwitchBot app, an outlet timer
+ * behind it) and **Pair the SwitchBot plug**, which opens the Pair screen's steps. Paired: the plug as its adverts say it
+ * (the 24 V on or off, the supply's draw), the switch, a link to **Power use** ([onOpenPage]) and **Forget the plug**.
  */
 @Composable
-fun PowerPlugPage() {
+fun PowerPlugPage(onOpenPage: (SettingsPage) -> Unit) {
     val graph = LocalContext.current.graph
     val settings by graph.plugSettings.collectAsStateWithLifecycle()
     val pair by graph.pairFlow.state.collectAsStateWithLifecycle()
@@ -108,65 +84,63 @@ fun PowerPlugPage() {
         NoteLine(PowerCopy.READING)
         return
     }
-    val pairing = pair.step != PairStep.Done && (pair.step != PairStep.Ready || opened)
+    val pairing = pair.step != PairStep.Done && (opened || pair.step != PairStep.Find || pair.searching || pair.found.isNotEmpty())
     when {
         pairing -> PairSteps(pair, graph.pairFlow, onStartOver = {
             graph.pairFlow.restart()
             opened = current.pairing == null
+            if (opened) graph.pairFlow.search()
         })
-        current.pairing != null -> PairedPlug(current)
-        else -> Unpaired(onPair = {
+        current.pairing != null -> PairedPlug(current, clicked = pair.step == PairStep.Done && pair.clicked, onOpenPage)
+        else -> Unpaired(current, onPair = {
             graph.pairFlow.restart()
             opened = true
+            graph.pairFlow.search()
         })
     }
 }
 
-/** No plug yet: what it is for, and Pair the power plug. */
+/** No plug yet: what it is for, what to do first, and Pair the SwitchBot plug (v1.36 — M72: the Shelly's pairing cleared, said). */
 @Composable
-private fun Unpaired(onPair: () -> Unit) {
+private fun Unpaired(settings: PlugSettings, onPair: () -> Unit) {
     SectionRule()
+    if (settings.shellyCleared) Problem(PowerCopy.SHELLY_CLEARED)
     NoteLine(PowerCopy.EXPLANATION)
+    FirstWords()
     HairlineDivider(startInset = 16.dp)
     Anchored(PageRows.PAIR_PLUG.anchor) {
         ActionRow(note = PowerCopy.PAIR_NOTE) { ActionButton(PowerCopy.PAIR, onClick = onPair) }
     }
 }
 
+/** Before Find (v1.36 — M72): the plug in the wall and the supply in it, nothing in the SwitchBot app, the outlet timer. */
+@Composable
+private fun FirstWords() {
+    for (line in listOf(PowerCopy.PLUG_IN, PowerCopy.NOT_IN_APP, PowerCopy.OUTLET_TIMER)) NoteLine("· $line")
+}
+
 // ---- The Pair screen -----------------------------------------------------------------------------------------------
 
-/**
- * The steps, numbered, the one under way open with its words and its action; those done ticked. The Update step is one only
- * on firmware older than 2.0.0 (v1.28 — M65).
- */
+/** The steps, numbered, the one under way open with its words and its action; those done ticked. */
 @Composable
 private fun PairSteps(pair: PairState, flow: PairFlow, onStartOver: () -> Unit) {
     SectionEyebrow(PowerCopy.PAIR)
-    val steps = STEPS.filter { it != PairStep.Update || pair.firmwareUpdate != null }
-    val at = steps.indexOf(pair.step).coerceAtLeast(0)
-    steps.forEachIndexed { i, step ->
+    val at = STEPS.indexOf(pair.step).coerceAtLeast(0)
+    STEPS.forEachIndexed { i, step ->
         StepHeader(i + 1, PowerCopy.stepTitle(step), done = i < at, current = i == at)
         if (i == at) {
             NoteLine(PowerCopy.stepNote(step, pair))
-            when (step) {
-                PairStep.Ready -> ActionRow(note = PowerCopy.SHELLY_STILL) { ActionButton(PowerCopy.FIND, onClick = flow::ready) }
-                PairStep.Find -> FindStep(pair, flow)
-                PairStep.Update -> UpdateStep(pair, flow)
-                PairStep.SetUp -> SetUpStep(pair, flow)
-                PairStep.Complete -> ReadingRow(PowerCopy.SETUP, pair.info?.provision?.let(PowerCopy::provision) ?: PowerCopy.READING)
-                PairStep.Network -> ActionRow { ActionButton(PowerCopy.CLOSE_NETWORK, onClick = flow::closeNetwork, enabled = !pair.working) }
-                PairStep.Verify -> VerifyStep(pair, flow)
-                PairStep.Done -> Unit
+            if (step == PairStep.Find) FindStep(pair, flow)
+            if (step == PairStep.Check && pair.problem != null) {
+                pair.plug?.let { plug -> ActionRow { ActionButton("Try again", onClick = { flow.choose(plug) }, enabled = !pair.working) } }
+                ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::search, enabled = !pair.working) }
             }
             if (pair.working) ProgressHairline(null, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             pair.problem?.let { Problem(it) }
-            // The reset's way under the reason, at Find too (v1.32 — M70: with no facts read, as the real plug refuses them),
-            // and past it (v1.28 — M65: a plug found refusing this tablet during the update, or at `complete`).
-            if (pair.fallback) Fallback(pair, flow)
         }
         HairlineDivider(startInset = 16.dp)
     }
-    ActionRow { ActionButton(PowerCopy.START_OVER, onClick = onStartOver, enabled = !pair.working) }
+    ActionRow { ActionButton(PowerCopy.START_OVER, onClick = onStartOver, enabled = !pair.working || pair.searching) }
 }
 
 /** A step's number in a ring (filled while it is the one under way, a tick once done) and its title. */
@@ -211,30 +185,19 @@ private fun StepHeader(number: Int, title: String, done: Boolean, current: Boole
     }
 }
 
-/**
- * Step 2: the plugs found (a tap chooses one), then what the chosen one said, and the way on from there. A plug that refused
- * or stayed silent said nothing (v1.32 — M70): no facts, and the reset's way under the reason ([PairSteps]).
- */
+/** Step 1: the plugs found, the strongest first (a tap chooses one and stops the search), and Search again. */
 @Composable
 private fun FindStep(pair: PairState, flow: PairFlow) {
-    for (plug in pair.found) FoundRow(plug, chosen = plug.address == pair.plug?.address, enabled = !pair.working) { flow.choose(plug) }
+    FirstWords()
+    for (plug in pair.found) FoundRow(plug, enabled = !pair.working || pair.searching) { flow.choose(plug) }
     ActionRow(note = if (pair.searching) PowerCopy.SEARCHING else null) {
         ActionButton(PowerCopy.SEARCH, onClick = flow::search, enabled = !pair.searching && !pair.working)
     }
-    val info = pair.info
-    if (info != null) PlugFacts(info)
-    if (info == null || pair.fallback) return
-    when {
-        // v1.28 — M65: old firmware goes on to the Update step and a new plug to its setup by themselves; locked: the problem line.
-        !info.pairs || info.provision == Provision.Locked || info.provision == Provision.Pending -> Unit
-        info.provision == Provision.Confirmed -> ActionRow { ActionButton(PowerCopy.SET_UP, onClick = flow::setUp, enabled = !pair.working) }
-        else -> ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::refresh, enabled = !pair.working) }
-    }
 }
 
-/** A plug the scan found: its name and signal; the chosen one marked. */
+/** A plug the search found: "SwitchBot Plug Mini (US) …47CA" and its signal. */
 @Composable
-private fun FoundRow(plug: FoundPlug, chosen: Boolean, enabled: Boolean, onChoose: () -> Unit) {
+private fun FoundRow(plug: FoundPlug, enabled: Boolean, onChoose: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -244,162 +207,18 @@ private fun FoundRow(plug: FoundPlug, chosen: Boolean, enabled: Boolean, onChoos
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            plug.name,
+            PowerCopy.found(plug),
             Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal),
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            listOfNotNull(plug.rssi?.let { "$it dBm" }, if (chosen) "Chosen" else null).joinToString(" · "),
+            plug.rssi?.let { "$it dBm" }.orEmpty(),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     HairlineDivider(startInset = 16.dp)
-}
-
-/** What the plug said of itself: its model, firmware and setup state. */
-@Composable
-private fun PlugFacts(info: PlugInfo) {
-    ReadingRow("Model", info.model ?: "—")
-    ReadingRow(PowerCopy.FIRMWARE, info.ver ?: "—")
-    ReadingRow(PowerCopy.SETUP, PowerCopy.provision(info.provision))
-}
-
-/**
- * The plug finished its setup without this tablet: a factory reset, or a pairing window another tablet opened. Joining needs
- * only the plug chosen (Android's bond, then its device info over it), so it is offered with no facts read too (v1.32 — M70).
- */
-@Composable
-private fun Fallback(pair: PairState, flow: PairFlow) {
-    NoteLine(PowerCopy.FALLBACK)
-    ActionRow { ActionButton(PowerCopy.FIND_AGAIN, onClick = flow::search, enabled = !pair.working && !pair.searching) }
-    if (pair.plug != null) ActionRow(note = PowerCopy.JOIN_NOTE) { ActionButton(PowerCopy.JOIN, onClick = flow::join, enabled = !pair.working) }
-}
-
-/**
- * Step 3 on firmware older than 2.0.0 (v1.28 — M65): each part ticked as it lands. Until the update has started, the hotspot's
- * name and password and **Update the plug** (again after a stop short of it); once it stops, **Search again**.
- */
-@Composable
-private fun UpdateStep(pair: PairState, flow: PairFlow) {
-    val update = pair.firmwareUpdate ?: return
-    // v1.29 — M66: the choice first, Use it as it is the first way; the update's parts once it has begun.
-    val begun = update.tasks.isNotEmpty() || pair.working
-    if (begun) for (task in UpdateTask.entries) Tick(PowerCopy.updateTask(task, update, pair.working), task in update.tasks)
-    if (pair.working || pair.fallback) return
-    if (UpdateTask.Started !in update.tasks) {
-        ActionRow(note = PowerCopy.AS_IS_NOTE) { ActionButton(PowerCopy.AS_IS, onClick = flow::asIs) }
-        NoteLine(PowerCopy.LOCK_IT + ": " + PowerCopy.LOCK_NOTE)
-        HotspotForm(pair.hotspot, PowerCopy.LOCK_IT, onSend = flow::update)
-    }
-    if (pair.problem != null) ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::search) }
-}
-
-/**
- * Step 4: each task ticked as it lands; a new plug set up from here (v1.28 — M65: by itself) asks for the hotspot's name and
- * password after the bond, unless it has them already.
- */
-@Composable
-private fun SetUpStep(pair: PairState, flow: PairFlow) {
-    val tasks = when {
-        pair.asIs -> listOf(SetUpTask.Settings, SetUpTask.Bluetooth, SetUpTask.Cloud)   // v1.29 — M66: no pairing
-        pair.overBluetooth && SetUpTask.Settings !in pair.tasks -> listOf(SetUpTask.Window, SetUpTask.Bond, SetUpTask.Listed)
-        else -> SetUpTask.entries
-    }
-    for (task in tasks) Tick(PowerCopy.task(task), task in pair.tasks)
-    if (pair.working) return
-    if (pair.asIs) {
-        if (pair.hotspotWanted) HotspotForm(pair.hotspot, PowerCopy.SEND_NETWORK, onSend = flow::provision)
-        if (pair.problem != null) ActionRow { ActionButton(PowerCopy.SEARCH, onClick = flow::search) }
-        return
-    }
-    if (pair.overBluetooth && SetUpTask.Listed in pair.tasks && SetUpTask.Settings !in pair.tasks) {
-        HotspotForm(pair.hotspot, PowerCopy.SEND_NETWORK, onSend = flow::provision)
-    } else if (pair.problem != null) {
-        ActionRow { ActionButton("Try again", onClick = if (pair.overBluetooth) flow::bondWhilePending else flow::setUp) }
-    }
-}
-
-/** One task: a tick once done. */
-@Composable
-private fun Tick(label: String, done: Boolean) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 40.dp)
-            .semantics(mergeDescendants = true) { contentDescription = label + if (done) ", done" else ", waiting" }
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            if (done) "✓" else "·",
-            Modifier.width(24.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (done) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (done) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-/**
- * The phone hotspot's name and password for the plug (v1.32 — M70: or a 2.4 GHz Wi-Fi's), sent over Bluetooth with [action].
- * Held as typed in memory only (v1.28 — M65: `remember`, not the saved state), starting from the one the flow [kept] for this
- * setup.
- */
-@Composable
-private fun HotspotForm(kept: Hotspot?, action: String, onSend: (String, String) -> Unit) {
-    var ssid by remember(kept) { mutableStateOf(kept?.ssid.orEmpty()) }
-    var pass by remember(kept) { mutableStateOf(kept?.pass.orEmpty()) }
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Field(PowerCopy.HOTSPOT, ssid, { ssid = it }, enabled = true)
-        Field(PowerCopy.PASSWORD, pass, { pass = it }, enabled = true, password = true)
-    }
-    ActionRow { ActionButton(action, onClick = { onSend(ssid, pass) }, enabled = ssid.isNotBlank()) }
-}
-
-@Composable
-private fun Field(label: String, value: String, onValue: (String) -> Unit, enabled: Boolean, password: Boolean = false) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValue,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = enabled,
-        singleLine = true,
-        label = { Text(label) },
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else KeyboardType.Text, autoCorrectEnabled = false),
-        shape = MaterialTheme.shapes.small,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.onSurface,
-            unfocusedBorderColor = LocalTertiary.current,
-            disabledBorderColor = LocalHairline.current,
-            focusedLabelColor = MaterialTheme.colorScheme.onSurface,
-            cursorColor = MaterialTheme.colorScheme.onSurface,
-        ),
-    )
-}
-
-/** Step 7: the 24 V on for 5 s, the boards answering as it goes, then Finish (or without the check). */
-@Composable
-private fun VerifyStep(pair: PairState, flow: PairFlow) {
-    pair.verify?.let { verify ->
-        ReadingRow(
-            "Power boards",
-            PowerCopy.answering(verify.answered, verify.total),
-            note = when {
-                verify.finished && verify.passed -> PowerCopy.VERIFY_PASSED
-                verify.on -> "24 V on"
-                else -> "24 V off"
-            },
-        )
-    }
-    val passed = pair.verify?.passed == true
-    ActionRow {
-        ActionButton(if (pair.verify == null) PowerCopy.VERIFY else PowerCopy.VERIFY_AGAIN, onClick = flow::verify, enabled = !pair.working)
-        ActionButton(PowerCopy.FINISH, onClick = flow::finish, enabled = passed && !pair.working)
-    }
-    if (!passed) ActionRow { ActionButton(PowerCopy.SKIP_CHECK, onClick = flow::finish, enabled = !pair.working) }
 }
 
 /** What went wrong, in the attention amber, read out as it comes. */
@@ -418,44 +237,20 @@ private fun Problem(text: String) {
 
 // ---- Paired -----------------------------------------------------------------------------------------------------------
 
-/** The plug as it stands, its switch, Admit a replacement tablet, Forget the plug. */
+/** The plug as its adverts say it, its switch, Power use, Forget the plug; [clicked] just after pairing, said once. */
 @Composable
-private fun PairedPlug(settings: PlugSettings) {
+private fun PairedPlug(settings: PlugSettings, clicked: Boolean, onOpenPage: (SettingsPage) -> Unit) {
     val graph = LocalContext.current.graph
-    val scope = rememberCoroutineScope()
-    val status by graph.plug.status.collectAsStateWithLifecycle()
-    val reachable by graph.plug.reachable.collectAsStateWithLifecycle()
-    val armedAt by graph.rail.armedAt.collectAsStateWithLifecycle()
+    val seen by graph.plugAdverts.seen.collectAsStateWithLifecycle()
     val welded by graph.rail.welded.collectAsStateWithLifecycle()
-    var heard by remember { mutableStateOf<PlugRead?>(null) }
-    var said by rememberSaveable { mutableStateOf<String?>(null) }
     var asking by rememberSaveable { mutableStateOf(false) }
-    PollWhileShown(STATUS_EVERY_MS) { graph.plug.switchStatus() }
-    LaunchedEffect(settings.pairing?.address) { heard = graph.plug.read() }
-    val left = secondsLeft(armedAt)
-    val info = (heard as? PlugRead.Read)?.info
-    // v1.26 — M62: a plug this tablet has no bond with that connects and stays silent has locked (SMART_PLUG.md). v1.29 — M66:
-    // only one kept locked; no bond is normal for a plug used as it is.
-    val unlocked = settings.pairing?.locked == false
-    val locked = !unlocked && heard == PlugRead.Silent && settings.pairing?.address?.let(graph.plug.bluetooth::bonded) == false
 
     SectionEyebrow(PowerCopy.STATE)
-    val answering = reachable != false
-    ReadingRow(PowerCopy.OUTPUT, if (answering) PowerCopy.output(status, left) else PowerCopy.NOT_ANSWERING)
-    ReadingRow(PowerCopy.DRAW, if (answering) PowerCopy.watts(status) else "—")
-    ReadingRow(
-        PowerCopy.SETUP,
-        when {
-            info != null -> PowerCopy.provision(info.provision)
-            locked -> PowerCopy.provision(Provision.Locked)
-            heard == null -> PowerCopy.READING
-            else -> PowerCopy.NOT_ANSWERING
-        },
-    )
-    ReadingRow(PowerCopy.FIRMWARE, info?.ver ?: settings.pairing?.firmware ?: "—")
-    if (locked) Problem(PairFlow.LOCKED)
+    if (clicked) NoteLine(PowerCopy.CLICKED)
+    ReadingRow(PowerCopy.OUTPUT, PowerCopy.output(seen))
+    ReadingRow(PowerCopy.DRAW, PowerCopy.watts(seen?.watts))
     if (welded) Problem(PowerCopy.WELDED)
-    if (unlocked) NoteLine(PowerCopy.UNLOCKED)   // v1.29 — M66
+    NoteLine(PowerCopy.OUTLET_TIMER)
 
     SectionEyebrow(PowerCopy.TITLE)
     Anchored(PageRows.PLUG_SWITCH.anchor) {
@@ -466,16 +261,12 @@ private fun PairedPlug(settings: PlugSettings) {
             note = if (settings.on) PowerCopy.SWITCH_ON_NOTE else PowerCopy.SWITCH_OFF_NOTE,
         )
     }
-    // v1.29 — M66: no pairing, nothing to admit, for a plug used as it is.
-    if (!unlocked) {
-        Anchored(PageRows.ADMIT_TABLET.anchor) {
-            ActionRow(note = said ?: PowerCopy.ADMIT_NOTE) {
-                ActionButton(PowerCopy.ADMIT, onClick = {
-                    scope.launch { said = if (graph.admitTablet()) PowerCopy.ADMIT_OPEN else PowerCopy.ADMIT_FAILED }
-                })
-            }
-        }
-    }
+    NavRow(
+        PowerCopy.USE_TITLE,
+        PowerCopy.USE_OPEN,
+        onClick = { onOpenPage(SettingsPage.PowerUse) },
+        glyph = painterResource(SettingsPage.PowerUse.glyph),
+    )
     Anchored(PageRows.FORGET_PLUG.anchor) {
         ActionRow(note = PowerCopy.FORGET_NOTE) { ActionButton(PowerCopy.FORGET, onClick = { asking = true }) }
     }
@@ -495,36 +286,5 @@ private fun PairedPlug(settings: PlugSettings) {
     }
 }
 
-/** The seconds the plug's timer has left from the last ARM ([armedAt], elapsed ms), counted down while shown; null with none. */
-@Composable
-internal fun secondsLeft(armedAt: Long?): Long? {
-    val left by produceState<Long?>(null, armedAt) {
-        while (true) {
-            value = armedAt?.let { RailKeeper.TOGGLE_AFTER_S - (SystemClock.elapsedRealtime() - it) / MS_PER_S }?.takeIf { it > 0 }
-            if (value == null) break
-            delay(MS_PER_S)
-        }
-    }
-    return left
-}
-
-/** [read] now and every [everyMs] after while the app is in front, one after another (each may wait on the plug). */
-@Composable
-internal fun PollWhileShown(everyMs: Long, read: suspend () -> Unit) {
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val latest by rememberUpdatedState(read)
-    LaunchedEffect(lifecycle, everyMs) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                latest()
-                delay(everyMs)
-            }
-        }
-    }
-}
-
-/** The Pair screen's numbered steps, in order (Done is the end, not a step; Update only on old firmware, v1.28 — M65). */
-private val STEPS = listOf(PairStep.Ready, PairStep.Find, PairStep.Update, PairStep.SetUp, PairStep.Complete, PairStep.Network, PairStep.Verify)
-
-private const val STATUS_EVERY_MS = 2_000L
-private const val MS_PER_S = 1_000L
+/** The Pair screen's numbered steps, in order (v1.36 — M72). */
+private val STEPS = listOf(PairStep.Find, PairStep.Check, PairStep.Done)

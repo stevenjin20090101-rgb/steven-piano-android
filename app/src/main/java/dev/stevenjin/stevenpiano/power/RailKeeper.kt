@@ -24,29 +24,32 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
-/** ARM, CUT and the switch's status, as the keeper asks them of the plug ([ShellyRail] over Bluetooth; a fake in tests). */
+/** ARM, CUT and the switch's status, as the keeper asks them of the plug ([SwitchBotRail] over Bluetooth; a fake in tests). */
 interface RailPlug {
-    /** ARM: `Switch.Set {id:0, on:true, toggle_after:[seconds]}`; true when the plug took it. */
+    /**
+     * ARM: the plug on; true when it took it. [seconds] is how long a plug with a timer of its own would hold it; the
+     * SwitchBot (v1.36 — M72) has none, so the 24 V stays on until a CUT.
+     */
     suspend fun arm(seconds: Int): Boolean
 
-    /** CUT: `Switch.Set {id:0, on:false}`; true when the plug took it. */
+    /** CUT: the plug off; true when it took it. */
     suspend fun cut(): Boolean
 
-    /** `Switch.GetStatus {id:0}`; null when the plug can't be asked. */
+    /** The plug's switch and the supply's draw; null when the plug can't be asked. */
     suspend fun status(): PlugStatus?
 
     /**
-     * The plug watch (v1.29 — M66): its settings read, and what differs from the tablet's put back (the switch's, the cloud
-     * off, the network and access point closed; v1.32 — M70, Matter off, with the restart it asks for waited out before this
-     * returns, and quietly the first time). True when something was put back that should be said, false when nothing differed
-     * (or only quietly), null when the plug couldn't be read.
+     * The plug watch (v1.29 — M66): its settings read, and what differs from the tablet's put back. True when something was
+     * put back that should be said, false when nothing differed (or only quietly), null when the plug couldn't be read. The
+     * SwitchBot (v1.36 — M72) keeps none of the tablet's: always false.
      */
     suspend fun putBack(): Boolean? = false
 }
 
 /**
- * The plug's switch as `Switch.GetStatus {id:0}` says: [output] on, the seconds its timer was set for ([timerS], null when
- * none runs), and the 24 V supply's draw in watts ([watts], `apower`: what proves the rail is really up).
+ * The plug's switch as it says: [output] on, the seconds its timer was set for ([timerS]; null when none runs, always with
+ * the SwitchBot), and the 24 V supply's draw in watts ([watts]: what proves the rail is really up; the SwitchBot's from its
+ * latest advert, null when unread).
  */
 data class PlugStatus(val output: Boolean, val timerS: Double? = null, val watts: Double? = null)
 
@@ -114,7 +117,7 @@ interface PowerHost {
 
 /** Where the rail stands (DESIGN.md › v1.26 — M60). */
 enum class RailPhase {
-    /** Off: nothing wants it (or it is left to the plug's timer). */
+    /** Off: nothing wants it, or (v1.27 — M64) the piano restarts with its wants kept, the 24 V cut meanwhile. */
     Off,
 
     /** Coming up: a good CHECK, ARM, then the boards awaited for the baseline. Notes wait. */
@@ -173,10 +176,14 @@ sealed interface RailMessage {
 }
 
 /**
- * The tablet as the 24 V rail's dead-man's switch (v1.26 — M60; `firmware/docs/SMART_PLUG.md`, "The app's routine"). The
- * solenoid supply is on a smart plug that switches itself off 30 s after the last ARM; this keeps the rail up exactly while
- * something wants it (the reasons: a piece playing, the Keys tab, Test every key, the safety check, a firmware update,
- * guest play) and the piano answers with its boards:
+ * The tablet as the 24 V rail's keeper (v1.26 — M60; `firmware/docs/SMART_PLUG.md`, "The app's routine"). The solenoid
+ * supply is on a smart plug; this keeps the rail up exactly while something wants it (the reasons: a piece playing, the
+ * Keys tab, Test every key, the safety check, a firmware update, guest play) and the piano answers with its boards, and
+ * off otherwise. Since v1.36 (M72) the plug is a SwitchBot Plug Mini, which has **no timer of its own**: an ARM holds the
+ * 24 V on until a CUT, and it comes on by itself after a power cut. So the tablet CUTs explicitly wherever the Shelly's
+ * 30 s timer used to bound the rail, CUTs at app start and at every new connection to the plug unless something wants
+ * the rail ([appStarted], [plugConnected]), and CUTs at once when an advert says the plug is on with nothing wanting it
+ * ([advert]). An outlet timer is the hardware backstop if the tablet stops.
  *
  * - **Rail-up:** a good CHECK (the piano's `get boards` answered within 2 s), ARM, then the CHECK every 500 ms until every
  *   board reads OK, 10 s at most. The boards that answered are the **baseline**; fewer than seven is a trunk fault, said;
@@ -190,8 +197,8 @@ sealed interface RailMessage {
  * - **Stop:** when nothing wants the rail, the stop sequence (CC64 = 0, CC123), a second, then CUT; "24 V off" for a few
  *   seconds. A want back within that second keeps the rail up.
  * - **A failure ends what wanted the rail:** the next Play, key or start brings it up again, through a fresh CHECK.
- * - **The safety check's restart** ([expectRestart], v1.27 — M64) is no failure: the piano gone meanwhile, the rail goes
- *   quietly off with its wants kept, and comes up again with the piano.
+ * - **The safety check's restart** ([expectRestart], v1.27 — M64) is no failure: the piano gone meanwhile, the rail is
+ *   CUT quietly with its wants kept (v1.36 — M72: no plug timer to bound it), and comes up again with the piano.
  * - **The power watch** ([power], v1.30 — M67; SMART_PLUG.md › rule 11; [PowerWatch]), from each checked rail-up to the
  *   rail's end: the rail-up's reading is the idle draw (above 30 W twice, a second apart, with nothing sent: CUT, "The 24 V
  *   draws N W with nothing playing — 24 V cut"); then `!i2cfails`; then, while a piece plays, `apower` about every 2 s for
@@ -260,7 +267,10 @@ class RailKeeper(
 
     private val _armedAt = MutableStateFlow<Long?>(null)
 
-    /** When the plug last took an ARM ([now]'s clock); null after a CUT it took. The plug's timer runs 30 s from it. */
+    /**
+     * When the plug last took an ARM ([now]'s clock); null after a CUT it took. With no plug timer (v1.36 — M72) the rail
+     * may be up for as long as it isn't null.
+     */
     val armedAt: StateFlow<Long?> = _armedAt.asStateFlow()
 
     private val _guestUntil = MutableStateFlow<Long?>(null)
@@ -271,11 +281,20 @@ class RailKeeper(
     private val _welded = MutableStateFlow(false)
 
     /**
-     * The supply still draws after a CUT the plug took: a relay stuck closed. `apower` is the proof (SMART_PLUG.md › rule 9;
+     * The supply still draws after a CUT the plug took: a relay stuck closed. The draw is the proof (SMART_PLUG.md › rule 9;
      * `output` is only the commanded state, which a welded contact still reads as off): above half the supply's idle draw
-     * with the piano silent, at least [WELDED_WATTS] ([weldedAbove]).
+     * with the piano silent, at least [WELDED_WATTS] ([weldedAbove]). Since v1.36 (M72) also: [ADVERT_CUTS] CUTs in a row
+     * that didn't take, the plug's adverts still saying on (the same amber words: the tablet can't cut the 24 V).
      */
     val welded: StateFlow<Boolean> = _welded.asStateFlow()
+
+    /** What [welded] is made of: the draw after a CUT, and CUTs that don't take (v1.36 — M72). */
+    private var weldSeen = false
+    private var cutsDontTake = false
+
+    /** v1.36 — M72: when the last CUT went ([now]'s clock; adverts sent before it may still say on), and CUTs since an "off". */
+    private var cutAt: Long? = null
+    private var advertCuts = 0
 
     /**
      * The supply's draw with the piano silent (v1.26 — M62), read at each rail-up once its boards are up and before the
@@ -399,13 +418,78 @@ class RailKeeper(
     /**
      * The safety check's `restart` (v1.27 — M64; SMART_PLUG.md rule 10): the piano lets go of the link at once and is back
      * a few seconds later. For [withinMs], or until it is connected again, a CHECK that finds it gone is no failure: the
-     * rail goes quietly to Off with every want kept (no stop, no CUT, nothing said; the plug's own timer bounds the rail,
-     * as for a rebooting controller), and the rail-up with its CHECK follows the piano back. Outside it, nothing changes.
+     * rail goes quietly to Off with every want kept (no stop, nothing said), and the rail-up with its CHECK follows the piano
+     * back. Outside it, nothing changes. Before v1.36 the plug's own 30 s timer bounded the rail meanwhile; the SwitchBot
+     * has none (M72), so it is CUT at once, quietly: the piano is restarting, and the rail-up after it ARMs afresh.
      */
     fun expectRestart(withinMs: Long) {
         restartUntil = now() + withinMs
         log("Rail: the piano restarts; its link lost in the next ${withinMs / MS_PER_S} s is no failure")
     }
+
+    /**
+     * An advert of the paired plug (v1.36 — M72; [PlugAdverts], on [scope]'s thread): its switch [on]. Nothing wanting the
+     * rail and the rail off (or a want waiting with no ARM of the keeper's: not [holding]; never while it stops: the check
+     * after the piece reads it), "on" is CUT at once (logged): the plug on at power-up, someone with the SwitchBot app, a CUT
+     * that was missed. Adverts sent before a CUT may still say on for
+     * [ADVERT_SETTLE_MS]; one after that is another CUT, and [ADVERT_CUTS] in a row that didn't take show the amber
+     * [welded]. "Off", or something wanting the rail, starts the count again.
+     */
+    fun advert(on: Boolean) {
+        if (!available.value) return
+        if (!on || holding()) {
+            advertCuts = 0
+            if (!on && cutsDontTake) {
+                cutsDontTake = false
+                showWelded()
+            }
+            return
+        }
+        val t = now()
+        if (cutAt?.let { t - it < ADVERT_SETTLE_MS } == true) return
+        if (advertCuts >= ADVERT_CUTS && !cutsDontTake) {
+            cutsDontTake = true
+            showWelded()
+            log("Plug: $advertCuts CUTs in a row and its adverts still say on: the tablet can't switch the 24 V off")
+        }
+        advertCuts++
+        cutAt = t
+        log("Plug: an advert says on with nothing wanting the 24 V; CUT")
+        cutIfIdle()
+    }
+
+    /** At app start (v1.36 — M72): CUT unless the keeper holds the rail (the plug may have come on by itself at power-up). */
+    fun appStarted() {
+        if (available.value) cutIfIdle("the app started")
+    }
+
+    /**
+     * A new connection to the paired plug (v1.36 — M72; [PlugClient]): CUT unless the keeper holds the rail. Not within
+     * [CONNECT_CUT_GAP_MS] of the last CUT, whose own connection it may be.
+     */
+    fun plugConnected() {
+        if (!available.value || cutAt?.let { now() - it < CONNECT_CUT_GAP_MS } == true) return
+        cutIfIdle("the plug connected")
+    }
+
+    /** A CUT in the routine's place, when the keeper isn't holding the rail ([holding]; looked at again as it runs); [why] logged. */
+    private fun cutIfIdle(why: String? = null) {
+        if (!available.value || holding()) return
+        scope.launch {
+            command {
+                if (!available.value || holding()) return@command
+                why?.let { log("Rail: $it; CUT, as nothing holds the 24 V on") }
+                cutRail()
+            }
+        }
+    }
+
+    /**
+     * Whether the keeper holds the rail on (v1.36 — M72): coming up, up, kept or stopping, or wanted with an ARM of its own
+     * standing (wanted again within the stop's second). Not while the rail is off and a want waits (for the piano's link,
+     * or through the safety check's restart): a plug on then is on by itself, and is CUT.
+     */
+    private fun holding(): Boolean = _phase.value != RailPhase.Off || wantedNow() && _armedAt.value != null
 
     /** The message is read (its OK): it goes. */
     fun dismissMessage() {
@@ -446,11 +530,14 @@ class RailKeeper(
         guestEnds()
     }
 
-    /** The switch going off, or the plug being forgotten: what plays stops, the stop sequence, CUT (only when the rail may be up). */
+    /**
+     * The switch going off, or the plug being forgotten: what plays stops, the stop sequence and CUT when the rail may be up;
+     * else (v1.36 — M72) a CUT alone, as the SwitchBot may be on without an ARM (at power-up, or from its app).
+     */
     suspend fun release() {
         if (!available.value) return
         command {
-            if (_phase.value != RailPhase.Off || _armedAt.value != null) end()
+            if (_phase.value != RailPhase.Off || _armedAt.value != null) end() else cutRail()
             setPhase(RailPhase.Off)
         }
     }
@@ -528,7 +615,7 @@ class RailKeeper(
         val baseline: Set<Int> = when {
             // Every board answered with the rail off: the trunk side is fed from the controller, so the boards prove
             // nothing; the supply gets a fixed 1.5 s instead (SMART_PLUG.md › rule 2). (With the rail perhaps still up
-            // from an ARM within 30 s, the first CHECK below finds them all and the wait is 500 ms.)
+            // from an ARM no CUT took since, the first CHECK below finds them all and the wait is 500 ms.)
             !mayBeUp && before.all -> {
                 if (waitFor(armedAt + CONTROLLER_FED_MS) { !wantedNow() }) return stopRail()
                 val after = checkTwice() ?: return if (wantedNow()) fail(RailMessage.PianoSilent) else stopRail()
@@ -656,9 +743,11 @@ class RailKeeper(
                 continue
             }
             if (read == null && !connected.value && now() < restartUntil) {
-                // The restart the safety check asked for (v1.27 — M64): the wants stay and the plug's timer bounds the rail;
-                // once the piano is back the rail-up with its CHECK restores the baseline. Wanted no more before, the usual stop.
-                log("CHECK: no answer while the piano restarts, as the safety check asked")
+                // The restart the safety check asked for (v1.27 — M64): the wants stay, and once the piano is back the rail-up
+                // with its CHECK restores the baseline. Wanted no more before, the usual stop. The Shelly's timer used to bound
+                // the rail meanwhile; the SwitchBot has none (v1.36 — M72), so it is CUT now, quietly.
+                log("CHECK: no answer while the piano restarts, as the safety check asked; CUT until it is back")
+                cutRail()
                 _baseline.value = null
                 setPhase(RailPhase.Off)
                 waitFor { connected.value || !wantedNow() }
@@ -744,7 +833,7 @@ class RailKeeper(
 
     // ---- The power watch (v1.30 — M67) --------------------------------------------------------------------------------
 
-    /** The plug's `apower` now, W; null unread. */
+    /** The supply's draw now, W (since v1.36 — M72 the SwitchBot's latest advert, under 3 s old); null unread. */
     private suspend fun idleReading(): Double? = plug.status()?.watts?.takeIf { it.isFinite() && it >= 0.0 }
 
     /** This rail-up's power watch, from its [idle] reading; its first look, at once, asks `!i2cfails`. */
@@ -888,13 +977,12 @@ class RailKeeper(
     // ---- The plug watch (v1.29 — M66) ----------------------------------------------------------------------------------
 
     /**
-     * One look at the plug while nothing wants the rail (v1.29 — M66; every [WATCH_EVERY_MS]): `Switch.GetStatus`, one small
-     * read. Found on: its settings put back first (an `auto_on` must not bring it back), then CUT with its weld look, and
-     * "switched on by something else" said. Its settings are looked at too the first time, after the plug was out of reach,
-     * and every [SETTINGS_EVERY_MS]; changed ones are put back and said. Never while the rail is wanted (the keeper talks to
-     * the plug every 10 s then) or a firmware update runs; a plug out of reach says nothing new. Matter off (v1.32 — M70) may
-     * restart the plug: [RailPlug.putBack] returns once it is back, so the restart is no missed read, and a plug found on is
-     * still CUT (and said, its weld look after) once it answers again; it comes back off, its power-up state the tablet's.
+     * One look at the plug while nothing wants the rail (v1.29 — M66; every [WATCH_EVERY_MS]): its status, one small read
+     * (the SwitchBot's GATT status since v1.36 — M72). Found on: its settings put back first, then CUT with its weld look,
+     * and "switched on by something else" said. Its settings are looked at too the first time, after the plug was out of
+     * reach, and every [SETTINGS_EVERY_MS]; changed ones are put back and said (the SwitchBot keeps none: nothing to put
+     * back). Never while the rail is wanted (the keeper talks to the plug every 10 s then) or a firmware update runs; a plug
+     * out of reach says nothing new. The adverts ([advert]) usually CUT a plug found on long before this look.
      */
     private suspend fun watch() {
         if (!available.value || wantedNow() || updating) return
@@ -938,12 +1026,15 @@ class RailKeeper(
     }
 
     /**
-     * CUT, best effort: when it fails the plug's timer cuts within 30 s. Then, a few seconds on and unless the rail was armed
-     * again meanwhile, whether the relay really let go: the supply still drawing more than [weldedAbove] is a relay stuck
-     * closed ([welded]); the plug's `output` reads off either way.
+     * CUT, best effort. Then, a few seconds on and unless the rail was armed again meanwhile, whether the relay really let
+     * go: the supply still drawing more than [weldedAbove] is a relay stuck closed ([welded]); the plug's `output` reads off
+     * either way. Before v1.36 a CUT that failed was bounded by the plug's 30 s timer; the SwitchBot has none (M72), so the
+     * 24 V may stay on: the plug's next "on" advert ([advert]) or the idle look ([watch]) CUTs again.
      */
     private suspend fun cutRail(): Boolean {
+        cutAt = now()
         if (plug.cut()) {
+            cutAt = now()
             _armedAt.value = null
             weldJob?.cancel()
             weldJob = scope.launch {
@@ -952,13 +1043,20 @@ class RailKeeper(
                 val status = plug.status() ?: return@launch
                 if (_armedAt.value != null) return@launch
                 val above = weldedAbove()
-                _welded.value = (status.watts ?: 0.0) > above
-                if (_welded.value) log("After a CUT the supply still draws ${status.watts} W (above $above W): the plug's relay may be stuck")
+                weldSeen = (status.watts ?: 0.0) > above
+                showWelded()
+                if (weldSeen) log("After a CUT the supply still draws ${status.watts} W (above $above W): the plug's relay may be stuck")
             }
             return true
         }
-        log("CUT: the plug didn't answer; its timer cuts within ${TOGGLE_AFTER_S} s")
+        cutAt = now()
+        log("CUT: the plug didn't answer; the 24 V may still be on (the plug has no timer): its next \"on\" advert CUTs again")
         return false
+    }
+
+    /** [welded] from its two causes (v1.36 — M72). */
+    private fun showWelded() {
+        _welded.value = weldSeen || cutsDontTake
     }
 
     /**
@@ -973,8 +1071,11 @@ class RailKeeper(
         check()
     }
 
-    /** Whether the rail may be up from an ARM within the plug's 30 s (no CUT taken since). */
-    private fun mayBeUp(): Boolean = _armedAt.value?.let { now() - it < TOGGLE_AFTER_S * MS_PER_S } == true
+    /**
+     * Whether the rail may be up from an ARM: one taken with no CUT taken since. (Before v1.36 only within the plug's 30 s
+     * timer; the SwitchBot has none, M72, so an ARM holds until a CUT.)
+     */
+    private fun mayBeUp(): Boolean = _armedAt.value != null
 
     // ---- The wants ---------------------------------------------------------------------------------------------------
 
@@ -1068,7 +1169,10 @@ class RailKeeper(
     }
 
     companion object {
-        /** ARM's `toggle_after`: the plug switches itself off this long after the last ARM. */
+        /**
+         * The seconds each ARM asks for: a plug with its own timer would switch itself off this long after the last ARM
+         * (the Shelly did, before v1.36). The SwitchBot has none (M72): it is sent, and ignored.
+         */
         const val TOGGLE_AFTER_S = 30
         const val KEEP_EVERY_MS = 10_000L
         const val RAIL_UP_EVERY_MS = 500L
@@ -1092,6 +1196,14 @@ class RailKeeper(
 
         /** The least drawn after a CUT that means the supply is still powered; half its idle draw when that is more (M62). */
         const val WELDED_WATTS = 2.0
+
+        /**
+         * The advert watch (v1.36 — M72): adverts this soon after a CUT may have been sent before it; this many CUTs in a row
+         * with the plug still saying on show [welded]; a new connection this soon after a CUT is that CUT's own.
+         */
+        const val ADVERT_SETTLE_MS = 1_500L
+        const val ADVERT_CUTS = 3
+        const val CONNECT_CUT_GAP_MS = 5_000L
 
         /**
          * The power watch (v1.30 — M67): a reading above the cap at rail-up is looked at again this much later; the check

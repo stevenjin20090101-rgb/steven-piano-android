@@ -43,7 +43,7 @@ class RoutesTest {
     fun `every page has its own route under the Piano tab`() {
         assertEquals(
             listOf(
-                "instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "power", "playback", "tablet-sound", "quiet", "remote", "guests",
+                "instrument", "keyboard", "feel", "lighting", "pedal", "firmware", "power", "power-use", "playback", "tablet-sound", "quiet", "remote", "guests",
                 "system", "display", "kiosk", "updates", "artwork", "help",
             ),
             SettingsPage.entries.map { it.key },
@@ -94,14 +94,14 @@ class RoutesTest {
     }
 
     @Test
-    fun `four pages are the piano's, fourteen are the app's, each with the one name the person reads (v1_13 M31b, System v1_18 M50, Power plug v1_26 M60)`() {
+    fun `four pages are the piano's, fifteen are the app's, each with the one name the person reads (v1_13 M31b, System v1_18 M50, Power plug v1_26 M60, Power use v1_36 M72)`() {
         assertEquals(
-            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware) + List(12) { null },
+            listOf(null, null, PianoPage.Feel, PianoPage.Lighting, PianoPage.Pedal, PianoPage.Firmware) + List(13) { null },
             SettingsPage.entries.map { it.piano },
         )
         assertEquals(
             listOf(
-                "Instrument", "Keyboard", "Sound and touch", "Lights and screen", "Pedal", "Firmware and status", "Power plug", "Playback", "Tablet sound",
+                "Instrument", "Keyboard", "Sound and touch", "Lights and screen", "Pedal", "Firmware and status", "Power plug", "Power use", "Playback", "Tablet sound",
                 "Quiet times", "Web panel", "Guests", "System", "Display", "Kiosk", "Updates", "Library and artwork", "Help and about",
             ),
             SettingsPage.entries.map { it.title },

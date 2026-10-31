@@ -759,9 +759,6 @@ class AppWebBackend(
         /** How long the library must be quiet before the guests' Modern list is worked out again, as the channels wait. */
         private const val SETTLE_MS = 500L
 
-        /** The 24 V plug's switch, read for the panels' System page at most this often (v1.26 — M62; the tablet's page: 5 s). */
-        private const val PLUG_READ_MS = 5_000L
-
         /** The guests' lists' genres, and the Modern list's key and name (v1.14 — M37). */
         private val CLASSICAL = Genres.name(Genres.CLASSICAL)
         private val MODERN = Genres.name(Genres.MODERN)
@@ -821,21 +818,11 @@ class AppWebBackend(
         )
     }
 
-    /** The plug's switch read again for the panels at most once in 5 s, as the tablet's own System page reads it (v1.26 — M62). */
-    private val plugFloor = RefreshFloor(PLUG_READ_MS, android.os.SystemClock::elapsedRealtime)
-
     /**
-     * The 24 V plug as the System page shows it (v1.26 — M62): the rail's fact with the plug's reading as the tablet last
-     * had it, none while the plug doesn't answer ("Not answering", as the tablet's page says). With a plug paired its switch
-     * is read again in the background, at most once in 5 s whichever panel asks, and the next read carries the answer: a
-     * panel never waits on the plug's Bluetooth.
+     * The 24 V plug as the System page shows it (v1.26 — M62): the rail's fact. Since v1.36 (M72) its reading is the
+     * SwitchBot's adverts', already in the fact (none once not seen for 10 s): a panel never asks the plug's Bluetooth.
      */
-    private fun power(): dev.stevenjin.stevenpiano.power.RailFact {
-        val fact = graph.remote.railFact.value
-        if (!fact.paired) return fact
-        if (plugFloor.take()) graph.appScope.launch { graph.plug.switchStatus() }
-        return if (graph.plug.reachable.value == false) fact.copy(output = null, watts = null) else fact
-    }
+    private fun power(): dev.stevenjin.stevenpiano.power.RailFact = graph.remote.railFact.value
 
     /** The covers' counts by their lookup's status (all null when the library couldn't be read), and Apple's stop. */
     private fun coversOf(counts: List<dev.stevenjin.stevenpiano.data.db.CoverCount>?, blockedUntil: Long?): WebCovers {

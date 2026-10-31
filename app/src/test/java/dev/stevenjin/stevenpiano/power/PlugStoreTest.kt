@@ -15,6 +15,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -31,8 +33,8 @@ import java.io.File
 
 /**
  * The power watch's usual idle in the plug's store (v1.31 — M68), piano safety: the plug's last rail-up readings outlive the
- * app, go with its pairing, and start again only after a trip and a safety check that heard every key. And (v1.32 — M70)
- * whether the plug's Matter is off, read false from a pairing kept before 1.32.
+ * app, go with its pairing, and start again only after a trip and a safety check that heard every key. Since v1.36 (M72):
+ * the update clears a Shelly plug's pairing (data: once, said, idempotent), and Power use's meter is kept with the pairing.
  */
 class PlugStoreTest {
     @get:Rule
@@ -104,37 +106,70 @@ class PlugStoreTest {
     }
 
     @Test
-    fun `a pairing kept before 1_32 reads Matter not yet off, the watch's first look keeps it off, and a new pairing says (v1_32 M70)`() {
+    fun `the update to the SwitchBot - a Shelly pairing is cleared with its usual idle, said, and a second run changes nothing (v1_36 M72)`() {
         raw { store ->
-            store.edit { prefs ->   // as 1.31 kept it: no matterOff
-                prefs[stringPreferencesKey("address")] = PLUG.address
-                prefs[stringPreferencesKey("id")] = PLUG.id!!
+            store.edit { prefs ->   // as 1.35 kept a Shelly plug
+                prefs[stringPreferencesKey("address")] = "A8:03:2A:B5:C1:D2"
+                prefs[stringPreferencesKey("id")] = "shellyplugusg4-a8032ab5c1d2"
+                prefs[stringPreferencesKey("firmware")] = "2.0.1"
+                prefs[stringPreferencesKey("bondEntry")] = "00:00:5E:00:53:A1"
                 prefs[booleanPreferencesKey("locked")] = true
+                prefs[booleanPreferencesKey("matterOff")] = true
                 prefs[booleanPreferencesKey("on")] = true
+                prefs[stringPreferencesKey("idles")] = "1761300000000:9.8,1761300060000:10.1,1761300120000:10.0"
             }
         }
-        val old = kept()
-        assertEquals("read as it was", PLUG, old.pairing)
-        assertFalse("not yet off: the watch's first look is quiet", old.pairing!!.matterOff)
-        assertTrue(old.on)
+        val before = kept()
+        assertNull("read as no plug even before it is cleared: the rail never switches a Shelly", before.pairing)
+        assertFalse(before.switches)
+        assertEquals(PlugSettings(shellyCleared = true), before)
 
-        session { it.matterTurnedOff() }
-        assertTrue("kept by the watch's first look", kept().pairing!!.matterOff)
-        assertTrue("the rest as it was", kept().on)
+        assertTrue("cleared, for the log once", session { it.migrate() })
+        val after = kept()
+        assertEquals(PlugSettings(shellyCleared = true), after)
+        assertEquals("Piano › Power plug says to pair the SwitchBot", PowerCopy.PAIR, "Pair the SwitchBot plug")
+        assertTrue(PowerCopy.SHELLY_CLEARED.endsWith(PowerCopy.PAIR + "."))
+        raw { store -> assertEquals("every Shelly field gone", setOf("shellyCleared"), store.data.first().asMap().keys.map { it.name }.toSet()) }
+
+        assertFalse("a second run finds nothing", session { it.migrate() })
+        assertEquals(after, kept())
 
         session { it.pair(PLUG) }
-        assertFalse("paired again, Matter not taken off at the setup", kept().pairing!!.matterOff)
-        session { it.pair(PLUG.copy(matterOff = true)) }
-        assertEquals(PLUG.copy(matterOff = true), kept().pairing)
+        assertEquals("a SwitchBot paired: the message goes", PlugSettings(pairing = PLUG, on = true), kept())
+        assertFalse("and the migration leaves it alone", session { it.migrate() })
+        assertEquals(PLUG, kept().pairing)
+    }
 
+    @Test
+    fun `the power use round-trips through the store, goes with the pairing, and never lands on another plug (v1_36 M72)`() {
+        val zone = java.time.ZoneId.of("Europe/London")
+        val meter = EnergyMeter(zone)
+        for (i in 0..1_800) meter.add(1_761_300_000_000L + i * 2_000L, 10.0 + (i % 7))
         session { store ->
-            store.forget()
-            store.matterTurnedOff()
+            store.pair(PLUG)
+            store.keepEnergy(PLUG.address, meter.encode())
+            store.keepEnergy("11:22:33:44:55:66", "1|999|-|")   // another plug's: not kept
         }
-        assertEquals("no plug paired: nothing kept", PlugSettings(), kept())
+        val back = EnergyMeter.decode(session { it.energy(PLUG.address) }, zone)
+        assertEquals(meter.totalWh, back.totalWh, 1e-6)
+        assertEquals(meter.peak, back.peak)
+        assertEquals(meter.days().keys, back.days().keys)
+        for ((day, use) in meter.days()) {
+            assertEquals(use.wh, back.days().getValue(day).wh, 1e-6)
+            assertEquals(use.peak, back.days().getValue(day).peak)
+        }
+        assertNull("asked for by another plug: none", session { it.energy("11:22:33:44:55:66") })
+
+        session { it.pair(PLUG.copy(address = "11:22:33:44:55:66")) }
+        assertNull("a new pairing starts from nothing", session { it.energy("11:22:33:44:55:66") })
+        session { store ->
+            store.keepEnergy("11:22:33:44:55:66", meter.encode())
+            store.forget()
+        }
+        assertNull("forgotten with the plug", session { it.energy("11:22:33:44:55:66") })
     }
 
     private companion object {
-        val PLUG = PlugPairing("AA:BB:CC:DD:EE:FF", id = "shellyplugusg4-aabbccddeeff")
+        val PLUG = PlugPairing("68:EE:8F:28:47:CA", mac = "68:EE:8F:28:47:CA")
     }
 }

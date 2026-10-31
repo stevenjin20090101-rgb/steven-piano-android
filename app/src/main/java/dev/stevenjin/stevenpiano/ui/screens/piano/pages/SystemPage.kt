@@ -384,21 +384,17 @@ private fun PianoCard(
 }
 
 /**
- * The 24 V smart plug on the Piano card (v1.26 — M60), once one is paired: "On · 24 s left · 6.4 W", "Off · 0.0 W" or "Not
- * answering", read every 5 s while the page shows; amber, with what it means, when the relay may be stuck on ([stuck]).
+ * The 24 V smart plug on the Piano card (v1.26 — M60), once one is paired: since v1.36 (M72) the SwitchBot as its adverts
+ * say it, "SwitchBot plug · off · 0.0 W", "… · on · 6.4 W" or "… · not seen"; amber, with what it means, when the relay
+ * may be stuck on ([stuck]).
  */
 @Composable
 private fun PlugFact(stuck: Boolean) {
     val graph = LocalContext.current.graph
     val settings by graph.plugSettings.collectAsStateWithLifecycle()
     if (settings?.pairing == null) return
-    val status by graph.plug.status.collectAsStateWithLifecycle()
-    val reachable by graph.plug.reachable.collectAsStateWithLifecycle()
-    val armedAt by graph.rail.armedAt.collectAsStateWithLifecycle()
-    PollWhileShown(SYSTEM_MS) { graph.plug.switchStatus() }
-    val left = secondsLeft(armedAt)
-    val value = if (reachable == false) PowerCopy.NOT_ANSWERING else PowerCopy.fact(status, left)
-    CardFact(SystemCopy.Fact(PowerCopy.TITLE, value, attention = stuck))
+    val seen by graph.plugAdverts.seen.collectAsStateWithLifecycle()
+    CardFact(SystemCopy.Fact(PowerCopy.TITLE, PowerCopy.fact(seen), attention = stuck))
     if (stuck) CardNote(PowerCopy.WELDED)
 }
 

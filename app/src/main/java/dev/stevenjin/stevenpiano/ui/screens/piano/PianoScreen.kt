@@ -92,6 +92,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.pages.LockedFirmwareUpdate
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PedalPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PlaybackPage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PowerPlugPage
+import dev.stevenjin.stevenpiano.ui.screens.piano.pages.PowerUsePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.RemotePage
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.ReadWhileShown
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SYSTEM_ROW_MS
@@ -314,7 +315,9 @@ private fun PianoHub(
     val plug by graph.plugSettings.collectAsStateWithLifecycle()
     val rail by graph.rail.phase.collectAsStateWithLifecycle()
     val power = PowerCopy.hub(plug, rail)
-    val summaries = remember(piano, settings, web, firmware, firmwarePiano, quiet, keyboard, instrument, linkWords, update, system, attention, power) {
+    val seen by graph.plugAdverts.seen.collectAsStateWithLifecycle()   // v1.36 — M72: Power use's row, the watts now
+    val use = PowerCopy.useHub(plug, seen)
+    val summaries = remember(piano, settings, web, firmware, firmwarePiano, quiet, keyboard, instrument, linkWords, update, system, attention, power, use) {
         GroupSummaries.from(
             piano,
             settings,
@@ -329,6 +332,7 @@ private fun PianoHub(
             system?.reading,
             attention,
             power,
+            use,
         )
     }
     val query = vm.query
@@ -459,7 +463,8 @@ private fun SettingsPageView(
                         SettingsPage.Lighting -> LightingPage(pianoReport(vm), vm)
                         SettingsPage.Pedal -> PedalPage(pianoReport(vm), vm)
                         SettingsPage.Firmware -> FirmwarePage(pianoReport(vm), vm, firmwareReport(vm), vm)
-                        SettingsPage.Power -> PowerPlugPage()   // v1.26 — M60
+                        SettingsPage.Power -> PowerPlugPage(onOpenPage)   // v1.26 — M60
+                        SettingsPage.PowerUse -> PowerUsePage()   // v1.36 — M72
                         SettingsPage.Playback -> PlaybackPage(appSettings(vm), vm)
                         SettingsPage.TabletSound -> TabletSoundPage(appSettings(vm), vm)
                         SettingsPage.Quiet -> QuietTimesPage()

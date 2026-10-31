@@ -34,7 +34,7 @@ data class HubGroup(val title: String, val rows: List<HubRow>)
 object HubGroups {
     val all: List<HubGroup> = listOf(
         HubGroup("Instruments", pages(SettingsPage.Instrument, SettingsPage.Keyboard)),
-        HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware, SettingsPage.Power)),
+        HubGroup(PIANO, pages(SettingsPage.Feel, SettingsPage.Lighting, SettingsPage.Pedal, SettingsPage.Firmware, SettingsPage.Power, SettingsPage.PowerUse)),
         HubGroup("Playing", pages(SettingsPage.Playback, SettingsPage.TabletSound, SettingsPage.Quiet)),
         HubGroup("Sharing", pages(SettingsPage.Remote, SettingsPage.Guests)),
         HubGroup("This tablet", pages(SettingsPage.System, SettingsPage.Display, SettingsPage.Kiosk, SettingsPage.Updates, SettingsPage.Artwork, SettingsPage.Help)),

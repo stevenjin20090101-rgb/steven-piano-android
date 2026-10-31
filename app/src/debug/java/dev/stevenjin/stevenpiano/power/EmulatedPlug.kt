@@ -17,37 +17,29 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 
 /**
- * The emulator's power plug (v1.26 — M60; debug builds only), beside the emulated piano: one [EmulatedShelly] for the
- * process, chosen by `adb shell setprop debug.stevenpiano.plug <state>` as the emulated piano's lock is by
- * `debug.stevenpiano.lock`, read when the app first asks:
+ * The emulator's power plug (v1.26 — M60; the SwitchBot Plug Mini since v1.36 — M72; debug builds only), beside the
+ * emulated piano: one [EmulatedSwitchBot] for the process, chosen by `adb shell setprop debug.stevenpiano.plug <state>` as
+ * the emulated piano's lock is by `debug.stevenpiano.lock`, read when the app first asks:
  *
- * - `pending` (new from its box), `confirmed` (set up with the Shelly app: the normal Pair screen), `complete` (finished its
- *   setup without this tablet: refusing it everything, its device info too, as the real plug does since v1.32 — M70; the
- *   fallback at Find), `locked` (its setup window ran out offline), `paired` (paired with this
- *   tablet, set up, off every network), `old` (firmware 1.7.5, set up with the Shelly app: no pairing); unset or `none`, no
- *   plug in range at all, and the emulated piano's boards always answer, as before the plug.
- * - Its firmware (v1.28 — M65): `debug.stevenpiano.plugver 1.6.2` starts it on that one (unset: 2.0.3, or 1.7.5 for `old`);
- *   an older one updates itself to 2.1.0 when asked. `debug.stevenpiano.plugupdate refuse` has it refuse `Shelly.Update`
- *   over Bluetooth. Both are read when the plug is made (the first ask, or `reset <state>`).
+ * - `on` (or anything else: plugged in, it comes on by itself, as the real one did), `off`; unset or `none`, no plug in
+ *   range at all, and the emulated piano's boards always answer, as before the plug.
  * - With a plug, the 24 V supply hangs on it: the emulated piano's `!boards` reads MISSING while the relay is open and OK
  *   0.9 s after it closes (firmware 2.1.0's re-probe); `debug.stevenpiano.trunk one-missing` keeps board 5 (MIDI 72–83)
  *   missing, `dead` every board.
- * - adb's `--es dev.stevenjin.stevenpiano.EMULATOR_PLUG "…"` ([command]): `away` (out of range) and `back`, `reset <state>`
- *   (a power cycle), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed), `boardsup <ms>` (how long the
- *   boards take after the supply comes up: 5000 for firmware 2.0.1's re-probe); v1.29 — M66, for the plug watch: `outside
- *   on` (switched on by another phone) and `initial on` (its power-up state changed); v1.32 — M70, `matter on` (Matter
- *   turned on from outside: the watch turns it off) and `sta1 on` (a second network, as the Shelly app may set one).
- *   `debug.stevenpiano.plugunpaired refuse` has firmware before 2.0.0 refuse unpaired requests once `complete`.
+ * - adb's `--es dev.stevenjin.stevenpiano.EMULATOR_PLUG "…"` ([command]): `away` (out of range: no adverts, no GATT) and
+ *   `back`, `reset` (a power cut: back on by itself), `outside on` (switched on with the SwitchBot app), `draw <W>` (the
+ *   power watch's debug path: the supply draws that much more while up; 12 is a coil stuck on), `silent on|off` (adverts,
+ *   but its GATT answers nothing), `trunk ok|one-missing|dead`, `weld on|off` (the relay stuck closed), `boardsup <ms>`
+ *   (how long the boards take after the supply comes up).
  *
- * Every request and answer is logged (`adb logcat -s Plug`), the hotspot's name and password blanked, and the link log
- * says what changed.
+ * Every command and reply is logged (`adb logcat -s Plug`), and the link log says what changed.
  */
 object EmulatedPlug {
     @Volatile
     private var made = false
 
     @Volatile
-    private var plug: EmulatedShelly? = null
+    private var plug: EmulatedSwitchBot? = null
 
     @Volatile
     private var trunk = ""
@@ -61,7 +53,7 @@ object EmulatedPlug {
     private var boardsUpMs = BOARDS_UP_MS
 
     /** The fake plug, made at the first ask from `debug.stevenpiano.plug`; null with none. */
-    fun shelly(): EmulatedShelly? {
+    fun switchBot(): EmulatedSwitchBot? {
         if (!made) {
             synchronized(this) {
                 if (!made) {
@@ -74,7 +66,7 @@ object EmulatedPlug {
         return plug
     }
 
-    /** The plug's Bluetooth as the app's [PlugClient] uses it. */
+    /** The plug's Bluetooth as the app's [PlugClient] and [PlugAdverts] use it. */
     fun transport(): PlugTransport = EmulatedPlugTransport()
 
     /**
@@ -82,8 +74,8 @@ object EmulatedPlug {
      * Board 5 answers never with the trunk `one-missing`; none with `dead`.
      */
     fun boards(now: Long = SystemClock.elapsedRealtime()): String? {
-        val shelly = shelly() ?: return null
-        val since = shelly.poweredSince()
+        val plug = switchBot() ?: return null
+        val since = plug.poweredSince()
         val up = since != null && now - since >= boardsUpMs
         return (0 until BOARDS).joinToString(",") { i -> if (up && answers(i)) "OK" else "MISSING" }
     }
@@ -101,75 +93,58 @@ object EmulatedPlug {
         when (word) {
             "away" -> away = true
             "back" -> away = false
-            "reset" -> {
-                synchronized(this) {
-                    plug = create(argument)
-                    made = true
-                }
-            }
+            "reset" -> switchBot()?.powerCut()
             "trunk" -> trunk = argument
             "boardsup" -> boardsUpMs = argument.toLongOrNull()?.coerceIn(0L, MAX_BOARDS_UP_MS) ?: BOARDS_UP_MS
-            "weld" -> shelly()?.weld = argument == "on"
-            // v1.29 — M66: for the plug watch, the switch on from outside and its power-up state changed.
-            "outside" -> if (argument == "on") shelly()?.switchOnFromOutside()
-            "initial" -> shelly()?.changeSetting("initial_state", argument.ifEmpty { "on" })
-            // v1.32 — M70: Matter on from outside, and a second network.
-            "matter" -> if (argument == "on") shelly()?.matterOnFromOutside()
-            "sta1" -> if (argument == "on") shelly()?.addSecondNetwork()
+            "weld" -> switchBot()?.weld = argument == "on"
+            "outside" -> if (argument == "on") switchBot()?.switchOnFromOutside()
+            "draw" -> switchBot()?.extraWatts = argument.toDoubleOrNull()?.takeIf { it.isFinite() }?.coerceIn(0.0, MAX_EXTRA_WATTS) ?: 0.0
+            "silent" -> switchBot()?.silent = argument == "on"
             else -> Log.w(TAG, "Unknown plug command: $line")
         }
         LinkLog.shared.add("The emulated power plug: $line")
     }
 
-    private fun create(word: String): EmulatedShelly? {
+    private fun create(word: String): EmulatedSwitchBot? {
         val clock = SystemClock::elapsedRealtime
-        // v1.28 — M65: the firmware it starts on, and Shelly.Update refused over Bluetooth.
-        val version = SystemProperty.read(VERSION_PROPERTY).trim().ifEmpty { null }
-        val firmware = version ?: EmulatedShelly.FIRMWARE
-        val made = when (word.trim().lowercase(Locale.ROOT)) {
+        return when (word.trim().lowercase(Locale.ROOT)) {
             "", "none" -> null
-            "pending" -> EmulatedShelly(Provision.Pending, clock, firmware = firmware)
-            "complete" -> EmulatedShelly(Provision.Complete, clock, firmware = firmware)
-            "locked" -> EmulatedShelly(Provision.Locked, clock, firmware = firmware)
-            "old" -> EmulatedShelly(Provision.Confirmed, clock, firmware = version ?: OLD_FIRMWARE)
-            "paired" -> EmulatedShelly(Provision.Complete, clock, firmware = firmware).also { it.reset(Provision.Complete, bonded = EmulatedShelly.TABLET) }
-            else -> EmulatedShelly(Provision.Confirmed, clock, firmware = firmware)
+            "off" -> EmulatedSwitchBot(clock, on = false)
+            else -> EmulatedSwitchBot(clock)
         }
-        made?.refuseUpdate = SystemProperty.read(UPDATE_PROPERTY).trim().equals("refuse", ignoreCase = true)
-        // v1.29 — M66: old firmware that lets only paired centrals in once `complete`.
-        made?.refuseUnpaired = SystemProperty.read(REFUSE_PROPERTY).trim().equals("refuse", ignoreCase = true)
-        return made
     }
 
-    /** [PlugTransport] to the fake plug: a scan finds it (unless away or restarting), connections and requests take a moment. */
+    /** [PlugTransport] to the fake plug: a scan and the advert watch find it (unless away), connections and commands take a moment. */
     private class EmulatedPlugTransport : PlugTransport {
         @Volatile
         private var up = false
 
-        @Volatile
-        override var refused: Boolean = false
-            private set
-
-        @Volatile
-        override var reached: Boolean = false
-            private set
-
         override fun blocker(): String? = null
 
-        private fun reachable(): EmulatedShelly? = shelly()?.takeIf { !away && !it.rebooting() }
+        private fun reachable(): EmulatedSwitchBot? = switchBot()?.takeIf { !away }
 
         override suspend fun scan(timeoutMs: Long, found: (FoundPlug) -> Unit): String? {
             delay(FIND_MS)
-            if (reachable() != null) found(FoundPlug(EmulatedShelly.ADDRESS, EmulatedShelly.NAME, RSSI))
+            reachable()?.let { plug ->
+                val model = SwitchBot.model(plug.serviceData()) ?: return@let
+                SwitchBot.advert(plug.manufacturer())?.let { found(FoundPlug(EmulatedSwitchBot.ADDRESS, it.mac, model, RSSI)) }
+            }
             delay((minOf(timeoutMs, SCAN_MS) - FIND_MS).coerceAtLeast(0))
             return null
         }
 
+        override suspend fun watch(address: String, mac: String?, fast: Boolean, heard: (PlugAdvert) -> Unit): String {
+            while (true) {
+                delay(if (fast) FAST_ADVERT_MS else SLOW_ADVERT_MS)
+                val plug = reachable() ?: continue
+                if (!address.equals(EmulatedSwitchBot.ADDRESS, ignoreCase = true)) continue
+                SwitchBot.advert(plug.manufacturer())?.let(heard)
+            }
+        }
+
         override suspend fun connect(address: String): Boolean {
             delay(CONNECT_MS)
-            refused = false
-            up = reachable() != null && address.equals(EmulatedShelly.ADDRESS, ignoreCase = true)
-            reached = up
+            up = reachable() != null && address.equals(EmulatedSwitchBot.ADDRESS, ignoreCase = true)
             if (!up) Log.d(TAG, "connect $address: not reachable")
             return up
         }
@@ -177,54 +152,31 @@ object EmulatedPlug {
         override val connected: Boolean get() = up && reachable() != null
 
         override suspend fun exchange(frame: ByteArray, timeoutMs: Long): ByteArray? {
-            delay(RPC_MS)
-            val shelly = reachable()
-            if (!up || shelly == null) {
+            delay(GATT_MS)
+            val plug = reachable()
+            if (!up || plug == null) {
                 up = false
                 return null
             }
-            val text = String(frame, Charsets.UTF_8)
-            Log.d(TAG, "> ${EmulatedShelly.redacted(text)}")
-            return when (val answer = shelly.handle(EmulatedShelly.TABLET, text)) {
-                is EmulatedShelly.Answer.Reply -> {
-                    Log.d(TAG, "< ${answer.json}")
-                    answer.json.toByteArray(Charsets.UTF_8)
-                }
-                EmulatedShelly.Answer.Refused -> {
-                    Log.d(TAG, "< refused: insufficient authentication")
-                    refused = true
-                    null
-                }
-                EmulatedShelly.Answer.Silent -> {
-                    // Locked (v1.26 — M62): connected, and its RPC never replies; the caller's time runs out.
-                    delay((timeoutMs - RPC_MS).coerceAtLeast(0))
-                    Log.d(TAG, "< nothing in $timeoutMs ms (locked)")
-                    null
-                }
-            }
+            val reply = plug.handle(frame)
+            Log.d(TAG, "> ${hex(frame)}  < " + (reply?.let(::hex) ?: "nothing"))
+            if (reply == null) delay((timeoutMs - GATT_MS).coerceAtLeast(0))
+            return reply
         }
 
         override fun disconnect() {
             up = false
         }
 
-        override suspend fun bond(address: String, timeoutMs: Long): Boolean {
-            delay(BOND_MS)   // Android's pairing request, accepted
-            return reachable()?.bond(EmulatedShelly.TABLET) == true
-        }
-
-        override fun bonded(address: String): Boolean = shelly()?.bonded(EmulatedShelly.TABLET) == true
+        private fun hex(bytes: ByteArray): String = bytes.joinToString("") { String.format(Locale.ROOT, "%02x", it.toInt() and 0xFF) }
     }
 
     private const val TAG = "Plug"
     private const val PLUG_PROPERTY = "debug.stevenpiano.plug"
     private const val TRUNK_PROPERTY = "debug.stevenpiano.trunk"
-    private const val VERSION_PROPERTY = "debug.stevenpiano.plugver"
-    private const val UPDATE_PROPERTY = "debug.stevenpiano.plugupdate"
-    private const val REFUSE_PROPERTY = "debug.stevenpiano.plugunpaired"
-    private const val OLD_FIRMWARE = "1.7.5"
     private const val BOARDS = 7
     private const val MISSING_BOARD = 4
+    private const val MAX_EXTRA_WATTS = 500.0
 
     /** Firmware 2.1.0 re-probes a missing board every second: the boards answer about this long after the supply comes up. */
     const val BOARDS_UP_MS = 900L
@@ -232,7 +184,10 @@ object EmulatedPlug {
     private const val FIND_MS = 800L
     private const val SCAN_MS = 2_500L
     private const val CONNECT_MS = 250L
-    private const val RPC_MS = 40L
-    private const val BOND_MS = 700L
+    private const val GATT_MS = 40L
+
+    /** About 3 adverts a second, as the real plug sends them; the low-power scan catches about one in five seconds. */
+    private const val FAST_ADVERT_MS = 333L
+    private const val SLOW_ADVERT_MS = 2_000L
     private const val RSSI = -58
 }

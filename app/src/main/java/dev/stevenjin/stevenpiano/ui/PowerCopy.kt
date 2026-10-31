@@ -9,23 +9,24 @@
 
 package dev.stevenjin.stevenpiano.ui
 
+import dev.stevenjin.stevenpiano.power.FoundPlug
 import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
+import dev.stevenjin.stevenpiano.power.Peak
+import dev.stevenjin.stevenpiano.power.PlugAdvert
 import dev.stevenjin.stevenpiano.power.PlugSettings
-import dev.stevenjin.stevenpiano.power.PlugStatus
-import dev.stevenjin.stevenpiano.power.Provision
 import dev.stevenjin.stevenpiano.power.RailMessage
 import dev.stevenjin.stevenpiano.power.RailPhase
-import dev.stevenjin.stevenpiano.power.SetUpTask
-import dev.stevenjin.stevenpiano.power.UpdateState
-import dev.stevenjin.stevenpiano.power.UpdateTask
+import dev.stevenjin.stevenpiano.power.SwitchBot
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * The 24 V smart plug's words (v1.26 — M60; DESIGN.md › v1.26 — M60): the messages, Piano › Power plug, its Pair screen
- * (v1.28 — M65: without the Shelly app, the update on old firmware; v1.32 — M70: a phone's hotspot or any 2.4 GHz Wi-Fi,
- * the reset by the Shelly app, Matter off).
+ * The 24 V smart plug's words (v1.26 — M60; DESIGN.md › v1.26 — M60): the messages, Piano › Power plug and its Pair screen
+ * (the SwitchBot Plug Mini since v1.36 — M72: no setup in its app, an outlet timer as the backup), and Piano › Power use.
  */
 object PowerCopy {
     const val TITLE = "Power plug"
@@ -92,211 +93,114 @@ object PowerCopy {
 
     // ---- Piano › Power plug -------------------------------------------------------------------------------------------
 
+    /** v1.36 — M72: the SwitchBot, with no timer of its own, and the outlet timer behind it. */
     const val EXPLANATION =
-        "The 24 V supply for the piano's keys can hang on a Bluetooth smart plug (a Shelly Plug US Gen4). This tablet then " +
-            "keeps it on only while something plays and the piano answers with its power boards. Anything else — the tablet " +
-            "asleep, the app closed, the piano silent — and the plug switches it off by itself within 30 seconds, so nothing " +
-            "stays hot while the piano is idle."
-    const val PAIR = "Pair the power plug"
-    const val PAIR_NOTE = "About 15 minutes, with your phone's hotspot or a 2.4 GHz Wi-Fi. Only the 24 V supply goes on the plug."
+        "The 24 V supply for the piano's keys can hang on a Bluetooth smart plug, a SwitchBot Plug Mini. This tablet then " +
+            "keeps it on only while something plays and the piano answers with its power boards, and switches it off after " +
+            "every piece. The plug has no timer of its own: if the tablet stops, the 24 V stays on, so keep an outlet timer " +
+            "behind it as the backup."
+    const val PAIR = "Pair the SwitchBot plug"
+    const val PAIR_NOTE = "About a minute, all from this tablet. Only the piano's 24 V supply goes on the plug."
+
+    /** v1.36 — M72: after the update cleared a Shelly plug's pairing. */
+    const val SHELLY_CLEARED = "This version works with a SwitchBot plug: the Shelly plug's pairing was cleared. Pair the SwitchBot plug."
 
     const val SWITCH = "Switch the 24 V with the plug"
     const val SWITCH_ON_NOTE = "The 24 V comes on for each piece, Test every key, the Keys tab and updates, and goes off after."
-    const val SWITCH_OFF_NOTE = "The app leaves the plug alone, and the plug stays off: to play without it, plug the 24 V supply into a wall socket."
+    const val SWITCH_OFF_NOTE = "The app leaves the plug alone: to play without it, plug the 24 V supply into a wall socket."
 
     const val STATE = "The plug"
     const val OUTPUT = "24 V"
     const val DRAW = "The supply draws"
-    const val SETUP = "Setup"
-    const val FIRMWARE = "Plug firmware"
-    const val NOT_ANSWERING = "Not answering"
+    const val NOT_SEEN = "Not seen"
     const val READING = "Reading…"
 
-    const val ADMIT = "Admit a replacement tablet"
-    const val ADMIT_NOTE = "For 3 minutes another tablet can pair: on it, open Piano › Power plug › Pair the power plug."
-    const val ADMIT_OPEN = "The plug lets another tablet pair for 3 minutes."
-    const val ADMIT_FAILED = "The plug didn't answer. Try again near it."
     const val FORGET = "Forget the plug"
-    const val FORGET_NOTE = "The app stops switching the 24 V and the plug forgets this tablet."
+    const val FORGET_NOTE = "The 24 V goes off and the app stops switching it."
     const val FORGET_TITLE = "Forget the power plug?"
     const val FORGET_TEXT =
-        "The 24 V goes off now and the plug forgets this tablet. It stays off until the plug is paired again, or the supply " +
-            "moves to a wall socket."
+        "The 24 V goes off now. It stays off until the plug is paired again, or the supply moves to a wall socket."
     const val FORGET_ACTION = "Forget"
     const val WELDED = "After the 24 V was cut the plug still reads on: its relay may be stuck. Unplug the supply and check the plug."
     const val WELDED_SHORT = "The plug's relay may be stuck on"
 
-    /** The plug's output: "On · 24 s left", "On", "Off". */
-    fun output(status: PlugStatus?, secondsLeft: Long?): String = when {
-        status == null -> NOT_ANSWERING
-        !status.output -> "Off"
-        secondsLeft != null && secondsLeft > 0 -> "On · $secondsLeft s left"
-        else -> "On"
+    /** The plug's switch as its adverts say (v1.36 — M72): "On", "Off", or "Not seen" for none in 10 s. */
+    fun output(seen: PlugAdvert?): String = when {
+        seen == null -> NOT_SEEN
+        seen.on -> "On"
+        else -> "Off"
     }
 
-    /** The supply's draw: "6.4 W". */
-    fun watts(status: PlugStatus?): String = status?.watts?.let { String.format(Locale.ROOT, "%.1f W", it) } ?: "—"
+    /** A draw: "6.4 W"; "—" for none. */
+    fun watts(watts: Double?): String = watts?.let { String.format(Locale.ROOT, "%.1f W", it) } ?: "—"
 
-    /** The System page's fact: "On · 24 s left · 6.4 W", "Off · 0.0 W", "Not answering". */
-    fun fact(status: PlugStatus?, secondsLeft: Long?): String =
-        if (status == null) NOT_ANSWERING else output(status, secondsLeft) + " · " + watts(status)
+    /** The System page's and the panel's fact (v1.36 — M72): "SwitchBot plug · off · 0.0 W", "… · on · 6.4 W", "… · not seen". */
+    fun fact(seen: PlugAdvert?): String =
+        if (seen == null) "$SWITCHBOT · not seen" else "$SWITCHBOT · " + (if (seen.on) "on" else "off") + " · " + watts(seen.watts)
 
-    fun provision(provision: Provision): String = when (provision) {
-        Provision.Pending -> "Pending: new, not set up yet"
-        Provision.Confirmed -> "Confirmed: set up, finishing"
-        Provision.Complete -> "Complete"
-        Provision.Locked -> "Locked: needs a power cycle"
-        Provision.Unknown -> "—"
-    }
+    const val SWITCHBOT = "SwitchBot plug"
 
-    // ---- The Pair screen ----------------------------------------------------------------------------------------------
+    // ---- The Pair screen (v1.36 — M72) --------------------------------------------------------------------------------
 
     fun stepTitle(step: PairStep): String = when (step) {
-        PairStep.Ready -> "Get it ready"
         PairStep.Find -> "Find the plug"
-        PairStep.Update -> "Update its firmware"
-        PairStep.SetUp -> "Pair it with this tablet"
-        PairStep.Complete -> "Wait while it finishes its setup"
-        PairStep.Network -> "Close its network"
-        PairStep.Verify -> "Check it"
-        PairStep.Done -> "Done"
+        PairStep.Check -> "Check it clicks"
+        PairStep.Done -> "Paired"
     }
 
-    /**
-     * A step's words (v1.28 — M65: the Update step's name the plug's firmware; a new plug set up from here has its own order;
-     * v1.32 — M70: a phone's hotspot or a 2.4 GHz Wi-Fi such as the school's, and the Matter pop-up at the setup).
-     */
+    /** What to do first, before Find: the plug in the wall, the supply in it, nothing in the SwitchBot app, the outlet timer. */
+    const val PLUG_IN = "Plug the SwitchBot into the wall, and the piano's 24 V supply into it."
+    const val NOT_IN_APP = "Don't add it to the SwitchBot app: this tablet talks to it directly."
+    const val OUTLET_TIMER =
+        "Keep an outlet timer as the backup: the plug has no timer of its own, so if the tablet stops, the 24 V stays on."
+
     fun stepNote(step: PairStep, pair: PairState): String = when (step) {
-        PairStep.Ready ->
-            "Plug the 24 V supply into the plug, and the plug into the wall. Its setup needs a 2.4 GHz Wi-Fi with internet " +
-                "until it ends (about 15 minutes): your phone's hotspot, kept on, or a Wi-Fi such as the school's. On an " +
-                "iPhone's hotspot, turn on Maximize Compatibility; on an Android's, choose the 2.4 GHz band."
-        PairStep.Find -> "The tablet looks for plugs nearby. Choose yours: its name begins ShellyPlugUSG4."
-        PairStep.Update -> updateNote(pair.firmwareUpdate?.from)
-        PairStep.SetUp -> if (pair.asIs) {
-            AS_IS_SETUP + (if (pair.hotspotWanted) " " + AS_IS_HOTSPOT else "") + " " + MATTER_POPUP
-        } else if (pair.overBluetooth) {
-            "Pairing first: when Android asks to pair with the plug, tap Pair. Then the plug joins the Wi-Fi, takes its " +
-                "settings (off after a power cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud " +
-                "goes off. " + MATTER_POPUP
-        } else {
-            "Pairing first: when Android asks to pair with the plug, tap Pair. Then it takes its settings (off after a power " +
-                "cut, its button can't hold the 24 V on) and Bluetooth control, and its cloud goes off. " + MATTER_POPUP
-        }
-        PairStep.Complete -> if (pair.overBluetooth) {
-            "The plug finishes its setup on its own, about 5 minutes. If it is on your phone's hotspot, keep the hotspot on " +
-                "until it does: then the plug forgets every network by itself."
-        } else {
-            "The plug finishes its setup on its own, about 5 minutes. If it is on your phone's hotspot, keep the hotspot on " +
-                "until it does."
-        }
-        PairStep.Network ->
-            "The plug forgets every network and closes its own: from now on only this tablet can talk to it. Then turn the " +
-                "hotspot off, if you used one."
-        PairStep.Verify -> (if (pair.overBluetooth) "The plug is off every network now: you can turn the hotspot off. " else "") +
-            "The 24 V comes on for 5 seconds: every power board should answer, then the plug switches off by itself. Connect " +
-            "to the piano first."
+        PairStep.Find -> "The tablet looks for SwitchBot plugs nearby for 15 seconds, the strongest signal first. Tap yours: " +
+            "the last 4 characters of its MAC are on its label."
+        PairStep.Check -> if (pair.clicked) CLICKED else
+            "The tablet connects to it and switches it off, on and off again: listen for the clicks."
         PairStep.Done -> "The 24 V now follows the music."
     }
 
-    /**
-     * The setup's line for Android's "Matter device found" pop-up (v1.32 — M70): the plug advertises Matter after every boot
-     * until the setup turns it off.
-     */
-    const val MATTER_POPUP =
-        "If Android offers to set the plug up as a Matter device, close that: the tablet doesn't use Matter, and turns it off."
-
-    /**
-     * The Update step's words (v1.28 — M65): the plug's firmware, why it must change, and what happens next; and (v1.28.1)
-     * that this firmware can't encrypt Bluetooth before pairing, so the password crosses in the clear this once
-     * (SMART_PLUG.md › One-time setup).
-     */
-    fun updateNote(firmware: String?): String =
-        "The plug has firmware ${firmware ?: "older than 2.0.0"}, and locking it to this tablet needs 2.0.0 or later. Use it " +
-            "as it is, or update it: given a Wi-Fi's name and password, it joins it and updates itself from " +
-            "Shelly (about 2 minutes), its setup is cleared, " +
-            "then it pairs with this tablet and finishes its setup on that Wi-Fi, all by itself. Keep the Wi-Fi on and the " +
-            "tablet near the plug. This firmware can't encrypt Bluetooth yet, so the password goes over unencrypted this " +
-            "once: use your phone's hotspot with a password just for today, and change it afterwards."
-
-    // ---- As it is (v1.29 — M66) -----------------------------------------------------------------------------------------
-
-    const val AS_IS = "Use it as it is"
-    const val AS_IS_NOTE =
-        "It works, but any phone nearby with the Shelly app could switch it. The tablet checks it every minute and switches " +
-            "it back off."
-    const val LOCK_IT = "Update and lock it to this tablet"
-    const val LOCK_NOTE = "About 2 more minutes on the Wi-Fi; then only this tablet can talk to it."
-    const val AS_IS_SETUP =
-        "Its settings (off after a power cut, its button can't hold the 24 V on), Bluetooth control and the cloud off, with " +
-            "no update and no pairing."
-    const val AS_IS_HOTSPOT =
-        "It must get online once to finish its setup (about 5 minutes), then it forgets every network: give it a Wi-Fi's " +
-            "name and password. This firmware can't encrypt Bluetooth, so the password goes over unencrypted: use your " +
-            "phone's hotspot with a password just for today, and change it afterwards."
-
-    /** Piano › Power plug for a plug used as it is (v1.29 — M66). */
-    const val UNLOCKED =
-        "Not locked to this tablet. A phone nearby with the Shelly app could switch it; the tablet checks it every minute " +
-            "and switches it back off. To lock it later: Forget the plug, then Pair the power plug and choose Update and " +
-            "lock it to this tablet."
-
+    const val CLICKED = "The plug clicked on and off."
     const val FIND = "Find the plug"
-
-    /** Step 1's quiet second line (v1.28 — M65): the Shelly app's way still works; v1.32 — M70: and what being late means. */
-    const val SHELLY_STILL =
-        "The Shelly app still works: set the plug up there, then come straight back here within 5 minutes. After that the " +
-            "plug only answers devices it paired with, and needs a reset."
-    const val UPDATE = "Update the plug"
-    const val INSTALLING = "Downloading and installing (about 2 minutes)"
     const val SEARCH = "Search again"
     const val SEARCHING = "Searching…"
-    const val SET_UP = "Pair and set up"
-    const val CLOSE_NETWORK = "Close its network"
-    const val VERIFY = "Turn the 24 V on for 5 s"
-    const val VERIFY_AGAIN = "Check again"
-    const val FINISH = "Finish"
-    const val SKIP_CHECK = "Finish without the check"
     const val START_OVER = "Start over"
-    const val FIND_AGAIN = "Find the plug again"
 
-    fun task(task: SetUpTask): String = when (task) {
-        SetUpTask.Settings -> "Settings"
-        SetUpTask.Bluetooth -> "Bluetooth control"
-        SetUpTask.Window -> "Pairing window"
-        SetUpTask.Bond -> "Paired with this tablet"
-        SetUpTask.Listed -> "On the plug's list"
-        SetUpTask.Cloud -> "Cloud off"
+    /** A plug the search found: "SwitchBot Plug Mini (US) …47CA". */
+    fun found(plug: FoundPlug): String = "SwitchBot ${plug.model} …${SwitchBot.lastFour(plug.mac)}"
+
+    // ---- Piano › Power use (v1.36 — M72) -------------------------------------------------------------------------------
+
+    const val USE_TITLE = "Power use"
+    const val USE_NOW = "Now"
+    const val USE_PEAK = "Peak"
+    const val USE_ENERGY = "Energy"
+    const val USE_TODAY = "Today"
+    const val USE_MONTH = "This month"
+    const val USE_ALL_TIME = "Since pairing"
+    const val USE_LINE = "The last 10 minutes"
+    const val USE_NOTE = "Measured by the SwitchBot plug: the piano's 24 V supply only."
+    const val USE_NO_PLUG = "No plug paired: pair the SwitchBot plug on Power plug to see the piano's power use."
+    const val USE_OPEN = "Watts now, peaks and energy"
+
+    /** Power use's row on the hub: "Not paired", or the watts now ("12.3 W"; "—" with no advert for 10 s). */
+    fun useHub(settings: PlugSettings?, seen: PlugAdvert?): String = if (settings?.pairing == null) NOT_PAIRED else watts(seen?.watts)
+
+    /** Energy: "0.042 kWh" (3 decimals) from watt-hours. */
+    fun kwh(wh: Double): String = String.format(Locale.ROOT, "%.3f kWh", wh / 1_000.0)
+
+    /** A peak and when: "14.2 W · 14:05" today, "14.2 W · 3 Nov 14:05" another day; "—" before one. */
+    fun peak(peak: Peak?, now: Long, zone: ZoneId): String {
+        peak ?: return "—"
+        val at = Instant.ofEpochMilli(peak.at).atZone(zone)
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate() == at.toLocalDate()
+        return watts(peak.watts) + " · " + at.format(if (today) TIME else DAY_TIME)
     }
 
-    /** One part of the update (v1.28 — M65); the install says what it does while it runs. */
-    fun updateTask(task: UpdateTask, update: UpdateState, working: Boolean): String = when (task) {
-        UpdateTask.RailOff -> "24 V off through its restarts"
-        UpdateTask.Online -> "On the hotspot"
-        UpdateTask.Offered -> "Update from Shelly" + (update.to?.let { ": $it" } ?: "")
-        UpdateTask.Started -> "Update started"
-        UpdateTask.Installed -> if (working && UpdateTask.Started in update.tasks && task !in update.tasks) INSTALLING else "Downloaded and installed"
-        UpdateTask.Cleared -> "Setup cleared"
-    }
-
-    /** "7 of 7 answering" while the check runs. */
-    fun answering(answered: Int?, total: Int): String = if (answered == null) "Reading the boards…" else "$answered of $total answering"
-
-    const val VERIFY_PASSED = "Every board answered with the 24 V on, and none once it went off."
-
-    // The fallback: the plug finished its setup without this tablet (v1.32 — M70: the Shelly app's reset first).
-    const val FALLBACK =
-        "Reset the plug: in the Shelly app, open the plug › Settings › Factory reset; or unplug it, plug it back in, and " +
-            "within the first minute hold its button for 10 seconds (5 seconds only restarts it). A factory reset keeps its " +
-            "firmware, not its pairings or network. Then find it again: it will be new, and this tablet sets it up from " +
-            "here, pairing first."
-    const val JOIN = "Pair with a plug another tablet set up"
-    const val JOIN_NOTE = "If the tablet the plug knows opened Admit a replacement tablet in the last 3 minutes."
-
-    /** The setup's form (v1.32 — M70): a phone's hotspot or a 2.4 GHz Wi-Fi such as the school's; held in memory only. */
-    const val HOTSPOT = "Wi-Fi name (2.4 GHz)"
-    const val PASSWORD = "Wi-Fi password"
-    const val SEND_NETWORK = "Send to the plug"
+    private val TIME = DateTimeFormatter.ofPattern("H:mm", Locale.ROOT)
+    private val DAY_TIME = DateTimeFormatter.ofPattern("d MMM H:mm", Locale.ENGLISH)
 
     // ---- Firmware and status: guest play with the plug -------------------------------------------------------------------
 

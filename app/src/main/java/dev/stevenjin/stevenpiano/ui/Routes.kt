@@ -55,6 +55,8 @@ enum class SettingsPage(val key: String, val title: String, val piano: PianoPage
     Firmware("firmware", PianoPage.Firmware.title, PianoPage.Firmware, R.drawable.ic_g_chip),
     /** The 24 V supply's smart plug (v1.26 — M60): Steven Piano's, beside its own pages; the app's, not the piano's settings. */
     Power("power", "Power plug", null, R.drawable.ic_g_power),
+    /** The piano's power use (v1.36 — M72): the watts now, the peaks and the energy, from the SwitchBot's adverts. */
+    PowerUse("power-use", "Power use", null, R.drawable.ic_g_gauge),
     Playback("playback", "Playback", null, R.drawable.ic_g_play),
     TabletSound("tablet-sound", "Tablet sound", null, R.drawable.ic_g_speaker),
     /** Quiet times (v1.20 — M54), where Schedule was (its timed plays were removed). */

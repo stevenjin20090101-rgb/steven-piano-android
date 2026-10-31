@@ -57,9 +57,8 @@ object PageRows {
     val END_GUEST = AppRow("firmware.endguest", PowerCopy.END_GUEST, SettingsPage.Firmware, "Firmware", listOf("guest play", "24 V", "stop guests"))
 
     // ---- THE PIANO › Power plug (v1.26 — M60) ----------------------------------------------------------
-    val PAIR_PLUG = AppRow("power.pair", PowerCopy.PAIR, SettingsPage.Power, null, listOf("smart plug", "Shelly", "24 V", "pair", "set up"))
+    val PAIR_PLUG = AppRow("power.pair", PowerCopy.PAIR, SettingsPage.Power, null, listOf("smart plug", "SwitchBot", "24 V", "pair", "set up"))
     val PLUG_SWITCH = AppRow("power.switch", PowerCopy.SWITCH, SettingsPage.Power, PowerCopy.TITLE, listOf("24 V", "relay", "smart plug", "fire", "safety"))
-    val ADMIT_TABLET = AppRow("power.admit", PowerCopy.ADMIT, SettingsPage.Power, PowerCopy.TITLE, listOf("new tablet", "replacement", "pair another"))
     val FORGET_PLUG = AppRow("power.forget", PowerCopy.FORGET, SettingsPage.Power, PowerCopy.TITLE, listOf("unpair", "remove the plug"))
 
     // ---- PLAYING › Playback -------------------------------------------------------------------------
@@ -141,7 +140,7 @@ object PageRows {
         CONNECTION, AUTO_CONNECT, STEVEN_PIANO, ANOTHER_PIANO, ALL_KEYS_OFF,
         CHOOSE_KEYBOARD, FORGET_KEYBOARD,
         CHECK_PIANO_UPDATES, LOCK, LOCK_PAIR, LOCK_UNLOCK, LOCK_GUEST, END_GUEST,
-        PAIR_PLUG, PLUG_SWITCH, ADMIT_TABLET, FORGET_PLUG,
+        PAIR_PLUG, PLUG_SWITCH, FORGET_PLUG,
         PAUSE, DEFAULT_TEMPO, TRANSPOSE, VELOCITY, DYNAMIC_RANGE, QUIETEST_NOTE, EXPRESSION, RESTRIKE, FOLD, SKIP_DRUMS,
         TABLET_SOUND, TABLET_VOLUME, SOUND_FILE,
         PLAY_ANYWAY, ADD_SECTION,
