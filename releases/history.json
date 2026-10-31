@@ -427,5 +427,16 @@
     "minSdk": 26,
     "tag": "v1.35",
     "publishedAt": "2026-10-27"
+  },
+  {
+    "versionCode": 47,
+    "versionName": "1.36",
+    "notes": "Power plug: the SwitchBot Plug Mini replaces the Shelly. Pair it in Piano › Power plug › Find, tap it, and it clicks on and off; no Wi-Fi or SwitchBot app. The tablet switches it off at start, after every piece, and whenever it sees it on with nothing playing. New: Piano › Power use shows the watts now, the peaks and the kWh used. Keep an outlet timer as the backup: the plug has no timer of its own.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.36/steven-piano-1.36.apk",
+    "sha256": "87f986caa15bdcd8e43b0076e9e1953ff7fd4dfa2da62e4d581cb5a7aa77d7f5",
+    "sizeBytes": 14442709,
+    "minSdk": 26,
+    "tag": "v1.36",
+    "publishedAt": "2026-10-31"
   }
 ]
