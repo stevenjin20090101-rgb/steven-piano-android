@@ -26,7 +26,7 @@ const KEY_HELD = 'A key is held on';
 /** The 24 V power plug's words (v1.26 — M62): the tablet's Attention.PLUG_STUCK and PowerCopy's. */
 const PLUG_STUCK = "The power plug's relay may be stuck on";
 const PLUG_WELDED = 'After the 24 V was cut the plug still reads on: its relay may be stuck. Unplug the supply and check the plug.';
-const PLUG_NOT_ANSWERING = 'Not answering';
+const PLUG_NAME = 'SwitchBot plug';
 const RAIL_OFF = '24 V off';
 
 /**
@@ -40,17 +40,15 @@ function railOff(sys) {
 }
 
 /**
- * The plug as the tablet's System page says it (PowerCopy.fact): "On · 23 s left · 6.4 W", "On · 6.4 W", "Off · 0.0 W",
- * or "Not answering" while there is no reading. [tabletNow]: the tablet's clock now (ms), against which its timer runs.
+ * The plug as the tablet's System page says it (PowerCopy.fact; v1.36 — M72, the SwitchBot as its adverts say it):
+ * "SwitchBot plug · off · 0.0 W", "SwitchBot plug · on · 6.4 W", or "SwitchBot plug · not seen" with no advert for 10 s.
+ * It has no timer, so `timerEndsAt` is always null now.
  */
-function plugFact(power, tabletNow) {
-  if (typeof power.output !== 'boolean') return PLUG_NOT_ANSWERING;
+function plugFact(power) {
+  if (typeof power.output !== 'boolean') return `${PLUG_NAME} · not seen`;
   const watts = finite(power.watts);
   const draw = watts === null ? '—' : `${watts.toFixed(1)} W`;
-  if (!power.output) return `Off · ${draw}`;
-  const ends = finite(power.timerEndsAt);
-  const left = ends === null ? 0 : Math.ceil((ends - tabletNow) / 1000);
-  return left > 0 ? `On · ${left} s left · ${draw}` : `On · ${draw}`;
+  return `${PLUG_NAME} · ${power.output ? 'on' : 'off'} · ${draw}`;
 }
 
 /**
@@ -752,8 +750,7 @@ export function create(host, body, tools) {
 
   /**
    * The Power plug row (v1.26 — M62), the tablet's words for it, hidden with no plug paired: amber while its relay may be
-   * stuck on, that warning under it, and the tablet's words for a failure while it has any. Again every second, from the
-   * last read, so its timer counts down as the tablet's does; the tablet's clock is the read's time plus what passed here.
+   * stuck on, that warning under it, and the tablet's words for a failure while it has any.
    */
   function paintPower() {
     const sys = shared.sys;
@@ -761,10 +758,8 @@ export function create(host, body, tools) {
     const paired = !!power && power.paired === true;
     plugFacts.hidden = !paired;
     if (!paired) return;
-    const at = finite(sys.at);
-    const tabletNow = at === null ? Date.now() : at + (Date.now() - shared.at);
     const welded = power.welded === true;
-    powerFact.set(plugFact(power, tabletNow), welded);
+    powerFact.set(plugFact(power), welded);
     plugWelded.hidden = !welded;
     const said = power.attention === true && typeof power.message === 'string' ? power.message : '';
     setText(plugMessage, said);
@@ -1119,10 +1114,7 @@ export function create(host, body, tools) {
     timers.system = setInterval(loadSystem, host.RELAYED ? SYSTEM_RELAYED_MS : SYSTEM_MS);
     timers.refresh = setInterval(refreshPiano, REFRESH_MS);
     timers.history = setInterval(loadHistory, HISTORY_MS);
-    timers.tick = setInterval(() => {
-      paintUpdated();
-      paintPower();   // v1.26 — M62: the plug's timer, as the tablet counts it
-    }, 1000);
+    timers.tick = setInterval(paintUpdated, 1000);
   }
 
   function stop() {

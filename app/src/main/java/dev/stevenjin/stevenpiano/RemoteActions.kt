@@ -31,7 +31,6 @@ import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
 import dev.stevenjin.stevenpiano.power.RailFact
-import dev.stevenjin.stevenpiano.power.RailKeeper
 import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.quiet.QuietCopy
 import dev.stevenjin.stevenpiano.record.RecordingState
@@ -111,23 +110,24 @@ class RemoteActions internal constructor(private val graph: AppGraph, private va
     /**
      * The plug and its rail in one fact for the web panel (the integrator adds it to `/api/system` and the state JSON after
      * the merge: BUILD_SPEC.md › v1.26 — M60): paired, the switch, where the rail stands, the plug's reading, the boards, the
-     * tablet's words, a stuck relay, guest play's end.
+     * tablet's words, a stuck relay, guest play's end. Since v1.36 (M72) the plug's reading is its adverts' ([PlugAdverts.seen]).
      */
     val railFact: StateFlow<RailFact> by lazy {
         combine(
             combine(graph.plugSettings, graph.rail.phase, graph.rail.message) { s, phase, message -> Triple(s, phase, message) },
-            combine(graph.plug.status, graph.rail.armedAt, graph.rail.boards) { status, armedAt, boards -> Triple(status, armedAt, boards) },
+            combine(graph.plugAdverts.seen, graph.rail.boards) { seen, boards -> seen to boards },
             combine(graph.rail.welded, graph.rail.guestUntil) { welded, guest -> welded to guest },
-        ) { (s, phase, message), (status, armedAt, boards), (welded, guest) ->
+        ) { (s, phase, message), (seen, boards), (welded, guest) ->
             val wall = System.currentTimeMillis() - SystemClock.elapsedRealtime()
             RailFact(
                 paired = s?.pairing != null,
                 on = s?.on == true,
                 rail = RailFact.word(phase),
                 waking = phase == RailPhase.Waking,
-                output = status?.output,
-                watts = status?.watts,
-                timerEndsAt = armedAt?.let { it + RailKeeper.TOGGLE_AFTER_S * 1_000L + wall },
+                // v1.36 — M72: the SwitchBot as its adverts say it (null: not seen for 10 s); it has no timer.
+                output = seen?.on,
+                watts = seen?.watts,
+                timerEndsAt = null,
                 answered = boards?.answered,
                 total = boards?.total,
                 message = message?.let(PowerCopy::message),

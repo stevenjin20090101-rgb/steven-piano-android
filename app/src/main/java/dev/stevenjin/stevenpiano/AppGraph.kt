@@ -160,7 +160,11 @@ import dev.stevenjin.stevenpiano.power.HeldKeys
 import dev.stevenjin.stevenpiano.power.IdleReading
 import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PlayerNow
+import dev.stevenjin.stevenpiano.power.PlugAdverts
 import dev.stevenjin.stevenpiano.power.PlugClient
+import dev.stevenjin.stevenpiano.power.PlugTransport
+import dev.stevenjin.stevenpiano.power.PowerUse
+import dev.stevenjin.stevenpiano.power.SwitchBotRail
 import dev.stevenjin.stevenpiano.power.PlugSettings
 import dev.stevenjin.stevenpiano.power.PlugStore
 import dev.stevenjin.stevenpiano.power.PowerHost
@@ -169,9 +173,10 @@ import dev.stevenjin.stevenpiano.power.RailHold
 import dev.stevenjin.stevenpiano.power.RailKeeper
 import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.RailPower
-import dev.stevenjin.stevenpiano.power.ShellyRail
 import dev.stevenjin.stevenpiano.ui.LockCopy
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.collectLatest
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1166,14 +1171,29 @@ class AppGraph(private val app: Application) {
         plugSettings.map { it?.switches == true }.stateIn(appScope, SharingStarted.Eagerly, false)
     }
 
-    /** The plug's JSON-RPC over Bluetooth (one request in flight); on the emulator in debug builds, the fake plug. */
+    /** The plug's Bluetooth (the SwitchBot Plug Mini since v1.36 — M72); on the emulator in debug builds, the fake plug. */
+    private val plugTransport: PlugTransport by lazy { Emulator.plugTransport() ?: AndroidPlugTransport(app, scanThrottle) }
+
+    /**
+     * The plug's commands over Bluetooth (one in flight). v1.36 — M72: each new connection to the paired plug CUTs unless
+     * something wants the rail ([RailKeeper.plugConnected]).
+     */
     val plug: PlugClient by lazy {
         PlugClient(
-            Emulator.plugTransport() ?: AndroidPlugTransport(app, scanThrottle),
+            plugTransport,
             appScope,
             address = { plugSettings.value?.pairing?.address },
             log = LinkLog::warn,
+            connected = { appScope.launch(Dispatchers.Main) { rail.plugConnected() } },
         )
+    }
+
+    /** The advert watch (v1.36 — M72): the paired plug's adverts, its switch and the supply's draw. */
+    val plugAdverts: PlugAdverts by lazy { PlugAdverts(SystemClock::elapsedRealtime, LinkLog::warn) }
+
+    /** Piano › Power use (v1.36 — M72): the adverts' draw integrated, kept with the pairing in the plug's store. */
+    val powerUse: PowerUse by lazy {
+        PowerUse(appScope, System::currentTimeMillis, { ZoneId.systemDefault() }, keep = { address, text -> plugStore.keepEnergy(address, text) })
     }
 
     /** The CHECK: the piano's `get boards`, answered within 2 s (null: no answer, or no console). */
@@ -1183,8 +1203,7 @@ class AppGraph(private val app: Application) {
     val rail: RailKeeper by lazy {
         RailKeeper(
             scope = appScope,
-            // v1.32 — M70: the plug watch keeps Matter off, quietly the first time (kept with the pairing).
-            plug = ShellyRail(plug, matterOff = { plugSettings.value?.pairing?.matterOff == true }, keepMatterOff = plugStore::matterTurnedOff, log = LinkLog::warn),
+            plug = SwitchBotRail(plug, plugAdverts),   // v1.36 — M72
             check = ::railCheck,
             connected = stevenConnected,
             stopSequence = ::railStopSequence,
@@ -1209,7 +1228,7 @@ class AppGraph(private val app: Application) {
     private val railPlays: PianoLink by lazy { RailGate(stevenPlays, rail.notesHeld) }
 
     /** The Pair screen's work (Piano › Power plug). */
-    val pairFlow: PairFlow by lazy { PairFlow(plug, plugStore, appScope, check = ::railCheck, now = SystemClock::elapsedRealtime, log = LinkLog::warn) }
+    val pairFlow: PairFlow by lazy { PairFlow(plug, plugStore, appScope, log = LinkLog::warn) }
 
     /** The stop sequence (CC64 = 0, CC123) straight to Steven Piano, past both gates, and written before it returns. */
     private suspend fun railStopSequence() {
@@ -1279,26 +1298,24 @@ class AppGraph(private val app: Application) {
         }
     }
 
-    /** Forget the plug: the rail cut, this tablet dropped from the plug's bonds (when known), the pairing gone. */
+    /** Forget the plug: the rail cut, the pairing gone, and its power use with it. */
     fun forgetPlug() {
         appScope.launch {
             rail.release()
-            val pairing = plugSettings.value?.pairing
-            pairing?.bondEntry?.let { entry -> plug.call("BLE.DeletePairedDevice", org.json.JSONObject().put("addr", entry)) }
             plugStore.forget()
+            powerUse.clear()
             plug.drop()
             pairFlow.restart()
             LinkLog.warn("Power plug forgotten")
         }
     }
 
-    /** Admit a replacement tablet: the plug's pairing window for 3 minutes. True when the plug opened it. */
-    suspend fun admitTablet(): Boolean =
-        plug.call("BLE.StartPairing", org.json.JSONObject().put("timeout", PairFlow.PAIRING_WINDOW_S))?.ok == true
-
     /** What the rail follows: the player (a piece playing; held while the rail comes up), Test every key, a firmware update, Live's keys. */
     private fun startRail() {
+        // v1.36 — M72: a Shelly plug's pairing from before 1.36 cleared, once (it already reads as none).
+        appScope.launch { if (plugStore.migrate()) LinkLog.warn("Power plug: the Shelly plug's pairing was cleared; this version pairs a SwitchBot plug") }
         rail.start()
+        followPlugAdverts()
         RailHold(
             appScope,
             player = combine(player.state, pianoLink.kind) { s, kind ->
@@ -1322,17 +1339,51 @@ class AppGraph(private val app: Application) {
                 }
             },
         )
-        // Guest play this tablet started survives a restart of the app: its end, on the wall clock, is kept.
+        // Guest play this tablet started survives a restart of the app: its end, on the wall clock, is kept. Then (v1.36 —
+        // M72) the CUT at app start unless something wants the rail: the SwitchBot comes on by itself after a power cut.
         appScope.launch {
-            val until = plugSettings.first { it != null }?.guestUntil ?: return@launch
-            val left = until - System.currentTimeMillis()
-            if (left > 0) rail.restoreGuest(SystemClock.elapsedRealtime() + left) else plugStore.setGuestUntil(null)
+            val settings = plugSettings.first { it != null }
+            settings?.guestUntil?.let { until ->
+                val left = until - System.currentTimeMillis()
+                if (left > 0) rail.restoreGuest(SystemClock.elapsedRealtime() + left) else plugStore.setGuestUntil(null)
+            }
+            if (settings?.switches == true) withTimeoutOrNull(RAIL_AWAIT_MS) { rail.available.first { it } }
+            rail.appStarted()
         }
         appScope.launch {
             rail.guestUntil.drop(1).collect { until ->
                 plugStore.setGuestUntil(until?.let { System.currentTimeMillis() + (it - SystemClock.elapsedRealtime()) })
             }
         }
+    }
+
+    /**
+     * The advert watch (v1.36 — M72): while a plug is paired, its adverts for the life of the process, low-power while the
+     * rail is off and fast while it is up. Each one to the keeper (an "on" with nothing wanting the rail is CUT) and to Power
+     * use; a CUT taken keeps Power use's meter. A new pairing, or none, starts Power use again from what the store kept.
+     */
+    private fun followPlugAdverts() {
+        val pairing = plugSettings.map { it?.pairing }.distinctUntilChanged()
+        val fast = rail.phase.map { it != RailPhase.Off }.distinctUntilChanged()
+        appScope.launch {
+            combine(pairing, fast) { p, f -> p to f }.collectLatest { (p, f) ->
+                if (p == null) {
+                    plugAdverts.clear()
+                    return@collectLatest
+                }
+                plugAdverts.run(plugTransport, p.address, p.mac, f) { advert ->
+                    appScope.launch(Dispatchers.Main) {
+                        rail.advert(advert.on)
+                        powerUse.reading(advert.watts)
+                    }
+                }
+            }
+        }
+        appScope.launch {
+            plugSettings.first { it != null }
+            pairing.collect { p -> powerUse.load(p?.address, p?.let { plugStore.energy(it.address) }) }
+        }
+        appScope.launch { rail.armedAt.drop(1).collect { if (it == null) powerUse.save() } }
     }
 
     /** A firmware update wants the rail from BEGIN (its transfer under way) until its outcome is known. */

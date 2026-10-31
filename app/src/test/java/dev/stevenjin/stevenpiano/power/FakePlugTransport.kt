@@ -9,65 +9,73 @@
 
 package dev.stevenjin.stevenpiano.power
 
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
-import org.json.JSONObject
+import java.util.Locale
 
 /**
- * The emulator's fake plug ([EmulatedShelly]) over Bluetooth for tests, at once (a locked plug's silence takes the caller's
- * whole time): every request's method is in [methods] (Android's bond as "bond"), its frame in [frames], and what the plug
- * was at it in [seen]. A refusal is the GATT one, cleared at the next connection as Android's is. Moved out of
- * `PairFlowTest` in v1.32 (M70), for the plug watch's tests too.
+ * The emulator's fake SwitchBot ([EmulatedSwitchBot]) over Bluetooth for tests (v1.36 — M72), at once (a silent plug takes
+ * the caller's whole time): every command's frame in [frames] as hex, every connection counted in [connects]. A search
+ * finds the plug and [others]; the advert watch hears what [advertise] sends while it runs. [away]: out of range.
  */
-class FakePlugTransport(private val shelly: EmulatedShelly) : PlugTransport {
+class FakePlugTransport(private val plug: EmulatedSwitchBot) : PlugTransport {
     private var up = false
-    val methods = mutableListOf<String>()
+    private var listener: ((PlugAdvert) -> Unit)? = null
     val frames = mutableListOf<String>()
+    var connects = 0
+    var away = false
 
-    /** At each request: the plug's setup state, and whether this tablet was bonded with it. */
-    val seen = mutableListOf<Pair<Provision, Boolean>>()
-    override var refused: Boolean = false
-    override var reached: Boolean = false
+    /** Other plugs a search finds beside this one. */
+    val others = mutableListOf<FoundPlug>()
+
+    /** Whether the advert watch's scan runs now, and how ([fast]). */
+    val watching: Boolean get() = listener != null
+    var fast: Boolean? = null
 
     override fun blocker(): String? = null
 
     override suspend fun scan(timeoutMs: Long, found: (FoundPlug) -> Unit): String? {
-        found(FoundPlug(EmulatedShelly.ADDRESS, EmulatedShelly.NAME, -60))
+        if (!away) found(FoundPlug(EmulatedSwitchBot.ADDRESS, plug.mac, SwitchBot.model(plug.serviceData())!!, RSSI))
+        others.forEach(found)
         return null
     }
 
+    override suspend fun watch(address: String, mac: String?, fast: Boolean, heard: (PlugAdvert) -> Unit): String {
+        listener = heard
+        this.fast = fast
+        try {
+            awaitCancellation()
+        } finally {
+            listener = null
+        }
+    }
+
+    /** The plug's advert as it stands now, to the watch (none while away). */
+    fun advertise() {
+        if (!away) listener?.invoke(SwitchBot.advert(plug.manufacturer())!!)
+    }
+
     override suspend fun connect(address: String): Boolean {
-        refused = false
-        up = !shelly.rebooting()
-        reached = up
+        connects++
+        up = !away && address.equals(EmulatedSwitchBot.ADDRESS, ignoreCase = true)
         return up
     }
 
-    override val connected: Boolean get() = up && !shelly.rebooting()
+    override val connected: Boolean get() = up && !away
 
     override suspend fun exchange(frame: ByteArray, timeoutMs: Long): ByteArray? {
         if (!connected) return null
-        val text = String(frame, Charsets.UTF_8)
-        methods += JSONObject(text).getString("method")
-        frames += text
-        seen += shelly.provisionNow() to shelly.bonded(EmulatedShelly.TABLET)
-        return when (val answer = shelly.handle(EmulatedShelly.TABLET, text)) {
-            is EmulatedShelly.Answer.Reply -> answer.json.toByteArray(Charsets.UTF_8)
-            EmulatedShelly.Answer.Refused -> {
-                refused = true
-                null
-            }
-            EmulatedShelly.Answer.Silent -> {
-                delay(timeoutMs)
-                null
-            }
-        }
+        frames += frame.joinToString("") { String.format(Locale.ROOT, "%02x", it.toInt() and 0xFF) }
+        val reply = plug.handle(frame)
+        if (reply == null) delay(timeoutMs)
+        return reply
     }
 
     override fun disconnect() {
         up = false
     }
 
-    override suspend fun bond(address: String, timeoutMs: Long): Boolean = shelly.bond(EmulatedShelly.TABLET).also { methods += "bond" }
-
-    override fun bonded(address: String): Boolean = shelly.bonded(EmulatedShelly.TABLET)
+    companion object {
+        const val RSSI = -60
+    }
 }

@@ -205,6 +205,7 @@ class MainActivity : ComponentActivity() {
             if (graph.recording.recording) graph.recording.stop(TakeEnd.AppLeft)   // and a take ends, saved
             graph.kiosk.appLeft()
             graph.remote.listening.foreground(false)   // v1.23 — M55: and the microphone stops (Android would hear only silence)
+            graph.powerUse.save()   // v1.36 — M72: Power use's meter kept as the app stops
         }
     }
 

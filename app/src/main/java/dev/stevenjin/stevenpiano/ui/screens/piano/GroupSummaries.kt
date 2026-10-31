@@ -64,6 +64,8 @@ data class GroupSummaries(
     val system: String = UNKNOWN,
     /** Power plug (v1.26 — M60): "Not paired", "Off", or where the 24 V stands ([PowerCopy.hub]). */
     val power: String = PowerCopy.NOT_PAIRED,
+    /** Power use (v1.36 — M72): the watts now ([PowerCopy.useHub]). */
+    val powerUse: String = UNKNOWN,
 ) {
     /** The value on [page]'s row. */
     fun of(page: SettingsPage): String = when (page) {
@@ -74,6 +76,7 @@ data class GroupSummaries(
         SettingsPage.Pedal -> pedal
         SettingsPage.Firmware -> firmware
         SettingsPage.Power -> power
+        SettingsPage.PowerUse -> powerUse
         SettingsPage.Playback -> playback
         SettingsPage.TabletSound -> tabletSound
         SettingsPage.Quiet -> quiet
@@ -113,6 +116,7 @@ data class GroupSummaries(
             systemReading: SystemReading? = null,
             attention: List<Attention.Item> = emptyList(),
             power: String = PowerCopy.NOT_PAIRED,
+            powerUse: String = UNKNOWN,
         ): GroupSummaries = GroupSummaries(
             feel = feel(piano),
             lighting = lighting(piano),
@@ -132,6 +136,7 @@ data class GroupSummaries(
             help = help(version),
             system = system(systemReading, attention),
             power = power,
+            powerUse = powerUse,
         )
 
         /** The Instrument row (v1.13): the instrument's name and its state, "Steven Piano · Connected". */

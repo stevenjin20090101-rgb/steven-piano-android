@@ -31,6 +31,7 @@ import kotlin.math.roundToInt
  * The 24 V rail's routine (v1.26 — M60; SMART_PLUG.md › The app's routine), piano safety: on a fake clock, with a fake
  * plug whose relay feeds fake boards (they answer 900 ms after the supply comes up, as firmware 2.1.0's re-probe does)
  * and a piano that can fall silent or lose a board. Every call the keeper makes is in [Bench.log], in order, with its time.
+ * Since v1.36 (M72) the fake plug has no timer, as the SwitchBot hasn't: an ARM holds until a CUT.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RailKeeperTest {
@@ -90,7 +91,7 @@ class RailKeeperTest {
                 if (!outputNow()) onSince = now()
                 output = true
                 armedAt = now()
-                toggleS = seconds
+                toggleS = Int.MAX_VALUE / 1_000   // v1.36 — M72: the SwitchBot ignores the seconds; no timer
                 log += Event(now(), "ARM")
                 return true
             }
@@ -421,7 +422,10 @@ class RailKeeperTest {
         keeper.expectRestart(60_000)
         bench.connected = false   // `restarting`: the piano lets go of the link
         advanceTimeBy(10_000)   // the keep's CHECK, and the retry 2 s after it, fall in here
-        assertTrue("no stop, no CUT while the piano restarts: ${bench.kinds()}", bench.kinds().none { it == "STOP PLAYING" || it == "STOP" || it == "CUT" })
+        assertTrue("no stop while the piano restarts: ${bench.kinds()}", bench.kinds().none { it == "STOP PLAYING" || it == "STOP" })
+        // v1.36 — M72: no plug timer to bound the rail meanwhile, so it is CUT, quietly, once.
+        assertEquals("the 24 V CUT, quietly", 1, bench.kinds().count { it == "CUT" })
+        assertFalse(bench.output)
         assertNull("nothing said", keeper.message.value)
         assertEquals(RailPhase.Off, keeper.phase.value)
         val back = currentTime

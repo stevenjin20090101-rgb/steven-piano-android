@@ -94,8 +94,8 @@ object Emulator {
      * - `--es …EMULATOR_MIDI "90 3C 64 80 3C 00"` plays those bytes (malformed ones too, as they are) from the emulated
      *   keyboard; `--ez …EMULATOR_MIDI_PLUG false` unplugs it and `true` plugs it in again; `--es …EMULATOR_MIDI_SERVICE
      *   "…"` plays bytes from the debug build's test device through Android's own MIDI service (v1.11 — M29);
-     * - `--es …EMULATOR_PLUG "away"` takes the fake power plug out of range (`back`, `reset confirmed`, `trunk one-missing`,
-     *   `weld on`: [EmulatedPlug.command]; v1.26 — M60).
+     * - `--es …EMULATOR_PLUG "away"` takes the fake power plug out of range (`back`, `reset`, `trunk one-missing`,
+     *   `weld on`, `outside on`, `draw 12`: [EmulatedPlug.command]; v1.26 — M60, the SwitchBot since v1.36 — M72).
      */
     fun onIntent(graph: AppGraph, intent: Intent) {
         if (!on) return

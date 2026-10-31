@@ -156,7 +156,8 @@ object SettingsIndex {
         SettingsPage.Feel to listOf("feel", "touch", "dynamics"),
         SettingsPage.Lighting to listOf("lighting", "LEDs", "lights"),
         SettingsPage.Firmware to listOf("version", "status"),
-        SettingsPage.Power to listOf("smart plug", "Shelly", "24 V", "relay", "supply", "solenoids"),   // v1.26 — M60
+        SettingsPage.Power to listOf("smart plug", "SwitchBot", "24 V", "relay", "supply", "solenoids"),   // v1.26 — M60
+        SettingsPage.PowerUse to listOf("watts", "kWh", "energy", "electricity", "peak", "consumption"),   // v1.36 — M72
         SettingsPage.Remote to listOf("remote control", "web control", "browser"),
         SettingsPage.Quiet to listOf("quiet", "downtime", "silent", "class", "schedule"),
         SettingsPage.Guests to listOf("requests", "visitors"),

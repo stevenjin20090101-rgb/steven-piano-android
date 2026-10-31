@@ -49,6 +49,8 @@ sealed interface PowerVerdict {
  * The power watch (v1.30 — M67; `firmware/docs/SMART_PLUG.md` › rule 11): a key stuck on (an I²C hiccup that lost a
  * release, the firmware none the wiser) seen in the 24 V supply's draw at the wall, the plug's `apower`, which owes
  * nothing to the link that failed. Pure, one per rail-up: the keeper ([RailKeeper]) reads the plug and the piano and acts.
+ * Since v1.36 (M72) the draw is the SwitchBot's, from its adverts ([PlugAdverts]); the timing below ([LAG_MS]) was the
+ * Shelly's `apower`, and the SwitchBot's under load is the bench's to confirm.
  *
  * - **Idle** (the pedal up): the reading at rail-up, every channel verified off and nothing sent; then the lowest reading
  *   with no key held and the pedal up. Above [CAP_WATTS] at rail-up, a channel may be shorted ([railUp]).

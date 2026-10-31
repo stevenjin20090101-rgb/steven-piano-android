@@ -20,28 +20,15 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-/** The paired plug (v1.26 — M60): its Bluetooth [address], and what `Shelly.GetDeviceInfo` said of it when it was paired. */
-data class PlugPairing(
-    val address: String,
-    val id: String? = null,
-    val model: String? = null,
-    val firmware: String? = null,
-    /** This tablet as the plug's `BLE.ListPairedDevices` named it after the bond (what Forget asks it to delete); null if unknown. */
-    val bondEntry: String? = null,
-    /**
-     * Locked to this tablet by a bond (v1.29 — M66). False for a plug used as it is on firmware older than 2.0.0: no bond,
-     * any phone nearby could switch it. Pairings kept before 1.29 read as locked.
-     */
-    val locked: Boolean = true,
-    /**
-     * The plug's Matter turned off by this tablet (v1.32 — M70): at the setup, when the plug took `Matter.SetConfig`, or by
-     * the plug watch's first look. Pairings kept before 1.32 read false: that first look turns it off quietly.
-     */
-    val matterOff: Boolean = false,
-)
+/**
+ * The paired plug (v1.26 — M60; the SwitchBot Plug Mini since v1.36 — M72): its Bluetooth [address] (what the tablet
+ * connects to) and the [mac] its adverts carry (what the advert watch looks for; null: as its address).
+ */
+data class PlugPairing(val address: String, val mac: String? = null)
 
 /** One rail-up's idle reading (v1.31 — M68): when ([at], the wall clock, ms), and the 24 V supply's draw with nothing sent. */
 data class IdleReading(val at: Long, val watts: Double)
@@ -51,6 +38,7 @@ data class IdleReading(val at: Long, val watts: Double)
  * pairing until a person turns it off), and guest play this tablet started, [guestUntil] (the wall clock, ms), kept so a
  * restart of the app keeps arming for it. The power watch's usual idle (v1.31 — M68): the last rail-up readings that didn't
  * trip ([idles], oldest first), and whether a rail-up tripped above them since ([aboveUsual]); a pairing starts them empty.
+ * [shellyCleared] (v1.36 — M72): a Shelly plug's pairing was cleared by the update, until a SwitchBot is paired.
  */
 data class PlugSettings(
     val pairing: PlugPairing? = null,
@@ -58,6 +46,7 @@ data class PlugSettings(
     val guestUntil: Long? = null,
     val idles: List<IdleReading> = emptyList(),
     val aboveUsual: Boolean = false,
+    val shellyCleared: Boolean = false,
 ) {
     /** The plug switches the rail: paired, and its switch on. */
     val switches: Boolean get() = pairing != null && on
@@ -74,7 +63,10 @@ interface PairingStore {
     suspend fun setOn(on: Boolean)
 }
 
-/** [PlugSettings] in the "power_plug" DataStore. A store that can't be read reads as no plug: the app as before it. */
+/**
+ * [PlugSettings] in the "power_plug" DataStore. A store that can't be read reads as no plug: the app as before it. A
+ * pairing kept before 1.36 is a Shelly plug's (v1.36 — M72): it reads as none, [shellyCleared], until [migrate] clears it.
+ */
 class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
     constructor(context: Context) : this(context.applicationContext.plugDataStore)
 
@@ -82,31 +74,57 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
         .map { prefs ->
             val address = prefs[ADDRESS]?.takeIf { it.isNotBlank() }
-            PlugSettings(
-                pairing = address?.let {
-                    PlugPairing(it, prefs[ID], prefs[MODEL], prefs[FIRMWARE], prefs[BOND_ENTRY], locked = prefs[LOCKED] ?: true, matterOff = prefs[MATTER_OFF] ?: false)
-                },
-                on = prefs[ON] ?: false,
-                guestUntil = prefs[GUEST_UNTIL],
-                idles = idlesOf(prefs[IDLES]),
-                aboveUsual = prefs[ABOVE_USUAL] ?: false,
-            )
+            when {
+                address != null && prefs[KIND] != SWITCHBOT -> PlugSettings(shellyCleared = true)   // a Shelly's, not yet cleared
+                address == null -> PlugSettings(shellyCleared = prefs[SHELLY_CLEARED] == true)
+                else -> PlugSettings(
+                    pairing = PlugPairing(address, prefs[MAC]?.takeIf { it.isNotBlank() }),
+                    on = prefs[ON] ?: false,
+                    guestUntil = prefs[GUEST_UNTIL],
+                    idles = idlesOf(prefs[IDLES]),
+                    aboveUsual = prefs[ABOVE_USUAL] ?: false,
+                )
+            }
         }
 
-    /** Paired with [pairing]; its switch [on] (off until the Pair screen's last step). The usual idle starts empty (M68). */
+    /**
+     * The update to the SwitchBot (v1.36 — M72), at the first read: a Shelly plug's pairing kept before 1.36 (its address
+     * without the SwitchBot's mark: its id, model, firmware, bond, Matter, switch and guest play) is cleared, and with it
+     * the usual idle and the power use (a different plug idles differently); Piano › Power plug says to pair the SwitchBot.
+     * True when it cleared one (for the log, once); a second run finds nothing and changes nothing.
+     */
+    suspend fun migrate(): Boolean {
+        var cleared = false
+        tryEdit { prefs ->
+            if (prefs[ADDRESS].isNullOrBlank() || prefs[KIND] == SWITCHBOT) return@tryEdit
+            prefs.clear()
+            prefs[SHELLY_CLEARED] = true
+            cleared = true
+        }
+        return cleared
+    }
+
+    /** Paired with [pairing]; its switch [on]. The usual idle and the power use start empty (M68, M72). */
     override suspend fun pair(pairing: PlugPairing, on: Boolean) {
         store.edit { prefs ->
+            prefs.clear()
             prefs[ADDRESS] = pairing.address
-            pairing.id?.let { prefs[ID] = it } ?: prefs.remove(ID)
-            pairing.model?.let { prefs[MODEL] = it } ?: prefs.remove(MODEL)
-            pairing.firmware?.let { prefs[FIRMWARE] = it } ?: prefs.remove(FIRMWARE)
-            pairing.bondEntry?.let { prefs[BOND_ENTRY] = it } ?: prefs.remove(BOND_ENTRY)
-            prefs[LOCKED] = pairing.locked
-            prefs[MATTER_OFF] = pairing.matterOff
+            prefs[KIND] = SWITCHBOT
+            pairing.mac?.let { prefs[MAC] = it }
             prefs[ON] = on
-            prefs.remove(IDLES)
-            prefs.remove(ABOVE_USUAL)
         }
+    }
+
+    /** The power use's meter ([EnergyMeter.encode]) of the plug at [address]; null with none kept, or another plug paired. */
+    suspend fun energy(address: String): String? = try {
+        store.data.first().let { prefs -> prefs[ENERGY]?.takeIf { prefs[ADDRESS] == address && prefs[KIND] == SWITCHBOT } }
+    } catch (e: IOException) {
+        null
+    }
+
+    /** The power use's meter of the plug at [address] kept (v1.36 — M72): only while that plug is still the paired one. */
+    suspend fun keepEnergy(address: String, text: String) {
+        tryEdit { prefs -> if (prefs[ADDRESS] == address && prefs[KIND] == SWITCHBOT) prefs[ENERGY] = text }
     }
 
     override suspend fun setOn(on: Boolean) {
@@ -117,15 +135,7 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         store.edit { prefs -> if (wallMs == null) prefs.remove(GUEST_UNTIL) else prefs[GUEST_UNTIL] = wallMs }
     }
 
-    /**
-     * The plug watch found the plug's Matter off, or turned it off, the first time (v1.32 — M70): kept, so Matter on again is
-     * said from now on. Nothing without a plug paired; a write that fails only makes the next such look quiet again.
-     */
-    suspend fun matterTurnedOff() {
-        tryEdit { prefs -> if (!prefs[ADDRESS].isNullOrBlank()) prefs[MATTER_OFF] = true }
-    }
-
-    /** Forget the plug: everything goes, its usual idle too. */
+    /** Forget the plug: everything goes, its usual idle and its power use too. */
     suspend fun forget() {
         store.edit { it.clear() }
     }
@@ -170,16 +180,17 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
 
     private companion object {
         val ADDRESS = stringPreferencesKey("address")
-        val ID = stringPreferencesKey("id")
-        val MODEL = stringPreferencesKey("model")
-        val FIRMWARE = stringPreferencesKey("firmware")
-        val BOND_ENTRY = stringPreferencesKey("bondEntry")
         val ON = booleanPreferencesKey("on")
-        val LOCKED = booleanPreferencesKey("locked")
         val GUEST_UNTIL = longPreferencesKey("guestUntil")
 
-        /** The plug's Matter turned off by this tablet (v1.32 — M70); absent before 1.32. */
-        val MATTER_OFF = booleanPreferencesKey("matterOff")
+        /** v1.36 — M72: the pairing's kind ([SWITCHBOT]; absent: a Shelly's, kept before 1.36), the advert MAC, the Shelly cleared. */
+        val KIND = stringPreferencesKey("kind")
+        val MAC = stringPreferencesKey("mac")
+        val SHELLY_CLEARED = booleanPreferencesKey("shellyCleared")
+        const val SWITCHBOT = "switchbot"
+
+        /** The power use's meter (v1.36 — M72): [EnergyMeter.encode]'s text. */
+        val ENERGY = stringPreferencesKey("energy")
 
         /** The usual idle (v1.31 — M68): "1761300000000:9.8,…", oldest first, and a trip above it since. */
         val IDLES = stringPreferencesKey("idles")
