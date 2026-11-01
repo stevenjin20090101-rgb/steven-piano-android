@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.studio.style
 
+import dev.stevenjin.stevenpiano.studio.compose.Genre
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 
 /**
@@ -37,10 +38,21 @@ class StyleForm(
  */
 object StyleVocabulary {
     val moods: Map<String, Mood> = buildMap {
-        for (w in listOf("calm", "peaceful", "gentle", "soft", "quiet", "relaxing", "relaxed", "soothing", "dreamy", "sleepy", "tender", "serene", "tranquil", "mellow")) put(w, Mood.Calm)
+        for (w in listOf("calm", "peaceful", "gentle", "soft", "quiet", "relaxed", "soothing", "dreamy", "sleepy", "tender", "serene", "tranquil", "mellow")) put(w, Mood.Calm)
         for (w in listOf("bright", "happy", "cheerful", "joyful", "sunny", "playful", "uplifting", "merry", "hopeful")) put(w, Mood.Bright)
         for (w in listOf("wild", "dramatic", "stormy", "furious", "intense", "fiery", "energetic", "heroic")) put(w, Mood.Wild)
         for (w in listOf("melancholy", "melancholic", "sad", "sorrowful", "wistful", "lonely", "nostalgic", "dark", "gloomy", "mournful", "bittersweet", "rainy")) put(w, Mood.Melancholy)
+    }
+
+    /**
+     * The genre styles (v1.37 — M74), the two-word ones matched first ("lo-fi" is cut into "lo fi"). "Relaxing" was a
+     * mood word and "ballad" a form's (the ballade's) until then: they name chill and cinematic now.
+     */
+    val genres: Map<String, Genre> = buildMap {
+        for (w in listOf("lofi", "lo fi", "chillhop")) put(w, Genre.LoFi)
+        for (w in listOf("house", "dance", "edm")) put(w, Genre.House)
+        for (w in listOf("chill", "ambient", "relaxing")) put(w, Genre.Chill)
+        for (w in listOf("cinematic", "ballad", "ballads", "film", "pop ballad", "emotional")) put(w, Genre.Cinematic)
     }
 
     /** Tempo words to a target in quarter notes a minute; the two-word ones are matched first. */
@@ -115,6 +127,7 @@ object StyleVocabulary {
         "then", "than", "also", "let", "lets", "get", "got", "have", "has", "had", "do", "does", "did", "what", "how", "where",
         "when", "who", "which", "anything", "everything", "else", "other", "surprise", "not", "no",
         "without", "less", "never", "dont", "isnt", "nothing", "overly", "any", "all", "time", "need", "needs",
+        "after",   // "house after Clair de lune" (v1.37 — M74)
     )
 
     /** The catalogue's aliases (folded) for the built-in lists, beside their keys and names. */
@@ -156,7 +169,7 @@ object StyleVocabulary {
         form("minuet", listOf("minuet", "minuets", "menuet", "minuetto"), "\\bminuet|\\bmenuet", "a minuet", "minuets"),
         form("mazurka", listOf("mazurka", "mazurkas"), "\\bmazurk", "a mazurka", "mazurkas"),
         form("polonaise", listOf("polonaise", "polonaises"), "\\bpolonais", "a polonaise", "polonaises"),
-        form("ballade", listOf("ballade", "ballades", "ballad", "ballads"), "\\bballad", "a ballade", "ballades"),
+        form("ballade", listOf("ballade", "ballades"), "\\bballad", "a ballade", "ballades"),
         form("impromptu", listOf("impromptu", "impromptus"), "\\bimpromptu", "an impromptu", "impromptus"),
         form("scherzo", listOf("scherzo", "scherzos", "scherzi"), "\\bscherz", "a scherzo", "scherzos"),
         form("rhapsody", listOf("rhapsody", "rhapsodies", "rhapsodie"), "\\brhapsod", "a rhapsody", "rhapsodies"),
@@ -181,6 +194,7 @@ object StyleVocabulary {
     val allWords: Set<String> by lazy {
         buildSet {
             addAll(moods.keys)
+            genres.keys.forEach { addAll(it.split(' ')) }
             tempos.keys.forEach { addAll(it.split(' ')) }
             addAll(lengths.keys)
             addAll(minuteWords)

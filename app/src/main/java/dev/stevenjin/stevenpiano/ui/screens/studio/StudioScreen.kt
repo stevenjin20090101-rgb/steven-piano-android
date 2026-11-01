@@ -439,7 +439,7 @@ private fun Headline() {
     )
 }
 
-/** Suggestions that fill the box, centred: three ideas and the composer the library holds most pieces by. */
+/** Suggestions that fill the box, centred: three ideas, the four genre styles (v1.37 — M74) and the composer the library holds most pieces by. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Suggestions(favourite: String?, onChoose: (String) -> Unit) {
@@ -448,7 +448,7 @@ private fun Suggestions(favourite: String?, onChoose: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        val chips = SUGGESTIONS + listOfNotNull(favourite?.let { "In the manner of $it" })
+        val chips = SUGGESTIONS + GENRE_SUGGESTIONS + listOfNotNull(favourite?.let { "In the manner of $it" })
         for (chip in chips) SheetChip(chip, chosen = false, description = "Suggestion: $chip") { onChoose(chip) }
     }
 }
@@ -468,6 +468,9 @@ private fun FootLine() {
 private const val HEADLINE = "What should the piano play?"
 private const val FOOT_LINE = "Pieces you make are kept in History and in the Library's Made in Studio playlist."
 private val SUGGESTIONS = listOf("Calm and slow", "A bright waltz, 2 minutes", "Stormy and fast, in D minor")
+
+/** The genre styles (v1.37 — M74), each a chip: every word of each is understood. */
+internal val GENRE_SUGGESTIONS = listOf("Lo-fi", "House", "Chill / ambient", "Cinematic / pop ballad")
 
 /**
  * The idea box (glass on its solid surface, rounded [BOX_RADIUS], at least [BOX_HEIGHT] tall, in the aura's ring):

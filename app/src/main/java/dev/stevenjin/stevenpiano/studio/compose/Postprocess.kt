@@ -20,10 +20,11 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * A composition ready for [SmfWriter]: its [notes] in onset order (no pedal), the tempo its grid used
- * ([bpm]), and how long it lasts ([durationMicros]: the last note's end).
+ * A composition ready for [SmfWriter]: its [notes] in onset order, the tempo its grid used ([bpm]), how long it
+ * lasts ([durationMicros]: the last note's end), and its sustain pedal ([pedals]: none but in a genre's feel,
+ * v1.37 — M74, never past the last note's end).
  */
-class Composition(val notes: List<SmfWriter.Note>, val bpm: Int, val durationMicros: Long)
+class Composition(val notes: List<SmfWriter.Note>, val bpm: Int, val durationMicros: Long, val pedals: List<SmfWriter.Pedal> = emptyList())
 
 /**
  * What the model wrote into what the piano plays (v1.7 — M24). Pure but for [compose]'s `random` (the
@@ -41,8 +42,11 @@ class Composition(val notes: List<SmfWriter.Note>, val bpm: Int, val durationMic
  *    the bottom one and the inner voices step back, higher notes a touch brighter, a four-bar swell,
  *    a little unevenness; then a **closing fade** over the last [FADE_BARS] bars (4/4 at the tempo) to
  *    [FADE_FLOOR] of the level; never under [MIN_VELOCITY] or over [MAX_VELOCITY].
+ * 7. **A genre's feel** (v1.37 — M74, [GenreFeel]): house's firmer grid in step 2; then lo-fi's swing and lazy
+ *    onsets after step 5, each genre's velocities after step 6, chill's thinning and ritardando, and the pedal.
+ *    It keeps every limit above: no note sounds longer than before, and no more keys are down at once.
  *
- * No pedal: the pieces are written dry, as the model has no pedal.
+ * Without a genre there is no pedal: the pieces are written dry, as the model has no pedal.
  */
 object Postprocess {
     /** Grid lines a beat: sixteenths. */
@@ -75,28 +79,32 @@ object Postprocess {
 
     /**
      * [events] (times from the prompt's origin; the seed's too if they are to be heard) as a piece at
-     * [bpm] in [mood]. [strength] 1 puts every onset on the grid, 0 leaves it. A piece without a note
-     * is refused ([ComposeFailures.NO_MUSIC]).
+     * [bpm] in [mood], with [genre]'s feel when one is asked. [strength] 1 puts every onset on the grid, 0
+     * leaves it. A piece without a note is refused ([ComposeFailures.NO_MUSIC]).
      */
-    fun compose(events: List<AmtEvent>, bpm: Int, mood: Mood, random: Random, strength: Double = STRENGTH): Composition {
+    fun compose(events: List<AmtEvent>, bpm: Int, mood: Mood, random: Random, strength: Double = STRENGTH, genre: Genre? = null): Composition {
         require(bpm > 0) { "bpm $bpm" }
         require(strength in 0.0..1.0) { "strength $strength" }
         val beat = 60.0 / bpm
         val step = beat / STEPS_PER_BEAT
+        val grid = GenreFeel.strength(genre, strength)
         val placed = events.filter { !it.isRest && it.instrument == 0 }.map { e ->
             val on = e.time.toDouble() / Amt.TICKS_PER_SECOND
             val length = maxOf(e.duration.toDouble() / Amt.TICKS_PER_SECOND, MIN_NOTE_MICROS / 1e6)
-            val moved = on + strength * (Math.rint(on / step) * step - on)
+            val moved = on + grid * (Math.rint(on / step) * step - on)
             Placed(moved, moved + length, KeyMap.map(e.pitch, 0, fold = true))
         }
         if (placed.isEmpty()) throw StudioFailure(ComposeFailures.NO_MUSIC)
         val start = floor(placed.minOf { it.on } / beat + 1e-9) * beat
-        val notes = oneStrikeAtATime(
-            placed.map { Timed((it.on - start).micros(), (it.off - start).micros(), it.key) },
+        val notes = GenreFeel.timing(
+            oneStrikeAtATime(placed.map { Timed((it.on - start).micros(), (it.off - start).micros(), it.key) }),
+            beat, genre, random,
         )
-        val velocities = velocities(notes, beat, mood, random)
-        val out = notes.mapIndexed { i, n -> SmfWriter.Note(n.on, n.off, n.key, velocities[i]) }
-        return Composition(out, bpm, out.maxOf { it.offMicros })
+        val velocities = GenreFeel.velocities(notes, velocities(notes, beat, mood, random), beat, genre)
+        val keep = GenreFeel.keep(notes, velocities, genre)
+        val out = notes.indices.filter { keep[it] }.map { i -> notes[i].let { n -> SmfWriter.Note(n.on, n.off, n.key, velocities[i]) } }
+        val ending = GenreFeel.ending(out, beat, genre)
+        return Composition(ending.notes, bpm, ending.notes.maxOf { it.offMicros }, ending.pedals)
     }
 
     /**

@@ -27,6 +27,8 @@ import dev.stevenjin.stevenpiano.studio.TurnRecord
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.PreviewRoll
+import dev.stevenjin.stevenpiano.studio.style.GenreSeeds
+import dev.stevenjin.stevenpiano.studio.style.PlaylistPool
 import dev.stevenjin.stevenpiano.studio.style.PreviousTurn
 import dev.stevenjin.stevenpiano.studio.style.SeedAsk
 import dev.stevenjin.stevenpiano.studio.style.StyleLibrary
@@ -44,7 +46,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -52,6 +58,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
 /**
  * The Studio tab's state (v1.12 — M30): whether Studio runs here, its models and jobs, its turns ([turns], from
@@ -101,10 +108,25 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
     fun stageCard(turns: List<Turn>, memory: StageMemory, inSight: Boolean): Turn? =
         StudioStage.card(turns, if (inSight) memory.returned(clock()) else memory)
 
-    /** The library as the idea box reads it, built again half a second after the library last changed. */
-    val library: StateFlow<StyleLibrary?> = graph.library.all()
+    /**
+     * The playlists named for a genre (v1.37 — M74, [GenreSeeds]) with their pieces, read through the library's own
+     * lists: where a genre piece's seeds come from. Only those playlists are read.
+     */
+    private val genreLists: Flow<List<PlaylistPool>> = graph.library.playlists()
+        .map { all -> all.filter { GenreSeeds.named(it.name) }.map { it.id to it.name } }
+        .distinctUntilChanged()
+        .flatMapLatest { named ->
+            if (named.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                combine(named.map { (id, name) -> graph.library.inPlaylist(id).map { pieces -> PlaylistPool(name, pieces.map { it.id }) } }) { it.toList() }
+            }
+        }
+
+    /** The library as the idea box reads it, built again half a second after the library (or a genre's playlist) last changed. */
+    val library: StateFlow<StyleLibrary?> = combine(graph.library.all(), genreLists) { pieces, lists -> pieces to lists }
         .debounce(LIBRARY_SETTLE_MS)
-        .map { pieces -> StyleLibrary.of(pieces, graph.channels, graph.builtIns.lists) }
+        .map { (pieces, lists) -> StyleLibrary.of(pieces, graph.channels, graph.builtIns.lists, lists) }
         .flowOn(Dispatchers.Default)
         .catch { e -> if (e is CancellationException) throw e }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_MS), null)
@@ -116,9 +138,15 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
 
     private val typing = MutableStateFlow("")
 
+    /**
+     * The draw of a genre's song (v1.37 — M74): the same while an idea is typed, so the song the line names is the one
+     * sent; drawn again once it is sent.
+     */
+    private val roll = MutableStateFlow(Random.nextLong())
+
     /** What the box understands of what is typed, 250 ms after the last key; null while it is empty. */
-    val understood: StateFlow<StyleResult?> = combine(typing.debounce(UNDERSTAND_MS), library, rows) { text, lib, _ -> text to lib }
-        .mapLatest { (text, lib) -> if (text.isBlank() || lib == null) null else StylePrompt.parse(text, lib, previous()) }
+    val understood: StateFlow<StyleResult?> = combine(typing.debounce(UNDERSTAND_MS), library, rows, roll) { text, lib, _, r -> Triple(text, lib, r) }
+        .mapLatest { (text, lib, r) -> if (text.isBlank() || lib == null) null else StylePrompt.parse(text, lib, previous(), r) }
         .flowOn(Dispatchers.Default)
         .catch { e -> if (e is CancellationException) throw e }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_MS), null)
@@ -144,17 +172,19 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
         val lib = library.value ?: return
         viewModelScope.launch {
             val previousRow = previousRow()
-            val result = withContext(Dispatchers.Default) { StylePrompt.parse(text, lib, previous()) }
+            val drawn = roll.value
+            val result = withContext(Dispatchers.Default) { StylePrompt.parse(text, lib, previous(), drawn) }
             val spec = result.spec
             val avoid = if (result.refinement && previousRow != null && spec.variant > (StyleSpec.decode(previousRow.spec)?.variant ?: 0)) previousRow.seedPieceId else null
             val order = ComposeOrder(
                 pieceId = null,
-                request = ComposeRequest(spec.mood, spec.key, (spec.tempo as? TempoAsk.Exact)?.bpm, spec.minutes),
+                request = ComposeRequest(spec.mood, spec.key, (spec.tempo as? TempoAsk.Exact)?.bpm, spec.minutes, spec.genre),
                 style = spec,
                 candidates = result.candidates,
                 turn = TurnRecord(text, result.line, result.unused, if (result.refinement) previousRow?.id else null, avoid),
             )
             studio.compose(order, name = result.candidates.firstOrNull()?.let { lib.byId[it]?.title })
+            roll.value = Random.nextLong()
             onSent()
         }
     }
@@ -165,8 +195,9 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
             val spec = StyleSpec.decode(turn.spec)
             val lib = library.value
             val order = if (spec != null && lib != null) {
-                val candidates = withContext(Dispatchers.Default) { StylePrompt.candidates(spec, lib) }
-                ComposeOrder(null, ComposeRequest(spec.mood, spec.key, (spec.tempo as? TempoAsk.Exact)?.bpm, spec.minutes), spec, candidates, TurnRecord(understood = AGAIN, parentId = turn.rowId))
+                // A genre's turn keeps its song.
+                val candidates = withContext(Dispatchers.Default) { StylePrompt.candidates(spec, lib, Random.nextLong(), keep = turn.seedPieceId) }
+                ComposeOrder(null, ComposeRequest(spec.mood, spec.key, (spec.tempo as? TempoAsk.Exact)?.bpm, spec.minutes, spec.genre), spec, candidates, TurnRecord(understood = AGAIN, parentId = turn.rowId))
             } else {
                 ComposeOrder(turn.seedPieceId, ComposeRequest(turn.mood ?: dev.stevenjin.stevenpiano.studio.compose.Mood.Calm, turn.musicKey, turn.bpm, turn.minutes ?: 2), turn = TurnRecord(understood = AGAIN, parentId = turn.rowId))
             }
@@ -183,6 +214,7 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
             key = spec.key?.let { MusicKey.all.indexOf(it) }?.takeIf { it >= 0 },
             bpm = (spec.tempo as? TempoAsk.Exact)?.bpm,
             minutes = spec.minutes,
+            genre = spec.genre,
         )
     }
 
@@ -193,6 +225,7 @@ class StudioViewModel(private val graph: AppGraph, private val clock: () -> Long
         key = turn.musicKey?.let { MusicKey.all.indexOf(it) }?.takeIf { it >= 0 },
         bpm = turn.bpm,
         minutes = turn.minutes ?: 2,
+        genre = StyleSpec.decode(turn.spec)?.genre,
     )
 
     fun cancel(turn: Turn) {

@@ -13,11 +13,13 @@ import dev.stevenjin.stevenpiano.data.TextKeys
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.studio.compose.Genre
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.PromptBuilder
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 /** A word of an idea: [text] as typed (to echo it under "Not used"), [key] folded as the tables are. */
 class StyleWord(val text: String, val key: String)
@@ -99,7 +101,7 @@ sealed interface TempoAsk {
 /**
  * Where the seed comes from: a [Title] (the folded words found in titles), a [Pool] of the library ([source]
  * is `composer:<key>`, `artist:<words>`, `form:<key>`, `composer:<key>+form:<key>`, `channel:<key>`,
- * `list:<key>` or `mood:<mood>`; [label] is how the line says it), a [Piece] chosen in the sheet, or the
+ * `list:<key>`, `mood:<mood>` or `genre:<key>` (v1.37 — M74: [GenreSeeds]); [label] is how the line says it), a [Piece] chosen in the sheet, or the
  * [Default] (the piece played last).
  */
 sealed interface SeedAsk {
@@ -114,8 +116,8 @@ sealed interface SeedAsk {
 
 /**
  * What an idea asks for: a [mood]; a [key] (null: the seed's own), or only a mode ([minor]); a [tempo] (null:
- * the seed's own); a length in [minutes] (1–5); the [seed]; and [variant], how many times "different" asked
- * for another seed piece.
+ * the seed's own); a length in [minutes] (1–5); the [seed]; [variant], how many times "different" asked
+ * for another seed piece; and a [genre] style (v1.37 — M74; null: none).
  */
 data class StyleSpec(
     val mood: Mood = Mood.Calm,
@@ -125,6 +127,7 @@ data class StyleSpec(
     val minutes: Int = DEFAULT_MINUTES,
     val seed: SeedAsk = SeedAsk.Default,
     val variant: Int = 0,
+    val genre: Genre? = null,
 ) {
     /** The spec as one line of `name=value` pairs, as the history keeps it (no typed text but a title's folded words). */
     fun encode(): String = buildList {
@@ -145,6 +148,7 @@ data class StyleSpec(
             SeedAsk.Default -> Unit
         }
         if (variant != 0) add("variant=$variant")
+        genre?.let { add("genre=${it.key}") }
     }.joinToString(SEP.toString())
 
     companion object {
@@ -170,6 +174,7 @@ data class StyleSpec(
                     "pool" -> spec.copy(seed = SeedAsk.Pool(value.substringBefore('|'), value.substringAfter('|')))
                     "piece" -> value.toLongOrNull()?.let { spec.copy(seed = SeedAsk.Piece(it)) } ?: spec
                     "variant" -> value.toIntOrNull()?.let { spec.copy(variant = it.coerceAtLeast(0)) } ?: spec
+                    "genre" -> Genre.of(value)?.let { spec.copy(genre = it) } ?: spec
                     else -> spec
                 }
             }
@@ -206,10 +211,16 @@ data class StyleResult(
  * the library's titles (six words down to two, then a distinctive single word), the library's names
  * (composers, then performers), forms and the catalogue (channels and built-in lists), moods, tempo words and
  * comparatives; words that carry nothing go silently; the rest are "Not used". A negator ("not", "no",
- * "without", "less") sends the next content word there. An idea that names no title, name, form or catalogue
- * word refines the last turn ([PreviousTurn]); one that does starts afresh from Calm and two minutes.
- * Deterministic, bounded (200 code points, 40 words, n-grams of six), no recursion, and nothing typed ever
- * becomes a regular expression.
+ * "without", "less") sends the next content word there. An idea that names no title, name, form, catalogue
+ * or genre word refines the last turn ([PreviousTurn]), its genre kept; one that does starts afresh from Calm
+ * (or the genre's mood) and two minutes. Deterministic for a given [roll], bounded (200 code points, 40 words,
+ * n-grams of six), no recursion, and nothing typed ever becomes a regular expression.
+ *
+ * A genre (v1.37 — M74; lo-fi, house, chill, cinematic and their words, claimed after the negators and before the
+ * names, so "pop ballad" is cinematic and not the Modern channel): the first named wins, but a chill word beside
+ * another genre means calm ("chill lofi" is lo-fi). Its seed is drawn at random from his songs of that genre
+ * ([GenreSeeds]; [roll] seeds the draw, so the line and the job agree) unless a title, a name, a form or the
+ * catalogue names one: "after <song>" still wins. A refinement keeps its song unless it asks for a different one.
  */
 object StylePrompt {
     const val MAX_CHARS = 200
@@ -222,18 +233,22 @@ object StylePrompt {
     private const val TITLE_WORD_MIN = 5
     private const val TITLE_WORD_MAX_TITLES = 12
 
-    fun parse(text: String, library: StyleLibrary, previous: PreviousTurn? = null): StyleResult = Parse(StyleWords.cut(text, MAX_WORDS), library, previous).run()
+    fun parse(text: String, library: StyleLibrary, previous: PreviousTurn? = null, roll: Long = 0L): StyleResult =
+        Parse(StyleWords.cut(text, MAX_WORDS), library, previous, roll).run()
 
-    /** The seed candidates [spec] names in [library] now ("Another like it" asks its turn's spec again). */
-    fun candidates(spec: StyleSpec, library: StyleLibrary): List<Long> =
-        Parse(emptyList(), library, null).candidatesOf(spec.seed, spec.mood).take(MAX_CANDIDATES).map { it.id }
+    /**
+     * The seed candidates [spec] names in [library] now ("Another like it" asks its turn's spec again); a genre's songs
+     * drawn by [roll], [keep] first when it is one of them.
+     */
+    fun candidates(spec: StyleSpec, library: StyleLibrary, roll: Long = 0L, keep: Long? = null): List<Long> =
+        Parse(emptyList(), library, null, roll, keep).candidatesOf(spec.seed, spec.mood).take(MAX_CANDIDATES).map { it.id }
 
     /** The composer the library holds most pieces by, for the empty screen's last suggestion; null for an empty library. */
     fun favouriteComposer(library: StyleLibrary): String? =
         library.pieces.filter { it.composerKey.isNotEmpty() }.groupingBy { it.composerKey }.eachCount()
             .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).firstOrNull()?.key?.let(library::composerName)
 
-    private class Parse(val words: List<StyleWord>, val library: StyleLibrary, val previous: PreviousTurn?) {
+    private class Parse(val words: List<StyleWord>, val library: StyleLibrary, val previous: PreviousTurn?, val roll: Long = 0L, var keep: Long? = null) {
         val n = words.size
         val claimed = BooleanArray(n)
         val blocked = BooleanArray(n)
@@ -253,6 +268,8 @@ object StylePrompt {
         var artist: String? = null
         var form: StyleForm? = null
         var catalogue: CatalogueEntry? = null
+        var genre: Genre? = null
+        var calmFromChill = false
         var again = false
         var different = false
         val changes = ArrayList<String>()
@@ -268,6 +285,7 @@ object StylePrompt {
             patterns()
             titles()
             negators()
+            genres()
             names()
             forms()
             catalogue()
@@ -424,6 +442,33 @@ object StylePrompt {
             }
         }
 
+        // ---- genres (v1.37 — M74) ---------------------------------------------------------------------------
+
+        fun genres() {
+            val found = ArrayList<Triple<Int, Int, Genre>>()   // from, words, genre
+            for (size in 2 downTo 1) {
+                for (i in 0..n - size) {
+                    if (!free(i, size) || found.any { (from, count, _) -> i < from + count && from < i + size }) continue
+                    val g = StyleVocabulary.genres[(i until i + size).joinToString(" ") { keys[it] }] ?: continue
+                    found += Triple(i, size, g)
+                }
+            }
+            if (found.isEmpty()) return
+            found.sortBy { it.first }
+            val chosen = found.firstOrNull { it.third != Genre.Chill }?.third ?: Genre.Chill
+            genre = chosen
+            for ((from, size, g) in found) {
+                when (g) {
+                    chosen -> claim("genre", g.label, from, size)
+                    Genre.Chill -> {
+                        calmFromChill = true
+                        claim("mood", Mood.Calm.label, from, size)
+                    }
+                    else -> Unit   // a second genre: not used
+                }
+            }
+        }
+
         // ---- P3: composers and performers ------------------------------------------------------------------
 
         fun names() {
@@ -557,15 +602,20 @@ object StylePrompt {
             }
             if (form != null && mood == null && form!!.mood != null) mood = form!!.mood
             if (form != null && tempo == null && form!!.bpm != null) tempo = TempoAsk.Class(form!!.bpm!!, form!!.key)
+            if (calmFromChill && mood == null && moodStep == 0) mood = Mood.Calm
         }
 
         // ---- the result -------------------------------------------------------------------------------------
 
         fun result(): StyleResult {
-            val seedBearing = title != null || composer != null || artist != null || form != null || catalogue != null
+            val seedBearing = title != null || composer != null || artist != null || form != null || catalogue != null || genre != null
             val refine = previous != null && !seedBearing
             val base = if (refine) previous!!.spec else StyleSpec()
-            val moodNow = mood ?: if (moodStep != 0) stepped(base.mood, moodStep) else base.mood
+            val genreNow = genre ?: if (refine) base.genre else null
+            // A refinement keeps its genre's song, unless it asks for a different one.
+            if (keep == null && refine && !different) keep = previous?.seedPieceId
+            val baseMood = if (!refine && genre != null) genre!!.mood else base.mood
+            val moodNow = mood ?: if (moodStep != 0) stepped(baseMood, moodStep) else baseMood
             val minutesNow = minutes?.toInt() ?: (base.minutes + lengthStep).coerceIn(PromptBuilder.MIN_MINUTES, PromptBuilder.MAX_MINUTES)
             val tempoNow = when (val t = tempo) {
                 is TempoAsk.Scale -> previous?.bpm?.takeIf { refine }?.let { TempoAsk.Exact((it * t.factor).roundToInt().coerceIn(PromptBuilder.MIN_BPM, PromptBuilder.MAX_BPM)) } ?: t
@@ -589,9 +639,13 @@ object StylePrompt {
                 refine -> base.variant
                 else -> 0
             }
-            val spec = StyleSpec(moodNow, keyNow, minorNow, tempoNow, minutesNow, seed, variant)
+            val spec = StyleSpec(moodNow, keyNow, minorNow, tempoNow, minutesNow, seed, variant, genreNow)
             val unused = (0 until n).filter { !claimed[it] && (blocked[it] || keys[it] !in StyleVocabulary.stopWords) }.map { words[it].text }.take(MAX_UNUSED)
-            val line = if (refine) refinementLine(spec) else line(spec)
+            val line = when {
+                refine -> refinementLine(spec)
+                genreNow != null -> genreLine(spec, genreNow, candidates.firstOrNull())
+                else -> line(spec)
+            }
             return StyleResult(spec, candidates.take(MAX_CANDIDATES).map { it.id }, understood, line, unused, refine, again && refine)
         }
 
@@ -623,6 +677,25 @@ object StylePrompt {
             seedLabel(spec.seed)?.let { add("in the manner of $it") }
         }.joinToString(" · ")
 
+        /**
+         * A genre idea's line (v1.37 — M74): "Lo-fi · 3 min · after Shape of You (Ed Sheeran)": the genre, the mood only
+         * when one was asked, then as [line]; the seed is the song drawn ([first]), and when the genre has no songs of
+         * its own yet the line says so: "No lo-fi songs yet: after …", or only that when the default seed is used.
+         */
+        fun genreLine(spec: StyleSpec, g: Genre, first: PieceEntity?): String = buildList {
+            add(g.label)
+            if (mood != null || moodStep != 0) add(spec.mood.label)
+            spec.key?.let { add(it.label) } ?: spec.minor?.let { add(if (it) "minor" else "major") }
+            spec.tempo?.let { add(tempoLabel(it)) }
+            add("${spec.minutes} min${clamped?.let { " ($it)" }.orEmpty()}")
+            val drawn = GenreSeeds.of(spec.seed) == g || spec.seed == SeedAsk.Default
+            val after = if (drawn) first?.let(::titleLabel) else seedLabel(spec.seed)
+            when {
+                drawn && library.genrePool(g).isEmpty() -> add("No ${g.word} songs yet" + after?.let { ": after $it" }.orEmpty())
+                after != null -> add("after $after")
+            }
+        }.joinToString(" · ")
+
         /** The seed (plans/plan-studio.md (a)): a title, then a composer or performer (with a form when both give pieces), a form, the catalogue, the mood's pool, the default. */
         fun seedOf(mood: Mood): Pair<SeedAsk, List<PieceEntity>> {
             title?.let { (words, found) -> return SeedAsk.Title(words, titleLabel(found.first())) to found }
@@ -648,6 +721,10 @@ object StylePrompt {
                 val pieces = library.inCatalogue(e.key)
                 if (pieces.isNotEmpty()) return SeedAsk.Pool("${if (e.list) "list" else "channel"}:${e.key}", catalogueLabel(e)) to pieces.sortedWith(order)
             }
+            genre?.let { g ->
+                val pieces = genrePieces(g)
+                return if (pieces.isEmpty()) SeedAsk.Default to emptyList() else SeedAsk.Pool(GenreSeeds.source(g), "${g.word} songs") to pieces
+            }
             val moodPool = moodPool(mood)
             if (moodPool.isNotEmpty() && (mood != Mood.Calm || this.mood != null)) return SeedAsk.Pool("mood:${mood.name.lowercase(Locale.ROOT)}", "") to moodPool.sortedWith(order)
             return SeedAsk.Default to emptyList()
@@ -657,7 +734,17 @@ object StylePrompt {
             is SeedAsk.Title -> library.byTitle(seed.words, mood)
             is SeedAsk.Piece -> listOfNotNull(library.byId[seed.pieceId])
             SeedAsk.Default -> emptyList()
-            is SeedAsk.Pool -> poolPieces(seed.source, mood).sortedWith(library.order(mood))
+            is SeedAsk.Pool -> GenreSeeds.of(seed)?.let(::genrePieces) ?: poolPieces(seed.source, mood).sortedWith(library.order(mood))
+        }
+
+        /**
+         * [g]'s songs (else every Modern piece) in an order drawn by [roll], [keep] first when it is one of them; the
+         * library's id order underneath, so the same roll gives the same order whatever order the library came in.
+         */
+        fun genrePieces(g: Genre): List<PieceEntity> {
+            val drawn = library.genrePool(g).ifEmpty { library.modernPool }.shuffled(Random(roll))
+            val first = keep?.let { id -> drawn.firstOrNull { it.id == id } } ?: return drawn
+            return listOf(first) + drawn.filter { it !== first }
         }
 
         fun poolPieces(source: String, mood: Mood): List<PieceEntity> {
@@ -722,15 +809,18 @@ object StylePrompt {
     /**
      * A piece's title from what was understood, never from what was typed (v1.12 — M30): "Calm, after Clair de
      * lune" (a seed asked for by its title, or chosen in the sheet), "Calm, after Chopin" (a composer's pool),
-     * "Calm, after a nocturne" (a form's), else "Calm piece". Cut to the library's title length.
+     * "Calm, after a nocturne" (a form's), else "Calm piece". With a [genre] (v1.37 — M74) the genre names it in
+     * the mood's place, and a song drawn from its songs by its title: "Lo-fi, after Shape of You", "House piece".
+     * Cut to the library's title length.
      */
-    fun title(mood: Mood, seed: SeedAsk, seedTitle: String?): String {
+    fun title(mood: Mood, seed: SeedAsk, seedTitle: String?, genre: Genre? = null): String {
         val after = when (seed) {
             is SeedAsk.Title, is SeedAsk.Piece -> seedTitle?.trim()?.takeIf { it.isNotEmpty() }
-            is SeedAsk.Pool -> poolName(seed)
+            is SeedAsk.Pool -> if (GenreSeeds.of(seed) != null) seedTitle?.trim()?.takeIf { it.isNotEmpty() } else poolName(seed)
             SeedAsk.Default -> null
         }
-        return TextLimits.clip(if (after == null) "${mood.label} piece" else "${mood.label}, after $after", TextLimits.TITLE)
+        val name = genre?.label ?: mood.label
+        return TextLimits.clip(if (after == null) "$name piece" else "$name, after $after", TextLimits.TITLE)
     }
 
     /** A pool's composer or form, for a title: "Chopin" for Chopin's nocturnes, "a nocturne", "Horowitz"; none for a channel, a list or a mood. */

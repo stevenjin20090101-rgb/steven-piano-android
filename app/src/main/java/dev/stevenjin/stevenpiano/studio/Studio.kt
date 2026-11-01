@@ -226,7 +226,7 @@ class Studio(
             prompt = asked.prompt?.let { TextLimits.clip(it, StylePrompt.MAX_CHARS) }?.takeIf { it.isNotBlank() },
             understood = TextLimits.clip(asked.understood, LINE_CHARS),
             unused = asked.unused.take(StylePrompt.MAX_UNUSED).joinToString("\n") { TextLimits.clip(it, StylePrompt.MAX_CHARS) },
-            spec = style?.encode() ?: StyleSpec(order.request.mood, order.request.key, null, order.request.bpm?.let { TempoAsk.Exact(it) }, order.request.minutes, order.pieceId?.let { SeedAsk.Piece(it) } ?: SeedAsk.Default).encode(),
+            spec = style?.encode() ?: StyleSpec(order.request.mood, order.request.key, null, order.request.bpm?.let { TempoAsk.Exact(it) }, order.request.minutes, order.pieceId?.let { SeedAsk.Piece(it) } ?: SeedAsk.Default, genre = order.request.genre).encode(),
             mood = (style?.mood ?: order.request.mood).name,
             minutes = style?.minutes ?: order.request.minutes,
             outcome = GenerationEntity.PENDING,
@@ -401,7 +401,7 @@ class Studio(
         val chosen = chooseSeed(pending.order)
         val seed = seeds.seed(chosen.pieceId) ?: throw StudioFailure(ComposeFailures.SEED_GONE)
         val prompt = PromptBuilder.build(seed, chosen.request)
-        val title = StylePrompt.title(prompt.mood, chosen.ask, seed.title)
+        val title = StylePrompt.title(prompt.mood, chosen.ask, seed.title, prompt.genre)
         val minutes = chosen.request.minutes.coerceIn(PromptBuilder.MIN_MINUTES, PromptBuilder.MAX_MINUTES)
         val targetTicks = minutes * 60 * Amt.TICKS_PER_SECOND
         jobs.update(id) {
@@ -452,7 +452,7 @@ class Studio(
         val composedAt = elapsed()
         previewState.value = roll.snapshot()
         jobs.update(id) { it.copy(step = JobStep.Shaping, progress = null, tokens = generation.tokens.size, etaMs = null) }
-        val composition = Postprocess.compose(generation.events, prompt.bpm, prompt.mood, chance)
+        val composition = Postprocess.compose(generation.events, prompt.bpm, prompt.mood, chance, genre = prompt.genre)
         jobs.update(id) { it.copy(step = JobStep.Saving, musicMs = composition.durationMicros / 1_000, notes = composition.notes.size) }
         val stop = generation.stop.name.lowercase(java.util.Locale.ROOT)
         val seconds = (composedAt - startedAt) / 1e9

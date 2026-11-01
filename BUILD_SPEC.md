@@ -10246,3 +10246,25 @@ null); the words are "SwitchBot plug · off · 0.0 W". **Tests:** `SwitchBotTest
 ## The release: 1.36 (versionCode 47)
 
 M72 merged: the SwitchBot Plug Mini replaces the Shelly (verified from the Mac 2026-10-31: unencrypted GATT on/off/status, adverts about 3 a second, on at power-up), and Piano › Power use (now, peaks, kWh). Unverified until the school: the advert power formula under load, and whether adverts continue while the tablet holds the connection during a piece.
+
+# v1.37 — M74: Studio's genre styles
+
+Brief `~/.claude/plans/m74-studio-genres-brief.md`; worktree `android-wt-m74`, branch `m74-studio-genres`, from `420cf5b`
+(main with 1.36). No version bump, no signing, no emulator pass, no schema change. **New:** `studio/compose/GenreFeel.kt`
+(`Genre`: key, label, tempo range, mood, lo-fi's minor, `bpmFor` = the seed's tempo in the range's gentle half;
+`GenreFeel`: `strength` (house 0.7), `timing` (lo-fi: swing to 60 %, 0–20 ms late, onsets only later, ends kept, each key's
+next strike kept 120 ms away), `velocities` (lo-fi and chill × 0.9, house × 1.08 with the left hand evened over a bar and
+its beats +8, cinematic's `arc` 0.65 → 1.25 at 2/3 → 0.6; caps 80, 92, 70, 88), `keep` (chill drops chord notes, never
+the top, at or under the softest fifth), `ending` (chill's ritardando over the last two bars, lengths kept; the pedal
+every bar for lo-fi, every two for chill and cinematic, none for house, never past the last note)); `studio/style/
+GenreSeeds.kt` (the playlist names per genre, `nameKey` = folded letters and digits, `PlaylistPool`, the `genre:<key>`
+pool). **Changed:** `ComposeRequest`, `Prompt` and `StyleSpec` carry `genre` (`genre=lofi` in the history's spec line);
+`Postprocess.compose(…, genre)` and `Composition.pedals` (written by `StudioPieces.addComposition`); `PromptBuilder`'s
+defaults and `suggestedKey(…, genre)`; `StylePrompt` claims genres after the negators (first named wins, a chill word
+beside another genre is calm; seed-bearing), draws the pool with a `roll` (the view model keeps one per idea, so the line
+and the job agree), `genreLine`, `title(…, genre)`; `StyleVocabulary.genres` ("relaxing" leaves the moods, "ballad" the
+ballade's words; "after" is a stop word); `StyleLibrary` gets the genre playlists (`genrePool`, `modernPool`), read by
+`StudioViewModel` through `LibraryRepository.playlists()` / `inPlaylist()`; `SeedPicker` takes a genre's draw as found and
+applies its tempo and minor; the options sheet's GENRE row; the panel's Genre chips and `genre` in `POST
+/api/studio/compose` (lofi, house, chill, cinematic or null). **Tests:** `GenreFeelTest` 6, `StyleGenresTest` 9,
+`WebApiTest`'s compose case.

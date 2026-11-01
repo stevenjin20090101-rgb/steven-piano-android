@@ -87,8 +87,11 @@ class SeedPiece(val title: String, val composer: String?, val midi: MidiPiece)
  */
 data class SeedFacts(val key: MusicKey, val bpm: Int, val exactBpm: Double)
 
-/** What the compose sheet asks for: a [mood], a [key] and a tempo in [bpm] (null: the seed's own), and a length in [minutes] (1–5). */
-data class ComposeRequest(val mood: Mood = Mood.Calm, val key: MusicKey? = null, val bpm: Int? = null, val minutes: Int = 2)
+/**
+ * What the compose sheet asks for: a [mood], a [key] and a tempo in [bpm] (null: the seed's own, or the [genre]'s
+ * default), a length in [minutes] (1–5), and a [genre] whose feel the piece is played in (v1.37 — M74; null: none).
+ */
+data class ComposeRequest(val mood: Mood = Mood.Calm, val key: MusicKey? = null, val bpm: Int? = null, val minutes: Int = 2, val genre: Genre? = null)
 
 /**
  * A composition's prompt, ready for the [Sampler]. [events] are the seed as the model reads it (its
@@ -96,7 +99,8 @@ data class ComposeRequest(val mood: Mood = Mood.Calm, val key: MusicKey? = null,
  * multiplied by [timeScale], padded with rests; times from 0), [currentTime] its last event's time. The
  * sampler writes at most [budget] tokens and stops at [endTime] (ticks: the seed's 15 s and the
  * length), with [sampling] from the [mood]. [key] and [bpm] are what was chosen (the grid and the
- * velocities follow them); [mannerOf] is the seed's "<title> (<composer>)", the sheet's eyebrow.
+ * velocities follow them); [mannerOf] is the seed's "<title> (<composer>)", the sheet's eyebrow; [genre] the feel
+ * the piece is played in ([GenreFeel]; v1.37 — M74).
  */
 class Prompt(
     val events: List<AmtEvent>,
@@ -110,6 +114,7 @@ class Prompt(
     val transpose: Int,
     val timeScale: Double,
     val mannerOf: String,
+    val genre: Genre? = null,
 ) {
     /** AUTOREGRESS, then the seed's tokens. */
     val tokens: IntArray get() = AmtTokenizer.prompt(events)
@@ -164,8 +169,12 @@ object PromptBuilder {
         return midi.keySignatures.lastOrNull { it.atMicros <= start }?.sharps
     }
 
-    /** The key the sheet suggests for [mood]: the seed's own, or for Melancholy its minor (the relative minor of a major seed). */
-    fun suggestedKey(mood: Mood, seed: MusicKey): MusicKey = if (mood == Mood.Melancholy) seed.relativeMinor else seed
+    /**
+     * The key the sheet suggests for [mood]: the seed's own, or for Melancholy (and a [genre] that prefers minor,
+     * lo-fi: v1.37 — M74) its minor (the relative minor of a major seed: the same notes, no transposition).
+     */
+    fun suggestedKey(mood: Mood, seed: MusicKey, genre: Genre? = null): MusicKey =
+        if (mood == Mood.Melancholy || genre?.minor == true) seed.relativeMinor else seed
 
     /** "Clair de lune (Claude Debussy)", or the title alone when the composer isn't known. */
     fun mannerOf(title: String, composer: String?): String =
@@ -174,13 +183,13 @@ object PromptBuilder {
     /** The prompt for [request] from [seed]; a seed without a note is refused ([ComposeFailures.NO_SEED]). */
     fun build(seed: SeedPiece, request: ComposeRequest): Prompt {
         val facts = facts(seed.midi)
-        val bpm = (request.bpm ?: facts.bpm).coerceIn(MIN_BPM, MAX_BPM)
+        val bpm = (request.bpm ?: request.genre?.bpmFor(facts.bpm) ?: facts.bpm).coerceIn(MIN_BPM, MAX_BPM)
         // The seed's own tempo leaves its times alone (exactly: the fixture's arithmetic); another scales them.
         val scale = if (bpm == facts.bpm) 1.0 else facts.exactBpm / bpm
         val notes = AmtTokenizer.notes(seed.midi, SEED_SECONDS / scale + 1.0)
         if (notes.isEmpty()) throw StudioFailure(ComposeFailures.NO_SEED)
         val clipped = AmtTokenizer.clip(AmtTokenizer.events(notes, origin = notes.first().on, scale = scale), 0, SEED_TICKS)
-        val key = request.key ?: facts.key
+        val key = request.key ?: request.genre?.let { suggestedKey(request.mood, facts.key, it) } ?: facts.key
         val shift = transposition(facts.key, key, clipped.map { it.pitch })
         val seen = HashSet<Int>()
         val moved = clipped.mapNotNull { e ->
@@ -201,6 +210,7 @@ object PromptBuilder {
             transpose = shift,
             timeScale = scale,
             mannerOf = mannerOf(seed.title, seed.composer),
+            genre = request.genre,
         )
     }
 

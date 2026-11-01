@@ -11,10 +11,12 @@ package dev.stevenjin.stevenpiano.studio.style
 
 import dev.stevenjin.stevenpiano.channels.Channel
 import dev.stevenjin.stevenpiano.channels.PoolMatcher
+import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.TextKeys
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInList
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
+import dev.stevenjin.stevenpiano.studio.compose.Genre
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 
 /** A channel or a built-in list an idea can name: its [key], its [name], its pieces ([ids]); [list] for a built-in list. */
@@ -24,9 +26,10 @@ data class CatalogueEntry(val key: String, val name: String, val ids: List<Long>
  * The library as the parser reads it (v1.12 — M30): built once per screen (and again when the library
  * changes), then every keystroke's parse reads it. Studio's own pieces, the tablet's recordings, pieces
  * under 15 seconds and pieces under 16 notes are left out: none of them is a seed. Pure, deterministic:
- * the pieces are taken in id order, so a shuffled library gives the same answers.
+ * the pieces are taken in id order, so a shuffled library gives the same answers. [playlists] are the ones named
+ * for a genre (v1.37 — M74, [GenreSeeds]): where a genre piece's seeds come from.
  */
-class StyleLibrary(pieces: List<PieceEntity>, val catalogue: List<CatalogueEntry>) {
+class StyleLibrary(pieces: List<PieceEntity>, val catalogue: List<CatalogueEntry>, private val playlists: List<PlaylistPool> = emptyList()) {
     val pieces: List<PieceEntity> = pieces
         .filter { it.composerKey != STUDIO_KEY && it.composerKey != RECORDED_KEY && it.durationMs >= MIN_MS && it.noteCount >= MIN_NOTES }
         .sortedBy { it.id }
@@ -79,6 +82,18 @@ class StyleLibrary(pieces: List<PieceEntity>, val catalogue: List<CatalogueEntry
 
     fun inCatalogue(key: String): List<PieceEntity> = catalogue.firstOrNull { it.key == key }?.ids.orEmpty().mapNotNull(byId::get)
 
+    private val genrePools = HashMap<Genre, List<PieceEntity>>()
+
+    /** [genre]'s songs (v1.37 — M74): the pieces in the playlists named for it, none under [GenreSeeds.MIN_MS], in id order. */
+    @Synchronized
+    fun genrePool(genre: Genre): List<PieceEntity> = genrePools.getOrPut(genre) {
+        val ids = playlists.filter { GenreSeeds.holds(genre, it.name) }.flatMapTo(HashSet()) { it.ids }
+        pieces.filter { it.id in ids && it.durationMs >= GenreSeeds.MIN_MS }
+    }
+
+    /** Every Modern piece but the fragments, in id order: a genre's songs when none are in its playlists. */
+    val modernPool: List<PieceEntity> by lazy { pieces.filter { it.genre == Genres.MODERN && it.durationMs >= GenreSeeds.MIN_MS } }
+
     /**
      * The total order among candidates (plans/plan-studio.md (a); a title's exact and prefix matches come
      * first in [byTitle]): the composer also named; Popular or Recognisable; the note density nearest the
@@ -100,8 +115,11 @@ class StyleLibrary(pieces: List<PieceEntity>, val catalogue: List<CatalogueEntry
         val STUDIO_KEY: String = TextKeys.fold(ComposerNames.STUDIO)
         val RECORDED_KEY: String = TextKeys.fold(ComposerNames.RECORDED_LIVE)
 
-        /** The library's channels and built-in lists for the parser: each pool over [pieces], the whole library's channel left out. */
-        fun of(pieces: List<PieceEntity>, channels: List<Channel>, lists: List<BuiltInList>): StyleLibrary {
+        /**
+         * The library's channels and built-in lists for the parser: each pool over [pieces], the whole library's channel
+         * left out; and the [playlists] named for a genre.
+         */
+        fun of(pieces: List<PieceEntity>, channels: List<Channel>, lists: List<BuiltInList>, playlists: List<PlaylistPool> = emptyList()): StyleLibrary {
             val sorted = pieces.sortedBy { it.id }
             val entries = ArrayList<CatalogueEntry>()
             for (channel in channels) {
@@ -109,7 +127,7 @@ class StyleLibrary(pieces: List<PieceEntity>, val catalogue: List<CatalogueEntry
                 entries += CatalogueEntry(channel.key, channel.name, channel.pool(sorted), list = false)
             }
             for (list in lists) entries += CatalogueEntry(list.key, list.name, list.matches(sorted), list = true)
-            return StyleLibrary(sorted, entries)
+            return StyleLibrary(sorted, entries, playlists.filter { GenreSeeds.named(it.name) })
         }
 
         /** Notes a second: how busy a piece is, without reading its file. */
