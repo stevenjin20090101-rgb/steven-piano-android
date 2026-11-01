@@ -421,6 +421,7 @@ class AppGraph(private val app: Application) {
         Player(
             pianoLink, library, appScope, trail = LinkLog::warn, tablet = tabletSound.sink, quiet = { quiet.holds() }, gate = safetyGate,
             held = heldKeys::record,
+            railHolds = { railHoldsNotes.value },   // v1.38 — M75: a drop with the 24 V held (the piano off) is the hold's
         )
     }
 
@@ -1228,7 +1229,18 @@ class AppGraph(private val app: Application) {
             guest = railGuest,
             log = LinkLog::warn,
             power = railWatch,   // v1.30 — M67
+            wakeLink = ::wakePianoLink,   // v1.38 — M75
         )
+    }
+
+    /**
+     * v1.38 — M75: the rail woke the piano (its controller is on the plug with the 24 V): Steven Piano's link connects now,
+     * to the remembered piano, rather than waiting for a reconnect's backoff. Nothing while another instrument is chosen.
+     */
+    private fun wakePianoLink() {
+        if (pianoLink.kind.value != InstrumentKind.StevenPiano || stevenLink.state.value is LinkState.Connected) return
+        if (BlePermissions.missing(app).isNotEmpty()) return
+        pianoLink.connect(settings.value.lastDeviceAddress)
     }
 
     /** The rail as the safety check (M61) and anything else that wants it sees it. */
@@ -1304,6 +1316,18 @@ class AppGraph(private val app: Application) {
 
     /** A key on the Keys tab: the idle cut starts over, and a rail cut for idling wakes ("Waking the piano…"). */
     fun railKeyPressed() = rail.keyPressed()
+
+    /**
+     * v1.38 — M75: Piano › Power plug's Turn the piano on ([on]) or off: the rail wanted until 30 minutes pass without a
+     * note, or no longer (the usual stop, then CUT).
+     */
+    fun setPianoOn(on: Boolean) = rail.manual(on)
+
+    /**
+     * v1.38 — M75: Steven Piano is the instrument and its power plug switches the rail, so a piano not connected is off and
+     * wakes with the rail: what plays it (Play, Test every key, the safety check) wants the rail rather than being refused.
+     */
+    fun pianoWakes(): Boolean = pianoLink.kind.value == InstrumentKind.StevenPiano && rail.available.value
 
     /** The plug's switch, from Piano › Power plug: off, what plays stops and the rail is cut first. */
     fun setPlugOn(on: Boolean) {
@@ -1490,7 +1514,8 @@ class AppGraph(private val app: Application) {
             quiet.holds() -> Deferral.QUIET
             !remote.listening.inFront.value -> Deferral.AWAY
             pianoSettings.lock.value.guestLeft(SystemClock.elapsedRealtime()) > 0 -> Deferral.GUEST_PLAY
-            !pianoReady() -> Deferral.NO_PIANO
+            // v1.38 — M75: with the power plug the piano is off until the rail wakes it, which the check's own want does.
+            !pianoReady() && !pianoWakes() -> Deferral.NO_PIANO
             else -> null
         }
 
@@ -1674,8 +1699,11 @@ class AppGraph(private val app: Application) {
         /** The safety check's reason for wanting the 24 V rail ([RailPower.wanted], v1.26). */
         const val SAFETY_RAIL = "safety"
 
-        /** How long a sweep waits for the 24 V rail to come up before it gives up (v1.26). */
-        const val RAIL_AWAIT_MS = 10_000L
+        /**
+         * How long a sweep waits for the 24 V rail to come up before it gives up (v1.26). v1.38 — M75: 45 s, as a piano
+         * woken from off by its power plug may take the rail's 30 s for its link, then its CHECK.
+         */
+        const val RAIL_AWAIT_MS = 45_000L
         const val GUEST_RECONNECT_MS = 15_000L
         const val GUEST_START_MS = 5_000L
         const val CONTROL_CHANGE = 0xB0

@@ -241,7 +241,10 @@ class RemoteActions internal constructor(private val graph: AppGraph, private va
 
     /** The piano as the key test strikes it: the player's live keys and stop sequence, the instrument's link, the gates. */
     private val keyTestPiano = object : KeyTest.Piano {
-        override val connected: Boolean get() = graph.pianoLink.state.value is LinkState.Connected
+        // v1.38 — M75: with the power plug, a piano not connected is off and its rail-up (the test's `before`) wakes it; once
+        // the test runs, only the link itself counts (the piano letting go mid-sweep still stops it).
+        override val connected: Boolean
+            get() = graph.pianoLink.state.value is LinkState.Connected || graph.pianoWakes() && !keyTest.state.value.running
 
         override val playing: Boolean get() = graph.player.state.value.let { it.status == PlaybackStatus.Playing || it.loading }
 

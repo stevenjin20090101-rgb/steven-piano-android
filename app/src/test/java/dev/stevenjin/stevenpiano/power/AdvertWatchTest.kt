@@ -165,18 +165,22 @@ class AdvertWatchTest {
     }
 
     @Test
-    fun `a want waiting for the piano holds nothing - the plug on by itself is still CUT, and the rail comes up with the piano`() = runTest {
+    fun `a want waiting for the piano - an advert saying on is never CUT, and the rail wakes the piano (v1_38 M75)`() = runTest {
         val s = Stack(this, plugOn = true)
-        s.link.value = false   // the piano not connected yet
+        s.link.value = false   // the piano off: its controller is on the plug too
         val keeper = s.keeper()
-        keeper.keysOnScreen(true)   // the Keys tab wants the rail, and waits for the piano
+        // The race M72 lost: a want put, and an "on" advert before the routine took it up (it CUT then, with no ARM of its own).
+        keeper.keysOnScreen(true)
+        keeper.advert(true)
+        runCurrent()
         advanceTimeBy(2 * ADVERT_MS)
-        assertEquals(RailPhase.Off, keeper.phase.value)
-        assertFalse("on by itself, not the keeper's: CUT", s.plug.output())
-        s.link.value = true
+        assertTrue("wanted: on, never CUT", s.plug.output())
+        assertFalse(s.transport.frames.contains("570f50010100"))
+        s.link.value = true   // the controller up on the plug's power
         advanceTimeBy(3_000)
         assertEquals("up with the piano, through its CHECK", RailPhase.Up, keeper.phase.value)
         assertTrue(s.plug.output())
+        assertFalse(s.transport.frames.contains("570f50010100"))
     }
 
     @Test

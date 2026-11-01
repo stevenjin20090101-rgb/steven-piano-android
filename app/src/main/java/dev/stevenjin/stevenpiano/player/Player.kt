@@ -118,6 +118,12 @@ class Player(
      * as [activeKeysLow] and [activeKeysHigh] give them, and the sustain pedal as last sent. Scheduler thread.
      */
     private val held: ((low: Long, high: Long, pedalDown: Boolean) -> Unit)? = null,
+    /**
+     * v1.38 — M75: whether a drop leaves a playing piece to the 24 V's hold (`power.RailHold`) instead of pausing it: the
+     * power plug holds its notes now (the rail off or waking), and the piano's controller, on the plug too, goes off with
+     * a CUT. The hold pauses it at its start and plays it once the piano is back. Never by default. Main thread.
+     */
+    private val railHolds: () -> Boolean = { false },
 ) : ChannelDeck {
     private val engine = PlaybackEngine(if (tablet == null) link else TeeSink(link, tablet))
     private val scheduler = Scheduler(engine, clock, ::publish, prepareThread)
@@ -826,8 +832,8 @@ class Player(
             if (!connected) silenceLive()   // the piano lets go on a drop; forget the Keys screen's keys too
             if (connected) {
                 scheduler.submit { engine.connectedAnew(it) }
-            } else if (state.value.status == PlaybackStatus.Playing) {
-                pause()   // the piano silences itself on a drop
+            } else if (state.value.status == PlaybackStatus.Playing && !railHolds()) {
+                pause()   // the piano silences itself on a drop (with the power plug holding its notes, the hold pauses it)
             }
         } else if (connected && epoch != linkEpoch) {
             scheduler.submit { engine.connectedAnew(it) }

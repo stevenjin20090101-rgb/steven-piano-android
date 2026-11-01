@@ -559,8 +559,11 @@ class SafetyRunner(
         /** The release, then this before the coils are read. */
         const val RELEASE_MS = 1_000L
 
-        /** The piano connected (its lock deciding, the 24 V coming up) at most this long after a check begins. */
-        const val PIANO_WAIT_MS = 15_000L
+        /**
+         * The piano connected (its lock deciding, the 24 V coming up) at most this long after a check begins. v1.38 — M75:
+         * 45 s, as a piano woken from off by its power plug may take the rail's 30 s for its link, then its CHECK.
+         */
+        const val PIANO_WAIT_MS = 45_000L
 
         /** A piece loading to wait at its start, at most this long before the sweep. */
         const val SETTLE_MS = 5_000L

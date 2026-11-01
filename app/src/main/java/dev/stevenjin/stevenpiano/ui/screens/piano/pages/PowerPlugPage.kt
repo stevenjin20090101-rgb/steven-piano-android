@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.ui.screens.piano.pages
 
+import android.os.SystemClock
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,6 +70,7 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
 import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
 import dev.stevenjin.stevenpiano.ui.theme.LocalAttention
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
+import kotlinx.coroutines.delay
 
 /**
  * Piano › Power plug (v1.26 — M60; the SwitchBot Plug Mini since v1.36 — M72), behind the kiosk PIN as every Piano page.
@@ -245,6 +250,7 @@ private fun PairedPlug(settings: PlugSettings, clicked: Boolean, onOpenPage: (Se
     val welded by graph.rail.welded.collectAsStateWithLifecycle()
     var asking by rememberSaveable { mutableStateOf(false) }
 
+    if (settings.on) ManualSwitch()   // v1.38 — M75: near the top
     SectionEyebrow(PowerCopy.STATE)
     if (clicked) NoteLine(PowerCopy.CLICKED)
     ReadingRow(PowerCopy.OUTPUT, PowerCopy.output(seen))
@@ -285,6 +291,32 @@ private fun PairedPlug(settings: PlugSettings, clicked: Boolean, onOpenPage: (Se
         )
     }
 }
+
+/**
+ * v1.38 — M75: **Turn the piano on** (the rail wanted as any feature wants it: ARM, the piano's link, the CHECK), which
+ * becomes **Turn the piano off** while on, with how long it stays on ("On · turns off in 28 min": 30 minutes after the
+ * last note). Behind the kiosk PIN, as the whole page is.
+ */
+@Composable
+private fun ManualSwitch() {
+    val graph = LocalContext.current.graph
+    val until by graph.rail.manualUntil.collectAsStateWithLifecycle()
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(until) {
+        while (until != null) {
+            now = SystemClock.elapsedRealtime()
+            delay(MANUAL_TICK_MS)
+        }
+    }
+    val left = until?.let { it - now }?.takeIf { it > 0 }
+    ActionRow(note = left?.let(PowerCopy::manualOn) ?: PowerCopy.MANUAL_OFF_NOTE) {
+        ActionButton(if (left != null) PowerCopy.TURN_OFF else PowerCopy.TURN_ON, onClick = { graph.setPianoOn(left == null) })
+    }
+    HairlineDivider(startInset = 16.dp)
+}
+
+/** How often the manual switch's minutes left are looked at again. */
+private const val MANUAL_TICK_MS = 15_000L
 
 /** The Pair screen's numbered steps, in order (v1.36 — M72). */
 private val STEPS = listOf(PairStep.Find, PairStep.Check, PairStep.Done)
