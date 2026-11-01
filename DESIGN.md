@@ -4002,3 +4002,20 @@ never cool down. **The 80 W leeway**: the draw cuts the 24 V only at 80 W or mor
 notes and the pedal while playing): playing for 5 s, idle on two readings, after the piece on three fresh adverts, the
 usual idle at rail-up; the rail-up's absolute 100 W cap stays, and the 10 W / 30 s coil rule only logs. Brief
 `~/.claude/plans/m78-fault-cooldown-brief.md`.
+
+# v1.41 — a new version of a piece takes the old one's place
+
+Steven, 2026-11-01: the library's band arrangements (about 360) are becoming piano versions and thousands of new songs
+are coming, but an import knew a file only by its bytes, so each new version would have arrived beside its old one, and
+pieces are deleted one at a time. Of three ways out (wiping the app's data, which loses favorites, plays, covers and
+settings; deleting the old versions by hand; replacing in place), Steven chose the last. **INDEX.csv's `replaces`** (an
+optional column after `path`): the SHA-256s of earlier versions of the row's file, apart by spaces; anything that is not
+64 hex digits is ignored, and an index without the column reads as before. **On import** a file the library already has
+is a duplicate, whatever its row names. Otherwise, when the row names an earlier version the library holds, the first
+added of them takes the new file in place: the file, its size, length and notes are the new version's (so are the
+length on its row, the Calm channel's notes a second and its roll card); the piece keeps its id, and with it its
+favorite, its plays and place in Recent, a rename, a move to Classical or Modern, its cover and its playlists, and it
+joins its row's playlist as a new piece would. The other earlier versions stay; a row naming none the library holds
+brings a new piece. Every import does this: Add zip, Add folder, the web panel, Steven's library. **The words**: the
+import bar "Imported 1,204 pieces, replaced 360 · in the playlist Pop." or "Replaced 360 pieces."; the web panel's
+tally "Imported 1,204 pieces · 360 replaced · 6 already there".

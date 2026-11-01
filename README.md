@@ -658,6 +658,19 @@ From 1.10.1 an upload of your own music arrives with its artists and in a playli
   artists and turning `Title - Artist` names the right way round. On the school
   tablet that is **MIDI**, 265 pieces.
 
+### Importing: a new version of a piece
+
+From 1.41 an `INDEX.csv` may have a `replaces` column after `path`: the SHA-256s of
+earlier versions of that row's file, apart by spaces (anything that is not 64 hex digits
+is ignored). When the library holds one of them, the new file takes its place: the
+piece plays the new version (its length and notes are the new ones) and keeps its
+favorite, its plays and its place in Recent, a rename, a move to Classical or Modern, its
+cover and its playlists; it also joins the row's playlist. When the library holds several
+of them, the one added first is replaced and the others stay. A file the library already
+has is skipped as before, and a row naming none the library holds brings a new piece.
+The import says "Imported 1,204 pieces, replaced 360" (the web panel: "360 replaced").
+Every import does this: Add zip, Add folder, the web panel and Steven's library.
+
 ## Steven's library
 
 A new tablet can load Steven's library straight from GitHub (from 1.10):

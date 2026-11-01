@@ -10397,3 +10397,31 @@ by hand, cooling then the sweep, a fault during a quick check; the sweep tests n
 ## The release: 1.40 (versionCode 51)
 
 M78 merged: the key sweep only after a fault CUT (other checks quick and silent), a 25-minute cool-down after a fault (persisted; Skip in Power plug behind the PIN), and an 80 W leeway on every power trip (the 100 W rail-up cap kept).
+
+# v1.41 — a new version in place: INDEX.csv's `replaces`
+
+From `2a6e7a1` (1.40), in the main checkout; the library side (writing the column) is another session's. No schema change
+(Room v7 stays). **`IndexCsv.Row.replaces: Set<String>`**: the column found by its header name `replaces` only (none
+without a header), its values apart by whitespace, each kept when it is 64 hex digits (lower-cased, in the field's
+order), else left out; an index without it reads as before. **`Importer.prepare`**: a SHA-256 seen in the batch or found
+(`findBySha`) is a duplicate as before, `replaces` unread; else the parse and `PieceFiles.write` (`<sha256>.mid`), then
+`replace(row, file)`: `ImportStore.oldestBySha(replaces)` (`PieceSql.OLDEST_BY_SHA`: the lowest id; 500 hashes a query)
+and `ImportStore.replaceFile(earlier.copy(sha256, fileName, sourceName, sizeBytes, durationMs, noteCount), collection)`:
+`PieceSql.REPLACE_FILE`, an `UPDATE OR IGNORE` of those six columns by id (0 rows: another piece holds the SHA-256, or
+the piece is gone), then the row's collection linked as `insertAll` links (`playlistId(name, imported = true)`;
+`addPiece` IGNORE keeps a piece already in it where it is), in one transaction. Names, `collection`, `addedAt`,
+`favorite`, `playCount`, `lastPlayedAt`, `genre`, `appleGenre`, artwork rows and links are not touched. On true the old
+file is deleted, `Importer(replaced = …)` hears the id (`AppGraph`: `ArtworkRepository.forgetRollCard`, the card's file
+and its bitmap, `BitmapCache.remove`) and the outcome is `Replaced` (its SHA-256 goes to the batch's playlist as any
+piece's does, D2); with no earlier version held, or false, the file is a new piece as before. Both store methods have
+defaults (none found, nothing written), as `artistGenres` has. `ImportProgress.replaced` (and in `piecesChanged`); the
+log's ", N replaced" only when some were; `WebApi.import`'s `replaced` and the panel's "N replaced" (`library.js`);
+`ImportCopy.summary` "Imported N pieces, replaced M" / "Replaced M pieces"; `LibraryPack`'s NOT_READ counts replaced
+pieces as read. **Tests:** `IndexCsvTest` (+4: the column, an index without it, bad values, no header), `ImporterTest`
+(+8: a replace keeps the id, favorite, plays, rename, genre and `addedAt` and swaps the SHA-256, the file, its size,
+length and notes, the old file deleted, the row's playlist, the roll card's hook, the log; a hash the library lacks
+brings a new piece; no column, a new piece beside the old; a known SHA-256 a duplicate whatever `replaces` names; the
+first added of several; a new version that is no MIDI file fails and leaves the piece; a refused replace brings a new
+piece; a zip's replaced piece in the zip's playlist), `PieceSqlTest` (new: both statements on Room's v7 export through
+sqlite-jdbc: only the six columns written, the unique index, the first added), `ImportCopyTest` (+1), `WebApiTest` (the
+`replaced` key).
