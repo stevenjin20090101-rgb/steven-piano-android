@@ -1109,17 +1109,17 @@ connect, the 24 V goes off again and the tablet says "The piano didn't start. Ch
   play. With "— 24 V cut", a board went missing while playing and the 24 V went off. Check the cables between the boards.
 - **Lost the power plug** — the tablet couldn't reach the plug twice: the music stopped and the tablet keeps trying to
   switch the 24 V off (the plug has no timer of its own). Bring the tablet nearer the plug, then play again.
-- **A key stayed on — 24 V cut** (1.30) — while a piece played, the 24 V drew a key's worth more than the music was
-  holding: the piece stopped and the 24 V went off. Tap Play: the safety check runs first, then the piece. If it keeps
-  happening, have that key's power board and its cable checked.
-- **A key stayed on after the piece — 24 V cut** (1.30) — after the piece the 24 V still drew a key's worth more than
-  idle, or the piano said a key was still on, or it had I²C trouble during the piece. The same: the safety check runs
-  before the next piece; if it keeps happening, have the board and cable checked.
+- **24 V cut: …** (1.39) — a power watch tripped, and the words say which rule and its numbers, so a report tells us
+  what fired: "a board stayed on, 150 W more than the notes explain", "a board stayed on, 45 W more than the piano's idle
+  (6 W)", "a key stayed on, 11 W more than the piano's idle (6 W) for 30 s", "the piano lost contact with a board (I²C
+  errors 0 → 1)", "45 W more than the piano's idle (6 W) after the piece", "the piano says 1 key is still on after the
+  piece". The safety check runs before the next piece; if it keeps happening, have the power boards and their cables
+  checked.
 - **The 24 V draws 36 W with nothing playing — 24 V cut** (1.30) — as the 24 V came on, before any note, it drew over
   30 W twice: a key's channel may be shorted. The safety check runs before the next piece; if this comes back, leave the
   24 V unplugged and have the power boards checked.
-- **The 24 V draws 12 W more than usual with nothing playing — 24 V cut** (1.31) — as the 24 V came on, it drew more than
-  half a key above its usual (the middle of its last 5 starts, kept with the plug's pairing), twice a second apart: a
+- **The 24 V draws 45 W more than usual with nothing playing — 24 V cut** (1.31; from 1.39 at 40 W or more, not half a
+  key) — as the 24 V came on, it drew that much above its usual (the middle of its last 5 starts, kept with the plug's pairing), twice a second apart: a
   key's channel may have been on since before, which the 30 W cap misses. The safety check runs before the next piece.
   After this, a check that hears every key lets the tablet learn the usual again; a check with the microphone off keeps
   it, so this comes back at every start: annoying, but safe. While the extra draw stays, the check's own start is cut too:
@@ -1146,15 +1146,48 @@ adverts; "—" when none came for 10 seconds), the last 10 minutes as a line, to
 times, and the energy today, this month and since pairing in kWh. It counts only the 24 V supply on the plug. A gap in
 the adverts over 10 seconds counts as nothing, not as the last reading. Kept with the pairing; Forget clears it.
 
-**The power watch** (1.30; from 1.36 the draw comes from the SwitchBot's adverts): while a piece plays, the tablet also
-reads what the 24 V supply draws, about every 2 seconds, and weighs it against the keys the music holds (about 12 W each at Full power). A key on that the music isn't holding —
-an I²C hiccup that lost its release — shows as a steady extra draw: after about 20 seconds of it with the pedal up, the
-piece stops and the 24 V goes off. Readings with the pedal down are skipped (its motor draws more then), and so is the
-watch during the piece with Full power off; the check after the piece always runs. After each piece, before the 24 V goes
-off (about a second later than before), it reads the draw twice and asks the piano whether a key is still on and whether
-it had I²C trouble. As the 24 V comes on, more than 30 W with nothing playing cuts it too, and (1.31) so does more than
-half a key above what the plug usually draws then. Each time, the safety check runs before the next piece. Without a plug
-paired, nothing of this happens.
+**The power watch** (1.30; from 1.36 the draw comes from the SwitchBot's adverts; 1.39 after a false trip on the real
+piano). A real failure is a whole power board: one that loses I²C latches its 16 keys on, 150–190 W more. So:
+
+- **While a piece plays**, the draw alone never stops it, however high (a passage with nearly every key down draws 500 W
+  and more, and that is fine). It stops only when, for 5 seconds, the draw is **100 W or more above what the notes explain**
+  (idle + the busiest second's keys over the last 3 s × 12 W + 30 W for the pedal: the adverts can trail by seconds),
+  or when the piano's own **I²C error count** goes up (read every 5 seconds during a piece, between MIDI packets). Both
+  cut the 24 V at once. The old "a key's worth for 20 s" watch now only writes to the log: it stopped a piece that was fine.
+- **With nothing playing** (no note for 2 s, no key held, the pedal up): **40 W** above the piano's idle (the middle of
+  its last 20 idle readings) on two readings is a board on; **10 W** above it for **30 s** is a key on; the I²C count is
+  read every 30 s. Each cuts the 24 V at once.
+- **After each piece**: 1.5 s after the stop, the piano is asked whether a key is still on and whether it had I²C trouble
+  (either cuts at once); then three adverts that came after that, about a second apart: all three 40 W or more above
+  idle cuts it. An advert from the piece's last notes never counts.
+- **As the 24 V comes on**: more than 30 W twice with nothing sent cuts it, and so does 40 W or more above what the plug
+  usually draws (learned from an idle reading at least 5 s after the piano connects: the controller boots on the plug).
+- No advert for over 10 seconds with the 24 V on: "Power reading lost" in amber under Now playing, and logged; nothing
+  is cut for that alone.
+- **While a piece plays, the plug is also asked every 5 s whether it is on** (a short connection, so its adverts keep
+  flowing). Found off (its button, or its power), or an advert saying off: the notes wait, the tablet switches it on
+  again, waits for the piano, and the piece carries on where it was. Three unanswered asks in a row stop the music
+  ("Lost the power plug").
+
+Each trip makes the safety check run before the next piece.
+
+**On hours** (1.39, Piano › Power plug › On hours; on by default, 7:00–22:00 every day, with From and To): within them the
+piano stays on and connected all day, so Play starts at once. Outside them it is off, and the Piano tab says "Piano off
+until 7:00 · press Play here to wake it" (the System page and the web panel too). A person at the tablet still wakes it:
+Play, Keys, Turn the piano on, Test every key, the safety check. After a piece the tablet keeps it on 2 minutes for the
+next one, then turns it off. The web panel, the relay and guests can't wake it outside the hours: "The piano is off until
+7:00" (guests' requests still join Up next). A piece already playing at 22:00 finishes, then the 24 V goes off. Quiet
+times still hold playback as before. The web panel's System page has **Turn the piano on / off** too (on refused outside
+the hours).
+
+**The power on Now playing** (1.39): with a plug paired, one quiet line under the transport, "12.3 W now · peak 145.0 W
+this piece" (the peak starts again with each piece; "— W" without a reading under 3 s old). The web panel's Now playing
+shows it in whole watts.
+
+**The safety check every 6 pieces** (1.39, Piano › System): **off by default**, and switched off once for every install.
+Off, the tablet still checks the piano quietly after every piece and watches its power; a trip still asks for a safety
+check before the next piece, and **Run the safety check** still runs one by hand. With the plug, the check's "power off
+and on" is the piano's restart (its controller is on the plug), so the console's restart is skipped.
 
 **Needs the real plug** (the tests run every step against a fake plug), with the firmware's bench checks in
 `SMART_PLUG.md`:
@@ -1166,8 +1199,9 @@ paired, nothing of this happens.
 - [ ] Kill the app mid-piece: the 24 V **stays on** (no plug timer); the outlet timer is what ends it. Open the app: off.
 - [ ] Guest play: the iPad plays for the hour; End guest play turns the 24 V off.
 - [ ] The draw under load, with a 47 Ω / 25 W dummy load on the 24 V (`SMART_PLUG.md` › check 12): Power use reads about
-      12 W more, and the power watch stops a piece within about 20 s. This confirms the advert's power formula, and whether
-      the plug keeps advertising while the tablet holds its connection during a piece.
+      12 W more, and the log shows the floor watch's "log only" line within about 20 s (it no longer cuts). This confirms the
+      advert's power formula (pySwitchBot's, checked again for 1.39), and how far the adverts trail the switch.
+- [ ] 1.39: a board's worth (a 4 Ω / 200 W resistor: 144 W, briefly) on the 24 V mid-piece cuts within about 6 s; idle, within 2 s.
 
 ## Kiosk
 
