@@ -3880,3 +3880,22 @@ read, with the usual idle; Piano › Power plug says to pair the SwitchBot. **Pi
 now, the last 10 minutes as a still line, today's and the all-time peak, and the kWh today, this month and since pairing,
 integrated from the adverts (a gap over 10 s is no data) and kept with the pairing. Brief
 `~/.claude/plans/m72-switchbot-brief.md`; no firmware change.
+
+# v1.37 — M74: Studio's genre styles
+
+Steven, 2026-11-01: modern music, in the manner of his own songs. Studio's idea box (and the options sheet, and the web
+panel's form) gains four genre styles, each a suggestion chip: **Lo-fi** (also lofi, lo fi, chillhop), **House** (dance,
+EDM), **Chill / ambient** (ambient, relaxing) and **Cinematic / pop ballad** (ballad, film, emotional). The line says it,
+"Lo-fi · 3 min · after Shape of You (Ed Sheeran)", and so does the title ("Lo-fi, after Shape of You", "House piece"); it
+works with the rest ("sad lo-fi in D minor, 2 minutes"), and the follow-ups keep the genre (and its song, unless
+"different"). The seed is drawn at random from his songs of that genre: the library's pieces in the playlists named for
+it by Apple Music's genres (House & Dance, K-pop, Soundtrack, R&B/Soul…; case and punctuation ignored), never a fragment
+under 30 s nor Studio's own; with none there, any Modern piece ("No lo-fi songs yet: after …"); with none of those, the
+default seed; a title in the idea still wins. Every result is new music: the model continues the seed. The feel
+(`GenreFeel`, after `Postprocess`'s own steps) sets defaults the person can change: lo-fi 70–77 bpm, swung eighths, a
+little lazy, softer, its minor, the pedal changed every bar; house 120–123, a firmer 1/16 grid, brighter, the left hand's
+beats accented, dry; chill 60–67, softer and sparser, a ritardando, a two-bar pedal; cinematic 60–70, soft, building to a
+peak two thirds through and fading, a two-bar pedal. Each tempo is the seed's own held in the gentle half of the genre's
+range; every genre has a cap under the piano's loudest. The piano's limits stay as they were: the feel only ever makes a
+note shorter or leaves it, never puts more keys down at once, and every note and pedal ends. Brief
+`~/.claude/plans/m74-studio-genres-brief.md`; no firmware change.

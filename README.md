@@ -1365,7 +1365,7 @@ Studio is the fourth tab: Library · Now playing · Keys · **Studio** · Piano.
 screen, under "What should the piano play?", type an idea in the box ("Describe a piece…") and
 **Send**, or tap a suggestion: a mood (calm, bright, stormy, sad…), a tempo (slow, andante, fast,
 96 bpm), a key (in D minor, F♯ major), a length (2 minutes, 3:30, short), a form (nocturne, waltz,
-lullaby, étude…), a composer, a performer or a piece's name from the library, or a channel or list
+lullaby, étude…), a genre style (below), a composer, a performer or a piece's name from the library, or a channel or list
 (Baroque, Popular). There is no text model: words are understood by keywords, and the line under
 the box says what was understood ("Calm · D minor · slow · 2 min · in the manner of Clair de lune
 (Debussy)") and which words were not used. The ring round the box is the aura: it turns slowly at
@@ -1384,12 +1384,26 @@ Titles are made from what was understood, never from what was typed: "Calm, afte
 hides the words until the PIN opens the settings); Models, recordings, Keep, Discard and removing a
 turn ask for the PIN. The notification opens the Studio tab.
 
+**Genre styles (1.37)**: **Lo-fi** (also lofi, chillhop), **House** (dance, EDM), **Chill / ambient** (ambient,
+relaxing) and **Cinematic / pop ballad** (ballad, film, emotional), each a suggestion chip, and they mix with the rest:
+"sad lo-fi in D minor, 2 minutes". A genre piece grows from **one of your own songs of that genre**, drawn at random
+from the library's playlists named for it by Apple Music's genres (Lo-Fi, Hip-Hop/Rap, Jazz, R&B/Soul for lo-fi; House
+& Dance, Dance, Electronic for house; Chill, Ambient, New Age for chill; Soundtrack, Pop, Singer/Songwriter, K-pop for
+cinematic), never a fragment under 30 seconds nor one of Studio's own. The line names it: "Lo-fi · 3 min · after Shape of
+You (Ed Sheeran)"; with none of that genre yet, any Modern piece ("No lo-fi songs yet: after …"); a song named in the
+idea ("house after Clair de lune") still wins. Then the genre's feel: lo-fi slow and swung, a little lazy, soft, minor,
+the pedal changed every bar; house at 120 bpm or so, tight to the beat, brighter, dry; chill slow, soft and sparse,
+easing off at the end under a long pedal; cinematic soft, building to a peak two thirds through and fading. Each sets
+only defaults (tempo, key, mood): what you ask for wins. **Every result is a new piece**: the model carries the song's
+first fifteen seconds on into music of its own, never the song itself. The options sheet and the web panel's form have
+a **Genre** row too (None, Lo-fi, House, Chill, Cinematic).
+
 **Composing a piece**
 
 1. **Studio › Models › Composing › Download**, once: 173 MB, checked the same way.
 2. Type an idea and **Send** (above), or **Options** on the Studio tab (also **Library › + ›
    Compose in Studio…**) for the sheet:
-   **Mood** (Calm, Bright, Wild, Melancholy); **Key** (C to B, major or minor) and **Tempo** (40–200
+   **Mood** (Calm, Bright, Wild, Melancholy); **Genre** (None, or one of the four styles above); **Key** (C to B, major or minor) and **Tempo** (40–200
    bpm), both the chosen piece's own until you change them (Melancholy turns the key to its minor);
    **Length** (1–5 minutes); and **In the manner of**: the piece played last, or **Change** to search
    the library for another. From a computer or a phone, the web panel's **Studio** page has the same
@@ -1405,7 +1419,7 @@ turn ask for the PIN. The notification opens the Studio tab.
 **What it writes**: new music only. The chosen piece's first fifteen seconds are the model's
 starting point and are never part of the result; the model (trained on the Lakh MIDI collection,
 not on piano alone) carries on in their manner, not note for note. Calm plays softest, Wild the
-most freely; every piece ends with a two-bar fade and no pedal. Every note is one the piano can
+most freely; every piece ends with a two-bar fade, and with no pedal unless a genre style asks for it. Every note is one the piano can
 play: keys 24–107, a key struck again no sooner than 120 ms after itself, at most ten notes
 starting at once. A very dense piece can come out shorter than asked (the model is stopped at 45
 tokens a second of music, 13,500 for five minutes since 1.12); its card then says so: "3:41 written
