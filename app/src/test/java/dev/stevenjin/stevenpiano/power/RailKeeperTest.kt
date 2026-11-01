@@ -1119,16 +1119,16 @@ class RailKeeperTest {
     }
 
     @Test
-    fun `the rail-up cap - above 30 W twice a second apart with nothing sent, CUT, said and the check due, notes held throughout`() = runTest {
+    fun `the rail-up cap - above 100 W twice a second apart with nothing sent, CUT, said and the check due, notes held throughout`() = runTest {
         val bench = Bench(this)
         val watch = bench.Watch()
         val keeper = bench.keeper(watch)
         val held = mutableListOf<Boolean>()
         backgroundScope.launch { keeper.notesHeld.collect { held += it } }
-        bench.extraWatts = 30.0
+        bench.extraWatts = 100.0
         keeper.wanted(RailKeeper.PLAY, true)
         advanceTimeBy(5_000)
-        assertEquals(RailMessage.Overdraw((IDLE_WATTS + 30.0).roundToInt()), keeper.message.value)
+        assertEquals(RailMessage.Overdraw((IDLE_WATTS + 100.0).roundToInt()), keeper.message.value)
         assertEquals(listOf("CHECK", "ARM", "CHECK", "CHECK", "STOP PLAYING", "STOP", "CUT", "CHECK DUE"), bench.kinds())
         assertTrue("no note went", held.all { it })
         assertEquals(1, watch.due)

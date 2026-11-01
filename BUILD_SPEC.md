@@ -10368,3 +10368,7 @@ The SwitchBot advert's scale matches pySwitchBot (`((data[10] << 8) + data[11]) 
 check; the floor watch log-only, the after-piece and usual-idle rewritten), `PowerWatchTest` (dense 60–84 keys with the
 pedal, a sudden passage 2 s late, a 144 W board; after the piece), `OnHoursTest` 3, `SafetyRunnerTest` (every 6 off),
 `SettingsRepositoryTest` (the migration), `AdvertWatchTest` updated.
+
+## The release: 1.39 (versionCode 50)
+
+M76 (On hours 7:00–22:00, the stuck-board trips: 100 W unexplained for 5 s while playing, 40 W at idle, `!i2cfails` every 5 s / 30 s; the M67 floor watch log-only after a false trip on the real piano; the after-piece check on fresh adverts; the 5 s plug check; the 2-minute grace; the power on Now playing; the 6th-piece check off) and M77 (the kiosk guide, never force-stopped, PowerService, Runs reliably, K-pop artists plain) merged. The integrator raised the rail-up cap 30 W → 100 W (the controller boots on the plug).

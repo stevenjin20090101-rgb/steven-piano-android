@@ -465,9 +465,11 @@ class PowerWatchTest {
     // ---- The rail-up cap ----------------------------------------------------------------------------------------------
 
     @Test
-    fun `the rail-up cap - above 30 W with nothing sent is a fault`() {
-        assertEquals(PowerVerdict.Overdraw(31.0), PowerWatch.railUp(31.0))
-        assertEquals(PowerVerdict.Fine, PowerWatch.railUp(30.0))
+    fun `the rail-up cap - above 100 W with nothing sent is a fault, a controller booting is not`() {
+        assertEquals(PowerVerdict.Overdraw(156.0), PowerWatch.railUp(156.0))
+        assertEquals(PowerVerdict.Overdraw(101.0), PowerWatch.railUp(101.0))
+        assertEquals(PowerVerdict.Fine, PowerWatch.railUp(100.0))
+        assertEquals(PowerVerdict.Fine, PowerWatch.railUp(45.0))
         assertEquals(PowerVerdict.Fine, PowerWatch.railUp(12.0))
         assertEquals(PowerVerdict.Fine, PowerWatch.railUp(null))
     }

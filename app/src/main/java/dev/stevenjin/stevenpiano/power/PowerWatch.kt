@@ -161,10 +161,11 @@ class PowerWatch(railUpWatts: Double?) {
         const val STUCK_FLOOR_WATTS = 3.0
 
         /**
-         * The rail-up's sanity cap: the supply idles at 5–15 W and the pedal's motor draws a few watts up, so more than
-         * this with nothing sent is a channel on (shorted, or held from before). The bench refines it.
+         * The rail-up's sanity cap: more than this with nothing sent is a board on (a PCA latched high: 16 coils, about
+         * 144 W). v1.39: 30 W → 100 W, as the controller now boots on the plug and the pedal's motor settles at rail-up
+         * (a false trip on the real piano); a single shorted channel is left to the idle watch (10 W for 30 s).
          */
-        const val CAP_WATTS = 30.0
+        const val CAP_WATTS = 100.0
 
         /** The floor watch trips on this many readings counted in a row, spanning at least [RUN_MS]. */
         const val RUN_READINGS = 8
