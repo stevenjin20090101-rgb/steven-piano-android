@@ -3919,3 +3919,23 @@ shows); a House & Dance song shows its album cover, else its roll card, and the 
 the 2×2 mosaic; the artist's photo never appears for either, in rows, Now playing, the backdrop's colours, a channel's
 card or the web panel. **Playlists first**: the Library opens on Playlists, its chip first, the playlists above the
 channels' row; the web panel's Library opens on Playlists too. Brief `~/.claude/plans/m73-library-genres-brief.md`.
+
+# v1.38 — M75: the plug on while playing
+
+Steven, 2026-11-01, on 1.37 with the SwitchBot: a piece played with notes on screen and no sound. **The cause:** the
+piano's controller is on the same plug as the 24 V, so with the plug off the piano is off and has no link. The rail-up
+needed a connected piano and a good CHECK before any ARM, so a want waited for a link that could never come; meanwhile
+notes weren't held (no link, the rail off: "they go nowhere anyway"), and M72's advert watch CUT a plug found on while a
+want waited with no ARM. **Now:** a want with no link wakes the piano: ARM first (confirmed on by the reply's switch, then
+a status read; 3 tries a second apart, else "Lost the power plug"), the link asked to connect at once (and every 5 s),
+30 s at most for it, the 1.5 s settle, then the CHECK, and only then notes; no link in time is CUT and "The piano didn't
+start. Check its power." "A good CHECK before ARM" still rules while the piano is already connected. With the plug,
+notes are held whenever the rail isn't up, connected or not, so Play, the next piece and the panel's Play pause the piece
+at its start ("Waking the piano…") and play it from there once the piano is up; a drop while the rail holds the notes
+(the controller going off with a CUT) is left to that hold rather than pausing the piece. The advert watch never CUTs
+while anything wants the rail. Test every key and the safety check no longer wait for a connected piano with the plug:
+their own want wakes it (their wait for the rail is 45 s). **Piano › Power plug** gains **Turn the piano on / Turn the
+piano off** near the top ("On · turns off in 28 min"): a `manual` want through the same rail-up, ending by itself 30
+minutes after the last note. Deferred: the idle "Piano off · turns on when you play" words and no reconnect loop while
+off, the 5 s on-check while playing, the 2-minute grace between pieces, repower-as-restart for the safety check, the
+panel's button. Brief `~/.claude/plans/m75-plug-on-while-playing-brief.md`.

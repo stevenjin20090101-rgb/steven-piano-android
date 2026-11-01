@@ -147,6 +147,12 @@ sealed interface RailMessage {
     /** "Lost the power plug": ARM failed twice in a row. */
     data object PlugLost : RailMessage
 
+    /**
+     * v1.38 — M75: the piano was off (its controller is on the plug too) and its link didn't come up within 30 s of a
+     * confirmed ARM: the 24 V CUT, "The piano didn't start. Check its power."
+     */
+    data object PianoDidntStart : RailMessage
+
     /** "Only [answered] of [total] power boards answered" (a trunk fault), and "— 24 V cut" when [cut]. */
     data class TrunkFault(val answered: Int, val total: Int, val cut: Boolean) : RailMessage
 
@@ -189,6 +195,10 @@ sealed interface RailMessage {
  *   board reads OK, 10 s at most. The boards that answered are the **baseline**; fewer than seven is a trunk fault, said;
  *   none ends it. Notes wait meanwhile ([notesHeld], which [RailGate] applies). Boards that answer with the rail off (the
  *   trunk fed from the controller) prove nothing: then the wait is a fixed 1.5 s after ARM.
+ * - **Waking the piano from off** (v1.38 — M75): the piano's controller is on the plug with the 24 V, so with no link the
+ *   piano is off and there is nothing to CHECK. A want then ARMs first (confirmed on: the reply's switch, then a status;
+ *   3 tries a second apart), asks the link to connect at once ([wakeLink]), waits 30 s at most for it, then the 1.5 s
+ *   settle and the CHECK; notes wait throughout. No link in time: CUT, "The piano didn't start. Check its power."
  * - **While wanted:** every 10 s the CHECK, then ARM only when the piano answered and every baseline board still reads OK.
  *   **Nothing ARMs without a good CHECK just before it**, but the two exceptions: a firmware update from BEGIN until its
  *   outcome (3 minutes at most) and guest play this tablet started (60 minutes at most), which ARM every 10 s unchecked.
@@ -234,6 +244,11 @@ class RailKeeper(
     private val log: (String) -> Unit = {},
     /** The power watch's other readings (v1.30 — M67); null: no power watch, as before it. */
     private val power: PowerHost? = null,
+    /**
+     * v1.38 — M75: asks Steven Piano's link to connect now (the piano's controller is on the plug too, so it is off until
+     * an ARM): called once the plug confirms on, and again every [WAKE_ASK_EVERY_MS] until the link is up.
+     */
+    private val wakeLink: () -> Unit = {},
 ) : RailPower {
     private val context = scope.coroutineContext.minusKey(Job)
 
@@ -277,6 +292,14 @@ class RailKeeper(
 
     /** When guest play this tablet started ends ([now]'s clock); null with none. */
     val guestUntil: StateFlow<Long?> = _guestUntil.asStateFlow()
+
+    private val _manualUntil = MutableStateFlow<Long?>(null)
+
+    /**
+     * v1.38 — M75: until when ([now]'s clock) Piano › Power plug's **Turn the piano on** keeps the rail wanted ([manual]);
+     * null while it doesn't. Past it, the want has ended by itself.
+     */
+    val manualUntil: StateFlow<Long?> = _manualUntil.asStateFlow()
 
     private val _welded = MutableStateFlow(false)
 
@@ -368,6 +391,7 @@ class RailKeeper(
 
     override fun wanted(reason: String, on: Boolean) {
         if (on) put(reason) else remove(reason)
+        playedNow()
     }
 
     /** The Keys tab came on screen ([on]) or left it: while on it wants the rail, until 10 minutes pass without a key. */
@@ -380,6 +404,31 @@ class RailKeeper(
     /** A key on the Keys tab (the screen's or a keyboard's through Live): the idle cut starts over, and a rail cut for idling comes up. */
     fun keyPressed() {
         if (keysShown) put(KEYS, until = now() + KEYS_IDLE_MS)
+        playedNow()
+    }
+
+    /**
+     * v1.38 — M75: Piano › Power plug's **Turn the piano on** ([on]) or **Turn the piano off**. On, it wants the rail as any
+     * feature does (the same rail-up: ARM, the piano's link, the CHECK), until [MANUAL_IDLE_MS] pass without notes: a
+     * piece starting or ending, a key, or any other want coming or going starts the 30 minutes again. Off, the want goes,
+     * and the usual stop follows (the stop sequence, a second, CUT) unless something else wants the rail.
+     */
+    fun manual(on: Boolean) {
+        if (on) {
+            val until = now() + MANUAL_IDLE_MS
+            put(MANUAL, until = until)
+            _manualUntil.value = until
+        } else {
+            remove(MANUAL)
+            _manualUntil.value = null
+        }
+    }
+
+    /** Something played, or wanted the rail, or stopped wanting it (v1.38 — M75): a manual want's 30 minutes start again. */
+    private fun playedNow() {
+        val want = wants[MANUAL] ?: return
+        if (!live(want, now())) return
+        manual(true)
     }
 
     /**
@@ -429,9 +478,9 @@ class RailKeeper(
 
     /**
      * An advert of the paired plug (v1.36 — M72; [PlugAdverts], on [scope]'s thread): its switch [on]. Nothing wanting the
-     * rail and the rail off (or a want waiting with no ARM of the keeper's: not [holding]; never while it stops: the check
-     * after the piece reads it), "on" is CUT at once (logged): the plug on at power-up, someone with the SwitchBot app, a CUT
-     * that was missed. Adverts sent before a CUT may still say on for
+     * rail and the rail off (not [holding]; never while it stops: the check after the piece reads it; since v1.38 — M75
+     * never while anything wants the rail, one waiting for the piano included), "on" is CUT at once (logged): the plug on at
+     * power-up, someone with the SwitchBot app, a CUT that was missed. Adverts sent before a CUT may still say on for
      * [ADVERT_SETTLE_MS]; one after that is another CUT, and [ADVERT_CUTS] in a row that didn't take show the amber
      * [welded]. "Off", or something wanting the rail, starts the count again.
      */
@@ -485,11 +534,12 @@ class RailKeeper(
     }
 
     /**
-     * Whether the keeper holds the rail on (v1.36 — M72): coming up, up, kept or stopping, or wanted with an ARM of its own
-     * standing (wanted again within the stop's second). Not while the rail is off and a want waits (for the piano's link,
-     * or through the safety check's restart): a plug on then is on by itself, and is CUT.
+     * Whether the keeper holds the rail on (v1.36 — M72): coming up, up, kept or stopping, or wanted at all. v1.38 — M75:
+     * the piano's controller is on the plug too, so a want waiting for the piano's link is exactly when the plug must come
+     * on (M72 CUT a plug on then, with no ARM of the keeper's: the deadlock that played a piece into an unpowered piano).
+     * Only a plug on with nothing wanting the rail is CUT.
      */
-    private fun holding(): Boolean = _phase.value != RailPhase.Off || wantedNow() && _armedAt.value != null
+    private fun holding(): Boolean = _phase.value != RailPhase.Off || wantedNow()
 
     /** The message is read (its OK): it goes. */
     fun dismissMessage() {
@@ -550,9 +600,10 @@ class RailKeeper(
                 RailPhase.Up, RailPhase.Kept -> keep()
                 else -> {
                     setPhase(RailPhase.Off)
-                    // The CHECK needs the piano's link: without it, what wants the rail waits for it (the update and
-                    // guest play need none). Meanwhile the plug watch looks once a minute (v1.29 — M66).
-                    while (!waitFor(now() + WATCH_EVERY_MS) { wantedNow() && (uncheckedNow() || connected.value) }) watch()
+                    // v1.38 — M75: a want brings the rail up whether the piano's link is up or not: the controller is on
+                    // the plug too, so without the link the piano is off, and the rail-up wakes it ([wake]). Meanwhile the
+                    // plug watch looks once a minute (v1.29 — M66).
+                    while (!waitFor(now() + WATCH_EVERY_MS) { wantedNow() }) watch()
                     session()
                 }
             }
@@ -585,13 +636,15 @@ class RailKeeper(
      */
     private suspend fun railUp(): Boolean {
         val mayBeUp = mayBeUp()
-        if (!connected.value) return quietly(mayBeUp)   // gone meanwhile: the loop waits for it again
         powerWatch = null
         setPhase(RailPhase.Waking)
         _message.value = RailMessage.Waking
         if (!wantedNow()) return quietly(mayBeUp)
+        // v1.38 — M75: no link, the piano is off (its controller is on the plug too): ARM first, then its link, then the
+        // CHECK ([wake]). "A good CHECK before ARM" holds only while the piano is already connected.
+        val woke = !connected.value
+        var before: Boards? = if (woke) wake() ?: return false else null
         // The CHECK before ARM: never ARM without a good one. Two unanswered in a row, or two refused ARMs, end it.
-        var before: Boards? = null
         var misses = 0
         var refused = 0
         while (before == null) {
@@ -611,12 +664,15 @@ class RailKeeper(
                 if (waitFor(now() + RETRY_MS) { !wantedNow() }) return quietly(true)
             }
         }
-        val armedAt = _armedAt.value ?: now()
+        // Woken, the boards came up with the controller: their 500 ms looks count from the link, not the ARM long before.
+        val armedAt = if (woke) now() else _armedAt.value ?: now()
         val baseline: Set<Int> = when {
+            // Woken: the controller and the 24 V came on together, so every board answering is the rail up.
+            woke && before.all -> before.okSet
             // Every board answered with the rail off: the trunk side is fed from the controller, so the boards prove
             // nothing; the supply gets a fixed 1.5 s instead (SMART_PLUG.md › rule 2). (With the rail perhaps still up
             // from an ARM no CUT took since, the first CHECK below finds them all and the wait is 500 ms.)
-            !mayBeUp && before.all -> {
+            !woke && !mayBeUp && before.all -> {
                 if (waitFor(armedAt + CONTROLLER_FED_MS) { !wantedNow() }) return stopRail()
                 val after = checkTwice() ?: return if (wantedNow()) fail(RailMessage.PianoSilent) else stopRail()
                 after.okSet
@@ -699,6 +755,57 @@ class RailKeeper(
         log("Rail up: ${baseline.size} of $total boards")
         setPhase(RailPhase.Up)
         return true
+    }
+
+    /**
+     * v1.38 — M75: the piano woken from off. Its controller is on the plug with the 24 V, so with no link there is nothing
+     * to CHECK: ARM first, confirmed on ([armConfirmed]), then its link asked for at once ([wakeLink], again every
+     * [WAKE_ASK_EVERY_MS]), [WAKE_LINK_MS] at most; the supply's 1.5 s settle after the ARM; then the CHECK (twice, 500 ms
+     * apart, when the first goes unanswered). The first CHECK's boards; null when it ended: failed and said (the plug never
+     * on: "Lost the power plug"; no link in time: CUT, "The piano didn't start. Check its power."), or no longer wanted.
+     */
+    private suspend fun wake(): Boards? {
+        log("Rail: the piano is off; ARM first, then its link")
+        when (armConfirmed()) {
+            null -> return null.also { quietly(true) }
+            false -> return null.also { fail(RailMessage.PlugLost) }
+            true -> Unit
+        }
+        val by = now() + WAKE_LINK_MS
+        while (!connected.value) {
+            wakeLink()
+            val t = now()
+            if (t >= by) {
+                log("Rail: the piano's link didn't come up within ${WAKE_LINK_MS / MS_PER_S} s of the ARM; CUT")
+                return null.also { fail(RailMessage.PianoDidntStart) }
+            }
+            waitFor(minOf(by, t + WAKE_ASK_EVERY_MS)) { connected.value || !wantedNow() }
+            if (!wantedNow()) return null.also { quietly(true) }
+        }
+        log("Rail: the piano's link is up after the ARM")
+        val armed = _armedAt.value ?: now()
+        if (waitFor(armed + CONTROLLER_FED_MS) { !wantedNow() }) return null.also { quietly(true) }
+        val read = checkTwice()
+        if (!wantedNow()) return null.also { quietly(true) }
+        if (read == null) return null.also { fail(RailMessage.PianoSilent) }
+        _boards.value = read
+        return read
+    }
+
+    /**
+     * ARM until the plug confirms on (v1.38 — M75): its reply's switch on ([RailPlug.arm]), then a status read that doesn't
+     * say off; [ARM_TRIES] tries [ARM_AGAIN_MS] apart. True on; false when it never confirmed; null when no longer wanted.
+     */
+    private suspend fun armConfirmed(): Boolean? {
+        repeat(ARM_TRIES) { i ->
+            if (i > 0 && waitFor(now() + ARM_AGAIN_MS) { !wantedNow() }) return null
+            if (arm()) {
+                if (plug.status()?.output != false) return true
+                log("ARM: the plug answered, but its status says off")
+            }
+            if (!wantedNow()) return null
+        }
+        return false
     }
 
     /**
@@ -932,9 +1039,10 @@ class RailKeeper(
         say(RailMessage.Off)
     }
 
-    /** Ends everything: the wants so far, what plays, then the stop sequence and CUT. */
+    /** Ends everything: the wants so far (Turn the piano on's too), what plays, then the stop sequence and CUT. */
     private suspend fun end() {
         consumedThrough = nextSeq - 1
+        _manualUntil.value = null
         stopPlaying()
         stopSequence()
         cutRail()
@@ -1139,10 +1247,13 @@ class RailKeeper(
         if (phase != RailPhase.Waking && _message.value == RailMessage.Waking) _message.value = null
     }
 
-    /** Notes wait while the plug switches the rail and it isn't up; with no piano connected and the rail off, they go nowhere anyway. */
+    /**
+     * Notes wait while the plug switches the rail and it isn't up. v1.38 — M75: with no piano connected too (its controller
+     * is on the plug, so it is off): a piece started then is paused at its start ([RailHold]) while the rail-up wakes it.
+     */
     private fun refreshHeld() {
         val phase = _phase.value
-        _held.value = available.value && phase != RailPhase.Up && phase != RailPhase.Kept && (connected.value || phase != RailPhase.Off)
+        _held.value = available.value && phase != RailPhase.Up && phase != RailPhase.Kept
     }
 
     /** [message] for a few seconds (the calm "24 V off"), unless another comes meanwhile. */
@@ -1181,6 +1292,19 @@ class RailKeeper(
         const val STOP_TO_CUT_MS = 1_000L
         const val CONTROLLER_FED_MS = 1_500L
         const val REPOWER_OFF_MS = 3_000L
+
+        /**
+         * v1.38 — M75: waking the piano from off. Its link awaited this long after a confirmed ARM, and asked for again this
+         * often meanwhile (a scan that ended before the controller advertised); an ARM tried this many times, this far apart,
+         * until the plug confirms on.
+         */
+        const val WAKE_LINK_MS = 30_000L
+        const val WAKE_ASK_EVERY_MS = 5_000L
+        const val ARM_TRIES = 3
+        const val ARM_AGAIN_MS = 1_000L
+
+        /** v1.38 — M75: Turn the piano on's want ends by itself after this long without notes. */
+        const val MANUAL_IDLE_MS = 30 * 60_000L
 
         /** How long [repower]'s own want keeps the rail up after it: the safety check's sweep is about 39 s. */
         const val REPOWER_HOLD_MS = 60_000L
@@ -1223,6 +1347,7 @@ class RailKeeper(
         const val UPDATE = "update"
         const val GUEST = "guest"
         const val REPOWER = "repower"
+        const val MANUAL = "manual"
 
         private const val MINUTE_MS = 60_000L
         private const val MS_PER_S = 1_000L

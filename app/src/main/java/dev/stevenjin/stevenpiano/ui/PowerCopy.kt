@@ -38,6 +38,9 @@ object PowerCopy {
     const val PIANO_SILENT = "The piano stopped answering — 24 V cut"
     const val PLUG_LOST = "Lost the power plug"
 
+    /** v1.38 — M75: the piano woken from off, and its link never came up. */
+    const val PIANO_DIDNT_START = "The piano didn't start. Check its power."
+
     /** The plug watch (v1.29 — M66). */
     const val SWITCHED_ON = "The power plug had been switched on by something else: switched off"
     const val SETTINGS_PUT_BACK = "The power plug's settings had been changed: put back"
@@ -63,6 +66,7 @@ object PowerCopy {
         RailMessage.Off -> RAIL_OFF
         RailMessage.PianoSilent -> PIANO_SILENT
         RailMessage.PlugLost -> PLUG_LOST
+        RailMessage.PianoDidntStart -> PIANO_DIDNT_START
         is RailMessage.TrunkFault -> trunk(message.answered, message.total, message.cut)
         RailMessage.SwitchedOn -> SWITCHED_ON
         RailMessage.SettingsPutBack -> SETTINGS_PUT_BACK
@@ -108,6 +112,14 @@ object PowerCopy {
     const val SWITCH = "Switch the 24 V with the plug"
     const val SWITCH_ON_NOTE = "The 24 V comes on for each piece, Test every key, the Keys tab and updates, and goes off after."
     const val SWITCH_OFF_NOTE = "The app leaves the plug alone: to play without it, plug the 24 V supply into a wall socket."
+
+    /** v1.38 — M75: Piano › Power plug's manual switch for the 24 V (and the piano's controller with it). */
+    const val TURN_ON = "Turn the piano on"
+    const val TURN_OFF = "Turn the piano off"
+    const val MANUAL_OFF_NOTE = "Plays still turn it on by themselves. On, it stays on until 30 minutes pass without a note."
+
+    /** The manual switch's state: "On · turns off in 28 min" (the minutes rounded up, 1 at least). */
+    fun manualOn(msLeft: Long): String = "On · turns off in ${((msLeft + 59_999) / 60_000).coerceAtLeast(1)} min"
 
     const val STATE = "The plug"
     const val OUTPUT = "24 V"

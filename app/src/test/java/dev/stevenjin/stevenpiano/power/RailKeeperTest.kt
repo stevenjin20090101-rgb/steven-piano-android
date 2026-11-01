@@ -60,6 +60,22 @@ class RailKeeperTest {
         var keeper: RailKeeper? = null
         val guestCalls = mutableListOf<String>()
 
+        /**
+         * v1.38 — M75: the piano's controller on the plug too. Each ask to connect is "WAKE" in the log; with [bootMs] set,
+         * the link comes up that long after an ask made while the plug is on (null: it never does).
+         */
+        var bootMs: Long? = null
+
+        fun wakeLink() {
+            log += Event(now(), "WAKE")
+            val boot = bootMs ?: return
+            if (!outputNow()) return
+            test.backgroundScope.launch {
+                delay(boot)
+                if (outputNow()) connected = true
+            }
+        }
+
         fun now(): Long = test.currentTime
 
         /** v1.29 — M66: switched on by another phone, no timer. */
@@ -219,6 +235,7 @@ class RailKeeperTest {
             now = ::now,
             guest = guest,
             power = power,
+            wakeLink = ::wakeLink,
         ).also {
             keeper = it
             it.start()
@@ -230,7 +247,7 @@ class RailKeeperTest {
          * power watch's asks ("ASK …", v1.30 — M67) left out.
          */
         fun kinds(from: Long = 0L): List<String> =
-            log.filter { it.at >= from && it.kind != "STATUS" && it.kind != "SETTINGS" && !it.kind.startsWith("ASK") }.map { it.kind }
+            log.filter { it.at >= from && it.kind != "STATUS" && it.kind != "SETTINGS" && it.kind != "WAKE" && !it.kind.startsWith("ASK") }.map { it.kind }
 
         fun arms(from: Long = 0L, until: Long = Long.MAX_VALUE): List<Event> = log.filter { it.kind == "ARM" && it.at in from until until }
     }
@@ -382,23 +399,98 @@ class RailKeeperTest {
     }
 
     @Test
-    fun `no piano connected - nothing asked, nothing held, and the rail comes up once it connects`() = runTest {
+    fun `the piano off (its controller on the plug) - Play ARMs first, wakes the link, then the CHECK, and only then notes (v1_38 M75)`() = runTest {
         val bench = Bench(this)
-        bench.connected = false
+        bench.connected = false   // the plug off: the piano with it
+        bench.bootMs = 4_000L
         val keeper = bench.keeper()
+        assertTrue("with the plug, notes wait while the piano is off", keeper.notesHeld.value)
         keeper.wanted(RailKeeper.PLAY, true)
-        advanceTimeBy(60_000)
-        assertEquals("the rail waits for the piano", RailPhase.Off, keeper.phase.value)
-        assertTrue("no CHECK, no ARM without it", bench.log.isEmpty())
-        assertFalse("notes go nowhere anyway: nothing to hold, as before the plug", keeper.notesHeld.value)
-        assertNull(keeper.message.value)
-        bench.connected = true
         runCurrent()
         assertEquals(RailPhase.Waking, keeper.phase.value)
-        assertTrue("held from the connection until the rail is up", keeper.notesHeld.value)
+        assertEquals(RailMessage.Waking, keeper.message.value)
+        advanceTimeBy(2 * RPC_MS + 1)
+        assertEquals("ARM first, no CHECK before it", listOf("ARM"), bench.kinds())
+        assertEquals("the ARM confirmed by a status, then the link asked for at once", listOf("ARM", "STATUS", "WAKE"), bench.log.map { it.kind })
         advanceTimeBy(3_000)
+        assertTrue("the link not up yet: notes still wait", keeper.notesHeld.value)
+        advanceTimeBy(1_200)
+        assertTrue(bench.connected)
         assertEquals(RailPhase.Up, keeper.phase.value)
-        bench.assertEveryArmChecked()
+        assertFalse("the CHECK answered with every board: notes go", keeper.notesHeld.value)
+        assertEquals(listOf("ARM", "CHECK"), bench.kinds())
+        assertEquals((0 until 7).toSet(), keeper.baseline.value)
+        assertNull(keeper.message.value)
+
+        // No link within 30 s: CUT, and said; nothing more.
+        val dead = Bench(this)
+        dead.connected = false
+        val second = dead.keeper()
+        second.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(RailKeeper.WAKE_LINK_MS - 1_000)
+        assertEquals(RailPhase.Waking, second.phase.value)
+        assertTrue("the link asked for again meanwhile", dead.log.count { it.kind == "WAKE" } >= 5)
+        advanceTimeBy(2_000)
+        assertEquals(listOf("ARM", "STOP PLAYING", "STOP", "CUT"), dead.kinds())
+        assertEquals(RailMessage.PianoDidntStart, second.message.value)
+        assertEquals(RailPhase.Off, second.phase.value)
+        assertFalse(dead.output)
+        advanceTimeBy(10 * 60_000L)
+        assertEquals("the want ended with it: no ARM again until Play", 1, dead.arms().size)
+    }
+
+    @Test
+    fun `waking - an ARM the plug says off is tried again a second later, and three offs end it (v1_38 M75)`() = runTest {
+        val bench = Bench(this)
+        bench.connected = false
+        bench.armWorks = false
+        val keeper = bench.keeper()
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(1_000 + RPC_MS)
+        bench.armWorks = true   // the second try takes
+        bench.bootMs = 2_000L
+        advanceTimeBy(4_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        assertEquals(listOf("ARM FAILED", "ARM", "CHECK"), bench.kinds())
+
+        val never = Bench(this)
+        never.connected = false
+        never.armWorks = false
+        val second = never.keeper()
+        second.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(5_000)
+        assertEquals(listOf("ARM FAILED", "ARM FAILED", "ARM FAILED", "STOP PLAYING", "STOP", "CUT"), never.kinds())
+        assertEquals(RailMessage.PlugLost, second.message.value)
+        assertTrue("no notes: held", second.notesHeld.value)
+    }
+
+    @Test
+    fun `Turn the piano on - wanted, up through the same rail-up, off CUTs, and 30 minutes without a note CUT (v1_38 M75)`() = runTest {
+        val bench = Bench(this)
+        bench.connected = false
+        bench.bootMs = 3_000L
+        val keeper = bench.keeper()
+        keeper.manual(true)
+        advanceTimeBy(5_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        assertEquals(currentTime - 5_000 + RailKeeper.MANUAL_IDLE_MS, keeper.manualUntil.value)
+        keeper.manual(false)
+        advanceTimeBy(2_000)
+        assertEquals(listOf("ARM", "CHECK", "STOP", "CUT"), bench.kinds())
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        assertNull(keeper.manualUntil.value)
+
+        bench.log.clear()
+        keeper.manual(true)
+        advanceTimeBy(5_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        advanceTimeBy(20 * 60_000L)
+        keeper.keyPressed()   // a note: the 30 minutes start again
+        advanceTimeBy(25 * 60_000L)
+        assertEquals("still on, 25 minutes after the note", RailPhase.Up, keeper.phase.value)
+        advanceTimeBy(5 * 60_000L + 2_000)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        assertEquals("CUT once, after 30 minutes without a note", 1, bench.kinds().count { it == "CUT" })
     }
 
     @Test
@@ -745,13 +837,15 @@ class RailKeeperTest {
     }
 
     @Test
-    fun `a guest window the tablet didn't start - nothing unchecked, the CHECK rules`() = runTest {
+    fun `a guest window the tablet didn't start - one ARM to wake the piano, then CUT when its link never comes (v1_38 M75)`() = runTest {
         val bench = Bench(this)
         bench.connected = false   // the iPad holds the piano
         val keeper = bench.keeper()
         keeper.wanted("panel", true)
         advanceTimeBy(30 * 60_000L)
-        assertTrue("never armed without the piano's CHECK", bench.arms().isEmpty())
+        assertEquals("never kept up without the piano's CHECK", 1, bench.arms().size)
+        assertEquals(RailMessage.PianoDidntStart, keeper.message.value)
+        assertFalse(bench.output)
     }
 
     // ---- The Keys tab --------------------------------------------------------------------------------------------

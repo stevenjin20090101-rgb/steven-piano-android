@@ -1080,7 +1080,10 @@ it says so in amber ("its relay may be stuck").
 
 **Only the 24 V supply goes on the plug.** The controller's own supply and the LED strip's stay on another socket, so the
 piano keeps its screen, Bluetooth and settings while the 24 V is off. Label the plug *PIANO 24 V — must stay on the smart
-plug*.
+plug*. From 1.38 the controller may share the plug, so with it off the piano is off: Play, a key, Test every key or **Turn
+the piano on** (Piano › Power plug; it turns off 30 minutes after the last note) switches the plug on first, waits up to
+30 s for the piano to connect and checks its boards before a note goes ("Waking the piano…"). If the piano doesn't
+connect, the 24 V goes off again and the tablet says "The piano didn't start. Check its power."
 
 **Setting it up** (about a minute, all from the tablet; Piano › Power plug › **Pair the SwitchBot plug**):
 
