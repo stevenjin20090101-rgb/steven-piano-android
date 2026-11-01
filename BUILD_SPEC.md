@@ -10297,3 +10297,22 @@ and `AppleCatalogTest` updated.
 ## The release: 1.37 (versionCode 48)
 
 M73 (the library sorted by Apple Music genre: genre playlists, K-pop into his K-pop, Dance/House/Electronic into House & Dance, imported Pop and MIDI removed at the Room 6→7 upgrade; K-pop plain covers; House & Dance album covers; Library opens on Playlists) and M74 (Studio genre styles: lo-fi, house, chill, cinematic, seeded from the genre playlists) merged; the doc paragraphs kept side by side.
+
+# v1.38 — M75: the plug on while playing
+
+Brief `~/.claude/plans/m75-plug-on-while-playing-brief.md` with the coordinator's corrections (the controller on the
+plug; a fast first cut); worktree `android-wt-m75`, branch `m75-plug-on`, from `53110f1` (main with 1.37). No version
+bump, no signing, no emulator, no firmware change. **`RailKeeper`**: `run()` takes a want up whether connected or not;
+`railUp()` with no link calls `wake()` (`armConfirmed()`: `ARM_TRIES` 3, `ARM_AGAIN_MS` 1 s, the ARM's reply then
+`RailPlug.status()` not off; then `wakeLink` every `WAKE_ASK_EVERY_MS` 5 s until `connected`, `WAKE_LINK_MS` 30 s, else
+`fail(RailMessage.PianoDidntStart)`; then `CONTROLLER_FED_MS` after the ARM and `checkTwice()`), and its baseline counts
+from the link (all boards at once: the baseline). `holding()` is `phase != Off || wantedNow()` (M72's "a want waiting with
+no ARM" CUT removed); `refreshHeld()` drops the "not connected and Off" exception. `manual(on)` puts `MANUAL` until
+`MANUAL_IDLE_MS` (30 min), `manualUntil` shows it, and every `wanted()` or `keyPressed()` restarts it; `end()` clears it.
+**`AppGraph`**: `wakePianoLink()` (`pianoLink.connect(lastDeviceAddress)` for Steven Piano with Bluetooth allowed),
+`setPianoOn`, `pianoWakes()` (Steven Piano and the plug switching) used by the safety host's `deferral()` (no `NO_PIANO`)
+and the key test's `connected` (before it runs); `Player(railHolds = { railHoldsNotes.value })` leaves a drop to
+`RailHold` while the rail holds the notes; `RAIL_AWAIT_MS` and `SafetyRunner.PIANO_WAIT_MS` 45 s. **UI**:
+`PowerPlugPage.ManualSwitch` (`PowerCopy.TURN_ON`/`TURN_OFF`/`manualOn`), `PowerCopy.PIANO_DIDNT_START`. **Tests**:
+`RailKeeperTest` (the wake: ARM, link, CHECK, notes; no link in 30 s; ARM retries and three offs; Turn the piano on; the
+guest window rewritten), `AdvertWatchTest` (an "on" advert while a want waits is never CUT).
