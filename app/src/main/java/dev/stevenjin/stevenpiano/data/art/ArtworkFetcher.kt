@@ -73,6 +73,7 @@ class ArtworkFetcher(
             is ArtKey.Composer -> composer(key)
             is ArtKey.Piece -> piece(key)
             is ArtKey.Cover -> covers?.fetch(key) ?: Fetched.Skipped
+            is ArtKey.Genre -> covers?.genre(key) ?: Fetched.Skipped
         }
     } catch (e: CancellationException) {
         throw e

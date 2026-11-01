@@ -58,6 +58,12 @@ data class ArtworkEntity(
          */
         fun forCover(pieceId: Long): String = "cover:$pieceId"
 
+        /**
+         * A Modern piece's genre lookup (v1.37 — M73), by piece id: written only when it failed (retried a day later); a
+         * genre found, or none, is kept on the piece itself (`PieceEntity.appleGenre`).
+         */
+        fun forGenre(pieceId: Long): String = "genre:$pieceId"
+
         /** A cover row's [sourceTitle] when the person chose the cover ("Change cover"): no lookup ever replaces it. */
         const val CHOSEN_HERE = "Chosen on this tablet"
 

@@ -26,7 +26,8 @@ import java.util.Locale
 /**
  * One song in Apple's catalogue (v1.15 — M40), as much of it as covers use: the iTunes Search API's `trackName`,
  * `artistName`, `collectionName` (the album), `artworkUrl100` (its artwork at 100 px), `trackViewUrl` (the track on
- * Apple Music) and `kind` ("song"). [coverUrl] is the artwork to download: 600 px, on Apple's image hosts only, or null.
+ * Apple Music) and `kind` ("song"); and (v1.37 — M73) `primaryGenreName` ("Pop", "K-Pop"), the genre playlists'. [coverUrl]
+ * is the artwork to download: 600 px, on Apple's image hosts only, or null.
  */
 data class CatalogTrack(
     val trackName: String,
@@ -35,6 +36,7 @@ data class CatalogTrack(
     val artworkUrl100: String?,
     val trackViewUrl: String?,
     val kind: String?,
+    val primaryGenreName: String? = null,
 ) {
     val coverUrl: String? get() = AppleUrls.cover(artworkUrl100)
 }
@@ -132,6 +134,7 @@ internal object AppleJson {
                 artworkUrl100 = song.text("artworkUrl100"),
                 trackViewUrl = song.text("trackViewUrl"),
                 kind = song.text("kind"),
+                primaryGenreName = song.text("primaryGenreName"),
             )
         }
     }

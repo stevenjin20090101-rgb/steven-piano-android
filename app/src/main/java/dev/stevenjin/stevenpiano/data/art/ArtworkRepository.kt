@@ -95,6 +95,12 @@ class ArtworkRepository(
 
         override suspend fun hasCover(pieceId: Long): Boolean = dao.get(ArtworkEntity.forPiece(pieceId))?.imagePath != null
 
+        override suspend fun needsGenre(pieceId: Long): Boolean = library.needsAppleGenre(pieceId)
+
+        override suspend fun keepGenre(pieceId: Long, genre: String) {
+            library.setAppleGenre(pieceId, genre)
+        }
+
         override suspend fun keep(pieceId: Long, image: ByteArray, sourceUrl: String?, sourceTitle: String): Fetched {
             if (!withContext(io) { BitmapCache.isImage(image) }) return Fetched.NotFound
             val record = ArtworkEntity(ArtworkEntity.forCover(pieceId), sourceUrl = sourceUrl, sourceTitle = sourceTitle, fetchedAt = 0, status = ArtworkStatus.OK)
@@ -153,6 +159,19 @@ class ArtworkRepository(
         scope.launch { library.count().catch { e -> if (e is CancellationException) throw e }.collect { mosaics.clear() } }
     }
 
+    /**
+     * Which pieces' art is plain (Steven's K-pop) and which shows album covers (his House & Dance), v1.37 — M73
+     * ([CoverRule]): read from the start, shared by every piece's art and the web panel. [CoverStyles.Unread] until read,
+     * and when the library can't be read.
+     */
+    val coverStyles: StateFlow<CoverStyles> = library.coverStyles()
+        .catch { e ->
+            if (e is CancellationException) throw e
+            Log.w(TAG, "The covers' styles couldn't be read", e)
+            emit(CoverStyles.Unread)
+        }
+        .stateIn(scope, SharingStarted.Eagerly, CoverStyles.Unread)
+
     /** The artwork row for [key] ([ArtworkEntity.forComposer] and the like) as it changes; null while there is none. */
     fun artwork(key: String): Flow<ArtworkEntity?> = rows.filterNotNull().map { it[key] }.distinctUntilChanged()
 
@@ -181,7 +200,9 @@ class ArtworkRepository(
      */
     suspend fun requestDue(force: Boolean): Int = readOr(0) {
         val composers = worker.requestAll(composerKeys(), force)
-        composers + if (coversWanted()) worker.requestAll(coverKeys(coverRuleSince()), force = false) else 0
+        if (!coversWanted()) return@readOr composers
+        // v1.37 — M73: then the one-time pass for the Modern pieces' genres the cover lookups will not learn.
+        composers + worker.requestAll(coverKeys(coverRuleSince()), force = false) + worker.requestAll(genreKeys(), force = false)
     }
 
     /**
@@ -192,11 +213,14 @@ class ArtworkRepository(
     suspend fun due(): Boolean = readOr(false) {
         val now = System.currentTimeMillis()
         composerKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) } ||
-            (covers.blockedFor() == null && coversWanted() && coversDue(now, coverRuleSince()))
+            (covers.blockedFor() == null && coversWanted() && (coversDue(now, coverRuleSince()) || genresDue(now)))
     }
 
     private suspend fun coversDue(now: Long, since: Long): Boolean =
         coverKeys(since).any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false, coverRuleSince = since) }
+
+    /** Whether a Modern piece's genre is still to be looked up (v1.37 — M73), a failed one a day ago or more. */
+    private suspend fun genresDue(now: Long): Boolean = genreKeys().any { ArtworkPolicy.shouldFetch(dao.get(it.storageKey), now, force = false) }
 
     /**
      * Piece [pieceId]'s album cover, first in line (v1.15 — M40: the piece playing, from the resting screen and Now
@@ -352,6 +376,13 @@ class ArtworkRepository(
         }
     }
 
+    /** The pieces whose cover the person chose (on the tablet, or in the web panel), v1.37 — M73: a plain piece still shows it. */
+    suspend fun coversChosenByHand(): Set<Long> = readOr(emptySet()) {
+        rows.filterNotNull().first().values.asSequence()
+            .filter { it.key.startsWith(COVER_PREFIX) && it.status == ArtworkStatus.OK && ArtworkPolicy.chosenByHand(it) }
+            .mapNotNullTo(HashSet()) { it.key.removePrefix(COVER_PREFIX).toLongOrNull() }
+    }
+
     /**
      * The pieces with a cover of their own (Studio's, the recordings', album covers and covers chosen by hand), by id, with
      * when it was kept: the web panel's art kind and version.
@@ -411,6 +442,7 @@ class ArtworkRepository(
                 pieceIdOf(key)?.let { id ->
                     withContext(io) { rollCardFiles.delete(id) }
                     dao.delete(ArtworkEntity.forCover(id))   // v1.15 — M40
+                    dao.delete(ArtworkEntity.forGenre(id))   // v1.37 — M73
                 }
                 val row = dao.get(key) ?: return@readOr
                 row.imagePath?.let { path -> withContext(io) { files.delete(path) } }
@@ -436,6 +468,9 @@ class ArtworkRepository(
     private suspend fun composerKeys(): List<ArtKey.Composer> =
         library.composers().first().map { ArtKey.Composer(it.composerKey, it.name) }
 
+    /** The Modern pieces whose genre the one-time pass looks up (v1.37 — M73), as keys, newest first. */
+    private suspend fun genreKeys(): List<ArtKey.Genre> = library.genreCandidates().map { ArtKey.Genre(it.id, it.title, it.composerShort) }
+
     /** The pieces whose album cover may be looked up (v1.15 — M40), as keys, in [LibraryRepository.coverCandidates]' order. */
     private suspend fun coverKeys(since: Long): List<ArtKey.Cover> =
         library.coverCandidates(since).map { ArtKey.Cover(it.id, it.title, it.composerShort, it.genre == Genres.CLASSICAL) }
@@ -448,6 +483,7 @@ class ArtworkRepository(
         const val ROLL_CARD_DIR = "rollcards"
         val PIECE_PREFIX = ArtworkEntity.forPiece(0).removeSuffix("0")
         val COMPOSER_PREFIX = ArtworkEntity.forComposer("")
+        val COVER_PREFIX = ArtworkEntity.forCover(0).removeSuffix("0")
     }
 
     /** How much longer Apple's lookups wait after its 403 or 429, in ms; null when they may go (v1.18 — M46: the System page reads it). */

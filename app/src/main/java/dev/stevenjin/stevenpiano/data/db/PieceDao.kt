@@ -122,6 +122,28 @@ interface PieceDao {
     )
     suspend fun coverCandidates(since: Long): List<CoverCandidate>
 
+    /**
+     * The Modern pieces whose genre a lookup has still to learn (v1.37 — M73): none yet ([PieceEntity.appleGenre] null),
+     * and no album-cover lookup due that would learn it on the way (they have a cover of their own, or their `cover:<id>`
+     * lookup found one or nothing already). The one-time "genre missing" pass. Newest first.
+     */
+    @Query(
+        "SELECT p.id, p.title, p.composerShort, p.genre FROM pieces p " +
+            "LEFT JOIN artwork a ON a.`key` = 'piece:' || p.id " +
+            "LEFT JOIN artwork c ON c.`key` = 'cover:' || p.id " +
+            "WHERE p.genre = 2 AND p.appleGenre IS NULL AND (a.imagePath IS NOT NULL OR c.status IN ('OK', 'NOT_FOUND')) " +
+            "ORDER BY p.addedAt DESC, p.id DESC",
+    )
+    suspend fun genreCandidates(): List<CoverCandidate>
+
+    /** Piece [id]'s Apple genre, the first time only, and only for a Modern piece (v1.37 — M73). Returns the rows changed. */
+    @Query("UPDATE pieces SET appleGenre = :appleGenre WHERE id = :id AND appleGenre IS NULL AND genre = 2")
+    suspend fun setAppleGenre(id: Long, appleGenre: String): Int
+
+    /** The pieces in any of [playlistIds], with their composers (v1.37 — M73: K-pop's and House & Dance's, for their covers). */
+    @Query("SELECT DISTINCT p.id, p.composerKey FROM pieces p JOIN collection_pieces cp ON cp.pieceId = p.id WHERE cp.collectionId IN (:playlistIds)")
+    fun inPlaylists(playlistIds: List<Long>): Flow<List<PieceHead>>
+
     @Query("SELECT COUNT(*) FROM pieces")
     fun count(): Flow<Int>
 
