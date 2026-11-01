@@ -70,7 +70,7 @@ interface PairingStore {
  * [PlugSettings] in the "power_plug" DataStore. A store that can't be read reads as no plug: the app as before it. A
  * pairing kept before 1.36 is a Shelly plug's (v1.36 — M72): it reads as none, [shellyCleared], until [migrate] clears it.
  */
-class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
+class PlugStore(private val store: DataStore<Preferences>) : PairingStore, CoolStore {
     constructor(context: Context) : this(context.applicationContext.plugDataStore)
 
     val settings: Flow<PlugSettings> = store.data
@@ -157,14 +157,30 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         }
     }
 
+    /**
+     * v1.40 — M78: the cool-down after a fault CUT, its end on the wall clock; kept across restarts, and through a new
+     * pairing or Forget (pairing again never ends it). Unreadable: none (the safety check the fault made due still holds).
+     */
+    override suspend fun coolUntil(): Long? = try {
+        store.data.first()[COOL_UNTIL]
+    } catch (e: IOException) {
+        null
+    }
+
+    override suspend fun setCoolUntil(wallMs: Long?) {
+        tryEdit { prefs -> if (wallMs == null) prefs.remove(COOL_UNTIL) else prefs[COOL_UNTIL] = wallMs }
+    }
+
     private fun clearKeepingHours(prefs: MutablePreferences) {
         val on = prefs[HOURS_ON]
         val start = prefs[HOURS_START]
         val end = prefs[HOURS_END]
+        val cool = prefs[COOL_UNTIL]
         prefs.clear()
         on?.let { prefs[HOURS_ON] = it }
         start?.let { prefs[HOURS_START] = it }
         end?.let { prefs[HOURS_END] = it }
+        cool?.let { prefs[COOL_UNTIL] = it }
     }
 
     // ---- The power watch's usual idle (v1.31 — M68): a write that fails only loses a reading, never the rail's safety ----
@@ -227,6 +243,9 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         val HOURS_ON = booleanPreferencesKey("hoursOn")
         val HOURS_START = intPreferencesKey("hoursStart")
         val HOURS_END = intPreferencesKey("hoursEnd")
+
+        /** v1.40 — M78: the cool-down's end (the wall clock, ms). */
+        val COOL_UNTIL = longPreferencesKey("coolUntil")
 
         fun hoursOf(prefs: Preferences): OnHours {
             val start = prefs[HOURS_START]?.takeIf { it in 0 until OnHours.MINUTES_PER_DAY } ?: OnHours.DEFAULT_START

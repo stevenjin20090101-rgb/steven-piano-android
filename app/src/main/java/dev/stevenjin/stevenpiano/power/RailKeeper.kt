@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.power
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -63,6 +64,16 @@ data class PlugStatus(val output: Boolean, val timerS: Double? = null, val watts
 
 /** v1.39 — M76: the supply's draw, W, as the plug's advert said it, and when that advert came ([at], the keeper's clock, ms). */
 data class PlugReading(val watts: Double, val at: Long)
+
+/**
+ * v1.40 — M78: where the cool-down after a fault CUT is kept, its end on the wall clock (ms), so it holds across restarts of
+ * the app and the tablet ([PlugStore]; a fake in tests).
+ */
+interface CoolStore {
+    suspend fun coolUntil(): Long?
+
+    suspend fun setCoolUntil(wallMs: Long?)
+}
 
 /** The piano's link as guest play needs it (DESIGN.md › v1.26 — M60): let go, connect again, end guest play on the piano. */
 interface GuestLink {
@@ -251,6 +262,11 @@ sealed interface RailMessage {
  *   piano's `!i2cfails` (every 5 s during a piece, every 30 s idle) CUT at once ([cutAtOnce]); the plug's status every 5 s
  *   during a piece, and any "off" advert, re-ARM it with the notes held ([plugCheck], [rewake]); silent adverts say
  *   [readingLost]. The plug's draw comes from its adverts ([RailPlug.watts]) with no connection.
+ * - **v1.40 — M78, the cool-down.** A fault CUT (the power trips, `!i2cfails` rising, `!active` after a piece, and the
+ *   safety check's coil on through [cutNow]) begins [COOL_MS] of cool-down ([coolUntil], kept in [cool] on the [wall]
+ *   clock). Until it ends nothing may switch the plug on: every want is refused ([put]), no ARM goes, and an "on" advert is
+ *   CUT. A non-fault CUT (the On hours ending, the grace, Turn the piano off, the piano not starting) never begins one.
+ *   [skipCooling] (Piano › Power plug, confirmed) ends it early; the safety check the fault made due still runs.
  * - **Without the plug** ([available] false: none paired, or its switch off) nothing here calls the plug or the piano, and
  *   [notesHeld] stays false: the app behaves exactly as before.
  *
@@ -287,6 +303,10 @@ class RailKeeper(
      * after a piece whose check passed, for the next; 0 within them, or with no On hours.
      */
     private val graceMs: () -> Long = { 0L },
+    /** v1.40 — M78: where the cool-down after a fault CUT is kept; null: no cool-down (as before 1.40; most tests). */
+    private val cool: CoolStore? = null,
+    /** v1.40 — M78: the wall clock (ms) the cool-down's end is kept on, across restarts of the tablet. */
+    private val wall: () -> Long = System::currentTimeMillis,
 ) : RailPower {
     private val context = scope.coroutineContext.minusKey(Job)
 
@@ -445,9 +465,22 @@ class RailKeeper(
     private var noGrace = false
     private var startedInHours = false
 
+    private val _coolUntil = MutableStateFlow<Long?>(null)
+
+    /**
+     * v1.40 — M78: until when ([wall]'s clock, ms) the cool-down after a fault CUT lasts; null with none begun (a past one
+     * may stay until the next). Nothing switches the plug on meanwhile.
+     */
+    val coolUntil: StateFlow<Long?> = _coolUntil.asStateFlow()
+
+    /** v1.40 — M78: the kept cool-down has been read (no want may ARM before), and the wants refused during it, logged once. */
+    private var coolRead = cool == null
+    private val coolRefused = HashSet<String>()
+
     /** Starts following the wants (once). */
     fun start() {
         if (loop != null) return
+        if (cool != null) scope.launch { readCool(cool) }
         scope.launch {
             available.collect {
                 refreshHeld()
@@ -494,8 +527,7 @@ class RailKeeper(
     fun manual(on: Boolean) {
         if (on) {
             val until = now() + MANUAL_IDLE_MS
-            put(MANUAL, until = until)
-            _manualUntil.value = until
+            if (put(MANUAL, until = until)) _manualUntil.value = until   // v1.40 — M78: refused while cooling down
         } else {
             remove(MANUAL)
             _manualUntil.value = null
@@ -536,7 +568,7 @@ class RailKeeper(
      * tablet connects again, ends it on the piano, sends the stop sequence and cuts.
      */
     fun startGuest(minutes: Int) {
-        if (!available.value) return
+        if (!available.value || coolingNow()) return   // v1.40 — M78: nothing switches the plug on while cooling down
         val until = now() + minutes.coerceIn(1, GUEST_MAX_MIN) * MINUTE_MS
         put(GUEST, until = until, unchecked = until)
         _guestUntil.value = until
@@ -547,7 +579,7 @@ class RailKeeper(
     /** Guest play this tablet started is still running after the app started again: until [until] ([now]'s clock). */
     fun restoreGuest(until: Long) {
         if (until <= now() || GUEST in wants) return
-        put(GUEST, until = until, unchecked = until)
+        if (!put(GUEST, until = until, unchecked = until)) return   // v1.40 — M78: cooling down
         _guestUntil.value = until
         watchGuest(until)
     }
@@ -635,7 +667,7 @@ class RailKeeper(
      * on (M72 CUT a plug on then, with no ARM of the keeper's: the deadlock that played a piece into an unpowered piano).
      * Only a plug on with nothing wanting the rail is CUT.
      */
-    private fun holding(): Boolean = _phase.value != RailPhase.Off || wantedNow()
+    private fun holding(): Boolean = !coolingNow() && (_phase.value != RailPhase.Off || wantedNow())   // v1.40 — M78: cooling, never
 
     /** The message is read (its OK): it goes. */
     fun dismissMessage() {
@@ -664,7 +696,125 @@ class RailKeeper(
             log("Cut now: the stop sequence, then CUT")
             end()
             setPhase(RailPhase.Off)
+            coolDown("the safety check found a coil on")   // v1.40 — M78: a fault CUT
         }
+    }
+
+    // ---- v1.40 — M78: the cool-down after a fault CUT ---------------------------------------------------------------------
+
+    /** The cool-down's ms left now; null when none runs. */
+    fun coolLeft(): Long? = _coolUntil.value?.let { it - wall() }?.takeIf { it > 0 }
+
+    private fun coolingNow(): Boolean = coolLeft() != null
+
+    /**
+     * Piano › Power plug's **Skip the cool-down** (behind the kiosk PIN, confirmed): it ends now, logged. The safety check
+     * the fault made due is the runner's, and still runs, with its sweep, before the next Play.
+     */
+    fun skipCooling() {
+        if (!coolingNow()) return
+        _coolUntil.value = null
+        coolRefused.clear()
+        log("Rail: the cool-down after the fault skipped at the tablet; the safety check still runs before the next piece")
+        cool?.let { store -> scope.launch { keepCool(store, null) } }
+        changed()
+    }
+
+    /**
+     * A fault CUT ([why]): [COOL_MS] of cool-down from now, kept. Every want so far is ended (a fault's CUT ends them
+     * already), and none is taken until it ends. Nothing without a [cool] store, or without the plug.
+     */
+    private fun coolDown(why: String) {
+        val store = cool ?: return
+        if (!available.value) return
+        val until = wall() + COOL_MS
+        _coolUntil.value = until
+        coolRead = true
+        coolRefused.clear()
+        consumedThrough = nextSeq - 1
+        _manualUntil.value = null
+        log("Rail: cooling down ${COOL_MS / MINUTE_MS} min after the fault ($why); nothing switches the 24 V on until then")
+        scope.launch { keepCool(store, until) }
+        changed()
+    }
+
+    /** A fault CUT done ([why]): the cool-down, then the safety check (its sweep) due before the next Play. */
+    private fun faulted(why: RailMessage) {
+        coolDown(why.toString())
+        power?.checkDue()
+    }
+
+    /** The kept cool-down read at start: still cooling, every want made meanwhile is ended (none had ARMed: they waited). */
+    private suspend fun readCool(store: CoolStore) {
+        val kept = try {
+            store.coolUntil()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("Rail: the cool-down's record couldn't be read (${e.javaClass.simpleName})")
+            null
+        }
+        val until = listOfNotNull(kept, _coolUntil.value).maxOrNull()?.takeIf { it > wall() }
+        _coolUntil.value = until
+        coolRead = true
+        if (until != null) {
+            consumedThrough = nextSeq - 1
+            _manualUntil.value = null
+            log("Rail: still cooling down after a fault, ${(until - wall() + MINUTE_MS - 1) / MINUTE_MS} min left")
+        } else if (kept != null) {
+            keepCool(store, null)   // a past one: gone
+        }
+        changed()
+    }
+
+    private suspend fun keepCool(store: CoolStore, until: Long?) {
+        try {
+            store.setCoolUntil(until)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("Rail: the cool-down couldn't be kept (${e.javaClass.simpleName}); it holds until the app ends")
+        }
+    }
+
+    /**
+     * The quick safety check's look at the power (no sweep): with the rail up under its power watch, the piano's
+     * `!i2cfails` against this rail-up's, and the draw on two fresh adverts against the idle ([BoardWatch.idle]). A rise, or
+     * both readings [PowerWatch.LEEWAY_WATTS] or more above the idle, CUTs at once ([cutAtOnce]: a fault, the cool-down).
+     * The trip; null when fine, or with nothing to read (no plug, no power watch, the rail not up).
+     */
+    suspend fun quickLook(): RailMessage? {
+        val host = power ?: return null
+        val watch = powerWatch
+        val board = boardWatch
+        if (!available.value || _phase.value != RailPhase.Up || watch == null || board == null) return null
+        val began = now()
+        val fails = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
+        val before = failsSeen
+        val idle = board.idle
+        val readings = ArrayList<Double>(2)
+        var trip: RailMessage? = if (fails != null && before != null && fails > before) RailMessage.BoardLost(before, fails) else null
+        var since = began
+        while (trip == null && readings.size < 2 && now() < began + QUICK_LOOK_MS && powerWatch === watch) {
+            val reading = plug.reading()
+            if (reading != null && reading.at > since && reading.watts.isFinite()) {
+                readings += reading.watts
+                since = reading.at + BoardWatch.BOARD_APART_MS - AFTER_POLL_MS
+            }
+            if (readings.size < 2) delay(AFTER_POLL_MS)
+        }
+        if (powerWatch !== watch) return _message.value?.takeIf { it.attention }   // the rail ended meanwhile: its own words
+        if (trip == null && idle != null && readings.size == 2 && readings.all { it - idle >= PowerWatch.LEEWAY_WATTS }) {
+            trip = RailMessage.BoardOn((readings.min() - idle).roundToInt(), idle.roundToInt(), playing = false)
+        }
+        log(
+            "Safety check's power look: !i2cfails ${fails ?: "—"} (${before ?: "—"} this rail-up), " +
+                "${readings.joinToString(", ") { "${PowerWatch.watts(it)} W" }.ifEmpty { "no fresh reading" }} (idle ${PowerWatch.watts(idle)} W); " +
+                (trip?.let { "24 V cut: $it" } ?: "fine"),
+        )
+        val cut = trip ?: return null
+        command { if (_phase.value != RailPhase.Off) cutAtOnce(cut) }
+        return cut
     }
 
     /**
@@ -806,8 +956,9 @@ class RailKeeper(
             if (again == null || PowerWatch.railUp(again) is PowerVerdict.Overdraw) {
                 val watts = again ?: idle ?: PowerWatch.CAP_WATTS
                 log("Power watch: ${PowerWatch.watts(watts)} W at rail-up with nothing sent: a channel may be on")
-                fail(RailMessage.Overdraw(watts.roundToInt()))
-                power.checkDue()
+                val why = RailMessage.Overdraw(watts.roundToInt())
+                fail(why)
+                faulted(why)   // v1.40 — M78: the cool-down, and the check due
                 return false
             }
             idle = again
@@ -834,8 +985,9 @@ class RailKeeper(
                     // One without the sweep (the microphone off) keeps it, so the trip repeats at each rail-up. Annoying, but safe.
                     log("Power watch: ${PowerWatch.watts(still.watts)} W at rail-up with nothing sent, above the usual: a channel may be on")
                     power.aboveUsual()
-                    fail(RailMessage.AboveUsual((still.watts - still.usual).roundToInt()))
-                    power.checkDue()
+                    val why = RailMessage.AboveUsual((still.watts - still.usual).roundToInt())
+                    fail(why)
+                    faulted(why)
                     return false
                 }
                 idle = again
@@ -1020,7 +1172,7 @@ class RailKeeper(
                 after == null -> true
                 after.cut != null -> {
                     fail(after.cut)
-                    power?.checkDue()
+                    faulted(after.cut)
                     return false
                 }
                 else -> wantedNow().also { passed = true }
@@ -1191,8 +1343,9 @@ class RailKeeper(
                 cutAtOnce(RailMessage.BoardOn(verdict.above.roundToInt(), verdict.idle?.roundToInt(), playing = false))
             }
             is PowerVerdict.CoilOn -> {
-                log("Power watch: a key stayed on — ${verdict.why}")
-                cutAtOnce(RailMessage.CoilOn(verdict.above.roundToInt(), verdict.idle.roundToInt(), (verdict.ms / MS_PER_S).toInt()))
+                // v1.40 — M78: under the 80 W leeway: logged only, never a CUT (the piano's own `!active` is the coil's).
+                log("Power watch (log only, no CUT): a coil's worth stayed on — ${verdict.why}")
+                false
             }
             else -> {
                 // v1.31 — M68's usual idle, learned (v1.39 — M76) only from an idle reading at least 5 s after the
@@ -1216,7 +1369,7 @@ class RailKeeper(
         watchSince = now()
         val cut = after.cut ?: return false
         fail(cut)
-        power?.checkDue()
+        faulted(cut)
         return true
     }
 
@@ -1235,7 +1388,7 @@ class RailKeeper(
         needsBaseline = false
         _message.value = why
         setPhase(RailPhase.Off)
-        power?.checkDue()
+        faulted(why)
         return true
     }
 
@@ -1461,6 +1614,10 @@ class RailKeeper(
     // ---- The plug, the piano ---------------------------------------------------------------------------------------
 
     private suspend fun arm(): Boolean {
+        if (coolingNow()) {
+            log("ARM refused: cooling down after a fault")   // v1.40 — M78: never reached through a want
+            return false
+        }
         weldJob?.cancel()   // the rail is wanted again: what the plug says now isn't about the last CUT
         val ok = plug.arm(TOGGLE_AFTER_S)
         if (ok) _armedAt.value = now() else log("ARM: the plug didn't answer")
@@ -1521,7 +1678,12 @@ class RailKeeper(
 
     // ---- The wants ---------------------------------------------------------------------------------------------------
 
-    private fun put(reason: String, until: Long = Long.MAX_VALUE, unchecked: Long = Long.MIN_VALUE) {
+    /** [reason] wants the rail; false when refused (v1.40 — M78: cooling down after a fault, logged once a reason). */
+    private fun put(reason: String, until: Long = Long.MAX_VALUE, unchecked: Long = Long.MIN_VALUE): Boolean {
+        if (coolingNow()) {
+            if (coolRefused.add(reason)) log("Rail: $reason refused: cooling down after a fault, ${(coolLeft()!! + MINUTE_MS - 1) / MINUTE_MS} min left")
+            return false
+        }
         if (reason != GRACE) {
             // v1.39 — M76: something new wants the rail: its end may earn a grace, unless it began within the On hours.
             graceGiven = false
@@ -1531,6 +1693,7 @@ class RailKeeper(
         }
         wants[reason] = Want(nextSeq++, until, unchecked)
         changed()
+        return true
     }
 
     private fun remove(reason: String) {
@@ -1544,7 +1707,7 @@ class RailKeeper(
     private fun live(want: Want, t: Long): Boolean = want.seq > consumedThrough && t < want.until
 
     /** Something wants the rail now, and the plug switches it. */
-    private fun wantedNow(t: Long = now()): Boolean = available.value && wants.values.any { live(it, t) }
+    private fun wantedNow(t: Long = now()): Boolean = available.value && coolRead && !coolingNow() && wants.values.any { live(it, t) }
 
     /** A want that may ARM without the CHECK (the update, guest play) holds now. */
     private fun uncheckedNow(t: Long = now()): Boolean = available.value && wants.values.any { live(it, t) && t < it.uncheckedUntil }
@@ -1662,6 +1825,10 @@ class RailKeeper(
 
         /** v1.39 — M76: the grace between pieces outside the On hours. */
         const val GRACE_MS = 2 * 60_000L
+
+        /** v1.40 — M78 (Steven): the cool-down after a fault CUT; and the quick check's power look, this long at most. */
+        const val COOL_MS = 25 * 60_000L
+        const val QUICK_LOOK_MS = 4_000L
 
         /** How long [repower]'s own want keeps the rail up after it: the safety check's sweep is about 39 s. */
         const val REPOWER_HOLD_MS = 60_000L

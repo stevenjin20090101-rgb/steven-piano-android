@@ -155,16 +155,21 @@ fun BoxScope.SafetyCheckCard() {
                     ) {
                         Column(Modifier.widthIn(max = CARD_WIDTH).fillMaxWidth()) {
                             val lock = state.lock
-                            if (lock != null && !state.running) {
-                                Locked(
+                            val cooling = state.cooling
+                            when {
+                                lock != null && !state.running -> Locked(
                                     lock = lock,
-                                    said = said,
+                                    said = said ?: cooling?.let(SafetyCopy::cooling),
                                     gate = gate,
-                                    onRun = { why -> said = why?.let(SafetyCopy::deferral) },
+                                    onRun = { why ->
+                                        // v1.40 — M78: refused while cooling down: the minutes left.
+                                        val left = if (why == Deferral.COOLING) runner.coolLeft() else null
+                                        said = left?.let(SafetyCopy::cooling) ?: why?.let(SafetyCopy::deferral)
+                                    },
                                     onAside = runner::putAside,
                                 )
-                            } else {
-                                Checking(state, onDismiss = runner::dismiss)
+                                cooling != null && !state.running && state.ended == null -> Cooling(cooling, onDismiss = runner::dismiss)
+                                else -> Checking(state, onDismiss = runner::dismiss)
                             }
                         }
                     }
@@ -182,6 +187,24 @@ fun BoxScope.SafetyCheckCard() {
         LockedCapsule(onShow = runner::showCard)
     }
     KioskGateSheet(gate)
+}
+
+/** v1.40 — M78: Play refused while the rail cools down after a fault: the minutes left, what follows, and OK. */
+@Composable
+private fun Cooling(left: Long, onDismiss: () -> Unit) {
+    Text(
+        SafetyCopy.cooling(left),
+        Modifier.semantics {
+            heading()
+            liveRegion = LiveRegionMode.Polite
+        },
+        style = MaterialTheme.typography.headlineMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(SafetyCopy.COOLING_NOTE, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = TOUCH)) { Text(SafetyCopy.OK) }
+    }
 }
 
 /** A check running, or its moment after it passed or stopped. */

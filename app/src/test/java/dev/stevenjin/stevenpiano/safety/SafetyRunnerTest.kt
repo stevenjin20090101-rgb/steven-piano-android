@@ -176,6 +176,14 @@ class SafetyRunnerTest {
 
         override suspend fun titleOf(pieceId: Long): String = "Piece $pieceId"
 
+        /** v1.40 — M78: the quick check's power look ("power look"): fine, or this trip's words. */
+        var powerTrip: String? = null
+
+        override suspend fun powerLook(): String? {
+            calls += "power look"
+            return powerTrip
+        }
+
         fun sweeps(): Int = calls.count { it == "sweep" }
     }
 
@@ -196,6 +204,9 @@ class SafetyRunnerTest {
 
         /** Whether the 24 V comes up for each sweep, in turn (then up); and when it was waited for. */
         val rail = ArrayDeque<Boolean>()
+
+        /** v1.40 — M78: the rail's cool-down after a fault CUT, its ms left (null: none). */
+        var coolLeft: Long? = null
         val runner = SafetyRunner(
             scope = scope.backgroundScope,
             store = store,
@@ -217,6 +228,7 @@ class SafetyRunnerTest {
             log = { logs += it },
             heardAll = { heardAll++ },
             every = { every },
+            cooling = { coolLeft },
         )
 
         fun play(count: Int = 1, id: Long = 1L) = repeat(count) { host.pieces.tryEmit(Played(id, ended = true)) }
@@ -238,7 +250,7 @@ class SafetyRunnerTest {
         }
 
     @Test
-    fun `the 6th piece played on the piano begins the check right after it, and a pass starts the count again`() = runTest {
+    fun `the 6th piece played on the piano begins the check right after it, quick with no fault (v1_40 M78), and a pass starts the count again`() = runTest {
         val rig = started()
         rig.play(5)
         runCurrent()
@@ -261,12 +273,10 @@ class SafetyRunnerTest {
         assertEquals(0, done.count)
         assertFalse(done.pending)
         assertTrue(done.last!!.passed)
-        assertEquals(84, done.last!!.keys)
-        assertEquals("wanted again for the sweep, let go at the end", listOf(true, true, false), rig.power)
-        assertEquals(
-            listOf("pause", "release", "ask active", "ask boards", "await rail", "sweep"),
-            rig.host.calls,
-        )
+        assertNull("no key struck", done.last!!.keys)
+        assertTrue(done.last!!.quick)
+        assertEquals("let go at the end", listOf(true, false), rig.power)
+        assertEquals(listOf("pause", "release", "ask active", "ask boards", "power look"), rig.host.calls)
         assertEquals(0, rig.store.record.count)
     }
 
@@ -382,7 +392,7 @@ class SafetyRunnerTest {
 
     @Test
     fun `keys not heard only warn - the check passes, Play isn't locked, the count starts again, the words say which (v1_33 M71)`() = runTest {
-        val rig = started(MemoryStore(SafetyRecord(count = 5)))
+        val rig = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         rig.host.silent = setOf(36, 66)
         val ended = mutableListOf<SafetyOutcome>()
         backgroundScope.launch { rig.runner.state.collect { state -> state.ended?.let { ended += it } } }
@@ -454,7 +464,7 @@ class SafetyRunnerTest {
 
     @Test
     fun `a missing board calls for the restart and the repower before the sweep`() = runTest {
-        val rig = started(MemoryStore(SafetyRecord(count = 5)))
+        val rig = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         rig.host.boards = "OK,OK,MISSING,OK,OK,OK,OK"
         rig.host.boardsAfterRestart = allOk
         rig.play()
@@ -469,7 +479,7 @@ class SafetyRunnerTest {
 
     @Test
     fun `on firmware without restart the step is left out, and the repower still comes before the sweep`() = runTest {
-        val rig = started(MemoryStore(SafetyRecord(count = 5)))
+        val rig = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         rig.host.facts = mapOf("active" to "0", "boards" to allOk)   // firmware 2.1.0: no !restartproto
         rig.host.boards = "OK,OK,MISSING,OK,OK,OK,OK"
         rig.boardsAfterRepower = allOk
@@ -485,7 +495,7 @@ class SafetyRunnerTest {
 
     @Test
     fun `with the microphone off there is no sweep, and no key can lock Play`() = runTest {
-        val rig = started(MemoryStore(SafetyRecord(count = 5)), listens = false)
+        val rig = started(MemoryStore(SafetyRecord(count = 5, fault = true)), listens = false)
         rig.host.silent = setOf(36)
         rig.play()
         settle()
@@ -517,7 +527,7 @@ class SafetyRunnerTest {
         again.host.factsAfterDump = mapOf("active" to "0", "boards" to allOk, "restartproto" to "1")
         again.play()
         settle()
-        assertEquals(listOf("pause", "dump again", "release", "ask active", "ask boards"), again.host.calls)
+        assertEquals(listOf("pause", "dump again", "release", "ask active", "ask boards", "power look"), again.host.calls)
         assertTrue(again.runner.state.value.last!!.passed)
 
         // A piano with no console at all: its facts left out, and with the microphone off it passes, as before.
@@ -525,13 +535,13 @@ class SafetyRunnerTest {
         none.host.facts = emptyMap()
         none.play()
         settle()
-        assertEquals(listOf("pause", "release"), none.host.calls)
+        assertEquals(listOf("pause", "release", "power look"), none.host.calls)
         assertTrue(none.runner.state.value.last!!.passed)
     }
 
     @Test
     fun `the 24 V not up for the keys fails none of them - the repower, then the keys, or due again (v1_26 M61)`() = runTest {
-        val rig = started(MemoryStore(SafetyRecord(count = 5)))
+        val rig = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         rig.rail += false   // the first wait: the rail doesn't come up; the second: it does
         rig.play()
         settle()
@@ -542,7 +552,7 @@ class SafetyRunnerTest {
         assertNull(rig.runner.state.value.lock)
         assertTrue(rig.runner.state.value.last!!.passed)
 
-        val never = started(MemoryStore(SafetyRecord(count = 5)))
+        val never = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         never.rail += listOf(false, false)
         never.host.silent = setOf(36)   // would fail, were it swept
         never.play()
@@ -553,7 +563,7 @@ class SafetyRunnerTest {
         assertTrue("due again before the next Play", never.runner.state.value.pending)
 
         // The key test's own wait finding it down is the same: no key judged, the repower, then the keys.
-        val own = started(MemoryStore(SafetyRecord(count = 5)))
+        val own = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         own.host.testRail += false
         own.host.silent = setOf(36)   // judged on the second sweep, after the repower: a warning (v1.33 — M71)
         own.play()
@@ -567,7 +577,7 @@ class SafetyRunnerTest {
 
     @Test
     fun `a check stopped on the way is due again before the next Play, and the Play that waited is not played`() = runTest {
-        val rig = started(MemoryStore(SafetyRecord(count = 5)))
+        val rig = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         rig.play()
         runCurrent()
         var waited = 0
@@ -623,25 +633,95 @@ class SafetyRunnerTest {
 
     @Test
     fun `only a check whose sweep heard every key says so - not one without the microphone, nor one that missed keys (v1_31 M68, v1_33 M71)`() = runTest {
-        val swept = started(MemoryStore(SafetyRecord(count = 5)))
+        val swept = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         swept.play()
         settle()
         assertTrue(swept.runner.state.value.last!!.passed)
         assertEquals("every key heard: after a trip, the plug's usual idle starts again", 1, swept.heardAll)
 
-        val mute = started(MemoryStore(SafetyRecord(count = 5)), listens = false)
+        val mute = started(MemoryStore(SafetyRecord(count = 5, fault = true)), listens = false)
         mute.play()
         settle()
         assertTrue("passed, the microphone off", mute.runner.state.value.last!!.passed)
         assertEquals("no sweep: the usual idle is kept, so a trip repeats at each rail-up", 0, mute.heardAll)
 
-        val silent = started(MemoryStore(SafetyRecord(count = 5)))
+        val silent = started(MemoryStore(SafetyRecord(count = 5, fault = true)))
         silent.host.silent = setOf(36)
         silent.play()
         settle()
         assertTrue("passed, with a warning", silent.runner.state.value.last!!.passed)
         assertNull(silent.runner.state.value.lock)
         assertEquals(0, silent.heardAll)
+    }
+
+    // ---- v1.40 — M78: the sweep only after a fault, and the cool-down -------------------------------------------------------
+
+    @Test
+    fun `no fault pending - Run the safety check is quick, no key struck, and it passes, and a trip on its power look stops it (v1_40 M78)`() = runTest {
+        val rig = started()
+        assertNull(rig.runner.runNow())
+        settle()
+        assertEquals("no KeyTest call", 0, rig.host.sweeps())
+        assertEquals(listOf("pause", "release", "ask active", "ask boards", "power look"), rig.host.calls)
+        val last = rig.store.record.last!!
+        assertTrue(last.passed)
+        assertTrue(last.quick)
+        assertTrue(dev.stevenjin.stevenpiano.ui.SafetyCopy.last(last, last.at).endsWith(" · quick check, no keys struck"))
+        assertTrue(rig.runner.open)
+
+        // Its power look finds a board's worth on: the rail cut it, and the check can't pass.
+        val trip = "24 V cut: a board stayed on, 144 W more than the piano's idle (6 W)"
+        rig.host.powerTrip = trip
+        val ended = mutableListOf<SafetyOutcome>()
+        backgroundScope.launch { rig.runner.state.collect { state -> state.ended?.let { ended += it } } }
+        assertNull(rig.runner.runNow())
+        settle()
+        assertEquals(SafetyOutcome.Unfinished(Why.STOPPED, trip), ended.distinct().single())
+        assertTrue("due again", rig.store.record.pending)
+    }
+
+    @Test
+    fun `a fault CUT - Play refused while cooling down, then the check plays every key and passing unlocks, and a fault during a quick check keeps it due (v1_40 M78)`() = runTest {
+        val rig = started()
+        rig.runner.require()   // the rail's fault CUT
+        rig.coolLeft = 25 * 60_000L
+        runCurrent()
+        assertTrue(rig.runner.state.value.pending)
+        assertTrue(rig.runner.state.value.fault)
+        assertTrue("kept", rig.store.record.fault)
+        var played = 0
+        assertFalse(rig.runner.admit(3L) { played++ })
+        assertEquals("the card says so", 25 * 60_000L, rig.runner.state.value.cooling)
+        assertTrue(rig.runner.state.value.card)
+        assertEquals("Cooling down after a fault · 25 min left", rig.runner.refusal())
+        assertEquals(Deferral.COOLING, rig.runner.runNow())
+        rig.coolLeft = 24 * 60_000L - 1
+        assertEquals("Cooling down after a fault · 24 min left", rig.runner.refusal())
+        runCurrent()
+        assertFalse("no check while cooling", rig.runner.state.value.running)
+
+        // Over (or skipped at the tablet): the check the fault called for runs before the Play, with the sweep.
+        rig.coolLeft = null
+        assertFalse(rig.runner.admit(3L) { played++ })
+        runCurrent()
+        assertTrue(rig.runner.state.value.running)
+        settle()
+        assertEquals(1, rig.host.sweeps())
+        assertEquals("then the Play goes", 1, played)
+        assertFalse(rig.runner.state.value.pending)
+        assertFalse("cleared by the pass", rig.store.record.fault)
+        assertEquals(84, rig.store.record.last!!.keys)
+        assertTrue(rig.runner.open)
+
+        // A fault CUT while a quick check runs: its pass doesn't clear the check the fault called for.
+        assertNull(rig.runner.runNow())
+        runCurrent()
+        rig.runner.require()
+        settle()
+        assertTrue(rig.store.record.last!!.passed)
+        assertTrue(rig.store.record.pending)
+        assertTrue(rig.store.record.fault)
+        assertFalse(rig.runner.open)
     }
 
     private companion object {

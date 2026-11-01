@@ -442,15 +442,17 @@ class PowerWatchTest {
         }
     }
 
-    // ---- After the piece (v1.39 — M76: three fresh readings 40 W above idle, or the piano's own facts) --------------------
+    // ---- After the piece (v1.40 — M78: three fresh readings 80 W above idle, or the piano's own facts) --------------------
 
     @Test
-    fun `after the piece - 8 W above idle on fresh readings passes, 45 W on all three trips with its numbers, two of three high passes`() {
+    fun `after the piece - 45 W above idle on fresh readings passes, 85 W on all three trips with its numbers, two of three high passes (v1_40 M78)`() {
         val watch = PowerWatch(12.0).apply { failsAtRailUp = 3 }
         assertNull(watch.afterPiece(listOf(20.0, 20.1, 19.9), active = 0, fails = 3, idle = 12.0))
-        assertEquals(RailMessage.AfterPiece(45, 12), watch.afterPiece(listOf(57.0, 58.0, 57.2), active = 0, fails = 3, idle = 12.0))
-        assertNull("the music's tail in the first two", watch.afterPiece(listOf(80.0, 60.0, 12.3), active = 0, fails = 3, idle = 12.0))
-        assertNull("fewer than three fresh: the piano's facts decide", watch.afterPiece(listOf(80.0, 80.0), active = 0, fails = 3, idle = 12.0))
+        assertNull("45 W: tripped before 1.40, under the 80 W leeway now", watch.afterPiece(listOf(57.0, 58.0, 57.2), active = 0, fails = 3, idle = 12.0))
+        assertEquals(RailMessage.AfterPiece(85, 12), watch.afterPiece(listOf(97.0, 98.0, 97.2), active = 0, fails = 3, idle = 12.0))
+        assertEquals("a board's 144 W", RailMessage.AfterPiece(144, 12), watch.afterPiece(listOf(156.0, 156.0, 156.0), active = 0, fails = 3, idle = 12.0))
+        assertNull("the music's tail in the first two", watch.afterPiece(listOf(180.0, 160.0, 12.3), active = 0, fails = 3, idle = 12.0))
+        assertNull("fewer than three fresh: the piano's facts decide", watch.afterPiece(listOf(180.0, 180.0), active = 0, fails = 3, idle = 12.0))
     }
 
     @Test
@@ -477,10 +479,12 @@ class PowerWatchTest {
     // ---- The usual idle (v1.31 — M68) -----------------------------------------------------------------------------------
 
     @Test
-    fun `the usual idle - fewer than 3 kept never trip, and 40 W above their median does`() {
-        assertEquals("two kept: too few to say", PowerVerdict.Fine, PowerWatch.againstUsual(60.0, listOf(10.0, 10.0), fullPower = true))
+    fun `the usual idle - fewer than 3 kept never trip, and 80 W above their median does (v1_40 M78)`() {
+        assertEquals("two kept: too few to say", PowerVerdict.Fine, PowerWatch.againstUsual(160.0, listOf(10.0, 10.0), fullPower = true))
         val kept = listOf(10.4, 9.6, 10.0)   // the median: 10 W
-        assertEquals("+40 W (v1.39 — M76)", PowerVerdict.AboveUsual(50.0, 10.0), PowerWatch.againstUsual(50.0, kept, fullPower = true))
+        assertEquals("+80 W (v1.40 — M78)", PowerVerdict.AboveUsual(90.0, 10.0), PowerWatch.againstUsual(90.0, kept, fullPower = true))
+        assertEquals("+79 W: under the leeway", PowerVerdict.Fine, PowerWatch.againstUsual(89.0, kept, fullPower = true))
+        assertEquals("+40 W: tripped in 1.39, no longer", PowerVerdict.Fine, PowerWatch.againstUsual(50.0, kept, fullPower = true))
         assertEquals("+12 W: a coil's worth no longer trips", PowerVerdict.Fine, PowerWatch.againstUsual(22.0, kept, fullPower = true))
         assertEquals("nor in PWM drive", PowerVerdict.Fine, PowerWatch.againstUsual(22.0, kept, fullPower = false))
         assertEquals("unread", PowerVerdict.Fine, PowerWatch.againstUsual(null, kept, fullPower = true))

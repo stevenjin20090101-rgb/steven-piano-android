@@ -144,6 +144,7 @@ object SafetyCopy {
         Deferral.AWAY -> "A safety check runs before the next piece. Open Steven Piano on the tablet."
         Deferral.GUEST_PLAY -> "Guest play is on. The safety check runs once it ends."
         Deferral.NO_PIANO -> "The piano isn't connected. Connect it, then run the safety check."
+        Deferral.COOLING -> "Cooling down after a fault. Run the safety check once it ends."
     }
 
     /** Why a check under way had to stop. */
@@ -153,9 +154,24 @@ object SafetyCopy {
         Deferral.AWAY -> "Steven Piano left the screen."
         Deferral.GUEST_PLAY -> "Guest play began."
         Deferral.NO_PIANO -> NOT_CONNECTED
+        Deferral.COOLING -> "A power fault cut the 24 V."
     }
 
     const val NOT_CONNECTED = "The piano isn't connected."
+
+    // ---- v1.40 — M78: the cool-down after a fault CUT ------------------------------------------------------------------
+
+    /**
+     * "Cooling down after a fault · 24 min left" (the minutes rounded up): Play's refusal, Piano › Power plug, System and
+     * the panel.
+     */
+    fun cooling(leftMs: Long): String = "Cooling down after a fault · ${((leftMs + 59_999L) / 60_000L).coerceAtLeast(1L)} min left"
+
+    /** Under the cooling words on the card, when Play was refused. */
+    const val COOLING_NOTE = "The power to the keys was cut for a fault. Once the cool-down ends, run the safety check to play again."
+
+    /** Once it has ended, while the check the fault called for (with its sweep) is still to pass. */
+    const val CHECK_TO_PLAY = "Run the safety check to play again"
 
     /** "C2, F♯4". */
     fun names(keys: List<Int>): String = keys.sorted().joinToString(", ") { KeyboardGeometry.name(it) }
@@ -219,6 +235,7 @@ object SafetyCopy {
             last.coilOn -> "a key was still on"
             !last.passed && short && last.silent.isEmpty() -> boardsAnswered(last.boardsOk!!, last.boardsOf!!)
             !last.passed -> silent(last.silent)
+            last.keys == null && last.quick -> "quick check, no keys struck"   // v1.40 — M78
             last.keys == null -> "keys not tested (microphone off)"
             last.silent.isNotEmpty() -> "${(last.keys - last.silent.size).coerceAtLeast(0)} of ${last.keys} keys heard"
             else -> "all ${last.keys} keys"

@@ -182,6 +182,7 @@ import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.RailPower
 import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.PowerCopy
+import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.collectLatest
 import java.time.ZoneId
@@ -1291,6 +1292,7 @@ class AppGraph(private val app: Application) {
             power = railWatch,   // v1.30 — M67
             wakeLink = ::wakePianoLink,   // v1.38 — M75
             graceMs = ::railGraceMs,   // v1.39 — M76
+            cool = plugStore,   // v1.40 — M78: the cool-down after a fault CUT, kept on the wall clock
         )
     }
 
@@ -1417,6 +1419,7 @@ class AppGraph(private val app: Application) {
         rail.start()
         followPlugAdverts()
         followOnHours()   // v1.39 — M76
+        followCooling()   // v1.40 — M78
         followPieceStarts()
         RailHold(
             appScope,
@@ -1559,8 +1562,41 @@ class AppGraph(private val app: Application) {
             } else {
                 PowerCopy.asleep(plug.hours, plug.hours.outside(ZonedDateTime.now()))
             }
-        }.stateIn(appScope, SharingStarted.Eagerly, null)
+        }.combine(coolWords) { asleep, cool -> cool ?: asleep }   // v1.40 — M78: the cool-down's words first
+            .stateIn(appScope, SharingStarted.Eagerly, null)
     }
+
+    // ---- v1.40 — M78: the cool-down after a fault CUT ---------------------------------------------------------------------
+
+    private val _coolWords = MutableStateFlow<String?>(null)
+
+    /**
+     * The cool-down's words with Steven Piano on its plug: "Cooling down after a fault · 24 min left" (looked at every
+     * [COOL_TICK_MS]), then "Run the safety check to play again" until the check the fault called for passes; null
+     * otherwise. Play's refusal, Piano › Power plug, and (through [pianoAsleep]) the Piano tab, System and the panel.
+     */
+    val coolWords: StateFlow<String?> get() = _coolWords
+
+    private fun followCooling() {
+        appScope.launch {
+            combine(rail.coolUntil, safety.state, plugSwitches, pianoLink.kind) { until, state, plugged, kind ->
+                Triple(until, state.fault && (state.pending || state.lock != null), plugged && kind == InstrumentKind.StevenPiano)
+            }.distinctUntilChanged().collectLatest { (until, due, shown) ->
+                while (true) {
+                    val left = until?.let { it - System.currentTimeMillis() }?.takeIf { it > 0 && shown }
+                    _coolWords.value = left?.let(SafetyCopy::cooling) ?: SafetyCopy.CHECK_TO_PLAY.takeIf { due && shown }
+                    if (left == null) break
+                    delay(minOf(left, COOL_TICK_MS))
+                }
+            }
+        }
+    }
+
+    /** The cool-down's ms left with the plug switching the rail; null while none runs. */
+    fun coolLeft(): Long? = rail.coolLeft()?.takeIf { rail.available.value }
+
+    /** Piano › Power plug's Skip the cool-down (behind the kiosk PIN, confirmed): logged; the safety check still runs. */
+    fun skipCooling() = rail.skipCooling()
 
     /**
      * Why a start from afar (the web panel, the relay: Play, a channel, Test every key, Turn the piano on) is refused now:
@@ -1575,6 +1611,7 @@ class AppGraph(private val app: Application) {
 
     /** The panel's Turn the piano on / off (its System page): on is refused outside the On hours ([offHoursRefusal]). */
     fun setPianoOnFromAfar(on: Boolean): String? {
+        if (on) coolLeft()?.let { return SafetyCopy.cooling(it) }   // v1.40 — M78
         if (on) offHoursRefusal()?.let { return it }
         rail.manual(on)
         return null
@@ -1592,6 +1629,7 @@ class AppGraph(private val app: Application) {
      */
     private suspend fun wakeForUpdate(): Boolean {
         if (stevenConnected.value) return true
+        if (withContext(Dispatchers.Main) { coolLeft() } != null) return false   // v1.40 — M78: nothing switches the plug on
         if (!withContext(Dispatchers.Main) { pianoWakes() }) return false
         withContext(Dispatchers.Main) { rail.wantFor(RailKeeper.UPDATE_WAKE, UPDATE_WAKE_MS) }
         return railUpWithin(RAIL_AWAIT_MS) && stevenConnected.value
@@ -1638,6 +1676,7 @@ class AppGraph(private val app: Application) {
             heardAll = ::railHeardAll,   // v1.31 — M68
             every = { settings.value.safetyCheckEvery },   // v1.39 — M76: off by default
             repowerRestarts = { railPower.available.value },   // v1.39 — M76: the controller is on the plug too
+            cooling = ::coolLeft,   // v1.40 — M78
         )
     }
 
@@ -1684,6 +1723,7 @@ class AppGraph(private val app: Application) {
         override val played: Flow<Played> get() = player.played
 
         override fun deferral(): Deferral? = when {
+            coolLeft() != null -> Deferral.COOLING   // v1.40 — M78: a check under way stops too
             player.locked || firmwareUpdater.state.value.busy -> Deferral.UPDATING
             quiet.holds() -> Deferral.QUIET
             !remote.listening.inFront.value -> Deferral.AWAY
@@ -1760,6 +1800,9 @@ class AppGraph(private val app: Application) {
         }
 
         override suspend fun titleOf(pieceId: Long): String? = withContext(Dispatchers.IO) { library.summaries(listOf(pieceId))[pieceId]?.title }
+
+        // v1.40 — M78: the quick check's `!i2cfails` and idle draw on a fresh advert, with the plug; a trip is the rail's CUT.
+        override suspend fun powerLook(): String? = rail.quickLook()?.let(PowerCopy::message)
     }
 
     /** From [start]: the safety check reads its record and follows the player. */
@@ -1881,6 +1924,9 @@ class AppGraph(private val app: Application) {
 
         /** v1.39 — M76: the On hours looked at this often; the firmware updater's wake wants the rail this long. */
         const val HOURS_LOOK_MS = 30_000L
+
+        /** v1.40 — M78: the cool-down's minutes left are looked at again this often. */
+        const val COOL_TICK_MS = 15_000L
         const val PLUG_READ_MS = 2_000L
         const val UPDATE_WAKE_MS = 5 * 60_000L
         const val GUEST_RECONNECT_MS = 15_000L

@@ -81,6 +81,13 @@ object PowerCopy {
         is RailMessage.KeysOn -> "24 V cut: the piano says ${message.keys} " + (if (message.keys == 1) "key is" else "keys are") + " still on after the piece"
     }
 
+    // ---- v1.40 — M78: the cool-down after a fault CUT (its words: SafetyCopy.cooling) -------------------------------------
+
+    const val SKIP_COOL = "Skip the cool-down"
+    const val SKIP_COOL_NOTE = "Only if you know the piano is safe. The safety check still plays every key before the next piece."
+    const val SKIP_COOL_TEXT = "The coils may still be hot. Skip the 25-minute cool-down?"
+    const val SKIP_COOL_ACTION = "Skip"
+
     /** v1.39 — M76: the plug's adverts silent for over 10 s with the rail up (amber, small; never a CUT by itself). */
     const val READING_LOST = "Power reading lost"
 

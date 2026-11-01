@@ -10372,3 +10372,24 @@ pedal, a sudden passage 2 s late, a 144 W board; after the piece), `OnHoursTest`
 ## The release: 1.39 (versionCode 50)
 
 M76 (On hours 7:00–22:00, the stuck-board trips: 100 W unexplained for 5 s while playing, 40 W at idle, `!i2cfails` every 5 s / 30 s; the M67 floor watch log-only after a false trip on the real piano; the after-piece check on fresh adverts; the 5 s plug check; the 2-minute grace; the power on Now playing; the 6th-piece check off) and M77 (the kiosk guide, never force-stopped, PowerService, Runs reliably, K-pop artists plain) merged. The integrator raised the rail-up cap 30 W → 100 W (the controller boots on the plug).
+
+# v1.40 — M78: the sweep only after a fault, the cool-down, the 80 W leeway
+
+Brief `~/.claude/plans/m78-fault-cooldown-brief.md` plus the coordinator's 80 W leeway; worktree `android-wt-m78`, branch
+`m78-cooldown`, from `fb97731`. No version bump, no signing, no emulator, no firmware change. **`SafetyRecord.fault`** (key
+`fault`; absent: `pending` or the coil lock, so a 1.39 trip's check keeps its sweep), set by `require()` and the `CoilOn`
+outcome, cleared by a pass unless a fault came while it ran (`faultDuring`); `SafetyCheck.start(quick = !fault)` →
+`CheckState.quick` (no SWEEP line); after a quick pass `SafetyHost.powerLook()` (`RailKeeper.quickLook`: `!i2cfails`
+against this rail-up's, two fresh adverts 80 W above `BoardWatch.idle`; a trip is `cutAtOnce`); `LastCheck.quick`
+(`lastQuick`). **The cool-down**: `RailKeeper(cool: CoolStore?, wall)`, `PlugStore` key `coolUntil` (wall ms, kept by
+`pair`/`forget`), `COOL_MS` 25 min begun by `faulted()` (every former `checkDue` site) and by `cutNow`; while cooling `put`
+refuses every want (logged once a reason), `wantedNow`/`holding` are false (an "on" advert is CUT) and `arm()` refuses;
+wants made before the store is read wait for it, and are ended if it is cooling; `skipCooling()`. `SafetyRunner(cooling)`:
+`admit` refuses (`SafetyState.cooling`, the card's `Cooling` moment), `refusal()`, `runNow` → `Deferral.COOLING` (the host's
+deferral too, so a check under way stops). `AppGraph.coolWords` (15 s tick) feeds `pianoAsleep` and Piano › Power plug (the
+words, **Skip the cool-down** in a `GlassAlertDialog`, Turn the piano on disabled); `setPianoOnFromAfar` and `wakeForUpdate`
+refuse. **80 W**: `PowerWatch.LEEWAY_WATTS` = `UNEXPLAINED_WATTS` = `BOARD_IDLE_WATTS` = `USUAL_ABOVE_WATTS`; `CAP_WATTS` 100
+stays; the idle `CoilOn` only logs (once per 30 s run). **Tests:** `RailKeeperTest` (a fault's cool-down end to end, the
+coil-on cut with a new keeper and Skip, the non-fault CUTs, the quick look; the leeway numbers), `SafetyRunnerTest` (quick
+by hand, cooling then the sweep, a fault during a quick check; the sweep tests now start from a fault), `SafetyStoreTest`
+(the fault's round-trip and migration), `PowerWatchTest` (80 W after the piece and at the usual idle).

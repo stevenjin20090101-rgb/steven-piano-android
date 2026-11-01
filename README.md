@@ -1151,17 +1151,17 @@ the adverts over 10 seconds counts as nothing, not as the last reading. Kept wit
 piano). A real failure is a whole power board: one that loses I²C latches its 16 keys on, 150–190 W more. So:
 
 - **While a piece plays**, the draw alone never stops it, however high (a passage with nearly every key down draws 500 W
-  and more, and that is fine). It stops only when, for 5 seconds, the draw is **100 W or more above what the notes explain**
+  and more, and that is fine). It stops only when, for 5 seconds, the draw is **80 W or more above what the notes explain** (100 W in 1.39)
   (idle + the busiest second's keys over the last 3 s × 12 W + 30 W for the pedal: the adverts can trail by seconds),
   or when the piano's own **I²C error count** goes up (read every 5 seconds during a piece, between MIDI packets). Both
   cut the 24 V at once. The old "a key's worth for 20 s" watch now only writes to the log: it stopped a piece that was fine.
-- **With nothing playing** (no note for 2 s, no key held, the pedal up): **40 W** above the piano's idle (the middle of
-  its last 20 idle readings) on two readings is a board on; **10 W** above it for **30 s** is a key on; the I²C count is
-  read every 30 s. Each cuts the 24 V at once.
+- **With nothing playing** (no note for 2 s, no key held, the pedal up): **80 W** (from 1.40; 40 W in 1.39) above the
+  piano's idle (the middle of its last 20 idle readings) on two readings is a board on; **10 W** above it for **30 s** is
+  only logged from 1.40; the I²C count is read every 30 s. Each trip cuts the 24 V at once.
 - **After each piece**: 1.5 s after the stop, the piano is asked whether a key is still on and whether it had I²C trouble
-  (either cuts at once); then three adverts that came after that, about a second apart: all three 40 W or more above
-  idle cuts it. An advert from the piece's last notes never counts.
-- **As the 24 V comes on**: more than 30 W twice with nothing sent cuts it, and so does 40 W or more above what the plug
+  (either cuts at once); then three adverts that came after that, about a second apart: all three 80 W or more above
+  idle (from 1.40) cuts it. An advert from the piece's last notes never counts.
+- **As the 24 V comes on**: more than 100 W twice with nothing sent cuts it, and so does 80 W (from 1.40) or more above what the plug
   usually draws (learned from an idle reading at least 5 s after the piano connects: the controller boots on the plug).
 - No advert for over 10 seconds with the 24 V on: "Power reading lost" in amber under Now playing, and logged; nothing
   is cut for that alone.
@@ -1171,6 +1171,13 @@ piano). A real failure is a whole power board: one that loses I²C latches its 1
   ("Lost the power plug").
 
 Each trip makes the safety check run before the next piece.
+
+**The cool-down** (1.40): after a fault cut (any **24 V cut: …**, a rail-up trip, or a key found on by the safety check)
+nothing switches the plug on for 25 minutes (Play, Keys, Turn the piano on, the On hours, the web panel, the safety
+check, a firmware update), and the tablet switches it off if it comes on; Play, Piano › Power plug, System and the web
+panel say "Cooling down after a fault · 24 min left", then "Run the safety check to play again". **Skip the cool-down**
+(Piano › Power plug, only while cooling) asks "The coils may still be hot. Skip the 25-minute cool-down?" and is logged;
+the safety check, playing every key, still runs before the next piece.
 
 **On hours** (1.39, Piano › Power plug › On hours; on by default, 7:00–22:00 every day, with From and To): within them the
 piano stays on and connected all day, so Play starts at once. Outside them it is off, and the Piano tab says "Piano off
@@ -1344,6 +1351,12 @@ time, and a change of the clock or the time zone is taken at once. (Since 1.24 n
 - [ ] Restart the tablet with a schedule ahead and don't open the app: it still plays.
 
 ## Safety check
+
+From 1.40 the keys are played (step 4) only in a check a power fault called for (a trip of the power plug's watch, or a
+key found still on); every other check, by hand or after the 6th piece, is quick and silent (the keys released, the
+coils, the boards, the piano's I²C count and what the 24 V draws idle), and System says "quick check, no keys struck".
+After a fault the check waits for the 25-minute cool-down (see *The 24 V power plug*), and the tablet says "Run the
+safety check to play again" until it passes.
 
 After every 6th piece the tablet plays on the piano, the piano checks itself (from 1.26). A full-screen **Safety
 check** card shows, over whatever was on the tablet, the resting screen too, with each step ticking as it finishes:

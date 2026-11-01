@@ -18,8 +18,8 @@ package dev.stevenjin.stevenpiano.power
  * - **Idle** ([idleReading]: the rail up, nothing playing, no note for 2 s, no key held, the pedal up). The idle draw is
  *   the median of the last [IDLE_KEPT] idle readings (the rail-up's first). [BOARD_IDLE_WATTS] or more above it on two
  *   readings at least [BOARD_APART_MS] apart is a board on ([PowerVerdict.BoardOn]); [COIL_IDLE_WATTS] or more above it
- *   for [COIL_IDLE_MS] is a coil on ([PowerVerdict.CoilOn]; not a coil's 6 W for 16 s, which tripped falsely with the
- *   plug's adverts). A reading above either is never learned as idle. The keeper gives it fresh adverts only.
+ *   for [COIL_IDLE_MS] is a coil on ([PowerVerdict.CoilOn]; v1.40 — M78 the keeper only logs it: the 80 W leeway is
+ *   the one rule that cuts). A reading above either is never learned as idle. The keeper gives it fresh adverts only.
  * - **While playing** ([playing]): total draw never trips by itself, however high: a dense passage drawing 500 W is fine
  *   when the notes explain it. Explained = idle + the busiest second's keys ([PowerSample.heldMost]) × [PowerWatch.COIL_WATTS]
  *   (at Full power a coil draws that; in PWM drive its note's duty of it, less, so the music is never under-explained)
@@ -73,6 +73,7 @@ class BoardWatch(railUpWatts: Double?) {
         if (above >= COIL_IDLE_WATTS) {
             val since = coilSince ?: at.also { coilSince = it }
             if (at - since >= COIL_IDLE_MS) {
+                coilSince = at   // v1.40 — M78: logged only, so said once per run, not at every reading
                 return PowerVerdict.CoilOn(above, base, at - since, "idle: ${PowerWatch.watts(above)} W above the idle ${PowerWatch.watts(base)} W for ${(at - since) / 1_000} s")
             }
             return PowerVerdict.Fine
@@ -138,20 +139,26 @@ class BoardWatch(railUpWatts: Double?) {
         /** The idle draw is the median of this many idle readings. */
         const val IDLE_KEPT = 20
 
-        /** Idle: this much above idle on two readings this far apart is a board on (one board: about 150–190 W). */
-        const val BOARD_IDLE_WATTS = 40.0
+        /**
+         * Idle: this much above idle on two readings this far apart is a board on (one board: about 150–190 W). v1.40 — M78:
+         * the uniform [PowerWatch.LEEWAY_WATTS] (was 40 W).
+         */
+        const val BOARD_IDLE_WATTS = PowerWatch.LEEWAY_WATTS
         const val BOARD_APART_MS = 500L
 
-        /** Idle: this much above idle for this long is a coil on (v1.39 — M76, after a false trip at 6 W / 16 s). */
+        /**
+         * Idle: this much above idle for this long is a coil on (v1.39 — M76, after a false trip at 6 W / 16 s). v1.40 — M78:
+         * logged only, never a CUT (said once per run); above it a reading is still never learned as idle.
+         */
         const val COIL_IDLE_WATTS = 10.0
         const val COIL_IDLE_MS = 30_000L
 
         /**
-         * While playing: this much more than the notes explain, for this long, is a board on. Just under one board's
-         * 144 W (Steven, after two rounds; 100 W on 2026-11-01): a dense passage at Full power with every coil drawing a
-         * watt more than [PowerWatch.COIL_WATTS] still stays under it with all 88 keys down.
+         * While playing: this much more than the notes explain, for this long, is a board on. Well under one board's
+         * 144 W (Steven, after two rounds; 100 W on 2026-11-01; v1.40 — M78 the uniform [PowerWatch.LEEWAY_WATTS], 80 W):
+         * the notes explain a dense passage at Full power, so only the unexplained part counts.
          */
-        const val UNEXPLAINED_WATTS = 100.0
+        const val UNEXPLAINED_WATTS = PowerWatch.LEEWAY_WATTS
         const val UNEXPLAINED_MS = 5_000L
 
         /** The pedal's motor while down: 10–30 W, the most taken. */

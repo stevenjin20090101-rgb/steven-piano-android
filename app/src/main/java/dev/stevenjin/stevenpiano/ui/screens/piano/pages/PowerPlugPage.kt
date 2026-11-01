@@ -298,11 +298,33 @@ private fun PairedPlug(settings: PlugSettings, clicked: Boolean, onOpenPage: (Se
 /**
  * v1.38 — M75: **Turn the piano on** (the rail wanted as any feature wants it: ARM, the piano's link, the CHECK), which
  * becomes **Turn the piano off** while on, with how long it stays on ("On · turns off in 28 min": 30 minutes after the
- * last note). Behind the kiosk PIN, as the whole page is.
+ * last note). Behind the kiosk PIN, as the whole page is. v1.40 — M78: after a fault CUT, the cool-down's words above it
+ * (Turn the piano on waits for its end) and **Skip the cool-down**, confirmed; then "Run the safety check to play again".
  */
 @Composable
 private fun ManualSwitch() {
     val graph = LocalContext.current.graph
+    val words by graph.coolWords.collectAsStateWithLifecycle()
+    val cooling = words != null && graph.coolLeft() != null
+    var skipping by rememberSaveable { mutableStateOf(false) }
+    words?.let { Problem(it) }
+    if (cooling) {
+        ActionRow(note = PowerCopy.SKIP_COOL_NOTE) { ActionButton(PowerCopy.SKIP_COOL, onClick = { skipping = true }) }
+    }
+    if (skipping) {
+        GlassAlertDialog(
+            onDismissRequest = { skipping = false },
+            title = { Text(PowerCopy.SKIP_COOL) },
+            text = { Text(PowerCopy.SKIP_COOL_TEXT) },
+            confirmButton = {
+                TextButton(onClick = {
+                    skipping = false
+                    graph.skipCooling()
+                }) { Text(PowerCopy.SKIP_COOL_ACTION) }
+            },
+            dismissButton = { TextButton(onClick = { skipping = false }) { Text("Cancel") } },
+        )
+    }
     val until by graph.rail.manualUntil.collectAsStateWithLifecycle()
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(until) {
@@ -313,7 +335,11 @@ private fun ManualSwitch() {
     }
     val left = until?.let { it - now }?.takeIf { it > 0 }
     ActionRow(note = left?.let(PowerCopy::manualOn) ?: PowerCopy.MANUAL_OFF_NOTE) {
-        ActionButton(if (left != null) PowerCopy.TURN_OFF else PowerCopy.TURN_ON, onClick = { graph.setPianoOn(left == null) })
+        ActionButton(
+            if (left != null) PowerCopy.TURN_OFF else PowerCopy.TURN_ON,
+            onClick = { graph.setPianoOn(left == null) },
+            enabled = left != null || !cooling,   // v1.40 — M78: nothing switches the plug on while cooling down
+        )
     }
     HairlineDivider(startInset = 16.dp)
 }

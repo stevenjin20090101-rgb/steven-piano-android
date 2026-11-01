@@ -57,18 +57,23 @@ data class LastCheck(
     val recovered: Boolean = false,
     val restarted: Boolean? = null,
     val repowered: Boolean? = null,
+    /** v1.40 — M78: a quick check (no fault called for it): no key struck, by design rather than the microphone off. */
+    val quick: Boolean = false,
 )
 
 /**
  * What the safety check keeps across restarts of the app (v1.26 — M61): the pieces played since the last check that
  * passed ([count]), whether one is due before the next Play ([pending]: it couldn't run when it was due, or was under way
- * when the app went), why Play is locked ([lock]), and the [last] check.
+ * when the app went), why Play is locked ([lock]), and the [last] check. v1.40 — M78: [fault], a fault CUT called for the
+ * next check (a power trip, `!i2cfails` rising, `!active` after a piece, a coil on): it plays every key with the
+ * microphone (the sweep); every other check is quick, with none. Cleared only by a check that passes.
  */
 data class SafetyRecord(
     val count: Int = 0,
     val pending: Boolean = false,
     val lock: SafetyLock? = null,
     val last: LastCheck? = null,
+    val fault: Boolean = false,
 )
 
 /** Where the [SafetyRecord] is kept: its own DataStore ([DataStoreSafetyStore]), or memory in the tests. */
@@ -97,13 +102,13 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         val kept = prefs[LOCK]
         if (kept != null && kept.startsWith(KEYS_PREFIX)) {
             clearKeysLock(kept)
-            record.copy(lock = null, pending = true)
+            record.copy(lock = null, pending = true, fault = true)   // v1.40 — M78: as it reads once cleared
         } else {
             record
         }
     } catch (e: IOException) {
         log("Safety check: its record couldn't be read; a check runs before the next piece")
-        SafetyRecord(pending = true)
+        SafetyRecord(pending = true, fault = true)   // v1.40 — M78: the full check, its sweep too
     }
 
     /** M71's migration: the old `keys:…` lock removed (only if it is still there), a check due instead. */
@@ -135,6 +140,8 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
             count = (this[COUNT] ?: 0).coerceAtLeast(0),
             pending = this[PENDING] ?: false,
             lock = lockOf(this[LOCK]),
+            // v1.40 — M78: a record kept before 1.40 with a check due (a trip's, or the coil lock's) keeps its sweep.
+            fault = this[FAULT] ?: ((this[PENDING] ?: false) || this[LOCK] == COIL),
             last = lastAt?.let { at ->
                 LastCheck(
                     at = at,
@@ -147,6 +154,7 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
                     recovered = this[LAST_RECOVERED] ?: false,
                     restarted = this[LAST_RESTARTED],
                     repowered = this[LAST_REPOWERED],
+                    quick = this[LAST_QUICK] ?: false,
                 )
             },
         )
@@ -155,6 +163,7 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
     private fun MutablePreferences.fill(record: SafetyRecord) {
         this[COUNT] = record.count
         this[PENDING] = record.pending
+        this[FAULT] = record.fault
         when (val lock = record.lock) {
             null -> remove(LOCK)
             SafetyLock.CoilOn -> this[LOCK] = COIL
@@ -162,7 +171,7 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         }
         val last = record.last
         if (last == null) {
-            for (key in listOf(LAST_AT, LAST_PASSED, LAST_KEYS, LAST_SILENT, LAST_COIL, LAST_BOARDS_OK, LAST_BOARDS_OF, LAST_RECOVERED, LAST_RESTARTED, LAST_REPOWERED)) remove(key)
+            for (key in listOf(LAST_AT, LAST_PASSED, LAST_KEYS, LAST_SILENT, LAST_COIL, LAST_BOARDS_OK, LAST_BOARDS_OF, LAST_RECOVERED, LAST_RESTARTED, LAST_REPOWERED, LAST_QUICK)) remove(key)
             return
         }
         this[LAST_AT] = last.at
@@ -175,6 +184,7 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         this[LAST_RECOVERED] = last.recovered
         if (last.restarted == null) remove(LAST_RESTARTED) else this[LAST_RESTARTED] = last.restarted
         if (last.repowered == null) remove(LAST_REPOWERED) else this[LAST_REPOWERED] = last.repowered
+        this[LAST_QUICK] = last.quick
     }
 
     companion object {
@@ -193,6 +203,10 @@ class DataStoreSafetyStore(private val store: DataStore<Preferences>, private va
         /** Which recovery step was done (v1.27 — M63): new keys, so a record kept before them reads as it did. */
         private val LAST_RESTARTED = booleanPreferencesKey("lastRestarted")
         private val LAST_REPOWERED = booleanPreferencesKey("lastRepowered")
+
+        /** v1.40 — M78: a fault calls for the sweep; the last check was a quick one. */
+        private val FAULT = booleanPreferencesKey("fault")
+        private val LAST_QUICK = booleanPreferencesKey("lastQuick")
 
         private const val COIL = "coil"
         /** The keys not heard, as 1.26 to 1.32 kept them: no longer a lock (v1.33 — M71). */
