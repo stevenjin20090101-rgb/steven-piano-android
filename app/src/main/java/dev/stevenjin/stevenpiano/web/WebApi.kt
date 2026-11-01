@@ -564,11 +564,12 @@ object WebApi {
     /**
      * The import's progress, then its tally; and (v1.10.1 — M28, D7) the playlist the last finished import put its
      * pieces in, `{id, name}`, null when it put them in none (files picked one by one, nothing arrived) or one runs.
+     * `replaced` (v1.41): pieces that took a new version's file in place.
      */
     fun import(i: ImportProgress): JSONObject = JSONObject()
         .put("running", !i.finished)
         .put("done", i.done).put("total", i.total)
-        .put("imported", i.imported).put("duplicates", i.duplicates).put("failed", i.failed)
+        .put("imported", i.imported).put("replaced", i.replaced).put("duplicates", i.duplicates).put("failed", i.failed)
         .put("current", i.current ?: JSONObject.NULL)
         .put("playlist", i.playlist?.takeIf { i.finished }?.let { JSONObject().put("id", it.id).put("name", it.name) } ?: JSONObject.NULL)
 

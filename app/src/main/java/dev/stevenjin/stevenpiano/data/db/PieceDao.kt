@@ -180,6 +180,14 @@ interface PieceDao {
     @Update
     suspend fun update(piece: PieceEntity)
 
+    /** The first added of the pieces among [shas] (at most 500 at a time): what a new version replaces (v1.41). */
+    @Query(PieceSql.OLDEST_BY_SHA)
+    suspend fun oldestBySha(shas: List<String>): PieceEntity?
+
+    /** Piece [id] takes a new version's file in place (v1.41): 1, or 0 when it is gone or another piece holds [sha256]. */
+    @Query(PieceSql.REPLACE_FILE)
+    suspend fun replaceFile(id: Long, sha256: String, fileName: String, sourceName: String, sizeBytes: Long, durationMs: Long, noteCount: Int): Int
+
     @Query("UPDATE pieces SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: Long, favorite: Boolean)
 

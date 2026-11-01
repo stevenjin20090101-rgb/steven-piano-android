@@ -331,10 +331,12 @@ class LibraryPack(
             // The pack's pieces, from its own index, before the import reads (and then deletes) the zip.
             val shas = withContext(io) { ZipSource(file).use { it.readIndex()?.sha256s() } }.orEmpty()
             val result = import(ImportSource.LocalZip(file, skip))
-            if (result.total > 0 && result.imported + result.duplicates == 0) return PackState.Failed(LibraryFailures.NOT_READ)
+            // A piece that took a new version's file in place (v1.41) was read as surely as one added.
+            if (result.total > 0 && result.imported + result.replaced + result.duplicates == 0) return PackState.Failed(LibraryFailures.NOT_READ)
             withContext(io) { offered.record(manifest.version, shas) }
             recordLoaded(maxOf(loaded, manifest.version))
-            log("Library: version ${manifest.version} loaded, ${result.imported} pieces added, ${result.duplicates} there already, ${result.failed} failed")
+            val replaced = if (result.replaced > 0) ", ${result.replaced} replaced" else ""
+            log("Library: version ${manifest.version} loaded, ${result.imported} pieces added$replaced, ${result.duplicates} there already, ${result.failed} failed")
             return PackState.Done(result.imported)
         } finally {
             withContext(NonCancellable + io) { file.delete() }   // the import deletes it; this is for a stop before it opened it

@@ -427,6 +427,21 @@ class LibraryRepository(
         return target?.let { ImportedPlaylist(it.id, it.name) }
     }
 
+    /** The first added of the pieces with [shas] (v1.41: what a new version replaces), asked [SQL_CHUNK] at a time. */
+    override suspend fun oldestBySha(shas: Set<String>): PieceEntity? =
+        shas.chunked(SQL_CHUNK).mapNotNull { pieces.oldestBySha(it) }.minByOrNull { it.id }
+
+    /**
+     * A new version's file in place of piece [piece]'s (v1.41), in one transaction: only what the file gives is written
+     * ([PieceSql.REPLACE_FILE], which writes nothing when another piece holds the SHA-256), then the piece goes at the
+     * end of its row's [collection], as [insertAll] links a new one (a piece in it already keeps its place).
+     */
+    override suspend fun replaceFile(piece: PieceEntity, collection: String?): Boolean = db.withTransaction {
+        val written = pieces.replaceFile(piece.id, piece.sha256, piece.fileName, piece.sourceName, piece.sizeBytes, piece.durationMs, piece.noteCount) > 0
+        if (written) collection?.let { name -> link(playlistId(name, imported = true), piece.id) }
+        written
+    }
+
     override suspend fun insertAll(pieces: List<PieceEntity>): Int = db.withTransaction {
         var inserted = 0
         for (piece in pieces) {

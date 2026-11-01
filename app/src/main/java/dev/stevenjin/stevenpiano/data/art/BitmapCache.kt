@@ -53,6 +53,11 @@ class BitmapCache(maxBytes: Int = defaultBytes()) {
         cache.put(key, bitmap)
     }
 
+    /** [key]'s picture goes (v1.41: a replaced piece's roll card, drawn again from its new notes). */
+    fun remove(key: String) {
+        cache.remove(key)
+    }
+
     private fun keyOf(file: File, size: ArtSize, version: Long) = "${file.path}@$version#${size.name}"
 
     companion object {

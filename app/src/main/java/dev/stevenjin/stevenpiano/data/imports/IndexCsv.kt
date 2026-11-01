@@ -22,9 +22,20 @@ import java.util.Locale
  * v1.10 — M27: an optional last column `sha256` (Steven's library pack writes it: each file's
  * SHA-256), read into [Row.sha256] when it is 64 hex digits (kept lower-case) and null otherwise,
  * so the app knows a pack's pieces before it reads them. An index without it reads as before.
+ *
+ * v1.41: an optional column `replaces`, found by its header name only: the SHA-256s of earlier versions of the
+ * row's file, apart by spaces, read into [Row.replaces] (64 hex digits each, kept lower-case; anything else is left
+ * out), so a new version takes its old one's place in the library ([Importer]). An index without it reads as before.
  */
 class IndexCsv private constructor(private val rows: Map<String, Row>) {
-    data class Row(val collection: String, val composer: String, val title: String, val path: String, val sha256: String? = null)
+    data class Row(
+        val collection: String,
+        val composer: String,
+        val title: String,
+        val path: String,
+        val sha256: String? = null,
+        val replaces: Set<String> = emptySet(),
+    )
 
     val size: Int get() = rows.size
 
@@ -37,6 +48,7 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
         const val FILE_NAME = "INDEX.csv"
 
         private val SHA256 = Regex("[0-9a-fA-F]{64}")
+        private val SPACES = Regex("\\s+")
 
         fun parse(text: String): IndexCsv {
             val table = CsvReader.parse(text, maxField = TextLimits.CSV_FIELD)
@@ -48,6 +60,7 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
             val title = column("title", 2)
             val path = column("path", 4)
             val sha256 = column("sha256", 5)
+            val replaces = if (hasHeader) header.indexOf("replaces") else -1
             val rows = (if (hasHeader) table.drop(1) else table).mapNotNull { cells ->
                 val filePath = cells.getOrNull(path)?.trim().orEmpty()
                 if (filePath.isEmpty()) return@mapNotNull null
@@ -57,10 +70,15 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
                     title = cells.getOrNull(title)?.trim().orEmpty(),
                     path = filePath,
                     sha256 = cells.getOrNull(sha256)?.trim()?.takeIf { SHA256.matches(it) }?.lowercase(Locale.ROOT),
+                    replaces = shas(cells.getOrNull(replaces)),
                 )
             }
             return IndexCsv(rows.toMap())
         }
+
+        /** A `replaces` field's SHA-256s (v1.41), in its order; a value that is not 64 hex digits is left out. */
+        private fun shas(field: String?): Set<String> =
+            field?.split(SPACES)?.filter { SHA256.matches(it) }?.mapTo(LinkedHashSet()) { it.lowercase(Locale.ROOT) }.orEmpty()
 
         /** Forward slashes, no leading "./" or "/", composed Unicode, case-insensitive. */
         fun normalizePath(path: String): String =

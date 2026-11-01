@@ -56,6 +56,25 @@ class ImportCopyTest {
     }
 
     @Test
+    fun `pieces that took a new version's file are counted after those that came in`() {
+        val pop = ImportedPlaylist(16, "Pop")
+        assertEquals(
+            "Imported 1,204 pieces, replaced 360 · in the playlist Pop.",
+            ImportCopy.summary(ImportProgress(done = 1_570, total = 1_570, imported = 1_204, duplicates = 6, playlist = pop, replaced = 360)),
+        )
+        assertEquals("Replaced 360 pieces.", ImportCopy.summary(ImportProgress(done = 362, total = 362, duplicates = 2, replaced = 360)))
+        assertEquals("Replaced 1 piece. 1 file couldn't be read.", ImportCopy.summary(ImportProgress(done = 2, total = 2, failed = 1, replaced = 1)))
+        assertEquals(
+            "Android stopped the import at 1,204 of 1,727 files. Imported 1,000 pieces, replaced 150. Adding the same files again finishes it.",
+            ImportCopy.summary(ImportProgress(done = 1_204, total = 1_727, imported = 1_000, replaced = 150, finished = true)),
+        )
+        assertEquals(
+            "Android stopped the import at 20 of 1,727 files. Replaced 20 pieces. Adding the same files again finishes it.",
+            ImportCopy.summary(ImportProgress(done = 20, total = 1_727, replaced = 20, finished = true)),
+        )
+    }
+
+    @Test
     fun `files another app sent are asked about before they are added`() {
         assertEquals("Add 3 files to the library?", ImportCopy.addShared(3))
         assertEquals("Add 1 file to the library?", ImportCopy.addShared(1))

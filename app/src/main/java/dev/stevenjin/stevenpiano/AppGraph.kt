@@ -278,7 +278,8 @@ class AppGraph(private val app: Application) {
 
     private val importState = MutableStateFlow(ImportProgress.Idle)
     val importProgress: StateFlow<ImportProgress> = importState.asStateFlow()
-    val importer: Importer by lazy { Importer(library, pieceFiles, importState) }
+    /** v1.41: a piece that takes a new version's file in place has its roll card drawn again. */
+    val importer: Importer by lazy { Importer(library, pieceFiles, importState, replaced = { artwork.forgetRollCard(it) }) }
 
     /** Whether the device is online; artwork is only ever fetched when it is. */
     val network: NetworkMonitor by lazy { NetworkMonitor(app) }

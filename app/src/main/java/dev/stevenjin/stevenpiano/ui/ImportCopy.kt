@@ -22,26 +22,35 @@ object ImportCopy {
      * loose upload's says where its pieces went (v1.10.1 — M28, D7): "Imported 265 pieces · in the playlist MIDI."
      * One Android stopped before its end (v1.27 — M63: its time for data sync ran out) says so, how far it came, and that
      * adding the same files again finishes it, the pieces already in passing without comment: "Android stopped the import
-     * at 1,204 of 1,727 files. Imported 1,180 pieces. Adding the same files again finishes it."
+     * at 1,204 of 1,727 files. Imported 1,180 pieces. Adding the same files again finishes it." Pieces that took a new
+     * version's file (v1.41) are counted after those that came in: "Imported 12 pieces, replaced 360.", "Replaced 360 pieces."
      */
     fun summary(progress: ImportProgress): String {
         if (progress.unreadable) {
             return if (progress.total == 1) "Couldn't read that file. Try Add files instead." else "Couldn't read those files. Try Add files instead."
         }
         if (progress.finished && progress.done < progress.total) {
-            val imported = if (progress.imported > 0) " Imported ${Format.count(progress.imported, "piece", "pieces")}." else ""
+            val imported = arrived(progress)?.let { " $it." }.orEmpty()
             return "Android stopped the import at ${Format.count(progress.done)} of ${Format.count(progress.total)} files.$imported " +
                 "Adding the same files again finishes it."
         }
         val where = progress.playlist?.let { " · ${inPlaylist(it.name).replaceFirstChar(Char::lowercaseChar)}" }.orEmpty()
+        val arrived = arrived(progress)
         val imported = when {
-            progress.imported > 0 -> "Imported ${Format.count(progress.imported, "piece", "pieces")}$where."
+            arrived != null -> "$arrived$where."
             progress.failed > 0 -> progress.playlist?.let { "${inPlaylist(it.name)}." }
             progress.duplicates == 1 -> "That piece is already in the library$where."
             else -> "Those pieces are already in the library$where."
         }
         val failed = if (progress.failed > 0) "${Format.count(progress.failed, "file", "files")} couldn't be read." else null
         return listOfNotNull(imported, failed).joinToString(" ")
+    }
+
+    /** "Imported 12 pieces", "Imported 12 pieces, replaced 360" or "Replaced 360 pieces" (v1.41); null when neither came. */
+    private fun arrived(progress: ImportProgress): String? {
+        val imported = if (progress.imported > 0) "Imported ${Format.count(progress.imported, "piece", "pieces")}" else null
+        if (progress.replaced == 0) return imported
+        return imported?.let { "$it, replaced ${Format.count(progress.replaced)}" } ?: "Replaced ${Format.count(progress.replaced, "piece", "pieces")}"
     }
 
     /** Where an upload's pieces went: "In the playlist MIDI" (the web panel's Add tab shows it under the tally, with Open the playlist). */

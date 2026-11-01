@@ -565,8 +565,9 @@ export function create(host) {
   }
 
   /**
-   * The import on the tablet: its progress while it runs, then its tally; and under it, when a zip or a loose
-   * file was put in a playlist (v1.10.1 — M28), "In the playlist MIDI" with Open the playlist.
+   * The import on the tablet: its progress while it runs, then its tally (v1.41: with the pieces that took a new
+   * version's file, "360 replaced"); and under it, when a zip or a loose file was put in a playlist (v1.10.1 — M28),
+   * "In the playlist MIDI" with Open the playlist.
    */
   function renderTally() {
     const node = $('import-tally');
@@ -577,6 +578,7 @@ export function create(host) {
     } else if (run.total > 0) {
       node.textContent = [
         `Imported ${plural(run.imported, 'piece', 'pieces')}`,
+        run.replaced ? `${run.replaced.toLocaleString()} replaced` : null,
         run.duplicates ? `${run.duplicates.toLocaleString()} already there` : null,
         run.failed ? `${run.failed.toLocaleString()} couldn't be read` : null,
       ].filter(Boolean).join(' · ');

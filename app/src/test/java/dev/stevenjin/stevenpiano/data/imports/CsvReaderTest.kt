@@ -135,4 +135,58 @@ class IndexCsvTest {
         assertNull(index.lookup("maestro/habanera.mid")!!.sha256)
         assertEquals(2, index.size)
     }
+
+    // v1.41: the optional `replaces` column (the SHA-256s of earlier versions of a row's file, apart by spaces), so a
+    // new version takes its old one's place in the library; an index without it reads as it always has.
+
+    @Test
+    fun `the replaces column gives a row its earlier versions' hashes, kept lower-case`() {
+        val index = IndexCsv.parse(
+            "collection,composer,title,size_kb,path,replaces\n" +
+                "Pop,Coldplay,Viva la Vida,12.0,modern/Coldplay/Viva la Vida.mid,$a\n" +
+                "Pop,Adele,\"Hello, Again\",9.5,modern/Adele/Hello.mid,${b.uppercase()} $a\n" +
+                "Pop,Adele,Skyfall,8.1,modern/Adele/Skyfall.mid,\n",
+        )
+        assertEquals(setOf(a), index.lookup("modern/Coldplay/Viva la Vida.mid")!!.replaces)
+        assertEquals("in the field's order", listOf(b, a), index.lookup("modern/Adele/Hello.mid")!!.replaces.toList())
+        assertEquals("Hello, Again", index.lookup("modern/Adele/Hello.mid")!!.title)
+        assertEquals("an empty field names none", emptySet<String>(), index.lookup("modern/Adele/Skyfall.mid")!!.replaces)
+        assertNull("no hash of the row's own file", index.lookup("modern/Coldplay/Viva la Vida.mid")!!.sha256)
+        assertEquals(emptySet<String>(), index.sha256s())
+    }
+
+    @Test
+    fun `an index without the column reads exactly as before, naming no earlier versions`() {
+        val row = IndexCsv.parse("collection,composer,title,size_kb,path\nPop,Coldplay,Yellow,4.2,modern/Coldplay/Yellow.mid\n")
+            .lookup("modern/Coldplay/Yellow.mid")!!
+        assertEquals(IndexCsv.Row("Pop", "Coldplay", "Yellow", "modern/Coldplay/Yellow.mid"), row)
+        assertEquals(emptySet<String>(), row.replaces)
+        assertEquals(IndexCsv.Row("", "", "", "a.mid", sha256 = a), IndexCsv.parse("path,sha256\na.mid,$a\n").lookup("a.mid"))
+    }
+
+    @Test
+    fun `a value in replaces that is not 64 hex digits is left out, and the rest of the row reads`() {
+        val index = IndexCsv.parse(
+            "path,replaces,title\n" +
+                "one.mid,${a.dropLast(1)},One\n" +
+                "two.mid,${a}0 $b,Two\n" +
+                "three.mid,${a.replaceFirst('0', 'g')},Three\n" +
+                "four.mid,\"$a,$b\",Four\n" +
+                "five.mid,  $a   $b ,Five\n" +
+                "six.mid,\"$b\t$a\",Six\n" +
+                "seven.mid,sha256:$a,Seven\n",
+        )
+        for (name in listOf("one", "three", "four", "seven")) assertEquals(name, emptySet<String>(), index.lookup("$name.mid")!!.replaces)
+        assertEquals("One", index.lookup("one.mid")!!.title)
+        assertEquals("the good value stays", setOf(b), index.lookup("two.mid")!!.replaces)
+        assertEquals("spaces before, after and between", setOf(a, b), index.lookup("five.mid")!!.replaces)
+        assertEquals("a tab parts them too", setOf(a, b), index.lookup("six.mid")!!.replaces)
+    }
+
+    @Test
+    fun `without a header there is no replaces column`() {
+        val row = IndexCsv.parse("Pop,Adele,Hello,9.5,modern/hello.mid,$a,$b\n").lookup("modern/hello.mid")!!
+        assertEquals(a, row.sha256)
+        assertEquals(emptySet<String>(), row.replaces)
+    }
 }

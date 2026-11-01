@@ -53,6 +53,17 @@ interface ImportStore {
 
     /** Each artist's genre by key, the one most of their pieces have (v1.14 — M37: [Genres.of]'s rule 2). */
     suspend fun artistGenres(): Map<String, Int> = emptyMap()
+
+    /** The first added of the pieces with [shas] (v1.41: the earlier versions an INDEX.csv row's `replaces` names); null for none. */
+    suspend fun oldestBySha(shas: Set<String>): PieceEntity? = null
+
+    /**
+     * The piece with [piece]'s id takes a new version's file in place (v1.41): [piece]'s SHA-256, file name, source,
+     * size, length and note count are written and nothing else, so its names, favorite, plays, genre, covers and
+     * playlists stay; then it goes at the end of [collection] (its INDEX.csv row's), as a new piece would. False when
+     * nothing was written: the piece is gone, or another holds that SHA-256 (the unique index).
+     */
+    suspend fun replaceFile(piece: PieceEntity, collection: String?): Boolean = false
 }
 
 /**
@@ -61,7 +72,9 @@ interface ImportStore {
  * the file name, read the other way round when only its right side is a known artist, else the
  * artist folder that holds it, else Track 0's name for stub titles: [TitleHeuristics], DESIGN.md ›
  * v1.10.1), sort (Classical or Modern: [Genres.of], v1.14 — M37), save, then insert 25 per
- * transaction. What a Mac adds beside the music (`__MACOSX/`, `._name`) is skipped before
+ * transaction. A file whose INDEX.csv row names earlier versions of it (`replaces`, v1.41) takes the place of the
+ * oldest the library holds instead, at once ([replace]); a file the library already has stays a duplicate, whatever
+ * its row names. What a Mac adds beside the music (`__MACOSX/`, `._name`) is skipped before
  * anything is counted. Files listed in INDEX.csv go first, so its names win over copies elsewhere
  * in the tree.
  * Text is cut to [TextLimits] before it is stored; a file too large to read in the memory left
@@ -69,6 +82,8 @@ interface ImportStore {
  * anything else: one bad file never ends the import, nor the app. One import runs at a time;
  * [progress] follows it, and always finishes, a cancelled import's too (v1.25 — M58: Android's time
  * for data sync ran out, and what was saved stays); a quiet one ([importOpened]) keeps a progress of its own.
+ * [replaced] hears of each piece that took a new file (v1.41), so what was drawn from its old one (its roll card) is
+ * drawn again.
  */
 class Importer(
     private val store: ImportStore,
@@ -77,6 +92,7 @@ class Importer(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = { Log.w(TAG, it) },
+    private val replaced: suspend (pieceId: Long) -> Unit = {},
 ) {
     private val running = Mutex()
 
@@ -175,6 +191,7 @@ class Importer(
             when (outcome) {
                 is Outcome.Ready -> batch += outcome.piece
                 is Outcome.Duplicate -> state = state.copy(duplicates = state.duplicates + 1, filled = state.filled + if (outcome.filled) 1 else 0)
+                is Outcome.Replaced -> state = state.copy(replaced = state.replaced + 1)
                 Outcome.Failed -> state = state.copy(failed = state.failed + 1)
             }
             outcome.sha?.let { sha ->
@@ -188,7 +205,10 @@ class Importer(
         val playlist = link(source.batch, folders.root, found, placed)
         state = state.copy(current = null, finished = true, playlist = playlist)
         sink.value = state
-        log("Import: ${state.imported} new, ${state.duplicates} already there, ${state.failed} failed" + (playlist?.let { ", in a playlist" + named(it.name) } ?: ""))
+        log(
+            "Import: ${state.imported} new" + (if (state.replaced > 0) ", ${state.replaced} replaced" else "") +
+                ", ${state.duplicates} already there, ${state.failed} failed" + (playlist?.let { ", in a playlist" + named(it.name) } ?: ""),
+        )
         return state
     }
 
@@ -252,6 +272,9 @@ class Importer(
         /** Already in the library, or earlier in this batch; [filled]: its blank composer was filled in. */
         class Duplicate(override val sha: String, val filled: Boolean = false) : Outcome
 
+        /** A piece already there took this file in place of an earlier version (v1.41); saved at once. */
+        class Replaced(override val sha: String) : Outcome
+
         data object Failed : Outcome {
             override val sha: String? get() = null
         }
@@ -294,7 +317,7 @@ class Importer(
             return Outcome.Failed
         }
         val meta = names.metadata(item, row, midi.sequenceNames)
-        val piece = PieceEntity(
+        val unnamed = PieceEntity(
             title = meta.title,
             composer = "",
             composerKey = "",
@@ -309,8 +332,33 @@ class Importer(
             addedAt = clock(),
             searchText = "",
             titleKey = "",
-        ).named(meta.title, names.composer(meta))   // named() cuts the title
+        )
+        replace(row, unnamed)?.let { return it }   // v1.41: a new version of a piece already there
+        val piece = unnamed.named(meta.title, names.composer(meta))   // named() cuts the title
         return Outcome.Ready(piece.copy(genre = genres.of(piece.composerKey, piece.collection)))
+    }
+
+    /**
+     * v1.41: when [row] names earlier versions of this file (`replaces`), the first added of those the library holds
+     * takes it in place ([ImportStore.replaceFile]): [file]'s SHA-256, file name, source, size, length and note count
+     * over the old version's, and nothing else, so its id stays and with it its favorite, plays, names, genre, covers
+     * and playlists; it joins the row's collection, and its old file goes once the library has the new one. Null when
+     * the library holds none of them, or refused (the piece went meanwhile): [file] is then a new piece, as before.
+     */
+    private suspend fun replace(row: IndexCsv.Row?, file: PieceEntity): Outcome.Replaced? {
+        val earlier = row?.replaces?.takeIf { it.isNotEmpty() }?.let { store.oldestBySha(it) } ?: return null
+        val piece = earlier.copy(
+            sha256 = file.sha256,
+            fileName = file.fileName,
+            sourceName = file.sourceName,
+            sizeBytes = file.sizeBytes,
+            durationMs = file.durationMs,
+            noteCount = file.noteCount,
+        )
+        if (!store.replaceFile(piece, file.collection)) return null
+        if (earlier.fileName != file.fileName) files.delete(earlier.fileName)
+        replaced(earlier.id)
+        return Outcome.Replaced(file.sha256)
     }
 
     /**

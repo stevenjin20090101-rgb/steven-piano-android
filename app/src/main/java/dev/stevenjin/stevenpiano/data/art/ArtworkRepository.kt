@@ -428,6 +428,12 @@ class ArtworkRepository(
     /** [rollCard], only if it is already drawn. */
     fun cachedRollCard(pieceId: Long): Bitmap? = bitmaps.get(rollKey(pieceId))
 
+    /** Piece [pieceId] took a new version's file in place (v1.41): its roll card is drawn again, from the new notes. */
+    suspend fun forgetRollCard(pieceId: Long) {
+        withContext(io) { rollCardFiles.delete(pieceId) }
+        bitmaps.remove(rollKey(pieceId))
+    }
+
     /** The pieces whose roll cards make a composer's mosaic: their first four by title (none when the library can't be read). */
     suspend fun mosaicPieces(composerKey: String): List<Long> =
         mosaics[composerKey] ?: readOr(emptyList()) { library.firstPieceIds(composerKey, MOSAIC_PIECES) }.also { mosaics[composerKey] = it }

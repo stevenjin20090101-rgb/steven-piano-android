@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,6 +26,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
+import java.security.MessageDigest
 
 class ImporterTest {
     @get:Rule
@@ -33,7 +35,8 @@ class ImporterTest {
     private val store = FakeStore()
     private val progress = MutableStateFlow(ImportProgress.Idle)
     private val logs = mutableListOf<String>()
-    private val importer by lazy { Importer(store, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it }) }
+    private val redrawn = mutableListOf<Long>()
+    private val importer by lazy { Importer(store, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it }, replaced = { redrawn += it }) }
 
     private fun midi(key: Int, trackName: String? = null) = SmfBuilder(format = 0).track {
         trackName?.let { name(0, it) }
@@ -409,11 +412,168 @@ class ImporterTest {
         assertEquals("nothing arrived: no playlist", null, failed.playlist)
     }
 
+    // v1.41: an INDEX csv row's `replaces` names earlier versions of its file; the new version takes the old one's place.
+
+    private fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun index(vararg rows: String) = IndexCsv.parse("collection,composer,title,size_kb,path,replaces\n" + rows.joinToString("\n") + "\n")
+
+    /** Two notes over a second: longer and fuller than [midi]'s one note of 500 ms. */
+    private val piano = SmfBuilder(format = 0).track {
+        noteOn(0, 60)
+        noteOn(0, 64)
+        noteOff(960, 60)
+        noteOff(960, 64)
+    }.build()
+
+    @Test
+    fun `a new version takes its piece's place, keeping its id, favorite, plays and names, swapping its SHA and file`() = runTest {
+        val band = midi(60)
+        val path = "modern/Coldplay/Viva la Vida.mid"
+        importer.run(OpenedSource(listOf(item(path, band)), index("Pop,Coldplay,Viva la Vida,1,$path,")))
+        val before = store.pieces.single()
+        store.pieces[0] = before.copy(favorite = true, playCount = 3, lastPlayedAt = 5_000L, title = "Viva la Vida (school choir)", genre = 1)
+        val oldFile = File(tmp.root, "pieces/${sha(band)}.mid")
+        assertTrue(oldFile.isFile)
+
+        val result = importer.run(OpenedSource(listOf(item(path, piano)), index("Pop,Coldplay,Viva la Vida (piano),1,$path,${sha(band)}")))
+        assertEquals(ImportProgress(done = 1, total = 1, replaced = 1, finished = true), result)
+        assertTrue(result.piecesChanged)
+        val after = store.pieces.single()
+        assertEquals(before.id, after.id)
+        assertEquals(listOf(true, 3, 5_000L), listOf(after.favorite, after.playCount, after.lastPlayedAt))
+        assertEquals("the person's rename stays", "Viva la Vida (school choir)", after.title)
+        assertEquals("a Classical/Modern move stays", 1, after.genre)
+        assertEquals(before.addedAt, after.addedAt)
+        assertEquals(sha(piano), after.sha256)
+        assertEquals("${sha(piano)}.mid", after.fileName)
+        assertEquals(piano.size.toLong(), after.sizeBytes)
+        assertEquals("the new version's length and notes (the Calm channel's notes a second)", 1_000L, after.durationMs)
+        assertEquals(2, after.noteCount)
+        assertTrue(File(tmp.root, "pieces/${sha(piano)}.mid").readBytes().contentEquals(piano))
+        assertFalse("the old version's file goes", oldFile.exists())
+        assertEquals("it joins its row's playlist", listOf("Pop" to before.id), store.collectionLinks)
+        assertEquals("its roll card is drawn again", listOf(before.id), redrawn)
+        assertTrue(logs.any { it == "Import: 0 new, 1 replaced, 0 already there, 0 failed" })
+    }
+
+    @Test
+    fun `replaces naming no piece the library holds imports a new piece`() = runTest {
+        importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", midi(61))), index("Pop,Adele,Hello,1,modern/Adele/Hello.mid,")))
+        val result = importer.run(
+            OpenedSource(listOf(item("modern/Adele/Skyfall.mid", midi(62))), index("Pop,Adele,Skyfall,1,modern/Adele/Skyfall.mid,${sha(midi(99))}")),
+        )
+        assertEquals(ImportProgress(done = 1, total = 1, imported = 1, finished = true), result)
+        assertEquals(listOf("Hello", "Skyfall"), store.pieces.map { it.title })
+        assertTrue(store.collectionLinks.isEmpty())
+        assertTrue(redrawn.isEmpty())
+    }
+
+    @Test
+    fun `an index without the column puts a new version beside the old one, as before`() = runTest {
+        val band = midi(60)
+        val old = IndexCsv.parse("collection,composer,title,size_kb,path\nPop,Coldplay,Yellow,1,modern/Coldplay/Yellow.mid\n")
+        importer.run(OpenedSource(listOf(item("modern/Coldplay/Yellow.mid", band)), old))
+        val result = importer.run(OpenedSource(listOf(item("modern/Coldplay/Yellow.mid", piano)), old))
+        assertEquals(ImportProgress(done = 1, total = 1, imported = 1, finished = true), result)
+        assertEquals(listOf(sha(band), sha(piano)), store.pieces.map { it.sha256 })
+        assertTrue(File(tmp.root, "pieces/${sha(band)}.mid").isFile)
+        assertEquals("Import: 1 new, 0 already there, 0 failed", logs.last())
+    }
+
+    @Test
+    fun `a file the library has already stays a duplicate, whatever its row's replaces names`() = runTest {
+        val yellow = midi(60)
+        val clocks = midi(61)
+        importer.run(
+            OpenedSource(
+                listOf(item("modern/Coldplay/Yellow.mid", yellow), item("modern/Coldplay/Clocks.mid", clocks)),
+                index("Pop,Coldplay,Yellow,1,modern/Coldplay/Yellow.mid,", "Pop,Coldplay,Clocks,1,modern/Coldplay/Clocks.mid,"),
+            ),
+        )
+        val before = store.pieces.toList()
+        val result = importer.run(OpenedSource(listOf(item("modern/Coldplay/Yellow.mid", yellow)), index("Pop,Coldplay,Yellow,1,modern/Coldplay/Yellow.mid,${sha(clocks)}")))
+        assertEquals(ImportProgress(done = 1, total = 1, duplicates = 1, finished = true), result)
+        assertEquals("nothing changes", before, store.pieces)
+        assertTrue(File(tmp.root, "pieces/${sha(clocks)}.mid").isFile)
+        assertTrue(redrawn.isEmpty())
+    }
+
+    @Test
+    fun `of several earlier versions the library holds, the first added takes the new file, and the rest stay`() = runTest {
+        val first = midi(60)
+        val second = midi(61)
+        importer.run(OpenedSource(listOf(item("a/Hello.mid", first))))
+        importer.run(OpenedSource(listOf(item("b/Hello.mid", second))))
+        val (older, newer) = store.pieces.toList()
+        val result = importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", piano)), index("Pop,Adele,Hello,1,modern/Adele/Hello.mid,${sha(second)} ${sha(first)}")))
+        assertEquals(1, result.replaced)
+        assertEquals(sha(piano), store.pieces.single { it.id == older.id }.sha256)
+        assertEquals("the later one stays as it was", newer, store.pieces.single { it.id == newer.id })
+        assertTrue(File(tmp.root, "pieces/${sha(second)}.mid").isFile)
+        assertFalse(File(tmp.root, "pieces/${sha(first)}.mid").exists())
+    }
+
+    @Test
+    fun `a new version that is no MIDI file fails, and its piece stays as it was`() = runTest {
+        val band = midi(60)
+        importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", band))))
+        val before = store.pieces.single()
+        val result = importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", "not a midi file".toByteArray())), index("Pop,Adele,Hello,1,modern/Adele/Hello.mid,${sha(band)}")))
+        assertEquals(ImportProgress(done = 1, total = 1, failed = 1, finished = true), result)
+        assertEquals(before, store.pieces.single())
+        assertTrue(File(tmp.root, "pieces/${sha(band)}.mid").isFile)
+    }
+
+    @Test
+    fun `when the library refuses the new file (the piece went meanwhile), it is imported as a new piece`() = runTest {
+        val band = midi(60)
+        importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", band))))
+        val before = store.pieces.single()
+        store.refuseReplace = true
+        val result = importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", piano)), index("Pop,Adele,Hello,1,modern/Adele/Hello.mid,${sha(band)}")))
+        assertEquals(ImportProgress(done = 1, total = 1, imported = 1, finished = true), result)
+        assertEquals(before, store.pieces.first())
+        assertEquals(sha(piano), store.pieces.last().sha256)
+        assertTrue("the old file stays with its piece", File(tmp.root, "pieces/${sha(band)}.mid").isFile)
+        assertTrue(redrawn.isEmpty())
+    }
+
+    @Test
+    fun `a zip's replaced piece goes into the zip's playlist, as a piece already there does`() = runTest {
+        val band = midi(60)
+        importer.run(OpenedSource(listOf(item("Hello.mid", band))))
+        val source = OpenedSource(
+            listOf(item("MIDI/Adele/Hello.mid", piano), item("MIDI/Adele/Skyfall.mid", midi(63))),
+            IndexCsv.parse("path,replaces\nMIDI/Adele/Hello.mid,${sha(band)}\n"),
+            batch = ImportBatch.zip("MIDI.zip"),
+        )
+        val result = importer.run(source)
+        assertEquals(ImportProgress(done = 2, total = 2, imported = 1, replaced = 1, finished = true, playlist = ImportedPlaylist(1, "MIDI")), result)
+        assertEquals(listOf("Hello", "Skyfall"), titles("MIDI"))
+        assertTrue("a row without a collection names no playlist of its own", store.collectionLinks.isEmpty())
+    }
+
     private class FakeStore : ImportStore {
         val pieces = mutableListOf<PieceEntity>()
         val batchSizes = mutableListOf<Int>()
 
+        /** v1.41: the playlists a replaced piece was put in (its INDEX.csv row's), by name; [refuseReplace] as when the piece went. */
+        val collectionLinks = mutableListOf<Pair<String, Long>>()
+        var refuseReplace = false
+
         override suspend fun findBySha(sha256: String): PieceEntity? = pieces.firstOrNull { it.sha256 == sha256 }
+
+        override suspend fun oldestBySha(shas: Set<String>): PieceEntity? = pieces.filter { it.sha256 in shas }.minByOrNull { it.id }
+
+        /** The whole of [piece] is kept, so what the importer hands over is what is checked; the SHA-256 stays unique. */
+        override suspend fun replaceFile(piece: PieceEntity, collection: String?): Boolean {
+            val at = pieces.indexOfFirst { it.id == piece.id }
+            if (refuseReplace || at < 0 || pieces.any { it.sha256 == piece.sha256 && it.id != piece.id }) return false
+            pieces[at] = piece
+            collection?.let { collectionLinks += it to piece.id }
+            return true
+        }
 
         override suspend fun fillComposer(piece: PieceEntity, composer: ComposerNames.Name) {
             pieces[pieces.indexOfFirst { it.id == piece.id }] = piece.named(piece.title, composer)

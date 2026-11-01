@@ -74,6 +74,19 @@ data class ArtistGenres(val composerKey: String, val classical: Int, val modern:
 /** A piece's id by its bytes' SHA-256: how an import finds the pieces it brought, new or there already. */
 data class PieceSha(val id: Long, val sha256: String)
 
+/** [PieceDao]'s statements for a new version of a piece (v1.41), which the tests also run on a real SQLite. */
+object PieceSql {
+    /** The first added (the lowest id) of the pieces with :shas: the one a new version replaces. */
+    const val OLDEST_BY_SHA = "SELECT * FROM pieces WHERE sha256 IN (:shas) ORDER BY id LIMIT 1"
+
+    /**
+     * Piece :id takes a new version's file: its SHA-256, file name, source, size, length and note count, and nothing
+     * else. OR IGNORE: when another piece holds :sha256 (the unique index) nothing is written, and no row is counted.
+     */
+    const val REPLACE_FILE = "UPDATE OR IGNORE pieces SET sha256 = :sha256, fileName = :fileName, sourceName = :sourceName, " +
+        "sizeBytes = :sizeBytes, durationMs = :durationMs, noteCount = :noteCount WHERE id = :id"
+}
+
 /**
  * This piece with a new title and composer, and every key derived from them. Title and composer
  * are cut to [TextLimits] first and the keys are derived from what is kept, so no row can outgrow
