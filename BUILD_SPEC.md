@@ -10268,3 +10268,28 @@ ballade's words; "after" is a stop word); `StyleLibrary` gets the genre playlist
 applies its tempo and minor; the options sheet's GENRE row; the panel's Genre chips and `genre` in `POST
 /api/studio/compose` (lofi, house, chill, cinematic or null). **Tests:** `GenreFeelTest` 6, `StyleGenresTest` 9,
 `WebApiTest`'s compose case.
+
+# v1.37 — M73: the library like Apple Music
+
+Brief `~/.claude/plans/m73-library-genres-brief.md`; worktree `android-wt-m73`, branch `m73-library`, from `420cf5b`
+(main with 1.36). No version bump, no signing, no emulator pass. **Schema v7** (`MIGRATION_6_7`, `SchemaV7`):
+`ALTER TABLE pieces ADD COLUMN appleGenre TEXT` (null: not looked up; "": no match), then the imported playlists
+(`imported = 1 AND builtIn = 0`) whose `PlaylistNames.fold` is `pop` or `midi` lose their links, their `playlist:<id>`
+artwork row and themselves, logged once (a photo's file, if any, stays on disk). **Apple**: `CatalogTrack.primaryGenreName`;
+`CoverFetcher.fetch` keeps the picked track's genre for a non-classical key before the download (`CoverStore.keepGenre`,
+"" for no match or nothing to search), `CoverFetcher.genre` (`ArtKey.Genre`, row `genre:<id>`, written only on failure)
+is the same search without a download, for `PieceDao.genreCandidates` (Modern, `appleGenre IS NULL`, own cover or a
+`cover:` row OK/NOT_FOUND), queued after the covers by `requestDue` and counted by `due()`; the worker treats both keys as
+Apple's (`ArtKey.fromApple`). **Genres**: `LibraryRepository.setAppleGenre` (first time, Modern only; in the same
+transaction links the piece to `GenrePlaylists.absorber`: K-Pop → `kpop`, Dance/House/Electronic/Electronica →
+`housedance`, the person's own playlists only), `genresChanged` → `AppGraph.refreshGenrePlaylists` after 5 s and with
+every built-in refresh; `GenrePlaylists.plan`/`refresh` (keys `genre:<fold>` and `genre-other`, the most common spelling,
+largest first, Other last; a list no longer wanted is removed); `PlaylistOrder.listing` puts them right after the
+person's own. **Covers**: `CoverRule`/`CoverStyles` (`LibraryRepository.coverStyles()` from the playlists' names,
+`ArtworkRepository.coverStyles` shared eagerly): `layers()` Usual = cover, portrait, roll card; Album = cover, roll card;
+Plain = roll card (cover too when chosen by hand); no portrait until read. Used by `PieceArt`, `rememberArtPalette`,
+`PlaylistCover` (K-pop's roll-card mosaic, House & Dance's first four covers among its first 24), `ChannelCard`
+(`ComposerArt(photo = false)` for K-pop's artists) and `AppWebBackend` (pieces' `portrait`/`cover`, cards' composers).
+**Library**: `Category.Playlists` first and the default; the channels' row under the playlists; `library.js` opens on
+`playlists`, its kind first. **Tests:** `SchemaV7Test` 4, `GenrePlaylistsTest` 4, `CoverRuleTest` 4; `LibraryStatesTest`
+and `AppleCatalogTest` updated.

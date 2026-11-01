@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -40,8 +41,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.channels.ChannelSummary
 import dev.stevenjin.stevenpiano.data.art.ArtSize
+import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ChannelCopy
 import dev.stevenjin.stevenpiano.ui.components.ArtFrame
 import dev.stevenjin.stevenpiano.ui.components.ComposerArt
@@ -108,11 +111,13 @@ fun ChannelCard(
         ) {
             ArtFrame(Modifier.fillMaxWidth(), aspect = CHANNEL_CARD_ASPECT) {
                 val composers = summary.composers
+                // v1.37 — M73: an artist of Steven's K-pop shows the mosaic of their pieces, never their photo.
+                val plainArtists = LocalContext.current.graph.artwork.coverStyles.collectAsStateWithLifecycle().value.plainArtists
                 if (composers.isEmpty()) {
                     MonogramTile(summary.name, Modifier.fillMaxSize(), framed = false)
                 } else {
                     Mosaic(composers.size, Modifier.fillMaxSize()) { i, cell ->
-                        ComposerArt(composers[i].key, composers[i].name, ArtSize.Tile, cell, framed = false)
+                        ComposerArt(composers[i].key, composers[i].name, ArtSize.Tile, cell, framed = false, photo = composers[i].key !in plainArtists)
                     }
                 }
                 Band(summary.name, meta, playing, dot, Modifier.align(Alignment.BottomCenter))

@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.data
 
+import dev.stevenjin.stevenpiano.data.builtin.GenrePlaylists
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 
 /**
@@ -30,13 +31,16 @@ object PlaylistOrder {
      * [NEWEST][PlaylistSort.NEWEST]: the person's own (and those an import made) by id, newest first, then the
      * built-in ones in their fixed order, [builtInOrder] (the catalogue's keys: Popular, Recognisable, Epic on
      * piano), a key it doesn't name after them by id. [NAME][PlaylistSort.NAME]: exactly the order before
-     * 1.10.1, the built-in ones first by id, then the rest by name.
+     * 1.10.1, the built-in ones first by id, then the rest by name. Either way the genre playlists (v1.37 — M73,
+     * [GenrePlaylists]) come right after the person's own, the largest first, "Other" last.
      */
     fun listing(all: List<PlaylistSummary>, sort: PlaylistSort, builtInOrder: List<String>): List<PlaylistSummary> {
-        val (builtIn, others) = all.partition { it.builtIn }
+        val (genres, rest) = all.partition { it.builtIn && GenrePlaylists.isGenreKey(it.builtInKey) }
+        val (builtIn, others) = rest.partition { it.builtIn }
+        val bySize = genres.sortedWith(compareBy({ it.builtInKey == GenrePlaylists.OTHER_KEY }, { -it.pieceCount }, { it.name.lowercase() }, { it.id }))
         return when (sort) {
-            PlaylistSort.NAME -> builtIn.sortedBy { it.id } + others
-            PlaylistSort.NEWEST -> others.sortedByDescending { it.id } +
+            PlaylistSort.NAME -> builtIn.sortedBy { it.id } + others + bySize
+            PlaylistSort.NEWEST -> others.sortedByDescending { it.id } + bySize +
                 builtIn.sortedWith(compareBy({ builtInOrder.indexOf(it.builtInKey).let { at -> if (at < 0) Int.MAX_VALUE else at } }, { it.id }))
         }
     }

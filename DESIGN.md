@@ -3899,3 +3899,23 @@ peak two thirds through and fading, a two-bar pedal. Each tempo is the seed's ow
 range; every genre has a cap under the piano's loudest. The piano's limits stay as they were: the feel only ever makes a
 note shorter or leaves it, never puts more keys down at once, and every note and pedal ends. Brief
 `~/.claude/plans/m74-studio-genres-brief.md`; no firmware change.
+
+# v1.37 — M73: the library like Apple Music
+
+Steven, 2026-11-01: K-pop's picture plain, every House & Dance song its own album cover, Pop and MIDI folded together and
+sorted "how Apple Music would do it", and the playlists the first thing the Library shows. **Genres**: the album-cover
+lookup now keeps the matched track's `primaryGenreName` on a Modern piece (`pieces.appleGenre`, schema v7; "" when Apple
+matched nothing; never for a Classical piece or one made here), and pieces looked up before 1.37 are asked once more in
+the background, under the same 3.5 s pacing and hour-long stop (`ArtKey.Genre`, the one-time "genre missing" pass).
+**Genre playlists** are built-in lists, one per genre present, named as Apple names it ("Pop", "Hip-Hop/Rap",
+"Soundtrack"…), by title, kept up to date as genres arrive; "Other" holds the songs Apple matched nothing for (often: his
+labels are often wrong) and comes last. Apple's K-Pop goes into Steven's own "K-pop", and Dance, House, Electronic and
+Electronica into his "House & Dance" (names compared without case, spaces, punctuation or "&"/"and"): a song joins when
+its genre arrives, and is never put back once he takes it out. They follow his own playlists, the largest first. **Pop
+and MIDI**: the upgrade to schema v7 deletes the imported playlists called Pop and MIDI once (their songs stay in the
+library; logged). **Covers**: a K-pop song shows its roll card, the plain generated cover, and the playlist the roll
+cards of its first four (never an artist's photo, nor the album cover the lookup found; a cover chosen by hand still
+shows); a House & Dance song shows its album cover, else its roll card, and the playlist its first four album covers as
+the 2×2 mosaic; the artist's photo never appears for either, in rows, Now playing, the backdrop's colours, a channel's
+card or the web panel. **Playlists first**: the Library opens on Playlists, its chip first, the playlists above the
+channels' row; the web panel's Library opens on Playlists too. Brief `~/.claude/plans/m73-library-genres-brief.md`.

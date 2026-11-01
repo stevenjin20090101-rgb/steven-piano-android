@@ -55,6 +55,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
 import dev.stevenjin.stevenpiano.data.builtin.StudioPlaylist
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
+import dev.stevenjin.stevenpiano.data.builtin.GenrePlaylists
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.imports.ImportLimits
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
@@ -235,7 +236,20 @@ class AppGraph(private val app: Application) {
         } catch (e: Exception) {
             Log.w(TAG, "The built-in playlists couldn't be refreshed", e)
         }
+        refreshGenrePlaylists()
         refreshStudioShelf()
+    }
+
+    /** The genre playlists (v1.37 — M73) from the pieces' Apple genres: with the built-in lists, and as genres arrive. */
+    suspend fun refreshGenrePlaylists(): Unit = withContext(Dispatchers.IO) {
+        try {
+            GenrePlaylists.refresh(library)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "The genre playlists couldn't be refreshed", e)
+        }
+        Unit
     }
 
     /** "Made in Studio" (v1.12 — M30) from Studio's history: after each piece Studio saves, and with the built-in lists. */
@@ -843,6 +857,7 @@ class AppGraph(private val app: Application) {
         // of renames ends (imports refresh them from ImportService).
         appScope.launch { refreshBuiltIns() }
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
+        appScope.launch { library.genresChanged.debounce(GENRES_SETTLE_MS).collect { refreshGenrePlaylists() } }   // v1.37 — M73
         pianoSettings.start()
         appScope.launch {
             try {
@@ -1669,6 +1684,9 @@ class AppGraph(private val app: Application) {
 
         /** Renames come in runs (a dialog's fields, a tidy-up): the built-in playlists wait for the run to end. */
         const val BUILT_INS_SETTLE_MS = 2_000L
+
+        /** The genre playlists are refreshed this long after the last of a run of genres arriving (one a search, 3.5 s apart). */
+        const val GENRES_SETTLE_MS = 5_000L
 
         /** The safety check (v1.26 — M61): the piano's dump at most this long, and the restart's window for the link. */
         const val SAFETY_FACTS_WAIT_MS = 5_000L

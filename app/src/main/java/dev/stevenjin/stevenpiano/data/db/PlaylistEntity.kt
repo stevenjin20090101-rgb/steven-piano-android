@@ -87,3 +87,9 @@ data class PlaylistSummary(
 
 /** Where one piece sits in a playlist. */
 data class PiecePosition(val pieceId: Long, val position: Int)
+
+/**
+ * A playlist as the genre playlists and the covers' rule read it (v1.37 — M73): its id, its name, and whether it is the
+ * app's ([builtIn], [builtInKey]).
+ */
+data class PlaylistRef(val id: Long, val name: String, val builtIn: Boolean, val builtInKey: String?)

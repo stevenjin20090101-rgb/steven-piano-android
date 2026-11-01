@@ -163,7 +163,7 @@ class ArtworkWorker(
      * source (Apple's covers, or Wikipedia's keys; v1.15 — M40). Returns how many.
      */
     private fun dropBackground(like: ArtKey? = null): Int {
-        val drop = { task: Task -> task.background && (like == null || (task.key is ArtKey.Cover) == (like is ArtKey.Cover)) }
+        val drop = { task: Task -> task.background && (like == null || task.key.fromApple == like.fromApple) }
         val dropped = queue.count(drop)
         queue.removeAll(drop)
         queued.values.removeAll(drop)
@@ -185,9 +185,9 @@ class ArtworkWorker(
             val task = Task(key, force, background = !priority)
             when {
                 priority -> queue.addFirst(task)
-                key is ArtKey.Cover -> queue.addLast(task)
+                key.fromApple -> queue.addLast(task)
                 else -> {   // ahead of the covers queued in the background (v1.15 — M40): rare, and at most a few hundred a run
-                    val covers = queue.indexOfFirst { it.background && it.key is ArtKey.Cover }
+                    val covers = queue.indexOfFirst { it.background && it.key.fromApple }
                     if (covers < 0) queue.addLast(task) else queue.add(covers, task)
                 }
             }
@@ -241,10 +241,10 @@ class ArtworkWorker(
             } else {
                 log("$key: offline mid-fetch, nothing recorded")
             }
-            Fetched.Saved -> log("$key: found with a picture")
+            Fetched.Saved -> log(if (task.key is ArtKey.Genre) "$key: genre kept" else "$key: found with a picture")
             Fetched.Skipped -> log("$key: nothing to look up")
             is Fetched.Busy -> {
-                val source = if (task.key is ArtKey.Cover) "Apple" else "Wikimedia"
+                val source = if (task.key.fromApple) "Apple" else "Wikimedia"
                 if (outcome.retryAfterMs > ArtworkFetcher.MAX_WAIT_MS) {
                     val dropped = dropBackground(like = task.key)
                     log("$key: $source asked to wait ${outcome.retryAfterMs} ms; this run stops, $dropped more left for the next")

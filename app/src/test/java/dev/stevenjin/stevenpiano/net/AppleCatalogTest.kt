@@ -57,7 +57,7 @@ class AppleCatalogTest {
         val json = """
             {"resultCount": 3, "results": [
               {"wrapperType": "track", "kind": "song", "artistName": "Lewis Capaldi", "collectionName": "Divinely Uninspired to a Hellish Extent",
-               "trackName": "Someone You Loved", "artworkUrl100": "$art100", "trackViewUrl": "$page"},
+               "trackName": "Someone You Loved", "artworkUrl100": "$art100", "trackViewUrl": "$page", "primaryGenreName": "Pop"},
               {"wrapperType": "track", "kind": "song", "artistName": "Lewis Capaldi", "trackName": ""},
               {"wrapperType": "track", "kind": "song", "artistName": "Piano Dreamers", "trackName": "Someone You Loved", "collectionName": null}
             ]}
@@ -65,7 +65,7 @@ class AppleCatalogTest {
         transport.ok(search, json.toByteArray())
         assertEquals(
             listOf(
-                CatalogTrack("Someone You Loved", "Lewis Capaldi", "Divinely Uninspired to a Hellish Extent", art100, page, "song"),
+                CatalogTrack("Someone You Loved", "Lewis Capaldi", "Divinely Uninspired to a Hellish Extent", art100, page, "song", primaryGenreName = "Pop"),
                 CatalogTrack("Someone You Loved", "Piano Dreamers", null, null, null, "song"),
             ),
             catalog.search("someone you loved lewis capaldi", 10),

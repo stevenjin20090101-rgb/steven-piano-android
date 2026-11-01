@@ -30,6 +30,14 @@ interface PlaylistDao {
     )
     fun summaries(): Flow<List<PlaylistSummary>>
 
+    /** Every playlist's id, name and whether it is built in (v1.37 — M73), as it changes. */
+    @Query("SELECT id, name, builtIn, builtInKey FROM collections ORDER BY id")
+    fun refs(): Flow<List<PlaylistRef>>
+
+    /** [refs], once. */
+    @Query("SELECT id, name, builtIn, builtInKey FROM collections ORDER BY id")
+    suspend fun refList(): List<PlaylistRef>
+
     @Query("SELECT collectionId FROM collection_pieces WHERE pieceId = :pieceId")
     fun playlistIdsOf(pieceId: Long): Flow<List<Long>>
 

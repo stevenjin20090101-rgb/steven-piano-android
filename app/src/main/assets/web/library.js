@@ -52,8 +52,9 @@ export function create(host) {
     return window.matchMedia('(min-width: 900px)').matches ? 'covers' : 'list';
   }
 
+  // The Library opens on Playlists (v1.37 — M73), as the tablet's does.
   const library = {
-    category: 'all', query: '', offset: 0, total: 0, pieces: [], view: null, genre: storedGenre(), shows: storedLibraryView(), emptyText: '',
+    category: 'playlists', query: '', offset: 0, total: 0, pieces: [], view: null, genre: storedGenre(), shows: storedLibraryView(), emptyText: '',
     emptyGlyph: 'g-note',
     listKey: '',        // the list drawn last, as its stagger names it (v1.20 — M53)
     loaded: false,      // the list asked for last is drawn
@@ -101,11 +102,11 @@ export function create(host) {
   /** [path] as the switch asks for it: with `?genre=` unless it is on All. */
   const scoped = (path) => (library.genre === 'all' ? path : `${path}?genre=${library.genre}`);
 
-  // The Library's four lists (v1.20 — M53): Pieces (All · Favorites · Recent under it) · Playlists · Composers (Artists
-  // under Modern) · Channels, each with its glyph; a search shows pieces, whichever is chosen.
+  // The Library's four lists (v1.20 — M53): Playlists (first since v1.37 — M73) · Pieces (All · Favorites · Recent under
+  // it) · Composers (Artists under Modern) · Channels, each with its glyph; a search shows pieces, whichever is chosen.
   const PIECE_CATEGORIES = ['all', 'favorites', 'recent'];
   const PIECE_CHIPS = [['all', 'All'], ['favorites', 'Favorites'], ['recent', 'Recent']];
-  const libraryKinds = () => [['pieces', 'Pieces', 'g-note'], ['playlists', 'Playlists', 'g-playlist'], ['composers', artists() ? 'Artists' : 'Composers', 'g-person'], ['channels', 'Channels', 'g-channels']];
+  const libraryKinds = () => [['playlists', 'Playlists', 'g-playlist'], ['pieces', 'Pieces', 'g-note'], ['composers', artists() ? 'Artists' : 'Composers', 'g-person'], ['channels', 'Channels', 'g-channels']];
   const kindOf = () => (library.query || PIECE_CATEGORIES.includes(library.category) ? 'pieces' : library.category);
 
   /**

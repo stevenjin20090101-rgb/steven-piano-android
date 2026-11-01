@@ -20,6 +20,9 @@ sealed interface ArtKey {
     val storageKey: String
     val label: String
 
+    /** Whether Apple's catalogue answers it (a cover or a genre), not Wikipedia: the worker paces and stops the two apart. */
+    val fromApple: Boolean get() = this is Cover || this is Genre
+
     /** A composer by [composerKey] (the folded surname the library groups by), shown as [display]. */
     data class Composer(val composerKey: String, val display: String) : ArtKey {
         override val storageKey: String get() = ArtworkEntity.forComposer(composerKey)
@@ -40,6 +43,17 @@ sealed interface ArtKey {
      */
     data class Cover(val id: Long, val title: String, val artist: String, val classical: Boolean) : ArtKey {
         override val storageKey: String get() = ArtworkEntity.forCover(id)
+        override val label: String get() = title
+    }
+
+    /**
+     * Modern piece [id]'s genre as Apple's catalogue names it (v1.37 — M73), looked up once by its [title] and [artist] as
+     * its cover is, for a piece whose cover lookup will not run again (it has a cover, or the lookup is done): the
+     * one-time "genre missing" pass. Kept on the piece; its row, `genre:<id>` ([ArtworkEntity.forGenre]), records only a
+     * failure.
+     */
+    data class Genre(val id: Long, val title: String, val artist: String) : ArtKey {
+        override val storageKey: String get() = ArtworkEntity.forGenre(id)
         override val label: String get() = title
     }
 }

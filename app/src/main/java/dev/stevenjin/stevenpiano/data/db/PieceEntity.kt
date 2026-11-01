@@ -21,7 +21,8 @@ import dev.stevenjin.stevenpiano.data.imports.ComposerNames
  * One piece in the library. Its file is `filesDir/pieces/<sha256>.mid`. [composerKey] groups
  * composers (the folded surname, "" when unknown), [composerShort] is what rows show,
  * [titleKey] sorts, [searchText] is what search matches, [genre] is Classical or Modern
- * (`Genres`; none for a piece made on the tablet; new in schema v5, `MIGRATION_4_5`).
+ * (`Genres`; none for a piece made on the tablet; new in schema v5, `MIGRATION_4_5`). [appleGenre] is a Modern piece's
+ * genre as Apple's catalogue names it (new in schema v7, `MIGRATION_6_7`).
  */
 @Entity(
     tableName = "pieces",
@@ -50,6 +51,12 @@ data class PieceEntity(
     val titleKey: String,
     /** 0 none (made here) · 1 classical · 2 modern (v1.14 — M37): sorted on import, moved by the person, never by Rename. */
     @ColumnInfo(defaultValue = "0") val genre: Int = 0,
+    /**
+     * The `primaryGenreName` of the track the album-cover lookup matched (v1.37 — M73: "Pop", "K-Pop", "Hip-Hop/Rap"), what
+     * the genre playlists are made of; "" when it was looked up and nothing matched; null until it is looked up. Only a
+     * Modern piece gets one (never a Classical one, nor one made here); kept the first time, never changed by a lookup again.
+     */
+    val appleGenre: String? = null,
 )
 
 /** What a queue or a list needs to name a piece without loading all of it. */

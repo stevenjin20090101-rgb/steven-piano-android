@@ -33,7 +33,8 @@ on the tablet*). Made by Steven Jin. Version 1.36.
 ## What it does
 
 - **Library**: search; **Playlists** and **Composers** as grids of tiles with
-  art; favorites and recent pieces. Import single files, a whole folder (with
+  art; favorites and recent pieces. It opens on **Playlists** (from 1.37), their
+  chip first and the playlists above the channels; the web panel's Library too. Import single files, a whole folder (with
   its `INDEX.csv`, whose sets arrive as playlists) or a zip, or load **Steven's
   library** from GitHub in one tap, and its updates later. A zip or a folder
   arrives as a playlist of its own, and its artist folders name the artists
@@ -47,7 +48,8 @@ on the tablet*). Made by Steven Jin. Version 1.36.
   to Classical*), and a composer's or artist's tile moves every piece by them. In
   kiosk mode the switch is free and a move asks for the PIN.
 - **Playlists**: a playlist is a page with its cover (your photo, else its first
-  composer's portrait), **Play** (from its top, in its order: there is no shuffle
+  composer's portrait; **K-pop** the plain roll cards of its first four songs and
+  **House & Dance** its first four album covers, from 1.37), **Play** (from its top, in its order: there is no shuffle
   since 1.26), and its pieces in the order you give them:
   drag a row by its handle, or use *Move up* and *Move down* in its menu. **Play**
   floats as a filled circle at the bottom of the list, wherever it is scrolled.
@@ -63,7 +65,20 @@ on the tablet*). Made by Steven Jin. Version 1.36.
   hold only what the library has (each piece in at most four recordings), and
   can't be renamed, reordered or deleted; Change photo still works. A list that
   finds nothing is not shown. From Steven's `midi` folder they hold 17, 29 and 49 pieces.
-- **Channels**: a row of wide cards above the playlists (**See all** shows them
+- **Genre playlists** (1.37): sorted the way Apple Music sorts. Each Modern song's
+  genre is the one Apple's catalogue gives the track its album cover came from
+  ("Pop", "Hip-Hop/Rap", "Soundtrack"…), learnt with the cover (songs from before
+  1.37 are asked once more in the background), and each genre has a built-in
+  playlist of that name, filled as genres arrive; songs Apple matched nothing for
+  are in **Other**, last. They follow your own playlists, the largest first.
+  Apple's K-Pop goes into your own **K-pop** playlist, and Dance, House and
+  Electronic into **House & Dance** (names compared without case, spaces or
+  punctuation): a song joins when its genre arrives and stays out once you take
+  it out. The update to 1.37 removes the imported **Pop** and **MIDI** playlists
+  once (their songs stay in the library). Classical pieces and pieces made here
+  have no genre. A K-pop song shows its plain roll card and a House & Dance song
+  its own album cover, else its roll card: never an artist's photo.
+- **Channels**: a row of wide cards under the playlists (**See all** shows them
   all as a grid): **Classical** and **Modern** (every piece of that genre; from 1.14), Calm, Epic,
   Recognisable, Popular, Baroque, Romantic, Impressionist, Nocturnes, Études and Everything, each
   faced with its four most frequent composers. A tap

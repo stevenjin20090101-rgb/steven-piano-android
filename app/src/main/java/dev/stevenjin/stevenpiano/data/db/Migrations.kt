@@ -9,9 +9,11 @@
 
 package dev.stevenjin.stevenpiano.data.db
 
+import android.util.Log
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.stevenjin.stevenpiano.data.Genres
+import dev.stevenjin.stevenpiano.data.PlaylistNames
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 
 /**
@@ -263,4 +265,48 @@ object SchemaV6 {
 
     /** The migration's statements, in order. */
     val STATEMENTS: List<String> = listOf(CREATE_SCHEDULES, COPY_QUIET, DROP_OLD, RENAME)
+}
+
+/**
+ * Schema v6 (apps 1.24 to 1.36) to v7 (app 1.37 — M73): every piece gets room for its genre as Apple's catalogue names it
+ * (`pieces.appleGenre`, null until a lookup: [SchemaV7.ADD_APPLE_GENRE], as Room generated it in `schemas/…/7.json`), and,
+ * once, the imported playlists called Pop and MIDI go ([SchemaV7.merged]): the genre playlists take their place. Their
+ * links and a photo's row go with them; every piece stays in the library, and no other playlist is touched. Logged once.
+ * Runs inside Room's migration transaction.
+ */
+val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(SchemaV7.ADD_APPLE_GENRE)
+        val rows = ArrayList<Pair<Long, String>>()
+        db.query(SchemaV7.IMPORTED_PLAYLISTS).use { cursor ->
+            while (cursor.moveToNext()) rows += cursor.getLong(0) to cursor.getString(1)
+        }
+        val gone = SchemaV7.merged(rows)
+        gone.forEach { id -> SchemaV7.deletes(id).forEach(db::execSQL) }
+        if (gone.isNotEmpty()) Log.i("Library", "1.37: the imported playlists Pop and MIDI went (${gone.size}); their pieces stay in the library")
+    }
+}
+
+/** Schema v7's statements: the column as Room generated it in `7.json`, and the one-time merge of Pop and MIDI. Pure: unit-tested. */
+object SchemaV7 {
+    /** `pieces.appleGenre`, exactly as 7.json's createSql for the table declares it. */
+    const val APPLE_GENRE_COLUMN = "`appleGenre` TEXT"
+
+    const val ADD_APPLE_GENRE = "ALTER TABLE `pieces` ADD COLUMN $APPLE_GENRE_COLUMN"
+
+    /** The playlists an import made (never the person's own, never the app's built-in ones): id and name. */
+    const val IMPORTED_PLAYLISTS = "SELECT id, name FROM collections WHERE imported = 1 AND builtIn = 0 ORDER BY id"
+
+    /** Of [imported] (id and name, [IMPORTED_PLAYLISTS]' rows), the ones called Pop or MIDI as names compare ([PlaylistNames.fold]). */
+    fun merged(imported: List<Pair<Long, String>>): List<Long> =
+        imported.filter { (_, name) -> PlaylistNames.fold(name) in MERGED }.map { it.first }
+
+    /** What deletes playlist [id]: its links (its pieces stay), its photo's row, then the playlist. */
+    fun deletes(id: Long): List<String> = listOf(
+        "DELETE FROM collection_pieces WHERE collectionId = $id",
+        "DELETE FROM artwork WHERE `key` = '${ArtworkEntity.forPlaylist(id)}'",
+        "DELETE FROM collections WHERE id = $id AND imported = 1 AND builtIn = 0",
+    )
+
+    private val MERGED = setOf(PlaylistNames.POP, PlaylistNames.MIDI)
 }

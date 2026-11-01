@@ -32,7 +32,7 @@ import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.LinkDot
 
 /**
- * The channels at the top of the Playlists listing (DESIGN.md › v1.5 — M17): the eyebrow
+ * The channels in the Playlists listing (DESIGN.md › v1.5 — M17; under the playlists since v1.37 — M73): the eyebrow
  * "CHANNELS" with See all at its end ([onSeeAll], the grid of every channel), then a row of
  * 280 × 200 dp cards, 12 dp apart, 16 dp in from both edges, scrolling sideways. [playing] is the
  * channel playing, whose card shows it. The cards come from the pools as last worked out, keyed by

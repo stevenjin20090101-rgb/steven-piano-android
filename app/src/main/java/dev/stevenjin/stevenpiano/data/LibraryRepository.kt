@@ -10,8 +10,11 @@
 package dev.stevenjin.stevenpiano.data
 
 import androidx.room.withTransaction
+import dev.stevenjin.stevenpiano.data.art.CoverRule
+import dev.stevenjin.stevenpiano.data.art.CoverStyles
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
-import dev.stevenjin.stevenpiano.data.builtin.BuiltInStore
+import dev.stevenjin.stevenpiano.data.builtin.GenrePlaylists
+import dev.stevenjin.stevenpiano.data.builtin.GenreStore
 import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.CoverCandidate
 import dev.stevenjin.stevenpiano.data.db.CoverCount
@@ -22,6 +25,7 @@ import dev.stevenjin.stevenpiano.data.db.PiecePosition
 import dev.stevenjin.stevenpiano.data.db.PieceSummary
 import dev.stevenjin.stevenpiano.data.db.PlaylistEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistPieceEntity
+import dev.stevenjin.stevenpiano.data.db.PlaylistRef
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
@@ -33,11 +37,16 @@ import dev.stevenjin.stevenpiano.player.PieceSource
 import dev.stevenjin.stevenpiano.player.PlayablePiece
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -53,14 +62,15 @@ class PieceUnavailableException(message: String) : Exception(message)
  * [BuiltInPlaylists.refresh] through [setPlaylistPieces], and renaming, deleting, reordering or
  * adding to or taking from one does nothing. A playlist the person names like a built-in one
  * takes the name, and the built-in one moves beside it ("Popular · built in"). Every list can
- * be asked for one genre ([LibraryScope], v1.14 — M37); a piece or an artist moves between them.
+ * be asked for one genre ([LibraryScope], v1.14 — M37); a piece or an artist moves between them. A Modern piece learns
+ * its genre as Apple names it ([setAppleGenre], v1.37 — M73), which makes the genre playlists ([GenrePlaylists]).
  */
 class LibraryRepository(
     private val db: PianoDatabase,
     private val files: PieceFiles,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
-) : PieceSource, ImportStore, BuiltInStore {
+) : PieceSource, ImportStore, GenreStore {
     private val pieces = db.pieces()
     private val playlists = db.playlists()
     private val renamed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -70,6 +80,14 @@ class LibraryRepository(
      * have changed. AppGraph refreshes them two seconds after the last of a run of these.
      */
     val namesChanged: SharedFlow<Unit> = renamed.asSharedFlow()
+
+    private val genresMoved = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * A piece's Apple genre arrived, or a piece or an artist moved between Classical and Modern (v1.37 — M73): the genre
+     * playlists may have changed. AppGraph refreshes them a few seconds after the last of a run of these.
+     */
+    val genresChanged: SharedFlow<Unit> = genresMoved.asSharedFlow()
 
     /** Every piece, by title (accents ignored); under a genre's [scope] (v1.14 — M37), that genre's. */
     fun all(scope: LibraryScope = LibraryScope.All): Flow<List<PieceEntity>> = scope.genre?.let(pieces::allIn) ?: pieces.all()
@@ -141,6 +159,7 @@ class LibraryRepository(
         val piece = pieces.byId(pieceId) ?: return
         if (piece.genre == Genres.NONE || Genres.madeHere(piece.composerKey)) return
         pieces.setGenre(pieceId, genre)
+        genresMoved.tryEmit(Unit)
     }
 
     /**
@@ -151,7 +170,51 @@ class LibraryRepository(
         if (genre != Genres.CLASSICAL && genre != Genres.MODERN) return
         if (composerKey.isBlank() || Genres.madeHere(composerKey)) return
         pieces.setComposerGenre(composerKey, genre)
+        genresMoved.tryEmit(Unit)
     }
+
+    /**
+     * Piece [pieceId]'s genre as Apple's catalogue names it ([appleGenre]; "" when the lookup matched nothing), v1.37 — M73:
+     * kept the first time only, and only for a Modern piece. When it is one of Steven's own playlists' genres
+     * ([GenrePlaylists.absorber]: K-Pop to his K-pop, Dance, House and Electronic to his House & Dance) the piece joins
+     * that playlist at its end, in the same transaction; it is never put back after the person takes it out. True when
+     * the genre was kept.
+     */
+    suspend fun setAppleGenre(pieceId: Long, appleGenre: String): Boolean {
+        val genre = TextLimits.clip(appleGenre.trim(), TextLimits.COLLECTION)
+        val kept = db.withTransaction {
+            if (pieces.setAppleGenre(pieceId, genre) == 0) return@withTransaction false
+            GenrePlaylists.absorber(genre, playlists.refList())?.let { link(it, pieceId) }
+            true
+        }
+        if (kept) genresMoved.tryEmit(Unit)
+        return kept
+    }
+
+    /** Whether piece [pieceId] still waits for its Apple genre: Modern, never looked up for one (v1.37 — M73). */
+    suspend fun needsAppleGenre(pieceId: Long): Boolean = pieces.byId(pieceId)?.let { it.genre == Genres.MODERN && it.appleGenre == null } == true
+
+    /** The Modern pieces whose genre the one-time pass looks up (v1.37 — M73; [PieceDao.genreCandidates]), newest first. */
+    suspend fun genreCandidates(): List<CoverCandidate> = pieces.genreCandidates()
+
+    /**
+     * Which pieces' art is plain (in a playlist called K-pop, as names compare) and which shows album covers (House &
+     * Dance), v1.37 — M73 ([CoverRule]), as the playlists and their pieces change.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun coverStyles(): Flow<CoverStyles> =
+        playlists.refs().map(CoverRule::styled).distinctUntilChanged().flatMapLatest { (plain, album) ->
+            combine(headsIn(plain), headsIn(album)) { inPlain, inAlbum ->
+                CoverStyles(
+                    plain = inPlain.mapTo(HashSet()) { it.id },
+                    album = inAlbum.mapTo(HashSet()) { it.id },
+                    plainArtists = inPlain.mapNotNullTo(HashSet()) { it.composerKey.ifBlank { null } },
+                    read = true,
+                )
+            }
+        }
+
+    private fun headsIn(playlistIds: List<Long>): Flow<List<PieceHead>> = if (playlistIds.isEmpty()) flowOf(emptyList()) else pieces.inPlaylists(playlistIds)
 
     /**
      * New title and composer; the composer is read as a file name's is on import ([ComposerNames.resolve]:
@@ -250,6 +313,13 @@ class LibraryRepository(
     }
 
     override suspend fun allPieces(): List<PieceEntity> = pieces.list()
+
+    override suspend fun playlistRefs(): List<PlaylistRef> = playlists.refList()
+
+    /** A genre list no piece has any more goes (v1.37 — M73); only a built-in playlist, never the person's. */
+    override suspend fun removeBuiltIn(id: Long) {
+        if (isBuiltIn(id)) playlists.delete(id)
+    }
 
     override suspend fun builtInId(key: String): Long? = playlists.byBuiltInKey(key)?.id
 

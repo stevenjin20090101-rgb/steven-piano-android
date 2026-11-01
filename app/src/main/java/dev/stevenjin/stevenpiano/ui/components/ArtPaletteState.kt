@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
+import dev.stevenjin.stevenpiano.data.art.ArtLayer
 import dev.stevenjin.stevenpiano.data.art.ArtPalette
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.graph
@@ -27,8 +28,10 @@ import dev.stevenjin.stevenpiano.graph
 @Composable
 fun rememberArtPalette(pieceId: Long, composerKey: String): ArtPalette? {
     val artwork = LocalContext.current.graph.artwork
-    val own = rememberArtworkRow(ArtworkEntity.forPiece(pieceId))
-    val portrait = rememberArtworkRow(ArtworkEntity.forComposer(composerKey))
+    // v1.37 — M73: what the piece's art may show (a song of Steven's K-pop or House & Dance: never the artist's photo).
+    val layers = rememberArtLayers(pieceId)
+    val own = rememberArtworkRow(ArtworkEntity.forPiece(pieceId))?.takeIf { ArtLayer.OwnCover in layers }
+    val portrait = rememberArtworkRow(ArtworkEntity.forComposer(composerKey))?.takeIf { ArtLayer.Portrait in layers }
     val row = own?.takeIf { it.imagePath != null } ?: portrait?.takeIf { it.imagePath != null }
     val palette by produceState(row?.let(artwork::cachedPalette), row?.imagePath, row?.fetchedAt) {
         value = row?.let { artwork.palette(it) }

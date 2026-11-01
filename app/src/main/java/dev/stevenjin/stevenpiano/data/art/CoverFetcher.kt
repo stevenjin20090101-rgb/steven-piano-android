@@ -36,6 +36,12 @@ interface CoverStore {
      * a cover of its own by now (one chosen meanwhile is never replaced); [Fetched.Failed] when it could not be kept.
      */
     suspend fun keep(pieceId: Long, image: ByteArray, sourceUrl: String?, sourceTitle: String): Fetched
+
+    /** Whether Modern piece [pieceId] still waits for its Apple genre (v1.37 — M73): never looked up for one. */
+    suspend fun needsGenre(pieceId: Long): Boolean = false
+
+    /** Keeps [genre] ("" none matched) as piece [pieceId]'s Apple genre, the first time only (v1.37 — M73). */
+    suspend fun keepGenre(pieceId: Long, genre: String) = Unit
 }
 
 /**
@@ -48,6 +54,10 @@ interface CoverStore {
  * [ArtworkFetcher.pageName]). Apple answering 403 or 429 is recorded as a failure (retried a day later, [ArtworkPolicy])
  * and stops every lookup for an hour ([BLOCK_MS], on [now]'s clock): meanwhile a cover is left for later
  * ([Fetched.Busy]), so the worker ends the run's covers.
+ *
+ * The genre (v1.37 — M73): a Modern piece's search also keeps the matched track's `primaryGenreName` on the piece
+ * ([CoverStore.keepGenre]; "" when nothing matched or there was nothing to search for), whether or not its cover is then
+ * kept; a Classical piece's never. [genre] is the same search for a piece whose cover lookup will not run again.
  */
 class CoverFetcher(private val api: AppleCatalogApi, private val store: CoverStore, private val now: () -> Long) {
     @Volatile private var blockedUntil: Long? = null
@@ -65,14 +75,43 @@ class CoverFetcher(private val api: AppleCatalogApi, private val store: CoverSto
         if (!store.wanted()) return Fetched.Skipped
         blockedFor()?.let { return Fetched.Busy(it) }
         if (store.hasCover(key.id)) return Fetched.Skipped
-        val artist = ArtworkFetcher.pageName(key.artist) ?: return Fetched.NotFound
-        if (CoverMatch.core(key.title).isEmpty()) return Fetched.NotFound
+        val artist = ArtworkFetcher.pageName(key.artist)
+        if (artist == null || CoverMatch.core(key.title).isEmpty()) {
+            if (!key.classical) store.keepGenre(key.id, NO_GENRE)
+            return Fetched.NotFound
+        }
         return try {
             val results = api.search(CoverMatch.term(key.title, artist), RESULTS)
-            val track = CoverMatch.pick(key.title, artist, key.classical, results) ?: return Fetched.NotFound
+            val picked = CoverMatch.pick(key.title, artist, key.classical, results)
+            if (!key.classical) store.keepGenre(key.id, genreOf(picked))
+            val track = picked ?: return Fetched.NotFound
             val url = track.coverUrl ?: return Fetched.NotFound
             val image = api.download(url, WikipediaClient.IMAGE_CAP) ?: return Fetched.NotFound
             store.keep(key.id, image, AppleUrls.pageLink(track.trackViewUrl), credit(track))
+        } catch (e: AppleBusyException) {
+            stop()
+            Fetched.Failed("Apple asked to stop (HTTP ${e.code})")
+        }
+    }
+
+    /**
+     * Modern piece [key]'s genre alone (v1.37 — M73: the one-time pass, for a piece with a cover or whose cover lookup is
+     * done): one search, as the cover's, and the matched track's genre kept ([CoverStore.keepGenre]; "" for none), nothing
+     * downloaded. [Fetched.Saved] when kept; [Fetched.Skipped] when covers are off or the genre is known by now.
+     */
+    suspend fun genre(key: ArtKey.Genre): Fetched {
+        if (!store.wanted()) return Fetched.Skipped
+        blockedFor()?.let { return Fetched.Busy(it) }
+        if (!store.needsGenre(key.id)) return Fetched.Skipped
+        val artist = ArtworkFetcher.pageName(key.artist)
+        if (artist == null || CoverMatch.core(key.title).isEmpty()) {
+            store.keepGenre(key.id, NO_GENRE)
+            return Fetched.Saved
+        }
+        return try {
+            val results = api.search(CoverMatch.term(key.title, artist), RESULTS)
+            store.keepGenre(key.id, genreOf(CoverMatch.pick(key.title, artist, classical = false, results)))
+            Fetched.Saved
         } catch (e: AppleBusyException) {
             stop()
             Fetched.Failed("Apple asked to stop (HTTP ${e.code})")
@@ -96,6 +135,12 @@ class CoverFetcher(private val api: AppleCatalogApi, private val store: CoverSto
 
         /** How long every lookup waits after Apple's 403 or 429. */
         const val BLOCK_MS = 60 * 60 * 1000L
+
+        /** A piece the catalogue matched nothing for: looked up, no genre (it goes in Other). */
+        const val NO_GENRE = ""
+
+        /** The genre kept for [track]: its `primaryGenreName`, or [NO_GENRE] when there is no match or it names none. */
+        fun genreOf(track: CatalogTrack?): String = track?.primaryGenreName?.trim().orEmpty()
 
         /** The lookup row's credit: "album · artist" (the artist alone when Apple names no album). */
         fun credit(track: CatalogTrack): String = listOfNotNull(track.collectionName, track.artistName).joinToString(" · ")

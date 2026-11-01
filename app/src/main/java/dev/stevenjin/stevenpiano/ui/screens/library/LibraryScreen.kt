@@ -651,20 +651,7 @@ private fun LibraryItems(
                 )
             }
             is Listing.Playlists -> {
-                if (listing.channels.isNotEmpty()) {
-                    item(key = "channels") {
-                        Box(faded) {
-                            ChannelRow(
-                                listing.channels,
-                                playing = playingChannel,
-                                dot = dot,
-                                onPlay = play::channel,
-                                onSetVolume = onSetVolume,
-                                onSeeAll = { vm.openGroup(Group.Channels) },
-                            )
-                        }
-                    }
-                }
+                // The playlists first (v1.37 — M73: the first thing the Library shows), then the channels' row under them.
                 // The header row: the eyebrow PLAYLISTS and the pop-up button of their order (v1.10.1 — M28, D6).
                 if (listing.playlists.isNotEmpty()) {
                     item(key = "playlists-head") { Box(faded) { PlaylistsHeader(listing.sort, onSortPlaylists) } }
@@ -681,6 +668,20 @@ private fun LibraryItems(
                                 onChangePhoto = { onChangePhoto(playlist.id) },
                                 onDialog = onDialog,
                                 modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+                if (listing.channels.isNotEmpty()) {
+                    item(key = "channels") {
+                        Box(faded) {
+                            ChannelRow(
+                                listing.channels,
+                                playing = playingChannel,
+                                dot = dot,
+                                onPlay = play::channel,
+                                onSetVolume = onSetVolume,
+                                onSeeAll = { vm.openGroup(Group.Channels) },
                             )
                         }
                     }
