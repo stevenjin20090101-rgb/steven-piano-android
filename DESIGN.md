@@ -2181,11 +2181,12 @@ Everything above still holds; Library › + keeps its three ways in (files, a fo
 
 ## The pack
 
-- **What is in it**: the MIDI files the library's INDEX.csv lists, each once (INDEX.csv lists 1,727
-  files; one, piano-midi.de's `bor_ps1_format5.mid`, is `bor_ps1_format4.mid` byte for byte, so version 1
-  holds **1,726 pieces**), their INDEX.csv with a new last column `sha256`, the library's README (its
-  collections and their credit lines) and MAESTRO's licence. Nothing else of the folder: not
-  `pop-shopping-list/`, not `ALL SONGS/` or `ALL-SONGS.zip`. Version 1 is **61 MB** (92.9 MB of MIDI).
+- **What is in it**: the MIDI files the library's INDEX.csv lists in its three classical collections, each
+  once (1,727 files; one, piano-midi.de's `bor_ps1_format5.mid`, is `bor_ps1_format4.mid` byte for byte, so
+  version 1 holds **1,726 pieces**), their INDEX.csv with a new last column `sha256`, the library's README
+  (its collections and their credit lines) and MAESTRO's licence. Nothing else of the folder: not the modern
+  songs INDEX.csv also lists under `modern/` (fan-made, not openly licensed), not `pop-shopping-list/`, not
+  `ALL SONGS/` or `ALL-SONGS.zip`. Version 1 is **61 MB** (92.9 MB of MIDI).
 - **The three collections**, credited as their licences ask: **MAESTRO v3.0.0** (Google Magenta;
   Curtis Hawthorne et al., "Enabling Factorized Piano Music Modeling and Generation with the MAESTRO
   Dataset", ICLR 2019; CC BY-NC-SA 4.0: **non-commercial use only**), **piano-midi.de** (Bernd Krueger,

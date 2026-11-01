@@ -707,12 +707,13 @@ A new tablet can load Steven's library straight from GitHub (from 1.10):
   www.piano-midi.de): CC BY-SA 3.0 Germany. **The Mutopia Project**: public domain. The pack
   carries the library's README with these credit lines, and MAESTRO's licence.
 
-**Publishing a new version** (from the Mac, `gh` signed in): put the files in
-`Player Piano/midi/` and their rows in its `INDEX.csv`, then
+**Publishing a new version** (from the Mac, `gh` signed in): put the files in one of the
+three classical collections in `Player Piano/midi/` and their rows in its `INDEX.csv`, then
 `python3 tools/publish_library.py --upload` (the next version; `--version N` to choose). It
-builds `library-v<n>.zip` from the files the index lists (each file once, the index with a
-`sha256` column added, the README and MAESTRO's licence beside them), checks it against the
-app's limits, uploads it to the release `library` (never "Latest") and writes
+builds `library-v<n>.zip` from the files the index lists in those collections (each file
+once, the index with a `sha256` column added, the README and MAESTRO's licence beside them;
+never the modern songs under `modern/`, which are fan-made and not openly licensed), checks
+it against the app's limits, uploads it to the release `library` (never "Latest") and writes
 `releases/library.json`. Commit and push that file: tablets offer the new version once it is
 on `main`. Versions only go up.
 

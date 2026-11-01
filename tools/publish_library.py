@@ -11,15 +11,22 @@
 """Build Steven's library pack, library-v<n>.zip, and (with --upload) publish it on the GitHub release `library`.
 
 The pack (v1.10 — M27) is what a new tablet loads with "Load Steven's library": the MIDI files INDEX.csv lists in
-the library folder (--midi, by default ../midi beside this repository), nothing else (pop-shopping-list/, ALL SONGS/,
-ALL-SONGS.zip and any other file the index does not name stay out), each file once (a byte-for-byte copy of a file
-listed earlier is left out and named on the way), and beside them:
+the library folder (--midi, by default ../midi beside this repository) under its three classical collections
+(COLLECTIONS: maestro-classical-performances/, piano-midi.de/, mutopia-public-domain/), nothing else
+(pop-shopping-list/, ALL SONGS/, ALL-SONGS.zip and any other file the index does not name stay out), each file once
+(a byte-for-byte copy of a file listed earlier is left out and named on the way), and beside them:
 
   INDEX.csv                    the index's rows for the files in the pack, with a new last column `sha256`
                                (each file's SHA-256, lower-case hex), so the app knows a pack's pieces before
                                it reads them and an update brings only pieces it never offered before;
   README.md                    the library's own README (its collections and their required credit lines);
   _maestro-metadata/LICENSE    MAESTRO's licence (CC BY-NC-SA 4.0), as Google Magenta ships it.
+
+The modern songs stay out though INDEX.csv lists them (its rows under modern/, counted on the way): they are fan-made
+transcriptions of copyrighted songs, for playing on the piano, not for this public pack (midi/README.md and
+midi/modern/README.md say so), and LICENCES covers none of them. The pack names the collections it holds rather than
+leaving out modern/ alone (LibraryFixtureTest's rule, the same rows today), so that a folder added later stays out of
+a public upload until it is named in COLLECTIONS with its licence in LICENCES.
 
 The zip is deterministic (sorted by the index's order, fixed timestamps, deflate level 9): the same folder builds
 the same bytes. It is checked against the app's caps before anything is written: at most 200 MiB (the app's
@@ -77,6 +84,8 @@ MAX_VERSION = 10_000
 MAX_NOTES = 1_000
 
 LICENCES = ["MAESTRO CC BY-NC-SA 4.0", "piano-midi.de CC BY-SA 3.0 DE", "Mutopia public domain"]
+# The collections the pack holds, one folder each, in LICENCES' order: INDEX.csv's rows under any other stay out.
+COLLECTIONS = ["maestro-classical-performances", "piano-midi.de", "mutopia-public-domain"]
 EXTRAS = ["README.md", "_maestro-metadata/LICENSE"]
 COLUMNS = ["collection", "composer", "title", "size_kb", "path"]
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
@@ -124,7 +133,14 @@ def read_index(midi):
 
 
 def build(midi, version, work, url_base, notes):
-    header, rows = read_index(midi)
+    header, index_rows = read_index(midi)
+    rows, outside = [], {}   # the rows under COLLECTIONS, in the index's order; the others counted by top folder
+    for row in index_rows:
+        top = row["path"].split("/")[0]
+        if top in COLLECTIONS:
+            rows.append(row)
+        else:
+            outside[top] = outside.get(top, 0) + 1
     kept, seen, dropped = [], {}, []
     for row in rows:
         path = os.path.join(midi, row["path"])
@@ -201,6 +217,8 @@ def build(midi, version, work, url_base, notes):
     unpacked = sum(len(d) for _, d, _ in kept)
     print(f"{name}: {size:,} bytes ({size / 1e6:.1f} MB), sha256 {sha}")
     print(f"  {len(kept):,} pieces ({unpacked:,} bytes of MIDI), {entries:,} entries, INDEX.csv {len(index_bytes):,} bytes")
+    for top, count in outside.items():
+        print(f"  left out the {count:,} rows under {top}/: not one of the pack's collections")
     for path, first in dropped:
         print(f"  left out {path}: the same bytes as {first}")
     return zip_path, manifest, text

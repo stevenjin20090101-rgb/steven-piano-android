@@ -10442,3 +10442,19 @@ only (`LibraryFixtureTest.kt`, `LibraryFixture.kt`'s note), no new version. `./g
 skipped, the corpus's 7 among them), none failing; with `-Pcorpus` the same 1,883, 5 skipped (the sound render and
 Studio's models), none failing: `CorpusTest` read 4,119 files (both copies of the classical library and the 665 modern
 songs), and only the damaged Borodin's two copies warn.
+
+## Fixed after the release: the library pack
+
+`tools/publish_library.py` packed every INDEX.csv row, so its next `--upload` would have put the 665 modern songs,
+fan-made transcriptions of copyrighted songs, into the public pack, which `midi/README.md` and `modern/README.md` keep
+them out of and whose `licences` names only the three classical collections. `build()` now packs only the rows under
+those three (`COLLECTIONS`, beside `LICENCES`) and counts the rest on the way ("left out the 665 rows under modern/").
+These are the 1,727 rows `LibraryFixtureTest` makes (outside `modern/`), but named rather than excepted, so that a
+folder added later stays out of a public upload until it is named with its licence. The docstring says so, README
+(*Publishing a new version*) and DESIGN (*What is in it*) in a phrase each. A dry build (`--version 2`, a scratch
+`--work` and `--manifest`, no `--upload`), three times, one hash: 1,726 pieces, 1,729 entries, 92,865,812 bytes of
+MIDI, the Borodin copy left out, as version 1; no `modern/` path in the zip or its INDEX.csv; the pieces' SHA-256s
+exactly the 1,726 of the classical files, none changed since August, so version 1's (the script as it was: 2,391
+pieces, the modern songs among them). Nothing uploaded: `releases/library.json` stays version 1, and a version 2 now
+would bring no new piece. Tools and docs only, no new version. `./gradlew test` (its unit tests run again, `--rerun`,
+not from the cache): 1,883 unit tests (12 skipped, the corpus's 7 among them), none failing.
