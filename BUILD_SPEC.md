@@ -10316,3 +10316,7 @@ and the key test's `connected` (before it runs); `Player(railHolds = { railHolds
 `PowerPlugPage.ManualSwitch` (`PowerCopy.TURN_ON`/`TURN_OFF`/`manualOn`), `PowerCopy.PIANO_DIDNT_START`. **Tests**:
 `RailKeeperTest` (the wake: ARM, link, CHECK, notes; no link in 30 s; ARM retries and three offs; Turn the piano on; the
 guest window rewritten), `AdvertWatchTest` (an "on" advert while a want waits is never CUT).
+
+## The release: 1.38 (versionCode 49)
+
+M75 first cut merged: the controller is on the plug, so a want with no link switches the plug on first (confirmed by GATT), wakes the link (30 s), then CHECKs; no advert CUT while anything wants the rail; Play holds until the rail is up; Turn the piano on (30 min). Deferred to 1.39: idle words, the 5 s check, the 2-minute grace, the panel button, the firmware updater and Keys before the link.
