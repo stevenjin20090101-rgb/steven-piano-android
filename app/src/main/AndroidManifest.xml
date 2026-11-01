@@ -53,6 +53,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- v1.39 — M77: the app keeps running on the school tablet, whose watches over the piano's power plug are its safety
+         layer: on the first start, and from Piano › System, it asks Android once to let it run without battery limits
+         (Android's own dialog, the person's yes). Distributed on GitHub, not Google Play. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:ignore="BatteryLife" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Listening from the panel (v1.23 — M55): the web panel may hear the room live, and test every key by ear, through
@@ -234,6 +240,14 @@
             android:name=".service.StudioService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- The power watch (v1.39 — M77): runs whenever the power plug is paired, so the process (and the watches over the
+             plug in it) outlives the screen; a quiet "Watching the piano's power". Connected device: the plug is a
+             Bluetooth device the app watches. Not exported: only the app starts it. -->
+        <service
+            android:name=".service.PowerService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- Where a silent install (device owner) reports; only the app's own explicit PendingIntent reaches it. -->
         <receiver

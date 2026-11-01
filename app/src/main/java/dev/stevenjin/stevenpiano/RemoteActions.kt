@@ -62,7 +62,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class RemoteActions internal constructor(private val graph: AppGraph, private val app: Application) {
     /** The tablet's and the app's readings for the web panel's System page (v1.18 — M46). */
-    val systemProbe: SystemProbe by lazy { AndroidSystemProbe(app) }
+    val systemProbe: SystemProbe by lazy { AndroidSystemProbe(app, powerWatch = graph::powerWatch) }   // v1.39 — M77: the watch
 
     /** The System page's day: a sample a minute while the process lives ([startSystemSamples]), in memory only. */
     val systemHistory = SystemHistory()

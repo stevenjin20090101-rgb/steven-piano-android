@@ -10,6 +10,8 @@
 package dev.stevenjin.stevenpiano
 
 import kotlinx.coroutines.withTimeoutOrNull
+import android.app.Activity
+import android.app.ActivityManager
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -27,6 +29,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.room.withTransaction
 import dev.stevenjin.stevenpiano.admin.DeviceOwnerRelease
+import dev.stevenjin.stevenpiano.admin.KeepRunning
 import dev.stevenjin.stevenpiano.admin.KioskController
 import dev.stevenjin.stevenpiano.admin.KioskMode
 import dev.stevenjin.stevenpiano.admin.OwnerRelease
@@ -114,6 +117,7 @@ import dev.stevenjin.stevenpiano.quiet.QuietGate
 import dev.stevenjin.stevenpiano.quiet.QuietStore
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.LibraryService
+import dev.stevenjin.stevenpiano.service.PowerService
 import dev.stevenjin.stevenpiano.service.StudioService
 import dev.stevenjin.stevenpiano.service.WebService
 import dev.stevenjin.stevenpiano.settings.Appearance
@@ -648,6 +652,52 @@ class AppGraph(private val app: Application) {
         }
     }
 
+    // ==== v1.39 — M77: the app keeps running on the school tablet (DESIGN.md › v1.39 — M77) ==============================
+
+    /** Whether the power watch's service runs ([PowerService]); null while no plug is paired, with nothing to watch. */
+    fun powerWatch(): Boolean? = if (plugSettings.value?.pairing == null) null else PowerService.state.value
+
+    /**
+     * The power watch follows the pairing (from [start]): on while a plug is paired, off without. Android lets the device
+     * owner, or an app without battery limits, start it from the background; otherwise [startPowerWatchIfPaired] does.
+     */
+    private fun followPowerWatch() {
+        appScope.launch {
+            plugSettings.first { it != null }
+            plugSettings.map { it?.pairing != null }.distinctUntilChanged().collect { paired ->
+                if (paired) startPowerService() else PowerService.stop(app)
+            }
+        }
+    }
+
+    /** The activity came to the front, where a foreground service may always start: the watch, while a plug is paired. */
+    fun startPowerWatchIfPaired() {
+        if (plugSettings.value?.pairing != null && !PowerService.state.value) startPowerService()
+    }
+
+    /** A connected device's service needs the Bluetooth permission (Android 14): without it, the watch isn't started at all. */
+    private fun startPowerService() {
+        if (BlePermissions.missing(app).isEmpty()) PowerService.start(app)
+    }
+
+    /**
+     * The first start asks Android, once, to let the app run without battery limits (Android's own dialog): not when it
+     * already may, nor while the screen is locked to the app (Android would block the dialog). Piano › System asks any time.
+     */
+    suspend fun askBatteryOnce(activity: Activity) {
+        if (KeepRunning.batteryUnrestricted(app)) return
+        val lockTask = activity.getSystemService(ActivityManager::class.java)?.lockTaskModeState ?: ActivityManager.LOCK_TASK_MODE_NONE
+        if (lockTask != ActivityManager.LOCK_TASK_MODE_NONE) return
+        try {
+            if (settingsRepository.batteryAsked()) return
+            if (KeepRunning.askBattery(activity)) settingsRepository.markBatteryAsked()
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "Couldn't keep whether the battery was asked about")
+        }
+    }
+
+    // ==== end of M77's block ====================================================================================================
+
     /**
      * Studio (its own tab since v1.12 — M30; a Piano page from v1.7 — M23): the models (downloaded on demand from the release tagged
      * `models`, pinned by hash; on the emulator in debug builds, a server on the Mac: [Emulator.modelsSource]), the
@@ -927,6 +977,7 @@ class AppGraph(private val app: Application) {
         studio.start()
         remote.followListening()   // v1.23 — M55
         startSafety()   // v1.26 — M61
+        followPowerWatch()   // v1.39 — M77
         appScope.launch {
             val s = settingsRepository.settings.first()
             // The keyboard first (v1.11 — M29): its address is foreign to the piano's link before that link scans.
