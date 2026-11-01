@@ -54,6 +54,7 @@ import dev.stevenjin.stevenpiano.studio.StudioSupport
 import dev.stevenjin.stevenpiano.studio.TurnRecord
 import dev.stevenjin.stevenpiano.studio.compose.ComposeFailures
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.Genre
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.PromptBuilder
@@ -82,7 +83,7 @@ private sealed interface Seed {
 /**
  * What the options sheet opens with (v1.12 — M30): the Studio tab's Options prefill it from what the idea box
  * understood, a card's "Adjust…" from that turn: the seed piece, the mood, the key (an index of [MusicKey.all]),
- * the tempo and the length. Null fields follow the seed as before.
+ * the tempo, the length and the genre (v1.37 — M74). Null fields follow the seed (and the genre) as before.
  */
 data class ComposeStart(
     val pieceId: Long? = null,
@@ -90,13 +91,16 @@ data class ComposeStart(
     val key: Int? = null,
     val bpm: Int? = null,
     val minutes: Int = 2,
+    val genre: Genre? = null,
 )
 
 /**
  * Compose a piece (DESIGN.md › v1.7 — M24), in a sheet with its drag handle, from the Studio tab's Options and a
  * card's "Adjust…" (v1.12 — M30; [start] its first choices, [turn] what the history keeps of how it was asked). The eyebrow names the seed ("In the manner of Clair de lune
  * (Claude Debussy)") over **Compose a piece**; MOOD, four chips (Calm · Bright · Wild · Melancholy:
- * Melancholy turns the key to the seed's minor while no key has been chosen); KEY, the twelve tonics in
+ * Melancholy turns the key to the seed's minor while no key has been chosen); GENRE (v1.37 — M74: None · Lo-fi ·
+ * House · Chill · Cinematic; a genre brings its mood, and its tempo and lo-fi's minor while none is chosen, and
+ * the piece is played in its feel); KEY, the twelve tonics in
  * the mode's own spelling and Major · Minor; TEMPO, 40–200 bpm, the seed's own until changed; LENGTH,
  * 1–5 minutes; IN THE MANNER OF, the piece (the one played last by default) and Change, a search over
  * the library; the note ("Runs on this tablet. About a minute for a two-minute piece.", and that the
@@ -115,6 +119,7 @@ fun ComposeSheet(onDismiss: () -> Unit, start: ComposeStart = ComposeStart(), tu
 
     var chosenPiece by rememberSaveable { mutableStateOf(start.pieceId) }
     var mood by rememberSaveable { mutableStateOf(start.mood) }
+    var genre by rememberSaveable { mutableStateOf(start.genre) }
     // Null until chosen here: the key and tempo follow the seed (and the key the mood) until then.
     var chosenKey by rememberSaveable { mutableStateOf(start.key) }
     var chosenBpm by rememberSaveable { mutableStateOf(start.bpm) }
@@ -127,8 +132,8 @@ fun ComposeSheet(onDismiss: () -> Unit, start: ComposeStart = ComposeStart(), tu
     }
     val choice = (seed as? Seed.Ready)?.choice
     val facts = choice?.facts
-    val key = chosenKey?.let { MusicKey.all[it] } ?: facts?.let { PromptBuilder.suggestedKey(mood, it.key) }
-    val bpm = chosenBpm ?: facts?.bpm
+    val key = chosenKey?.let { MusicKey.all[it] } ?: facts?.let { PromptBuilder.suggestedKey(mood, it.key, genre) }
+    val bpm = chosenBpm ?: facts?.let { genre?.bpmFor(it.bpm) ?: it.bpm }
 
     GlassSheet(
         onDismissRequest = onDismiss,
@@ -156,6 +161,17 @@ fun ComposeSheet(onDismiss: () -> Unit, start: ComposeStart = ComposeStart(), tu
             SectionEyebrow("Mood")
             ChipRow {
                 for (option in Mood.entries) SheetChip(option.label, option == mood) { mood = option }
+            }
+
+            SectionEyebrow("Genre")
+            ChipRow {
+                SheetChip("None", genre == null) { genre = null }
+                for (option in Genre.entries) {
+                    SheetChip(option.label, option == genre) {
+                        genre = option
+                        mood = option.mood
+                    }
+                }
             }
 
             SectionEyebrow("Key")
@@ -241,7 +257,7 @@ fun ComposeSheet(onDismiss: () -> Unit, start: ComposeStart = ComposeStart(), tu
                     "Compose",
                     onClick = {
                         val ready = choice ?: return@ActionButton
-                        val request = ComposeRequest(mood, key, bpm, minutes)
+                        val request = ComposeRequest(mood, key, bpm, minutes, genre)
                         studio.compose(ComposeOrder(ready.pieceId, request, turn = turn.copy(understood = StudioCopy.optionsLine(request, ready.title, ready.composer))), name = ready.title)
                         onDismiss()
                     },

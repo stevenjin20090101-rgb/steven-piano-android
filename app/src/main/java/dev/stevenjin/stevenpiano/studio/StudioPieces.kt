@@ -92,6 +92,7 @@ class StudioPieces(private val library: StudioLibrary, private val locale: Local
         if (composition.notes.isEmpty()) throw StudioFailure(ComposeFailures.NO_MUSIC)
         val bytes = SmfWriter.write(
             notes = composition.notes,
+            pedals = composition.pedals,
             title = title,
             text = "${ComposerNames.STUDIO}, ${STAMP.format(at)}",
             tempoMicros = SmfWriter.tempoOf(composition.bpm),

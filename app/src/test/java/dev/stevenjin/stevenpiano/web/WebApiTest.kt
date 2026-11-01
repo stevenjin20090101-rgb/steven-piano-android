@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.web
 import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.Genre
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.SeedFacts
@@ -332,6 +333,9 @@ class WebApiTest {
         val plain = WebApi.composeOrder(JSONObject("""{"mood":"calm","key":null,"bpm":null,"minutes":2}"""))
         assertEquals("no piece, key or tempo: the defaults", ComposeOrder(null, ComposeRequest(Mood.Calm, null, null, 2)), plain)
         for (mood in listOf("calm", "bright", "wild", "melancholy")) WebApi.composeOrder(JSONObject().put("mood", mood).put("minutes", 3))
+        // A genre (v1.37 — M74): one of the four, or none.
+        assertEquals(Genre.House, WebApi.composeOrder(JSONObject("""{"mood":"bright","minutes":2,"genre":"house"}""")).request.genre)
+        assertEquals(null, WebApi.composeOrder(JSONObject("""{"mood":"calm","minutes":2,"genre":null}""")).request.genre)
         val refusedBodies = listOf(
             """{"mood":"calm","minutes":2,"prompt":"play like Chopin"}""", // no text for the model, ever
             """{"mood":"Calm ","minutes":2}""",
@@ -349,6 +353,9 @@ class WebApiTest {
             """{"mood":"calm","minutes":2,"pieceId":0}""",
             """{"mood":"calm","minutes":2,"pieceId":"12"}""",
             """{"mood":7,"minutes":2}""",
+            """{"mood":"calm","minutes":2,"genre":"techno"}""",
+            """{"mood":"calm","minutes":2,"genre":"House"}""",
+            """{"mood":"calm","minutes":2,"genre":1}""",
         )
         for (body in refusedBodies) refused(400) { WebApi.composeOrder(JSONObject(body)) }
 

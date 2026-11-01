@@ -143,6 +143,14 @@ export function create(host) {
   // ---- Composing (v1.7 — M24) ------------------------------------------------------------------------------
 
   const MOODS = [['calm', 'Calm'], ['bright', 'Bright'], ['wild', 'Wild'], ['melancholy', 'Melancholy']];
+  /** The genre styles (v1.37 — M74), as the tablet's Genre: its mood, the gentle half of its tempo range, and lo-fi's minor. */
+  const GENRES = [
+    { name: 'lofi', label: 'Lo-fi', mood: 'calm', low: 70, high: 77, minor: true },
+    { name: 'house', label: 'House', mood: 'bright', low: 120, high: 123, minor: false },
+    { name: 'chill', label: 'Chill', mood: 'calm', low: 60, high: 67, minor: false },
+    { name: 'cinematic', label: 'Cinematic', mood: 'melancholy', low: 60, high: 70, minor: false },
+  ];
+  const genreOf = (c) => GENRES.find((g) => g.name === c.genre) || null;
   const MAJOR_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
   const MINOR_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B'];
   const COMPOSE_NOTE = 'Runs on this tablet. About a minute for a two-minute piece.';
@@ -156,15 +164,23 @@ export function create(host) {
   const spokenKey = (key) => keyName(key).replace('♯', ' sharp').replace('♭', ' flat');
   const manner = (seed) => (seed.composer ? `${seed.title} (${seed.composer})` : seed.title);
 
-  /** The key the form holds: the one chosen here, else the seed's (for Melancholy its minor, as on the tablet). */
+  /** The key the form holds: the one chosen here, else the seed's (for Melancholy and lo-fi its minor, as on the tablet). */
   function composeKey(c) {
     if (c.key) return c.key;
     if (!c.seed) return null;
     const own = c.seed.key;
-    return c.mood === 'melancholy' && !own.minor ? { tonic: (own.tonic + 9) % 12, minor: true } : { tonic: own.tonic, minor: own.minor };
+    const genre = genreOf(c);
+    const minor = c.mood === 'melancholy' || (genre && genre.minor);
+    return minor && !own.minor ? { tonic: (own.tonic + 9) % 12, minor: true } : { tonic: own.tonic, minor: own.minor };
   }
 
-  const composeBpm = (c) => (c.bpm !== null ? c.bpm : c.seed ? c.seed.bpm : null);
+  /** The tempo the form holds: the one chosen here, else the seed's (held in a genre's gentle range). */
+  function composeBpm(c) {
+    if (c.bpm !== null) return c.bpm;
+    if (!c.seed) return null;
+    const genre = genreOf(c);
+    return genre ? Math.min(genre.high, Math.max(genre.low, c.seed.bpm)) : c.seed.bpm;
+  }
 
   /** Under the button and the form: what it takes, and that the model downloads first while it isn't on the tablet. */
   function composeNote() {
@@ -186,7 +202,7 @@ export function create(host) {
   }
 
   function openCompose(pieceId) {
-    composing = { seed: null, reading: true, mood: 'calm', key: null, bpm: null, minutes: 2, choosing: false, query: '', error: null, sending: false };
+    composing = { seed: null, reading: true, mood: 'calm', genre: null, key: null, bpm: null, minutes: 2, choosing: false, query: '', error: null, sending: false };
     renderCompose();
     loadSeed(pieceId);
   }
@@ -211,7 +227,7 @@ export function create(host) {
     renderCompose();
   }
 
-  /** The tablet's sheet laid flat: MOOD, KEY, TEMPO, LENGTH, IN THE MANNER OF, the note, Cancel and Compose. */
+  /** The tablet's sheet laid flat: MOOD, GENRE, KEY, TEMPO, LENGTH, IN THE MANNER OF, the note, Cancel and Compose. */
   function composeEditor() {
     const c = composing;
     const again = () => {
@@ -233,6 +249,10 @@ export function create(host) {
       h('h3', { class: 'section-head eyebrow', text: 'Mood' }),
       h('div', { class: 'actions' }, h('div', { class: 'chips', role: 'group', 'aria-label': 'Mood' },
         MOODS.map(([name, label]) => chip(label, c.mood === name, () => { c.mood = name; again(); })))),
+      h('h3', { class: 'section-head eyebrow', text: 'Genre' }),
+      h('div', { class: 'actions' }, h('div', { class: 'chips', role: 'group', 'aria-label': 'Genre' },
+        [chip('None', c.genre === null, () => { c.genre = null; again(); })].concat(
+          GENRES.map((g) => chip(g.label, c.genre === g.name, () => { c.genre = g.name; c.mood = g.mood; again(); }))))),
       h('h3', { class: 'section-head eyebrow', text: 'Key' }),
       h('div', { class: 'actions' },
         h('div', { class: 'chips', role: 'group', 'aria-label': 'Key' }, keyChips),
@@ -344,7 +364,7 @@ export function create(host) {
     c.sending = true;
     renderCompose();
     try {
-      await post(host.ROOT + '/api/studio/compose', { pieceId: c.seed.pieceId, mood: c.mood, key: { tonic: key.tonic, minor: key.minor }, bpm: composeBpm(c), minutes: c.minutes });
+      await post(host.ROOT + '/api/studio/compose', { pieceId: c.seed.pieceId, mood: c.mood, key: { tonic: key.tonic, minor: key.minor }, bpm: composeBpm(c), minutes: c.minutes, genre: c.genre });
       if (composing === c) composing = null;
       renderCompose();
       toast('Composing on the tablet. It shows under Jobs.');

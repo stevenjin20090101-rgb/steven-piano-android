@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.web
 import dev.stevenjin.stevenpiano.studio.ComposeOrder
 import dev.stevenjin.stevenpiano.studio.SeedChoice
 import dev.stevenjin.stevenpiano.studio.compose.ComposeRequest
+import dev.stevenjin.stevenpiano.studio.compose.Genre
 import dev.stevenjin.stevenpiano.studio.compose.Mood
 import dev.stevenjin.stevenpiano.studio.compose.MusicKey
 import dev.stevenjin.stevenpiano.studio.compose.PromptBuilder
@@ -512,10 +513,11 @@ object WebApi {
         )
 
     /**
-     * A composition asked for from the panel (v1.7 — M24): `{pieceId, mood, key, bpm, minutes}`, each
+     * A composition asked for from the panel (v1.7 — M24): `{pieceId, mood, key, bpm, minutes, genre}`, each
      * field checked and nothing else taken. `pieceId` names a piece of the library (absent or null: the
      * default seed), `mood` is calm, bright, wild or melancholy, `key` is `{tonic: 0–11, minor}` (null:
-     * the piece's own), `bpm` 40–200 (null: the piece's own), `minutes` 1–5. No text reaches the model.
+     * the piece's own), `bpm` 40–200 (null: the piece's own), `minutes` 1–5, `genre` (v1.37 — M74) lofi,
+     * house, chill or cinematic (absent or null: none). No text reaches the model.
      */
     fun composeOrder(json: JSONObject): ComposeOrder {
         onlyKeys(json, COMPOSE_KEYS)
@@ -532,7 +534,10 @@ object WebApi {
         }
         val bpm = if (wholeOrNull(json, "bpm") == null) null else int(json, "bpm", PromptBuilder.MIN_BPM..PromptBuilder.MAX_BPM)
         val minutes = int(json, "minutes", PromptBuilder.MIN_MINUTES..PromptBuilder.MAX_MINUTES)
-        return ComposeOrder(pieceId, ComposeRequest(mood, key, bpm, minutes))
+        val genre = stringOrNull(json, "genre", 16)?.let { name ->
+            Genre.entries.firstOrNull { it.key == name } ?: throw ApiError(400, "field", "genre must be lofi, house, chill or cinematic.")
+        }
+        return ComposeOrder(pieceId, ComposeRequest(mood, key, bpm, minutes, genre))
     }
 
     /** A seed for the panel's compose form: `{pieceId, title, composer, key: {tonic, minor, label}, bpm}`. */
@@ -543,7 +548,7 @@ object WebApi {
         .put("key", JSONObject().put("tonic", s.facts.key.tonic).put("minor", s.facts.key.minor).put("label", s.facts.key.label))
         .put("bpm", s.facts.bpm)
 
-    private val COMPOSE_KEYS = setOf("pieceId", "mood", "key", "bpm", "minutes")
+    private val COMPOSE_KEYS = setOf("pieceId", "mood", "key", "bpm", "minutes", "genre")
     private val KEY_KEYS = setOf("tonic", "minor")
 
     /**

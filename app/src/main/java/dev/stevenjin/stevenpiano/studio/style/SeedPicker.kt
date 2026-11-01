@@ -21,7 +21,8 @@ import kotlin.math.roundToInt
  * An idea's seed piece and what is asked of it (v1.12 — M30), on the job's thread: it reads the key and tempo of
  * at most [LOOK] candidates ([PromptBuilder.facts], one file each). A title or a chosen piece is taken as found;
  * from a pool it prefers a seed whose own mode is the one asked for (a transposition can't change a mode) and
- * whose tempo is nearest. "Different" ([StyleSpec.variant]) starts that many places further down the list.
+ * whose tempo is nearest. A genre's songs (v1.37 — M74) come drawn at random, and the first that reads is taken.
+ * "Different" ([StyleSpec.variant]) starts that many places further down the list.
  */
 object SeedPicker {
     const val LOOK = 4
@@ -35,7 +36,7 @@ object SeedPicker {
         val start = Math.floorMod(spec.variant, candidates.size)
         val rotated = candidates.drop(start) + candidates.take(start)
         val looked = rotated.filter { it != avoid }.ifEmpty { rotated }
-        if (spec.seed is SeedAsk.Title || spec.seed is SeedAsk.Piece || spec.variant > 0) {
+        if (spec.seed is SeedAsk.Title || spec.seed is SeedAsk.Piece || spec.variant > 0 || GenreSeeds.of(spec.seed) != null) {
             for (id in looked.take(LOOK)) facts(id)?.let { return Pick(id, request(spec, it), it) }
             return null
         }
@@ -52,7 +53,10 @@ object SeedPicker {
         return Pick(best.first, request(spec, best.second), best.second)
     }
 
-    /** What [spec] asks of a seed whose own key and tempo are [facts]. */
+    /**
+     * What [spec] asks of a seed whose own key and tempo are [facts]; a genre's defaults where nothing is asked
+     * (v1.37 — M74): its tempo ([dev.stevenjin.stevenpiano.studio.compose.Genre.bpmFor]) and lo-fi's minor.
+     */
     fun request(spec: StyleSpec, facts: SeedFacts): ComposeRequest {
         val key = spec.key ?: spec.minor?.let { minor ->
             when {
@@ -60,15 +64,15 @@ object SeedPicker {
                 minor -> facts.key.relativeMinor
                 else -> MusicKey(facts.key.relativeMajor, false)
             }
-        } ?: PromptBuilder.suggestedKey(spec.mood, facts.key)
+        } ?: PromptBuilder.suggestedKey(spec.mood, facts.key, spec.genre)
         val bpm = when (val t = spec.tempo) {
             is TempoAsk.Exact -> t.bpm
             // A tempo word is held near the seed's own, so a seed is never stretched absurdly.
             is TempoAsk.Class -> t.bpm.coerceIn((facts.bpm * MIN_STRETCH).roundToInt(), (facts.bpm * MAX_STRETCH).roundToInt())
             is TempoAsk.Scale -> (facts.bpm * t.factor).roundToInt()
-            null -> null
+            null -> spec.genre?.bpmFor(facts.bpm)
         }?.coerceIn(PromptBuilder.MIN_BPM, PromptBuilder.MAX_BPM)
-        return ComposeRequest(spec.mood, key, bpm, spec.minutes.coerceIn(PromptBuilder.MIN_MINUTES, PromptBuilder.MAX_MINUTES))
+        return ComposeRequest(spec.mood, key, bpm, spec.minutes.coerceIn(PromptBuilder.MIN_MINUTES, PromptBuilder.MAX_MINUTES), spec.genre)
     }
 
     private fun targetBpm(spec: StyleSpec): Int? = when (val t = spec.tempo) {

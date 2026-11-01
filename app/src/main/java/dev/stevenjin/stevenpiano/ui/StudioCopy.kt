@@ -197,8 +197,10 @@ object StudioCopy {
     /**
      * The understood line of a piece asked for in the options sheet or the web panel's form (v1.12 — M30): "Calm · D♭
      * major · 72 bpm · 2 min · in the manner of Clair de lune (Debussy)"; the seed's own key and tempo are not named.
+     * A genre (v1.37 — M74) goes first: "Lo-fi · Calm · …".
      */
     fun optionsLine(request: dev.stevenjin.stevenpiano.studio.compose.ComposeRequest, seedTitle: String?, seedComposer: String?): String = buildList {
+        request.genre?.let { add(it.label) }
         add(request.mood.label)
         request.key?.let { add(it.label) }
         request.bpm?.let { add("$it bpm") }
