@@ -460,5 +460,16 @@
     "minSdk": 26,
     "tag": "v1.38",
     "publishedAt": "2026-11-01"
+  },
+  {
+    "versionCode": 50,
+    "versionName": "1.39",
+    "notes": "Power plug: On hours (7:00-22:00 the piano stays on and starts instantly; at night Play at the tablet still wakes it). The false 'key stayed on' cut is fixed: while playing only 100 W of power the notes can't explain for 5 s, or the controller losing a board, cuts the 24 V; every cut now says why and how many watts. Now playing shows the watts now and this piece's peak. The safety check every 6 pieces is off (a switch in Piano > System). Kiosk: setup steps on the Kiosk page; the app keeps running (Runs reliably on System). K-pop artists show plain covers.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.39/steven-piano-1.39.apk",
+    "sha256": "5e63ed3ae156f2034e0bd7fbfec7394ff5f0d36060cd4d207257cd41a5f82bf5",
+    "sizeBytes": 14517469,
+    "minSdk": 26,
+    "tag": "v1.39",
+    "publishedAt": "2026-11-01"
   }
 ]
