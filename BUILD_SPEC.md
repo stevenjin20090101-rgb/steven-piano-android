@@ -10425,3 +10425,7 @@ first added of several; a new version that is no MIDI file fails and leaves the 
 piece; a zip's replaced piece in the zip's playlist), `PieceSqlTest` (new: both statements on Room's v7 export through
 sqlite-jdbc: only the six columns written, the unique index, the first added), `ImportCopyTest` (+1), `WebApiTest` (the
 `replaced` key).
+
+## The release: 1.41 (versionCode 52)
+
+A new version in place (INDEX.csv's `replaces`). 1.40 (versionCode 51, M78) was already out when this began, so it is 1.41.
