@@ -10293,3 +10293,7 @@ Plain = roll card (cover too when chosen by hand); no portrait until read. Used 
 **Library**: `Category.Playlists` first and the default; the channels' row under the playlists; `library.js` opens on
 `playlists`, its kind first. **Tests:** `SchemaV7Test` 4, `GenrePlaylistsTest` 4, `CoverRuleTest` 4; `LibraryStatesTest`
 and `AppleCatalogTest` updated.
+
+## The release: 1.37 (versionCode 48)
+
+M73 (the library sorted by Apple Music genre: genre playlists, K-pop into his K-pop, Dance/House/Electronic into House & Dance, imported Pop and MIDI removed at the Room 6→7 upgrade; K-pop plain covers; House & Dance album covers; Library opens on Playlists) and M74 (Studio genre styles: lo-fi, house, chill, cinematic, seeded from the genre playlists) merged; the doc paragraphs kept side by side.
