@@ -1248,6 +1248,7 @@ button, input, select { font: inherit; color: inherit; }
 .scrubber .range:hover::-moz-range-thumb, .scrubber .range:active::-moz-range-thumb, .scrubber .range:focus-visible::-moz-range-thumb { transform: scale(1); }
 
 .transport { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.power-line { margin: 2px 0 0; text-align: center; font-size: 13px; line-height: 18px; color: var(--secondary); font-variant-numeric: tabular-nums; }
 
 /* The icon buttons give way (to 40 px) on the narrowest block; the play circle never does. Shuffle's room (v1.26 — M61:
    shuffle is gone) stays, empty, so the play circle keeps the middle. */

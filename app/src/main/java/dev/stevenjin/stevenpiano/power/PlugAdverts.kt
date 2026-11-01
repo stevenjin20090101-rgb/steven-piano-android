@@ -59,6 +59,16 @@ class PlugAdverts(private val now: () -> Long, private val log: (String) -> Unit
         return heard.advert.watts.takeIf { age <= FRESH_MS && it.isFinite() && it >= 0.0 }
     }
 
+    /**
+     * v1.39 — M76: the latest advert's draw with when it came ([now]'s clock), while under [FRESH_MS] old (as [watts], whose
+     * silence log it shares): the power watches count only adverts that came after the moment they ask about.
+     */
+    fun reading(t: Long = now()): PlugReading? {
+        val watts = watts(t) ?: return null
+        val heard = last ?: return null
+        return PlugReading(watts, heard.at)
+    }
+
     /** When the latest advert came ([now]'s clock); null before one. */
     fun lastAt(): Long? = last?.at
 

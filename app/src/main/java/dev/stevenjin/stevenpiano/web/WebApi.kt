@@ -444,6 +444,8 @@ object WebApi {
         .put("waking", p.waking)
         .put("message", p.message ?: JSONObject.NULL)
         .put("attention", p.attention)
+        .put("now", p.now?.takeIf { it.isFinite() }.orNull())   // v1.39 — M76
+        .put("peak", p.peak?.takeIf { it.isFinite() }.orNull())
 
     /**
      * The safety check in the state (v1.26 — M61): `{running, step, of, locked, failedKeys, coil, stopped, text, missedKeys}`
@@ -766,6 +768,8 @@ object WebApi {
         .put("attention", f.attention)
         .put("welded", f.welded)
         .put("guestEndsAt", f.guestEndsAt.orNull())
+        .put("asleep", f.asleep.orNull())   // v1.39 — M76
+        .put("manualEndsAt", f.manualEndsAt.orNull())
 
     /**
      * The piano's facts as numbers and words (firmware/docs/BLE_DIAG.md), every name of [PianoSettings.diagFacts] in its

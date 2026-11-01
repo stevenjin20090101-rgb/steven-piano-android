@@ -56,6 +56,9 @@ object SafetyCopy {
     const val COIL_ON = "a key is still on"
     const val MICROPHONE_OFF = "microphone off"
     const val NOT_OFFERED = "not on this firmware"
+
+    /** v1.39 — M76: with the power plug, the controller restarts with the power off and on. */
+    const val BY_REPOWER = "the power off and on restarts it"
     const val OTA_PENDING = "the new firmware hasn't confirmed itself yet"
     const val NOT_BACK = "the piano didn't come back"
     const val NO_PLUG = "no power plug"
@@ -112,7 +115,12 @@ object SafetyCopy {
 
     // ---- Piano › System › Listen and test ---------------------------------------------------------------------------
     const val SWITCH = "Automatic safety check (uses the microphone)"
-    const val SWITCH_NOTE = "Every 6 pieces the piano strikes each key once while the tablet listens. Nothing is recorded or sent."
+    const val SWITCH_NOTE = "When a safety check runs, the piano strikes each key once while the tablet listens. Nothing is recorded or sent."
+
+    /** v1.39 — M76: the check every 6 pieces, off by default. */
+    const val EVERY_SWITCH = "Safety check every 6 pieces"
+    const val EVERY_OFF_NOTE = "Off: the tablet still checks the piano quietly after every piece and watches its power."
+    const val EVERY_ON_NOTE = "After every 6th piece the tablet runs the full safety check before the next."
     const val NO_PERMISSION = "Android hasn't allowed the microphone, so the safety check runs without listening. Turn this on to allow it."
     const val NEVER = "No safety check yet"
     const val DUE = "A safety check runs before the next piece."
@@ -182,6 +190,7 @@ object SafetyCopy {
             Why.MICROPHONE_OFF -> MICROPHONE_OFF
             Why.KEYS_SILENT -> missed(line.keys).ifEmpty { null }
             Why.NOT_OFFERED -> NOT_OFFERED
+            Why.BY_REPOWER -> BY_REPOWER
             Why.OTA_PENDING -> OTA_PENDING
             Why.REFUSED -> line.said ?: "refused"
             Why.NOT_BACK -> NOT_BACK

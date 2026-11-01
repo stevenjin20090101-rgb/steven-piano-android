@@ -112,6 +112,14 @@ internal fun ListenCard(vm: PianoViewModel, gate: KioskGate) {
             )
         }
         if (refused && !listen.allowed) NoteLine(ListenCopy.NOT_ALLOWED)
+        // v1.39 — M76: the check every 6 pieces, off by default; a trip still asks for one, and it runs by hand.
+        SwitchRow(
+            SafetyCopy.EVERY_SWITCH,
+            checked = settings.safetyCheckEvery,
+            onChange = { on -> gate.run { graph.appScope.launch { graph.settingsRepository.setSafetyCheckEvery(on) } } },
+            note = if (settings.safetyCheckEvery) SafetyCopy.EVERY_ON_NOTE else SafetyCopy.EVERY_OFF_NOTE,
+            locked = gate.locked,
+        )
         // The safety check (v1.26 — M61): its microphone, and how the last check went.
         SwitchRow(
             SafetyCopy.SWITCH,

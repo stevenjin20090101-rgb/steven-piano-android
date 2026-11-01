@@ -10341,3 +10341,30 @@ artists**: `CoverStyles.kpopArtists` from `CoverRule.kpopArtists` (plain pieces 
 `composer_groups`), `CoverStyles.portrait`; `ComposerArt`, `rememberArtLayers(pieceId, composerKey)` and the panel's
 composers and pieces honour it. **Tests**: `KioskExitTest` (the switch), `ReliableCopyTest`, `CoverRuleTest` (K-pop
 artists); `KioskModeTest` and `WebApiTest` expectations updated.
+
+# v1.39 — M76: On hours, the stuck board, the power on Now playing
+
+Brief `~/.claude/plans/m76-on-hours-brief.md` with the coordinator's additions (100 W, the safety check off, the false-trip
+fixes); worktree `android-wt-m76`, branch `m76-on-hours`, from `24c3b08`. No version bump, no signing, no emulator, no
+firmware change. **`OnHours`** (`PlugStore` keys `hoursOn`/`hoursStart`/`hoursEnd`, absent = 7:00–22:00 on; kept by
+`pair`/`forget`), `AppGraph.followOnHours` (a 30 s wall-clock look, `RailKeeper.HOURS` told on change only),
+`offHoursRefusal` (`OnHours.refusesRemote`, the rail Off) in `WebRoutes.startRefusal`, `/api/keytest/start` and the new
+`POST /api/power {on}` (409 `off-hours`), `pianoAsleep` (Piano tab, System fact, `power.asleep`). **`RailKeeper`**:
+`graceMs` (`GRACE`, 2 min outside the hours after a passed check, not for wants put within them, nor after Turn the piano
+off); `look()` every second on a 1 s grid with `RailPlug.reading()` (an advert's watts and when it came; only fresh ones
+count): `!i2cfails` every 5 s playing / 30 s idle (`BoardLost`), `plugCheck` (GATT status every 5 s playing and on an
+"off" advert, `rewake`, `PLUG_MISSES` 3), `BoardWatch.playing` (`UNEXPLAINED_WATTS` 100 for 5 s, `LAG_MS` 3 s,
+`PEDAL_WATTS` 30), `BoardWatch.idleReading` (`BOARD_IDLE_WATTS` 40 twice 0.5 s apart; `COIL_IDLE_WATTS` 10 for 30 s; the
+median of 20), the floor watch log-only, `afterPiece` (`AFTER_FRESH_MS` 1.5 s, 3 adverts ~1 s apart, 40 W on all three;
+`!active`/`!i2cfails` at once), `afterPieceUp` when the rail stays up, `cutAtOnce` (CUT, stop, `checkDue`), `readingLost`;
+the usual idle kept once per rail-up from an idle reading `IDLE_LEARN_AFTER_MS` after the link, `USUAL_ABOVE_WATTS` 40.
+Messages `BoardOn`/`CoilOn`/`BoardLost`/`AfterPiece`/`KeysOn` with numbers (`StuckKey` gone). `PlugClient`: no `hold`,
+`IDLE_MS` 1 s. `GattPianoLink(resting)`: no reconnect while the rail is Off with the plug; no auto-connect at start then.
+`FirmwareUpdater(wake)`: `wantFor(UPDATE_WAKE, 5 min)` and the rail up. `KeysViewModel.waking`: presses dropped.
+`SafetyRunner(every, repowerRestarts)`: `PianoSettings.safetyCheckEvery` (key `safetyCheckEvery6`, absent = off),
+`CheckState.plug` → `Why.BY_REPOWER`. `PiecePower` (peak per piece) → `PowerLine` and `power {now, peak}` in the state.
+The SwitchBot advert's scale matches pySwitchBot (`((data[10] << 8) + data[11]) & 0x7FFF) / 10`). **Tests:**
+`RailKeeperTest` (On hours and 22:00, the grace, the idle board and coil, the board while playing, `!i2cfails`, the 5 s
+check; the floor watch log-only, the after-piece and usual-idle rewritten), `PowerWatchTest` (dense 60–84 keys with the
+pedal, a sudden passage 2 s late, a 144 W board; after the piece), `OnHoursTest` 3, `SafetyRunnerTest` (every 6 off),
+`SettingsRepositoryTest` (the migration), `AdvertWatchTest` updated.

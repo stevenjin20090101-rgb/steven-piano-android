@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.power
 
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** One `apower` reading as the floor watch weighs it (v1.30 — M67; [PowerWatch.sample] makes it). */
 data class PowerSample(
@@ -43,6 +44,15 @@ sealed interface PowerVerdict {
      * channel may have been on since before the rail came up.
      */
     data class AboveUsual(val watts: Double, val usual: Double) : PowerVerdict
+
+    /**
+     * v1.39 — M76 ([BoardWatch]): a whole board's worth on that nothing explains: [above] W more than the [idle] (idle) or
+     * than the notes explain (playing, [idle] null); [why], for the log.
+     */
+    data class BoardOn(val above: Double, val idle: Double?, val why: String) : PowerVerdict
+
+    /** v1.39 — M76 ([BoardWatch]): with nothing playing, [above] W more than the [idle] for [ms]: a key on. */
+    data class CoilOn(val above: Double, val idle: Double, val ms: Long, val why: String) : PowerVerdict
 }
 
 /**
@@ -60,12 +70,15 @@ sealed interface PowerVerdict {
  *   fewest, the run starts again; between, the music's timing leaves it undecided and it waits. [RUN_READINGS] readings
  *   counted in a row, spanning [RUN_MS], are a coil on that the music isn't holding: long legato and big chords never do it,
  *   their keys being subtracted whichever second the plug measured. A reading with the pedal down is skipped and the run
- *   starts again; so in PWM drive (Full power off), whose coils draw their notes' duty, unknown here.
- * - **After the piece** ([afterPiece]): both readings more than [threshold] above idle, `!active` above 0, or more
- *   `!i2cfails` than at the rail-up ([failsAtRailUp]).
+ *   starts again; so in PWM drive (Full power off), whose coils draw their notes' duty, unknown here. **Since v1.39 (M76)
+ *   its verdict is logged only, never a CUT**: it tripped falsely mid-piece on the real piano (the adverts' timing and
+ *   scale unproven); while playing only [BoardWatch]'s 100 W rule and `!i2cfails` cut.
+ * - **After the piece** ([afterPiece]; v1.39 — M76): `!active` above 0, or more `!i2cfails` than at the rail-up
+ *   ([failsAtRailUp]), at once; on the draw only three fresh adverts all at least 40 W above idle.
  * - **The usual idle** (v1.31 — M68; [againstUsual]): a coil already on at rail-up (a shorted MOSFET) would be learned as
- *   idle above, and one channel stays under [CAP_WATTS]. So the plug's last [USUAL_KEPT] rail-up readings that didn't trip
- *   are kept with its pairing; with [USUAL_LEAST] of them, a rail-up's reading more than [threshold] above their median trips.
+ *   idle above, and one channel stays under [CAP_WATTS]. So the plug's last [USUAL_KEPT] idle readings that didn't trip
+ *   are kept with its pairing (since v1.39, one per rail-up, at least 5 s after the piano's link came up); with
+ *   [USUAL_LEAST] of them, a rail-up's reading [USUAL_ABOVE_WATTS] or more above their median trips.
  */
 class PowerWatch(railUpWatts: Double?) {
     /** The supply's draw with no key held and the pedal up, W; null before a reading (a supply drawing none isn't powered). */
@@ -113,21 +126,19 @@ class PowerWatch(railUpWatts: Double?) {
     }
 
     /**
-     * The check after the piece: [first] and [second] (`apower` a second apart after the stop sequence, null unread), the
-     * piano's `!active` and `!i2cfails` (null unread). A key stayed on: both readings more than [threshold] above idle,
-     * `!active` above 0, or more I²C failures than at the rail-up (fewer: the controller restarted).
+     * The check after the piece (v1.39 — M76, after a false trip on the real piano): the piano's `!active` above 0, or more
+     * `!i2cfails` than at the rail-up (fewer: the controller restarted), at once: the direct signals. On the draw only when
+     * there are [RailKeeper.AFTER_READINGS] fresh [readings] (adverts that came after the piece's last notes), all at
+     * least [BoardWatch.BOARD_IDLE_WATTS] above [idle] (the board-trip rule; a coil's 6 W proved too tight for the plug's
+     * adverts). The trip's words with their numbers, or null when it passed.
      */
-    fun afterPiece(first: Double?, second: Double?, active: Int?, fails: Long?, fullPower: Boolean): PowerVerdict {
-        val t = threshold(fullPower)
-        val base = idle
-        val why = ArrayList<String>(3)
-        if (base != null && first != null && second != null && first > base + t && second > base + t) {
-            why += "${watts(first)} W and ${watts(second)} W, more than ${watts(t)} W above idle ${watts(base)} W"
-        }
-        if (active != null && active > 0) why += "!active=$active"
+    fun afterPiece(readings: List<Double>, active: Int?, fails: Long?, idle: Double?): RailMessage? {
+        if (active != null && active > 0) return RailMessage.KeysOn(active)
         val before = failsAtRailUp
-        if (fails != null && before != null && fails > before) why += "!i2cfails $before → $fails"
-        return if (why.isEmpty()) PowerVerdict.Fine else PowerVerdict.Stuck(why.joinToString("; "))
+        if (fails != null && before != null && fails > before) return RailMessage.BoardLost(before, fails, afterPiece = true)
+        val base = idle ?: return null
+        if (readings.size < RailKeeper.AFTER_READINGS || readings.any { it - base < BoardWatch.BOARD_IDLE_WATTS }) return null
+        return RailMessage.AfterPiece((readings.min() - base).roundToInt(), base.roundToInt())
     }
 
     private fun restart(): PowerVerdict {
@@ -203,10 +214,16 @@ class PowerWatch(railUpWatts: Double?) {
          * The rail-up's reading [watts], nothing sent yet, against the plug's [usual] idle (v1.31 — M68): more than T above
          * it, [PowerVerdict.AboveUsual]; unread, or too few [readings] kept, [PowerVerdict.Fine].
          */
-        fun againstUsual(watts: Double?, readings: List<Double>, fullPower: Boolean): PowerVerdict {
+        fun againstUsual(watts: Double?, readings: List<Double>, @Suppress("UNUSED_PARAMETER") fullPower: Boolean): PowerVerdict {
             val usual = usual(readings) ?: return PowerVerdict.Fine
-            return if (watts != null && watts > usual + threshold(fullPower)) PowerVerdict.AboveUsual(watts, usual) else PowerVerdict.Fine
+            return if (watts != null && watts >= usual + USUAL_ABOVE_WATTS) PowerVerdict.AboveUsual(watts, usual) else PowerVerdict.Fine
         }
+
+        /**
+         * v1.39 — M76: the rail-up trips on the usual idle only this far above it (was T, 6 W): the reading at rail-up now
+         * has the piano's controller booting in it, and the plug's adverts are the bench's to prove.
+         */
+        const val USUAL_ABOVE_WATTS = 40.0
 
         /** The floor watch's sample of [watts], asked at [asked] and answered at [answered] (ms), with the router's keys and pedal. */
         fun sample(
@@ -216,17 +233,19 @@ class PowerWatch(railUpWatts: Double?) {
             held: (from: Long, to: Long) -> Double,
             pedalDown: (from: Long, to: Long) -> Boolean,
             fullPower: Boolean,
+            /** v1.39 — M76: how far back the second the reading averaged may have ended ([BoardWatch.LAG_MS] for the board rule). */
+            lagMs: Long = LAG_MS,
         ): PowerSample {
             var most = 0.0
             var least = Double.MAX_VALUE
             var back = 0L
-            while (back <= LAG_MS) {
+            while (back <= lagMs) {
                 val keys = held(asked - back - HELD_MS, asked - back)
                 most = maxOf(most, keys)
                 least = minOf(least, keys)
                 back += LAG_STEP_MS
             }
-            return PowerSample(asked, watts, most, least, pedalDown(asked - PEDAL_MS, answered), fullPower)
+            return PowerSample(asked, watts, most, least, pedalDown(asked - maxOf(PEDAL_MS, lagMs + HELD_MS), answered), fullPower)
         }
 
         /** "9.1", or "—" for none: a draw in the log. */

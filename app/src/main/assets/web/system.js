@@ -407,7 +407,14 @@ export function create(host, body, tools) {
   const powerFact = makeFact(h, fill, 'Power plug');
   const plugWelded = h('p', { class: 'plug-note', hidden: true, text: PLUG_WELDED });
   const plugMessage = h('p', { class: 'plug-note', hidden: true });
-  const plugFacts = h('div', { class: 'facts extra', hidden: true }, powerFact.node, plugWelded, plugMessage);
+  // v1.39 — M76: the piano resting with its plug ("Piano off until 7:00 · press Play here to wake it"), and Turn the piano
+  // on / off (on is refused outside the On hours: only a person at the tablet wakes it then).
+  const plugAsleep = h('p', { class: 'plug-asleep', hidden: true });
+  const pianoOnButton = h('button', { class: 'outlined', type: 'button' }, h('span', { text: 'Turn the piano on' }));
+  const pianoOnLine = h('span', { class: 'listen-line' });
+  const pianoOnRow = h('div', { class: 'listen-row plug-row', hidden: true }, pianoOnButton, pianoOnLine);
+  pianoOnButton.addEventListener('click', () => setPianoOn(pianoOnButton));
+  const plugFacts = h('div', { class: 'facts extra', hidden: true }, powerFact.node, plugWelded, plugMessage, plugAsleep, pianoOnRow);
   const pianoCard = h('section', { class: 'card', 'aria-label': 'Piano' },
     h('div', { class: 'card-head' }, glyph('g-keys'), h('h2', { text: 'Piano' }), pianoMeta),
     boards.node,
@@ -783,6 +790,26 @@ export function create(host, body, tools) {
     const said = power.attention === true && typeof power.message === 'string' ? power.message : '';
     setText(plugMessage, said);
     plugMessage.hidden = !said;
+    // v1.39 — M76 (absent on older tablets: nothing new shows).
+    const asleep = typeof power.asleep === 'string' ? power.asleep : '';
+    setText(plugAsleep, asleep);
+    plugAsleep.hidden = !asleep;
+    const manualOn = Number(power.manualEndsAt) > 0;
+    pianoOnRow.hidden = power.on !== true || !('manualEndsAt' in power);
+    setText(pianoOnButton.firstChild, manualOn ? 'Turn the piano off' : 'Turn the piano on');
+    const left = manualOn ? Math.max(1, Math.ceil((Number(power.manualEndsAt) - (Number(sys.at) || Date.now())) / 60000)) : 0;
+    setText(pianoOnLine, manualOn ? `On · turns off in ${left} min` : 'On for 30 minutes after the last note');
+  }
+
+  /** v1.39 — M76: Turn the piano on (or off), as Piano › Power plug on the tablet; the tablet's words when it refuses. */
+  function setPianoOn(button) {
+    const power = shared.sys && shared.sys.power;
+    const on = !(power && Number(power.manualEndsAt) > 0);
+    return busy(button, async () => {
+      await host.post(host.ROOT + '/api/power', { on });
+      host.toast(on ? 'Turning the piano on…' : 'Turning the piano off.');
+      soon();
+    });
   }
 
   /** Running now: every row the tablet lists, in its order: a dot, the title, the detail (and its bar), the state's word. */

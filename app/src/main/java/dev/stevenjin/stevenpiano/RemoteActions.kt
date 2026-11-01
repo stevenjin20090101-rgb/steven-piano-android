@@ -30,6 +30,7 @@ import dev.stevenjin.stevenpiano.diag.SystemProbe
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.player.Player
+import dev.stevenjin.stevenpiano.power.PieceWatts
 import dev.stevenjin.stevenpiano.power.RailFact
 import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.quiet.QuietCopy
@@ -117,7 +118,15 @@ class RemoteActions internal constructor(private val graph: AppGraph, private va
             combine(graph.plugSettings, graph.rail.phase, graph.rail.message) { s, phase, message -> Triple(s, phase, message) },
             combine(graph.plugAdverts.seen, graph.rail.boards) { seen, boards -> seen to boards },
             combine(graph.rail.welded, graph.rail.guestUntil) { welded, guest -> welded to guest },
-        ) { (s, phase, message), (seen, boards), (welded, guest) ->
+            // v1.39 — M76: the words while the piano rests, Turn the piano on's end, and Now playing's watts and peak.
+            combine(graph.pianoAsleep, graph.rail.manualUntil, graph.piecePower.state, graph.player.state) { asleep, manual, power, player ->
+                listOf(asleep, manual, power, player.status == PlaybackStatus.Playing)
+            },
+        ) { (s, phase, message), (seen, boards), (welded, guest), extra ->
+            val asleep = extra[0] as String?
+            val manual = extra[1] as Long?
+            val power = extra[2] as PieceWatts
+            val playing = extra[3] as Boolean
             val wall = System.currentTimeMillis() - SystemClock.elapsedRealtime()
             RailFact(
                 paired = s?.pairing != null,
@@ -134,6 +143,11 @@ class RemoteActions internal constructor(private val graph: AppGraph, private va
                 attention = message?.attention == true,
                 welded = welded,
                 guestEndsAt = guest?.let { it + wall },
+                asleep = asleep,
+                manualEndsAt = manual?.let { it + wall },
+                // Whole watts for the panel's Now playing, only while a piece plays: the state isn't sent at every advert.
+                pieceNow = power.fresh(SystemClock.elapsedRealtime())?.takeIf { playing }?.let { Math.round(it).toDouble() },
+                piecePeak = power.peak?.let { Math.round(it).toDouble() },
             )
         }.stateIn(graph.appScope, SharingStarted.Eagerly, RailFact())
     }

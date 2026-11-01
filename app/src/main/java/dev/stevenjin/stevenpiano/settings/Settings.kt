@@ -223,6 +223,13 @@ data class PianoSettings(
      * still releases the keys and reads the coils and the boards. Keys not heard never lock Play (v1.33 — M71).
      */
     val safetyCheckListens: Boolean = true,
+    /**
+     * v1.39 — M76: Safety check every 6 pieces (Piano › System), off by default (Steven: "really annoying"). Off, the
+     * tablet still checks the piano quietly after every piece and watches its power; a trip still asks for a check
+     * before the next Play, and Run the safety check still runs one by hand. The migration: a key no install had before
+     * 1.39, so every install reads it off until switched on.
+     */
+    val safetyCheckEvery: Boolean = false,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -497,6 +504,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The safety check's listening on or off (v1.26 — M61); turning it on asks Android for the microphone first (the System page). */
     suspend fun setSafetyCheckListens(on: Boolean) = edit { it[SAFETY_CHECK_LISTENS] = on }
 
+    /** v1.39 — M76: Safety check every 6 pieces. */
+    suspend fun setSafetyCheckEvery(on: Boolean) = edit { it[SAFETY_CHECK_EVERY] = on }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -592,6 +602,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             midiOutName = this[MIDI_OUT_ID]?.let { this[MIDI_OUT_NAME] },
             listenFromPanel = this[LISTEN_FROM_PANEL] ?: defaults.listenFromPanel,
             safetyCheckListens = this[SAFETY_CHECK_LISTENS] ?: defaults.safetyCheckListens,
+            safetyCheckEvery = this[SAFETY_CHECK_EVERY] ?: defaults.safetyCheckEvery,
         )
     }
 
@@ -670,6 +681,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val MIDI_OUT_NAME = stringPreferencesKey("midiOutName")
         val LISTEN_FROM_PANEL = booleanPreferencesKey("listenFromPanel")
         val SAFETY_CHECK_LISTENS = booleanPreferencesKey("safetyCheckListens")
+
+        /** v1.39 — M76: the safety check every 6 pieces; absent (every install before 1.39), off. */
+        val SAFETY_CHECK_EVERY = booleanPreferencesKey("safetyCheckEvery6")
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256

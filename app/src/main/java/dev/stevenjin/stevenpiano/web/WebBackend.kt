@@ -233,6 +233,15 @@ interface WebBackend {
      */
     suspend fun safetyRefusal(): String?
 
+    /**
+     * v1.39 — M76: why a start from afar is refused now (409 `off-hours`): outside the On hours with the piano resting on
+     * its plug ("The piano is off until 7:00"; only a person at the tablet wakes it then); null when it may go.
+     */
+    suspend fun offHoursRefusal(): String? = null
+
+    /** v1.39 — M76: the System page's Turn the piano on ([on]) or off; the refusal's words when refused (on, outside the On hours). */
+    suspend fun setPianoOn(on: Boolean): String? = null
+
     /** Piano › Quiet times as the panel shows it: the sections, and the quiet now. */
     suspend fun quiet(): WebQuiet
 
@@ -610,9 +619,13 @@ data class WebPower(
     val waking: Boolean = false,
     val message: String? = null,
     val attention: Boolean = false,
+    /** v1.39 — M76: Now playing's watts now (whole, while a piece plays) and this piece's peak; null for none. */
+    val now: Double? = null,
+    val peak: Double? = null,
 ) {
     companion object {
-        fun of(fact: RailFact): WebPower = WebPower(fact.paired, fact.on, fact.rail, fact.waking, fact.message, fact.attention)
+        fun of(fact: RailFact): WebPower =
+            WebPower(fact.paired, fact.on, fact.rail, fact.waking, fact.message, fact.attention, fact.pieceNow, fact.piecePeak)
     }
 }
 

@@ -179,7 +179,7 @@ class SafetyRunnerTest {
         fun sweeps(): Int = calls.count { it == "sweep" }
     }
 
-    private class Rig(scope: TestScope, store: MemoryStore = MemoryStore(), listens: Boolean = true) {
+    private class Rig(scope: TestScope, store: MemoryStore = MemoryStore(), listens: Boolean = true, every: Boolean = true) {
         val host = FakeHost(scope.backgroundScope)
         val store = store
         var listens = listens
@@ -216,6 +216,7 @@ class SafetyRunnerTest {
             },
             log = { logs += it },
             heardAll = { heardAll++ },
+            every = { every },
         )
 
         fun play(count: Int = 1, id: Long = 1L) = repeat(count) { host.pieces.tryEmit(Played(id, ended = true)) }
@@ -230,8 +231,8 @@ class SafetyRunnerTest {
         runCurrent()
     }
 
-    private fun TestScope.started(store: MemoryStore = MemoryStore(), listens: Boolean = true): Rig =
-        Rig(this, store, listens).also {
+    private fun TestScope.started(store: MemoryStore = MemoryStore(), listens: Boolean = true, every: Boolean = true): Rig =
+        Rig(this, store, listens, every).also {
             it.runner.start()
             runCurrent()
         }
@@ -267,6 +268,27 @@ class SafetyRunnerTest {
             rig.host.calls,
         )
         assertEquals(0, rig.store.record.count)
+    }
+
+    @Test
+    fun `the check every 6 pieces off - the 6th piece begins nothing, and a trip still requires a check (v1_39 M76)`() = runTest {
+        val rig = started(MemoryStore(SafetyRecord(count = 5)), every = false)
+        rig.play(7)
+        runCurrent()
+        assertFalse("no check after the 6th", rig.runner.state.value.running)
+        assertFalse(rig.runner.state.value.pending)
+        assertTrue("Play goes", rig.runner.open)
+        assertEquals("nothing counted", 5, rig.runner.state.value.count)
+        rig.runner.require()   // the power watch cut the 24 V
+        runCurrent()
+        assertTrue("a trip still asks for a check", rig.runner.state.value.pending)
+        var played = 0
+        assertFalse("the next Play waits for it", rig.runner.admit(3L) { played++ })
+        runCurrent()
+        assertTrue(rig.runner.state.value.running)
+        settle()
+        assertEquals(1, played)
+        assertTrue(rig.runner.open)
     }
 
     @Test

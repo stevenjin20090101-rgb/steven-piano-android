@@ -314,7 +314,7 @@ private fun BlockRow(block: QuietBlock, onStart: () -> Unit, onEnd: () -> Unit, 
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+internal fun TimeDialog(title: String, minute: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     val state = rememberTimePickerState(
         initialHour = minute / QuietTimes.MINUTES_PER_HOUR,
         initialMinute = minute % QuietTimes.MINUTES_PER_HOUR,

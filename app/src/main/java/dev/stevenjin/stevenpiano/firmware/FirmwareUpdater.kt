@@ -99,6 +99,11 @@ class FirmwareUpdater(
     private val log: (String) -> Unit = {},
     /** Where the image is hashed and its signature checked: off the main thread. */
     private val compute: CoroutineDispatcher = Dispatchers.Default,
+    /**
+     * v1.39 — M76: the piano not connected because it is off with its power plug: want the rail and wait for it to wake
+     * (true once connected). The default, and without the plug: false at once, as before ("Connect to the piano first").
+     */
+    private val wake: suspend () -> Boolean = { false },
 ) {
     private val _state = MutableStateFlow<FirmwareState>(FirmwareState.Idle)
     val state: StateFlow<FirmwareState> = _state.asStateFlow()
@@ -182,7 +187,11 @@ class FirmwareUpdater(
     suspend fun check(manual: Boolean) = checks.withLock {
         val before = _state.value
         if (before.busy) return@withLock
-        val piano = piano.value
+        var piano = piano.value
+        if (manual && piano !is FirmwarePiano.Connected && wake()) {
+            // v1.39 — M76: woken by its plug; its version arrives with the connection.
+            piano = withTimeoutOrNull(WOKEN_MS) { this@FirmwareUpdater.piano.first { it is FirmwarePiano.Connected } } ?: this@FirmwareUpdater.piano.value
+        }
         if (piano !is FirmwarePiano.Connected || !piano.updatable) {
             val why = if (piano is FirmwarePiano.Connected) FirmwareFailures.NOT_UPDATABLE else FirmwareFailures.NOT_CONNECTED
             if (manual) settle(FirmwareState.Failed(why, retryable = false, manifest = before.manifest, check = true))
@@ -256,6 +265,7 @@ class FirmwareUpdater(
     private suspend fun transfer(manifest: FirmwareManifest) {
         var locked = false
         try {
+            if (link.state.value !is LinkState.Connected) wake()   // v1.39 — M76: the piano off with its plug wakes first
             precondition()?.let { why -> return notSent(manifest, why) }
             val image = verified?.takeIf { it.first == manifest }?.second ?: (download(manifest) ?: return)
             _state.value = FirmwareState.Verifying(manifest)
@@ -657,6 +667,9 @@ class FirmwareUpdater(
     companion object {
         /** What Now playing's banner says while the player is locked. */
         const val PLAYER_LOCKED = "Updating the piano"
+
+        /** v1.39 — M76: a piano woken by its plug reports its version this long after connecting, at most. */
+        const val WOKEN_MS = 10_000L
 
         /** Between the stop sequence having been written and BEGIN: the piano asks for 500 ms of quiet (ERR 1); 100 ms spare for the air. */
         const val QUIET_MS = 600L

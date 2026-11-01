@@ -336,6 +336,7 @@ private fun ColumnScope.PieceView(
     val words: @Composable (TextStyle) -> Unit = { title -> PieceWords(piece, channel, starting, title, onAbout) }
     val controls: @Composable ColumnScope.(Boolean) -> Unit = { scrubber ->
         TransportControls(piece, state, frame, roll, player, playback, onSeek = seek, onMoved = { if (!playing) settle++ }, scrubber = scrubber, inset = 0.dp)
+        PowerLine()   // v1.39 — M76: the watts now and this piece's peak, with a plug paired
     }
     val views: @Composable (Modifier) -> Unit = { modifier ->
         NoteViews(plan, piece, state, marks, frame, roll, player, view.scrolls, view.divided, seek, modifier)

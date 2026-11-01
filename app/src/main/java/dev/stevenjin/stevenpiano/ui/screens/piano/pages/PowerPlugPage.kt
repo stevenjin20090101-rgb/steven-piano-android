@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.power.FoundPlug
+import dev.stevenjin.stevenpiano.power.OnHours
 import dev.stevenjin.stevenpiano.power.PairFlow
 import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
@@ -68,6 +69,7 @@ import dev.stevenjin.stevenpiano.ui.components.SectionRule
 import dev.stevenjin.stevenpiano.ui.components.SwitchRow
 import dev.stevenjin.stevenpiano.ui.screens.piano.Anchored
 import dev.stevenjin.stevenpiano.ui.screens.piano.PageRows
+import dev.stevenjin.stevenpiano.ui.screens.quiet.TimeDialog
 import dev.stevenjin.stevenpiano.ui.theme.LocalAttention
 import dev.stevenjin.stevenpiano.ui.theme.LocalTertiary
 import kotlinx.coroutines.delay
@@ -267,6 +269,7 @@ private fun PairedPlug(settings: PlugSettings, clicked: Boolean, onOpenPage: (Se
             note = if (settings.on) PowerCopy.SWITCH_ON_NOTE else PowerCopy.SWITCH_OFF_NOTE,
         )
     }
+    if (settings.on) OnHoursRows(settings.hours)   // v1.39 — M76
     NavRow(
         PowerCopy.USE_TITLE,
         PowerCopy.USE_OPEN,
@@ -313,6 +316,48 @@ private fun ManualSwitch() {
         ActionButton(if (left != null) PowerCopy.TURN_OFF else PowerCopy.TURN_ON, onClick = { graph.setPianoOn(left == null) })
     }
     HairlineDivider(startInset = 16.dp)
+}
+
+/**
+ * v1.39 — M76: **On hours** (7:00–22:00 every day by default): the switch, and From and To with the quiet times' time
+ * picker. Within them the piano stays on and connected; outside them only a person at the tablet wakes it.
+ */
+@Composable
+private fun OnHoursRows(hours: OnHours) {
+    val graph = LocalContext.current.graph
+    var picking by rememberSaveable { mutableStateOf<String?>(null) }
+    SwitchRow(
+        PowerCopy.ON_HOURS,
+        hours.on,
+        onChange = { graph.setOnHours(hours.copy(on = it)) },
+        note = if (hours.on) PowerCopy.hours(hours.start, hours.end) + ". " + PowerCopy.ON_HOURS_ON_NOTE else PowerCopy.ON_HOURS_OFF_NOTE,
+    )
+    if (hours.on) {
+        ActionRow {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(PowerCopy.ON_HOURS_FROM, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.width(8.dp))
+                ActionButton(OnHours.time(hours.start), onClick = { picking = PowerCopy.ON_HOURS_FROM })
+                Spacer(Modifier.width(12.dp))
+                Text(PowerCopy.ON_HOURS_TO.lowercase(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.width(8.dp))
+                ActionButton(OnHours.time(hours.end), onClick = { picking = PowerCopy.ON_HOURS_TO })
+            }
+        }
+    }
+    HairlineDivider(startInset = 16.dp)
+    picking?.let { which ->
+        val from = which == PowerCopy.ON_HOURS_FROM
+        TimeDialog(
+            title = "${PowerCopy.ON_HOURS} · $which",
+            minute = if (from) hours.start else hours.end,
+            onPick = { minute ->
+                picking = null
+                graph.setOnHours(if (from) hours.copy(start = minute) else hours.copy(end = minute))
+            },
+            onDismiss = { picking = null },
+        )
+    }
 }
 
 /** How often the manual switch's minutes left are looked at again. */

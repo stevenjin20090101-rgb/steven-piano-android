@@ -15,6 +15,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -47,6 +48,8 @@ data class PlugSettings(
     val idles: List<IdleReading> = emptyList(),
     val aboveUsual: Boolean = false,
     val shellyCleared: Boolean = false,
+    /** v1.39 — M76: the On hours (7:00–22:00 every day, on, until changed); kept through a new pairing or Forget. */
+    val hours: OnHours = OnHours(),
 ) {
     /** The plug switches the rail: paired, and its switch on. */
     val switches: Boolean get() = pairing != null && on
@@ -74,15 +77,17 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         .catch { e -> if (e is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw e }
         .map { prefs ->
             val address = prefs[ADDRESS]?.takeIf { it.isNotBlank() }
+            val hours = hoursOf(prefs)
             when {
-                address != null && prefs[KIND] != SWITCHBOT -> PlugSettings(shellyCleared = true)   // a Shelly's, not yet cleared
-                address == null -> PlugSettings(shellyCleared = prefs[SHELLY_CLEARED] == true)
+                address != null && prefs[KIND] != SWITCHBOT -> PlugSettings(shellyCleared = true, hours = hours)   // a Shelly's, not yet cleared
+                address == null -> PlugSettings(shellyCleared = prefs[SHELLY_CLEARED] == true, hours = hours)
                 else -> PlugSettings(
                     pairing = PlugPairing(address, prefs[MAC]?.takeIf { it.isNotBlank() }),
                     on = prefs[ON] ?: false,
                     guestUntil = prefs[GUEST_UNTIL],
                     idles = idlesOf(prefs[IDLES]),
                     aboveUsual = prefs[ABOVE_USUAL] ?: false,
+                    hours = hours,
                 )
             }
         }
@@ -107,7 +112,7 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
     /** Paired with [pairing]; its switch [on]. The usual idle and the power use start empty (M68, M72). */
     override suspend fun pair(pairing: PlugPairing, on: Boolean) {
         store.edit { prefs ->
-            prefs.clear()
+            clearKeepingHours(prefs)
             prefs[ADDRESS] = pairing.address
             prefs[KIND] = SWITCHBOT
             pairing.mac?.let { prefs[MAC] = it }
@@ -135,9 +140,31 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         store.edit { prefs -> if (wallMs == null) prefs.remove(GUEST_UNTIL) else prefs[GUEST_UNTIL] = wallMs }
     }
 
-    /** Forget the plug: everything goes, its usual idle and its power use too. */
+    /** Forget the plug: everything goes, its usual idle and its power use too (v1.39 — M76: the On hours stay). */
     suspend fun forget() {
-        store.edit { it.clear() }
+        store.edit { clearKeepingHours(it) }
+    }
+
+    /**
+     * v1.39 — M76: the On hours. A store from before 1.39 has none of their keys and reads as the default (7:00–22:00
+     * every day, on): the migration is the new keys with their defaults.
+     */
+    suspend fun setHours(hours: OnHours) {
+        store.edit { prefs ->
+            prefs[HOURS_ON] = hours.on
+            prefs[HOURS_START] = hours.start.coerceIn(0, OnHours.MINUTES_PER_DAY - 1)
+            prefs[HOURS_END] = hours.end.coerceIn(0, OnHours.MINUTES_PER_DAY - 1)
+        }
+    }
+
+    private fun clearKeepingHours(prefs: MutablePreferences) {
+        val on = prefs[HOURS_ON]
+        val start = prefs[HOURS_START]
+        val end = prefs[HOURS_END]
+        prefs.clear()
+        on?.let { prefs[HOURS_ON] = it }
+        start?.let { prefs[HOURS_START] = it }
+        end?.let { prefs[HOURS_END] = it }
     }
 
     // ---- The power watch's usual idle (v1.31 — M68): a write that fails only loses a reading, never the rail's safety ----
@@ -195,6 +222,17 @@ class PlugStore(private val store: DataStore<Preferences>) : PairingStore {
         /** The usual idle (v1.31 — M68): "1761300000000:9.8,…", oldest first, and a trip above it since. */
         val IDLES = stringPreferencesKey("idles")
         val ABOVE_USUAL = booleanPreferencesKey("aboveUsual")
+
+        /** v1.39 — M76: the On hours: on, and their start and end (minutes of the day); absent, the defaults. */
+        val HOURS_ON = booleanPreferencesKey("hoursOn")
+        val HOURS_START = intPreferencesKey("hoursStart")
+        val HOURS_END = intPreferencesKey("hoursEnd")
+
+        fun hoursOf(prefs: Preferences): OnHours {
+            val start = prefs[HOURS_START]?.takeIf { it in 0 until OnHours.MINUTES_PER_DAY } ?: OnHours.DEFAULT_START
+            val end = prefs[HOURS_END]?.takeIf { it in 0 until OnHours.MINUTES_PER_DAY } ?: OnHours.DEFAULT_END
+            return OnHours(prefs[HOURS_ON] ?: true, start, end)
+        }
 
         /** The kept readings, oldest first; what doesn't read is left out. */
         fun idlesOf(text: String?): List<IdleReading> = text.orEmpty().split(',').mapNotNull { entry ->

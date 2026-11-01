@@ -3960,3 +3960,26 @@ boot too, as kiosk's home screen) and comes back if Android ends it. The web pan
 **K-pop artists**: an artist whose pieces are all or mostly (half or more) in K-pop shows the plain art too, in the
 Artists grid, on the artist's page and wherever their portrait would show; one K-pop song among many keeps the photo.
 Brief `~/.claude/plans/m77-kiosk-reliable-brief.md`.
+
+# v1.39 — M76: On hours, the stuck board, the power on Now playing
+
+Steven, 2026-11-01: "off hours is 10:00–7:00 but can bypass if a person is where the tablet is"; a real failure is a whole
+board (a PCA9685 that loses I²C latches 16 coils on, 150–190 W); and a false "A key stayed on" mid-piece on 1.38 with the
+SwitchBot. **On hours** (Piano › Power plug, on by default, 7:00–22:00 every day, From and To with the quiet times' picker,
+kept with the plug and through a new pairing): within them a standing want keeps the piano on and connected; outside them
+it rests, "Piano off until 7:00 · press Play here to wake it" (the Piano tab, the System fact, the panel), and only the
+tablet wakes it (Play, Keys, Turn the piano on, Test every key, the safety check); the panel, the relay and its key test
+get 409 "The piano is off until 7:00" while it rests (awake, a person is there: the panel plays); a passed check after a
+piece keeps it 2 minutes for the next; a piece that began within the hours ends with the normal CUT. **The trips, every one
+naming its rule and number** ("24 V cut: …"): while playing only 100 W more than the notes explain for 5 s (the busiest
+second over the 3 s before the advert, + 30 W of pedal; total draw never trips) and `!i2cfails` rising (read every 5 s);
+idle, 40 W above the idle median twice, 10 W for 30 s, `!i2cfails` every 30 s; after the piece `!active` or `!i2cfails`
+at once, else three adverts that came 1.5 s after the stop all 40 W above idle; M68's usual idle learned 5 s after the
+link and tripping at 40 W. M67's 6 W floor watch only logs. CUT first, then the stop, the safety check due. The plug's
+status every 5 s during a piece (and any "off" advert): the notes held, re-ARM, the link, resume; three unanswered stop
+it. Adverts silent for 10 s: an amber "Power reading lost", no CUT. Plug connections are short (dropped a second after
+the last call) so the adverts flow. **Now playing**: "12.3 W now · peak 145.0 W this piece" under the transport (the panel
+too, whole watts). **1.38's leftovers**: no reconnect loop while the piano rests, the firmware updater wakes it, keys
+before the link are dropped with "Waking the piano…", the safety check's repower is its restart, the panel's Turn the
+piano on / off. **The safety check every 6 pieces** is off by default (Steven: "really annoying"); a trip still requires
+one, and it runs by hand. Brief `~/.claude/plans/m76-on-hours-brief.md`.

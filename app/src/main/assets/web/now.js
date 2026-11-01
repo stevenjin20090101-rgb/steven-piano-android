@@ -198,6 +198,18 @@ export function create(host) {
   function renderPower() {
     const power = state() && state().power;
     $('power-capsule').hidden = !(power && power.waking === true);
+    // v1.39 — M76: under the transport, "12 W now · peak 145 W this piece" ("— W" without a fresh reading); with a plug
+    // paired on a tablet that sends it (older tablets send no `now`: nothing shows).
+    const line = $('now-power');
+    const shown = !!(power && power.paired === true && 'now' in power);
+    line.hidden = !shown;
+    if (!shown) return;
+    const now = Number(power.now);
+    const peak = Number(power.peak);
+    const text = power.now === null || !Number.isFinite(now)
+      ? '— W'
+      : `${Math.round(now)} W now` + (power.peak !== null && Number.isFinite(peak) ? ` · peak ${Math.round(peak)} W this piece` : '');
+    if (line.textContent !== text) line.textContent = text;
   }
 
   $('quiet-override').addEventListener('click', async () => {

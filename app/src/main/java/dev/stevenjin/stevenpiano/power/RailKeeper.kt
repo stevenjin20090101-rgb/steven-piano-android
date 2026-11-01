@@ -39,6 +39,14 @@ interface RailPlug {
     suspend fun status(): PlugStatus?
 
     /**
+     * v1.39 — M76: the supply's draw alone with when the plug said it ([PlugReading.at], the keeper's clock), null unread:
+     * the SwitchBot's latest advert (under 3 s old), with no connection to the plug, so the power watches can read it every
+     * second, the plug's adverts keep flowing, and a reading the plug sent before a moment (a piece's last notes, an ARM)
+     * is never taken for one after it.
+     */
+    suspend fun reading(): PlugReading?
+
+    /**
      * The plug watch (v1.29 — M66): its settings read, and what differs from the tablet's put back. True when something was
      * put back that should be said, false when nothing differed (or only quietly), null when the plug couldn't be read. The
      * SwitchBot (v1.36 — M72) keeps none of the tablet's: always false.
@@ -52,6 +60,9 @@ interface RailPlug {
  * latest advert, null when unread).
  */
 data class PlugStatus(val output: Boolean, val timerS: Double? = null, val watts: Double? = null)
+
+/** v1.39 — M76: the supply's draw, W, as the plug's advert said it, and when that advert came ([at], the keeper's clock, ms). */
+data class PlugReading(val watts: Double, val at: Long)
 
 /** The piano's link as guest play needs it (DESIGN.md › v1.26 — M60): let go, connect again, end guest play on the piano. */
 interface GuestLink {
@@ -162,11 +173,6 @@ sealed interface RailMessage {
     /** The plug watch (v1.29 — M66): its settings had been changed, and were put back. */
     data object SettingsPutBack : RailMessage
 
-    /**
-     * The power watch (v1.30 — M67): a key stayed on, seen in the supply's draw while a piece played, or [afterPiece] in
-     * the check after it; the 24 V cut, and Play waits for a safety check.
-     */
-    data class StuckKey(val afterPiece: Boolean) : RailMessage
 
     /** The power watch (v1.30 — M67): the supply drew [watts] W at rail-up with nothing sent; the 24 V cut, the check due. */
     data class Overdraw(val watts: Int) : RailMessage
@@ -176,6 +182,27 @@ sealed interface RailMessage {
      * idle; the 24 V cut, the check due.
      */
     data class AboveUsual(val watts: Int) : RailMessage
+
+    // v1.39 — M76: the power trips, each with its reason and its numbers (Steven's next report says which rule fired).
+    // The floor watch's "a key stayed on" mid-piece (M67) no longer cuts: it is logged only.
+
+    /**
+     * [BoardWatch]: a board's worth on that nothing explains: [above] W more than the piano's [idle] W with nothing
+     * [playing], or more than the notes explain while playing ([idle] null then). CUT at once.
+     */
+    data class BoardOn(val above: Int, val idle: Int?, val playing: Boolean) : RailMessage
+
+    /** [BoardWatch]: with nothing playing, [above] W more than the piano's [idle] W for [seconds] s: a key on. CUT at once. */
+    data class CoilOn(val above: Int, val idle: Int, val seconds: Int) : RailMessage
+
+    /** The piano's `!i2cfails` went up from [before] to [after]: it lost contact with a board, mid-piece, idle or [afterPiece]. */
+    data class BoardLost(val before: Long, val after: Long, val afterPiece: Boolean = false) : RailMessage
+
+    /** The check after the piece: three fresh readings all at least [above] W more than the piano's [idle] W. */
+    data class AfterPiece(val above: Int, val idle: Int) : RailMessage
+
+    /** The check after the piece: the piano says [keys] coils are still on (`!active`). */
+    data class KeysOn(val keys: Int) : RailMessage
 
     /** Whether it needs attention (amber, until dismissed or the next rail-up) rather than passing by itself. */
     val attention: Boolean get() = this !is Waking && this !is Off
@@ -218,6 +245,12 @@ sealed interface RailMessage {
  *   check due before the next Play ([PowerHost.checkDue]). The rail-up's reading is also weighed against the plug's usual
  *   idle (v1.31 — M68; [PowerHost.usualIdle]): more than T above it twice, a second apart, CUT, "The 24 V draws N W more
  *   than usual with nothing playing — 24 V cut", the check due; a rail-up that didn't trip is kept, one that did never is.
+ * - **v1.39 — M76.** The On hours' standing want ([HOURS]) keeps the rail up all day; outside them a person at the tablet
+ *   wakes it, and a piece's check that passes keeps it [graceMs] for the next ([GRACE]). While up, beside the power
+ *   watch, the stuck-board watch ([BoardWatch]: a board's worth drawn that nothing explains, idle or playing) and the
+ *   piano's `!i2cfails` (every 5 s during a piece, every 30 s idle) CUT at once ([cutAtOnce]); the plug's status every 5 s
+ *   during a piece, and any "off" advert, re-ARM it with the notes held ([plugCheck], [rewake]); silent adverts say
+ *   [readingLost]. The plug's draw comes from its adverts ([RailPlug.watts]) with no connection.
  * - **Without the plug** ([available] false: none paired, or its switch off) nothing here calls the plug or the piano, and
  *   [notesHeld] stays false: the app behaves exactly as before.
  *
@@ -249,6 +282,11 @@ class RailKeeper(
      * an ARM): called once the plug confirms on, and again every [WAKE_ASK_EVERY_MS] until the link is up.
      */
     private val wakeLink: () -> Unit = {},
+    /**
+     * v1.39 — M76: the grace between pieces, ms: outside the On hours (a person at the tablet), the rail kept this long
+     * after a piece whose check passed, for the next; 0 within them, or with no On hours.
+     */
+    private val graceMs: () -> Long = { 0L },
 ) : RailPower {
     private val context = scope.coroutineContext.minusKey(Job)
 
@@ -368,6 +406,45 @@ class RailKeeper(
     private var looks = 0
     private var failsAsked = false
 
+    private val _readingLost = MutableStateFlow(false)
+
+    /**
+     * v1.39 — M76: the rail is up and the plug's adverts have said nothing for over [PlugAdverts.SILENT_MS]: the power
+     * watches can't read the draw (logged once; a small amber "Power reading lost"). Never a CUT by itself.
+     */
+    val readingLost: StateFlow<Boolean> = _readingLost.asStateFlow()
+
+    /** v1.39 — M76: this rail-up's stuck-board watch ([BoardWatch]), beside [powerWatch]. */
+    private var boardWatch: BoardWatch? = null
+
+    /** v1.39 — M76: `!i2cfails` as last read this rail-up (null: unread), and when it is read next ([now]'s clock). */
+    private var failsSeen: Long? = null
+    private var failsAt = Long.MAX_VALUE
+
+    /** v1.39 — M76: when the floor watch takes its next reading, and the last moment the draw read. */
+    private var floorAt = 0L
+    private var wattsAt = 0L
+
+    /** v1.39 — M76: when the piano's link last came up, and whether this rail-up gave the usual idle its reading. */
+    private var linkUpAt = 0L
+    private var idleKept = false
+
+    /** v1.39 — M76: whether a piece played at the last look (its end calls for the check after it). */
+    private var wasPlaying = false
+
+    /** v1.39 — M76: the plug's 5 s check while playing: when next, unanswered in a row, and one asked now (an "off" advert). */
+    private var plugCheckAt = Long.MAX_VALUE
+    private var plugMisses = 0
+    private var plugCheckNow = false
+
+    /**
+     * v1.39 — M76, the grace between pieces: given since the last want (so its own end CUTs), refused by Turn the piano
+     * off, and whether what wants the rail began within the On hours (a piece playing at 22:00 ends with the normal CUT).
+     */
+    private var graceGiven = false
+    private var noGrace = false
+    private var startedInHours = false
+
     /** Starts following the wants (once). */
     fun start() {
         if (loop != null) return
@@ -380,6 +457,7 @@ class RailKeeper(
         scope.launch {
             connected.collect {
                 if (it) restartUntil = 0L   // back from a restart: a later loss is a failure again
+                if (it) linkUpAt = now()
                 refreshHeld()
                 changed()
             }
@@ -421,7 +499,17 @@ class RailKeeper(
         } else {
             remove(MANUAL)
             _manualUntil.value = null
+            noGrace = true   // v1.39 — M76: turned off is off, with no grace between pieces
         }
+    }
+
+    /**
+     * v1.39 — M76: [reason] wants the rail for [ms] from now, then no longer by itself (the firmware updater waking the
+     * piano before its transfer, whose own want takes over from BEGIN).
+     */
+    fun wantFor(reason: String, ms: Long) {
+        put(reason, until = now() + ms)
+        playedNow()
     }
 
     /** Something played, or wanted the rail, or stopped wanting it (v1.38 — M75): a manual want's 30 minutes start again. */
@@ -486,6 +574,14 @@ class RailKeeper(
      */
     fun advert(on: Boolean) {
         if (!available.value) return
+        if (!on && _phase.value == RailPhase.Up && wantedNow() && _armedAt.value?.let { now() - it >= ADVERT_SETTLE_MS } != false) {
+            // v1.39 — M76: "off" while the rail should be up (the plug pressed, or its power gone): the plug's own status
+            // decides at once ([plugCheck]), as its 5 s check while playing does; a stale advert from before an ARM, no.
+            if (!plugCheckNow) {
+                plugCheckNow = true
+                changed()
+            }
+        }
         if (!on || holding()) {
             advertCuts = 0
             if (!on && cutsDontTake) {
@@ -744,7 +840,7 @@ class RailKeeper(
                 }
                 idle = again
             }
-            idle?.let(power::keepIdle)
+            // v1.39 — M76: not kept here: the reading at rail-up has the controller booting in it (see [look]).
         }
         idle?.let { idleWatts = it }
         if (power != null) startWatch(idle)
@@ -816,14 +912,21 @@ class RailKeeper(
     private suspend fun keep() {
         var next = (_armedAt.value ?: now()) + KEEP_EVERY_MS
         while (true) {
-            val stop = waitFor(minOf(next, lookAt)) { !wantedNow() }
+            waitFor(minOf(next, lookAt)) { !wantedNow() || plugCheckNow }
             if (!available.value) {
                 abandon()
                 return
             }
-            if (stop) {
+            if (!wantedNow()) {
                 stopRail()
                 return
+            }
+            if (plugCheckNow) {
+                // v1.39 — M76: an "off" advert while up: the plug's status decides.
+                plugCheckNow = false
+                if (_phase.value == RailPhase.Up && plugCheck()) return
+                if (_phase.value != RailPhase.Up && _phase.value != RailPhase.Kept) return
+                continue
             }
             if (now() < next) {
                 if (look()) return   // the power watch's turn between the keeper's own (v1.30 — M67)
@@ -908,19 +1011,32 @@ class RailKeeper(
         stopSequence()
         val stopped = now()
         val checking = powerWatch?.takeIf { power?.struckSince(watchSince) == true }
-        val back = if (checking == null) {
+        var passed = false
+        var back = if (checking == null) {
             waitFor(stopped + STOP_TO_CUT_MS) { wantedNow() }
         } else {
-            when (afterPiece(checking, stopped)) {
-                null -> true
-                is PowerVerdict.Stuck -> {
-                    fail(RailMessage.StuckKey(afterPiece = true))
+            val after = afterPiece(checking, stopped) { wantedNow() }
+            when {
+                after == null -> true
+                after.cut != null -> {
+                    fail(after.cut)
                     power?.checkDue()
                     return false
                 }
-                else -> wantedNow()
+                else -> wantedNow().also { passed = true }
             }
         }
+        val grace = graceMs()
+        if (!back && passed && grace > 0 && !graceGiven && !noGrace && !startedInHours) {
+            // v1.39 — M76: outside the On hours a person at the tablet woke the piano: kept for the next piece, the CUT
+            // after [grace] (its own end comes back here with nothing struck since: no check, no second grace).
+            log("Rail: the check after the piece passed outside the On hours; kept ${grace / MS_PER_S} s for the next piece")
+            put(GRACE, until = now() + grace)
+            graceGiven = true
+            watchSince = now()
+            back = true
+        }
+        noGrace = false
         if (back) {
             setPhase(
                 when {
@@ -941,14 +1057,23 @@ class RailKeeper(
     // ---- The power watch (v1.30 — M67) --------------------------------------------------------------------------------
 
     /** The supply's draw now, W (since v1.36 — M72 the SwitchBot's latest advert, under 3 s old); null unread. */
-    private suspend fun idleReading(): Double? = plug.status()?.watts?.takeIf { it.isFinite() && it >= 0.0 }
+    private suspend fun idleReading(): Double? = plug.reading()?.watts?.takeIf { it.isFinite() && it >= 0.0 }
 
     /** This rail-up's power watch, from its [idle] reading; its first look, at once, asks `!i2cfails`. */
     private fun startWatch(idle: Double?) {
         powerWatch = PowerWatch(idle)
+        boardWatch = BoardWatch(idle)
         watchSince = now()
         looks = 0
         failsAsked = false
+        failsSeen = null
+        failsAt = Long.MAX_VALUE
+        wasPlaying = false
+        plugMisses = 0
+        plugCheckAt = Long.MAX_VALUE
+        floorAt = now()
+        wattsAt = now()
+        idleKept = false
         lookAt = now()
         log("Power watch: idle ${PowerWatch.watts(idle)} W at rail-up")
     }
@@ -957,62 +1082,271 @@ class RailKeeper(
     private fun pieceNow(): Boolean = wants[PLAY]?.let { live(it, now()) } == true
 
     /**
-     * The power watch's look, about every 2 s while the rail is up: the rail-up's `!i2cfails` first (what the check after the
-     * piece compares); then, while a piece plays, one `apower` reading for the floor watch (none plays: its run starts
-     * again). True when it found a key on that the music isn't holding: the piece stopped, CUT, said, the check due.
+     * The power watch's look while the rail is up (v1.30 — M67; every second since v1.39 — M76): the rail-up's `!i2cfails`
+     * first (what the check after the piece compares). Then (v1.39 — M76) `!i2cfails` again every [FAILS_PLAYING_MS] during
+     * a piece and every [FAILS_IDLE_MS] idle (one small console line, which the link sends only between MIDI packets: the
+     * notes keep their pacing), any rise a board that lost contact; during a piece the plug's own status every
+     * [PLUG_CHECK_MS] ([plugCheck]); and the draw from the plug's adverts: during a piece for the stuck-board watch
+     * ([BoardWatch.playing]) and, at its own 1.5–2.5 s, the floor watch ([PowerWatch.reading]); idle (no note for
+     * [IDLE_AFTER_MS], no key held, the pedal up) for the idle watch ([BoardWatch.idleReading]). A piece that ended with
+     * the rail staying up (the On hours) gets the check after it here. True when the rail ended: a fault found (CUT, said,
+     * the check due), or the plug lost.
      */
     private suspend fun look(): Boolean {
         val watch = powerWatch
+        val board = boardWatch
         val host = power
-        if (watch == null || host == null) {
+        if (watch == null || board == null || host == null) {
             lookAt = Long.MAX_VALUE
             return false
         }
-        lookAt = now() + PowerWatch.lookIn(looks++)
+        val t = now()
+        // On a steady 1 s grid: a look the keeper's own CHECK and ARM delayed keeps its slot, so the watches' runs are
+        // timed by the second (the reading is the plug's latest advert either way).
+        val slot = if (lookAt <= t && t - lookAt < BoardWatch.READ_EVERY_MS) lookAt else t
+        lookAt = slot + BoardWatch.READ_EVERY_MS
         if (!failsAsked) {
             failsAsked = true
-            watch.failsAtRailUp = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
+            val fails = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
+            watch.failsAtRailUp = fails
+            failsSeen = fails
+            failsAt = now() + FAILS_IDLE_MS
             return false
         }
-        if (!pieceNow()) {
+        val playing = pieceNow()
+        if (playing != wasPlaying) {
+            wasPlaying = playing
+            board.pause()
+            if (playing) {
+                plugCheckAt = t + PLUG_CHECK_MS
+                failsAt = minOf(failsAt, t + FAILS_PLAYING_MS)
+            } else {
+                watch.pause()
+                plugCheckAt = Long.MAX_VALUE
+                if (host.struckSince(watchSince) && afterPieceUp(watch)) return true
+                if (powerWatch !== watch) return false
+            }
+        }
+        if (now() >= failsAt) {
+            failsAt = now() + if (playing) FAILS_PLAYING_MS else FAILS_IDLE_MS
+            val fails = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
+            if (powerWatch !== watch || !wantedNow()) return false
+            val before = failsSeen
+            if (fails != null && before != null && fails > before) {
+                log("Power watch: !i2cfails $before → $fails with the rail up" + if (pieceNow()) " mid-piece" else " and idle")
+                return cutAtOnce(RailMessage.BoardLost(before, fails))
+            }
+            if (fails != null) {
+                failsSeen = fails   // fewer: the controller started again, its count with it
+                watch.failsAtRailUp = fails
+            }
+        }
+        if (playing && now() >= plugCheckAt && plugCheck()) return true
+        if (powerWatch !== watch || !wantedNow()) return false
+        val reading = plug.reading()?.takeIf { it.watts.isFinite() }
+        if (powerWatch !== watch || !wantedNow()) return false
+        if (reading == null || reading.at <= wattsAt) {
+            // No advert since the last reading: nothing new to weigh (only fresh adverts count).
+            if (!_readingLost.value && slot - wattsAt > PlugAdverts.SILENT_MS) {
+                _readingLost.value = true
+                log("Power watch: no reading from the plug for ${(slot - wattsAt) / MS_PER_S} s with the rail up; the 24 V stays on, the piano's own checks go on")
+            }
+            return false
+        }
+        wattsAt = reading.at
+        _readingLost.value = false
+        val asked = reading.at   // when the plug said it: the keys and pedal are weighed against that moment
+        val watts = reading.watts
+        val fullPower = host.fullPower
+        if (pieceNow()) {
+            // The stuck-board rule: the music's draw over the 3 s before the advert (it can trail the switch by seconds),
+            // so a passage starting or ending never looks unexplained.
+            val wide = PowerWatch.sample(asked, now(), watts, host::held, host::pedalDown, fullPower, lagMs = BoardWatch.LAG_MS)
+            when (val verdict = board.playing(wide)) {
+                is PowerVerdict.BoardOn -> {
+                    log("Power watch: a board stayed on mid-piece — ${verdict.why}")
+                    return cutAtOnce(RailMessage.BoardOn(verdict.above.roundToInt(), null, playing = true))
+                }
+                else -> Unit
+            }
+            if (asked < floorAt) return false
+            floorAt = asked + PowerWatch.lookIn(looks++)
+            val sample = PowerWatch.sample(asked, now(), watts, host::held, host::pedalDown, fullPower)
+            val stuck = watch.reading(sample) as? PowerVerdict.Stuck ?: return false
+            // v1.39 — M76: logged only, never a CUT (a false trip on the real piano: the adverts' timing and scale are
+            // the bench's to prove). While playing only the board rule and `!i2cfails` cut.
+            log("Power watch (log only, no CUT): the floor watch would have said a key stayed on mid-piece — ${stuck.why}")
             watch.pause()
             return false
         }
-        val asked = now()
-        val watts = plug.status()?.watts?.takeIf { it.isFinite() } ?: return false
-        if (powerWatch !== watch || !pieceNow()) return false
-        val sample = PowerWatch.sample(asked, now(), watts, host::held, host::pedalDown, host.fullPower)
-        val stuck = watch.reading(sample) as? PowerVerdict.Stuck ?: return false
-        log("Power watch: a key stayed on mid-piece — ${stuck.why}; the piece stops, CUT")
-        fail(RailMessage.StuckKey(afterPiece = false))
-        host.checkDue()
+        val idle = _phase.value == RailPhase.Up && !host.struckSince(asked - IDLE_AFTER_MS) &&
+            host.held(asked - IDLE_AFTER_MS, asked) <= 0.0 && !host.pedalDown(asked - PowerWatch.PEDAL_MS, asked)
+        if (!idle) {
+            board.notIdle()
+            return false
+        }
+        return when (val verdict = board.idleReading(asked, watts, fullPower)) {
+            is PowerVerdict.BoardOn -> {
+                log("Power watch: a board stayed on — ${verdict.why}")
+                cutAtOnce(RailMessage.BoardOn(verdict.above.roundToInt(), verdict.idle?.roundToInt(), playing = false))
+            }
+            is PowerVerdict.CoilOn -> {
+                log("Power watch: a key stayed on — ${verdict.why}")
+                cutAtOnce(RailMessage.CoilOn(verdict.above.roundToInt(), verdict.idle.roundToInt(), (verdict.ms / MS_PER_S).toInt()))
+            }
+            else -> {
+                // v1.31 — M68's usual idle, learned (v1.39 — M76) only from an idle reading at least 5 s after the
+                // piano's link came up: the controller now boots on the plug too.
+                if (!idleKept && asked >= maxOf(linkUpAt, watchSince) + IDLE_LEARN_AFTER_MS && verdict == PowerVerdict.Fine && board.learned(watts)) {
+                    idleKept = true
+                    host.keepIdle(watts)
+                }
+                false
+            }
+        }
+    }
+
+    /**
+     * v1.39 — M76: the check after a piece while the rail stays up (the On hours, or another want): as at the stop
+     * ([afterPiece]), without its CUT; a new piece starting first ends it. True when it found a key on: the stop, CUT,
+     * said, the check due.
+     */
+    private suspend fun afterPieceUp(watch: PowerWatch): Boolean {
+        val after = afterPiece(watch, now()) { pieceNow() || !wantedNow() } ?: return false
+        watchSince = now()
+        val cut = after.cut ?: return false
+        fail(cut)
+        power?.checkDue()
         return true
     }
 
     /**
-     * The check after the piece (SMART_PLUG.md › rule 11 b), between the stop sequence at [stopped] and the CUT: an `apower`
-     * reading a second after it, the piano's `!active` and `!i2cfails`, and a second reading a second after the first. Its
-     * verdict, logged; null when something wanted the rail again before it was done (it stays up, as within the second).
+     * v1.39 — M76: a fault the draw or the piano's I²C count proves (a board on, a coil on at idle, a board lost): the 24 V
+     * CUT first, at once, then what plays stopped and the stop sequence; [why] said, the safety check due. Always true.
      */
-    private suspend fun afterPiece(watch: PowerWatch, stopped: Long): PowerVerdict? {
-        val host = power ?: return PowerVerdict.Fine
-        if (waitFor(stopped + STOP_TO_CUT_MS) { wantedNow() }) return null
-        val firstAt = now()
-        val first = plug.status()?.watts?.takeIf { it.isFinite() }
+    private suspend fun cutAtOnce(why: RailMessage): Boolean {
+        log("Rail: $why; CUT at once")
+        consumedThrough = nextSeq - 1
+        _manualUntil.value = null
+        cutRail()
+        stopPlaying()
+        stopSequence()
+        _baseline.value = null
+        needsBaseline = false
+        _message.value = why
+        setPhase(RailPhase.Off)
+        power?.checkDue()
+        return true
+    }
+
+    /**
+     * v1.39 — M76, the plug's check while the rail is up (every [PLUG_CHECK_MS] during a piece, and at once on an "off"
+     * advert): its status over a short GATT connection. On, nothing. Off: [rewake]. Unanswered [PLUG_MISSES] times in a
+     * row: the music stops, CUT (best effort), "Lost the power plug". True when the rail ended.
+     */
+    private suspend fun plugCheck(): Boolean {
+        plugCheckAt = now() + PLUG_CHECK_MS
+        val status = plug.status()
+        if (!wantedNow() || !available.value || _phase.value != RailPhase.Up) return false
+        if (status == null) {
+            if (++plugMisses < PLUG_MISSES) return false
+            log("Plug: $PLUG_MISSES checks in a row unanswered with the 24 V wanted")
+            fail(RailMessage.PlugLost)
+            return true
+        }
+        plugMisses = 0
+        if (status.output) return false
+        log("Plug: it says off while the 24 V should be up; notes held, ARM again")
+        return !rewake()
+    }
+
+    /**
+     * v1.39 — M76: the plug found off with the rail wanted up (and the piano's controller off with it). Notes held (a piece
+     * pauses where it is, [RailHold]), ARM until the plug confirms on, the piano's link awaited as at a wake (30 s; its
+     * old connection may not have noticed the drop yet, so a CHECK unanswered waits for the new one), the CHECK, and the
+     * baseline's boards; then up again and the piece resumes. True when back up; false when it ended (failed and said, or
+     * no longer wanted).
+     */
+    private suspend fun rewake(): Boolean {
+        val previous = _baseline.value
+        setPhase(RailPhase.Waking)
+        _message.value = RailMessage.Waking
+        when (armConfirmed()) {
+            null -> return quietly(true)
+            false -> return fail(RailMessage.PlugLost)
+            true -> Unit
+        }
+        val by = now() + WAKE_LINK_MS
+        val armed = _armedAt.value ?: now()
+        if (waitFor(armed + CONTROLLER_FED_MS) { !wantedNow() }) return quietly(true)
+        var read: Boards? = null
+        while (read == null) {
+            if (!connected.value) {
+                wakeLink()
+                waitFor(minOf(by, now() + WAKE_ASK_EVERY_MS)) { connected.value || !wantedNow() }
+            }
+            if (!wantedNow()) return quietly(true)
+            if (connected.value) read = check()
+            if (!wantedNow()) return quietly(true)
+            if (read != null) break
+            if (now() >= by) {
+                log("Rail: the piano didn't answer within ${WAKE_LINK_MS / MS_PER_S} s of the ARM; CUT")
+                return fail(RailMessage.PianoDidntStart)
+            }
+            if (connected.value && waitFor(now() + RAIL_UP_EVERY_MS) { !wantedNow() }) return quietly(true)
+        }
+        val boards = read ?: return false
+        _boards.value = boards
+        if (previous != null && !boards.holds(previous)) return fail(RailMessage.TrunkFault(boards.answered, boards.total, cut = true))
+        // The controller started again: its I²C count with it, and the draw's runs.
+        failsAsked = false
+        powerWatch?.pause()
+        boardWatch?.pause()
+        wasPlaying = false
+        log("Rail: up again after the plug was found off")
+        setPhase(RailPhase.Up)
+        return true
+    }
+
+    /** The check after the piece's verdict: [cut], the trip's words, or null when it passed. */
+    private class AfterCheck(val cut: RailMessage?)
+
+    /**
+     * The check after the piece (SMART_PLUG.md › rule 11 b; v1.39 — M76 after a false trip on the real piano), from the stop
+     * sequence (or the piece's end, the rail staying up) at [stopped]: [AFTER_FRESH_MS] later the piano's `!active` and
+     * `!i2cfails` (a coil on, or more failures than at the rail-up: a trip at once, the direct signals); then three of the
+     * plug's adverts about a second apart, each one that came at least [AFTER_FRESH_MS] after the stop (never one from the
+     * piece's last notes: the adverts can trail the switch by seconds), [AFTER_LONGEST_MS] at most. On the draw only when all
+     * three are at least [BoardWatch.BOARD_IDLE_WATTS] above the idle (the board-trip rule); fewer read, the piano's facts
+     * decide. Logged with the readings and the idle used. Null when [again] (wanted again, or the next piece) came first.
+     */
+    private suspend fun afterPiece(watch: PowerWatch, stopped: Long, again: () -> Boolean): AfterCheck? {
+        val host = power ?: return AfterCheck(null)
+        if (waitFor(stopped + AFTER_FRESH_MS, again)) return null
         val active = host.ask(ACTIVE)?.trim()?.toIntOrNull()
         val fails = host.ask(I2C_FAILS)?.trim()?.toLongOrNull()
-        if (waitFor(firstAt + AFTER_APART_MS) { wantedNow() }) return null
-        val second = if (first == null) null else plug.status()?.watts?.takeIf { it.isFinite() }
-        val fullPower = host.fullPower
-        val verdict = watch.afterPiece(first, second, active, fails, fullPower)
+        val idle = boardWatch?.idle ?: watch.idle
+        val readings = ArrayList<Double>(AFTER_READINGS)
+        var direct = watch.afterPiece(emptyList(), active, fails, idle)
+        if (direct == null) {
+            var since = stopped + AFTER_FRESH_MS
+            while (readings.size < AFTER_READINGS && now() < stopped + AFTER_LONGEST_MS) {
+                val reading = plug.reading()
+                if (reading != null && reading.at >= since) {
+                    readings += reading.watts
+                    since = reading.at + AFTER_APART_MS - AFTER_POLL_MS
+                }
+                if (readings.size < AFTER_READINGS && waitFor(now() + AFTER_POLL_MS, again)) return null
+            }
+            direct = watch.afterPiece(readings, active, fails, idle)
+        }
         log(
-            "Power watch after the piece: ${PowerWatch.watts(first)} W, ${PowerWatch.watts(second)} W (idle " +
-                "${PowerWatch.watts(watch.idle)} W, T ${PowerWatch.watts(PowerWatch.threshold(fullPower))} W), !active ${active ?: "—"}, " +
-                "!i2cfails ${fails ?: "—"} (${watch.failsAtRailUp ?: "—"} at rail-up); the floor watch: ${watch.readings} readings, " +
-                "the highest ${PowerWatch.watts(watch.highest)} W above the music; " +
-                if (verdict is PowerVerdict.Stuck) "a key stayed on — ${verdict.why}" else "fine",
+            "Power watch after the piece: ${readings.joinToString(", ") { "${PowerWatch.watts(it)} W" }.ifEmpty { "no fresh reading" }} " +
+                "(idle ${PowerWatch.watts(idle)} W; a trip at ${PowerWatch.watts(BoardWatch.BOARD_IDLE_WATTS)} W above it on all " +
+                "$AFTER_READINGS), !active ${active ?: "—"}, !i2cfails ${fails ?: "—"} (${watch.failsAtRailUp ?: "—"} at rail-up); " +
+                (direct?.let { "24 V cut: $it" } ?: "fine"),
         )
-        return verdict
+        return AfterCheck(direct)
     }
 
     /** Nothing wants the rail any more before it came up: off, and a CUT only when an ARM may have put it up. */
@@ -1188,6 +1522,13 @@ class RailKeeper(
     // ---- The wants ---------------------------------------------------------------------------------------------------
 
     private fun put(reason: String, until: Long = Long.MAX_VALUE, unchecked: Long = Long.MIN_VALUE) {
+        if (reason != GRACE) {
+            // v1.39 — M76: something new wants the rail: its end may earn a grace, unless it began within the On hours.
+            graceGiven = false
+            noGrace = false
+            startedInHours = reason == HOURS || wants[HOURS]?.let { live(it, now()) } == true
+            if (reason != HOURS) wants.remove(GRACE)   // the next piece came: its own end earns the next grace
+        }
         wants[reason] = Want(nextSeq++, until, unchecked)
         changed()
     }
@@ -1241,7 +1582,10 @@ class RailKeeper(
         if (phase == RailPhase.Off || phase == RailPhase.Kept) {
             // The power watch (v1.30 — M67) runs from a checked rail-up until the rail is off or kept unchecked.
             powerWatch = null
+            boardWatch = null
             lookAt = Long.MAX_VALUE
+            plugCheckNow = false
+            _readingLost.value = false
         }
         refreshHeld()
         if (phase != RailPhase.Waking && _message.value == RailMessage.Waking) _message.value = null
@@ -1306,6 +1650,19 @@ class RailKeeper(
         /** v1.38 — M75: Turn the piano on's want ends by itself after this long without notes. */
         const val MANUAL_IDLE_MS = 30 * 60_000L
 
+        /**
+         * v1.39 — M76: the piano's `!i2cfails` read this often during a piece and idle; the plug's own status this often
+         * during a piece, and this many unanswered in a row are the plug lost; idle is this long without a note.
+         */
+        const val FAILS_PLAYING_MS = 5_000L
+        const val FAILS_IDLE_MS = 30_000L
+        const val PLUG_CHECK_MS = 5_000L
+        const val PLUG_MISSES = 3
+        const val IDLE_AFTER_MS = 2_000L
+
+        /** v1.39 — M76: the grace between pieces outside the On hours. */
+        const val GRACE_MS = 2 * 60_000L
+
         /** How long [repower]'s own want keeps the rail up after it: the safety check's sweep is about 39 s. */
         const val REPOWER_HOLD_MS = 60_000L
         const val UPDATE_CAP_MS = 3 * 60_000L
@@ -1336,6 +1693,18 @@ class RailKeeper(
         const val CAP_AGAIN_MS = 1_000L
         const val AFTER_APART_MS = 1_000L
 
+        /**
+         * v1.39 — M76, the check after the piece: only adverts that came this long after the stop count; this many, about
+         * [AFTER_APART_MS] apart, looked for every [AFTER_POLL_MS], until this long after the stop at most.
+         */
+        const val AFTER_FRESH_MS = 1_500L
+        const val AFTER_READINGS = 3
+        const val AFTER_POLL_MS = 250L
+        const val AFTER_LONGEST_MS = 7_000L
+
+        /** v1.39 — M76: the usual idle learned only from a reading this long after the piano's link came up. */
+        const val IDLE_LEARN_AFTER_MS = 5_000L
+
         /** The piano's facts the power watch reads: its coils believed on, and its I²C failures since it started. */
         const val ACTIVE = "active"
         const val I2C_FAILS = "i2cfails"
@@ -1348,6 +1717,11 @@ class RailKeeper(
         const val GUEST = "guest"
         const val REPOWER = "repower"
         const val MANUAL = "manual"
+
+        /** v1.39 — M76: the On hours' standing want, the grace between pieces, the firmware updater waking the piano. */
+        const val HOURS = "hours"
+        const val GRACE = "grace"
+        const val UPDATE_WAKE = "updatewake"
 
         private const val MINUTE_MS = 60_000L
         private const val MS_PER_S = 1_000L

@@ -397,6 +397,9 @@ private fun PlugFact(stuck: Boolean) {
     val seen by graph.plugAdverts.seen.collectAsStateWithLifecycle()
     CardFact(SystemCopy.Fact(PowerCopy.TITLE, PowerCopy.fact(seen), attention = stuck))
     if (stuck) CardNote(PowerCopy.WELDED)
+    // v1.39 — M76: resting with its plug: "Piano off until 7:00 · press Play here to wake it".
+    val asleep by graph.pianoAsleep.collectAsStateWithLifecycle()
+    asleep?.let { CardNote(it) }
 }
 
 @Composable

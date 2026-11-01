@@ -113,10 +113,10 @@ class WebServerTest {
         backend.calls.clear()
         val writes = server.routes.filter { it.access == WebServer.Access.WRITE }
         assertEquals(
-            "the table's thirty-three routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
+            "the table's thirty-four routes that change something (Studio's three from 1.7, the System page's two and the cover picker's " +
                 "three from 1.18, the quiet times' two from 1.20, listening's and the key test's four from 1.23, Confirm it's you from 1.24; " +
-                "the schedules' three, gone since 1.20, left the table in 1.24; Shuffle's, gone in 1.26)",
-            33,
+                "the schedules' three, gone since 1.20, left the table in 1.24; Shuffle's, gone in 1.26; Turn the piano on from 1.39)",
+            34,
             writes.size,
         )
         assertTrue(writes.any { it.sample == "/api/confirm" } && server.routes.none { it.sample.startsWith("/api/schedules") })

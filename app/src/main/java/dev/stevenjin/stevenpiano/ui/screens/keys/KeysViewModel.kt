@@ -71,6 +71,12 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
         graph.railKeysShown(on)
     }
 
+    /**
+     * v1.39 — M76: the piano wakes with its power plug (the Keys tab's own want, or a key, brought the rail up): "Waking the
+     * piano…", and keys pressed meanwhile are dropped, never sent late.
+     */
+    val waking: StateFlow<Boolean> = graph.railHoldsNotes
+
     /** The sustain as the piano was last told; a stop elsewhere lifts it. */
     val sustain: StateFlow<Boolean> = player.liveSustain
 
@@ -97,7 +103,9 @@ class KeysViewModel(private val graph: AppGraph) : ViewModel(), KeyTouches.Sink 
     /** Sent while the piano is connected, or while the tablet plays the piano sound itself (v1.8 — M25); recorded while a take runs (v1.11 — M29). */
     override fun noteOn(key: Int, velocity: Int) {
         graph.railKeyPressed()   // v1.26 — M60: the idle cut starts over; a rail cut for idling wakes
-        if (link.value is LinkState.Connected || graph.tabletSound.active) player.liveNoteOn(key, velocity)
+        // v1.39 — M76: before the piano is up with its plug, the press is dropped (the rail's gate would hold it anyway).
+        val waking = graph.railHoldsNotes.value
+        if (!waking && (link.value is LinkState.Connected || graph.tabletSound.active)) player.liveNoteOn(key, velocity)
         graph.recorder.screenKey(down = true, key = key, velocity = velocity)
         showVelocity(velocity)
     }

@@ -24,8 +24,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * The plug's commands over its Bluetooth (v1.26 — M60; the SwitchBot Plug Mini's since v1.36 — M72, [SwitchBot]): one
  * command in flight, [CALL_TIMEOUT_MS] for each reply, to the paired plug ([address]) or the one being paired (`to`). The
- * connection is made on the first call, kept while [hold] says the rail is wanted, let go [IDLE_MS] after the last call
- * otherwise, and made again after a failure: a command with no reply drops it, so the next starts on a fresh one. Each new
+ * connection is made on the first call and let go [IDLE_MS] after the last (v1.39 — M76: always short, rail up or not,
+ * connect, command, drop within about 2 s, so the plug's adverts, the power watches' readings, keep flowing; before it the
+ * connection was held all the while the rail was wanted), and made again after a failure: a command with no reply drops it, so the next starts on a fresh one. Each new
  * connection to the paired plug is told to [connected] (the keeper CUTs then unless something wants the rail). Any thread.
  */
 class PlugClient(
@@ -42,18 +43,10 @@ class PlugClient(
     private var connectedTo: String? = null
     private var answered: Boolean? = null
 
-    @Volatile
-    private var held = false
     private var idle: Job? = null
 
     /** The transport, for the Pair screen's scan and the advert watch. */
     val bluetooth: PlugTransport get() = transport
-
-    /** Keeps the connection up between calls while [on] (the rail is wanted); else it goes [IDLE_MS] after the last call. */
-    fun hold(on: Boolean) {
-        held = on
-        if (on) idle?.cancel() else scheduleIdle()
-    }
 
     /** ARM ([on]) or CUT to the plug at [to] (the paired one by default): true when it answered with its switch so. */
     suspend fun switch(on: Boolean, to: String? = null): Boolean = ask(SwitchBot.switch(on), to) == on
@@ -103,17 +96,14 @@ class PlugClient(
         return switch
     }
 
-    /** The connection goes [IDLE_MS] after the last call, unless the rail is wanted meanwhile. */
+    /** The connection goes [IDLE_MS] after the last call (a call meanwhile starts the wait again). */
     private fun scheduleIdle() {
         idle?.cancel()
-        if (held) return
         idle = scope.launch {
             delay(IDLE_MS)
             calls.withLock {
-                if (!held) {
-                    transport.disconnect()
-                    connectedTo = null
-                }
+                transport.disconnect()
+                connectedTo = null
             }
         }
     }
@@ -131,7 +121,8 @@ class PlugClient(
     companion object {
         const val CALL_TIMEOUT_MS = 3_000L
         const val CONNECT_TIMEOUT_MS = 10_000L
-        const val IDLE_MS = 30_000L
+        /** v1.39 — M76: a second after the last call (30 s, and held while the rail was wanted, before). */
+        const val IDLE_MS = 1_000L
     }
 }
 
@@ -150,6 +141,9 @@ class SwitchBotRail(private val client: PlugClient, private val adverts: PlugAdv
         val on = client.state() ?: return null
         return PlugStatus(on, timerS = null, watts = adverts.watts())
     }
+
+    /** v1.39 — M76: the latest advert's draw and when it came, no connection made. */
+    override suspend fun reading(): PlugReading? = adverts.reading()
 
     /** The SwitchBot keeps no settings of the tablet's: nothing differs, nothing to say (the contract's false). */
     override suspend fun putBack(): Boolean? = false
