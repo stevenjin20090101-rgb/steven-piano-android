@@ -214,6 +214,8 @@ data class CheckState(
     val railDown: Boolean = false,
     /** v1.39 — M76: the power plug switches the piano's controller with the 24 V: its repower is the restart. */
     val plug: Boolean = false,
+    /** v1.40 — M78: no fault called for this check: quick and silent, no sweep at all (not a step to come, nor left out). */
+    val quick: Boolean = false,
 ) {
     /** The line of [step], if it has begun. */
     fun line(step: SafetyStep): StepLine? = lines.firstOrNull { it.step == step }
@@ -239,7 +241,7 @@ data class CheckState(
             if (!railDown) want(SafetyStep.RESTART)
             want(SafetyStep.REPOWER)
         }
-        if (sweeps == 0) want(SafetyStep.SWEEP)
+        if (sweeps == 0 && !quick) want(SafetyStep.SWEEP)
         return lines + waiting.map { StepLine(it, Mark.WAITING) }
     }
 
@@ -288,7 +290,7 @@ data class CheckState(
  *    report is left out; with no dump at all from its console on this connection the coils can't be read, and the check
  *    can't finish (v1.27 — M64, [Why.NO_DUMP]).
  * 3. **Sweep** (only when the check [CheckState.listens]: the microphone switch on and allowed): the 84 keys while the
- *    microphone listens.
+ *    microphone listens. v1.40 — M78: only in a check a fault CUT called for; any other is [CheckState.quick], with none.
  * 4. **Pass**: no coil on and every board answering. Keys the sweep didn't hear only warn ([SafetyOutcome.Passed.missed],
  *    v1.33 — M71): no restart, no repower and no second sweep for them, and they never lock Play. The microphone can't
  *    be trusted to hear every key of an old piano out of tune; the coils and the boards can.
@@ -297,9 +299,15 @@ data class CheckState(
  * [SafetyOutcome.Unfinished]: it runs again before the next Play.
  */
 object SafetyCheck {
-    /** Begins a check: the release first. [reported] false: the piano's console gave no dump on this connection. */
-    fun start(listens: Boolean, coils: Boolean, boards: Boolean, restart: Boolean, reported: Boolean = true, plug: Boolean = false): Step =
-        Step(CheckState(listens, coils, boards, restart, reported, lines = listOf(StepLine(SafetyStep.RELEASE, Mark.RUNNING)), plug = plug), Command.Release)
+    /**
+     * Begins a check: the release first. [reported] false: the piano's console gave no dump on this connection. [quick]
+     * (v1.40 — M78): no fault called for it, so no sweep.
+     */
+    fun start(listens: Boolean, coils: Boolean, boards: Boolean, restart: Boolean, reported: Boolean = true, plug: Boolean = false, quick: Boolean = false): Step =
+        Step(
+            CheckState(listens, coils, boards, restart, reported, lines = listOf(StepLine(SafetyStep.RELEASE, Mark.RUNNING)), plug = plug, quick = quick),
+            Command.Release,
+        )
 
     /** What [event] (the last command's result, or an interruption) leads to from [state]. */
     fun on(state: CheckState, event: Event): Step {
@@ -391,6 +399,7 @@ object SafetyCheck {
 
     private fun sweep(state: CheckState): Step {
         val step = SafetyStep.SWEEP
+        if (state.quick) return end(state, SafetyOutcome.Passed(keys = null, recovered = state.recovered))   // v1.40 — M78
         if (!state.listens) {
             return end(state.put(step, Mark.SKIPPED, why = Why.MICROPHONE_OFF), SafetyOutcome.Passed(keys = null, recovered = state.recovered))
         }

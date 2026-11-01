@@ -129,8 +129,8 @@ class PowerWatch(railUpWatts: Double?) {
      * The check after the piece (v1.39 — M76, after a false trip on the real piano): the piano's `!active` above 0, or more
      * `!i2cfails` than at the rail-up (fewer: the controller restarted), at once: the direct signals. On the draw only when
      * there are [RailKeeper.AFTER_READINGS] fresh [readings] (adverts that came after the piece's last notes), all at
-     * least [BoardWatch.BOARD_IDLE_WATTS] above [idle] (the board-trip rule; a coil's 6 W proved too tight for the plug's
-     * adverts). The trip's words with their numbers, or null when it passed.
+     * least [BoardWatch.BOARD_IDLE_WATTS] above [idle] (the board-trip rule, v1.40 — M78 the 80 W leeway; a coil's 6 W
+     * proved too tight for the plug's adverts). The trip's words with their numbers, or null when it passed.
      */
     fun afterPiece(readings: List<Double>, active: Int?, fails: Long?, idle: Double?): RailMessage? {
         if (active != null && active > 0) return RailMessage.KeysOn(active)
@@ -163,7 +163,8 @@ class PowerWatch(railUpWatts: Double?) {
         /**
          * The rail-up's sanity cap: more than this with nothing sent is a board on (a PCA latched high: 16 coils, about
          * 144 W). v1.39: 30 W → 100 W, as the controller now boots on the plug and the pedal's motor settles at rail-up
-         * (a false trip on the real piano); a single shorted channel is left to the idle watch (10 W for 30 s).
+         * (a false trip on the real piano); a single shorted channel is left to the idle watch (10 W for 30 s: since v1.40 —
+         * M78 logged only) and the piano's own `!active`.
          */
         const val CAP_WATTS = 100.0
 
@@ -221,10 +222,19 @@ class PowerWatch(railUpWatts: Double?) {
         }
 
         /**
-         * v1.39 — M76: the rail-up trips on the usual idle only this far above it (was T, 6 W): the reading at rail-up now
-         * has the piano's controller booting in it, and the plug's adverts are the bench's to prove.
+         * v1.40 — M78 (Steven): the one leeway of every power trip. The 24 V is cut only when the draw is at least this much
+         * more than what is explained: the idle, plus the notes and the pedal while playing. A stuck board (16 coils, about
+         * 144 W) clears it easily; a coil, a pedal's motor or a plug's reading off by a few watts never does. The rail-up's
+         * [CAP_WATTS] stays absolute, for the controller booting; `!active`, `!i2cfails` and a coil on stay instant.
          */
-        const val USUAL_ABOVE_WATTS = 40.0
+        const val LEEWAY_WATTS = 80.0
+
+        /**
+         * v1.39 — M76: the rail-up trips on the usual idle only this far above it (was T, 6 W): the reading at rail-up now
+         * has the piano's controller booting in it, and the plug's adverts are the bench's to prove. v1.40 — M78: the
+         * uniform [LEEWAY_WATTS] (was 40 W).
+         */
+        const val USUAL_ABOVE_WATTS = LEEWAY_WATTS
 
         /** The floor watch's sample of [watts], asked at [asked] and answered at [answered] (ms), with the router's keys and pedal. */
         fun sample(

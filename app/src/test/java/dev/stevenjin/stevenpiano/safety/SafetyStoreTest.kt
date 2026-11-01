@@ -141,6 +141,18 @@ class SafetyStoreTest {
     fun `a record that can't be read means a check before the next piece`() {
         val file = File(tmp.root, "broken.preferences_pb")
         file.writeText("not a preferences file")
-        assertEquals(SafetyRecord(pending = true), session(file) { store, _ -> store.read() })
+        assertEquals("the full check, its sweep too (v1.40 — M78)", SafetyRecord(pending = true, fault = true), session(file) { store, _ -> store.read() })
+    }
+
+    @Test
+    fun `the fault and a quick check round-trip, and a 1_39 record with a check due keeps its sweep (v1_40 M78)`() {
+        val file = File(tmp.root, "fault.preferences_pb")
+        val kept = SafetyRecord(pending = true, fault = true, last = LastCheck(at = 7L, passed = true, keys = null, quick = true))
+        session(file) { store, _ -> store.write(kept) }
+        assertEquals(kept, session(file) { store, _ -> store.read() })
+        assertTrue(SafetyCopy.last(kept.last!!, now = 7L).endsWith(" · quick check, no keys struck"))
+        val older = File(tmp.root, "older139.preferences_pb")
+        session(older) { _, data -> data.edit { it[booleanPreferencesKey("pending")] = true } }
+        assertTrue("a trip's check from 1.39 still sweeps", session(older) { store, _ -> store.read() }.fault)
     }
 }

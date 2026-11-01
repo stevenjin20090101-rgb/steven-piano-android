@@ -43,6 +43,9 @@ enum class Deferral {
 
     /** Steven Piano isn't the instrument, isn't connected, or its lock hasn't accepted this tablet. */
     NO_PIANO,
+
+    /** v1.40 — M78: the 25-minute cool-down after a fault CUT: nothing switches the plug on until it ends. */
+    COOLING,
 }
 
 /** What the safety check works with: the player, the piano, the key test (AppGraph's; a stand-in in the tests). Main thread. */
@@ -97,6 +100,12 @@ interface SafetyHost {
 
     /** A piece's title, for the card. */
     suspend fun titleOf(pieceId: Long): String?
+
+    /**
+     * v1.40 — M78: a quick check's look at the power, once its steps passed: the piano's `!i2cfails` and the idle draw on a
+     * fresh advert (the rail's keeper, with the plug). Null: fine, or nothing to read; else the trip's words (the 24 V cut).
+     */
+    suspend fun powerLook(): String? = null
 }
 
 /**
@@ -118,9 +127,13 @@ data class SafetyState(
     val last: LastCheck? = null,
     val refused: Int = 0,
     val aside: Boolean = false,
+    /** v1.40 — M78: a fault CUT called for the next check: it sweeps. */
+    val fault: Boolean = false,
+    /** v1.40 — M78: Play just refused while cooling down after a fault: the ms left then, on the card for a moment. */
+    val cooling: Long? = null,
 ) {
-    /** The full-screen card shows: a check running, one that just ended, or Play locked (unless put aside). */
-    val card: Boolean get() = running || ended != null || (lock != null && !aside)
+    /** The full-screen card shows: a check running, one that just ended, Play locked (unless put aside), or refused while cooling. */
+    val card: Boolean get() = running || ended != null || (lock != null && !aside) || cooling != null
 }
 
 /**
@@ -148,6 +161,11 @@ data class SafetyState(
  *
  * [listens]: the switch "Automatic safety check (uses the microphone)" on and Android's permission; off, the check runs
  * without its sweep. Main thread ([scope]'s).
+ *
+ * **v1.40 — M78.** The sweep runs only in a check a fault CUT called for ([require], a coil on: [SafetyRecord.fault]);
+ * every other (Run the safety check with no fault, the 6th piece's) is quick: the release, `!active`, the boards, then the
+ * power look ([SafetyHost.powerLook]). While the rail cools down after a fault ([cooling]: ms left) Play is refused with
+ * its words, and no check runs.
  */
 class SafetyRunner(
     private val scope: CoroutineScope,
@@ -177,6 +195,8 @@ class SafetyRunner(
      * console's `restart` is skipped. False without the plug (or before 1.39's wiring): the restart as before.
      */
     private val repowerRestarts: () -> Boolean = { false },
+    /** v1.40 — M78: the cool-down after a fault CUT, its ms left; null while none runs (or without the plug). */
+    private val cooling: () -> Long? = { null },
 ) : StartGate {
     private val _state = MutableStateFlow(SafetyState())
     val state: StateFlow<SafetyState> = _state.asStateFlow()
@@ -192,6 +212,10 @@ class SafetyRunner(
     private var requiredEarly = false
     private var job: Job? = null
     private var shownJob: Job? = null
+    private var coolJob: Job? = null
+
+    /** v1.40 — M78: a fault CUT came while a check ran: its pass doesn't clear the check the fault calls for. */
+    private var faultDuring = false
 
     /** The start that waits for the check, and the piece it plays (for the card's "Next"). */
     private var waiting: (() -> Unit)? = null
@@ -207,7 +231,7 @@ class SafetyRunner(
             record = store.read()
             loaded = true
             if (early > 0 || requiredEarly) {
-                record = record.copy(count = record.count + early, pending = record.pending || requiredEarly)
+                record = record.copy(count = record.count + early, pending = record.pending || requiredEarly, fault = record.fault || requiredEarly)
                 early = 0
                 requiredEarly = false
                 save()
@@ -226,6 +250,17 @@ class SafetyRunner(
     override fun admit(pieceId: Long?, start: () -> Unit): Boolean {
         if (!loaded) {
             hold(pieceId, start)
+            return false
+        }
+        cooling()?.let { left ->
+            // v1.40 — M78: nothing switches the plug on until the cool-down ends; the card says so for a moment.
+            _state.update { it.copy(refused = it.refused + 1, aside = false, cooling = left) }
+            log("Play refused: ${SafetyCopy.cooling(left)}")
+            coolJob?.cancel()
+            coolJob = scope.launch {
+                delay(UNFINISHED_SHOWN_MS)
+                _state.update { it.copy(cooling = null) }
+            }
             return false
         }
         val lock = record.lock
@@ -254,6 +289,7 @@ class SafetyRunner(
 
     /** Why Play is refused on the web panel now (409 `safety`): the lock's words, or a check due while the app is away; else null. */
     fun refusal(): String? {
+        cooling()?.let { return SafetyCopy.cooling(it) }   // v1.40 — M78
         record.lock?.let { return SafetyCopy.locked(it) }
         if (loaded && job == null && record.pending && host.deferral() == Deferral.AWAY) return SafetyCopy.deferral(Deferral.AWAY)
         return null
@@ -265,6 +301,7 @@ class SafetyRunner(
      */
     fun runNow(): Deferral? {
         if (job != null) return null
+        if (cooling() != null) return Deferral.COOLING   // v1.40 — M78
         host.deferral()?.let { return it }
         begin()
         return null
@@ -273,15 +310,17 @@ class SafetyRunner(
     /**
      * A check before the next Play (v1.30 — M67): the power watch saw a key stay on and cut the 24 V. Due at once, as a
      * check that couldn't run when it was due ([SafetyState.pending], kept across restarts of the app): the next Play waits
-     * while it runs, and a failure locks Play as ever. A check under way already decides by its own outcome.
+     * while it runs, and a failure locks Play as ever. v1.40 — M78: a fault CUT, so that check sweeps ([SafetyRecord.fault]);
+     * one under way when it came no longer clears it by passing.
      */
     fun require() {
         if (!loaded) {
             requiredEarly = true
             return
         }
-        if (job != null || record.pending) return
-        record = record.copy(pending = true)
+        if (job != null) faultDuring = true
+        if (record.pending && record.fault) return
+        record = record.copy(pending = true, fault = true)
         save()
         publish()
         log("Safety check due before the next piece: the power watch cut the 24 V")
@@ -299,8 +338,12 @@ class SafetyRunner(
     fun dismiss() {
         shownJob?.cancel()
         shownJob = null
-        _state.update { it.copy(ended = null, check = if (it.running) it.check else null) }
+        coolJob?.cancel()
+        _state.update { it.copy(ended = null, check = if (it.running) it.check else null, cooling = null) }
     }
+
+    /** v1.40 — M78: the cool-down's ms left, for the card's words (Run the safety check refused while cooling). */
+    fun coolLeft(): Long? = cooling()
 
     private fun onPlayed(piece: Played) {
         if (!host.pianoReady()) return   // the piano didn't play it (no piano, a MIDI piano, guest play): not counted
@@ -377,8 +420,10 @@ class SafetyRunner(
         // v1.27 — M64: no dump on this connection (null) is asked for once more; still none, the keys are released and the
         // check ends unfinished, never passed with nothing read.
         val facts = host.facts() ?: dumpAgain()
+        val sweeps = record.fault   // v1.40 — M78: only a check a fault CUT called for plays the keys
         var step = SafetyCheck.start(
-            listens = listens(),
+            listens = sweeps && listens(),
+            quick = !sweeps,
             coils = facts != null && SafetyCheck.ACTIVE in facts,
             boards = facts != null && SafetyCheck.BOARDS in facts,
             restart = facts?.get(SafetyCheck.RESTART_FACT)?.trim() == "1",
@@ -389,7 +434,12 @@ class SafetyRunner(
             show(step.state)
             seen(step.state)
             val command = step.command
-            if (command is Command.Finish) return command.outcome
+            if (command is Command.Finish) {
+                val outcome = command.outcome
+                // v1.40 — M78: the quick check's power look (`!i2cfails`, the idle draw on a fresh advert); a trip CUT the 24 V.
+                if (step.state.quick && outcome is SafetyOutcome.Passed) attempt(null) { host.powerLook() }?.let { return SafetyOutcome.Unfinished(Why.STOPPED, it) }
+                return outcome
+            }
             val event = interruption()?.let { Event.Interrupted(SafetyCopy.interrupted(it)) } ?: perform(command, step.state, seen)
             step = SafetyCheck.on(step.state, event)
         }
@@ -488,18 +538,20 @@ class SafetyRunner(
         when (outcome) {
             is SafetyOutcome.Passed -> record = record.copy(
                 count = 0,
-                pending = false,
+                // v1.40 — M78: a fault CUT while it ran still calls for a check, with the sweep.
+                pending = faultDuring,
+                fault = faultDuring,
                 lock = null,
                 last = LastCheck(
                     at, passed = true, keys = outcome.keys, silent = outcome.missed, boardsOk = boards?.done, boardsOf = boards?.of,
-                    recovered = outcome.recovered, restarted = restarted, repowered = repowered,
+                    recovered = outcome.recovered, restarted = restarted, repowered = repowered, quick = check?.quick == true,
                 ),
             )
             SafetyOutcome.CoilOn -> {
                 log("Safety check failed: a coil is still on; the 24 V is cut and everything stops")
                 attempt(Unit) { cutNow() }
                 host.stopEverything()
-                record = record.copy(pending = false, lock = SafetyLock.CoilOn, last = LastCheck(at, passed = false, coilOn = true))
+                record = record.copy(pending = false, fault = true, lock = SafetyLock.CoilOn, last = LastCheck(at, passed = false, coilOn = true))
             }
             is SafetyOutcome.BoardsMissing -> {
                 log("Safety check failed: ${outcome.answered} of ${outcome.of} power boards answered after the restart and the power off and on; Play is locked")
@@ -521,6 +573,7 @@ class SafetyRunner(
         if (outcome is SafetyOutcome.Passed && outcome.heardAll) heardAll()
         wantRail(false)
         job = null
+        faultDuring = false
         save()
         val start = waiting.takeIf { outcome is SafetyOutcome.Passed }
         waiting = null
@@ -557,7 +610,10 @@ class SafetyRunner(
     private fun show(check: CheckState) = _state.update { it.copy(check = check) }
 
     private fun publish() = _state.update {
-        it.copy(loaded = loaded, lock = record.lock, pending = record.pending, count = record.count, last = record.last, aside = it.aside && record.lock != null)
+        it.copy(
+            loaded = loaded, lock = record.lock, pending = record.pending, count = record.count, last = record.last,
+            aside = it.aside && record.lock != null, fault = record.fault,
+        )
     }
 
     private fun save() {
