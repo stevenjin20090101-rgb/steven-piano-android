@@ -416,6 +416,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setKioskStayOnBefore(mask: Int?) = edit { if (mask == null) it.remove(KIOSK_STAY_ON_BEFORE) else it[KIOSK_STAY_ON_BEFORE] = mask }
 
+    /** Whether the first start has asked Android to let the app run without battery limits (v1.39 — M77). Housekeeping. */
+    suspend fun batteryAsked(): Boolean = current()[BATTERY_ASKED] == true
+
+    suspend fun markBatteryAsked() = edit { it[BATTERY_ASKED] = true }
+
     /** The web panel over the internet on or off (v1.10 — M26); it connects only once enrolled, with a PIN set. */
     suspend fun setCloudEnabled(on: Boolean) = edit { it[CLOUD_ENABLED] = on }
 
@@ -644,6 +649,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KIOSK_STRIKES = intPreferencesKey("kioskPinStrikes")
         val KIOSK_LOCKED_UNTIL = longPreferencesKey("kioskPinLockedUntil")
         val KIOSK_STAY_ON_BEFORE = intPreferencesKey("kioskStayOnBefore")
+        val BATTERY_ASKED = booleanPreferencesKey("batteryAsked")
         const val MAX_HOST_NAME = 253
         val CRASH_NOTICE_SEEN_AT = longPreferencesKey("crashNoticeSeenAt")
         val COVER_RULE_SINCE = longPreferencesKey("coverRuleSince")

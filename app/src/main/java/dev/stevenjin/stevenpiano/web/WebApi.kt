@@ -688,7 +688,9 @@ object WebApi {
                 JSONObject().put("version", a.version.orNull()).put("build", a.build.orNull()).put("pid", a.pid.orNull())
                     .put("threads", a.threads.orNull()).put("uptimeMs", a.uptimeMs.orNull()).put("heapUsed", a.heapUsed.orNull())
                     .put("heapMax", a.heapMax.orNull()).put("nativeHeap", a.nativeHeap.orNull()).put("cpuPct", a.cpuPct.orNull())
-                    .put("deviceOwner", a.deviceOwner.orNull()).put("kiosk", a.kiosk.orNull()),
+                    .put("deviceOwner", a.deviceOwner.orNull()).put("kiosk", a.kiosk.orNull())
+                    // v1.39 — M77: the System pages' "Runs reliably" (no battery limits; the power watch, null with no plug).
+                    .put("batteryUnrestricted", a.batteryUnrestricted.orNull()).put("powerWatch", a.powerWatch.orNull()),
             )
             .put(
                 "tablet",

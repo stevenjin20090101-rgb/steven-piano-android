@@ -339,6 +339,7 @@ private fun TabletCard(reading: SystemReading?, parts: Set<Attention.Part>) {
         CardFact(SystemCopy.Fact("Screen", SystemCopy.screen(reading)))
         // v1.25 — M58: USB or wireless debugging left on, amber (wireless debugging is an open port with full control).
         CardFact(SystemCopy.Fact(SystemCopy.DEBUGGING, SystemCopy.debugging(reading), attention = Attention.Part.Debugging in parts))
+        ReliableRows(reading)   // v1.39 — M77: Runs reliably, and the battery rows
     }
 }
 

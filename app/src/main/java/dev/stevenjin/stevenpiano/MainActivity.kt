@@ -121,6 +121,10 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) { graph.kiosk.lockWanted.collect { followKiosk(it) } }
         }
+        lifecycleScope.launch {
+            awaitFrame()
+            graph.askBatteryOnce(this@MainActivity)   // v1.39 — M77: once, on the first start
+        }
     }
 
     /**
@@ -183,6 +187,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         graph.fetchArtworkIfDue()
         graph.startWebIfOn(this)
+        graph.startPowerWatchIfPaired()   // v1.39 — M77: the power watch, while a plug is paired
         graph.kiosk.appOpened()   // back after "Unlock for now": locked again
         graph.releaseOwnerIfAsked()   // the adb way back, which `am start` reaches (DeviceOwnerRelease)
         graph.remote.listening.foreground(true)   // v1.23 — M55: the microphone may hear only while the app is in front

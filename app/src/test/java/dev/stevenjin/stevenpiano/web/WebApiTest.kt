@@ -426,7 +426,7 @@ class WebApiTest {
         assertEquals(6, plugged.getInt("answered"))
         assertEquals("Only 6 of 7 power boards answered", plugged.getString("message"))
         val app = bare.getJSONObject("app")
-        assertEquals(setOf("version", "build", "pid", "threads", "uptimeMs", "heapUsed", "heapMax", "nativeHeap", "cpuPct", "deviceOwner", "kiosk"), keys(app))
+        assertEquals(setOf("version", "build", "pid", "threads", "uptimeMs", "heapUsed", "heapMax", "nativeHeap", "cpuPct", "deviceOwner", "kiosk", "batteryUnrestricted", "powerWatch"), keys(app))
         val tablet = bare.getJSONObject("tablet")
         assertEquals(setOf("model", "android", "uptimeMs", "screenOn", "battery", "thermal", "memory", "storage", "cpu", "network", "debugging"), keys(tablet))
         val parts = mapOf(

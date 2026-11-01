@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.data.art
 
 import dev.stevenjin.stevenpiano.data.PlaylistNames
+import dev.stevenjin.stevenpiano.data.db.PieceHead
 import dev.stevenjin.stevenpiano.data.db.PlaylistRef
 
 /**
@@ -25,14 +26,17 @@ enum class ArtLayer { OwnCover, Portrait, RollCard }
 
 /**
  * Which pieces' art is [CoverStyle.Plain] (in a playlist called K-pop) and which [CoverStyle.Album] (House & Dance), and
- * the artists of the plain ones ([plainArtists]: a channel's card shows no photo of them). [read] false until the library
- * has said: no portrait shows then, so none flashes before the rule is known.
+ * the artists of the plain ones ([plainArtists]: a channel's card shows no photo of them). v1.39 — M77: [kpopArtists], the
+ * artists whose pieces are all or mostly (half or more) K-pop's, show no photo anywhere: the Artists grid, an artist's
+ * page, the composer art ([portrait]). [read] false until the library has said: no portrait shows then, so none flashes
+ * before the rule is known.
  */
 data class CoverStyles(
     val plain: Set<Long> = emptySet(),
     val album: Set<Long> = emptySet(),
     val plainArtists: Set<String> = emptySet(),
     val read: Boolean = false,
+    val kpopArtists: Set<String> = emptySet(),
 ) {
     /** Piece [pieceId]'s style; K-pop's plain one wins for a song in both. */
     fun of(pieceId: Long): CoverStyle = when (pieceId) {
@@ -40,6 +44,9 @@ data class CoverStyles(
         in album -> CoverStyle.Album
         else -> CoverStyle.Usual
     }
+
+    /** Whether artist [composerKey]'s photo may show (v1.39 — M77): not for a K-pop artist, nor before the styles are read. */
+    fun portrait(composerKey: String): Boolean = read && composerKey !in kpopArtists
 
     companion object {
         val Unread = CoverStyles()
@@ -64,6 +71,16 @@ object CoverRule {
         PlaylistNames.HOUSE_AND_DANCE -> CoverStyle.Album
         else -> CoverStyle.Usual
     }
+
+    /**
+     * The K-pop artists (v1.39 — M77): those with half or more of their pieces in a plain playlist ([inPlain], one row per
+     * piece) of all they have in the library ([pieceCounts], by `composerKey`). An artist with one K-pop song among many
+     * keeps their photo; the blank key (composer unknown) is never one.
+     */
+    fun kpopArtists(inPlain: List<PieceHead>, pieceCounts: Map<String, Int>): Set<String> =
+        inPlain.asSequence().map { it.composerKey }.filter { it.isNotBlank() }.groupingBy { it }.eachCount()
+            .filter { (key, plain) -> plain * 2 >= (pieceCounts[key] ?: plain) }
+            .keys
 
     /** Of [playlists], the ids of those whose pieces are plain, and of those whose pieces show album covers. */
     fun styled(playlists: List<PlaylistRef>): Pair<List<Long>, List<Long>> {

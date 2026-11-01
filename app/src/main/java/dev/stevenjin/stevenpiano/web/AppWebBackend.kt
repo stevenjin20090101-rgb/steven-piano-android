@@ -267,7 +267,7 @@ class AppWebBackend(
     }
 
     override suspend fun composers(scope: LibraryScope): List<WebComposer> {
-        val portraits = portraits()
+        val portraits = kpopPlain(portraits())
         return library { graph.library.composers(scope).first() }.orEmpty()
             .map { WebComposer(it.composerKey, it.name, it.pieceCount, it.composerKey in portraits, portraits[it.composerKey] ?: 0) }
     }
@@ -275,7 +275,7 @@ class AppWebBackend(
     override suspend fun composer(key: String, scope: LibraryScope): WebComposerDetail? {
         val pieces = library { graph.library.byComposer(key, scope).first() }.orEmpty()
         if (pieces.isEmpty()) return null
-        val portraits = portraits()
+        val portraits = kpopPlain(portraits())
         val covers = covers()
         val art = webArt()
         val name = pieces.minOf { it.composer }
@@ -740,6 +740,12 @@ class AppWebBackend(
         )
     }
 
+    /** The portraits of [portraits] that may show (v1.39 — M77): never a K-pop artist's ([CoverStyles.portrait]). */
+    private fun kpopPlain(portraits: Map<String, Long>): Map<String, Long> {
+        val styles = graph.artwork.coverStyles.value
+        return portraits.filterKeys { styles.portrait(it) }
+    }
+
     /**
      * The covers' rule as the panel reads it (v1.37 — M73, [CoverRule]): which songs are Steven's K-pop and House & Dance,
      * and, when any song is plain, the covers chosen by hand (a plain song still shows one).
@@ -755,7 +761,8 @@ class AppWebBackend(
         /** Whether piece [id] shows its composer's portrait and whether its own cover, of those there are. */
         fun shows(id: Long, composerKey: String, portraits: Map<String, Long>, covers: Map<Long, Long>): Pair<Boolean, Boolean> {
             val layers = CoverRule.layers(styles.of(id), chosenByHand = id in chosen, read = styles.read)
-            return (ArtLayer.Portrait in layers && composerKey in portraits) to (ArtLayer.OwnCover in layers && id in covers)
+            val portrait = ArtLayer.Portrait in layers && composerKey in portraits && styles.portrait(composerKey)   // v1.39 — M77
+            return portrait to (ArtLayer.OwnCover in layers && id in covers)
         }
     }
 

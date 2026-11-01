@@ -88,6 +88,10 @@ data class AppReading(
     val deviceOwner: Boolean? = null,
     /** The screen is locked to the app now (lock task mode). */
     val kiosk: Boolean? = null,
+    /** v1.39 — M77: Android lets the app run without battery limits (`isIgnoringBatteryOptimizations`). */
+    val batteryUnrestricted: Boolean? = null,
+    /** v1.39 — M77: the power watch's service runs (`PowerService`); null while no plug is paired (nothing to watch). */
+    val powerWatch: Boolean? = null,
 )
 
 /**
@@ -141,6 +145,8 @@ class AndroidSystemProbe(
     context: Context,
     private val version: String = BuildConfig.VERSION_NAME,
     private val build: Int = BuildConfig.VERSION_CODE,
+    /** v1.39 — M77: whether the power watch runs, null while no plug is paired ([AppReading.powerWatch]). */
+    private val powerWatch: () -> Boolean? = { null },
 ) : SystemProbe {
     private val app: Context = context.applicationContext
 
@@ -155,7 +161,10 @@ class AndroidSystemProbe(
         // CPU and skin temperatures, and the CPU's counters, are a device owner's to read: anyone else gets a SecurityException.
         val hardware = if (owner == true) guarded { app.getSystemService(HardwarePropertiesManager::class.java) } else null
         return SystemReading(
-            app = appReading(owner),
+            app = appReading(owner).copy(
+                batteryUnrestricted = guarded { power?.isIgnoringBatteryOptimizations(app.packageName) },
+                powerWatch = guarded { powerWatch() },
+            ),
             model = guarded { "${Build.MANUFACTURER.orEmpty()} ${Build.MODEL.orEmpty()}".trim().ifEmpty { null } },
             android = Build.VERSION.RELEASE,
             uptimeMs = SystemClock.elapsedRealtime(),

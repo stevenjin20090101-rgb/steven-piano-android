@@ -66,6 +66,21 @@ function debuggingOn(debug) {
   return null;
 }
 
+/**
+ * Runs reliably (v1.39 — M77; the tablet's ReliableCopy): the app is the device owner, runs without battery limits, and
+ * its power watch runs while a plug is paired (`powerWatch` null: none paired). {ok, text}, or null before the app says.
+ */
+function reliable(app) {
+  const a = app || {};
+  if (typeof a.deviceOwner !== 'boolean' || typeof a.batteryUnrestricted !== 'boolean') return null;
+  const watch = typeof a.powerWatch === 'boolean' ? a.powerWatch : null;
+  const ok = a.deviceOwner && a.batteryUnrestricted && watch !== false;
+  const words = [ok ? 'Yes' : 'No', a.deviceOwner ? 'device owner' : 'not device owner',
+    a.batteryUnrestricted ? 'battery unrestricted' : 'battery restricted'];
+  if (watch !== null) words.push(watch ? 'watching the plug' : 'not watching the plug');
+  return { ok, text: words.join(' · ') };
+}
+
 /** The Tablet card's Debugging row (SystemCopy.debugging): "USB", "Wireless", "USB and wireless", "Developer options on", "Off"; null before a reading. */
 function debuggingWord(debug) {
   if (!debug) return null;
@@ -348,11 +363,12 @@ export function create(host, body, tools) {
   const tabletUptime = makeFact(h, fill, 'Running for');
   const screenFact = makeFact(h, fill, 'Screen');
   const debuggingFact = makeFact(h, fill, DEBUGGING);
+  const reliableFact = makeFact(h, fill, 'Runs reliably');   // v1.39 — M77
   const tabletCard = h('section', { class: 'card', 'aria-label': 'Tablet' },
     h('div', { class: 'card-head' }, glyph('g-tablet'), h('h2', { text: 'Tablet' }), tabletMeta),
     h('div', { class: 'dials' }, batteryDial.node, heatDial.node),
     memoryLevel.node, storageLevel.node,
-    h('div', { class: 'facts' }, networkFact.node, tabletUptime.node, screenFact.node, debuggingFact.node));
+    h('div', { class: 'facts' }, networkFact.node, tabletUptime.node, screenFact.node, debuggingFact.node, reliableFact.node));
 
   // ---- The controller ------------------------------------------------------------------------------------------------
 
@@ -613,6 +629,9 @@ export function create(host, body, tools) {
     screenFact.set(tablet.screenOn === true ? 'On' : tablet.screenOn === false ? 'Off' : null);
     // v1.27 — M63: USB or wireless debugging left on, amber with the head's words (the tablet's System page).
     debuggingFact.set(debuggingWord(tablet.debugging), parts.has('debugging'));
+    // v1.39 — M77: the device owner, no battery limits, the power watch; amber when any is missing.
+    const runs = reliable(sys && sys.app);
+    reliableFact.set(runs ? runs.text : null, runs ? !runs.ok : false);
   }
 
   function paintController(sys, m, parts) {
